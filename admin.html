@@ -1522,18 +1522,26 @@ window.loadAccounts = async function(filter='all'){
   try{
     let snap;
     if(filter==='all'){
-      snap = await getDocs(query(collection(db,'bankAccounts'),orderBy('createdAt','desc'),limit(100)));
+      snap = await getDocs(query(collection(db,'bankAccounts'),limit(200)));
     } else {
-      snap = await getDocs(query(collection(db,'bankAccounts'),where('status','==',filter),orderBy('createdAt','desc'),limit(100)));
+      snap = await getDocs(query(collection(db,'bankAccounts'),where('status','==',filter),limit(200)));
     }
     // Update pending badge
-    const pendingSnap = await getDocs(query(collection(db,'bankAccounts'),where('status','==','pending')));
+    const allDocs = snap.docs;
+    const pendingCount = filter==='all' ? allDocs.filter(d=>d.data().status==='pending').length : (filter==='pending' ? allDocs.length : 0);
     const badge = document.getElementById('accBadge');
-    if(badge){ badge.style.display = pendingSnap.size > 0 ? 'inline-block' : 'none'; }
+    if(badge){ badge.style.display = pendingCount > 0 ? 'inline-block' : 'none'; }
 
-    if(snap.empty){ el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:12px 0">No accounts found</div>'; return; }
+    // Sort client-side newest first
+    const sorted = [...allDocs].sort((a,b)=>{
+      const ta = a.data().createdAt?.toMillis?.() || 0;
+      const tb = b.data().createdAt?.toMillis?.() || 0;
+      return tb - ta;
+    });
+
+    if(!sorted.length){ el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:12px 0">No accounts found</div>'; return; }
     const statusColor = s => s==='activated'?'#03A66D':s==='invalid'?'#ef4444':'#F0B90B';
-    el.innerHTML = snap.docs.map(d=>{
+    el.innerHTML = sorted.map(d=>{
       const a = d.data();
       const c = statusColor(a.status);
       return `<div class="item-card" style="margin-bottom:10px">
