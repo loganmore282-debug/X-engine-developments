@@ -846,7 +846,7 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
     </div>
     <div class="form-group">
       <label class="form-label">Amount (UGX)</label>
-      <input class="form-input" id="depAmount" type="number" placeholder="Min 50,000 — Max 300,000">
+      <input class="form-input" id="depAmount" type="number" placeholder="Min 50,000 — Max 200,000">
     </div>
     <div class="form-group">
       <label class="form-label">Mobile Money Phone</label>
@@ -1463,14 +1463,15 @@ window._switchTab = function(tab){
 // TICKER
 // ══════════════════════════════════════════════════
 const TICK_PHONES=['256****234','256****891','256****567','256****123','256****788','256****345','256****012','256****456','256****999','256****677'];
-const TICK_AMTS=[50000,75000,100000,150000,200000];
+const TICK_DEP_AMTS=[50000,75000,100000,150000,200000];
+const TICK_WIT_AMTS=[60000,80000,100000,150000,200000,300000,400000,500000];
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function buildTicker(){
   const msgs=[];
   for(let i=0;i<8;i++){
     const isWit=Math.random()>.55;
     const p=pick(TICK_PHONES);
-    const a=Number(pick(TICK_AMTS)).toLocaleString();
+    const a=Number(pick(isWit?TICK_WIT_AMTS:TICK_DEP_AMTS)).toLocaleString();
     msgs.push(isWit?`User ${p} has withdrawn UGX ${a}`:`User ${p} has deposited UGX ${a}`);
   }
   return msgs.join('   •   ');
