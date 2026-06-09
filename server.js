@@ -374,7 +374,7 @@ async function handleDepositCallback(req, res) {
           const notifRef = db.collection('notifications').doc();
           t.set(notifRef, {
             userId, title: '💰 Deposit Successful!',
-            message: `${fmtUGX(creditAmount)} has been credited to your wallet.\n\n📅 Date: ${date}\n⏰ Time: ${time}\n📱 Phone: ${phone || pending.phone || 'N/A'}\n🔖 Reference: ${reference}\n💳 Provider: ${provider}\n\nThank you for trusting Pearl Invest! 🌱`,
+            message: `${fmtUGX(creditAmount)} has been credited to your wallet.\n\n📅 Date: ${date}\n⏰ Time: ${time}\n📱 Phone: ${phone || pending.phone || 'N/A'}\n🔖 Reference: ${reference}\n💳 Provider: ${provider}\n\nThank you for trusting X-Engine! ⚙️`,
             type: 'deposit', amount: creditAmount, reference, provider,
             phone: phone || pending.phone || '', date, time,
             readBy: [], createdAt: FieldValue.serverTimestamp()
