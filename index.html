@@ -1273,6 +1273,10 @@ window._doRegister = async function(){
   if(pass!==pass2) return showToast('Passwords do not match','error');
   const btn=document.getElementById('registerBtn'); btn.disabled=true; btn.textContent='Creating...';
   try{
+    // Block duplicate phone numbers
+    const formatted = fmtPhone(phone);
+    const existing = await getDocs(query(collection(db,'users'),where('phone','==',formatted),limit(1)));
+    if(!existing.empty){ btn.disabled=false; btn.textContent='Create Account'; return showToast('Phone number already registered. Please log in.','error'); }
     const cred = await createUserWithEmailAndPassword(auth, makeEmail(phone), pass);
     const uid  = cred.user.uid;
     const code = genRefCode(uid);
