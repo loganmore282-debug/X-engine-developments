@@ -475,21 +475,24 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
 
       <!-- 3 stat cards -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-        <div style="background:#1a1a1a;border:1px solid rgba(3,166,109,.25);border-top:2px solid #03A66D;border-radius:13px;padding:12px 10px">
+        <div style="background:#1a1a1a;border:1px solid rgba(3,166,109,.25);border-top:2px solid #03A66D;border-radius:13px;padding:12px 10px;position:relative;overflow:hidden">
+          <svg style="position:absolute;right:-8px;bottom:-8px;opacity:.08;pointer-events:none" width="58" height="58" viewBox="0 0 24 24" fill="none" stroke="#03A66D" stroke-width="1.4" stroke-linecap="round"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
           <div style="font-size:9px;font-weight:700;color:#03A66D;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;align-items:center;gap:3px">
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#03A66D" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12l7-7 7 7"/></svg>Deposits
           </div>
           <div style="font-size:12px;font-weight:800;font-family:var(--fam-mono);color:#fff;margin-bottom:3px" id="balDeposit">UGX 0</div>
           <div style="font-size:9px;color:var(--muted)">Invest only</div>
         </div>
-        <div style="background:#1a1a1a;border:1px solid rgba(240,185,11,.25);border-top:2px solid #F0B90B;border-radius:13px;padding:12px 10px">
+        <div style="background:#1a1a1a;border:1px solid rgba(240,185,11,.25);border-top:2px solid #F0B90B;border-radius:13px;padding:12px 10px;position:relative;overflow:hidden">
+          <svg style="position:absolute;right:-8px;bottom:-8px;opacity:.08;pointer-events:none" width="58" height="58" viewBox="0 0 24 24" fill="none" stroke="#F0B90B" stroke-width="1.4" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
           <div style="font-size:9px;font-weight:700;color:#F0B90B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;align-items:center;gap:3px">
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#F0B90B" stroke-width="2.5" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>Cumulative
           </div>
           <div style="font-size:12px;font-weight:800;font-family:var(--fam-mono);color:#fff;margin-bottom:3px" id="balCumulative">UGX 0</div>
           <div style="font-size:9px;color:var(--muted)">Withdrawable</div>
         </div>
-        <div style="background:#1a1a1a;border:1px solid rgba(217,119,6,.25);border-top:2px solid #d97706;border-radius:13px;padding:12px 10px">
+        <div style="background:#1a1a1a;border:1px solid rgba(217,119,6,.25);border-top:2px solid #d97706;border-radius:13px;padding:12px 10px;position:relative;overflow:hidden">
+          <svg style="position:absolute;right:-8px;bottom:-8px;opacity:.08;pointer-events:none" width="58" height="58" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="1.4" stroke-linecap="round"><path d="M12 19V5M19 12l-7 7-7-7"/></svg>
           <div style="font-size:9px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;align-items:center;gap:3px">
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="3" stroke-linecap="round"><path d="M12 19V5M19 12l-7 7-7-7"/></svg>Withdrawn
           </div>
