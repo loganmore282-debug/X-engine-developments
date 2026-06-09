@@ -1252,6 +1252,73 @@ app.post('/invest/claim', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// BANK ACCOUNTS (Bound Mobile Money Accounts)
+// ═══════════════════════════════════════════
+app.post('/bank-account/add', async (req, res) => {
+  const { userId, phone, name, network } = req.body;
+  if (!userId || !phone || !name)
+    return res.status(400).json({ status: 'error', message: 'userId, phone and name required' });
+  try {
+    const userSnap = await db.collection('users').doc(userId).get();
+    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = userSnap.data();
+    if ((user.depositBalance || 0) <= 0)
+      return res.status(403).json({ status: 'error', message: 'You must make a deposit first before binding an account' });
+    const fullPhone = cleanPhone(phone);
+    const existing = await db.collection('bankAccounts').where('userId', '==', userId).get();
+    if (existing.size >= 2)
+      return res.status(400).json({ status: 'error', message: 'Maximum 2 bank accounts allowed' });
+    if (existing.docs.find(d => d.data().phone === fullPhone))
+      return res.status(400).json({ status: 'error', message: 'This number is already saved' });
+    const { date, time } = nowStr();
+    const docRef = await db.collection('bankAccounts').add({
+      userId, phone: fullPhone, name,
+      network: network || 'Mobile Money',
+      status: 'pending',
+      date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    await notify(userId, '🏦 Account Submitted!',
+      `Your account ${fullPhone} (${name}) has been submitted for verification.\n\n⏳ Status: Pending Admin Review\n📅 ${date} ⏰ ${time}\n\nYou'll be notified once it's activated.`,
+      'info', { phone: fullPhone, name, date, time });
+    return res.json({ status: 'success', accountId: docRef.id, message: 'Account submitted for review' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/bank-account/list', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const snap = await db.collection('bankAccounts').where('userId', '==', userId).get();
+    const accounts = snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: undefined }));
+    return res.json({ status: 'success', accounts });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/bank-account/update', async (req, res) => {
+  const { accountId, status, adminKey, note } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!accountId || !['pending', 'activated', 'invalid'].includes(status))
+    return res.status(400).json({ status: 'error', message: 'accountId and valid status required' });
+  try {
+    const snap = await db.collection('bankAccounts').doc(accountId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Account not found' });
+    const acc = snap.data();
+    await db.collection('bankAccounts').doc(accountId).update({
+      status, reviewedAt: FieldValue.serverTimestamp(), reviewNote: note || ''
+    });
+    const { date, time } = nowStr();
+    const titles = { activated: '✅ Account Activated!', invalid: '❌ Account Invalid', pending: '⏳ Account Pending' };
+    const msgs = {
+      activated: `Your account ${acc.phone} (${acc.name}) has been activated!\n\n✅ You can now use it for withdrawals.\n📅 ${date} ⏰ ${time}`,
+      invalid: `Your account ${acc.phone} was flagged as invalid.\n\n❌ Please bind a valid account.\n📅 ${date} ⏰ ${time}${note ? '\n\nNote: ' + note : ''}`,
+      pending: `Your account ${acc.phone} is still under review.\n\n⏳ Please wait for activation.\n📅 ${date} ⏰ ${time}`
+    };
+    await notify(acc.userId, titles[status], msgs[status], status === 'activated' ? 'info' : 'warning', { phone: acc.phone, status, date, time });
+    return res.json({ status: 'success', message: `Account marked as ${status}` });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════
 // DAILY CHECK-IN (server-side, fraud-proof)
 // ═══════════════════════════════════════════
 app.post('/checkin', async (req, res) => {

@@ -879,6 +879,12 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
       <div style="font-size:22px;font-weight:900;font-family:var(--fam-mono);color:#F0B90B" id="witAvailDisplay">UGX 0</div>
     </div>
 
+    <!-- Saved Accounts Quick-Select -->
+    <div id="savedAccountsSection" style="display:none;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">💳 Saved Accounts — tap to select</div>
+      <div id="savedAccountsList"></div>
+    </div>
+
     <!-- Amount -->
     <div class="form-group">
       <label class="form-label">Amount (UGX)</label>
@@ -1796,7 +1802,7 @@ window._openWithdrawPage = function(){
   window._witPin=''; window._witPinAttempts=0;
   updatePinDots_global('wd',0);
   // Reset verify state
-  window._phoneVerified=false; window._verifiedPhoneName='';
+  window._phoneVerified=false; window._verifiedPhoneName=''; window._lastVerifiedPhone='';
   const ac=document.getElementById('witAccountCard'); if(ac) ac.style.display='none';
   const ps=document.getElementById('witPinSection'); if(ps) ps.style.display='none';
   const vp=document.getElementById('witVerifyPrompt'); if(vp) vp.style.display='block';
@@ -1804,7 +1810,51 @@ window._openWithdrawPage = function(){
   if(vb){ vb.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Verify'; vb.disabled=false; vb.style.background=''; vb.style.borderColor='rgba(59,130,246,.4)'; vb.style.color='#60a5fa'; }
   const wb=document.getElementById('witBtn'); if(wb){wb.disabled=true;wb.style.opacity='.4';wb.style.cursor='not-allowed';}
   const attMsg=document.getElementById('witPinAttemptsMsg'); if(attMsg) attMsg.textContent='Enter your 4-digit withdrawal PIN';
+  // Load saved accounts
+  const sec=document.getElementById('savedAccountsSection');
+  const lst=document.getElementById('savedAccountsList');
+  if(sec && lst && _user){
+    fetch(`${SERVER}/bank-account/list`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:_user.uid})})
+      .then(r=>r.json()).then(d=>{
+        const active=(d.accounts||[]).filter(a=>a.status==='activated');
+        if(active.length){
+          sec.style.display='block';
+          lst.innerHTML=active.map(a=>`<div onclick="window._selectSavedAccount('${a.phone}','${a.name}','${a.network||''}')"
+            style="background:#1a1a1a;border:1.5px solid rgba(3,166,109,.35);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#fff">${a.phone}</div>
+              <div style="font-size:11px;color:var(--muted)">${a.name} · ${a.network||'Mobile Money'}</div>
+            </div>
+            <span style="font-size:10px;font-weight:700;background:rgba(3,166,109,.15);color:#03A66D;border:1px solid rgba(3,166,109,.3);border-radius:999px;padding:3px 10px">✅ Active</span>
+          </div>`).join('');
+        } else { sec.style.display='none'; }
+      }).catch(()=>{sec.style.display='none';});
+  }
   openPage('withdrawPage');
+};
+
+window._selectSavedAccount = function(phone, name, network){
+  // Strip +256 prefix for the input (9 digits)
+  const digits = phone.replace(/^\+256/,'').replace(/^\+/,'').replace(/^256/,'');
+  const inp = document.getElementById('witPhone');
+  if(inp) inp.value = digits;
+  window._phoneVerified = true;
+  window._verifiedPhoneName = name;
+  window._lastVerifiedPhone = digits;
+  // Show account card
+  const ac=document.getElementById('witAccountCard');
+  const acName=document.getElementById('witAccountName');
+  const acNet=document.getElementById('witAccountNetwork');
+  if(ac){ ac.style.display='block'; }
+  if(acName) acName.textContent=name;
+  if(acNet) acNet.textContent=(network||'Mobile Money')+' · ✅ Saved Account';
+  // Show verify button as verified
+  const vb=document.getElementById('verifyPhoneBtn');
+  if(vb){ vb.innerHTML='✅ Verified'; vb.disabled=true; vb.style.background='rgba(3,166,109,.15)'; vb.style.borderColor='rgba(3,166,109,.4)'; vb.style.color='#03A66D'; }
+  const vp=document.getElementById('witVerifyPrompt'); if(vp) vp.style.display='none';
+  const ps=document.getElementById('witPinSection'); if(ps) ps.style.display='block';
+  const wb=document.getElementById('witBtn'); if(wb){wb.disabled=false;wb.style.opacity='1';wb.style.cursor='pointer';}
+  showToast('Account selected ✅','success');
 };
 
 function updatePinDots_global(prefix,filled){
@@ -2042,40 +2092,167 @@ window.calcWithdrawFee = function(){
   document.getElementById('feePreviewPct').textContent = feePct;
 };
 
-// ── Withdrawal Account Page — PIN set / request reset ──
+// ── Withdrawal Account Page — Bank Accounts + PIN ──
 window._witAccPageFn = async function(){
   const body = document.getElementById('waPinBody');
   if(body) body.innerHTML='<div class="page-loader"><div class="spinner"></div></div>';
   openPage('withdrawAccountPage');
   if(!_user) return;
-  // Check if PIN already set
   try{
-    const r = await fetch(`${SERVER}/pin/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:_user.uid})});
-    const d = await r.json();
-    if(d.hasPin){
-      // PIN already set — show read-only info + request reset option
-      if(body) body.innerHTML=`
-        <div style="padding:20px;text-align:center">
-          <div style="width:64px;height:64px;background:rgba(240,185,11,.1);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F0B90B" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          </div>
-          <div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:8px">PIN Already Set</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6">Your withdrawal PIN is active and protecting your account. For security, you cannot change it here.</div>
-          <div style="background:#1a1a1a;border:1px solid rgba(240,185,11,.2);border-radius:14px;padding:16px;margin-bottom:20px;text-align:left">
-            <div style="font-size:12px;font-weight:700;color:#F0B90B;margin-bottom:6px">🔐 PIN Status: Active</div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6">If you forgot your PIN or need to reset it, tap the button below to send a reset request to admin. You will be notified once it's reset.</div>
-          </div>
-          <button onclick="requestPinReset()" style="width:100%;padding:15px;background:#1a1a1a;border:1.5px solid rgba(240,185,11,.3);border-radius:14px;color:#F0B90B;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--fam)">
-            📩 Request PIN Reset from Admin
-          </button>
-        </div>`;
+    const [pinRes, accRes] = await Promise.all([
+      fetch(`${SERVER}/pin/status`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:_user.uid})}),
+      fetch(`${SERVER}/bank-account/list`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:_user.uid})})
+    ]);
+    const pinData = await pinRes.json();
+    const accData = await accRes.json();
+    const accounts = accData.accounts || [];
+    const hasDeposited = (_userData?.depositBalance||0) > 0;
+
+    // ── Bank Accounts Section ──
+    const statusColor = s => s==='activated'?'#03A66D':s==='invalid'?'#ef4444':'#F0B90B';
+    const statusBg    = s => s==='activated'?'rgba(3,166,109,.15)':s==='invalid'?'rgba(239,68,68,.15)':'rgba(240,185,11,.15)';
+
+    let bankSection = `<div style="padding:18px 16px 10px">
+      <div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:4px">🏦 Bind Bank Account</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Up to 2 mobile money accounts for withdrawals</div>`;
+
+    if(!hasDeposited){
+      bankSection += `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:16px;text-align:center;margin-bottom:4px">
+        <div style="font-size:28px;margin-bottom:8px">🔒</div>
+        <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Deposit Required</div>
+        <div style="font-size:12px;color:var(--muted)">Make a deposit first to unlock this feature</div>
+      </div>`;
     } else {
-      // No PIN set — show PIN creation form
-      showSetPinInAccount(body);
+      // List existing accounts
+      accounts.forEach(a=>{
+        const c=statusColor(a.status), bg=statusBg(a.status);
+        bankSection += `<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:13px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#fff">${a.phone}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${a.name} · ${a.network||'Mobile Money'}</div>
+          </div>
+          <span style="font-size:10px;font-weight:700;background:${bg};color:${c};border:1px solid ${c}44;border-radius:999px;padding:3px 10px;text-transform:uppercase">${a.status}</span>
+        </div>`;
+      });
+      if(accounts.length < 2){
+        bankSection += `<div style="background:#1a1a1a;border:1.5px solid rgba(240,185,11,.2);border-radius:12px;padding:14px;margin-bottom:4px">
+          <div style="font-size:12px;font-weight:700;color:#F0B90B;margin-bottom:10px">➕ Add New Account</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <div style="background:#0B0E11;border:1.5px solid #2a2a2a;border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted);font-weight:700;white-space:nowrap">+256</div>
+            <input id="baPhone" type="tel" placeholder="7XXXXXXXX" maxlength="9" style="flex:1;background:#0B0E11;border:1.5px solid #2a2a2a;border-radius:10px;padding:10px 12px;font-size:13px;color:#fff;font-family:var(--fam);outline:none;-webkit-appearance:none">
+            <button id="baVerifyBtn" onclick="window._verifyBankPhone()" style="background:#0B0E11;border:1.5px solid rgba(59,130,246,.4);color:#60a5fa;border-radius:10px;padding:0 12px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--fam);height:46px">Verify</button>
+          </div>
+          <div id="baVerifiedCard" style="display:none;background:#0B0E11;border:1px solid rgba(3,166,109,.3);border-radius:10px;padding:10px;margin-bottom:10px">
+            <div id="baVerifiedName" style="font-size:13px;font-weight:700;color:#03A66D"></div>
+            <div id="baVerifiedNet" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+          </div>
+          <button id="baSaveBtn" onclick="window._saveBankAccount()" style="display:none;width:100%;padding:13px;background:#F0B90B;border:none;border-radius:12px;color:#000;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--fam)">💾 Save Account</button>
+          <div id="baMsg" style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center"></div>
+        </div>`;
+      }
     }
-  }catch(e){
-    // Fallback to set PIN form
-    showSetPinInAccount(body);
+    bankSection += `</div>`;
+
+    // ── PIN Section ──
+    let pinSection = `<div style="height:1px;background:#1a1a1a;margin:4px 16px 16px"></div>`;
+    if(pinData.hasPin){
+      pinSection += `<div style="padding:0 16px 24px;text-align:center">
+        <div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:16px;text-align:left">🔐 Withdrawal PIN</div>
+        <div style="width:56px;height:56px;background:rgba(240,185,11,.1);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F0B90B" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:6px">PIN Active ✅</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.6">Your withdrawal PIN is active and protecting your account.</div>
+        <button onclick="requestPinReset()" style="width:100%;padding:14px;background:#1a1a1a;border:1.5px solid rgba(240,185,11,.3);border-radius:14px;color:#F0B90B;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--fam)">📩 Request PIN Reset from Admin</button>
+      </div>`;
+    } else {
+      pinSection += `<div style="padding:0 16px 24px">
+        <div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:16px">🔐 Set Withdrawal PIN</div>
+        <div style="text-align:center">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.6">Create a 4-digit PIN to secure withdrawals.<br><span style="color:rgba(240,185,11,.7)">⚠️ Once set, PIN cannot be changed without admin approval.</span></div>
+          <div class="pin-dots" id="waPinDots" style="margin-bottom:20px">
+            <div class="pin-dot" id="wa0"></div><div class="pin-dot" id="wa1"></div>
+            <div class="pin-dot" id="wa2"></div><div class="pin-dot" id="wa3"></div>
+          </div>
+          <div class="pin-keypad" style="margin-bottom:20px">
+            <div class="pin-key" onclick="waPinKey('1')">1</div><div class="pin-key" onclick="waPinKey('2')">2</div><div class="pin-key" onclick="waPinKey('3')">3</div>
+            <div class="pin-key" onclick="waPinKey('4')">4</div><div class="pin-key" onclick="waPinKey('5')">5</div><div class="pin-key" onclick="waPinKey('6')">6</div>
+            <div class="pin-key" onclick="waPinKey('7')">7</div><div class="pin-key" onclick="waPinKey('8')">8</div><div class="pin-key" onclick="waPinKey('9')">9</div>
+            <div class="pin-key" style="visibility:hidden"></div><div class="pin-key" onclick="waPinKey('0')">0</div><div class="pin-key del" onclick="waPinDel()">⌫</div>
+          </div>
+          <button class="btn-auth" onclick="saveWithdrawPin()" style="width:100%">Save PIN</button>
+          <div id="waPinMsg" style="margin-top:10px;text-align:center"></div>
+        </div>
+      </div>`;
+    }
+
+    body.innerHTML = bankSection + pinSection;
+  } catch(e) {
+    // Fallback
+    const body2 = document.getElementById('waPinBody');
+    if(body2) showSetPinInAccount(body2);
+  }
+};
+
+// ── Bank Account: Verify Phone ──
+window._verifyBankPhone = async function(){
+  const phone = (document.getElementById('baPhone')?.value||'').trim();
+  if(!phone||phone.length<7) return showToast('Enter a phone number first','error');
+  const digits = phone.replace(/\D/g,'');
+  const marzPhone = digits.startsWith('256') ? digits : '256'+digits.slice(-9);
+  const btn = document.getElementById('baVerifyBtn');
+  if(btn){ btn.textContent='Checking...'; btn.disabled=true; }
+  document.getElementById('baMsg').textContent='';
+  try{
+    const r = await fetch(`${SERVER}/verify-phone`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:marzPhone})});
+    const d = await r.json();
+    if(d.success && d.name){
+      const net = marzPhone.startsWith('25677')||marzPhone.startsWith('25676')||marzPhone.startsWith('25639')||marzPhone.startsWith('25631') ? 'MTN' :
+                  marzPhone.startsWith('25670')||marzPhone.startsWith('25675')||marzPhone.startsWith('25674') ? 'Airtel' : 'Mobile Money';
+      window._baVerifiedName = d.name;
+      window._baVerifiedNet  = net;
+      window._baVerifiedPhone= '+256'+digits.slice(-9);
+      const card = document.getElementById('baVerifiedCard');
+      if(card){ card.style.display='block'; }
+      const nameEl = document.getElementById('baVerifiedName');
+      const netEl  = document.getElementById('baVerifiedNet');
+      if(nameEl) nameEl.textContent = d.name;
+      if(netEl)  netEl.textContent  = net+' · ✅ Verified';
+      const saveBtn = document.getElementById('baSaveBtn');
+      if(saveBtn) saveBtn.style.display='block';
+      if(btn){ btn.textContent='✅ Verified'; btn.style.borderColor='rgba(3,166,109,.4)'; btn.style.color='#03A66D'; }
+    } else {
+      document.getElementById('baMsg').textContent = d.message || 'Number not found. Try again.';
+      document.getElementById('baMsg').style.color = '#ef4444';
+      if(btn){ btn.textContent='Verify'; btn.disabled=false; }
+    }
+  } catch(e) {
+    document.getElementById('baMsg').textContent = 'Verification failed. Check your connection.';
+    document.getElementById('baMsg').style.color = '#ef4444';
+    if(btn){ btn.textContent='Verify'; btn.disabled=false; }
+  }
+};
+
+// ── Bank Account: Save ──
+window._saveBankAccount = async function(){
+  if(!_user){ showToast('Not logged in','error'); return; }
+  if(!window._baVerifiedPhone || !window._baVerifiedName){ showToast('Verify a phone number first','error'); return; }
+  const saveBtn = document.getElementById('baSaveBtn');
+  if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='Saving...'; }
+  try{
+    const r = await fetch(`${SERVER}/bank-account/add`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:_user.uid,phone:window._baVerifiedPhone,name:window._baVerifiedName,network:window._baVerifiedNet||''})});
+    const d = await r.json();
+    if(d.status==='success'){
+      showToast('Account saved! Pending admin review ⏳','success',4000);
+      window._baVerifiedPhone=''; window._baVerifiedName=''; window._baVerifiedNet='';
+      window._witAccPageFn(); // Refresh page
+    } else {
+      showToast(d.message||'Save failed','error');
+      if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='💾 Save Account'; }
+    }
+  } catch(e) {
+    showToast('Error: '+e.message,'error');
+    if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='💾 Save Account'; }
   }
 };
 

@@ -132,6 +132,7 @@ select.form-input{appearance:none}
     <button class="tab-btn" onclick="showTab('notifications',this)">🔔 Notifs</button>
     <button class="tab-btn" onclick="showTab('ads',this)">🖼️ Ads</button>
     <button class="tab-btn" onclick="showTab('settings',this)">⚙️ Settings</button>
+    <button class="tab-btn" onclick="showTab('accounts',this)">🏦 Accounts <span id="accBadge" class="notif-dot" style="display:none"></span></button>
   </div>
 
   <!-- ── DASHBOARD ── -->
@@ -592,6 +593,20 @@ select.form-input{appearance:none}
 
   </div><!-- /settingsPanel -->
 
+  <!-- ── BANK ACCOUNTS PANEL ── -->
+  <div class="panel" id="accountsPanel">
+    <div class="card">
+      <div class="card-title">🏦 Bound Bank Accounts</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="loadAccounts('all')">All</button>
+        <button class="btn btn-sm btn-gold" onclick="loadAccounts('pending')">⏳ Pending</button>
+        <button class="btn btn-sm btn-green" onclick="loadAccounts('activated')">✅ Activated</button>
+        <button class="btn btn-sm btn-red" onclick="loadAccounts('invalid')">❌ Invalid</button>
+      </div>
+      <div id="accountsList"><div style="color:var(--muted);font-size:12px">Select a filter to load accounts</div></div>
+    </div>
+  </div>
+
 </div><!-- /adminPanel -->
 
 <script type="module">
@@ -691,6 +706,7 @@ window.showTab = function(tab,btn){
   if(tab==='investments') loadInvestmentsAdmin();
   if(tab==='ads') loadAds();
   if(tab==='notifications') loadAdminNotifs();
+  if(tab==='accounts') loadAccounts('pending');
 };
 
 // ══════════════════════════════════════════════════
@@ -1497,6 +1513,59 @@ window.resetUserPin = async function(uid, label){
       fetch(`${SERVER}/admin/unlock-pin`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,adminKey:ADMIN_KEY})}).catch(()=>{});
     } else alert('❌ '+d.message);
   }catch(e){ alert('Error: '+e.message); }
+};
+
+// ── Bank Accounts ──
+window.loadAccounts = async function(filter='all'){
+  const el = document.getElementById('accountsList');
+  el.innerHTML = '<div class="page-loader"><div class="spinner"></div></div>';
+  try{
+    let snap;
+    if(filter==='all'){
+      snap = await getDocs(query(collection(db,'bankAccounts'),orderBy('createdAt','desc'),limit(100)));
+    } else {
+      snap = await getDocs(query(collection(db,'bankAccounts'),where('status','==',filter),orderBy('createdAt','desc'),limit(100)));
+    }
+    // Update pending badge
+    const pendingSnap = await getDocs(query(collection(db,'bankAccounts'),where('status','==','pending')));
+    const badge = document.getElementById('accBadge');
+    if(badge){ badge.style.display = pendingSnap.size > 0 ? 'inline-block' : 'none'; }
+
+    if(snap.empty){ el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:12px 0">No accounts found</div>'; return; }
+    const statusColor = s => s==='activated'?'#03A66D':s==='invalid'?'#ef4444':'#F0B90B';
+    el.innerHTML = snap.docs.map(d=>{
+      const a = d.data();
+      const c = statusColor(a.status);
+      return `<div class="item-card" style="margin-bottom:10px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700">${a.phone}</div>
+            <div style="font-size:12px;color:var(--muted)">${a.name} · ${a.network||'Mobile Money'}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">User: ${a.userId}</div>
+            <div style="font-size:10px;color:var(--muted)">${a.date||''} ${a.time||''}</div>
+          </div>
+          <span class="badge" style="background:${c}22;color:${c};border:1px solid ${c}55;border-radius:999px;padding:3px 10px;font-size:10px;font-weight:700;text-transform:uppercase">${a.status}</span>
+        </div>
+        <div class="mini-actions">
+          ${a.status!=='activated'?`<button class="btn btn-sm btn-green" onclick="updateAccount('${d.id}','activated')">✅ Activate</button>`:''}
+          ${a.status!=='invalid'?`<button class="btn btn-sm btn-red" onclick="updateAccount('${d.id}','invalid')">❌ Invalidate</button>`:''}
+          ${a.status!=='pending'?`<button class="btn btn-sm btn-outline" onclick="updateAccount('${d.id}','pending')">⏳ Set Pending</button>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e){ el.innerHTML='<div style="color:var(--muted);font-size:12px">Error: '+e.message+'</div>'; }
+};
+
+window.updateAccount = async function(accountId, status){
+  const note = status==='invalid' ? (prompt('Reason for invalidating (optional):')||'') : '';
+  try{
+    const r = await fetch(`${SERVER}/admin/bank-account/update`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId,status,adminKey:ADMIN_KEY,note})});
+    const d = await r.json();
+    if(d.status==='success'){
+      showMsg('accountsList','✅ Account updated to '+status,false);
+      loadAccounts('all');
+    } else { alert('❌ '+d.message); }
+  } catch(e){ alert('Error: '+e.message); }
 };
 
 // ── Load PIN/Password reset requests ──
