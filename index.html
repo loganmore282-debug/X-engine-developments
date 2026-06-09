@@ -39,6 +39,7 @@ input,button,select,textarea{font-family:var(--fam)}
 
 /* ── AUTH PAGES ── */
 #loginPage,#registerPage{min-height:100vh;background:#0B0E11;display:flex;flex-direction:column;position:relative;overflow:hidden}
+#loginPage{display:none}
 #registerPage{display:none}
 /* Engine grid background */
 #loginPage::before,#registerPage::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(240,185,11,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(240,185,11,.07) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;z-index:0}
@@ -318,6 +319,13 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
 </style>
 </head>
 <body>
+
+<!-- SPLASH -->
+<div id="splashScreen" style="position:fixed;inset:0;z-index:9999;background:#0B0E11;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:900;color:#F0B90B;letter-spacing:3px">X-ENGINE</div>
+  <div style="font-size:10px;color:rgba(240,185,11,.5);letter-spacing:4px;text-transform:uppercase">Investment Platform</div>
+  <div class="spinner" style="margin-top:12px"></div>
+</div>
 
 <!-- ══════════════════════════════════════════ -->
 <!-- LOGIN PAGE -->
@@ -1346,16 +1354,21 @@ window._doLogout = async function(){
 // AUTH STATE
 // ══════════════════════════════════════════════════
 onAuthStateChanged(auth, async (user)=>{
+  const splash = document.getElementById('splashScreen');
   if(user){
     _user=user;
     document.getElementById('loginPage').style.display='none';
     document.getElementById('registerPage').style.display='none';
     document.getElementById('mainApp').style.display='block';
+    if(splash) splash.style.display='none';
     await loadUserData();
     initTicker();
     loadProducts();
     loadSettings();
     startWitListener(user.uid);
+    // Restore last active tab
+    const savedTab = localStorage.getItem('xe_tab') || 'home';
+    setTimeout(()=>{ if(window._switchTab) window._switchTab(savedTab); },100);
     setTimeout(()=>loadAndShowDialog(),1500);
   } else {
     _user=null; _userData=null;
@@ -1363,6 +1376,7 @@ onAuthStateChanged(auth, async (user)=>{
     document.getElementById('loginPage').style.display='flex';
     document.getElementById('registerPage').style.display='none';
     document.getElementById('mainApp').style.display='none';
+    if(splash) splash.style.display='none';
   }
 });
 
@@ -1479,6 +1493,7 @@ window._switchTab = function(tab){
   const navMap={home:'nav-home',products:'nav-products',team:'nav-team',profile:'nav-profile'};
   if(navMap[tab] && document.getElementById(navMap[tab])) document.getElementById(navMap[tab]).classList.add('active');
   _activeTab=tab;
+  localStorage.setItem('xe_tab', tab);
   window.scrollTo(0,0);
   if(tab==='investments') loadMyInvestments();
   if(tab==='wallet') loadTransactions();
@@ -2734,7 +2749,14 @@ function txDialogFailed(title, sub){
   el('txdBar').style.width='100%';
   el('txdBar').parentElement.style.background='#1A1200';
   el('txdBtn').style.display='block'; el('txdBtn').textContent='Try Again';
-  el('txdBtn').onclick=()=>closeTxDialog();
+  el('txdBtn').onclick=()=>{
+    // Reset deposit button so user can try again
+    const depBtn=document.getElementById('depBtn');
+    if(depBtn){depBtn.disabled=false;depBtn.textContent='💰 Pay Now';}
+    const depStatus=document.getElementById('depStatus');
+    if(depStatus){depStatus.style.display='none';depStatus.textContent='';}
+    closeTxDialog();
+  };
   el('txdCancelBtn').style.display='none';
 }
 
