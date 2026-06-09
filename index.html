@@ -239,16 +239,16 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
 .full-page-body{padding:18px 16px}
 
 /* ── ANNOUNCEMENT DIALOG ── */
-.dialog-overlay{position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.75);display:none;align-items:flex-end;justify-content:center;padding:0}
+.dialog-overlay{position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;padding:24px}
 .dialog-overlay.open{display:flex}
-.dialog-box{background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:480px;overflow:hidden;max-height:88vh;overflow-y:auto}
-.dialog-header{background:#F0B90B;padding:20px 16px;position:relative;min-height:100px}
-.dialog-header-img{position:absolute;right:12px;top:-10px;width:90px}
-.dialog-header-title{font-size:20px;font-weight:900;color:#fff;font-style:italic;max-width:65%}
-.dialog-body-content{padding:18px 16px}
-.dialog-body-text{font-size:14px;color:var(--text2);line-height:1.7;margin-bottom:16px;white-space:pre-wrap}
+.dialog-box{background:var(--bg2);border-radius:20px;width:100%;max-width:420px;overflow:hidden;max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.dialog-header{background:#F0B90B;padding:24px 16px 18px;position:relative;min-height:90px}
+.dialog-header-img{position:absolute;right:12px;top:-8px;width:80px}
+.dialog-header-title{font-size:20px;font-weight:900;color:#fff;font-style:italic;max-width:70%}
+.dialog-body-content{padding:18px 18px 14px}
+.dialog-body-text{font-size:14px;color:var(--text2);line-height:1.75;margin-bottom:18px;white-space:pre-wrap}
 .dialog-action-link{display:block;text-align:center;color:var(--primary);font-size:13px;font-weight:700;text-decoration:underline;margin-bottom:16px;cursor:pointer}
-.btn-dialog-confirm{width:100%;padding:15px;border:none;border-radius:14px;background:#F0B90B;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:8px}
+.btn-dialog-confirm{width:100%;padding:15px;border:none;border-radius:50px;background:#F0B90B;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:6px}
 .dialog-close-x{position:absolute;top:10px;left:12px;width:28px;height:28px;background:rgba(255,255,255,.2);border:none;border-radius:50%;color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 
 /* ── MISC ── */
@@ -881,7 +881,7 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
     <!-- Amount -->
     <div class="form-group">
       <label class="form-label">Amount (UGX)</label>
-      <input class="form-input" id="witAmount" type="number" placeholder="Min 60,000 — Max 500,000" style="background:#1a1a1a;border-color:#2a2a2a" oninput="calcWithdrawFee()">
+      <input class="form-input" id="witAmount" type="number" placeholder="Min 10,000 (ref) / 60,000 — Max 500,000" style="background:#1a1a1a;border-color:#2a2a2a" oninput="calcWithdrawFee()">
     </div>
 
     <!-- Fee preview -->
@@ -1471,8 +1471,13 @@ function buildTicker(){
   for(let i=0;i<8;i++){
     const isWit=Math.random()>.55;
     const p=pick(TICK_PHONES);
-    const a=Number(pick(isWit?TICK_WIT_AMTS:TICK_DEP_AMTS)).toLocaleString();
-    msgs.push(isWit?`User ${p} has withdrawn UGX ${a}`:`User ${p} has deposited UGX ${a}`);
+    if(isWit){
+      const gross=pick(TICK_WIT_AMTS);
+      const net=Math.round(gross*0.9).toLocaleString();
+      msgs.push(`User ${p} has withdrawn UGX ${net}`);
+    } else {
+      msgs.push(`User ${p} has deposited UGX ${Number(pick(TICK_DEP_AMTS)).toLocaleString()}`);
+    }
   }
   return msgs.join('   •   ');
 }
@@ -1907,7 +1912,8 @@ window._startWithdrawal = async function(){
   const _cum=_userData?.cumulativeBalance||_userData?.walletBalance||0;
   const _ref=_userData?.refEarned||0;
   const cum = _cum + (_ref>=10000?_ref:0);
-  if(!amount||amount<60000) return showToast('Minimum withdrawal is UGX 60,000','error');
+  const minWit = _ref>=10000 ? 10000 : 60000;
+  if(!amount||amount<minWit) return showToast(`Minimum withdrawal is ${ugx(minWit)}`,'error');
   if(amount>500000) return showToast('Maximum withdrawal is UGX 500,000','error');
   if(amount>cum) return showToast(`Insufficient balance. Available: ${ugx(cum)}`,'error');
   if(!phone||phone.length<7) return showToast('Enter valid phone number','error');

@@ -373,8 +373,8 @@ async function handleDepositCallback(req, res) {
           });
           const notifRef = db.collection('notifications').doc();
           t.set(notifRef, {
-            userId, title: '💰 Deposit Successful!',
-            message: `${fmtUGX(creditAmount)} has been credited to your wallet.\n\n📅 Date: ${date}\n⏰ Time: ${time}\n📱 Phone: ${phone || pending.phone || 'N/A'}\n🔖 Reference: ${reference}\n💳 Provider: ${provider}\n\nThank you for trusting X-Engine! ⚙️`,
+            userId, title: '⚡ Funds Received!',
+            message: `${fmtUGX(creditAmount)} has been credited to your wallet.\n\n📅 Date: ${date}\n⏰ Time: ${time}\n📱 Phone: ${phone || pending.phone || 'N/A'}\n🔖 Reference: ${reference}\n💳 Provider: ${provider}\n\nThank you for investing with X-Engine! ⚙️`,
             type: 'deposit', amount: creditAmount, reference, provider,
             phone: phone || pending.phone || '', date, time,
             readBy: [], createdAt: FieldValue.serverTimestamp()
@@ -463,8 +463,8 @@ app.post('/register/bonus', async (req, res) => {
       const notifRef = db.collection('notifications').doc();
       t.set(notifRef, {
         userId,
-        title: '🎉 Welcome Bonus!',
-        message: `Welcome to X-Engine! 🌱\n\nYou've received a ${fmtUGX(bonus)} registration bonus as our gift to you!\n\n📅 Date: ${date}\n⏰ Time: ${time}\n\nStart investing and grow your money today! 💰`,
+        title: '🚀 Account Activated!',
+        message: `Welcome to X-Engine! ⚙️\n\nYou've received a ${fmtUGX(bonus)} activation bonus as our gift to you!\n\n📅 Date: ${date}\n⏰ Time: ${time}\n\nStart investing and watch your money grow! 📈`,
         type: 'registration_bonus', amount: bonus, date, time,
         readBy: [], createdAt: FieldValue.serverTimestamp()
       });
@@ -531,8 +531,8 @@ async function checkAndPayReferral(userId, depositAmount) {
         const notifRef = db.collection('notifications').doc();
         t.set(notifRef, {
           userId: referredBy,
-          title: '🎉 Referral Reward!',
-          message: `${user.name || 'Your referral'} just made their first deposit!\n\nYou earned ${fmtUGX(firstDepBonus)} referral bonus. 💰\n\n📅 Date: ${date}\n⏰ Time: ${time}`,
+          title: '🔗 Team Earnings!',
+          message: `${user.name || 'Your referral'} just made their first deposit!\n\nYou earned ${fmtUGX(firstDepBonus)} team bonus. 💰\n\n📅 Date: ${date}\n⏰ Time: ${time}`,
           type: 'referral', amount: firstDepBonus, date, time,
           readBy: [], createdAt: FieldValue.serverTimestamp()
         });
@@ -575,8 +575,8 @@ async function checkAndPayReferral(userId, depositAmount) {
         const notifRef = db.collection('notifications').doc();
         t.set(notifRef, {
           userId: referredBy,
-          title: '💸 Referral Reward!',
-          message: `${user.name || 'Your referral'} deposited ${fmtUGX(depositAmount)}!\n\nYou earned ${ongoingPct}% = ${fmtUGX(reward)} 🎯\n\n📅 Date: ${date}\n⏰ Time: ${time}\n\nKeep sharing your link to earn more! 🌱`,
+          title: '💎 Ongoing Team Bonus!',
+          message: `${user.name || 'Your referral'} deposited ${fmtUGX(depositAmount)}!\n\nYou earned ${ongoingPct}% = ${fmtUGX(reward)} 🎯\n\n📅 Date: ${date}\n⏰ Time: ${time}\n\nKeep sharing your link to earn more! ⚙️`,
           type: 'referral_ongoing', amount: reward, date, time,
           readBy: [], createdAt: FieldValue.serverTimestamp()
         });
@@ -629,8 +629,8 @@ app.post('/withdraw/request', async (req, res) => {
   if (!userId || !amount || !phone || !pin)
     return res.status(400).json({ status: 'error', message: 'userId, amount, phone and PIN required' });
   const amt = parseFloat(amount);
-  if (isNaN(amt) || amt < 60000 || amt > 500000)
-    return res.status(400).json({ status: 'error', message: 'Amount: 60,000–500,000 UGX' });
+  if (isNaN(amt) || amt > 500000)
+    return res.status(400).json({ status: 'error', message: 'Amount must be ≤ 500,000 UGX' });
   const fullPhone = cleanPhone(phone);
   try {
     const userSnap = await db.collection('users').doc(userId).get();
@@ -638,6 +638,11 @@ app.post('/withdraw/request', async (req, res) => {
     const user = userSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
     if (!user.withdrawalPin) return res.status(400).json({ status: 'error', message: 'No PIN set. Please set your withdrawal PIN first.', needsPin: true });
+    // Dynamic minimum: referral balance ≥ 10,000 → min is 10,000, otherwise 60,000
+    const refEarnedNow = user.refEarned || 0;
+    const minWithdraw  = refEarnedNow >= 10000 ? 10000 : 60000;
+    if (amt < minWithdraw)
+      return res.status(400).json({ status: 'error', message: refEarnedNow >= 10000 ? 'Minimum withdrawal is UGX 10,000' : 'Minimum withdrawal is UGX 60,000' });
 
     // ── BRUTE-FORCE PIN PROTECTION ── 10 attempts → 1-hour lock
     const MAX_PIN_ATTEMPTS = 10;
@@ -919,7 +924,7 @@ async function processWithdrawalSuccess(witId, wit, marzData) {
   const feeNote = wit.fee > 0 ? `\n💸 Fee deducted: ${fmtUGX(wit.fee)}` : '';
   await notify(
     wit.userId,
-    '✅ Withdrawal Successful!',
+    '🏦 Payout Confirmed!',
     `🎉 Your withdrawal has been processed successfully!\n\n` +
     `👤 Account Name: ${recipientName}\n` +
     `📱 Phone: ${wit.withdrawalPhone}\n` +
@@ -947,8 +952,8 @@ async function processWithdrawalFailure(witId, wit, reason) {
     .where('reference', '==', wit.reference).limit(1).get();
   if (!txSnap.empty) txSnap.docs[0].ref.update({ status: 'failed' });
   await notify(
-    wit.userId, 'Withdrawal Failed',
-    'Your withdrawal of ' + fmtUGX(wit.amount) + ' could not be processed. ' + fmtUGX(wit.amount) + ' has been refunded.\n\nReason: ' + reason,
+    wit.userId, '❌ Payout Failed',
+    'Your withdrawal of ' + fmtUGX(wit.amount) + ' could not be processed. ' + fmtUGX(wit.amount) + ' has been refunded to your wallet.\n\nReason: ' + reason,
     'withdrawal_failed',
     { amount: wit.amount, reference: wit.reference }
   );
@@ -1269,6 +1274,7 @@ app.post('/checkin', async (req, res) => {
       if (freshSnap.data().lastCheckinDate === todayKey) throw new Error('ALREADY_DONE');
       t.update(userRef, {
         walletBalance:   FieldValue.increment(bonus),
+        depositBalance:  FieldValue.increment(bonus),
         lastCheckinDate: todayKey,
         checkinStreak:   newStreak,
         checkinDays:     FieldValue.increment(1),
@@ -1277,14 +1283,14 @@ app.post('/checkin', async (req, res) => {
       const txRef = db.collection('transactions').doc();
       t.set(txRef, {
         userId, type: 'checkin',
-        description: 'Daily check-in bonus — Day ' + newStreak,
+        description: 'Daily check-in — Day ' + newStreak,
         amount: bonus, status: 'success', date, time,
         createdAt: FieldValue.serverTimestamp()
       });
       const notifRef = db.collection('notifications').doc();
       t.set(notifRef, {
-        userId, title: '✅ Check-in Bonus!',
-        message: fmtUGX(bonus) + ' check-in bonus credited!\n\n🔥 Streak: ' + newStreak + ' day(s)\n📅 Date: ' + date + '\n⏰ Time: ' + time + '\n\nKeep logging in daily! 🌱',
+        userId, title: '⚡ Daily Reward Claimed!',
+        message: fmtUGX(bonus) + ' deposited to your wallet!\n\n🔥 Streak: ' + newStreak + ' day(s)\n📅 Date: ' + date + '\n⏰ Time: ' + time + '\n\nKeep earning every day! ⚙️',
         type: 'checkin', amount: bonus, date, time,
         readBy: [], createdAt: FieldValue.serverTimestamp()
       });
