@@ -1350,6 +1350,27 @@ function updateUI(){
   document.getElementById('profileName').textContent   = _userData.phone||name;
   document.getElementById('profilePhone').textContent  = _userData.phone||'';
   document.getElementById('profileBalance').textContent = Number(cum).toFixed(2);
+  // Profile photo
+  const photoUrl = _userData.photoUrl || _userData.profilePhotoUrl || _userData.photoURL || '';
+  const avatarWrap = document.getElementById('profileAvatarWrap');
+  const avatarText = document.getElementById('profileAvatarText');
+  if (photoUrl && avatarWrap) {
+    avatarWrap.style.background = 'transparent';
+    let img = avatarWrap.querySelector('img');
+    if (!img) { img = document.createElement('img'); img.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:50%'; avatarWrap.innerHTML=''; avatarWrap.appendChild(img); }
+    img.src = photoUrl;
+    img.onerror = () => { avatarWrap.innerHTML = '<span id="profileAvatarText">👤</span>'; };
+  }
+  if (avatarWrap && !avatarWrap._photoClickSet) {
+    avatarWrap.style.cursor = 'pointer';
+    avatarWrap.title = 'Tap to change photo';
+    avatarWrap.addEventListener('click', () => {
+      let inp = document.getElementById('_profilePhotoInput');
+      if (!inp) { inp = document.createElement('input'); inp.type='file'; inp.id='_profilePhotoInput'; inp.accept='image/*'; inp.style.display='none'; document.body.appendChild(inp); inp.addEventListener('change', _uploadProfilePhoto); }
+      inp.value=''; inp.click();
+    });
+    avatarWrap._photoClickSet = true;
+  }
   if(_userData.createdAt?.toDate){
     const d=_userData.createdAt.toDate();
     document.getElementById('profileJoined').textContent = 'Joined: '+d.toLocaleDateString('en-UG',{day:'2-digit',month:'short',year:'numeric'});
@@ -2410,6 +2431,8 @@ function openTxDialog(type, amount, phone){
   el('txdBar').style.width='15%';
   el('txdBtn').style.display='none';
   el('txdCancelBtn').style.display='block';
+  el('txdCancelBtn').textContent = 'Cancel Polling';
+  el('txdCancelBtn').onclick = () => cancelTxPolling();
   el('txdRows').innerHTML = `
     <div class="txd-row"><span class="txd-label">Phone</span><span class="txd-val">${phone||'—'}</span></div>
     <div class="txd-row"><span class="txd-label">Status</span><span class="txd-val" id="txdStatusText">Waiting for approval...</span></div>
@@ -2446,6 +2469,7 @@ function txDialogSuccess(title, sub, amount, rows){
   el('txdBar').parentElement.style.background='rgba(3,166,109,.15)';
   if(rows) el('txdRows').innerHTML = rows.map(r=>`<div class="txd-row"><span class="txd-label">${r[0]}</span><span class="txd-val" style="color:${r[2]||'var(--text)'}">${r[1]}</span></div>`).join('');
   el('txdBtn').style.display='block';
+  el('txdBtn').onclick = () => closeTxDialog();
   el('txdCancelBtn').style.display='none';
 }
 
@@ -2565,6 +2589,33 @@ window.openChangePasswordPage = function(){
   overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
 };
 
+// ── Profile photo upload via Cloudinary ──
+async function _uploadProfilePhoto(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file || !_user) return;
+  const MAX_SIZE = 5 * 1024 * 1024;
+  if (file.size > MAX_SIZE) { showToast('Photo too large (max 5MB)', 'error'); return; }
+  showToast('Uploading photo…', 'info', 8000);
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_PRESET);
+    formData.append('folder', 'profiles');
+    const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: formData });
+    if (!resp.ok) throw new Error('Upload failed: ' + resp.status);
+    const data = await resp.json();
+    const url = data.secure_url;
+    if (!url) throw new Error('No URL returned');
+    await updateDoc(doc(db, 'users', _user.uid), { photoUrl: url });
+    // Update avatar immediately
+    const wrap = document.getElementById('profileAvatarWrap');
+    if (wrap) { wrap.style.background='transparent'; let img=wrap.querySelector('img'); if(!img){img=document.createElement('img');img.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:50%';wrap.innerHTML='';wrap.appendChild(img);} img.src=url; }
+    showToast('Photo updated! ✅', 'success');
+  } catch (err) {
+    showToast('Upload failed: ' + (err.message || 'Unknown error'), 'error');
+  }
+}
+
 console.log('✅ x-engine module loaded');
 </script>
 
@@ -2577,8 +2628,8 @@ console.log('✅ x-engine module loaded');
     <div class="txd-amount" id="txdAmount"></div>
     <div class="txd-bar"><div class="txd-bar-fill" id="txdBar"></div></div>
     <div id="txdRows"></div>
-    <button class="txd-btn" id="txdBtn" onclick="closeTxDialog()" style="display:none">Done ✓</button>
-    <button class="txd-btn outline" id="txdCancelBtn" onclick="cancelTxPolling()" style="margin-top:8px">Cancel Polling</button>
+    <button class="txd-btn" id="txdBtn" style="display:none">Done ✓</button>
+    <button class="txd-btn outline" id="txdCancelBtn" style="margin-top:8px">Cancel Polling</button>
   </div>
 </div>
 
