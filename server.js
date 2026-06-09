@@ -170,8 +170,9 @@ app.post('/pin/status', async (req, res) => {
   try {
     const snap = await db.collection('users').doc(userId).get();
     if (!snap.exists) return res.json({ hasPin: false });
-    const hasPin = !!(snap.data().withdrawalPinHash);
-    const locked = snap.data().pinAttempts >= 10;
+    const hasPin = !!(snap.data().withdrawalPin);
+    const pinLockUntil = snap.data().pinLockUntil?.toDate?.() || null;
+    const locked = !!(pinLockUntil && pinLockUntil > new Date());
     return res.json({ hasPin, locked, attempts: snap.data().pinAttempts || 0 });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -474,28 +475,24 @@ async function checkAndPayReferral(userId, depositAmount) {
 
     const settSnap = await db.collection('settings').doc('main').get();
     const settings = settSnap.exists ? settSnap.data() : {};
-    const firstDepBonus   = settings.referralBonus        || 5000;
-    const ongoingPct      = settings.referralOngoingPct   || 15;   // 15%
-
-    // How many confirmed deposits has this user made?
-    const depositCount = user.depositCount || 0;  // incremented on every successful deposit
+    const firstDepBonus = settings.referralBonus      || 5000;
+    const ongoingPct    = settings.referralOngoingPct || 15;
 
     const { date, time } = nowStr();
 
-    if (depositCount === 1) {
-      // ── FIRST DEPOSIT: pay flat UGX 5,000 to referrer ──
-      const refSnap = await db.collection('referrals')
-        .where('referredUserId', '==', userId)
-        .where('paid', '==', false)
-        .limit(1).get();
-      if (refSnap.empty) return;
-      const refDoc = refSnap.docs[0];
+    // ── Check referral doc state directly (no depositCount dependency) ──
+    const unpaidSnap = await db.collection('referrals')
+      .where('referredUserId', '==', userId)
+      .where('paid', '==', false)
+      .limit(1).get();
 
+    if (!unpaidSnap.empty) {
+      // ── L1: First-deposit flat bonus — referral exists but not yet paid ──
+      const refDoc = unpaidSnap.docs[0];
       await db.runTransaction(async (t) => {
         const referrerRef  = db.collection('users').doc(referredBy);
         const referrerSnap = await t.get(referrerRef);
         if (!referrerSnap.exists) return;
-
         t.update(referrerRef, {
           walletBalance: FieldValue.increment(firstDepBonus),
           referralCount: FieldValue.increment(1),
@@ -509,8 +506,7 @@ async function checkAndPayReferral(userId, depositAmount) {
           userId: referredBy, type: 'referral',
           description: `Referral bonus — ${user.name || 'friend'} made first deposit!`,
           amount: firstDepBonus, status: 'success', date, time,
-          referredUserId: userId,
-          createdAt: FieldValue.serverTimestamp()
+          referredUserId: userId, createdAt: FieldValue.serverTimestamp()
         });
         const notifRef = db.collection('notifications').doc();
         t.set(notifRef, {
@@ -521,46 +517,41 @@ async function checkAndPayReferral(userId, depositAmount) {
           readBy: [], createdAt: FieldValue.serverTimestamp()
         });
       });
-      console.log(`✅ Referral L1 paid: ${fmtUGX(firstDepBonus)} → ${referredBy} (${user.name || userId} first deposit)`);
+      console.log(`✅ Referral L1 paid: ${fmtUGX(firstDepBonus)} → ${referredBy} (triggered by ${userId})`);
+      return; // Don't also pay L2 on the same event
+    }
 
-    } else if (depositCount > 1 && depositAmount > 0) {
-      // ── SUBSEQUENT DEPOSITS: pay 15% to referrer ──
-      // Only pay if referral record exists and was already paid (L1 completed)
-      const refSnap = await db.collection('referrals')
+    // ── L2: Ongoing % reward — L1 already paid, this is a subsequent deposit ──
+    if (depositAmount > 0) {
+      const paidSnap = await db.collection('referrals')
         .where('referredUserId', '==', userId)
         .where('paid', '==', true)
         .limit(1).get();
-      if (refSnap.empty) return;
+      if (paidSnap.empty) return;
 
       const reward = Math.round(depositAmount * (ongoingPct / 100));
       if (reward <= 0) return;
 
+      const refDoc = paidSnap.docs[0];
       await db.runTransaction(async (t) => {
         const referrerRef  = db.collection('users').doc(referredBy);
         const referrerSnap = await t.get(referrerRef);
         if (!referrerSnap.exists) return;
-
         t.update(referrerRef, {
           walletBalance: FieldValue.increment(reward),
           refEarned:     FieldValue.increment(reward)
         });
-
-        // Log this ongoing reward on the referral doc too
-        const refDoc = refSnap.docs[0];
         t.update(refDoc.ref, {
           ongoingEarned: FieldValue.increment(reward),
           lastRewardAt:  FieldValue.serverTimestamp()
         });
-
         const txRef = db.collection('transactions').doc();
         t.set(txRef, {
           userId: referredBy, type: 'referral_ongoing',
           description: `${ongoingPct}% reward — ${user.name || 'referral'} deposited ${fmtUGX(depositAmount)}`,
           amount: reward, status: 'success', date, time,
-          referredUserId: userId, depositAmount,
-          createdAt: FieldValue.serverTimestamp()
+          referredUserId: userId, depositAmount, createdAt: FieldValue.serverTimestamp()
         });
-
         const notifRef = db.collection('notifications').doc();
         t.set(notifRef, {
           userId: referredBy,
@@ -680,58 +671,11 @@ app.post('/withdraw/request', async (req, res) => {
     const balance = cumBal + (refBal >= 10000 ? refBal : 0);
     if (balance < amt) return res.status(400).json({ status: 'error', message: 'Insufficient balance. Available: ' + fmtUGX(balance) });
 
-    // ── DATE/TIME CHECKS (EAT) ─────────────────────────────────────────
-    const eatNowD   = eatNow();
-    const eatHour   = eatNowD.getUTCHours();
-    const eatDay    = eatNowD.getUTCDay(); // 0=Sun,6=Sat
-    const eatMonth  = eatNowD.getUTCMonth() + 1; // 1-12
-    const eatDate   = eatNowD.getUTCDate();
-
-    // No weekends
-    if (eatDay === 0) return res.status(400).json({ status: 'error', message: 'No withdrawals on Sundays. Come back Monday!' });
-    if (eatDay === 6) return res.status(400).json({ status: 'error', message: 'No withdrawals on Saturdays. Come back Monday!' });
-
-    // Uganda official public holidays (fixed-date + approximate floating)
-    const ugHolidays = [
-      '01-01', // New Year's Day
-      '02-16', // NRM Liberation Day
-      '03-08', // International Women's Day
-      '04-11', // Idi Amin Dada Day (observed)
-      '05-01', // Labour Day
-      '06-03', // Martyr's Day
-      '06-09', // National Heroes' Day
-      '10-09', // Independence Day
-      '12-25', // Christmas Day
-      '12-26', // Boxing Day
-    ];
-    // Floating holidays: Easter (Good Fri + Easter Mon), Eid al-Fitr, Eid al-Adha
-    // Approximations for 2025-2030 — admin can always reject manually too
-    const floatingHolidays = [
-      // Easter Good Friday
-      '2025-04-18','2026-04-03','2027-03-26','2028-04-14','2029-03-30','2030-04-19',
-      // Easter Monday
-      '2025-04-21','2026-04-06','2027-03-29','2028-04-17','2029-04-02','2030-04-22',
-      // Eid al-Fitr (approximate)
-      '2025-03-30','2026-03-20','2027-03-09','2028-02-26','2029-02-14','2030-02-04',
-      // Eid al-Adha (approximate)
-      '2025-06-06','2026-05-27','2027-05-17','2028-05-05','2029-04-24','2030-04-14',
-    ];
-    const mm   = String(eatMonth).padStart(2,'0');
-    const dd   = String(eatDate).padStart(2,'0');
-    const yyyy = eatNowD.getUTCFullYear();
-    const fixedKey    = mm + '-' + dd;
-    const fullDateKey = yyyy + '-' + mm + '-' + dd;
-    if (ugHolidays.includes(fixedKey) || floatingHolidays.includes(fullDateKey))
-      return res.status(400).json({ status: 'error', message: 'No withdrawals on public holidays. Enjoy your holiday! 🎉' });
-
-    // Withdrawal window 9am–5pm EAT only
-    if (eatHour < 9 || eatHour >= 17)
-      return res.status(400).json({ status: 'error', message: 'Withdrawals only available 9:00am – 5:00pm Uganda time' });
-
     // ── RULE: deposited funds cannot be withdrawn directly ──────────────
     const investedTotal  = user.totalInvested  || 0;
     const withdrawnTotal = user.totalWithdrawn || 0;
-    const hasInvested    = investedTotal > 0;
+    // Allow if user has invested OR if admin has credited their cumulative wallet
+    const hasInvested = investedTotal > 0 || (user.cumulativeBalance || 0) > 0;
     if (!hasInvested)
       return res.status(400).json({ status: 'error', message: 'You must invest your deposited funds before withdrawing. Go to Products → choose a plan → invest → wait for maturity → claim → then withdraw.' });
 
@@ -934,9 +878,9 @@ async function processWithdrawalFailure(witId, wit, reason) {
   });
   await db.collection('users').doc(wit.userId).update({
     walletBalance: FieldValue.increment(wit.amount),
+    cumulativeBalance: FieldValue.increment(wit.amount),
     withdrawalCount: FieldValue.increment(-1)
   });
-  // NOTE: Balance is refunded above; no other cleanup needed.
   const txSnap = await db.collection('transactions')
     .where('reference', '==', wit.reference).limit(1).get();
   if (!txSnap.empty) txSnap.docs[0].ref.update({ status: 'failed' });
@@ -1031,7 +975,7 @@ app.post('/admin/deposit', async (req, res) => {
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
       const updateFields = {
-        walletBalance: (uSnap.data().walletBalance || 0) + amt,
+        walletBalance: FieldValue.increment(amt),
         updatedAt: FieldValue.serverTimestamp()
       };
       // Always update the target wallet field
@@ -1163,9 +1107,8 @@ app.post('/admin/reset-pin', async (req, res) => {
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const updateData = { pinAttempts: 0, updatedAt: FieldValue.serverTimestamp() };
-    try { updateData.withdrawalPinHash = FieldValue.delete(); } catch(e) {}
-    try { updateData.pinLockedUntil = FieldValue.delete(); } catch(e) {}
+    const updateData = { pinAttempts: 0, pinLockUntil: null, updatedAt: FieldValue.serverTimestamp() };
+    updateData.withdrawalPin = FieldValue.delete();
     await db.collection('users').doc(userId).update(updateData);
     await db.collection('notifications').add({
       userId, title: '🔓 Withdrawal PIN Reset',
@@ -1182,8 +1125,8 @@ app.post('/admin/unlock-pin', async (req, res) => {
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    await db.collection('users').doc(userId).update({ pinAttempts: 0, updatedAt: FieldValue.serverTimestamp() });
-    return res.json({ status: 'success', message: 'PIN attempts reset to 0' });
+    await db.collection('users').doc(userId).update({ pinAttempts: 0, pinLockUntil: null, updatedAt: FieldValue.serverTimestamp() });
+    return res.json({ status: 'success', message: 'PIN unlocked — attempts reset to 0' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -1306,8 +1249,8 @@ app.post('/checkin', async (req, res) => {
 // ═══════════════════════════════════════════
 async function runDailyCashback() {
   try {
-    const now = new Date();
-    const todayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const now = eatNow(); // use EAT so cashback fires on Uganda calendar day
+    const todayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD (EAT-shifted)
 
     // Get all active investments
     const invSnap = await db.collection('investments').where('status', '==', 'active').get();
