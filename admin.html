@@ -1109,7 +1109,7 @@ window.banUser=async function(uid,action){
 window.manualCreditUser=async function(uid){
   const amt=parseFloat(prompt('Amount to add (UGX):'));
   if(!amt||isNaN(amt)) return;
-  const wallet=confirm('Add to Cumulative Wallet (OK) or Deposits Wallet (Cancel)?')?'cumulativeBalance':'depositBalance';
+  const wallet=confirm('Wallet:\n\nOK  →  💰 Deposits (invest only)\nCancel  →  🏦 Cumulative (withdrawable)')?'depositBalance':'cumulativeBalance';
   const note=prompt('Note (optional):');
   try{
     const r=await fetch(`${SERVER}/admin/deposit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,amount:amt,wallet,note:note||'Admin credit',adminKey:ADMIN_KEY})});
