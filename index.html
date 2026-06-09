@@ -39,6 +39,7 @@ input,button,select,textarea{font-family:var(--fam)}
 
 /* ── AUTH PAGES ── */
 #loginPage,#registerPage{min-height:100vh;background:#0B0E11;display:flex;flex-direction:column;position:relative;overflow:hidden}
+#registerPage{display:none}
 /* Engine grid background */
 #loginPage::before,#registerPage::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(240,185,11,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(240,185,11,.07) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;z-index:0}
 /* Red glow top */
@@ -1336,6 +1337,7 @@ onAuthStateChanged(auth, async (user)=>{
     _user=null; _userData=null;
     if(_userUnsub){ _userUnsub(); _userUnsub=null; }
     document.getElementById('loginPage').style.display='flex';
+    document.getElementById('registerPage').style.display='none';
     document.getElementById('mainApp').style.display='none';
   }
 });
@@ -1358,9 +1360,9 @@ function updateUI(){
   if(!_userData) return;
   const dep = _userData.depositBalance||0;
   const refEarned = _userData.refEarned||0;
-  // Use walletBalance as master (server always increments this)
-  // cumulativeBalance is the earned/withdrawable portion
-  const cum = _userData.cumulativeBalance || _userData.walletBalance || 0;
+  // depositBalance = investable only (deposits + bonuses), NOT withdrawable
+  // cumulativeBalance = withdrawable only (investment returns), NOT reinvestable
+  const cum = _userData.cumulativeBalance || 0;
   const wit = _userData.totalWithdrawn||0;
   const name = (_userData.name||'').replace('@xengine.app','').replace('+256','') || 'there';
 
@@ -1909,7 +1911,7 @@ window._startWithdrawal = async function(){
   const amount=parseFloat(document.getElementById('witAmount').value);
   const phone=document.getElementById('witPhone').value.trim();
   const pin = window._witPin||'';
-  const _cum=_userData?.cumulativeBalance||_userData?.walletBalance||0;
+  const _cum=_userData?.cumulativeBalance||0;
   const _ref=_userData?.refEarned||0;
   const cum = _cum + (_ref>=10000?_ref:0);
   const minWit = _ref>=10000 ? 10000 : 60000;

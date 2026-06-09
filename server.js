@@ -449,6 +449,7 @@ app.post('/register/bonus', async (req, res) => {
       if (freshSnap.data().regBonusPaid) throw new Error('ALREADY_PAID');
       t.update(userRef, {
         walletBalance: FieldValue.increment(bonus),
+        depositBalance: FieldValue.increment(bonus),
         regBonusPaid: true,
         regBonusPaidAt: FieldValue.serverTimestamp(),
         referralCode
@@ -690,11 +691,12 @@ app.post('/withdraw/request', async (req, res) => {
       await db.collection('users').doc(userId).update({ pinAttempts: 0, pinLockUntil: null });
     }
 
-    // Withdrawable = cumulative wallet (earned returns + referral earnings)
-    const cumBal = user.cumulativeBalance || user.walletBalance || 0;
+    // Withdrawable = cumulative wallet ONLY (earned investment returns + referral earnings)
+    // Deposit wallet funds are investable-only, not withdrawable
+    const cumBal = user.cumulativeBalance || 0;
     const refBal = user.refEarned || 0;
     const balance = cumBal + (refBal >= 10000 ? refBal : 0);
-    if (balance < amt) return res.status(400).json({ status: 'error', message: 'Insufficient balance. Available: ' + fmtUGX(balance) });
+    if (balance < amt) return res.status(400).json({ status: 'error', message: 'Insufficient withdrawable balance. Cumulative: ' + fmtUGX(cumBal) + (refBal >= 10000 ? ', Referral: ' + fmtUGX(refBal) : '') });
 
     // ── RULE: deposited funds cannot be withdrawn directly ──────────────
     const investedTotal  = user.totalInvested  || 0;
