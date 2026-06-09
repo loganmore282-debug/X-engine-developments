@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>x-engine Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#F0B90B;--primary2:#F8D12F;--primary3:#FFE066;
+  --gold:#d97706;--gold2:#f59e0b;
+  --bg:#0f0f0f;--bg2:#1a1a1a;--bg3:#252525;
+  --card:rgba(220,38,38,0.04);
+  --border:rgba(220,38,38,0.15);
+  --text:#f9fafb;--muted:#6b7280;
+  --green:#03A66D;--blue:#3b82f6;
+  --r:12px;--fam:'Inter',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--fam)}
+input,button,select,textarea{font-family:var(--fam)}
+.topbar{position:sticky;top:0;z-index:100;background:rgba(15,15,15,.97);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+.topbar-brand{font-size:18px;font-weight:900;color:var(--primary2);letter-spacing:-.5px}
+.topbar-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.tab-bar{display:flex;overflow-x:auto;padding:10px 12px 0;gap:5px;background:var(--bg2);border-bottom:1px solid var(--border);scrollbar-width:none}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-btn{border:none;background:transparent;color:var(--muted);font-family:var(--fam);font-size:11px;font-weight:700;padding:8px 12px;border-radius:8px 8px 0 0;cursor:pointer;white-space:nowrap;text-transform:uppercase;letter-spacing:.5px;border-bottom:3px solid transparent;transition:all .2s}
+.tab-btn.active{color:var(--primary2);border-bottom-color:var(--primary2);background:rgba(220,38,38,.08)}
+.panel{padding:14px;display:none}
+.panel.active{display:block}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.form-group{margin-bottom:10px}
+.form-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:block}
+.form-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;transition:border-color .2s}
+.form-input:focus{border-color:var(--primary2)}
+.form-input::placeholder{color:var(--muted)}
+textarea.form-input{min-height:80px;resize:vertical}
+select.form-input{appearance:none}
+.btn{padding:10px 14px;border:none;border-radius:8px;font-family:var(--fam);font-size:11px;font-weight:800;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:.5px;display:inline-flex;align-items:center;gap:5px}
+.btn-primary{background:linear-gradient(135deg,var(--primary),#991b1b);color:#fff}
+.btn-gold{background:linear-gradient(135deg,var(--gold),#b45309);color:#fff}
+.btn-red{background:linear-gradient(135deg,#F0B90B,#F0B90B);color:#fff}
+.btn-green{background:linear-gradient(135deg,var(--green),#15803d);color:#fff}
+.btn-blue{background:linear-gradient(135deg,var(--blue),#1d4ed8);color:#fff}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-sm{padding:6px 10px;font-size:10px;border-radius:6px}
+.btn-full{width:100%;justify-content:center}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.stat-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.stat-val{font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:700;color:var(--primary2)}
+.stat-val.gold{color:var(--gold2)}.stat-val.red{color:var(--primary3)}.stat-val.green{color:#4ade80}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.item-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px}
+.item-title{font-size:13px;font-weight:700;color:var(--text)}
+.item-sub{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
+.badge{display:inline-block;font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.4px}
+.badge-green{background:rgba(22,163,74,.15);color:#4ade80}
+.badge-gold{background:rgba(217,119,6,.15);color:var(--gold2)}
+.badge-red{background:rgba(220,38,38,.15);color:var(--primary3)}
+.badge-blue{background:rgba(59,130,246,.15);color:#93c5fd}
+.badge-gray{background:rgba(255,255,255,.06);color:var(--muted)}
+.mini-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.msg-success{background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);color:#4ade80;padding:8px;border-radius:6px;font-size:12px;margin-top:6px}
+.msg-error{background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:var(--primary3);padding:8px;border-radius:6px;font-size:12px;margin-top:6px}
+.msg-info{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:#93c5fd;padding:8px;border-radius:6px;font-size:12px;margin-top:6px}
+.empty-state{text-align:center;padding:30px;color:var(--muted);font-size:13px}
+.search-input{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;width:100%;outline:none;margin-bottom:8px}
+.search-input::placeholder{color:var(--muted)}
+.photo-upload-area{border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:10px}
+.photo-upload-area:hover{border-color:var(--primary2);background:rgba(220,38,38,.04)}
+.progress-bar{height:5px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--primary2));border-radius:999px}
+.notif-dot{width:7px;height:7px;background:var(--primary3);border-radius:50%;display:inline-block;margin-left:4px}
+.callback-url{font-family:'Share Tech Mono',monospace;font-size:10px;color:#bfdbfe;background:rgba(59,130,246,.1);border-radius:5px;padding:4px 8px;margin-top:4px;word-break:break-all;display:block}
+/* AUTH */
+.auth-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;padding:24px}
+.auth-box{width:100%;max-width:340px}
+.auth-logo{text-align:center;margin-bottom:28px}
+.auth-logo-icon{font-size:44px;display:block;margin-bottom:8px}
+.auth-logo-name{font-size:26px;font-weight:900;color:var(--primary2)}
+.auth-logo-sub{font-size:11px;color:var(--muted);margin-top:3px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.auto-check-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;padding:7px 10px;background:rgba(220,38,38,.05);border:1px solid rgba(220,38,38,.12);border-radius:8px}
+.auto-check-status{font-size:10px;color:var(--muted);flex:1}
+.auto-check-status.checking{color:var(--gold2);animation:pulse 1s infinite}
+.spinner{width:14px;height:14px;border:2px solid rgba(220,38,38,.2);border-top-color:var(--primary2);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="authScreen" class="auth-screen">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <span class="auth-logo-icon">🚗</span>
+      <div class="auth-logo-name">x-engine Admin</div>
+      <div class="auth-logo-sub">Control Panel</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Admin Email</label>
+      <input class="form-input" type="email" id="adminEmail" placeholder="admin@xengine.app">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" type="password" id="adminPass" placeholder="••••••••">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="adminLogin()">🔓 Login</button>
+    <div id="authMsg" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="adminPanel" style="display:none">
+  <div class="topbar">
+    <div>
+      <div class="topbar-brand">x-engine Admin</div>
+      <div class="topbar-sub" id="adminGreeting">Welcome</div>
+    </div>
+    <button class="btn btn-sm" style="background:rgba(220,38,38,.15);color:var(--primary3);border:1px solid rgba(220,38,38,.3)" onclick="adminLogout()">Logout</button>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('dashboard',this)">📊 Dashboard</button>
+    <button class="tab-btn" onclick="showTab('withdrawals',this)">💸 Withdrawals <span id="witBadge" class="notif-dot" style="display:none"></span></button>
+    <button class="tab-btn" onclick="showTab('deposits',this)">💰 Deposits</button>
+    <button class="tab-btn" onclick="showTab('investments',this)">📈 Investments</button>
+    <button class="tab-btn" onclick="showTab('products',this)">🚗 Products</button>
+    <button class="tab-btn" onclick="showTab('users',this)">👥 Users</button>
+    <button class="tab-btn" onclick="showTab('referrals',this)">🔗 Referrals</button>
+    <button class="tab-btn" onclick="showTab('notifications',this)">🔔 Notifs</button>
+    <button class="tab-btn" onclick="showTab('ads',this)">🖼️ Ads</button>
+    <button class="tab-btn" onclick="showTab('settings',this)">⚙️ Settings</button>
+  </div>
+
+  <!-- ── DASHBOARD ── -->
+  <div class="panel active" id="dashboardPanel">
+    <div class="stat-grid">
+      <div class="stat-box"><div class="stat-val" id="sTotal">0</div><div class="stat-lbl">Total Users</div></div>
+      <div class="stat-box"><div class="stat-val gold" id="sTotalDep">0</div><div class="stat-lbl">Total Deposited</div></div>
+      <div class="stat-box"><div class="stat-val red" id="sTotalWit">0</div><div class="stat-lbl">Total Withdrawn</div></div>
+      <div class="stat-box"><div class="stat-val green" id="sTotalInv">0</div><div class="stat-lbl">Total Invested</div></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="stat-val gold" id="sPendingWit">0</div><div class="stat-lbl">Pending Withdrawals</div></div>
+      <div class="stat-box"><div class="stat-val" id="sActiveInv">0</div><div class="stat-lbl">Active Investments</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚡ Quick Actions</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn btn-gold btn-sm" onclick="showTab('withdrawals',document.querySelector('[onclick*=withdrawals]'))">💸 Withdrawals</button>
+        <button class="btn btn-primary btn-sm" onclick="showTab('deposits',document.querySelector('[onclick*=deposits]'))">💰 Deposits</button>
+        <button class="btn btn-blue btn-sm" onclick="showTab('products',document.querySelector('[onclick*=products]'))">🚗 Products</button>
+        <button class="btn btn-sm" style="background:rgba(168,85,247,.15);color:#c4b5fd;border:1px solid rgba(168,85,247,.3)" onclick="showTab('notifications',document.querySelector('[onclick*=notifications]'))">🔔 Notify</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">💰 Manual Funds</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">Add funds directly to a user's wallet</p>
+      <div class="form-group">
+        <label class="form-label">User ID or Phone</label>
+        <input class="form-input" type="text" id="manualDepUser" placeholder="User UID or phone">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Amount (UGX)</label>
+        <input class="form-input" type="number" id="manualDepAmt" placeholder="50000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Target Wallet</label>
+        <select class="form-input" id="manualDepWallet">
+          <option value="depositBalance">Deposits Wallet (invest only)</option>
+          <option value="cumulativeBalance">Cumulative Wallet (withdrawable)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <input class="form-input" type="text" id="manualDepNote" placeholder="Admin top-up">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="manualDeposit()">💰 Add Funds</button>
+      <div id="manualDepMsg"></div>
+    </div>
+  </div>
+
+  <!-- ── WITHDRAWALS ── -->
+  <div class="panel" id="withdrawalsPanel">
+    <div class="card">
+      <div class="card-title">💸 Withdrawals
+        <span style="font-size:11px;color:var(--muted);font-weight:400">(auto-processed via Marzpay)</span>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="filterWit('pending',this)">⏳ Pending</button>
+        <button class="btn btn-sm btn-outline" onclick="filterWit('processing',this)">⚡ Processing</button>
+        <button class="btn btn-sm btn-outline" onclick="filterWit('processed',this)">✅ Done</button>
+        <button class="btn btn-sm btn-outline" onclick="filterWit('failed',this)">❌ Failed</button>
+        <button class="btn btn-sm btn-outline" onclick="filterWit('all',this)">All</button>
+        <button class="btn btn-sm btn-primary" onclick="loadWithdrawals()" style="margin-left:auto">🔄 Refresh</button>
+      </div>
+      <div id="witList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- ── DEPOSITS ── -->
+  <div class="panel" id="depositsPanel">
+    <div class="card">
+      <div class="card-title">💰 Deposits</div>
+      <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px;color:#93c5fd">
+        🔗 Marzpay Callback URL:
+        <span class="callback-url" id="displayCallbackUrl">https://xengine-server-production.up.railway.app/callback</span>
+      </div>
+      <div class="auto-check-bar">
+        <span class="auto-check-status" id="autoCheckStatus">⏱ Auto-check every 30s — Idle</span>
+        <button class="btn btn-sm btn-primary" onclick="autoCheckAllProcessing(true)" style="font-size:9px">⚡ Check Now</button>
+        <button class="btn btn-sm btn-outline" onclick="loadDeposits()" style="font-size:9px">🔄 Refresh</button>
+      </div>
+      <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="filterDep('all',this)">All</button>
+        <button class="btn btn-sm btn-outline" onclick="filterDep('processing',this)">Processing</button>
+        <button class="btn btn-sm btn-outline" onclick="filterDep('success',this)">Success</button>
+        <button class="btn btn-sm btn-outline" onclick="filterDep('failed',this)">Failed</button>
+      </div>
+      <div id="depList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- ── INVESTMENTS ── -->
+  <div class="panel" id="investmentsPanel">
+    <div class="card">
+      <div class="card-title">📈 All Investments</div>
+      <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="filterAdminInv('all',this)">All</button>
+        <button class="btn btn-sm btn-outline" onclick="filterAdminInv('active',this)">Active</button>
+        <button class="btn btn-sm btn-outline" onclick="filterAdminInv('matured',this)">Matured</button>
+        <button class="btn btn-sm btn-outline" onclick="filterAdminInv('claimed',this)">Claimed</button>
+        <button class="btn btn-sm btn-primary" onclick="loadInvestmentsAdmin()" style="margin-left:auto">🔄 Refresh</button>
+      </div>
+      <div id="adminInvList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- ── PRODUCTS ── -->
+  <div class="panel" id="productsPanel">
+    <div class="card">
+      <div class="card-title">➕ Add / Edit Product</div>
+      <input type="hidden" id="editProductId">
+      <div class="form-group">
+        <label class="form-label">Product Name</label>
+        <input class="form-input" type="text" id="pName" placeholder="e.g. Engine V8">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="form-group">
+          <label class="form-label">Price (UGX)</label>
+          <input class="form-input" type="number" id="pPrice" placeholder="50000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cycle (Days)</label>
+          <input class="form-input" type="number" id="pCycle" placeholder="30">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="form-group">
+          <label class="form-label">Daily Cashback (UGX)</label>
+          <input class="form-input" type="number" id="pDailyCashback" placeholder="2000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Total Return (UGX)</label>
+          <input class="form-input" type="number" id="pReturn" placeholder="80000">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rating (e.g. 4.9)</label>
+        <input class="form-input" type="number" id="pRating" placeholder="4.9" step="0.1" min="1" max="5">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Display Order</label>
+        <input class="form-input" type="number" id="pOrder" placeholder="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-input" id="pDesc" placeholder="Product description..."></textarea>
+      </div>
+      <div style="margin-bottom:10px">
+        <label class="form-label">Product Photo (1 image)</label>
+        <div class="photo-upload-area" onclick="document.getElementById('pPhotoFile').click()">
+          <div id="pPhotoPreview" style="font-size:11px;color:var(--muted)">📷 Upload product photo</div>
+          <input type="file" id="pPhotoFile" accept="image/*" style="display:none" onchange="uploadProductPhoto()">
+        </div>
+        <input class="form-input" type="text" id="pPhotoUrl" placeholder="Or paste Cloudinary URL...">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="saveProduct()">💾 Save Product</button>
+        <button class="btn btn-outline btn-sm" onclick="clearProductForm()">Clear</button>
+      </div>
+      <div id="productMsg"></div>
+    </div>
+
+    <!-- Product Order & Stock Manager -->
+    <div class="card">
+      <div class="card-title">🚗 Product Order & Stock</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="loadProductOrderManager()">🔄 Load All</button>
+        <button class="btn btn-outline btn-sm" onclick="autoNumberProducts()">⚡ Auto-Number</button>
+        <button class="btn btn-green btn-sm" onclick="saveAllProductOrders()">💾 Save All</button>
+      </div>
+      <div id="productOrderMsg" style="margin-bottom:6px"></div>
+      <div id="productOrderList"><div class="empty-state">Tap Load All to begin</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🚗 All Products</div>
+      <button class="btn btn-sm btn-outline" onclick="loadAdminProducts()" style="margin-bottom:8px">🔄 Refresh</button>
+      <div id="adminProductsList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- ── USERS ── -->
+  <div class="panel" id="usersPanel">
+    <div class="card">
+      <div class="card-title">👥 User Management</div>
+      <input class="search-input" type="text" id="userSearch" placeholder="🔍 Search by name or phone..." oninput="searchUsers()">
+      <button class="btn btn-sm btn-primary" onclick="loadUsers()" style="margin-bottom:8px">🔄 Refresh</button>
+      <div id="usersList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- ── RESET REQUESTS ── -->
+  <div class="panel" id="requestsPanel" style="display:none">
+    <div class="card">
+      <div class="card-title">📩 Reset Requests</div>
+      <button class="btn btn-sm btn-primary" onclick="loadRequests()" style="margin-bottom:8px">🔄 Refresh</button>
+      <div id="requestsList"><div class="empty-state">Click Refresh to load requests</div></div>
+    </div>
+  </div>
+
+  <!-- ── REFERRALS ── -->
+  <div class="panel" id="referralsPanel">
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+      <div class="stat-box"><div class="stat-val" id="adminRefTotal">0</div><div class="stat-lbl">Total</div></div>
+      <div class="stat-box"><div class="stat-val green" id="adminRefActive">0</div><div class="stat-lbl">Active ✅</div></div>
+      <div class="stat-box"><div class="stat-val red" id="adminRefInactive">0</div><div class="stat-lbl">Inactive ⏳</div></div>
+    </div>
+    <div style="background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.15);border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px;color:var(--muted)">
+      <strong style="color:var(--text)">Referral Rewards (credited to Cumulative Wallet)</strong><br>
+      L1 (direct): UGX 20,000 &nbsp;|&nbsp; L2: UGX 2,000 &nbsp;|&nbsp; L3: UGX 200<br>
+      Active = referred user made first deposit
+    </div>
+    <div class="card">
+      <div class="card-title">🔗 Referrals</div>
+      <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="filterRefsAdmin('all',this)">All</button>
+        <button class="btn btn-sm btn-outline" onclick="filterRefsAdmin('active',this)">✅ Active</button>
+        <button class="btn btn-sm btn-outline" onclick="filterRefsAdmin('inactive',this)">⏳ Inactive</button>
+        <button class="btn btn-sm btn-outline" onclick="filterRefsAdmin('invalid',this)">❌ Invalid</button>
+        <button class="btn btn-sm btn-primary" onclick="loadReferralsAdmin()" style="margin-left:auto">🔄 Refresh</button>
+      </div>
+      <input class="search-input" type="text" id="refAdminSearch" placeholder="🔍 Search..." oninput="searchRefsAdmin(this.value)">
+      <div id="adminRefList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- ── NOTIFICATIONS ── -->
+  <div class="panel" id="notificationsPanel">
+    <div class="card">
+      <div class="card-title">📢 Send Notification</div>
+      <div class="form-group">
+        <label class="form-label">Target</label>
+        <select class="form-input" id="notifTarget" onchange="document.getElementById('notifUserIdWrap').style.display=this.value==='specific'?'block':'none'">
+          <option value="all">📢 All Users</option>
+          <option value="specific">👤 Specific User</option>
+        </select>
+      </div>
+      <div class="form-group" id="notifUserIdWrap" style="display:none">
+        <label class="form-label">User UID</label>
+        <input class="form-input" type="text" id="notifUserId" placeholder="User UID">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input class="form-input" type="text" id="notifTitle" placeholder="Notification title">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Message</label>
+        <textarea class="form-input" id="notifMsg" placeholder="Your message..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="notifType">
+          <option value="info">ℹ️ Info</option>
+          <option value="success">✅ Success</option>
+          <option value="warning">⚠️ Warning</option>
+          <option value="deposit">💰 Deposit</option>
+          <option value="withdrawal">💸 Withdrawal</option>
+          <option value="investment">📈 Investment</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="sendNotification()">📤 Send</button>
+      <div id="notifSendMsg"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 Recent Notifications</div>
+      <button class="btn btn-sm btn-outline" onclick="loadAdminNotifs()" style="margin-bottom:8px">🔄 Refresh</button>
+      <div id="adminNotifsList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- ── ADS / BANNER ── -->
+  <div class="panel" id="adsPanel">
+    <div class="card">
+      <div class="card-title">🖼️ Upload Banner</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">Single banner shown on home screen. Upload via Cloudinary.</p>
+      <div class="form-group">
+        <label class="form-label">Select Image</label>
+        <input class="form-input" type="file" id="adFile" accept="image/*" onchange="previewAd()">
+      </div>
+      <div id="adPreview" style="display:none;margin-bottom:10px;border-radius:10px;overflow:hidden;border:1px solid var(--border)">
+        <img id="adImgP" style="width:100%;height:140px;object-fit:cover">
+      </div>
+      <div id="adUploadBar" style="display:none;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Uploading...</div>
+        <div class="progress-bar"><div class="progress-fill" id="adProgressFill" style="width:0%;transition:width .3s"></div></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Title (optional)</label>
+        <input class="form-input" type="text" id="adTitle" placeholder="Banner title">
+      </div>
+      <button class="btn btn-primary" onclick="uploadAd()">☁️ Upload & Publish</button>
+      <div id="adMsg"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 All Banners</div>
+      <button class="btn btn-sm btn-outline" onclick="loadAds()" style="margin-bottom:8px">🔄 Refresh</button>
+      <div id="adminAdsList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- ── SETTINGS ── -->
+  <div class="panel" id="settingsPanel">
+
+    <div class="card">
+      <div class="card-title">⚙️ Platform Settings</div>
+      <div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:#93c5fd">
+        🔗 Marzpay Callback URL:<br>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#bfdbfe;word-break:break-all">https://xengine-server-production.up.railway.app/callback</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Registration Bonus (UGX) → Deposits Wallet</label>
+        <input class="form-input" type="number" id="settRegBonus" value="50000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Daily Check-in Bonus (UGX) → Deposits Wallet</label>
+        <input class="form-input" type="number" id="settCheckinBonus" value="1000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Withdrawal Fee (%)</label>
+        <input class="form-input" type="number" id="settWitFee" value="11">
+      </div>
+      <div class="form-group">
+        <label class="form-label">L1 Referral Reward (UGX) → Cumulative Wallet</label>
+        <input class="form-input" type="number" id="settRefL1" value="20000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">L2 Referral Reward (UGX)</label>
+        <input class="form-input" type="number" id="settRefL2" value="2000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">L3 Referral Reward (UGX)</label>
+        <input class="form-input" type="number" id="settRefL3" value="200">
+      </div>
+      <div class="form-group">
+        <label class="form-label">📱 App Download Link</label>
+        <input class="form-input" type="url" id="settAppLink" placeholder="https://...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">💬 Customer Service / Telegram URL</label>
+        <input class="form-input" type="url" id="settTelegramUrl" placeholder="https://t.me/...">
+      </div>
+      <button class="btn btn-primary" onclick="saveSettings()">💾 Save Settings</button>
+      <div id="settMsg"></div>
+    </div>
+
+    <!-- About -->
+    <div class="card">
+      <div class="card-title">🚗 About x-engine</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:8px">Shown on Profile → About us. Supports HTML.</p>
+      <textarea class="form-input" id="aboutContent" style="min-height:120px;font-size:12px" placeholder="Welcome to x-engine!..."></textarea>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="saveAbout()">💾 Save About</button>
+      <div id="aboutMsg"></div>
+    </div>
+
+    <!-- Terms -->
+    <div class="card">
+      <div class="card-title">📜 Terms & Conditions</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:8px">Shown on Profile → Regulations.</p>
+      <textarea class="form-input" id="termsContent" style="min-height:120px;font-size:12px" placeholder="1. Introduction..."></textarea>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="saveTerms()">💾 Save Terms</button>
+      <div id="termsMsg"></div>
+    </div>
+
+    <!-- Broadcast Dialog -->
+    <div class="card">
+      <div class="card-title">📢 Broadcast Dialog</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:12px">Popup shown to users after login. Supports a header image, body text, and action link.</p>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div>
+          <div style="font-size:12px;font-weight:800">Dialog Active</div>
+          <div style="font-size:10px;color:var(--muted)">Toggle show/hide for all users</div>
+        </div>
+        <button id="broadcastActiveBtn" onclick="toggleBroadcastActive()"
+          style="padding:7px 16px;border:none;border-radius:8px;font-family:var(--fam);font-size:11px;font-weight:800;cursor:pointer;background:rgba(220,38,38,.15);color:var(--primary3)">⭕ Off</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input class="form-input" type="text" id="broadcastTitleInput" placeholder="e.g. Official Announcement">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Body Message</label>
+        <textarea class="form-input" id="broadcastBodyInput" rows="4" style="resize:vertical" placeholder="Type your message..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Photo URL (optional)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="form-input" type="url" id="broadcastPhotoInput" placeholder="https://..." style="flex:1">
+          <label style="cursor:pointer;padding:8px 10px;background:rgba(220,38,38,.1);border:1px solid var(--border);border-radius:8px;font-size:11px;font-weight:800;color:var(--primary2);white-space:nowrap">
+            📷 Upload<input type="file" accept="image/*" style="display:none" onchange="uploadBroadcastPhoto(this)">
+          </label>
+        </div>
+        <img id="broadcastPhotoPreview" src="" style="display:none;margin-top:6px;width:100%;max-height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Action Button Label</label>
+          <input class="form-input" type="text" id="broadcastActionLabel" placeholder="e.g. Join Channel">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Action Button URL</label>
+          <input class="form-input" type="url" id="broadcastActionUrl" placeholder="https://t.me/...">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Show interval (hours, 0=every session)</label>
+        <input class="form-input" type="number" id="broadcastInterval" value="24" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Dismiss Button Label</label>
+        <input class="form-input" type="text" id="broadcastDismissLabel" value="Confirm">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="saveBroadcastDialog()">💾 Save & Publish</button>
+        <button class="btn btn-outline btn-sm" onclick="loadBroadcastDialog()">🔄 Load Current</button>
+        <button class="btn btn-red btn-sm" onclick="clearBroadcastDialog()">🗑️ Clear</button>
+      </div>
+      <div id="broadcastAdminMsg" style="margin-top:8px"></div>
+    </div>
+
+    <!-- Auth Screen Banner -->
+    <div class="card">
+      <div class="card-title">🖼️ Login/Register Screen Banner</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">This image shows on the login and register screens. Upload via Cloudinary.</p>
+      <div class="form-group">
+        <label class="form-label">Select Image</label>
+        <input class="form-input" type="file" id="authBannerFile" accept="image/*" onchange="previewAuthBanner()">
+      </div>
+      <div id="authBannerPreview" style="display:none;margin-bottom:10px;border-radius:10px;overflow:hidden;border:1px solid var(--border);height:120px">
+        <img id="authBannerImgP" style="width:100%;height:100%;object-fit:cover">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Or paste URL directly</label>
+        <input class="form-input" type="url" id="authBannerUrl" placeholder="https://res.cloudinary.com/...">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="uploadAuthBanner()">☁️ Upload & Save</button>
+        <button class="btn btn-outline btn-sm" onclick="saveAuthBannerUrl()">💾 Save URL</button>
+      </div>
+      <div id="authBannerMsg" style="margin-top:6px"></div>
+    </div>
+
+    <!-- Telegram Community Link -->
+    <div class="card">
+      <div class="card-title">✈️ Community / Support Link</div>
+      <div class="form-group">
+        <label class="form-label">Telegram Link</label>
+        <input class="form-input" type="url" id="tgLinkInput" placeholder="https://t.me/...">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveTelegramLink()">💾 Save</button>
+        <a id="tgPreviewBtn" href="#" target="_blank"
+          style="display:inline-flex;align-items:center;gap:4px;padding:7px 12px;background:#0088cc;border:none;border-radius:8px;color:#fff;font-size:10px;font-weight:800;cursor:pointer;text-decoration:none">✈️ Open</a>
+      </div>
+      <div id="tgLinkMsg" style="margin-top:6px"></div>
+    </div>
+
+  </div><!-- /settingsPanel -->
+
+</div><!-- /adminPanel -->
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {
+  getFirestore, collection, query, where, orderBy, limit,
+  getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+  writeBatch, serverTimestamp, increment, onSnapshot
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+// ── CONFIG ──
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBA_S0u69P9Por2kkhF189HHuhLTBX1vtE",
+  authDomain:        "x--engine.firebaseapp.com",
+  projectId:         "x--engine",
+  storageBucket:     "x--engine.firebasestorage.app",
+  messagingSenderId: "420172832235",
+  appId:             "1:420172832235:web:735d05ea80069177ec4dae"
+};
+const SERVER           = 'https://x-engine-server-production.up.railway.app';
+const ADMIN_KEY        = 'xengine_admin_2026';
+const CLOUDINARY_CLOUD = 'dcmfxgofa';
+const CLOUDINARY_PRESET= 'xengine_uploads';
+
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// ── STATE ──
+let _admin      = null;
+let _allWits    = [];
+let _allDeps    = [];
+let _allInvAdm  = [];
+let _allUsers   = [];
+let _allRefs    = [];
+let _witFilter  = 'all';
+let _depFilter  = 'all';
+let _invFilter  = 'all';
+let _refFilter  = 'all';
+let _autoCheckInterval = null;
+let _broadcastActive   = false;
+let _productOrderCache = [];
+
+function ugx(n){ return 'UGX '+Number(n||0).toLocaleString('en-UG'); }
+function showMsg(id,text,isErr){ const el=document.getElementById(id); if(!el)return; el.innerHTML=`<div class="msg-${isErr?'error':'success'}" style="margin-top:6px">${text}</div>`; setTimeout(()=>{if(el)el.innerHTML='';},4000); }
+
+// ══════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════
+window.adminLogin = async function(){
+  const email=document.getElementById('adminEmail').value.trim();
+  const pass=document.getElementById('adminPass').value;
+  if(!email||!pass){ document.getElementById('authMsg').innerHTML='<div class="msg-error">Enter email and password</div>'; return; }
+  try{
+    const cred=await signInWithEmailAndPassword(auth,email,pass);
+    const r=await fetch(`${SERVER}/admin/verify`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:cred.user.uid,adminKey:ADMIN_KEY})});
+    const d=await r.json();
+    if(!d.isAdmin){ await signOut(auth); document.getElementById('authMsg').innerHTML='<div class="msg-error">Not an admin account</div>'; }
+  }catch(e){ document.getElementById('authMsg').innerHTML=`<div class="msg-error">${e.message}</div>`; }
+};
+window.adminLogout = async function(){ await signOut(auth); };
+
+onAuthStateChanged(auth,user=>{
+  if(user){
+    _admin=user;
+    document.getElementById('authScreen').style.display='none';
+    document.getElementById('adminPanel').style.display='block';
+    document.getElementById('adminGreeting').textContent='Logged in: '+user.email;
+    loadDashboard(); loadWithdrawals(); loadDeposits();
+    startAutoCheckDeposits();
+    loadSettings_admin_extended ? loadSettings_admin_extended() : loadSettings_admin();
+    setTimeout(()=>loadBroadcastDialog(),1000);
+    setTimeout(()=>loadTelegramLink(),1200);
+  } else {
+    _admin=null;
+    document.getElementById('authScreen').style.display='flex';
+    document.getElementById('adminPanel').style.display='none';
+    if(_autoCheckInterval){ clearInterval(_autoCheckInterval); _autoCheckInterval=null; }
+  }
+});
+
+// ══════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════
+window.showTab = function(tab,btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  const el=document.getElementById(tab+'Panel');
+  if(el) el.classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(tab==='products') loadAdminProducts();
+  if(tab==='users') loadUsers();
+  if(tab==='referrals') loadReferralsAdmin();
+  if(tab==='investments') loadInvestmentsAdmin();
+  if(tab==='ads') loadAds();
+  if(tab==='notifications') loadAdminNotifs();
+};
+
+// ══════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════
+async function loadDashboard(){
+  try{
+    const [usersSnap,depsSnap,witsSnap,invSnap] = await Promise.all([
+      getDocs(collection(db,'users')),
+      getDocs(query(collection(db,'deposits'),where('status','==','success'))),
+      getDocs(query(collection(db,'withdrawals'),where('status','==','processed'))),
+      getDocs(query(collection(db,'investments'),where('status','==','active')))
+    ]);
+    const pendWit=await getDocs(query(collection(db,'withdrawals'),where('status','in',['pending','processing'])));
+    let totalDep=0,totalWit=0,totalInv=0;
+    depsSnap.forEach(d=>totalDep+=(d.data().amountCredited||d.data().amount||0));
+    witsSnap.forEach(d=>totalWit+=(d.data().amount||0));
+    document.getElementById('sTotal').textContent=usersSnap.size;
+    document.getElementById('sTotalDep').textContent=ugx(totalDep);
+    document.getElementById('sTotalWit').textContent=ugx(totalWit);
+    document.getElementById('sActiveInv').textContent=invSnap.size;
+    document.getElementById('sPendingWit').textContent=pendWit.size;
+    if(pendWit.size>0) document.getElementById('witBadge').style.display='inline-block';
+  }catch(e){ console.error('Dashboard error:',e); }
+}
+
+// ══════════════════════════════════════════════════
+// WITHDRAWALS
+// ══════════════════════════════════════════════════
+async function loadWithdrawals(){
+  const el=document.getElementById('witList');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  const snap=await getDocs(query(collection(db,'withdrawals'),orderBy('createdAt','desc'),limit(60)));
+  _allWits=[];
+  snap.forEach(d=>_allWits.push({id:d.id,...d.data()}));
+  renderWithdrawals();
+}
+window.loadWithdrawals=loadWithdrawals;
+
+function renderWithdrawals(){
+  const filtered=_witFilter==='all'?_allWits:_allWits.filter(w=>w.status===_witFilter);
+  const el=document.getElementById('witList');
+  if(!filtered.length){ el.innerHTML='<div class="empty-state">No withdrawals found</div>'; return; }
+  el.innerHTML=filtered.map(w=>{
+    const sc={'pending':'badge-gold','processing':'badge-blue','processed':'badge-green','failed':'badge-red'}[w.status]||'badge-gray';
+    return `<div class="item-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="flex:1">
+          <div class="item-title">${w.userName||'User'}</div>
+          <div class="item-sub">
+            📱 ${w.withdrawalPhone||'—'} &nbsp;|&nbsp; 💰 ${ugx(w.amount)}<br>
+            💸 Net: ${ugx(w.netAmount)} &nbsp;|&nbsp; Fee: ${ugx(w.fee)}<br>
+            📅 ${w.date||''} ${w.time||''}<br>
+            🔖 ${w.reference||w.id}
+            ${w.recipientName?`<br>👤 ${w.recipientName}`:''}
+            ${w.failReason?`<br><span style="color:var(--primary3)">❌ ${w.failReason}</span>`:''}
+          </div>
+        </div>
+        <span class="badge ${sc}">${w.status}</span>
+      </div>
+      <div class="mini-actions">
+        ${w.status==='failed'?`<button class="btn btn-sm btn-green" onclick="manualApproveWit('${w.id}')">🔁 Retry</button>`:''}
+        ${['pending','processing'].includes(w.status)?`<button class="btn btn-sm btn-red" onclick="rejectWithdrawal('${w.id}')">❌ Reject</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.filterWit=function(f,btn){ _witFilter=f; document.querySelectorAll('.tab-btn').forEach(b=>{}); renderWithdrawals(); };
+window.rejectWithdrawal=async function(id){
+  const reason=prompt('Reason for rejection (optional):');
+  try{
+    const r=await fetch(`${SERVER}/withdraw/reject`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({withdrawalId:id,adminKey:ADMIN_KEY,reason:reason||'Rejected by admin'})});
+    const d=await r.json();
+    alert(d.status==='success'?'✅ Rejected and refunded':'❌ '+d.message);
+    loadWithdrawals();
+  }catch(e){ alert('Error: '+e.message); }
+};
+window.manualApproveWit=async function(id){
+  if(!confirm('Manually approve this withdrawal?')) return;
+  try{
+    const r=await fetch(`${SERVER}/withdraw/approve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({withdrawalId:id,adminKey:ADMIN_KEY})});
+    const d=await r.json();
+    alert(d.status==='success'?'✅ Sent via Marzpay':'❌ '+d.message);
+    loadWithdrawals();
+  }catch(e){ alert('Error: '+e.message); }
+};
+
+// ══════════════════════════════════════════════════
+// DEPOSITS
+// ══════════════════════════════════════════════════
+async function loadDeposits(){
+  const el=document.getElementById('depList');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  const snap=await getDocs(query(collection(db,'deposits'),orderBy('createdAt','desc'),limit(60)));
+  _allDeps=[];
+  snap.forEach(d=>_allDeps.push({id:d.id,...d.data()}));
+  renderDeposits();
+}
+window.loadDeposits=loadDeposits;
+
+function renderDeposits(){
+  const filtered=_depFilter==='all'?_allDeps:_allDeps.filter(d=>d.status===_depFilter);
+  const el=document.getElementById('depList');
+  if(!filtered.length){ el.innerHTML='<div class="empty-state">No deposits found</div>'; return; }
+  el.innerHTML=filtered.map(d=>{
+    const sc={'success':'badge-green','processing':'badge-blue','pending':'badge-gold','failed':'badge-red','marz_error':'badge-red'}[d.status]||'badge-gray';
+    return `<div class="item-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="flex:1">
+          <div class="item-title">${ugx(d.amountCredited||d.amount)} via ${d.provider||'Mobile Money'}</div>
+          <div class="item-sub">
+            📱 ${d.phone||'—'}<br>
+            👤 ${d.userId||'—'}<br>
+            📅 ${d.createdAt?.toDate?.().toLocaleDateString('en-UG')||'—'}
+            ${d.failReason?`<br><span style="color:var(--primary3)">❌ ${d.failReason}</span>`:''}
+          </div>
+        </div>
+        <span class="badge ${sc}">${d.status}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+window.filterDep=function(f,btn){ _depFilter=f; renderDeposits(); };
+
+async function autoCheckAllProcessing(manual=false){
+  const el=document.getElementById('autoCheckStatus'); if(!el) return;
+  el.textContent='⏱ Checking processing deposits...'; el.className='auto-check-status checking';
+  const snap=await getDocs(query(collection(db,'pendingPayments'),where('status','==','processing')));
+  if(snap.empty){ el.textContent='✅ No processing deposits — all clear'; el.className='auto-check-status done'; return; }
+  let checked=0;
+  for(const d of snap.docs){
+    const data=d.data();
+    try{
+      const r=await fetch(`${SERVER}/check/${d.id}`);
+      const res=await r.json();
+      checked++;
+      if(res.status==='success'||res.status==='failed') await loadDeposits();
+    }catch(e){}
+  }
+  el.textContent=`✅ Checked ${checked} deposit(s)`; el.className='auto-check-status done';
+}
+window.autoCheckAllProcessing=autoCheckAllProcessing;
+
+function startAutoCheckDeposits(){
+  if(_autoCheckInterval) clearInterval(_autoCheckInterval);
+  _autoCheckInterval=setInterval(()=>autoCheckAllProcessing(),30000);
+}
+
+// ══════════════════════════════════════════════════
+// INVESTMENTS ADMIN
+// ══════════════════════════════════════════════════
+async function loadInvestmentsAdmin(){
+  const el=document.getElementById('adminInvList');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  const snap=await getDocs(query(collection(db,'investments'),orderBy('createdAt','desc'),limit(80)));
+  _allInvAdm=[];
+  snap.forEach(d=>_allInvAdm.push({id:d.id,...d.data()}));
+  renderInvAdmin();
+}
+window.loadInvestmentsAdmin=loadInvestmentsAdmin;
+
+function renderInvAdmin(){
+  const filtered=_invFilter==='all'?_allInvAdm:_allInvAdm.filter(i=>i.status===_invFilter);
+  const el=document.getElementById('adminInvList');
+  if(!filtered.length){ el.innerHTML='<div class="empty-state">No investments found</div>'; return; }
+  el.innerHTML=filtered.map(inv=>{
+    const sc={active:'badge-green',matured:'badge-gold',claimed:'badge-gray'}[inv.status]||'badge-gray';
+    const matDate=inv.maturityDate?.toDate?.();
+    return `<div class="item-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="flex:1">
+          <div class="item-title">${inv.productName||'Product'}</div>
+          <div class="item-sub">
+            👤 ${inv.userId||'—'}<br>
+            💰 ${ugx(inv.amount)} &nbsp;→&nbsp; ${ugx(inv.expectedReturn)}<br>
+            📅 Matures: ${matDate?matDate.toLocaleDateString('en-UG'):'—'}
+          </div>
+        </div>
+        <span class="badge ${sc}">${inv.status}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+window.filterAdminInv=function(f,btn){ _invFilter=f; renderInvAdmin(); };
+
+// ══════════════════════════════════════════════════
+// PRODUCTS
+// ══════════════════════════════════════════════════
+async function loadAdminProducts(){
+  const el=document.getElementById('adminProductsList');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  const snap=await getDocs(query(collection(db,'products'),orderBy('order','asc')));
+  if(snap.empty){ el.innerHTML='<div class="empty-state">No products yet</div>'; return; }
+  el.innerHTML='';
+  snap.forEach(d=>{
+    const p={id:d.id,...d.data()};
+    el.innerHTML+=`<div class="item-card">
+      <div style="display:flex;gap:10px">
+        ${p.photoUrl||p.photo?`<img src="${p.photoUrl||p.photo}" style="width:48px;height:60px;border-radius:8px;object-fit:cover;flex-shrink:0">`:``}
+        <div style="flex:1">
+          <div class="item-title">${p.name}</div>
+          <div class="item-sub">
+            Price: ${ugx(p.price)} | Cycle: ${p.cycle||p.term||0}d<br>
+            Daily: ${ugx(p.dailyCashback)} | Return: ${ugx(p.totalReturn)}<br>
+            Order: ${p.order||'—'} | ${p.isOutOfStock?'Sold Out':'On Sale'}
+          </div>
+        </div>
+      </div>
+      <div class="mini-actions">
+        <button class="btn btn-sm btn-gold" onclick="editProduct('${p.id}')">✏️ Edit</button>
+        <button class="btn btn-sm btn-red" onclick="deleteProduct('${p.id}')">🗑️ Delete</button>
+        <button class="btn btn-sm" style="background:rgba(220,38,38,.1);color:var(--primary2);border:1px solid rgba(220,38,38,.2)" onclick="toggleStock('${p.id}',${p.isOutOfStock})">${p.isOutOfStock?'✅ Set In Stock':'❌ Set Sold Out'}</button>
+      </div>
+    </div>`;
+  });
+}
+window.loadAdminProducts=loadAdminProducts;
+
+window.saveProduct=async function(){
+  const id=document.getElementById('editProductId').value;
+  const data={
+    name:document.getElementById('pName').value.trim(),
+    price:parseFloat(document.getElementById('pPrice').value)||0,
+    cycle:parseInt(document.getElementById('pCycle').value)||30,
+    dailyCashback:parseFloat(document.getElementById('pDailyCashback').value)||0,
+    totalReturn:parseFloat(document.getElementById('pReturn').value)||0,
+    rating:parseFloat(document.getElementById('pRating').value)||4.9,
+    order:parseInt(document.getElementById('pOrder').value)||99,
+    description:document.getElementById('pDesc').value.trim(),
+    photoUrl:document.getElementById('pPhotoUrl').value.trim(),
+    isActive:true,
+    isOutOfStock:false,
+    updatedAt:serverTimestamp()
+  };
+  if(!data.name||!data.price){ showMsg('productMsg','Name and price required',true); return; }
+  try{
+    if(id){ await updateDoc(doc(db,'products',id),data); showMsg('productMsg','✅ Product updated'); }
+    else{ data.createdAt=serverTimestamp(); await addDoc(collection(db,'products'),data); showMsg('productMsg','✅ Product added'); }
+    clearProductForm(); loadAdminProducts();
+  }catch(e){ showMsg('productMsg','❌ '+e.message,true); }
+};
+
+window.editProduct=async function(id){
+  const snap=await getDoc(doc(db,'products',id)); if(!snap.exists()) return;
+  const p=snap.data();
+  document.getElementById('editProductId').value=id;
+  document.getElementById('pName').value=p.name||'';
+  document.getElementById('pPrice').value=p.price||'';
+  document.getElementById('pCycle').value=p.cycle||p.term||'';
+  document.getElementById('pDailyCashback').value=p.dailyCashback||'';
+  document.getElementById('pReturn').value=p.totalReturn||'';
+  document.getElementById('pRating').value=p.rating||4.9;
+  document.getElementById('pOrder').value=p.order||'';
+  document.getElementById('pDesc').value=p.description||'';
+  document.getElementById('pPhotoUrl').value=p.photoUrl||p.photo||'';
+  window.scrollTo(0,0);
+};
+
+window.clearProductForm=function(){
+  ['editProductId','pName','pPrice','pCycle','pDailyCashback','pReturn','pRating','pOrder','pDesc','pPhotoUrl'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+};
+
+window.deleteProduct=async function(id){
+  if(!confirm('Delete this product? This cannot be undone.')) return;
+  await deleteDoc(doc(db,'products',id)); loadAdminProducts();
+};
+
+window.toggleStock=async function(id,isOOS){
+  await updateDoc(doc(db,'products',id),{isOutOfStock:!isOOS,updatedAt:serverTimestamp()});
+  loadAdminProducts();
+};
+
+window.uploadProductPhoto=async function(){
+  const file=document.getElementById('pPhotoFile').files[0]; if(!file) return;
+  if(file.size>5*1024*1024){ alert('Max 5MB'); return; }
+  const fd=new FormData(); fd.append('file',file); fd.append('upload_preset',CLOUDINARY_PRESET);
+  try{
+    const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,{method:'POST',body:fd});
+    const data=await res.json();
+    if(data.secure_url){ document.getElementById('pPhotoUrl').value=data.secure_url; document.getElementById('pPhotoPreview').textContent='✅ Uploaded: '+data.secure_url.slice(-30); }
+  }catch(e){ alert('Upload failed: '+e.message); }
+};
+
+// Product Order Manager (same as Pearl Invest)
+window.loadProductOrderManager=async function(){
+  const el=document.getElementById('productOrderList');
+  el.innerHTML='<div style="padding:10px;color:var(--muted);font-size:12px;text-align:center">Loading…</div>';
+  try{
+    const snap=await getDocs(collection(db,'products'));
+    _productOrderCache=[];
+    snap.forEach(d=>{ const p=d.data(); _productOrderCache.push({id:d.id,name:p.name||'Unnamed',order:p.order??'',isOutOfStock:!!p.isOutOfStock,price:p.price||0}); });
+    _productOrderCache.sort((a,b)=>{if(a.order===''&&b.order==='')return 0;if(a.order==='')return 1;if(b.order==='')return -1;return a.order-b.order;});
+    renderProductOrderList();
+    showMsg('productOrderMsg',`✅ Loaded ${_productOrderCache.length} products`,false);
+  }catch(e){ el.innerHTML=`<div style="padding:10px;color:var(--primary3);font-size:12px">❌ ${e.message}</div>`; }
+};
+function renderProductOrderList(){
+  const el=document.getElementById('productOrderList');
+  if(!_productOrderCache.length){ el.innerHTML='<div class="empty-state">No products</div>'; return; }
+  el.innerHTML=_productOrderCache.map((p,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid ${p.order===''?'rgba(217,119,6,.4)':'var(--border)'};border-radius:8px;padding:10px" data-idx="${i}">
+      <div style="flex-shrink:0;text-align:center">
+        <div style="font-size:9px;color:var(--muted);margin-bottom:2px">ORDER</div>
+        <input type="number" min="1" max="99" value="${p.order}" placeholder="?"
+          onchange="_productOrderCache[${i}].order=this.value?parseInt(this.value):''"
+          style="width:42px;background:var(--bg2);border:1px solid ${p.order===''?'rgba(217,119,6,.6)':'var(--border)'};border-radius:6px;padding:5px 3px;color:${p.order===''?'var(--gold2)':'var(--text)'};font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:800;text-align:center;outline:none">
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${String(p.name).replace(/[<>]/g,'')}</div>
+        <div style="font-size:11px;color:var(--muted)">${ugx(p.price)}</div>
+        ${p.order===''?'<div style="font-size:10px;color:var(--gold2);margin-top:2px">⚠️ No order — invisible in app!</div>':''}
+      </div>
+      <div style="flex-shrink:0">
+        <button onclick="toggleProductStock(${i})" style="padding:4px 8px;border:none;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer;background:${p.isOutOfStock?'rgba(220,38,38,.15)':'rgba(22,163,74,.15)'};color:${p.isOutOfStock?'var(--primary3)':'#4ade80'}">
+          ${p.isOutOfStock?'❌ OOS':'✅ OK'}
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+window.toggleProductStock=function(idx){ _productOrderCache[idx].isOutOfStock=!_productOrderCache[idx].isOutOfStock; renderProductOrderList(); };
+window.autoNumberProducts=function(){
+  if(!_productOrderCache.length){ showMsg('productOrderMsg','⚠️ Load products first',true); return; }
+  _productOrderCache.forEach((p,i)=>p.order=i+1); renderProductOrderList();
+  showMsg('productOrderMsg',`✅ Auto-numbered 1–${_productOrderCache.length}. Tap Save All to apply.`,false);
+};
+window.saveAllProductOrders=async function(){
+  if(!_productOrderCache.length){ showMsg('productOrderMsg','⚠️ Load products first',true); return; }
+  const missing=_productOrderCache.filter(p=>p.order==='');
+  if(missing.length){ showMsg('productOrderMsg',`⚠️ ${missing.length} product(s) have no order. Use Auto-Number or fill them in.`,true); return; }
+  showMsg('productOrderMsg','⏳ Saving…',false);
+  try{
+    const batch=writeBatch(db);
+    _productOrderCache.forEach(p=>batch.update(doc(db,'products',p.id),{order:parseInt(p.order),isOutOfStock:p.isOutOfStock,updatedAt:serverTimestamp()}));
+    await batch.commit();
+    showMsg('productOrderMsg',`✅ ${_productOrderCache.length} products saved!`,false);
+    await loadProductOrderManager();
+  }catch(e){ showMsg('productOrderMsg','❌ '+e.message,true); }
+};
+
+// ══════════════════════════════════════════════════
+// USERS
+// ══════════════════════════════════════════════════
+async function loadUsers(){
+  const el=document.getElementById('usersList');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  const snap=await getDocs(query(collection(db,'users'),orderBy('createdAt','desc'),limit(60)));
+  _allUsers=[];
+  snap.forEach(d=>_allUsers.push({id:d.id,...d.data()}));
+  renderUsers(_allUsers);
+}
+window.loadUsers=loadUsers;
+
+function renderUsers(users){
+  const el=document.getElementById('usersList');
+  if(!users.length){ el.innerHTML='<div class="empty-state">No users found</div>'; return; }
+  el.innerHTML=users.map(u=>{
+    const banned=u.status==='banned';
+    return `<div class="item-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="flex:1">
+          <div class="item-title">${u.name||u.phone||'User'}</div>
+          <div class="item-sub">
+            📱 ${u.phone||'—'}<br>
+            💰 Dep: ${ugx(u.depositBalance)} | Cum: ${ugx(u.cumulativeBalance)}<br>
+            📈 Invested: ${ugx(u.totalInvested)} | Withdrawn: ${ugx(u.totalWithdrawn)}<br>
+            🔗 Code: ${u.referralCode||'—'}<br>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted)">UID: ${u.id}</span>
+          </div>
+        </div>
+        <span class="badge ${banned?'badge-red':'badge-green'}">${banned?'Banned':'Active'}</span>
+      </div>
+      <div class="mini-actions">
+        <button class="btn btn-sm ${banned?'btn-green':'btn-red'}" onclick="banUser('${u.id}','${banned?'unban':'ban'}')">${banned?'✅ Unban':'🚫 Ban'}</button>
+        <button class="btn btn-sm btn-gold" onclick="manualCreditUser('${u.id}')">💰 Add Funds</button>
+        <button class="btn btn-sm btn-outline" onclick="resetUserPassword('${u.id}','${u.phone||u.name||u.id}')">🔑 Reset Pass</button>
+        <button class="btn btn-sm btn-outline" onclick="resetUserPin('${u.id}','${u.phone||u.name||u.id}')">🔓 Reset PIN</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.searchUsers=function(){
+  const q=document.getElementById('userSearch').value.toLowerCase();
+  if(!q){ renderUsers(_allUsers); return; }
+  renderUsers(_allUsers.filter(u=>(u.name||'').toLowerCase().includes(q)||(u.phone||'').includes(q)||(u.id||'').includes(q)));
+};
+
+window.banUser=async function(uid,action){
+  const reason=action==='ban'?prompt('Reason for ban:'):'';
+  try{
+    const r=await fetch(`${SERVER}/admin/ban`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,adminKey:ADMIN_KEY,action,reason:reason||''})});
+    const d=await r.json();
+    alert(d.status==='success'?'✅ Done':'❌ '+d.message);
+    loadUsers();
+  }catch(e){ alert('Error: '+e.message); }
+};
+
+window.manualCreditUser=async function(uid){
+  const amt=parseFloat(prompt('Amount to add (UGX):'));
+  if(!amt||isNaN(amt)) return;
+  const wallet=confirm('Add to Cumulative Wallet (OK) or Deposits Wallet (Cancel)?')?'cumulativeBalance':'depositBalance';
+  const note=prompt('Note (optional):');
+  try{
+    const r=await fetch(`${SERVER}/admin/deposit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,amount:amt,wallet,note:note||'Admin credit',adminKey:ADMIN_KEY})});
+    const d=await r.json();
+    alert(d.status==='success'?'✅ '+d.message:'❌ '+d.message);
+  }catch(e){ alert('Error: '+e.message); }
+};
+
+window.manualDeposit=async function(){
+  const userInput=document.getElementById('manualDepUser').value.trim();
+  const amount=parseFloat(document.getElementById('manualDepAmt').value);
+  const wallet=document.getElementById('manualDepWallet').value;
+  const note=document.getElementById('manualDepNote').value.trim();
+  if(!userInput||!amount){ showMsg('manualDepMsg','User ID and amount required',true); return; }
+  // Try to find by UID or phone
+  let userId=userInput;
+  if(!userInput.includes('@')&&userInput.length<20){
+    try{
+      const snap=await getDocs(query(collection(db,'users'),where('phone','==','+256'+userInput.slice(-9)),limit(1)));
+      if(!snap.empty) userId=snap.docs[0].id;
+    }catch(e){}
+  }
+  try{
+    const r=await fetch(`${SERVER}/admin/deposit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,amount,wallet,note:note||'Admin top-up',adminKey:ADMIN_KEY})});
+    const d=await r.json();
+    if(d.status==='success') showMsg('manualDepMsg','✅ '+d.message,false);
+    else showMsg('manualDepMsg','❌ '+d.message,true);
+  }catch(e){ showMsg('manualDepMsg','❌ '+e.message,true); }
+};
+
+// ══════════════════════════════════════════════════
+// REFERRALS
+// ══════════════════════════════════════════════════
+let _allRefsAdmin=[];
+window.loadReferralsAdmin=async function(){
+  const el=document.getElementById('adminRefList');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  const snap=await getDocs(collection(db,'referrals'));
+  _allRefsAdmin=[];
+  snap.forEach(d=>_allRefsAdmin.push({id:d.id,...d.data()}));
+  _allRefsAdmin.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+  const active=_allRefsAdmin.filter(r=>r.paid&&!r.invalid).length;
+  const inactive=_allRefsAdmin.filter(r=>!r.paid&&!r.invalid).length;
+  document.getElementById('adminRefTotal').textContent=_allRefsAdmin.length;
+  document.getElementById('adminRefActive').textContent=active;
+  document.getElementById('adminRefInactive').textContent=inactive;
+  renderRefsAdmin_local(_allRefsAdmin);
+};
+window.loadReferralsAdmin=window.loadReferralsAdmin;
+
+function refSt(r){ if(r.invalid)return'invalid'; if(r.paid)return'active'; return'inactive'; }
+function renderRefsAdmin_local(refs){
+  const el=document.getElementById('adminRefList');
+  if(!refs.length){ el.innerHTML='<div class="empty-state">No referrals</div>'; return; }
+  el.innerHTML=refs.map(r=>{
+    const st=refSt(r); const sc={active:'badge-green',inactive:'badge-gold',invalid:'badge-red'}[st];
+    const dateStr=r.createdAt?.seconds?new Date(r.createdAt.seconds*1000).toLocaleDateString('en-UG'):'—';
+    return `<div class="item-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="flex:1">
+          <div class="item-title">👤 ${String(r.referredName||'Unknown').replace(/[<>]/g,'')}</div>
+          <div class="item-sub">
+            Referred by: <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--gold2)">${r.referrerId||'—'}</span><br>
+            Joined: ${dateStr}<br>
+            L1 Reward: ${r.paid?ugx(r.paidBonus||20000):'Pending first deposit'}
+          </div>
+        </div>
+        <span class="badge ${sc}">${st==='active'?'✅ Active':st==='inactive'?'⏳ Inactive':'❌ Invalid'}</span>
+      </div>
+      <div class="mini-actions">
+        ${st==='inactive'?`<button class="btn btn-sm btn-red" onclick="flagRefInvalid('${r.id}')">❌ Mark Invalid</button>`:''}
+        ${st==='invalid'?`<button class="btn btn-sm btn-green" onclick="restoreRef('${r.id}')">↩️ Restore</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+window.filterRefsAdmin=function(f,btn){ _refFilter=f; const filtered=f==='all'?_allRefsAdmin:_allRefsAdmin.filter(r=>refSt(r)===f); renderRefsAdmin_local(filtered); };
+window.searchRefsAdmin=function(val){ const q=val.toLowerCase(); const filtered=_allRefsAdmin.filter(r=>(_refFilter==='all'||refSt(r)===_refFilter)&&(!q||(r.referredName||'').toLowerCase().includes(q)||(r.referrerId||'').includes(q))); renderRefsAdmin_local(filtered); };
+window.flagRefInvalid=async function(id){ await updateDoc(doc(db,'referrals',id),{invalid:true}); loadReferralsAdmin(); };
+window.restoreRef=async function(id){ await updateDoc(doc(db,'referrals',id),{invalid:false}); loadReferralsAdmin(); };
+
+// ══════════════════════════════════════════════════
+// NOTIFICATIONS
+// ══════════════════════════════════════════════════
+window.sendNotification=async function(){
+  const target=document.getElementById('notifTarget').value;
+  const title=document.getElementById('notifTitle').value.trim();
+  const msg=document.getElementById('notifMsg').value.trim();
+  const type=document.getElementById('notifType').value;
+  if(!title||!msg){ showMsg('notifSendMsg','Title and message required',true); return; }
+  const {serverTimestamp:sts}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+  try{
+    if(target==='all'){
+      const snap=await getDocs(collection(db,'users'));
+      const batch=writeBatch(db); let c=0;
+      snap.forEach(d=>{
+        const ref=doc(collection(db,'notifications'));
+        batch.set(ref,{userId:d.id,title,message:msg,type,readBy:[],createdAt:serverTimestamp()});
+        c++;
+      });
+      await batch.commit();
+      showMsg('notifSendMsg',`✅ Sent to ${c} users`,false);
+    } else {
+      const uid=document.getElementById('notifUserId').value.trim();
+      if(!uid){ showMsg('notifSendMsg','Enter User UID',true); return; }
+      await addDoc(collection(db,'notifications'),{userId:uid,title,message:msg,type,readBy:[],createdAt:serverTimestamp()});
+      showMsg('notifSendMsg','✅ Notification sent',false);
+    }
+  }catch(e){ showMsg('notifSendMsg','❌ '+e.message,true); }
+};
+
+async function loadAdminNotifs(){
+  const el=document.getElementById('adminNotifsList');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  const snap=await getDocs(query(collection(db,'notifications'),orderBy('createdAt','desc'),limit(30)));
+  if(snap.empty){ el.innerHTML='<div class="empty-state">No notifications</div>'; return; }
+  el.innerHTML=snap.docs.map(d=>{
+    const n=d.data(); const t=n.createdAt?.toDate?.();
+    return `<div class="item-card">
+      <div class="item-title">${n.title}</div>
+      <div class="item-sub">${n.message?.slice(0,80)||''}${(n.message||'').length>80?'...':''}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:4px">${t?t.toLocaleDateString('en-UG'):''} • ${n.type||'info'}</div>
+    </div>`;
+  }).join('');
+}
+window.loadAdminNotifs=loadAdminNotifs;
+
+// ══════════════════════════════════════════════════
+// ADS / BANNER
+// ══════════════════════════════════════════════════
+window.previewAd=function(){
+  const file=document.getElementById('adFile').files[0]; if(!file) return;
+  const url=URL.createObjectURL(file);
+  document.getElementById('adImgP').src=url;
+  document.getElementById('adPreview').style.display='block';
+};
+
+window.uploadAd=async function(){
+  const file=document.getElementById('adFile').files[0];
+  if(!file){ alert('Select a file first'); return; }
+  if(file.size>5*1024*1024){ alert('Max 5MB'); return; }
+  document.getElementById('adUploadBar').style.display='block';
+  document.getElementById('adProgressFill').style.width='30%';
+  const fd=new FormData(); fd.append('file',file); fd.append('upload_preset',CLOUDINARY_PRESET);
+  try{
+    const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,{method:'POST',body:fd});
+    const data=await res.json();
+    document.getElementById('adProgressFill').style.width='80%';
+    if(!data.secure_url) throw new Error(data.error?.message||'Upload failed');
+    const title=document.getElementById('adTitle').value.trim();
+    await addDoc(collection(db,'ads'),{url:data.secure_url,title:title||'Banner',active:true,createdAt:serverTimestamp()});
+    document.getElementById('adProgressFill').style.width='100%';
+    showMsg('adMsg','✅ Banner uploaded and published!',false);
+    loadAds();
+  }catch(e){ showMsg('adMsg','❌ '+e.message,true); }
+  finally{ document.getElementById('adUploadBar').style.display='none'; }
+};
+
+async function loadAds(){
+  const el=document.getElementById('adminAdsList');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  const snap=await getDocs(query(collection(db,'ads'),orderBy('createdAt','desc'),limit(10)));
+  if(snap.empty){ el.innerHTML='<div class="empty-state">No banners yet</div>'; return; }
+  el.innerHTML=snap.docs.map(d=>{
+    const ad=d.data();
+    return `<div class="item-card">
+      ${ad.url?`<img src="${ad.url}" style="width:100%;height:90px;object-fit:cover;border-radius:8px;margin-bottom:8px">`:''}
+      <div class="item-title">${ad.title||'Banner'}</div>
+      <div class="item-sub">${ad.active?'Active':'Inactive'}</div>
+      <div class="mini-actions">
+        <button class="btn btn-sm btn-red" onclick="deleteAd('${d.id}')">🗑️ Delete</button>
+        <button class="btn btn-sm btn-outline" onclick="toggleAdStatus('${d.id}',${ad.active})">${ad.active?'Deactivate':'Activate'}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+window.loadAds=loadAds;
+window.deleteAd=async function(id){ if(!confirm('Delete this banner?')) return; await deleteDoc(doc(db,'ads',id)); loadAds(); };
+window.toggleAdStatus=async function(id,active){ await updateDoc(doc(db,'ads',id),{active:!active}); loadAds(); };
+
+// ══════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════
+async function loadSettings_admin(){
+  try{
+    const snap=await getDoc(doc(db,'settings','main'));
+    if(snap.exists()){
+      const s=snap.data();
+      if(s.registrationBonus) document.getElementById('settRegBonus').value=s.registrationBonus;
+      if(s.checkinBonus) document.getElementById('settCheckinBonus').value=s.checkinBonus;
+      if(s.withdrawalFee) document.getElementById('settWitFee').value=s.withdrawalFee;
+      if(s.refL1) document.getElementById('settRefL1').value=s.refL1;
+      if(s.refL2) document.getElementById('settRefL2').value=s.refL2;
+      if(s.refL3) document.getElementById('settRefL3').value=s.refL3;
+      if(s.appDownloadLink) document.getElementById('settAppLink').value=s.appDownloadLink;
+      if(s.telegramLink) document.getElementById('settTelegramUrl').value=s.telegramLink;
+    }
+    const aboutSnap=await getDoc(doc(db,'settings','about'));
+    if(aboutSnap.exists()) document.getElementById('aboutContent').value=aboutSnap.data().content||'';
+    const termsSnap=await getDoc(doc(db,'settings','terms'));
+    if(termsSnap.exists()) document.getElementById('termsContent').value=termsSnap.data().content||'';
+  }catch(e){}
+}
+
+window.saveSettings=async function(){
+  const data={
+    registrationBonus:parseFloat(document.getElementById('settRegBonus').value)||50000,
+    checkinBonus:parseFloat(document.getElementById('settCheckinBonus').value)||1000,
+    withdrawalFee:parseFloat(document.getElementById('settWitFee').value)||11,
+    refL1:parseFloat(document.getElementById('settRefL1').value)||20000,
+    refL2:parseFloat(document.getElementById('settRefL2').value)||2000,
+    refL3:parseFloat(document.getElementById('settRefL3').value)||200,
+    appDownloadLink:document.getElementById('settAppLink').value.trim(),
+    telegramLink:document.getElementById('settTelegramUrl').value.trim(),
+    updatedAt:serverTimestamp()
+  };
+  await setDoc(doc(db,'settings','main'),data,{merge:true});
+  showMsg('settMsg','✅ Settings saved!',false);
+};
+
+window.saveAbout=async function(){
+  await setDoc(doc(db,'settings','about'),{content:document.getElementById('aboutContent').value,updatedAt:serverTimestamp()},{merge:true});
+  showMsg('aboutMsg','✅ About saved!',false);
+};
+window.saveTerms=async function(){
+  await setDoc(doc(db,'settings','terms'),{content:document.getElementById('termsContent').value,updatedAt:serverTimestamp()},{merge:true});
+  showMsg('termsMsg','✅ Terms saved!',false);
+};
+
+// ══════════════════════════════════════════════════
+// BROADCAST DIALOG
+// ══════════════════════════════════════════════════
+window.toggleBroadcastActive=function(){
+  _broadcastActive=!_broadcastActive;
+  const btn=document.getElementById('broadcastActiveBtn');
+  if(btn){ btn.textContent=_broadcastActive?'🟢 On':'⭕ Off'; btn.style.background=_broadcastActive?'rgba(22,163,74,.15)':'rgba(220,38,38,.15)'; btn.style.color=_broadcastActive?'#4ade80':'var(--primary3)'; }
+};
+
+window.uploadBroadcastPhoto=async function(input){
+  const file=input.files?.[0]; if(!file) return;
+  if(file.size>5*1024*1024){ alert('Max 5MB'); input.value=''; return; }
+  const msgEl=document.getElementById('broadcastAdminMsg');
+  if(msgEl) msgEl.innerHTML='<span style="color:var(--gold2)">⏳ Uploading…</span>';
+  try{
+    const fd=new FormData(); fd.append('file',file); fd.append('upload_preset',CLOUDINARY_PRESET);
+    const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,{method:'POST',body:fd});
+    const data=await res.json();
+    if(!data.secure_url) throw new Error(data.error?.message||'Upload failed');
+    const inp=document.getElementById('broadcastPhotoInput');
+    const prev=document.getElementById('broadcastPhotoPreview');
+    if(inp) inp.value=data.secure_url;
+    if(prev){ prev.src=data.secure_url; prev.style.display='block'; }
+    if(msgEl) msgEl.innerHTML='';
+  }catch(e){ if(msgEl) msgEl.innerHTML=`<span style="color:var(--primary3)">❌ ${e.message}</span>`; }
+  input.value='';
+};
+
+window.saveBroadcastDialog=async function(){
+  const title=document.getElementById('broadcastTitleInput')?.value.trim();
+  const body=document.getElementById('broadcastBodyInput')?.value.trim();
+  const photo=document.getElementById('broadcastPhotoInput')?.value.trim()||'';
+  const aLabel=document.getElementById('broadcastActionLabel')?.value.trim()||'';
+  const aUrl=document.getElementById('broadcastActionUrl')?.value.trim()||'';
+  const hours=parseInt(document.getElementById('broadcastInterval')?.value||24);
+  const dismiss=document.getElementById('broadcastDismissLabel')?.value.trim()||'Confirm';
+  if(!title||!body){ showMsg('broadcastAdminMsg','⚠️ Title and body required',true); return; }
+  try{
+    const existing=await getDoc(doc(db,'settings','broadcast'));
+    const oldV=existing.exists()?(existing.data().version||1):1;
+    const newV=_broadcastActive?oldV+1:oldV;
+    await setDoc(doc(db,'settings','broadcast'),{
+      active:_broadcastActive,title,body,photoUrl:photo,
+      actionLabel:aLabel,actionUrl:aUrl,intervalHours:isNaN(hours)?24:hours,
+      dismissLabel:dismiss,version:newV,updatedAt:serverTimestamp()
+    });
+    showMsg('broadcastAdminMsg',_broadcastActive?`✅ Published! Version ${newV}`:'✅ Saved (currently off)',false);
+  }catch(e){ showMsg('broadcastAdminMsg','❌ '+e.message,true); }
+};
+
+async function loadBroadcastDialog(){
+  try{
+    const snap=await getDoc(doc(db,'settings','broadcast'));
+    if(!snap.exists()){ showMsg('broadcastAdminMsg','No dialog saved yet',false); return; }
+    const d=snap.data();
+    const sv=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v||''; };
+    sv('broadcastTitleInput',d.title); sv('broadcastBodyInput',d.body);
+    sv('broadcastPhotoInput',d.photoUrl); sv('broadcastActionLabel',d.actionLabel);
+    sv('broadcastActionUrl',d.actionUrl); sv('broadcastInterval',d.intervalHours??24);
+    sv('broadcastDismissLabel',d.dismissLabel||'Confirm');
+    _broadcastActive=!!d.active;
+    const btn=document.getElementById('broadcastActiveBtn');
+    if(btn){ btn.textContent=_broadcastActive?'🟢 On':'⭕ Off'; btn.style.background=_broadcastActive?'rgba(22,163,74,.15)':'rgba(220,38,38,.15)'; btn.style.color=_broadcastActive?'#4ade80':'var(--primary3)'; }
+    const prev=document.getElementById('broadcastPhotoPreview');
+    if(prev&&d.photoUrl){ prev.src=d.photoUrl; prev.style.display='block'; }
+    showMsg('broadcastAdminMsg',`✅ Loaded. Status: ${d.active?'ON':'OFF'} | v${d.version||1}`,false);
+  }catch(e){ showMsg('broadcastAdminMsg','❌ '+e.message,true); }
+}
+window.loadBroadcastDialog=loadBroadcastDialog;
+
+window.clearBroadcastDialog=async function(){
+  if(!confirm('Clear dialog? Users will no longer see it.')) return;
+  await setDoc(doc(db,'settings','broadcast'),{active:false,updatedAt:serverTimestamp()},{merge:true});
+  showMsg('broadcastAdminMsg','✅ Dialog cleared',false);
+  _broadcastActive=false;
+  const btn=document.getElementById('broadcastActiveBtn');
+  if(btn){ btn.textContent='⭕ Off'; btn.style.background='rgba(220,38,38,.15)'; btn.style.color='var(--primary3)'; }
+};
+
+// ══════════════════════════════════════════════════
+// TELEGRAM LINK
+// ══════════════════════════════════════════════════
+window.saveTelegramLink=async function(){
+  const link=document.getElementById('tgLinkInput')?.value.trim();
+  if(!link||!link.startsWith('https://')){ showMsg('tgLinkMsg','⚠️ Enter a valid https:// URL',true); return; }
+  await setDoc(doc(db,'settings','app'),{telegramLink:link,updatedAt:serverTimestamp()},{merge:true});
+  const btn=document.getElementById('tgPreviewBtn'); if(btn) btn.href=link;
+  showMsg('tgLinkMsg','✅ Telegram link saved!',false);
+};
+
+async function loadTelegramLink(){
+  try{
+    const snap=await getDoc(doc(db,'settings','app'));
+    if(snap.exists()&&snap.data().telegramLink){
+      const link=snap.data().telegramLink;
+      const inp=document.getElementById('tgLinkInput'); if(inp) inp.value=link;
+      const btn=document.getElementById('tgPreviewBtn'); if(btn) btn.href=link;
+    }
+  }catch(e){}
+}
+
+// ── AUTH BANNER ──
+window.previewAuthBanner = function(){
+  const file=document.getElementById('authBannerFile').files[0]; if(!file) return;
+  const url=URL.createObjectURL(file);
+  document.getElementById('authBannerImgP').src=url;
+  document.getElementById('authBannerPreview').style.display='block';
+};
+
+window.uploadAuthBanner = async function(){
+  const file=document.getElementById('authBannerFile').files[0];
+  if(!file){ showMsg('authBannerMsg','⚠️ Select a file first',true); return; }
+  if(file.size>5*1024*1024){ showMsg('authBannerMsg','❌ Max 5MB',true); return; }
+  const fd=new FormData(); fd.append('file',file); fd.append('upload_preset',CLOUDINARY_PRESET);
+  showMsg('authBannerMsg','⏳ Uploading...',false);
+  try{
+    const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,{method:'POST',body:fd});
+    const data=await res.json();
+    if(!data.secure_url) throw new Error(data.error?.message||'Upload failed');
+    document.getElementById('authBannerUrl').value=data.secure_url;
+    await setDoc(doc(db,'settings','app'),{authBannerUrl:data.secure_url,updatedAt:serverTimestamp()},{merge:true});
+    showMsg('authBannerMsg','✅ Auth banner uploaded & saved!',false);
+  }catch(e){ showMsg('authBannerMsg','❌ '+e.message,true); }
+};
+
+window.saveAuthBannerUrl = async function(){
+  const url=document.getElementById('authBannerUrl').value.trim();
+  if(!url){ showMsg('authBannerMsg','⚠️ Enter a URL',true); return; }
+  try{
+    await setDoc(doc(db,'settings','app'),{authBannerUrl:url,updatedAt:serverTimestamp()},{merge:true});
+    showMsg('authBannerMsg','✅ Auth banner URL saved!',false);
+  }catch(e){ showMsg('authBannerMsg','❌ '+e.message,true); }
+};
+
+// Load auth banner URL on settings load
+const _origLoadSettings = loadSettings_admin;
+async function loadSettings_admin_extended(){
+  await _origLoadSettings();
+  try{
+    const appSnap=await getDoc(doc(db,'settings','app'));
+    if(appSnap.exists()&&appSnap.data().authBannerUrl){
+      const url=appSnap.data().authBannerUrl;
+      document.getElementById('authBannerUrl').value=url;
+      document.getElementById('authBannerImgP').src=url;
+      document.getElementById('authBannerPreview').style.display='block';
+    }
+  }catch(e){}
+}
+
+// ── ADMIN: Reset user password ──
+window.resetUserPassword = async function(uid, label){
+  const newPass = prompt(`Reset password for ${label}\nEnter new password (min 6 chars):`);
+  if(!newPass || newPass.length<6){ alert('Password must be at least 6 characters'); return; }
+  if(!confirm(`Reset password for ${label} to "${newPass}"?`)) return;
+  try{
+    const r=await fetch(`${SERVER}/admin/reset-password`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,newPassword:newPass,adminKey:ADMIN_KEY})});
+    const d=await r.json();
+    if(d.status==='success'){ alert('✅ Password reset! User will be notified.'); }
+    else alert('❌ '+d.message);
+  }catch(e){ alert('Error: '+e.message); }
+};
+
+// ── ADMIN: Reset user withdrawal PIN ──
+window.resetUserPin = async function(uid, label){
+  if(!confirm(`Reset withdrawal PIN for ${label}?\nUser will need to set a new PIN before withdrawing.`)) return;
+  try{
+    const r=await fetch(`${SERVER}/admin/reset-pin`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,adminKey:ADMIN_KEY})});
+    const d=await r.json();
+    if(d.status==='success'){
+      alert('✅ PIN reset! User will be prompted to set new PIN.');
+      // Also unlock if locked
+      fetch(`${SERVER}/admin/unlock-pin`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,adminKey:ADMIN_KEY})}).catch(()=>{});
+    } else alert('❌ '+d.message);
+  }catch(e){ alert('Error: '+e.message); }
+};
+
+// ── Load PIN/Password reset requests ──
+window.loadRequests = async function(){
+  const el = document.getElementById('requestsList');
+  if(el) el.innerHTML = '<div class="empty-state">Loading...</div>';
+  try{
+    const snap = await getDocs(query(collection(db,'adminRequests'),orderBy('createdAt','desc'),limit(50)));
+    if(snap.empty){ if(el) el.innerHTML='<div class="empty-state">No requests yet</div>'; return; }
+    if(el) el.innerHTML='';
+    snap.forEach(d=>{
+      const r=d.data();
+      const ts = r.createdAt?.toDate?.()?.toLocaleDateString('en-UG')||'';
+      if(el) el.innerHTML+=`<div class="card" style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:700;color:var(--primary)">${r.type==='pin_reset'?'🔓 PIN Reset':'🔑 Password Reset'}</span>
+          <span style="font-size:11px;color:var(--muted)">${ts}</span>
+        </div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${r.userName||r.userId}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${r.userPhone||r.userId}</div>
+        <div style="display:flex;gap:8px">
+          ${r.type==='pin_reset'?`<button class="btn btn-sm btn-primary" onclick="resetUserPin('${r.userId}','${r.userName||r.userId}');updateDoc(doc(db,'adminRequests','${d.id}'),{status:'done'}).catch(()=>{})">🔓 Reset PIN</button>`:''}
+          <button class="btn btn-sm btn-outline" onclick="updateDoc(doc(db,'adminRequests','${d.id}'),{status:'dismissed'}).catch(()=>{});loadRequests()">✕ Dismiss</button>
+        </div>
+      </div>`;
+    });
+  }catch(e){ if(el) el.innerHTML='<div class="empty-state">'+e.message+'</div>'; }
+};
+
+window.loadRequests = async function(){
+  const el=document.getElementById('requestsList');
+  if(el) el.innerHTML='<div class="page-loader"><div class="spinner"></div> Loading...</div>';
+  try{
+    const snap=await getDocs(query(collection(db,'adminRequests'),orderBy('createdAt','desc'),limit(50)));
+    if(snap.empty){ if(el) el.innerHTML='<div class="empty-state">No pending requests</div>'; return; }
+    if(el) el.innerHTML='';
+    snap.forEach(d=>{
+      const r=d.data();
+      if(r.status==='done'||r.status==='dismissed') return;
+      const ts=r.createdAt?.toDate?.()?.toLocaleString('en-UG')||'';
+      el.innerHTML+=`<div class="card" style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:800;color:var(--primary)">${r.type==='pin_reset'?'🔓 PIN RESET REQUEST':'🔑 PASSWORD RESET'}</span>
+          <span style="font-size:10px;color:var(--muted)">${ts}</span>
+        </div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:2px">${r.userName||r.userId}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${r.userPhone||''}</div>
+        <div style="display:flex;gap:8px">
+          ${r.type==='pin_reset'?`<button class="btn btn-primary btn-sm" onclick="handleResetRequest('${d.id}','${r.userId}','${r.userName||r.userId}','pin')">✅ Reset PIN Now</button>`:''}
+          <button class="btn btn-sm" style="background:#1a1a24;border:1px solid var(--border);color:var(--muted)" onclick="handleResetRequest('${d.id}','${r.userId}','${r.userName||r.userId}','dismiss')">✕ Dismiss</button>
+        </div>
+      </div>`;
+    });
+    if(el.innerHTML==='') el.innerHTML='<div class="empty-state">No pending requests</div>';
+  }catch(e){ if(el) el.innerHTML='<div class="empty-state">'+e.message+'</div>'; }
+};
+
+window.handleResetRequest = async function(docId, uid, label, action){
+  if(action==='pin'){
+    await resetUserPin(uid, label);
+    await setDoc(doc(db,'adminRequests',docId),{status:'done',handledAt:serverTimestamp()},{merge:true}).catch(()=>{});
+    loadRequests();
+  } else {
+    await setDoc(doc(db,'adminRequests',docId),{status:'dismissed',handledAt:serverTimestamp()},{merge:true}).catch(()=>{});
+    loadRequests();
+  }
+};
+
+console.log('✅ x-engine admin loaded');
+</script>
+</body>
+</html>
