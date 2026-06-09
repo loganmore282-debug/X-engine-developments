@@ -483,8 +483,9 @@ app.post('/register/bonus', async (req, res) => {
 
 // ═══════════════════════════════════════════
 // REFERRAL SYSTEM
-// Level 1: UGX 5,000 when referred user makes FIRST deposit
-// Level 2: 15% of every SUBSEQUENT deposit made by referred user
+// Level 1: UGX 20,000 flat when referred user makes FIRST deposit
+// Level 2: UGX 2,000 flat on every SUBSEQUENT deposit by referred user
+// Level 3: UGX 200 flat on every deposit by referred user's referral
 // ═══════════════════════════════════════════
 async function checkAndPayReferral(userId, depositAmount) {
   try {
@@ -496,8 +497,9 @@ async function checkAndPayReferral(userId, depositAmount) {
 
     const settSnap = await db.collection('settings').doc('main').get();
     const settings = settSnap.exists ? settSnap.data() : {};
-    const firstDepBonus = settings.referralBonus      || 5000;
-    const ongoingPct    = settings.referralOngoingPct || 15;
+    const firstDepBonus = settings.referralBonus       || 20000;
+    const ongoingFlat   = settings.referralOngoingFlat || 2000;
+    const l3Flat        = settings.referralL3Flat      || 200;
 
     const { date, time } = nowStr();
 
@@ -550,8 +552,7 @@ async function checkAndPayReferral(userId, depositAmount) {
         .limit(1).get();
       if (paidSnap.empty) return;
 
-      const reward = Math.round(depositAmount * (ongoingPct / 100));
-      if (reward <= 0) return;
+      const reward = ongoingFlat;
 
       const refDoc = paidSnap.docs[0];
       await db.runTransaction(async (t) => {
@@ -569,7 +570,7 @@ async function checkAndPayReferral(userId, depositAmount) {
         const txRef = db.collection('transactions').doc();
         t.set(txRef, {
           userId: referredBy, type: 'referral_ongoing',
-          description: `${ongoingPct}% reward — ${user.name || 'referral'} deposited ${fmtUGX(depositAmount)}`,
+          description: `Team bonus — ${user.name || 'referral'} deposited ${fmtUGX(depositAmount)}`,
           amount: reward, status: 'success', date, time,
           referredUserId: userId, depositAmount, createdAt: FieldValue.serverTimestamp()
         });
@@ -577,12 +578,38 @@ async function checkAndPayReferral(userId, depositAmount) {
         t.set(notifRef, {
           userId: referredBy,
           title: '💎 Ongoing Team Bonus!',
-          message: `${user.name || 'Your referral'} deposited ${fmtUGX(depositAmount)}!\n\nYou earned ${ongoingPct}% = ${fmtUGX(reward)} 🎯\n\n📅 Date: ${date}\n⏰ Time: ${time}\n\nKeep sharing your link to earn more! ⚙️`,
+          message: `${user.name || 'Your referral'} deposited ${fmtUGX(depositAmount)}!\n\nYou earned ${fmtUGX(reward)} team bonus 🎯\n\n📅 Date: ${date}\n⏰ Time: ${time}\n\nKeep sharing your link to earn more! ⚙️`,
           type: 'referral_ongoing', amount: reward, date, time,
           readBy: [], createdAt: FieldValue.serverTimestamp()
         });
       });
-      console.log(`✅ Referral L2 paid: ${fmtUGX(reward)} (${ongoingPct}% of ${fmtUGX(depositAmount)}) → ${referredBy}`);
+      console.log(`✅ Referral L2 paid: ${fmtUGX(reward)} (flat) → ${referredBy}`);
+
+      // ── L3: Pay referrer's referrer a flat 200 bonus ──
+      try {
+        const referrerSnap2 = await db.collection('users').doc(referredBy).get();
+        const referredBy2 = referrerSnap2.exists ? referrerSnap2.data().referredBy : null;
+        if (referredBy2 && referredBy2 !== referredBy && referredBy2 !== userId) {
+          await db.runTransaction(async (t) => {
+            const l3Ref  = db.collection('users').doc(referredBy2);
+            const l3Snap = await t.get(l3Ref);
+            if (!l3Snap.exists) return;
+            t.update(l3Ref, {
+              walletBalance: FieldValue.increment(l3Flat),
+              refEarned:     FieldValue.increment(l3Flat)
+            });
+            const notifRef = db.collection('notifications').doc();
+            t.set(notifRef, {
+              userId: referredBy2,
+              title: '💎 Ongoing Team Bonus!',
+              message: `Your team network is active! You earned ${fmtUGX(l3Flat)} L3 bonus 🎯\n\n📅 Date: ${date}\n⏰ Time: ${time}`,
+              type: 'referral_ongoing', amount: l3Flat, date, time,
+              readBy: [], createdAt: FieldValue.serverTimestamp()
+            });
+          });
+          console.log(`✅ Referral L3 paid: ${fmtUGX(l3Flat)} (flat) → ${referredBy2}`);
+        }
+      } catch (e) { console.error('L3 referral error:', e.message); }
     }
   } catch (e) { console.error('Referral error:', e.message); }
 }
