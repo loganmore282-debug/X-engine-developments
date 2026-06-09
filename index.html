@@ -1271,7 +1271,11 @@ window._doLogin = async function(){
   try{
     await signInWithEmailAndPassword(auth, makeEmail(phone), pass);
   }catch(e){
-    showToast(e.code==='auth/invalid-credential'?'Wrong phone or password.':e.message,'error');
+    if(e.code==='auth/user-disabled'){
+      showToast('Your account has been suspended. Contact support.','error',7000);
+    } else {
+      showToast(e.code==='auth/invalid-credential'?'Wrong phone or password.':e.message,'error');
+    }
   }finally{ btn.disabled=false; btn.textContent='Log in'; }
 };
 
@@ -1350,6 +1354,18 @@ window._doLogout = async function(){
 onAuthStateChanged(auth, async (user)=>{
   const splash = document.getElementById('splashScreen');
   if(user){
+    // Check Firestore ban status before granting access
+    try{
+      const uSnap = await getDoc(doc(db,'users',user.uid));
+      if(uSnap.exists() && uSnap.data().status === 'banned'){
+        await signOut(auth);
+        if(splash) splash.style.display='none';
+        document.getElementById('loginPage').style.display='flex';
+        document.getElementById('mainApp').style.display='none';
+        showToast('Your account has been suspended. Contact support.','error',7000);
+        return;
+      }
+    }catch(_){}
     _user=user;
     document.getElementById('loginPage').style.display='none';
     document.getElementById('registerPage').style.display='none';
@@ -1384,6 +1400,13 @@ async function loadUserData(){
   _userUnsub = onSnapshot(uRef,(snap)=>{
     if(!snap.exists()) return;
     _userData = snap.data();
+    // Kick out immediately if admin bans user while they are logged in
+    if(_userData.status === 'banned'){
+      signOut(auth).then(()=>{
+        showToast('Your account has been suspended. Contact support.','error',7000);
+      });
+      return;
+    }
     updateUI();
   });
 }
@@ -1891,7 +1914,7 @@ function updatePinDots_global(prefix,filled){
   }
 }
 
-// ── PHONE VERIFICATION (Pearl Invest style) ──
+// ── PHONE VERIFICATION ──
 window._phoneVerified = false;
 window._verifiedPhoneName = '';
 window._lastVerifiedPhone = '';

@@ -239,6 +239,7 @@ app.post('/collect', async (req, res) => {
   try {
     const userSnap = await db.collection('users').doc(userId).get();
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (userSnap.data().status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
     // Save to Firestore BEFORE calling Marzipay
     const depRef = db.collection('deposits').doc();
     const pendingRef = db.collection('pendingPayments').doc(reference);
@@ -1161,6 +1162,8 @@ app.post('/admin/ban', async (req, res) => {
     const userSnap = await db.collection('users').doc(userId).get();
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const isBan = action === 'ban';
+    // Disable/enable Firebase Auth account so login is blocked at the Auth level
+    await admin.auth().updateUser(userId, { disabled: isBan });
     await db.collection('users').doc(userId).update({
       status: isBan ? 'banned' : 'active',
       banReason: isBan ? (reason || 'Banned by admin') : null,
@@ -1248,6 +1251,7 @@ app.post('/invest/claim', async (req, res) => {
       const userRef  = db.collection('users').doc(userId);
       const userSnap = await t.get(userRef);
       if (!userSnap.exists) throw new Error('User not found');
+      if (userSnap.data().status === 'banned') throw new Error('Account suspended');
       t.update(userRef, {
         walletBalance: (userSnap.data().walletBalance || 0) + payout,
         cumulativeBalance: FieldValue.increment(payout),
