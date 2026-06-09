@@ -54,6 +54,19 @@ function nowStr() {
   const time = pad(h12) + ':' + pad(d.getUTCMinutes()) + ' ' + ampm;
   return { date, time, iso: new Date().toISOString() };
 }
+async function generateUniqueReferralCode(userId) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  for (let attempt = 0; attempt < 20; attempt++) {
+    let code = '';
+    const seed = userId + Date.now() + attempt;
+    const hash = crypto.createHash('sha256').update(seed).digest();
+    for (let i = 0; i < 6; i++) code += chars[hash[i] % chars.length];
+    const existing = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+    if (existing.empty) return code;
+  }
+  return crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
+}
+
 function cleanPhone(phone) {
   const s = String(phone || '').replace(/\s+/g, '').replace(/^\+/, '');
   if (s.startsWith('256')) return '+' + s;
@@ -425,13 +438,20 @@ app.post('/register/bonus', async (req, res) => {
     const bonus = settSnap.exists ? (settSnap.data().registrationBonus || 5000) : 5000;
     const { date, time } = nowStr();
 
+    // Generate a globally unique referral code if user doesn't have one yet
+    let referralCode = user.referralCode;
+    if (!referralCode) {
+      referralCode = await generateUniqueReferralCode(userId);
+    }
+
     await db.runTransaction(async (t) => {
       const freshSnap = await t.get(userRef);
       if (freshSnap.data().regBonusPaid) throw new Error('ALREADY_PAID');
       t.update(userRef, {
         walletBalance: FieldValue.increment(bonus),
         regBonusPaid: true,
-        regBonusPaidAt: FieldValue.serverTimestamp()
+        regBonusPaidAt: FieldValue.serverTimestamp(),
+        referralCode
       });
       const txRef = db.collection('transactions').doc();
       t.set(txRef, {
@@ -744,11 +764,53 @@ app.post('/withdraw/request', async (req, res) => {
         status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
-    console.log(`📋 Withdrawal ${witId} queued.`);
-    return res.json({
-      status: 'success', withdrawalId: witId, reference, netAmount, fee,
-      message: 'Withdrawal request submitted. Pending admin approval.'
+    console.log(`📋 Withdrawal ${witId} created — auto-processing via MarzPay…`);
+
+    // Auto-process: send to MarzPay immediately (no admin approval needed)
+    const witObj = {
+      userId, userName: user.name || '', userPhone: user.phone || '',
+      withdrawalPhone: fullPhone, amount: amt, fee, netAmount, reference
+    };
+    let marzData;
+    try {
+      marzData = await marzSendMoney({
+        amount: netAmount, phone: fullPhone,
+        reference,
+        description: `X-Engine Withdrawal — ${user.name || 'user'}`,
+        callbackUrl: `${RAILWAY_URL}/withdraw/callback`
+      });
+    } catch (marzErr) {
+      const errMsg = marzErr.response?.data?.message || marzErr.message;
+      console.error('❌ MarzPay send-money error:', errMsg);
+      await processWithdrawalFailure(witId, witObj, 'MarzPay: ' + errMsg);
+      return res.status(502).json({ status: 'error', message: 'Payment provider error: ' + errMsg });
+    }
+
+    const marzStatus = (marzData?.data?.transaction?.status || marzData?.status || '').toLowerCase();
+    const marzTxUuid = marzData?.data?.transaction?.uuid || '';
+    const isInstantSuccess = ['success', 'successful', 'completed'].includes(marzStatus);
+    const isProcessing = ['processing', 'pending', 'queued'].includes(marzStatus) || marzTxUuid;
+
+    if (!isInstantSuccess && !isProcessing) {
+      await processWithdrawalFailure(witId, witObj, 'MarzPay declined: ' + (marzStatus || 'unknown'));
+      return res.json({ status: 'failed', message: 'Payment provider declined the request.', marz: marzData });
+    }
+    if (isInstantSuccess) {
+      await processWithdrawalSuccess(witId, witObj, marzData);
+      return res.json({ status: 'success', withdrawalId: witId, reference, netAmount, fee, message: 'Withdrawal processed successfully! 💰' });
+    }
+    // Still processing — update doc, notify user, wait for callback
+    await db.collection('withdrawals').doc(witId).update({
+      status: 'processing', marzTxUuid, processedAt: FieldValue.serverTimestamp()
     });
+    const { date: d2, time: t2 } = nowStr();
+    await notify(userId, '⏳ Withdrawal Processing',
+      `Your withdrawal of ${fmtUGX(amt)} has been submitted and is processing.\n\n` +
+      `💰 You'll receive ${fmtUGX(netAmount)}${fee > 0 ? ` (fee: ${fmtUGX(fee)})` : ''}\n` +
+      `📞 Phone: ${fullPhone}\n🔖 Ref: ${reference}\n📅 ${d2} ⏰ ${t2}\n\n` +
+      `We'll notify you once MarzPay confirms delivery.`,
+      'info', { amount: amt, netAmount, fee, reference, phone: fullPhone, date: d2, time: t2 });
+    return res.json({ status: 'success', withdrawalId: witId, reference, netAmount, fee, message: 'Withdrawal submitted — processing now! ⏳' });
   } catch (e) {
     console.error('Withdrawal request error:', e.message);
     return res.status(400).json({ status: 'error', message: e.message });
@@ -774,7 +836,7 @@ app.post('/withdraw/approve', async (req, res) => {
       marzData = await marzSendMoney({
         amount: wit.netAmount, phone: wit.withdrawalPhone,
         reference: wit.reference,
-        description: `Pearl Invest Withdrawal — ${wit.userName || 'user'}`,
+        description: `X-Engine Withdrawal — ${wit.userName || 'user'}`,
         callbackUrl: `${RAILWAY_URL}/withdraw/callback`
       });
     } catch (marzErr) {
@@ -1072,11 +1134,11 @@ app.post('/admin/ban', async (req, res) => {
     });
     if (isBan) {
       await notify(userId, '🚫 Account Suspended',
-        'Your Pearl Invest account has been suspended.\n\nReason: ' + (reason || 'Policy violation') + '\n\nContact support if you believe this is an error.',
+        'Your X-Engine account has been suspended.\n\nReason: ' + (reason || 'Policy violation') + '\n\nContact support if you believe this is an error.',
         'warning', {});
     } else {
       await notify(userId, '✅ Account Restored',
-        'Your Pearl Invest account has been restored. You can now access all features.',
+        'Your X-Engine account has been restored. You can now access all features.',
         'info', {});
     }
     return res.json({ status: 'success', message: 'User ' + (isBan ? 'banned' : 'unbanned') + ' successfully' });
