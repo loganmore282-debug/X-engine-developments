@@ -134,9 +134,21 @@ input,button,select,textarea{font-family:var(--fam)}
 .my-products-count{font-size:13px;color:var(--muted);font-weight:600}
 
 /* Product card — Lafite style */
-.product-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:10px;display:flex;gap:12px;position:relative}
-.product-img-wrap{width:70px;height:90px;border-radius:10px;flex-shrink:0;overflow:hidden;background:linear-gradient(135deg,rgba(240,185,11,.1),rgba(3,166,109,.1));position:relative}
-.product-img{width:100%;height:100%;object-fit:cover;display:block;transform:translateZ(0);-webkit-backface-visibility:hidden;backface-visibility:hidden;image-rendering:auto}
+.product-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:10px;display:flex;gap:12px;position:relative;overflow:hidden;contain:layout style paint;transform:translateZ(0)}
+.product-img-wrap{
+  width:70px;height:90px;border-radius:10px;flex-shrink:0;
+  overflow:hidden;
+  background:linear-gradient(135deg,rgba(240,185,11,.1),rgba(3,166,109,.1));
+  position:relative;
+  /* Samsung GPU isolation — prevents black-background image bleed/artifact */
+  transform:translateZ(0);-webkit-transform:translateZ(0);
+  will-change:transform;
+  isolation:isolate;
+  contain:layout style paint;
+  -webkit-mask-image:-webkit-radial-gradient(white,black);
+  clip-path:inset(0 round 10px);-webkit-clip-path:inset(0 round 10px);
+}
+.product-img{width:100%;height:100%;object-fit:cover;display:block;transform:translateZ(0);-webkit-backface-visibility:hidden;backface-visibility:hidden}
 .product-img-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:32px}
 img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
 .product-info{flex:1;min-width:0}
