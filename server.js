@@ -851,7 +851,7 @@ app.post('/withdraw/request', async (req, res) => {
 
     const witCount  = user.withdrawalCount || 0;
     const witSettSnap = await db.collection('settings').doc('main').get();
-    const witFeePct = witSettSnap.exists ? (witSettSnap.data().withdrawalFee || 10) : 10;
+    const witFeePct = witSettSnap.exists ? (witSettSnap.data().withdrawalFee || 11) : 11;
     const fee       = (witCount === 0 || isTop) ? 0 : Math.round(amt * witFeePct / 100);
     const netAmount = amt - fee;
     const reference = uuidv4();
