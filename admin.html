@@ -1119,10 +1119,16 @@ function renderUsers(users){
   }).join('');
 }
 
-window.searchUsers=function(){
-  const q=document.getElementById('userSearch').value.toLowerCase();
+window.searchUsers=async function(){
+  const q=document.getElementById('userSearch').value.toLowerCase().trim();
   if(!q){ renderUsers(_allUsers); return; }
-  renderUsers(_allUsers.filter(u=>(u.name||'').toLowerCase().includes(q)||(u.phone||'').includes(q)||(u.id||'').includes(q)));
+  if(!_allUsers.length) await loadUsers();
+  // Normalize phone search: strip +256 or 0 prefix so partial numbers work
+  const phoneQ=q.replace(/^\+256/,'').replace(/^0/,'');
+  renderUsers(_allUsers.filter(u=>{
+    const phone=(u.phone||'').replace('+256','');
+    return (u.name||'').toLowerCase().includes(q)||phone.includes(phoneQ)||(u.phone||'').includes(q)||(u.referralCode||'').toLowerCase().includes(q)||(u.id||'').includes(q);
+  }));
 };
 
 window.banUser=async function(uid,action){
