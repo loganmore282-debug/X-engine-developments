@@ -1160,7 +1160,7 @@ function openWithdrawPage(){ if(window._openWithdrawPage) window._openWithdrawPa
 function openCheckinPage(){ openPage('checkinFullPage'); if(window._loadCheckin) window._loadCheckin(); }
 function openWithdrawAccountPage(){ if(window._witAccPageFn) window._witAccPageFn(); else openPage('withdrawAccountPage'); }
 function openChangePinPage(){ openChangePasswordPage(); }
-function openDownloadApp(){ if(window._openDownloadApp) window._openDownloadApp(); }
+function openDownloadApp(){ if(window._triggerPWAInstall && window._triggerPWAInstall()) return; if(window._openDownloadApp) window._openDownloadApp(); }
 function switchTab(t){ if(window._switchTab) window._switchTab(t); }
 function doLogin(){ if(window._doLogin) window._doLogin(); else alert('Loading...'); }
 function doRegister(){ if(window._doRegister) window._doRegister(); else alert('Loading...'); }
@@ -1260,10 +1260,15 @@ document.head.appendChild(s);
     _deferredPrompt=e;
     setTimeout(function(){ banner.style.display='block'; },3000);
   });
-  installBtn.addEventListener('click',function(){
+  function triggerInstall(){
+    if(!_deferredPrompt) return false;
     banner.style.display='none';
-    if(_deferredPrompt){ _deferredPrompt.prompt(); _deferredPrompt.userChoice.then(function(r){ _deferredPrompt=null; }); }
-  });
+    _deferredPrompt.prompt();
+    _deferredPrompt.userChoice.then(function(r){ _deferredPrompt=null; });
+    return true;
+  }
+  window._triggerPWAInstall = triggerInstall;
+  installBtn.addEventListener('click',function(){ triggerInstall(); });
   dismissBtn.addEventListener('click',function(){
     banner.style.display='none';
     localStorage.setItem('pwaInstallDismissed','1');
