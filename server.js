@@ -1787,18 +1787,45 @@ app.post('/admin/fix-referral-counts', async (req, res) => {
       l3Counts[l3Parent] = (l3Counts[l3Parent] || 0) + 1;
     });
 
-    // ── Also migrate refEarned → cumulativeBalance for all users who have
-    //    referral earnings sitting in refEarned but not yet in cumulativeBalance.
-    //    After this, refEarned is a lifetime tracker (never decremented).
-    const cumUpdates = {}; // uid → amount to add to cumulativeBalance
+    // ── Migrate refEarned → cumulativeBalance for users where it hasn't been done yet.
+    //    AND auto-fix double-credits: for users with depositCount=0 (no real deposits),
+    //    cumulativeBalance should equal exactly refEarned + totalEarned.
+    //    Any excess is a double-credit from running backfill + admin manual add.
+    const cumUpdates   = {}; // uid → { add: N }  (positive = credit missing amount)
+    const cumFixes     = {}; // uid → { set: N }   (corrected value for over-credited users)
+    const walletFixes  = {}; // uid → delta to apply to walletBalance
+
     allUsers.forEach(d => {
       const u = d.data();
-      const ref = u.refEarned || 0;
-      if (ref > 0) cumUpdates[d.id] = ref;
+      const refEarned      = u.refEarned      || 0;
+      const totalEarned    = u.totalEarned    || 0;
+      const cumBalance     = u.cumulativeBalance || 0;
+      const depositCount   = u.depositCount   || 0;
+
+      if (depositCount === 0 && refEarned > 0) {
+        // No real deposits → cumulative should ONLY be refEarned + totalEarned
+        const expected = refEarned + totalEarned;
+        if (cumBalance > expected) {
+          // Over-credited — deduct the excess
+          const overage = cumBalance - expected;
+          cumFixes[d.id]    = -overage;   // delta to cumulativeBalance
+          walletFixes[d.id] = -overage;   // delta to walletBalance
+        } else if (cumBalance < expected) {
+          // Under-credited (refEarned not yet migrated) — credit the missing amount
+          const missing = expected - cumBalance;
+          cumUpdates[d.id] = missing;
+        }
+      } else if (depositCount === 0 && refEarned === 0 && cumBalance === 0) {
+        // No referrals, no deposits — nothing to do
+      }
+      // depositCount > 0: user has real deposits and may have legitimate daily cashback
+      // in cumulativeBalance — don't touch them
     });
 
-    // Commit in batches of 400 (Firestore limit is 500)
-    const allUids = new Set([...Object.keys(l2Counts), ...Object.keys(l3Counts), ...Object.keys(cumUpdates)]);
+    const allUids = new Set([
+      ...Object.keys(l2Counts), ...Object.keys(l3Counts),
+      ...Object.keys(cumUpdates), ...Object.keys(cumFixes)
+    ]);
     const uidArr = [...allUids];
     for (let i = 0; i < uidArr.length; i += 400) {
       const chunk = uidArr.slice(i, i + 400);
@@ -1806,21 +1833,26 @@ app.post('/admin/fix-referral-counts', async (req, res) => {
       chunk.forEach(uid => {
         const ref = db.collection('users').doc(uid);
         const upd = {};
-        if (l2Counts[uid] !== undefined) upd.l2ReferralCount = l2Counts[uid];
-        if (l3Counts[uid] !== undefined) upd.l3ReferralCount = l3Counts[uid];
-        if (cumUpdates[uid]) upd.cumulativeBalance = FieldValue.increment(cumUpdates[uid]);
+        if (l2Counts[uid]   !== undefined) upd.l2ReferralCount  = l2Counts[uid];
+        if (l3Counts[uid]   !== undefined) upd.l3ReferralCount  = l3Counts[uid];
+        if (cumUpdates[uid] !== undefined) upd.cumulativeBalance = FieldValue.increment(cumUpdates[uid]);
+        if (cumFixes[uid]   !== undefined) upd.cumulativeBalance = FieldValue.increment(cumFixes[uid]);
+        if (walletFixes[uid] !== undefined) upd.walletBalance   = FieldValue.increment(walletFixes[uid]);
         batch.update(ref, upd);
       });
       await batch.commit();
     }
 
-    console.log(`✅ Referral backfill: updated ${allUids.size} users (L2/L3 counts + cumulative credits)`);
+    const fixedCount = Object.keys(cumFixes).length;
+    const creditedCount = Object.keys(cumUpdates).length;
+    console.log(`✅ Maintenance: ${allUids.size} users updated | ${fixedCount} double-credits fixed | ${creditedCount} missing credits added`);
     return res.json({
       status: 'success',
       updated: allUids.size,
-      l2Counts,
-      l3Counts,
-      cumulativeCredited: cumUpdates
+      doubleCreditsFixed: fixedCount,
+      missingCreditsAdded: creditedCount,
+      fixes: cumFixes,
+      credits: cumUpdates
     });
   } catch (e) {
     console.error('Backfill error:', e.message);
