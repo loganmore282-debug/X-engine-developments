@@ -753,7 +753,7 @@ async function loadDashboard(){
     let totalDep=0,totalWit=0,totalInv=0;
     depsSnap.forEach(d=>{ const a=d.data().amountCredited||d.data().amount||0; if(a>0) totalDep+=a; });
     witsSnap.forEach(d=>totalWit+=(d.data().amount||0));
-    invSnap.forEach(d=>totalInv+=(d.data().price||0));
+    invSnap.forEach(d=>totalInv+=(d.data().amount||0));
     document.getElementById('sTotal').textContent=usersSnap.size;
     document.getElementById('sTotalDep').textContent=ugx(totalDep);
     document.getElementById('sTotalWit').textContent=ugx(totalWit);
