@@ -47,7 +47,8 @@ select.form-input{appearance:none}
 .btn-sm{padding:6px 10px;font-size:10px;border-radius:6px}
 .btn-full{width:100%;justify-content:center}
 .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
-.stat-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.stat-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;transition:border-color .2s,background .2s}
+.stat-box[onclick]:hover,.stat-box[onclick]:active{border-color:var(--primary2);background:rgba(220,38,38,.08)}
 .stat-val{font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:700;color:var(--primary2)}
 .stat-val.gold{color:var(--gold2)}.stat-val.red{color:var(--primary3)}.stat-val.green{color:#4ade80}
 .stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
@@ -139,14 +140,14 @@ select.form-input{appearance:none}
   <!-- ── DASHBOARD ── -->
   <div class="panel active" id="dashboardPanel">
     <div class="stat-grid">
-      <div class="stat-box"><div class="stat-val" id="sTotal">0</div><div class="stat-lbl">Total Users</div></div>
-      <div class="stat-box"><div class="stat-val gold" id="sTotalDep">0</div><div class="stat-lbl">Total Deposited</div></div>
-      <div class="stat-box"><div class="stat-val red" id="sTotalWit">0</div><div class="stat-lbl">Total Withdrawn</div></div>
-      <div class="stat-box"><div class="stat-val green" id="sTotalInv">0</div><div class="stat-lbl">Total Invested</div></div>
+      <div class="stat-box" style="cursor:pointer" onclick="showTab('users',document.querySelector('[onclick*=users]'))"><div class="stat-val" id="sTotal">0</div><div class="stat-lbl">Total Users</div></div>
+      <div class="stat-box" style="cursor:pointer" onclick="showTab('deposits',document.querySelector('[onclick*=deposits]'))"><div class="stat-val gold" id="sTotalDep">0</div><div class="stat-lbl">Total Deposited</div></div>
+      <div class="stat-box" style="cursor:pointer" onclick="showTab('withdrawals',document.querySelector('[onclick*=withdrawals]'))"><div class="stat-val red" id="sTotalWit">0</div><div class="stat-lbl">Total Withdrawn</div></div>
+      <div class="stat-box" style="cursor:pointer" onclick="showTab('investments',document.querySelector('[onclick*=investments]'))"><div class="stat-val green" id="sTotalInv">0</div><div class="stat-lbl">Total Invested</div></div>
     </div>
     <div class="stat-grid">
-      <div class="stat-box"><div class="stat-val gold" id="sPendingWit">0</div><div class="stat-lbl">Pending Withdrawals</div></div>
-      <div class="stat-box"><div class="stat-val" id="sActiveInv">0</div><div class="stat-lbl">Active Investments</div></div>
+      <div class="stat-box" style="cursor:pointer" onclick="showTab('withdrawals',document.querySelector('[onclick*=withdrawals]'))"><div class="stat-val gold" id="sPendingWit">0</div><div class="stat-lbl">Pending Withdrawals</div></div>
+      <div class="stat-box" style="cursor:pointer" onclick="showTab('investments',document.querySelector('[onclick*=investments]'))"><div class="stat-val" id="sActiveInv">0</div><div class="stat-lbl">Active Investments</div></div>
     </div>
     <div class="card">
       <div class="card-title">⚡ Quick Actions</div>
