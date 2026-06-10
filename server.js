@@ -604,9 +604,10 @@ async function checkAndPayReferral(userId, depositAmount) {
         const referrerSnap = await t.get(referrerRef);
         if (!referrerSnap.exists) return;
         t.update(referrerRef, {
-          walletBalance: FieldValue.increment(firstDepBonus),
-          referralCount: FieldValue.increment(1),
-          refEarned:     FieldValue.increment(firstDepBonus)
+          walletBalance:     FieldValue.increment(firstDepBonus),
+          cumulativeBalance: FieldValue.increment(firstDepBonus),
+          referralCount:     FieldValue.increment(1),
+          refEarned:         FieldValue.increment(firstDepBonus)
         });
         t.update(refDoc.ref, {
           paid: true, paidAt: FieldValue.serverTimestamp(), paidBonus: firstDepBonus
@@ -647,8 +648,9 @@ async function checkAndPayReferral(userId, depositAmount) {
         const referrerSnap = await t.get(referrerRef);
         if (!referrerSnap.exists) return;
         t.update(referrerRef, {
-          walletBalance: FieldValue.increment(reward),
-          refEarned:     FieldValue.increment(reward)
+          walletBalance:     FieldValue.increment(reward),
+          cumulativeBalance: FieldValue.increment(reward),
+          refEarned:         FieldValue.increment(reward)
         });
         t.update(refDoc.ref, {
           ongoingEarned: FieldValue.increment(reward),
@@ -682,8 +684,9 @@ async function checkAndPayReferral(userId, depositAmount) {
             const l3Snap = await t.get(l3Ref);
             if (!l3Snap.exists) return;
             t.update(l3Ref, {
-              walletBalance: FieldValue.increment(l3Flat),
-              refEarned:     FieldValue.increment(l3Flat)
+              walletBalance:     FieldValue.increment(l3Flat),
+              cumulativeBalance: FieldValue.increment(l3Flat),
+              refEarned:         FieldValue.increment(l3Flat)
             });
             const notifRef = db.collection('notifications').doc();
             t.set(notifRef, {
