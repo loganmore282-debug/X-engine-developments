@@ -1747,33 +1747,34 @@ window.loadUDTab = async function(uid, tab){
   el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
   try{
     let html='';
+    const sortByDate=(docs)=>docs.slice().sort((a,b)=>(b.data().createdAt?.seconds||0)-(a.data().createdAt?.seconds||0));
     if(tab==='deposits'){
-      const snap=await getDocs(query(collection(db,'deposits'),where('userId','==',uid),orderBy('createdAt','desc'),limit(20)));
+      const snap=await getDocs(query(collection(db,'deposits'),where('userId','==',uid),limit(20)));
       if(snap.empty){ el.innerHTML='<div class="empty-state">No deposits</div>'; return; }
-      html=snap.docs.map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
+      html=sortByDate(snap.docs).map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
         <div style="display:flex;justify-content:space-between"><span style="font-weight:800;color:var(--primary2)">${ugx(r.amountCredited||r.amount||0)}</span><span class="badge ${r.status==='success'?'badge-green':'badge-red'}">${r.status}</span></div>
         <div style="font-size:10px;color:var(--muted)">${t?t.toLocaleString('en-UG'):''} &nbsp;|&nbsp; Ref: ${r.reference||'—'}</div>
       </div>`;}).join('');
     } else if(tab==='withdrawals'){
-      const snap=await getDocs(query(collection(db,'withdrawals'),where('userId','==',uid),orderBy('createdAt','desc'),limit(20)));
+      const snap=await getDocs(query(collection(db,'withdrawals'),where('userId','==',uid),limit(20)));
       if(snap.empty){ el.innerHTML='<div class="empty-state">No withdrawals</div>'; return; }
-      html=snap.docs.map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
+      html=sortByDate(snap.docs).map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
         <div style="display:flex;justify-content:space-between"><span style="font-weight:800;color:#ef4444">${ugx(r.amount||0)}</span><span class="badge ${r.status==='processed'?'badge-green':r.status==='failed'?'badge-red':'badge-gold'}">${r.status}</span></div>
         <div style="font-size:10px;color:var(--muted)">To: ${r.withdrawalPhone||'—'} &nbsp;|&nbsp; Fee: ${ugx(r.fee||0)}</div>
         <div style="font-size:10px;color:var(--muted)">${t?t.toLocaleString('en-UG'):''}</div>
       </div>`;}).join('');
     } else if(tab==='investments'){
-      const snap=await getDocs(query(collection(db,'investments'),where('userId','==',uid),orderBy('createdAt','desc'),limit(20)));
+      const snap=await getDocs(query(collection(db,'investments'),where('userId','==',uid),limit(20)));
       if(snap.empty){ el.innerHTML='<div class="empty-state">No investments</div>'; return; }
-      html=snap.docs.map(d=>{const r=d.data();const mat=r.maturityDate?new Date(r.maturityDate?.toDate?r.maturityDate.toDate():r.maturityDate):null;return`<div class="item-card" style="padding:10px">
+      html=sortByDate(snap.docs).map(d=>{const r=d.data();const mat=r.maturityDate?.toDate?r.maturityDate.toDate():(r.maturityDate?new Date(r.maturityDate):null);return`<div class="item-card" style="padding:10px">
         <div style="display:flex;justify-content:space-between"><span style="font-weight:800;color:var(--primary2)">${r.productName||'Product'}</span><span class="badge ${r.status==='active'?'badge-green':r.status==='matured'?'badge-gold':'badge-gray'}">${r.status}</span></div>
         <div style="font-size:10px;color:var(--muted)">${ugx(r.amount||0)} → ${ugx(r.expectedReturn||0)} &nbsp;|&nbsp; ${r.dailyCashback||0}/day</div>
         <div style="font-size:10px;color:var(--muted)">Matures: ${mat?mat.toLocaleDateString('en-UG'):'—'} ${r.lockedCashback?'🔒 Locked':''}</div>
       </div>`;}).join('');
     } else if(tab==='referrals'){
-      const snap=await getDocs(query(collection(db,'referrals'),where('referrerId','==',uid),orderBy('createdAt','desc'),limit(20)));
+      const snap=await getDocs(query(collection(db,'referrals'),where('referrerId','==',uid),limit(20)));
       if(snap.empty){ el.innerHTML='<div class="empty-state">No referrals</div>'; return; }
-      html=snap.docs.map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
+      html=sortByDate(snap.docs).map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
         <div style="display:flex;justify-content:space-between"><span style="font-weight:800;color:#F0B90B">L${r.level||1} &nbsp; ${ugx(r.bonusAmount||0)}</span><span style="font-size:10px;color:var(--muted)">${r.type||'—'}</span></div>
         <div style="font-size:10px;color:var(--muted)">Referred: ${r.referredPhone||r.referredUserId||'—'}</div>
         <div style="font-size:10px;color:var(--muted)">${t?t.toLocaleString('en-UG'):''}</div>
