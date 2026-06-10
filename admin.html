@@ -1247,7 +1247,7 @@ async function loadAdminNotifs(){
     const n=d.data(); const t=n.createdAt?.toDate?.();
     return `<div class="item-card">
       <div class="item-title">${n.title}</div>
-      <div class="item-sub">${n.message?.slice(0,80)||''}${(n.message||'').length>80?'...':''}</div>
+      <div class="item-sub" style="white-space:pre-wrap">${n.message||''}</div>
       <div style="font-size:10px;color:var(--muted);margin-top:4px">${t?t.toLocaleDateString('en-UG'):''} • ${n.type||'info'}</div>
     </div>`;
   }).join('');
