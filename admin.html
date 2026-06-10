@@ -1083,7 +1083,7 @@ window.saveAllProductOrders=async function(){
 async function loadUsers(){
   const el=document.getElementById('usersList');
   el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
-  const snap=await getDocs(query(collection(db,'users'),orderBy('createdAt','desc'),limit(60)));
+  const snap=await getDocs(query(collection(db,'users'),orderBy('createdAt','desc'),limit(500)));
   _allUsers=[];
   snap.forEach(d=>_allUsers.push({id:d.id,...d.data()}));
   renderUsers(_allUsers);
