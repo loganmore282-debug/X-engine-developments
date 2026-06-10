@@ -1605,11 +1605,13 @@ window.loadRequests = async function(filter){
   try{
     let q;
     if(_reqFilter==='pending'){
-      q=query(collection(db,'adminRequests'),where('status','==','pending'),orderBy('createdAt','desc'),limit(50));
+      q=query(collection(db,'adminRequests'),where('status','==','pending'),limit(50));
     } else {
       q=query(collection(db,'adminRequests'),orderBy('createdAt','desc'),limit(50));
     }
     const snap=await getDocs(q);
+    // sort pending results client-side (avoids composite index requirement)
+    if(_reqFilter==='pending') snap.docs.sort((a,b)=>(b.data().createdAt?.seconds||0)-(a.data().createdAt?.seconds||0));
     const pendingCount=_reqFilter==='pending'?snap.size:(snap.docs.filter(d=>d.data().status==='pending').length);
     const badge=document.getElementById('reqBadge');
     const countEl=document.getElementById('reqPendingCount');
