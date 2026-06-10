@@ -559,6 +559,28 @@ app.post('/register/bonus', async (req, res) => {
     });
 
     console.log(`🎁 Registration bonus: ${fmtUGX(bonus)} → ${userId}`);
+
+    // ── Update L2/L3 referral counts up the chain ──
+    try {
+      const l1Uid = user.referredBy; // who referred this new user
+      if (l1Uid) {
+        const l1Snap = await db.collection('users').doc(l1Uid).get();
+        const l2Uid = l1Snap.exists ? l1Snap.data().referredBy : null; // L1's referrer = L2 parent
+        if (l2Uid) {
+          await db.collection('users').doc(l2Uid).update({
+            l2ReferralCount: FieldValue.increment(1)
+          });
+          const l2Snap = await db.collection('users').doc(l2Uid).get();
+          const l3Uid = l2Snap.exists ? l2Snap.data().referredBy : null; // L2's referrer = L3 parent
+          if (l3Uid) {
+            await db.collection('users').doc(l3Uid).update({
+              l3ReferralCount: FieldValue.increment(1)
+            });
+          }
+        }
+      }
+    } catch (e2) { console.error('L2/L3 count error:', e2.message); }
+
     return res.json({ status: 'success', bonus, message: `${fmtUGX(bonus)} welcome bonus credited!` });
   } catch (e) {
     if (e.message === 'ALREADY_PAID')
@@ -1731,6 +1753,52 @@ function startCrons() {
   setInterval(runStaleWithdrawalAlert, 30 * 60 * 1000);
   console.log('⏰ Crons started: maturity(30m) | stale-deposits(5m) | stale-withdrawals(30m) | daily-cashback(24h)');
 }
+
+// One-time backfill: recalculate l2ReferralCount and l3ReferralCount for all users
+app.post('/admin/fix-referral-counts', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== (process.env.ADMIN_SECRET || 'xengine-fix-2026')) {
+    return res.status(403).json({ status: 'error', message: 'Forbidden' });
+  }
+  try {
+    const allUsers = await db.collection('users').get();
+    // Build a map: uid → referredBy
+    const refMap = {};
+    allUsers.forEach(d => { refMap[d.id] = d.data().referredBy || null; });
+
+    // Count how many people each user has as L2 and L3 downstream
+    const l2Counts = {}; // uid → number of L2 children
+    const l3Counts = {}; // uid → number of L3 children
+
+    allUsers.forEach(d => {
+      const uid = d.id;
+      const l1Parent = refMap[uid];          // person who referred uid
+      if (!l1Parent) return;
+      const l2Parent = refMap[l1Parent];     // l1Parent's referrer = uid's L2 grandparent
+      if (!l2Parent) return;
+      l2Counts[l2Parent] = (l2Counts[l2Parent] || 0) + 1;
+      const l3Parent = refMap[l2Parent];     // l2Parent's referrer = uid's L3 great-grandparent
+      if (!l3Parent) return;
+      l3Counts[l3Parent] = (l3Counts[l3Parent] || 0) + 1;
+    });
+
+    const batch = db.batch();
+    const uids = new Set([...Object.keys(l2Counts), ...Object.keys(l3Counts)]);
+    uids.forEach(uid => {
+      const ref = db.collection('users').doc(uid);
+      const upd = {};
+      if (l2Counts[uid] !== undefined) upd.l2ReferralCount = l2Counts[uid];
+      if (l3Counts[uid] !== undefined) upd.l3ReferralCount = l3Counts[uid];
+      batch.update(ref, upd);
+    });
+    await batch.commit();
+    console.log(`✅ Referral count backfill: updated ${uids.size} users`);
+    return res.json({ status: 'success', updated: uids.size, l2Counts, l3Counts });
+  } catch (e) {
+    console.error('Backfill error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
