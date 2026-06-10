@@ -731,6 +731,78 @@ async function checkAndPayReferral(userId, depositAmount) {
 // is created. Triggers referral check so referrer is paid
 // immediately when referred user invests (not on next deposit).
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// INVEST BUY — server-side atomic validation
+// Prevents investing with reg bonus or negative depositBalance
+// ═══════════════════════════════════════════
+app.post('/invest/buy', async (req, res) => {
+  const { userId, productId, qty } = req.body;
+  if (!userId || !productId) return res.status(400).json({ status: 'error', message: 'userId and productId required' });
+  const quantity = Math.min(Math.max(parseInt(qty)||1, 1), 3);
+  try {
+    const [userSnap, productSnap] = await Promise.all([
+      db.collection('users').doc(userId).get(),
+      db.collection('products').doc(productId).get()
+    ]);
+    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (!productSnap.exists) return res.status(404).json({ status: 'error', message: 'Product not found' });
+    const product = productSnap.data();
+    const price   = product.price || 0;
+    const total   = price * quantity;
+
+    // Check max 3 per product
+    const existingSnap = await db.collection('investments')
+      .where('userId','==',userId)
+      .where('productId','==',productId)
+      .where('status','in',['active','matured'])
+      .get();
+    const existing = existingSnap.size;
+    if (existing + quantity > 3)
+      return res.status(400).json({ status: 'error', message: `You can own max 3 of this product. You have ${existing}.` });
+
+    // Atomic transaction: validate depositBalance and deduct
+    const createdIds = [];
+    await db.runTransaction(async t => {
+      const freshUser = (await t.get(db.collection('users').doc(userId))).data();
+      const depBal    = freshUser.depositBalance || 0;
+      if (depBal < total)
+        throw new Error(`Insufficient Deposit Wallet balance. You have ${fmtUGX(depBal)}, need ${fmtUGX(total)}.`);
+
+      t.update(db.collection('users').doc(userId), {
+        depositBalance: FieldValue.increment(-total),
+        totalInvested:  FieldValue.increment(total)
+      });
+
+      const cycle    = product.cycle || product.term || 30;
+      const dailyCb  = product.dailyCashback || Math.round((product.totalReturn - price) / cycle) || 0;
+      const depositCount = freshUser.depositCount || 0;
+
+      for (let i = 0; i < quantity; i++) {
+        const startDate = new Date();
+        const matDate   = new Date(startDate.getTime() + cycle * 86400000);
+        const invRef    = db.collection('investments').doc();
+        createdIds.push(invRef.id);
+        t.set(invRef, {
+          userId, productId, productName: product.name,
+          productPhoto: product.photoUrl || product.photo || '',
+          amount: price, cycle, dailyCashback: dailyCb,
+          expectedReturn: product.totalReturn,
+          status: 'active', quantity: 1,
+          lockedCashback: (price <= 30000) && (depositCount === 0),
+          startDate: startDate.toISOString(),
+          maturityDate: matDate.toISOString(),
+          createdAt: FieldValue.serverTimestamp()
+        });
+      }
+    });
+
+    return res.json({ status: 'success', message: `Bought ${quantity}x ${product.name}!`, investmentIds: createdIds });
+  } catch (e) {
+    console.error('invest/buy error:', e.message);
+    return res.status(400).json({ status: 'error', message: e.message });
+  }
+});
+
 app.post('/invest/notify', async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
