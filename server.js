@@ -1695,36 +1695,6 @@ function startCrons() {
   console.log('⏰ Crons started: maturity(30m) | stale-deposits(5m) | stale-withdrawals(30m) | daily-cashback(24h)');
 }
 
-// ═══════════════════════════════════════════
-// ONE-TIME PRODUCTION WIPE  —  DELETE AFTER USE
-// POST /admin/wipe-test-data  { adminKey }
-// Keeps: admins, settings, products, ads
-// Wipes: users, deposits, pendingPayments, withdrawals, transactions,
-//        notifications, investments, bankAccounts, adminRequests, referrals
-// ═══════════════════════════════════════════
-app.post('/admin/wipe-test-data', async (req, res) => {
-  const { adminKey } = req.body;
-  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const WIPE = ['users','deposits','pendingPayments','withdrawals','transactions',
-    'notifications','investments','bankAccounts','adminRequests','referrals','broadcasts'];
-  const results = {};
-  for (const col of WIPE) {
-    let total = 0;
-    while (true) {
-      const snap = await db.collection(col).limit(400).get();
-      if (snap.empty) break;
-      const batch = db.batch();
-      snap.docs.forEach(d => batch.delete(d.ref));
-      await batch.commit();
-      total += snap.size;
-    }
-    results[col] = total;
-    console.log(`🗑  Wiped ${col}: ${total} docs`);
-  }
-  console.log('✅ Production wipe complete');
-  return res.json({ status: 'success', message: '✅ All test data wiped. Ready for production!', results });
-});
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   const authSource = process.env.MARZ_AUTH ? 'MARZ_AUTH env'
