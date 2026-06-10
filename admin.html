@@ -1083,7 +1083,7 @@ function renderUsers(users){
   if(!users.length){ el.innerHTML='<div class="empty-state">No users found</div>'; return; }
   el.innerHTML=users.map(u=>{
     const banned=u.status==='banned';
-    return `<div class="item-card">
+    return `<div class="item-card" style="cursor:pointer" onclick="openUserDetail('${u.id}')">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
         <div style="flex:1">
           <div class="item-title">${u.name||u.phone||'User'}</div>
@@ -1563,7 +1563,7 @@ window.loadAccounts = async function(filter='all'){
       const c = statusColor(a.status);
       return `<div class="item-card" style="margin-bottom:10px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
-          <div style="flex:1">
+          <div style="flex:1;cursor:pointer" onclick="openUserDetail('${a.userId||''}')">
             <div style="font-size:13px;font-weight:700">${a.phone}</div>
             <div style="font-size:12px;color:var(--muted)">${a.name} · ${a.network||'Mobile Money'}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:2px">User: ${a.userId}</div>
@@ -1676,6 +1676,124 @@ window.handleReq = async function(docId, uid, label, action){
 };
 
 console.log('✅ x-engine admin loaded');
+
+// ══════════════════════════════════════════════════
+// USER DETAIL OVERLAY
+// ══════════════════════════════════════════════════
+window.openUserDetail = async function(uid){
+  const overlay = document.getElementById('userDetailOverlay');
+  overlay.style.display='flex';
+  document.getElementById('udContent').innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  try{
+    const uSnap = await getDoc(doc(db,'users',uid));
+    if(!uSnap.exists()){ document.getElementById('udContent').innerHTML='<div class="empty-state">User not found</div>'; return; }
+    const u = {...uSnap.data(), id:uid};
+    const banned = u.status==='banned';
+    const joined = u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString('en-UG') : '—';
+
+    document.getElementById('udContent').innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div>
+          <div style="font-size:16px;font-weight:900;color:var(--primary2)">${u.name||u.phone||'User'}</div>
+          <div style="font-size:11px;color:var(--muted)">📱 ${u.phone||'—'} &nbsp;|&nbsp; Joined: ${joined}</div>
+          <div style="font-size:9px;color:var(--muted);font-family:monospace;margin-top:2px">${uid}</div>
+        </div>
+        <span class="badge ${banned?'badge-red':'badge-green'}">${banned?'Banned':'Active'}</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        ${[
+          ['Deposit Wallet',ugx(u.depositBalance||0),'#3b82f6'],
+          ['Cumulative Wallet',ugx(u.cumulativeBalance||0),'#03A66D'],
+          ['Referral Earned',ugx(u.refEarned||0),'#F0B90B'],
+          ['Total Earned',ugx(u.totalEarned||0),'#F8D12F'],
+          ['Total Invested',ugx(u.totalInvested||0),'#a855f7'],
+          ['Total Withdrawn',ugx(u.totalWithdrawn||0),'#ef4444'],
+          ['Real Deposits',u.depositCount||0,'#06b6d4'],
+          ['Ref Code',u.referralCode||'—','#6b7280'],
+        ].map(([l,v,c])=>`<div style="background:var(--bg3);border-radius:8px;padding:10px;border:1px solid var(--border)">
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700">${l}</div>
+          <div style="font-size:13px;font-weight:800;color:${c};margin-top:3px">${v}</div>
+        </div>`).join('')}
+      </div>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn btn-sm ${banned?'btn-green':'btn-red'}" onclick="banUser('${uid}','${banned?'unban':'ban'}')">${banned?'✅ Unban':'🚫 Ban'}</button>
+        <button class="btn btn-sm btn-gold" onclick="manualCreditUser('${uid}')">💰 Add Funds</button>
+        <button class="btn btn-sm btn-outline" onclick="resetUserPassword('${uid}','${u.phone||uid}')">🔑 Reset Pass</button>
+        <button class="btn btn-sm btn-outline" onclick="resetUserPin('${uid}','${u.phone||uid}')">🔓 Reset PIN</button>
+      </div>
+
+      <div style="display:flex;gap:4px;overflow-x:auto;margin-bottom:12px;scrollbar-width:none">
+        ${['deposits','withdrawals','investments','referrals'].map(t=>`
+          <button class="btn btn-sm" id="udtab-${t}" style="white-space:nowrap;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:10px" onclick="loadUDTab('${uid}','${t}')">${t.charAt(0).toUpperCase()+t.slice(1)}</button>
+        `).join('')}
+      </div>
+      <div id="udTabContent"><div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Tap a tab to load history</div></div>
+    `;
+  }catch(e){ document.getElementById('udContent').innerHTML=`<div class="empty-state">Error: ${e.message}</div>`; }
+};
+
+window.closeUserDetail = function(){
+  document.getElementById('userDetailOverlay').style.display='none';
+};
+
+window.loadUDTab = async function(uid, tab){
+  ['deposits','withdrawals','investments','referrals'].forEach(t=>{
+    const b=document.getElementById('udtab-'+t);
+    if(b){ b.style.background=t===tab?'var(--primary)':'transparent'; b.style.color=t===tab?'#000':'var(--muted)'; }
+  });
+  const el=document.getElementById('udTabContent');
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  try{
+    let html='';
+    if(tab==='deposits'){
+      const snap=await getDocs(query(collection(db,'deposits'),where('userId','==',uid),orderBy('createdAt','desc'),limit(20)));
+      if(snap.empty){ el.innerHTML='<div class="empty-state">No deposits</div>'; return; }
+      html=snap.docs.map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
+        <div style="display:flex;justify-content:space-between"><span style="font-weight:800;color:var(--primary2)">${ugx(r.amountCredited||r.amount||0)}</span><span class="badge ${r.status==='success'?'badge-green':'badge-red'}">${r.status}</span></div>
+        <div style="font-size:10px;color:var(--muted)">${t?t.toLocaleString('en-UG'):''} &nbsp;|&nbsp; Ref: ${r.reference||'—'}</div>
+      </div>`;}).join('');
+    } else if(tab==='withdrawals'){
+      const snap=await getDocs(query(collection(db,'withdrawals'),where('userId','==',uid),orderBy('createdAt','desc'),limit(20)));
+      if(snap.empty){ el.innerHTML='<div class="empty-state">No withdrawals</div>'; return; }
+      html=snap.docs.map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
+        <div style="display:flex;justify-content:space-between"><span style="font-weight:800;color:#ef4444">${ugx(r.amount||0)}</span><span class="badge ${r.status==='processed'?'badge-green':r.status==='failed'?'badge-red':'badge-gold'}">${r.status}</span></div>
+        <div style="font-size:10px;color:var(--muted)">To: ${r.withdrawalPhone||'—'} &nbsp;|&nbsp; Fee: ${ugx(r.fee||0)}</div>
+        <div style="font-size:10px;color:var(--muted)">${t?t.toLocaleString('en-UG'):''}</div>
+      </div>`;}).join('');
+    } else if(tab==='investments'){
+      const snap=await getDocs(query(collection(db,'investments'),where('userId','==',uid),orderBy('createdAt','desc'),limit(20)));
+      if(snap.empty){ el.innerHTML='<div class="empty-state">No investments</div>'; return; }
+      html=snap.docs.map(d=>{const r=d.data();const mat=r.maturityDate?new Date(r.maturityDate?.toDate?r.maturityDate.toDate():r.maturityDate):null;return`<div class="item-card" style="padding:10px">
+        <div style="display:flex;justify-content:space-between"><span style="font-weight:800;color:var(--primary2)">${r.productName||'Product'}</span><span class="badge ${r.status==='active'?'badge-green':r.status==='matured'?'badge-gold':'badge-gray'}">${r.status}</span></div>
+        <div style="font-size:10px;color:var(--muted)">${ugx(r.amount||0)} → ${ugx(r.expectedReturn||0)} &nbsp;|&nbsp; ${r.dailyCashback||0}/day</div>
+        <div style="font-size:10px;color:var(--muted)">Matures: ${mat?mat.toLocaleDateString('en-UG'):'—'} ${r.lockedCashback?'🔒 Locked':''}</div>
+      </div>`;}).join('');
+    } else if(tab==='referrals'){
+      const snap=await getDocs(query(collection(db,'referrals'),where('referrerId','==',uid),orderBy('createdAt','desc'),limit(20)));
+      if(snap.empty){ el.innerHTML='<div class="empty-state">No referrals</div>'; return; }
+      html=snap.docs.map(d=>{const r=d.data();const t=r.createdAt?.toDate?.();return`<div class="item-card" style="padding:10px">
+        <div style="display:flex;justify-content:space-between"><span style="font-weight:800;color:#F0B90B">L${r.level||1} &nbsp; ${ugx(r.bonusAmount||0)}</span><span style="font-size:10px;color:var(--muted)">${r.type||'—'}</span></div>
+        <div style="font-size:10px;color:var(--muted)">Referred: ${r.referredPhone||r.referredUserId||'—'}</div>
+        <div style="font-size:10px;color:var(--muted)">${t?t.toLocaleString('en-UG'):''}</div>
+      </div>`;}).join('');
+    }
+    el.innerHTML=html;
+  }catch(e){ el.innerHTML=`<div class="empty-state">Error: ${e.message}</div>`; }
+};
 </script>
+
+<!-- USER DETAIL OVERLAY -->
+<div id="userDetailOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:flex-end;justify-content:center">
+  <div style="background:var(--bg2);border-top:2px solid var(--primary);border-radius:20px 20px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:800;color:var(--text)">👤 User Detail</div>
+      <button onclick="closeUserDetail()" style="background:transparent;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+    </div>
+    <div id="udContent"></div>
+  </div>
+</div>
+
 </body>
 </html>
