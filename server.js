@@ -1367,7 +1367,7 @@ app.post('/invest/claim', async (req, res) => {
       return res.status(403).json({ status: 'error', message: 'Not your investment' });
     if (inv.status !== 'matured')
       return res.status(400).json({ status: 'error', message: 'Cannot claim — status is ' + inv.status });
-    const isLocked = (inv.amount || 0) <= 30000;
+    const isLocked = inv.lockedCashback === true;
     const payout = isLocked ? (inv.pendingCashback || inv.expectedReturn || 0) : (inv.expectedReturn || 0);
     const { date, time } = nowStr();
     await db.runTransaction(async (t) => {
@@ -1565,7 +1565,7 @@ async function runDailyCashback() {
 
       const cashback = Number(inv.dailyCashback);
       const { date, time } = nowStr();
-      const isLocked = (inv.amount || 0) <= 30000; // products ≤30k lock cashback till maturity
+      const isLocked = inv.lockedCashback === true; // set at buy time: ≤30k product AND no real deposit yet
 
       if (isLocked) {
         // Accumulate cashback on investment — NOT credited to wallet yet
