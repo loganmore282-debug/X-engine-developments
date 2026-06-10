@@ -1581,6 +1581,12 @@ async function runDailyCashback() {
       const lastPaidKey = inv.lastCashbackDate || '';
       if (lastPaidKey === todayKey) continue;
 
+      // Don't pay cashback on the same day the investment was created — first payout is day 2
+      const rawCreated = inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt || 0);
+      const createdEAT = new Date(rawCreated.getTime() + 3 * 60 * 60 * 1000);
+      const createdKey = createdEAT.toISOString().slice(0, 10);
+      if (createdKey === todayKey) continue;
+
       // Check investment not expired
       const matDate = inv.maturityDate && inv.maturityDate.toDate
         ? inv.maturityDate.toDate()
