@@ -1421,21 +1421,22 @@ function updateUI(){
   const wit = _userData.totalWithdrawn||0;
   const name = (_userData.name||'').replace('@xengine.app','').replace('+256','') || 'there';
 
-  // Balances
+  // Balances — clamp cumulative to 0 minimum for display
+  const cumDisplay = Math.max(0, cum);
   document.getElementById('balDeposit').textContent    = ugx(dep);
-  document.getElementById('balCumulative').textContent = ugx(cum);
+  document.getElementById('balCumulative').textContent = ugx(cumDisplay);
   document.getElementById('balWithdrawn').textContent  = ugx(wit);
   const refEarnEl=document.getElementById('balRefEarned'); if(refEarnEl) refEarnEl.textContent=ugx(_userData?.refEarned||0);
   document.getElementById('greetName').textContent     = name;
-  document.getElementById('cumIncomeDisplay').textContent = Number(cum).toFixed(2);
+  document.getElementById('cumIncomeDisplay').textContent = Number(cumDisplay).toFixed(2);
   const refBal = _userData?.refEarned||0;
-  const totalWithdrawable = cum + (refBal >= 10000 ? refBal : 0);
+  const totalWithdrawable = cumDisplay + (refBal >= 10000 ? refBal : 0);
   document.getElementById('witAvailDisplay').textContent  = ugx(totalWithdrawable);
 
   // Profile
   document.getElementById('profileName').textContent   = _userData.phone||name;
   document.getElementById('profilePhone').textContent  = _userData.phone||'';
-  document.getElementById('profileBalance').textContent = Number(cum).toFixed(2);
+  document.getElementById('profileBalance').textContent = Number(cumDisplay).toFixed(2);
   // Profile photo
   const photoUrl = _userData.photoUrl || _userData.profilePhotoUrl || _userData.photoURL || '';
   const avatarWrap = document.getElementById('profileAvatarWrap');
@@ -1467,16 +1468,16 @@ function updateUI(){
   document.getElementById('myRefCode').textContent = code;
   document.getElementById('myRefLink').textContent = `${APP_URL}?ref=${code}`;
 
-  // Checkin
+  // Checkin — use EAT (UTC+3) to match server timezone
   document.getElementById('ckStreak').textContent = _userData.checkinStreak||0;
   document.getElementById('ckEarned').textContent = ugx(_userData.checkinEarned||0);
-  const todayKey = new Date().toISOString().slice(0,10);
+  const eatNowMs = Date.now() + 3 * 60 * 60 * 1000;
+  const todayKey = new Date(eatNowMs).toISOString().slice(0,10);
   const alreadyCheckin = _userData.lastCheckinDate === todayKey;
   const hBtn = document.getElementById('homeCheckinBtn');
-  if(hBtn){ hBtn.disabled=alreadyCheckin; hBtn.textContent=alreadyCheckin?'Done':'Check in'; }
-  // Update checkin sub text
+  if(hBtn){ hBtn.disabled=alreadyCheckin; hBtn.textContent=alreadyCheckin?'Done ✓':'Check in'; }
   const ckSub = document.querySelector('.checkin-strip-sub');
-  if(ckSub && !ckSub._customSet) ckSub.textContent = (alreadyCheckin ? '✓ Checked in today' : ugx(_userData?.checkinBonusAmt||1000)+' bonus today');
+  if(ckSub) ckSub.textContent = alreadyCheckin ? '✓ Checked in today' : ugx(_checkinBonus)+' bonus today';
   const ckBtn = document.getElementById('checkinBtn');
   if(ckBtn){ ckBtn.disabled=alreadyCheckin; ckBtn.textContent=alreadyCheckin?'✅ Come back tomorrow':'✅ Check In Today'; }
 
@@ -2357,31 +2358,47 @@ window.waPinDel = function(){
 window._doCheckin = async function(){
   if(!_user) return;
   const btn1=document.getElementById('homeCheckinBtn'), btn2=document.getElementById('checkinBtn');
-  if(btn1) btn1.disabled=true;
+  if(btn1){ btn1.disabled=true; btn1.textContent='...'; }
   if(btn2){ btn2.disabled=true; btn2.textContent='Checking in...'; }
   try{
     const r=await fetch(`${SERVER}/checkin`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:_user.uid})});
     const d=await r.json();
     if(d.status==='success'){
+      // Lock buttons immediately — onSnapshot will confirm final state
+      if(btn1){ btn1.disabled=true; btn1.textContent='Done ✓'; }
+      if(btn2){ btn2.disabled=true; btn2.textContent='✅ Come back tomorrow'; }
+      const ckSub=document.querySelector('.checkin-strip-sub');
+      if(ckSub) ckSub.textContent='✓ Checked in today';
       showToast(`${ugx(d.bonus)} bonus added to Deposits Wallet! 🔥 Day ${d.streak}`,'success',4000);
-      // Force reload user data so dashboard updates
-      if(_userUnsub) { /* already listening — will auto-update */ }
-      loadUserData();
+      // onSnapshot listener auto-updates UI — no need to re-create listener
+    } else if(d.alreadyDone){
+      if(btn1){ btn1.disabled=true; btn1.textContent='Done ✓'; }
+      if(btn2){ btn2.disabled=true; btn2.textContent='✅ Come back tomorrow'; }
+      showToast('Already checked in today!','info');
+    } else {
+      // Real error — re-enable so user can retry
+      if(btn1){ btn1.disabled=false; btn1.textContent='Check in'; }
+      if(btn2){ btn2.disabled=false; btn2.textContent='✅ Check In Today'; }
+      showToast(d.message||'Check-in failed. Try again.','error');
     }
-    else if(d.alreadyDone){ showToast('Already checked in today!','error'); }
-    else showToast(d.message||'Error','error');
-  }catch(e){ showToast('Error: '+e.message,'error'); }
-  finally{ if(btn2) btn2.textContent='✅ Check In Today'; }
+  }catch(e){
+    if(btn1){ btn1.disabled=false; btn1.textContent='Check in'; }
+    if(btn2){ btn2.disabled=false; btn2.textContent='✅ Check In Today'; }
+    showToast('Connection error. Try again.','error');
+  }
 };
 
 window._loadCheckin = function(){
   if(!_userData) return;
-  const todayKey=new Date().toISOString().slice(0,10);
+  const eatNowMs = Date.now() + 3 * 60 * 60 * 1000;
+  const todayKey = new Date(eatNowMs).toISOString().slice(0,10);
   const done=_userData.lastCheckinDate===todayKey;
   const ckBtn=document.getElementById('checkinBtn');
   if(ckBtn){ ckBtn.disabled=done; ckBtn.textContent=done?'✅ Come back tomorrow':'✅ Check In Today'; }
   document.getElementById('ckStreak').textContent=_userData.checkinStreak||0;
   document.getElementById('ckEarned').textContent=ugx(_userData.checkinEarned||0);
+  const el2=document.getElementById('checkinFullBonusAmt');
+  if(el2) el2.textContent=ugx(_checkinBonus);
 };
 
 // ══════════════════════════════════════════════════
@@ -2524,19 +2541,18 @@ window._showNotifDetail = function({title,msg,ts}){
 // ══════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════
+let _checkinBonus = 1000; // default, updated from settings
 async function loadSettings(){
   try{
     const mainSnap=await getDoc(doc(db,'settings','main'));
     if(mainSnap.exists()){
       const s=mainSnap.data();
       if(s.checkinBonus){
+        _checkinBonus = s.checkinBonus;
         const el=document.getElementById('checkinBonusAmt');
         if(el) el.textContent=ugx(s.checkinBonus)+' bonus today';
         const el2=document.getElementById('checkinFullBonusAmt');
         if(el2) el2.textContent=ugx(s.checkinBonus);
-        // Update home strip sub text
-        const homeCheckinSub = document.querySelector('.checkin-strip-sub');
-        if(homeCheckinSub) homeCheckinSub.textContent=ugx(s.checkinBonus)+' bonus today';
       }
       if(s.telegramLink) _helpLink=s.telegramLink;
       if(s.appDownloadLink) _appDownloadLink=s.appDownloadLink;
