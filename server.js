@@ -667,6 +667,24 @@ app.post('/withdraw/request', async (req, res) => {
     const user = userSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
     if (!user.withdrawalPin) return res.status(400).json({ status: 'error', message: 'No PIN set. Please set your withdrawal PIN first.', needsPin: true });
+
+    // ── RATE LIMIT: max 1 withdrawal request per 2 minutes ──
+    const lastReqAt = user.lastWithdrawalRequestAt?.toDate?.() || null;
+    if (lastReqAt && (Date.now() - lastReqAt.getTime()) < 2 * 60 * 1000) {
+      const secLeft = Math.ceil((2 * 60 * 1000 - (Date.now() - lastReqAt.getTime())) / 1000);
+      return res.status(429).json({ status: 'error', message: `Please wait ${secLeft} seconds before making another withdrawal request.` });
+    }
+
+    // ── PHONE VERIFICATION: must match registered profile phone or an activated bank account ──
+    const userProfilePhone = cleanPhone(user.phone || '');
+    const bankSnap = await db.collection('bankAccounts')
+      .where('userId', '==', userId)
+      .where('status', '==', 'activated')
+      .get();
+    const allowedPhones = [userProfilePhone, ...bankSnap.docs.map(d => cleanPhone(d.data().phone || ''))].filter(Boolean);
+    if (!allowedPhones.includes(fullPhone)) {
+      return res.status(400).json({ status: 'error', message: 'Withdrawal phone must be your registered profile number or an activated bank account. Please bind and activate your account first.' });
+    }
     // Dynamic minimum: referral balance ≥ 10,000 → min is 10,000, otherwise 60,000
     const refEarnedNow = user.refEarned || 0;
     const minWithdraw  = refEarnedNow >= 10000 ? 10000 : 60000;
@@ -753,30 +771,41 @@ app.post('/withdraw/request', async (req, res) => {
     const conditionsMet    = true;
     const conditionsDetail = {
       hasInvested,
-      totalInvested:    investedTotal,
-      totalWithdrawn:   withdrawnTotal,
+      totalInvested:         investedTotal,
+      totalWithdrawn:        withdrawnTotal,
       totalEarned,
       claimedInWallet,
       pureBalance,
-      walletBalance:    balance,  // snapshot for record
-      weekdayOk:        true,
-      timeOk:           true,
-      pinOk:            true,
-      balanceOk:        true,
-      isTopInvestor:    isTop,
+      walletBalance:         balance,
+      weekdayOk:             true,
+      timeOk:                true,
+      pinOk:                 true,
+      balanceOk:             true,
+      isTopInvestor:         isTop,
+      withdrawalPhoneVerified: true,   // phone matched registered account
       noReinvestViolation: claimedInWallet === 0 ? 'clean' : `UGX ${fmtUGX(claimedInWallet)} claimed returns present (withdrawn, not reinvested ✅)`
     };
     let witId;
+    let cumPortion = 0, refPortion = 0;
     await db.runTransaction(async (t) => {
       const userRef = db.collection('users').doc(userId);
       const freshSnap = await t.get(userRef);
-      const freshBal = freshSnap.data().walletBalance || 0;
+      const freshData = freshSnap.data();
+      const freshBal = freshData.walletBalance || 0;
       if (freshBal < amt) throw new Error(`Insufficient balance: ${fmtUGX(freshBal)}`);
-      t.update(userRef, {
-        walletBalance: Math.max(0, (freshSnap.data().walletBalance||0) - amt),
-        cumulativeBalance: FieldValue.increment(-amt),
-        withdrawalCount: (freshSnap.data().withdrawalCount || 0) + 1
-      });
+      // Split deduction: deplete cumulativeBalance first, then refEarned
+      const freshCum = freshData.cumulativeBalance || 0;
+      const freshRef = freshData.refEarned || 0;
+      cumPortion = Math.max(0, Math.min(freshCum, amt));
+      refPortion = Math.max(0, amt - cumPortion);
+      const balUpdates = {
+        walletBalance: Math.max(0, freshBal - amt),
+        withdrawalCount: (freshData.withdrawalCount || 0) + 1,
+        lastWithdrawalRequestAt: FieldValue.serverTimestamp()
+      };
+      if (cumPortion > 0) balUpdates.cumulativeBalance = FieldValue.increment(-cumPortion);
+      if (refPortion > 0) balUpdates.refEarned = FieldValue.increment(-refPortion);
+      t.update(userRef, balUpdates);
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
       const { date, time } = nowStr();
@@ -785,9 +814,9 @@ app.post('/withdraw/request', async (req, res) => {
         withdrawalPhone: fullPhone, amount: amt, fee, netAmount, reference,
         status: 'pending', withdrawalCount: witCount + 1,
         isTopInvestor: isTop,
-        conditionsMet,        // ← verified badge: all server rules passed
-        conditionsDetail,     // ← detail breakdown for admin panel display
-        refIdsToExpire: [],  // no longer used
+        cumPortion, refPortion,   // ← balance breakdown for accurate refund if failed
+        conditionsMet,
+        conditionsDetail,
         date, time,
         createdAt: FieldValue.serverTimestamp()
       });
@@ -973,11 +1002,16 @@ async function processWithdrawalFailure(witId, wit, reason) {
   await db.collection('withdrawals').doc(witId).update({
     status: 'failed', failReason: reason, failedAt: FieldValue.serverTimestamp()
   });
-  await db.collection('users').doc(wit.userId).update({
+  // Refund exactly what was deducted from each sub-balance
+  const refundUpdates = {
     walletBalance: FieldValue.increment(wit.amount),
-    cumulativeBalance: FieldValue.increment(wit.amount),
     withdrawalCount: FieldValue.increment(-1)
-  });
+  };
+  const cp = wit.cumPortion ?? wit.amount; // backward-compat: old docs without split
+  const rp = wit.refPortion ?? 0;
+  if (cp > 0) refundUpdates.cumulativeBalance = FieldValue.increment(cp);
+  if (rp > 0) refundUpdates.refEarned = FieldValue.increment(rp);
+  await db.collection('users').doc(wit.userId).update(refundUpdates);
   const txSnap = await db.collection('transactions')
     .where('reference', '==', wit.reference).limit(1).get();
   if (!txSnap.empty) txSnap.docs[0].ref.update({ status: 'failed' });
