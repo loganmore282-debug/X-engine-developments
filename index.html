@@ -1237,7 +1237,7 @@ let _user     = null;
 let _userData = null;
 let _userUnsub = null;
 let _pendingProduct = null;
-let _helpLink = 'https://t.me/xengine_support';
+let _helpLink = '';
 let _appDownloadLink = '';
 let _txFilter = 'all';
 let _allTxs   = [];
@@ -1338,7 +1338,8 @@ window._doRegister = async function(){
 };
 
 window._showForgot = function(){
-  window.open(_helpLink,'_blank');
+  if(_helpLink) window.open(_helpLink,'_blank');
+  else showToast('Our Telegram community is coming soon! 🚀 Stay tuned.','info',4000);
 };
 
 window._doLogout = async function(){
@@ -2627,7 +2628,10 @@ async function loadSettings(){
   }catch(e){ console.error('loadSettings error:',e); }
 }
 
-window._openHelp = function(){ window.open(_helpLink,'_blank'); };
+window._openHelp = function(){
+  if(_helpLink) window.open(_helpLink,'_blank');
+  else showToast('Our Telegram community is coming soon! 🚀 Stay tuned.','info',4000);
+};
 window._showAbout = function(){ openModal('aboutModal'); };
 window._showTerms = function(){ openModal('termsModal'); };
 window._openDownloadApp = function(){
