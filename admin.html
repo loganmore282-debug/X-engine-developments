@@ -603,8 +603,8 @@ select.form-input{appearance:none}
       <div class="card-title">🔧 Maintenance Tools</div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Recalculate Level 2 & Level 3 referral counts for all users. Run this once to fix existing accounts.</div>
-          <button class="btn btn-primary btn-sm" onclick="fixReferralCounts()">🔁 Fix L2/L3 Referral Counts</button>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Fixes two things at once: (1) recalculates L2 & L3 referral counts, (2) credits referral earnings to each user's cumulative wallet. Run once for existing accounts.</div>
+          <button class="btn btn-primary btn-sm" onclick="fixReferralCounts()">🔁 Fix Referral Counts + Credit Cumulative</button>
           <div id="fixRefMsg" style="margin-top:6px"></div>
         </div>
       </div>

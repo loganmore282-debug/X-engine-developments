@@ -848,18 +848,19 @@ app.post('/withdraw/request', async (req, res) => {
       await db.collection('users').doc(userId).update({ pinAttempts: 0, pinLockUntil: null });
     }
 
-    // Withdrawable = cumulative wallet ONLY (earned investment returns + referral earnings)
+    // Withdrawable = cumulativeBalance (investment returns + referral earnings combined)
+    // refEarned is now a lifetime tracker only — never deducted
     // Deposit wallet funds are investable-only, not withdrawable
     const cumBal = user.cumulativeBalance || 0;
     const refBal = user.refEarned || 0;
-    const balance = cumBal + (refBal >= 10000 ? refBal : 0);
-    if (balance < amt) return res.status(400).json({ status: 'error', message: 'Insufficient withdrawable balance. Cumulative: ' + fmtUGX(cumBal) + (refBal >= 10000 ? ', Referral: ' + fmtUGX(refBal) : '') });
+    const balance = cumBal;
+    if (balance < amt) return res.status(400).json({ status: 'error', message: 'Insufficient withdrawable balance. Available: ' + fmtUGX(cumBal) });
 
     // ── RULE: deposited funds cannot be withdrawn directly ──────────────
     const investedTotal  = user.totalInvested  || 0;
     const withdrawnTotal = user.totalWithdrawn || 0;
-    // Allow if user has invested OR if admin has credited their cumulative wallet
-    const hasInvested = investedTotal > 0 || (user.cumulativeBalance || 0) > 0;
+    // Allow if user has invested OR has earned balance in cumulative wallet
+    const hasInvested = investedTotal > 0 || cumBal > 0 || refBal > 0;
     if (!hasInvested)
       return res.status(400).json({ status: 'error', message: 'You must invest your deposited funds before withdrawing. Go to Products → choose a plan → invest → wait for maturity → claim → then withdraw.' });
 
@@ -905,19 +906,17 @@ app.post('/withdraw/request', async (req, res) => {
       const freshSnap = await t.get(userRef);
       const freshData = freshSnap.data();
       const freshBal = freshData.walletBalance || 0;
-      if (freshBal < amt) throw new Error(`Insufficient balance: ${fmtUGX(freshBal)}`);
-      // Split deduction: deplete cumulativeBalance first, then refEarned
       const freshCum = freshData.cumulativeBalance || 0;
-      const freshRef = freshData.refEarned || 0;
-      cumPortion = Math.max(0, Math.min(freshCum, amt));
-      refPortion = Math.max(0, amt - cumPortion);
+      if (freshCum < amt) throw new Error(`Insufficient balance: ${fmtUGX(freshCum)}`);
+      // Deduct only from cumulativeBalance — refEarned is a lifetime tracker, never decremented
+      cumPortion = amt;
+      refPortion = 0;
       const balUpdates = {
         walletBalance: Math.max(0, freshBal - amt),
+        cumulativeBalance: FieldValue.increment(-amt),
         withdrawalCount: (freshData.withdrawalCount || 0) + 1,
         lastWithdrawalRequestAt: FieldValue.serverTimestamp()
       };
-      if (cumPortion > 0) balUpdates.cumulativeBalance = FieldValue.increment(-cumPortion);
-      if (refPortion > 0) balUpdates.refEarned = FieldValue.increment(-refPortion);
       t.update(userRef, balUpdates);
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
@@ -1782,18 +1781,41 @@ app.post('/admin/fix-referral-counts', async (req, res) => {
       l3Counts[l3Parent] = (l3Counts[l3Parent] || 0) + 1;
     });
 
-    const batch = db.batch();
-    const uids = new Set([...Object.keys(l2Counts), ...Object.keys(l3Counts)]);
-    uids.forEach(uid => {
-      const ref = db.collection('users').doc(uid);
-      const upd = {};
-      if (l2Counts[uid] !== undefined) upd.l2ReferralCount = l2Counts[uid];
-      if (l3Counts[uid] !== undefined) upd.l3ReferralCount = l3Counts[uid];
-      batch.update(ref, upd);
+    // ── Also migrate refEarned → cumulativeBalance for all users who have
+    //    referral earnings sitting in refEarned but not yet in cumulativeBalance.
+    //    After this, refEarned is a lifetime tracker (never decremented).
+    const cumUpdates = {}; // uid → amount to add to cumulativeBalance
+    allUsers.forEach(d => {
+      const u = d.data();
+      const ref = u.refEarned || 0;
+      if (ref > 0) cumUpdates[d.id] = ref;
     });
-    await batch.commit();
-    console.log(`✅ Referral count backfill: updated ${uids.size} users`);
-    return res.json({ status: 'success', updated: uids.size, l2Counts, l3Counts });
+
+    // Commit in batches of 400 (Firestore limit is 500)
+    const allUids = new Set([...Object.keys(l2Counts), ...Object.keys(l3Counts), ...Object.keys(cumUpdates)]);
+    const uidArr = [...allUids];
+    for (let i = 0; i < uidArr.length; i += 400) {
+      const chunk = uidArr.slice(i, i + 400);
+      const batch = db.batch();
+      chunk.forEach(uid => {
+        const ref = db.collection('users').doc(uid);
+        const upd = {};
+        if (l2Counts[uid] !== undefined) upd.l2ReferralCount = l2Counts[uid];
+        if (l3Counts[uid] !== undefined) upd.l3ReferralCount = l3Counts[uid];
+        if (cumUpdates[uid]) upd.cumulativeBalance = FieldValue.increment(cumUpdates[uid]);
+        batch.update(ref, upd);
+      });
+      await batch.commit();
+    }
+
+    console.log(`✅ Referral backfill: updated ${allUids.size} users (L2/L3 counts + cumulative credits)`);
+    return res.json({
+      status: 'success',
+      updated: allUids.size,
+      l2Counts,
+      l3Counts,
+      cumulativeCredited: cumUpdates
+    });
   } catch (e) {
     console.error('Backfill error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
