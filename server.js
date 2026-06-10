@@ -1367,7 +1367,8 @@ app.post('/invest/claim', async (req, res) => {
       return res.status(403).json({ status: 'error', message: 'Not your investment' });
     if (inv.status !== 'matured')
       return res.status(400).json({ status: 'error', message: 'Cannot claim — status is ' + inv.status });
-    const payout = inv.expectedReturn || 0;
+    const isLocked = (inv.amount || 0) <= 30000;
+    const payout = isLocked ? (inv.pendingCashback || inv.expectedReturn || 0) : (inv.expectedReturn || 0);
     const { date, time } = nowStr();
     await db.runTransaction(async (t) => {
       const userRef  = db.collection('users').doc(userId);
@@ -1564,40 +1565,73 @@ async function runDailyCashback() {
 
       const cashback = Number(inv.dailyCashback);
       const { date, time } = nowStr();
+      const isLocked = (inv.amount || 0) <= 30000; // products ≤30k lock cashback till maturity
 
-      // Credit to user wallet
-      const userRef = db.collection('users').doc(inv.userId);
-      batch.update(userRef, {
-        walletBalance: FieldValue.increment(cashback),
-        cumulativeBalance: FieldValue.increment(cashback),
-        totalEarned: FieldValue.increment(cashback),
-        updatedAt: FieldValue.serverTimestamp()
-      });
+      if (isLocked) {
+        // Accumulate cashback on investment — NOT credited to wallet yet
+        batch.update(invDoc.ref, {
+          lastCashbackDate: todayKey,
+          pendingCashback: FieldValue.increment(cashback)
+        });
 
-      // Mark investment as paid today
-      batch.update(invDoc.ref, { lastCashbackDate: todayKey });
+        // Transaction record (locked)
+        const txRef = db.collection('transactions').doc();
+        batch.set(txRef, {
+          userId: inv.userId,
+          type: 'daily_cashback_locked',
+          amount: cashback,
+          description: `Daily cashback (locked) — ${inv.productName || 'Investment'}`,
+          investmentId: invDoc.id,
+          locked: true,
+          date, time,
+          createdAt: FieldValue.serverTimestamp()
+        });
 
-      // Transaction record
-      const txRef = db.collection('transactions').doc();
-      batch.set(txRef, {
-        userId: inv.userId,
-        type: 'daily_cashback',
-        amount: cashback,
-        description: `Daily cashback — ${inv.productName || 'Investment'}`,
-        investmentId: invDoc.id,
-        date, time,
-        createdAt: FieldValue.serverTimestamp()
-      });
+        // Notification — inform user cashback is accumulating
+        const newPending = (inv.pendingCashback || 0) + cashback;
+        const notifRef = db.collection('notifications').doc();
+        batch.set(notifRef, {
+          userId: inv.userId,
+          title: '🔒 Cashback Accumulating',
+          message: `UGX ${cashback.toLocaleString()} cashback from ${inv.productName || 'your investment'} is locked. Total locked so far: UGX ${newPending.toLocaleString()}. You will receive everything at maturity.`,
+          readBy: [],
+          createdAt: FieldValue.serverTimestamp()
+        });
+      } else {
+        // Normal: credit to user wallet immediately
+        const userRef = db.collection('users').doc(inv.userId);
+        batch.update(userRef, {
+          walletBalance: FieldValue.increment(cashback),
+          cumulativeBalance: FieldValue.increment(cashback),
+          totalEarned: FieldValue.increment(cashback),
+          updatedAt: FieldValue.serverTimestamp()
+        });
 
-      // Notification
-      const notifRef = db.collection('notifications').doc();
-      batch.set(notifRef, {
-        userId: inv.userId,
-        title: '💰 Daily Cashback Received',
-        message: `UGX ${cashback.toLocaleString()} cashback from ${inv.productName || 'your investment'} has been added to your Cumulative Wallet.`,
-        readBy: [],
-        createdAt: FieldValue.serverTimestamp()
-      });
+        // Mark investment as paid today
+        batch.update(invDoc.ref, { lastCashbackDate: todayKey });
+
+        // Transaction record
+        const txRef = db.collection('transactions').doc();
+        batch.set(txRef, {
+          userId: inv.userId,
+          type: 'daily_cashback',
+          amount: cashback,
+          description: `Daily cashback — ${inv.productName || 'Investment'}`,
+          investmentId: invDoc.id,
+          date, time,
+          createdAt: FieldValue.serverTimestamp()
+        });
+
+        // Notification
+        const notifRef = db.collection('notifications').doc();
+        batch.set(notifRef, {
+          userId: inv.userId,
+          title: '💰 Daily Cashback Received',
+          message: `UGX ${cashback.toLocaleString()} cashback from ${inv.productName || 'your investment'} has been added to your Cumulative Wallet.`,
+          readBy: [],
+          createdAt: FieldValue.serverTimestamp()
+        });
+      }
 
       paid++;
     }
