@@ -211,6 +211,80 @@ app.post('/pin/request-reset', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+app.post('/password/request-reset', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const snap = await db.collection('users').doc(userId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = snap.data() || {};
+    const existing = await db.collection('adminRequests')
+      .where('userId', '==', userId).where('type', '==', 'password_reset').where('status', '==', 'pending').limit(1).get();
+    if (!existing.empty) return res.json({ status: 'success', message: 'Request already pending' });
+    await db.collection('adminRequests').add({
+      type: 'password_reset', userId,
+      userName: user.name || user.phone || userId,
+      userPhone: user.phone || '',
+      status: 'pending', createdAt: FieldValue.serverTimestamp()
+    });
+    return res.json({ status: 'success', message: 'Password reset request submitted' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/withdraw/request-phone-change', async (req, res) => {
+  const { userId, newPhone } = req.body;
+  if (!userId || !newPhone) return res.status(400).json({ status: 'error', message: 'userId and newPhone required' });
+  const cleanedNew = cleanPhone(newPhone);
+  try {
+    const snap = await db.collection('users').doc(userId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = snap.data() || {};
+    const existing = await db.collection('adminRequests')
+      .where('userId', '==', userId).where('type', '==', 'withdrawal_number').where('status', '==', 'pending').limit(1).get();
+    if (!existing.empty) return res.json({ status: 'success', message: 'Request already pending' });
+    await db.collection('adminRequests').add({
+      type: 'withdrawal_number', userId,
+      userName: user.name || user.phone || userId,
+      userPhone: user.phone || '',
+      requestedPhone: cleanedNew,
+      status: 'pending', createdAt: FieldValue.serverTimestamp()
+    });
+    return res.json({ status: 'success', message: 'Phone change request submitted. Admin will review shortly.' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/approve-phone-change', async (req, res) => {
+  const { requestId, adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!requestId) return res.status(400).json({ status: 'error', message: 'requestId required' });
+  try {
+    const reqSnap = await db.collection('adminRequests').doc(requestId).get();
+    if (!reqSnap.exists) return res.status(404).json({ status: 'error', message: 'Request not found' });
+    const reqData = reqSnap.data();
+    if (reqData.type !== 'withdrawal_number') return res.status(400).json({ status: 'error', message: 'Not a phone change request' });
+    const { userId, requestedPhone, userName } = reqData;
+    // Update all activated bank accounts for this user — or add as a new one
+    // For simplicity: update user profile phone as withdrawal number
+    await db.collection('users').doc(userId).update({ withdrawalPhone: requestedPhone });
+    // Update the bankAccount if one matches the old phone, or add new one
+    const bankSnap = await db.collection('bankAccounts').where('userId','==',userId).where('status','==','activated').limit(1).get();
+    if (!bankSnap.empty) {
+      await bankSnap.docs[0].ref.update({ phone: requestedPhone });
+    } else {
+      await db.collection('bankAccounts').add({
+        userId, phone: requestedPhone, name: userName || '',
+        network: 'MTN', status: 'activated', createdAt: FieldValue.serverTimestamp()
+      });
+    }
+    await db.collection('adminRequests').doc(requestId).update({ status: 'done', handledAt: FieldValue.serverTimestamp() });
+    const { date, time } = nowStr();
+    await notify(userId, '✅ Phone Change Approved',
+      `Your withdrawal phone number has been updated to ${requestedPhone}.\n\n📅 ${date} ⏰ ${time}\n\nYou can now withdraw to this number.`,
+      'info', {});
+    return res.json({ status: 'success', message: 'Phone change approved' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 
 
 app.post('/pin/verify', async (req, res) => {

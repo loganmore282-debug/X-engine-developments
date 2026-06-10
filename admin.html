@@ -132,6 +132,7 @@ select.form-input{appearance:none}
     <button class="tab-btn" onclick="showTab('notifications',this)">🔔 Notifs</button>
     <button class="tab-btn" onclick="showTab('ads',this)">🖼️ Ads</button>
     <button class="tab-btn" onclick="showTab('settings',this)">⚙️ Settings</button>
+    <button class="tab-btn" onclick="showTab('requests',this)">📩 Requests <span id="reqBadge" style="display:none;background:#F0B90B;color:#000;font-size:9px;font-weight:800;padding:1px 5px;border-radius:999px;margin-left:2px">0</span></button>
     <button class="tab-btn" onclick="showTab('accounts',this)">🏦 Accounts <span id="accBadge" class="notif-dot" style="display:none"></span></button>
   </div>
 
@@ -325,11 +326,17 @@ select.form-input{appearance:none}
   </div>
 
   <!-- ── RESET REQUESTS ── -->
-  <div class="panel" id="requestsPanel" style="display:none">
+  <div class="panel" id="requestsPanel">
     <div class="card">
-      <div class="card-title">📩 Reset Requests</div>
-      <button class="btn btn-sm btn-primary" onclick="loadRequests()" style="margin-bottom:8px">🔄 Refresh</button>
-      <div id="requestsList"><div class="empty-state">Click Refresh to load requests</div></div>
+      <div class="card-title">📩 Support Requests
+        <span id="reqPendingCount" style="font-size:11px;color:var(--muted);font-weight:400;margin-left:4px"></span>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-primary" onclick="loadRequests('pending')" id="reqFilterPending" style="opacity:1">⏳ Pending</button>
+        <button class="btn btn-sm btn-outline" onclick="loadRequests('all')" id="reqFilterAll">All</button>
+        <button class="btn btn-sm btn-outline" onclick="loadRequests()" style="margin-left:auto">🔄 Refresh</button>
+      </div>
+      <div id="requestsList"><div class="empty-state">Loading...</div></div>
     </div>
   </div>
 
@@ -700,6 +707,7 @@ window.showTab = function(tab,btn){
   const el=document.getElementById(tab+'Panel');
   if(el) el.classList.add('active');
   if(btn) btn.classList.add('active');
+  if(tab==='requests') loadRequests('pending');
   if(tab==='products') loadAdminProducts();
   if(tab==='users') loadUsers();
   if(tab==='referrals') loadReferralsAdmin();
@@ -708,6 +716,15 @@ window.showTab = function(tab,btn){
   if(tab==='notifications') loadAdminNotifs();
   if(tab==='accounts') loadAccounts('pending');
 };
+
+// Live badge count for pending requests
+onSnapshot(query(collection(db,'adminRequests'),where('status','==','pending')),snap=>{
+  const badge=document.getElementById('reqBadge');
+  if(badge){
+    if(snap.size>0){ badge.style.display='inline'; badge.textContent=snap.size; }
+    else badge.style.display='none';
+  }
+});
 
 // ══════════════════════════════════════════════════
 // DASHBOARD
@@ -1576,70 +1593,86 @@ window.updateAccount = async function(accountId, status){
   } catch(e){ alert('Error: '+e.message); }
 };
 
-// ── Load PIN/Password reset requests ──
-window.loadRequests = async function(){
-  const el = document.getElementById('requestsList');
-  if(el) el.innerHTML = '<div class="empty-state">Loading...</div>';
-  try{
-    const snap = await getDocs(query(collection(db,'adminRequests'),orderBy('createdAt','desc'),limit(50)));
-    if(snap.empty){ if(el) el.innerHTML='<div class="empty-state">No requests yet</div>'; return; }
-    if(el) el.innerHTML='';
-    snap.forEach(d=>{
-      const r=d.data();
-      const ts = r.createdAt?.toDate?.()?.toLocaleDateString('en-UG')||'';
-      if(el) el.innerHTML+=`<div class="card" style="margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <span style="font-size:12px;font-weight:700;color:var(--primary)">${r.type==='pin_reset'?'🔓 PIN Reset':'🔑 Password Reset'}</span>
-          <span style="font-size:11px;color:var(--muted)">${ts}</span>
-        </div>
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${r.userName||r.userId}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${r.userPhone||r.userId}</div>
-        <div style="display:flex;gap:8px">
-          ${r.type==='pin_reset'?`<button class="btn btn-sm btn-primary" onclick="resetUserPin('${r.userId}','${r.userName||r.userId}');updateDoc(doc(db,'adminRequests','${d.id}'),{status:'done'}).catch(()=>{})">🔓 Reset PIN</button>`:''}
-          <button class="btn btn-sm btn-outline" onclick="updateDoc(doc(db,'adminRequests','${d.id}'),{status:'dismissed'}).catch(()=>{});loadRequests()">✕ Dismiss</button>
-        </div>
-      </div>`;
-    });
-  }catch(e){ if(el) el.innerHTML='<div class="empty-state">'+e.message+'</div>'; }
-};
-
-window.loadRequests = async function(){
+// ── Support requests: PIN reset / Password reset / Withdrawal phone change ──
+let _reqFilter = 'pending';
+window.loadRequests = async function(filter){
+  if(filter !== undefined) _reqFilter = filter;
   const el=document.getElementById('requestsList');
-  if(el) el.innerHTML='<div class="page-loader"><div class="spinner"></div> Loading...</div>';
+  if(el) el.innerHTML='<div class="empty-state">Loading...</div>';
+  // Highlight active filter button
+  document.getElementById('reqFilterPending')?.style && (document.getElementById('reqFilterPending').style.opacity = _reqFilter==='pending'?'1':'0.4');
+  document.getElementById('reqFilterAll')?.style && (document.getElementById('reqFilterAll').style.opacity = _reqFilter==='pending'?'0.4':'1');
   try{
-    const snap=await getDocs(query(collection(db,'adminRequests'),orderBy('createdAt','desc'),limit(50)));
-    if(snap.empty){ if(el) el.innerHTML='<div class="empty-state">No pending requests</div>'; return; }
-    if(el) el.innerHTML='';
-    snap.forEach(d=>{
+    let q;
+    if(_reqFilter==='pending'){
+      q=query(collection(db,'adminRequests'),where('status','==','pending'),orderBy('createdAt','desc'),limit(50));
+    } else {
+      q=query(collection(db,'adminRequests'),orderBy('createdAt','desc'),limit(50));
+    }
+    const snap=await getDocs(q);
+    const pendingCount=_reqFilter==='pending'?snap.size:(snap.docs.filter(d=>d.data().status==='pending').length);
+    const badge=document.getElementById('reqBadge');
+    const countEl=document.getElementById('reqPendingCount');
+    if(badge){ if(pendingCount>0){badge.style.display='inline';badge.textContent=pendingCount;}else badge.style.display='none'; }
+    if(countEl) countEl.textContent = pendingCount>0?`(${pendingCount} pending)`:'';
+    if(snap.empty){ if(el) el.innerHTML='<div class="empty-state">No '+(filter||_reqFilter==='pending'?'pending ':'')+' requests</div>'; return; }
+    const typeLabel={pin_reset:'🔓 PIN Reset',password_reset:'🔑 Password Reset',withdrawal_number:'📱 Phone Change'};
+    const typeColor={pin_reset:'var(--primary)',password_reset:'#93c5fd',withdrawal_number:'#4ade80'};
+    const statusBadge={pending:'<span class="badge badge-gold">Pending</span>',done:'<span class="badge badge-green">Done</span>',dismissed:'<span class="badge badge-gray">Dismissed</span>'};
+    const rows=snap.docs.map(d=>{
       const r=d.data();
-      if(r.status==='done'||r.status==='dismissed') return;
-      const ts=r.createdAt?.toDate?.()?.toLocaleString('en-UG')||'';
-      el.innerHTML+=`<div class="card" style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-size:11px;font-weight:800;color:var(--primary)">${r.type==='pin_reset'?'🔓 PIN RESET REQUEST':'🔑 PASSWORD RESET'}</span>
-          <span style="font-size:10px;color:var(--muted)">${ts}</span>
+      const ts=r.createdAt?.toDate?.()?.toLocaleString('en-UG',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})||'';
+      const label=typeLabel[r.type]||r.type;
+      const color=typeColor[r.type]||'var(--muted)';
+      const sb=statusBadge[r.status]||'';
+      const isPending=r.status==='pending';
+      let actions='';
+      if(isPending){
+        if(r.type==='pin_reset') actions+=`<button class="btn btn-sm btn-primary" onclick="handleReq('${d.id}','${r.userId}','${(r.userName||'').replace(/'/g,"\\'")}','pin')">🔓 Reset PIN</button>`;
+        if(r.type==='password_reset') actions+=`<button class="btn btn-sm btn-blue" onclick="handleReq('${d.id}','${r.userId}','${(r.userName||'').replace(/'/g,"\\'")}','password')">🔑 Reset Password</button>`;
+        if(r.type==='withdrawal_number') actions+=`<button class="btn btn-sm btn-green" onclick="handleReq('${d.id}','${r.userId}','${(r.userName||'').replace(/'/g,"\\'")}','phone')">✅ Approve</button><button class="btn btn-sm" style="background:#2a1a1a;border:1px solid rgba(220,38,38,.3);color:#f87171" onclick="handleReq('${d.id}','${r.userId}','${(r.userName||'').replace(/'/g,"\\'")}','reject_phone')">✕ Reject</button>`;
+        actions+=`<button class="btn btn-sm btn-outline" onclick="handleReq('${d.id}','${r.userId}','${(r.userName||'').replace(/'/g,"\\'")}','dismiss')">✕ Dismiss</button>`;
+      }
+      return `<div class="item-card" style="border-left:3px solid ${color}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:800;color:${color}">${label}</span>
+          <div style="display:flex;align-items:center;gap:6px">${sb}<span style="font-size:10px;color:var(--muted)">${ts}</span></div>
         </div>
-        <div style="font-size:14px;font-weight:700;margin-bottom:2px">${r.userName||r.userId}</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${r.userPhone||''}</div>
-        <div style="display:flex;gap:8px">
-          ${r.type==='pin_reset'?`<button class="btn btn-primary btn-sm" onclick="handleResetRequest('${d.id}','${r.userId}','${r.userName||r.userId}','pin')">✅ Reset PIN Now</button>`:''}
-          <button class="btn btn-sm" style="background:#1a1a24;border:1px solid var(--border);color:var(--muted)" onclick="handleResetRequest('${d.id}','${r.userId}','${r.userName||r.userId}','dismiss')">✕ Dismiss</button>
-        </div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px">${r.userName||r.userId}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:${r.type==='withdrawal_number'?'6px':'10px'}">${r.userPhone||''}</div>
+        ${r.type==='withdrawal_number'?`<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px">📱 Requested number: <strong style="color:#4ade80">${r.requestedPhone||'—'}</strong></div>`:''}
+        ${actions?`<div class="mini-actions">${actions}</div>`:''}
       </div>`;
-    });
-    if(el.innerHTML==='') el.innerHTML='<div class="empty-state">No pending requests</div>';
+    }).join('');
+    if(el) el.innerHTML = rows || '<div class="empty-state">No requests</div>';
   }catch(e){ if(el) el.innerHTML='<div class="empty-state">'+e.message+'</div>'; }
 };
 
-window.handleResetRequest = async function(docId, uid, label, action){
-  if(action==='pin'){
-    await resetUserPin(uid, label);
-    await setDoc(doc(db,'adminRequests',docId),{status:'done',handledAt:serverTimestamp()},{merge:true}).catch(()=>{});
+window.handleReq = async function(docId, uid, label, action){
+  try{
+    if(action==='pin'){
+      await resetUserPin(uid, label);
+      await setDoc(doc(db,'adminRequests',docId),{status:'done',handledAt:serverTimestamp()},{merge:true});
+    } else if(action==='password'){
+      await resetUserPassword(uid, label);
+      await setDoc(doc(db,'adminRequests',docId),{status:'done',handledAt:serverTimestamp()},{merge:true});
+    } else if(action==='phone'){
+      const r=await fetch(`${SERVER}/admin/approve-phone-change`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:docId,adminKey:ADMIN_KEY})});
+      const d=await r.json();
+      if(d.status!=='success') return alert('❌ '+d.message);
+      alert('✅ Phone change approved. User notified.');
+    } else if(action==='reject_phone'){
+      if(!confirm('Reject this phone change request?')) return;
+      await setDoc(doc(db,'adminRequests',docId),{status:'dismissed',handledAt:serverTimestamp()},{merge:true});
+      // Notify user
+      const reqSnap=await getDocs(query(collection(db,'adminRequests')));
+      alert('Request rejected.');
+    } else if(action==='dismiss'){
+      if(!confirm('Dismiss this request?')) return;
+      await setDoc(doc(db,'adminRequests',docId),{status:'dismissed',handledAt:serverTimestamp()},{merge:true});
+    }
     loadRequests();
-  } else {
-    await setDoc(doc(db,'adminRequests',docId),{status:'dismissed',handledAt:serverTimestamp()},{merge:true}).catch(()=>{});
-    loadRequests();
-  }
+  }catch(e){ alert('Error: '+e.message); }
 };
 
 console.log('✅ x-engine admin loaded');

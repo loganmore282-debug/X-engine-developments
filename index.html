@@ -2332,6 +2332,18 @@ function showSetPinInAccount(body){
     </div>`;
 }
 
+window.requestPasswordReset = async function(btn){
+  if(!_user) return;
+  if(!confirm('Send a password reset request to admin? They will reset your password and notify you.')) return;
+  if(btn){ btn.disabled=true; btn.textContent='Sending...'; }
+  try{
+    const r=await fetch(`${SERVER}/password/request-reset`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:_user.uid})});
+    const d=await r.json();
+    showToast('Password reset request sent! Admin will contact you shortly.','success',4000);
+  }catch(e){ showToast('Request sent to admin','success'); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='📩 Request Password Reset from Admin'; } }
+};
+
 window.requestPinReset = async function(){
   if(!_user) return;
   if(!confirm('Send a PIN reset request to admin? They will reset your PIN and notify you.')) return;
@@ -2340,6 +2352,18 @@ window.requestPinReset = async function(){
     const d = await r.json();
     if(d.status==='success') showToast('Reset request sent! Admin will notify you shortly.','success',4000);
     else showToast(d.message||'Request sent','info');
+  }catch(e){ showToast('Request sent to admin','success'); }
+};
+
+window.requestWithdrawalPhoneChange = async function(){
+  if(!_user) return;
+  const newPhone = prompt('Enter the new withdrawal phone number (e.g. 0771234567):');
+  if(!newPhone || !newPhone.trim()) return;
+  if(!confirm(`Request to change withdrawal phone to ${newPhone.trim()}?`)) return;
+  try{
+    const r=await fetch(`${SERVER}/withdraw/request-phone-change`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:_user.uid,newPhone:newPhone.trim()})});
+    const d=await r.json();
+    showToast(d.message||'Request sent! Admin will review shortly.','success',4000);
   }catch(e){ showToast('Request sent to admin','success'); }
 };
 
@@ -2887,6 +2911,9 @@ window.openChangePasswordPage = function(){
         <div style="font-size:17px;font-weight:800;color:#fff;margin-bottom:8px">Change Password</div>
         <div style="font-size:13px;color:var(--muted);line-height:1.7">For security, passwords cannot be changed directly in the app.<br>Contact admin via Customer Service to request a password reset.</div>
       </div>
+      <button onclick="requestPasswordReset(this)" style="width:100%;padding:15px;background:rgba(59,130,246,.12);border:1.5px solid rgba(59,130,246,.3);border-radius:14px;color:#93c5fd;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--fam);margin-bottom:10px">
+        📩 Request Password Reset from Admin
+      </button>
       <button onclick="openHelp()" style="width:100%;padding:15px;background:rgba(240,185,11,.12);border:1.5px solid rgba(240,185,11,.3);border-radius:14px;color:#F0B90B;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--fam);margin-bottom:10px">
         💬 Contact Customer Service
       </button>
