@@ -1664,8 +1664,6 @@ window.handleReq = async function(docId, uid, label, action){
     } else if(action==='reject_phone'){
       if(!confirm('Reject this phone change request?')) return;
       await setDoc(doc(db,'adminRequests',docId),{status:'dismissed',handledAt:serverTimestamp()},{merge:true});
-      // Notify user
-      const reqSnap=await getDocs(query(collection(db,'adminRequests')));
       alert('Request rejected.');
     } else if(action==='dismiss'){
       if(!confirm('Dismiss this request?')) return;
