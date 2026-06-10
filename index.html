@@ -2156,7 +2156,7 @@ window._witAccPageFn = async function(){
     const pinData = await pinRes.json();
     const accData = await accRes.json();
     const accounts = accData.accounts || [];
-    const hasDeposited = (_userData?.depositBalance||0) > 0;
+    const hasDeposited = (_userData?.depositCount||0) > 0;
     const hasAccounts  = accounts.length > 0;
 
     // ── Bank Accounts Section ──

@@ -1414,8 +1414,8 @@ app.post('/bank-account/add', async (req, res) => {
     const userSnap = await db.collection('users').doc(userId).get();
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = userSnap.data();
-    if ((user.depositBalance || 0) <= 0)
-      return res.status(403).json({ status: 'error', message: 'You must make a deposit first before binding an account' });
+    if ((user.depositCount || 0) <= 0)
+      return res.status(403).json({ status: 'error', message: 'You must make a real deposit first before binding a withdrawal account' });
     const fullPhone = cleanPhone(phone);
     const existing = await db.collection('bankAccounts').where('userId', '==', userId).get();
     if (existing.size >= 2)
