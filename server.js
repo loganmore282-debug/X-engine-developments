@@ -424,39 +424,51 @@ async function handleDepositCallback(req, res) {
         ? callbackAmount : expectedAmount;
       if (isSuccess) {
         const { date, time } = nowStr();
-        await db.runTransaction(async (t) => {
-          const userRef = db.collection('users').doc(userId);
-          const userSnap = await t.get(userRef);
-          if (!userSnap.exists) throw new Error('User not found: ' + userId);
-          const curBal = userSnap.data().walletBalance || 0;
-          t.update(userRef, { walletBalance: curBal + creditAmount, depositBalance: FieldValue.increment(creditAmount), depositCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
-          if (pending.depositId) {
-            t.update(db.collection('deposits').doc(pending.depositId), {
-              status: 'success', amountCredited: creditAmount, marzTxId: txId,
-              phone: phone || pending.phone, provider, paidAt: FieldValue.serverTimestamp()
+        let alreadyProcessed = false;
+        try {
+          await db.runTransaction(async (t) => {
+            // Re-read pendingPayments inside transaction for true idempotency
+            const pendingRef2 = db.collection('pendingPayments').doc(reference);
+            const freshPending = await t.get(pendingRef2);
+            if (freshPending.data()?.status === 'success') throw new Error('ALREADY_PROCESSED');
+            const userRef = db.collection('users').doc(userId);
+            const userSnap = await t.get(userRef);
+            if (!userSnap.exists) throw new Error('User not found: ' + userId);
+            const curBal = userSnap.data().walletBalance || 0;
+            t.update(userRef, { walletBalance: curBal + creditAmount, depositBalance: FieldValue.increment(creditAmount), depositCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+            if (pending.depositId) {
+              t.update(db.collection('deposits').doc(pending.depositId), {
+                status: 'success', amountCredited: creditAmount, marzTxId: txId,
+                phone: phone || pending.phone, provider, paidAt: FieldValue.serverTimestamp()
+              });
+            }
+            t.update(pendingRef2, {
+              status: 'success', amountCredited: creditAmount, processedAt: FieldValue.serverTimestamp()
             });
-          }
-          t.update(db.collection('pendingPayments').doc(reference), {
-            status: 'success', amountCredited: creditAmount, processedAt: FieldValue.serverTimestamp()
+            const txRef = db.collection('transactions').doc();
+            t.set(txRef, {
+              userId, type: 'deposit', description: `Deposit via ${provider}`,
+              amount: creditAmount, phone: phone || pending.phone || '', reference,
+              marzTxId: txId, provider, status: 'success', date, time,
+              createdAt: FieldValue.serverTimestamp()
+            });
+            const notifRef = db.collection('notifications').doc();
+            t.set(notifRef, {
+              userId, title: '⚡ Funds Received!',
+              message: `${fmtUGX(creditAmount)} has been credited to your wallet.\n\n📅 Date: ${date}\n⏰ Time: ${time}\n📱 Phone: ${phone || pending.phone || 'N/A'}\n🔖 Reference: ${reference}\n💳 Provider: ${provider}\n\nThank you for investing with X-Engine! ⚙️`,
+              type: 'deposit', amount: creditAmount, reference, provider,
+              phone: phone || pending.phone || '', date, time,
+              readBy: [], createdAt: FieldValue.serverTimestamp()
+            });
           });
-          const txRef = db.collection('transactions').doc();
-          t.set(txRef, {
-            userId, type: 'deposit', description: `Deposit via ${provider}`,
-            amount: creditAmount, phone: phone || pending.phone || '', reference,
-            marzTxId: txId, provider, status: 'success', date, time,
-            createdAt: FieldValue.serverTimestamp()
-          });
-          const notifRef = db.collection('notifications').doc();
-          t.set(notifRef, {
-            userId, title: '⚡ Funds Received!',
-            message: `${fmtUGX(creditAmount)} has been credited to your wallet.\n\n📅 Date: ${date}\n⏰ Time: ${time}\n📱 Phone: ${phone || pending.phone || 'N/A'}\n🔖 Reference: ${reference}\n💳 Provider: ${provider}\n\nThank you for investing with X-Engine! ⚙️`,
-            type: 'deposit', amount: creditAmount, reference, provider,
-            phone: phone || pending.phone || '', date, time,
-            readBy: [], createdAt: FieldValue.serverTimestamp()
-          });
-        });
-        console.log(`✅ Credited ${fmtUGX(creditAmount)} to user ${userId}`);
-        await checkAndPayReferral(userId, creditAmount);
+        } catch (txErr) {
+          if (txErr.message === 'ALREADY_PROCESSED') { console.log('⚠️ Idempotency: already processed:', reference); alreadyProcessed = true; }
+          else throw txErr;
+        }
+        if (!alreadyProcessed) {
+          console.log(`✅ Credited ${fmtUGX(creditAmount)} to user ${userId}`);
+          await checkAndPayReferral(userId, creditAmount);
+        }
       } else if (isFailed) {
         const failReason =
           payload.transaction?.description ||
@@ -510,7 +522,7 @@ app.post('/register/bonus', async (req, res) => {
     }
 
     const settSnap = await db.collection('settings').doc('main').get();
-    const bonus = settSnap.exists ? (settSnap.data().registrationBonus || 5000) : 5000;
+    const bonus = settSnap.exists ? (settSnap.data().registrationBonus || 50000) : 50000;
     const { date, time } = nowStr();
 
     // Generate a globally unique referral code if user doesn't have one yet
@@ -572,9 +584,9 @@ async function checkAndPayReferral(userId, depositAmount) {
 
     const settSnap = await db.collection('settings').doc('main').get();
     const settings = settSnap.exists ? settSnap.data() : {};
-    const firstDepBonus = settings.referralBonus       || 20000;
-    const ongoingFlat   = settings.referralOngoingFlat || 2000;
-    const l3Flat        = settings.referralL3Flat      || 200;
+    const firstDepBonus = settings.refL1 || 20000;
+    const ongoingFlat   = settings.refL2 || 2000;
+    const l3Flat        = settings.refL3 || 200;
 
     const { date, time } = nowStr();
 
@@ -838,7 +850,9 @@ app.post('/withdraw/request', async (req, res) => {
     req._refIdsToExpire = [];
 
     const witCount  = user.withdrawalCount || 0;
-    const fee       = (witCount === 0 || isTop) ? 0 : Math.round(amt * 0.1);
+    const witSettSnap = await db.collection('settings').doc('main').get();
+    const witFeePct = witSettSnap.exists ? (witSettSnap.data().withdrawalFee || 10) : 10;
+    const fee       = (witCount === 0 || isTop) ? 0 : Math.round(amt * witFeePct / 100);
     const netAmount = amt - fee;
     const reference = uuidv4();
 
@@ -1363,8 +1377,7 @@ app.post('/invest/claim', async (req, res) => {
       t.update(userRef, {
         walletBalance: (userSnap.data().walletBalance || 0) + payout,
         cumulativeBalance: FieldValue.increment(payout),
-        totalEarned:   FieldValue.increment(payout),   // ← tracks claimed returns for no-reinvest rule
-        totalInvested: FieldValue.increment(inv.amount || 0) // keep totalInvested accurate
+        totalEarned: FieldValue.increment(payout)   // tracks claimed returns for no-reinvest rule
       });
       t.update(invRef,  { status: 'claimed', claimedAt: FieldValue.serverTimestamp() });
       const txRef = db.collection('transactions').doc();
@@ -1465,7 +1478,7 @@ app.post('/checkin', async (req, res) => {
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const settSnap = await db.collection('settings').doc('main').get();
-    const bonus = settSnap.exists ? (settSnap.data().checkinBonus || 200) : 200;
+    const bonus = settSnap.exists ? (settSnap.data().checkinBonus || 1000) : 1000;
     const userRef  = db.collection('users').doc(userId);
     const userSnap = await userRef.get();
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
@@ -1598,7 +1611,7 @@ async function runDailyCashback() {
 
 async function runMaturityCheck() {
   try {
-    const now  = new Date();
+    const now  = eatNow();
     const snap = await db.collection('investments').where('status', '==', 'active').get();
     if (snap.empty) return;
     let count = 0;

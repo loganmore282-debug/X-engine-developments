@@ -459,7 +459,7 @@ select.form-input{appearance:none}
       </div>
       <div class="form-group">
         <label class="form-label">Withdrawal Fee (%)</label>
-        <input class="form-input" type="number" id="settWitFee" value="11">
+        <input class="form-input" type="number" id="settWitFee" value="10">
       </div>
       <div class="form-group">
         <label class="form-label">L1 Referral Reward (UGX) → Cumulative Wallet</label>
@@ -1335,7 +1335,7 @@ window.saveSettings=async function(){
   const data={
     registrationBonus:parseFloat(document.getElementById('settRegBonus').value)||50000,
     checkinBonus:parseFloat(document.getElementById('settCheckinBonus').value)||1000,
-    withdrawalFee:parseFloat(document.getElementById('settWitFee').value)||11,
+    withdrawalFee:parseFloat(document.getElementById('settWitFee').value)||10,
     refL1:parseFloat(document.getElementById('settRefL1').value)||20000,
     refL2:parseFloat(document.getElementById('settRefL2').value)||2000,
     refL3:parseFloat(document.getElementById('settRefL3').value)||200,
