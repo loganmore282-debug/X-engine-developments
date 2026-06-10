@@ -751,11 +751,13 @@ async function loadDashboard(){
     ]);
     const pendWit=await getDocs(query(collection(db,'withdrawals'),where('status','in',['pending','processing'])));
     let totalDep=0,totalWit=0,totalInv=0;
-    depsSnap.forEach(d=>totalDep+=(d.data().amountCredited||d.data().amount||0));
+    depsSnap.forEach(d=>{ const a=d.data().amountCredited||d.data().amount||0; if(a>0) totalDep+=a; });
     witsSnap.forEach(d=>totalWit+=(d.data().amount||0));
+    invSnap.forEach(d=>totalInv+=(d.data().price||0));
     document.getElementById('sTotal').textContent=usersSnap.size;
     document.getElementById('sTotalDep').textContent=ugx(totalDep);
     document.getElementById('sTotalWit').textContent=ugx(totalWit);
+    document.getElementById('sTotalInv').textContent=ugx(totalInv);
     document.getElementById('sActiveInv').textContent=invSnap.size;
     document.getElementById('sPendingWit').textContent=pendWit.size;
     if(pendWit.size>0) document.getElementById('witBadge').style.display='inline-block';
