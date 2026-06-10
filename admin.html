@@ -892,7 +892,7 @@ function renderInvAdmin(){
   if(!filtered.length){ el.innerHTML='<div class="empty-state">No investments found</div>'; return; }
   el.innerHTML=filtered.map(inv=>{
     const sc={active:'badge-green',matured:'badge-gold',claimed:'badge-gray'}[inv.status]||'badge-gray';
-    const matDate=inv.maturityDate?.toDate?.();
+    const matDate = inv.maturityDate?.toDate ? inv.maturityDate.toDate() : (inv.maturityDate ? new Date(inv.maturityDate) : null);
     return `<div class="item-card">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
         <div style="flex:1">
