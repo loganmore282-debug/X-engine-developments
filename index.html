@@ -1234,19 +1234,19 @@ document.head.appendChild(s);
 
 
 <!-- PWA INSTALL BANNER -->
-<div id="pwaInstallBanner" style="display:none;position:fixed;bottom:80px;left:12px;right:12px;z-index:99999;background:#1a1a1a;border:1px solid #F0B90B;border-radius:16px;padding:14px 14px 14px 14px;box-shadow:0 8px 32px rgba(0,0,0,.7);animation:slideUp .4s ease">
+<div id="pwaInstallBanner" style="display:none;position:fixed;top:10px;left:12px;right:12px;z-index:99999;background:#1a1a1a;border:1px solid #F0B90B;border-radius:16px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,.7);animation:slideDown .4s ease">
   <div style="display:flex;align-items:center;gap:12px">
     <img src="icon-192.png" style="width:48px;height:48px;border-radius:12px;flex-shrink:0">
     <div style="flex:1;min-width:0">
-      <div style="font-family:'Barlow',sans-serif;font-weight:800;font-size:14px;color:#F8D12F;line-height:1.2">Install X-Engine</div>
-      <div style="font-family:'Barlow',sans-serif;font-size:11px;color:#848E9C;margin-top:2px">Add to Home Screen for quick access</div>
+      <div style="font-family:'Barlow',sans-serif;font-weight:800;font-size:14px;color:#F8D12F;line-height:1.2">X-Engine App</div>
+      <div style="font-family:'Barlow',sans-serif;font-size:11px;color:#848E9C;margin-top:2px">Install for quick access — no app store needed</div>
     </div>
-    <button id="pwaInstallBtn" style="background:linear-gradient(135deg,#F0B90B,#d97706);color:#000;border:none;border-radius:10px;padding:9px 16px;font-family:'Barlow',sans-serif;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">Install</button>
+    <button id="pwaInstallBtn" style="background:linear-gradient(135deg,#F0B90B,#d97706);color:#000;border:none;border-radius:10px;padding:9px 14px;font-family:'Barlow',sans-serif;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap">⬇ Download App</button>
     <button id="pwaDismissBtn" style="background:transparent;border:none;color:#848E9C;font-size:20px;cursor:pointer;padding:0 4px;line-height:1">×</button>
   </div>
 </div>
 <style>
-@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes slideDown{from{transform:translateY(-60px);opacity:0}to{transform:translateY(0);opacity:1}}
 </style>
 <script>
 (function(){
