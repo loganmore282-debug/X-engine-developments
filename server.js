@@ -108,6 +108,32 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
   });
   return resp.data;
 }
+// Fetch the REAL transaction status from MarzPay — used to verify webhook
+// callbacks server-side so a forged callback can never move money.
+// Docs: GET /transactions/{id} accepts UUID/reference and returns the
+// same shape as webhook payloads.
+async function marzGetTransaction(idOrRef) {
+  const resp = await axios.get(`${MARZ_BASE}/transactions/${idOrRef}`, {
+    headers: { 'Authorization': `Basic ${MARZ_AUTH}`, 'Content-Type': 'application/json' },
+    timeout: 15000
+  });
+  return resp.data;
+}
+// Returns 'completed' | 'failed' | 'pending' | ... or '' if unverifiable
+// (network error). Empty string means "couldn't check" — callers treat a
+// CONTRADICTING status as fraud but allow '' so a MarzPay API blip doesn't
+// freeze genuine payments (a forger can't cause our verify call to fail).
+async function marzVerifyStatus(idOrRef) {
+  try {
+    const v = await marzGetTransaction(idOrRef);
+    return String(
+      v?.transaction?.status || v?.data?.transaction?.status || v?.status || ''
+    ).toLowerCase();
+  } catch (e) {
+    console.warn('⚠️ MarzPay status verify unreachable for', idOrRef, '—', e.message);
+    return '';
+  }
+}
 async function marzVerifyPhone(phone) {
   const resp = await axios.post(`${MARZ_BASE}/phone-verification/verify`,
     { phone_number: cleanPhone(phone).replace('+', '') },
@@ -513,6 +539,16 @@ async function handleDepositCallback(req, res) {
       // SECURITY: Never credit more than expected
       const creditAmount = (callbackAmount > 0 && callbackAmount <= expectedAmount * 1.01)
         ? callbackAmount : expectedAmount;
+      // ── ANTI-FRAUD: callbacks are unauthenticated, so confirm the status
+      // with MarzPay directly before crediting. A forged "completed"
+      // callback fails here because MarzPay reports the real status.
+      if (isSuccess && pending.marzTxId) {
+        const realStatus = await marzVerifyStatus(pending.marzTxId);
+        if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) {
+          console.warn(`🚨 FRAUD BLOCK: callback claims success but MarzPay says '${realStatus}' for ${reference} — NOT crediting`);
+          return;
+        }
+      }
       if (isSuccess) {
         const { date, time } = nowStr();
         let alreadyProcessed = false;
@@ -931,6 +967,7 @@ app.post('/invest/buy', verifyUser, async (req, res) => {
         throw new Error(`Insufficient Deposit Wallet balance. You have ${fmtUGX(depBal)}, need ${fmtUGX(total)}.`);
 
       t.update(db.collection('users').doc(userId), {
+        walletBalance:  FieldValue.increment(-total),  // keep walletBalance = deposit + cumulative
         depositBalance: FieldValue.increment(-total),
         totalInvested:  FieldValue.increment(total)
       });
@@ -1413,11 +1450,23 @@ app.post('/withdraw/callback', async (req, res) => {
       if (witSnap.empty) { console.log('❌ No withdrawal for ref:', reference); return; }
       const witDoc = witSnap.docs[0];
       const wit = witDoc.data();
+      // ── ANTI-FRAUD: verify the claimed status with MarzPay before acting.
+      // A forged "failed" callback would otherwise refund a withdrawal whose
+      // money was actually sent (refund + cash = double payout).
+      const realStatus = wit.marzTxId ? await marzVerifyStatus(wit.marzTxId) : '';
       if (['success', 'successful', 'completed'].includes(rawStatus) && wit.status !== 'processed') {
+        if (realStatus && !['completed', 'successful', 'success'].includes(realStatus)) {
+          console.warn(`🚨 FRAUD BLOCK: callback claims success but MarzPay says '${realStatus}' for ${reference}`);
+          return;
+        }
         console.log(`✅ Withdrawal confirmed: ${reference}`);
         await processWithdrawalSuccess(witDoc.id, wit, payload);
       }
       if (['failed', 'declined', 'cancelled', 'error'].includes(rawStatus) && !['failed', 'processed'].includes(wit.status)) {
+        if (realStatus && !['failed', 'declined', 'cancelled', 'error'].includes(realStatus)) {
+          console.warn(`🚨 FRAUD BLOCK: callback claims failure but MarzPay says '${realStatus}' for ${reference} — NOT refunding`);
+          return;
+        }
         const failReason = payload.transaction?.description || payload.description || rawStatus || 'Provider declined';
         console.log(`❌ Withdrawal failed: ${reference} — ${failReason}`);
         await processWithdrawalFailure(witDoc.id, wit, failReason);
@@ -1645,6 +1694,11 @@ app.post('/invest/claim', verifyUser, async (req, res) => {
     const payout = isLocked ? (inv.pendingCashback || inv.expectedReturn || 0) : (inv.expectedReturn || 0);
     const { date, time } = nowStr();
     await db.runTransaction(async (t) => {
+      // Re-read investment inside the transaction — blocks concurrent
+      // double-claims that both passed the outer 'matured' check
+      const freshInv = await t.get(invRef);
+      if (!freshInv.exists || freshInv.data().status !== 'matured')
+        throw new Error('Already claimed or not matured');
       const userRef  = db.collection('users').doc(userId);
       const userSnap = await t.get(userRef);
       if (!userSnap.exists) throw new Error('User not found');
