@@ -469,8 +469,11 @@ async function handleDepositCallback(req, res) {
           ''
         ).toLowerCase();
         if (s) return s;
+        // MarzPay collection event types (from docs): completed / failed / pending / cancelled
+        if (payload.event_type === 'collection.completed') return 'completed';
         if (payload.event_type === 'collection.successful') return 'successful';
         if (payload.event_type === 'collection.failed') return 'failed';
+        if (payload.event_type === 'collection.cancelled') return 'cancelled';
         return '';
       })();
 
@@ -480,6 +483,7 @@ async function handleDepositCallback(req, res) {
       const callbackAmount = parseFloat(
         payload.amount ||
         payload.collection?.amount?.raw ||          // ← actual MarzPay structure
+        payload.transaction?.amount?.raw ||         // ← docs: amount also on transaction object
         payload.data?.collection?.amount?.raw ||
         payload.charged_amount || 0
       );
@@ -493,6 +497,8 @@ async function handleDepositCallback(req, res) {
         payload.transaction?.uuid ||               // ← actual MarzPay structure
         payload.data?.transaction?.uuid ||
         payload.transaction_id || payload.id || '';
+      // Docs: MTN/Airtel txn ID arrives as collection.provider_transaction_id
+      const providerTxId = payload.collection?.provider_transaction_id || '';
       const provider =
         payload.collection?.provider ||            // ← actual MarzPay structure
         payload.data?.collection?.provider ||
@@ -523,7 +529,7 @@ async function handleDepositCallback(req, res) {
             if (pending.depositId) {
               t.update(db.collection('deposits').doc(pending.depositId), {
                 status: 'success', amountCredited: creditAmount, marzTxId: txId,
-                phone: phone || pending.phone, provider, paidAt: FieldValue.serverTimestamp()
+                providerTxId, phone: phone || pending.phone, provider, paidAt: FieldValue.serverTimestamp()
               });
             }
             t.update(pendingRef2, {
@@ -1691,6 +1697,13 @@ app.post('/bank-account/add', verifyUser, async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Maximum 2 bank accounts allowed' });
     if (existing.docs.find(d => d.data().phone === fullPhone))
       return res.status(400).json({ status: 'error', message: 'This number is already saved' });
+    // SECURITY: one phone number can only ever be bound by ONE user across the
+    // whole platform — blocks withdrawing through someone else's activated number
+    const phoneTaken = await db.collection('bankAccounts').where('phone', '==', fullPhone).limit(5).get();
+    if (phoneTaken.docs.some(d => d.data().userId !== userId && d.data().status !== 'invalid')) {
+      console.warn(`🚨 Bind attempt on another user's number: ${fullPhone} by ${userId}`);
+      return res.status(403).json({ status: 'error', message: 'This number is already bound to another account. Each number can only be linked to one X-Engine account.' });
+    }
     const { date, time } = nowStr();
     const docRef = await db.collection('bankAccounts').add({
       userId, phone: fullPhone, name,
