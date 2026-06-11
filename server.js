@@ -1167,7 +1167,11 @@ async function processWithdrawalSuccess(witId, wit, marzData) {
   }
   const txSnap = await db.collection('transactions')
     .where('reference', '==', wit.reference).limit(1).get();
-  if (!txSnap.empty) txSnap.docs[0].ref.update({ status: 'success', date, time });
+  if (!txSnap.empty) txSnap.docs[0].ref.update({
+    status: 'success',
+    description: `Withdrawal successful — sent to ${wit.withdrawalPhone}`,
+    date, time
+  });
 
   const feeNote = wit.fee > 0 ? `\n💸 Fee deducted: ${fmtUGX(wit.fee)}` : '';
   await notify(

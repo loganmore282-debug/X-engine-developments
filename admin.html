@@ -602,6 +602,23 @@ select.form-input{appearance:none}
       <div id="tgLinkMsg" style="margin-top:6px"></div>
     </div>
 
+    <!-- Maintenance Mode -->
+    <div class="card">
+      <div class="card-title">🚧 Maintenance Mode</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text)">App Status</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">When ON — users see a maintenance screen. Admins always have access.</div>
+        </div>
+        <label style="position:relative;width:48px;height:26px;cursor:pointer;flex-shrink:0">
+          <input type="checkbox" id="maintToggle" onchange="toggleMaintenance(this.checked)" style="opacity:0;width:0;height:0;position:absolute">
+          <span id="maintSlider" style="position:absolute;inset:0;background:#333;border-radius:26px;transition:.3s"></span>
+          <span id="maintKnob" style="position:absolute;left:3px;top:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s"></span>
+        </label>
+      </div>
+      <div id="maintStatus" style="font-size:12px;padding:8px 12px;border-radius:8px;background:rgba(3,166,109,.1);border:1px solid rgba(3,166,109,.25);color:#03A66D">✅ App is Live</div>
+    </div>
+
     <!-- Maintenance Tools -->
     <div class="card">
       <div class="card-title">🔧 Maintenance Tools</div>
@@ -731,6 +748,7 @@ window.showTab = function(tab,btn){
   if(tab==='ads') loadAds();
   if(tab==='notifications') loadAdminNotifs();
   if(tab==='accounts') loadAccounts('pending');
+  if(tab==='settings') loadMaintenanceState();
 };
 
 // Live badge count for pending requests
@@ -1355,6 +1373,34 @@ async function loadSettings_admin(){
     if(aboutSnap.exists()) document.getElementById('aboutContent').value=aboutSnap.data().content||'';
     const termsSnap=await getDoc(doc(db,'settings','terms'));
     if(termsSnap.exists()) document.getElementById('termsContent').value=termsSnap.data().content||'';
+  }catch(e){}
+}
+
+// ── Maintenance mode ──
+window.toggleMaintenance = async function(on){
+  try{
+    await setDoc(doc(db,'settings','main'),{ maintenanceMode: on },{ merge:true });
+    const slider=document.getElementById('maintSlider');
+    const knob=document.getElementById('maintKnob');
+    const status=document.getElementById('maintStatus');
+    if(on){
+      slider.style.background='#F0B90B'; knob.style.left='25px';
+      status.style.cssText='font-size:12px;padding:8px 12px;border-radius:8px;background:rgba(240,185,11,.1);border:1px solid rgba(240,185,11,.3);color:#F0B90B';
+      status.textContent='🚧 Maintenance Mode is ON — users see maintenance screen';
+    } else {
+      slider.style.background='#333'; knob.style.left='3px';
+      status.style.cssText='font-size:12px;padding:8px 12px;border-radius:8px;background:rgba(3,166,109,.1);border:1px solid rgba(3,166,109,.25);color:#03A66D';
+      status.textContent='✅ App is Live';
+    }
+  } catch(e){ alert('Error: '+e.message); }
+};
+async function loadMaintenanceState(){
+  try{
+    const snap=await getDoc(doc(db,'settings','main'));
+    if(!snap.exists()) return;
+    const on=snap.data().maintenanceMode===true;
+    const toggle=document.getElementById('maintToggle');
+    if(toggle){ toggle.checked=on; window.toggleMaintenance(on); }
   }catch(e){}
 }
 
