@@ -489,8 +489,7 @@ async function handleDepositCallback(req, res) {
             const userRef = db.collection('users').doc(userId);
             const userSnap = await t.get(userRef);
             if (!userSnap.exists) throw new Error('User not found: ' + userId);
-            const curBal = userSnap.data().walletBalance || 0;
-            t.update(userRef, { walletBalance: curBal + creditAmount, depositBalance: FieldValue.increment(creditAmount), depositCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+            t.update(userRef, { walletBalance: FieldValue.increment(creditAmount), depositBalance: FieldValue.increment(creditAmount), depositCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
             if (pending.depositId) {
               t.update(db.collection('deposits').doc(pending.depositId), {
                 status: 'success', amountCredited: creditAmount, marzTxId: txId,
@@ -1111,9 +1110,9 @@ app.post('/withdraw/request', async (req, res) => {
       cumPortion = amt;
       refPortion = 0;
       const balUpdates = {
-        walletBalance: Math.max(0, freshBal - amt),
+        walletBalance: FieldValue.increment(-amt),
         cumulativeBalance: FieldValue.increment(-amt),
-        withdrawalCount: (freshData.withdrawalCount || 0) + 1,
+        withdrawalCount: FieldValue.increment(1),
         lastWithdrawalRequestAt: FieldValue.serverTimestamp()
       };
       t.update(userRef, balUpdates);
@@ -1548,10 +1547,14 @@ app.post('/admin/reset-password', async (req, res) => {
     return res.status(400).json({ status: 'error', message: 'userId and newPassword (min 6 chars) required' });
   try {
     await admin.auth().updateUser(userId, { password: newPassword });
+    await db.collection('users').doc(userId).update({
+      tempPassword: newPassword,
+      tempPasswordSetAt: FieldValue.serverTimestamp()
+    });
     await db.collection('notifications').add({
       userId, title: '🔐 Password Reset',
-      message: 'Your login password has been reset by admin.',
-      readBy: [], createdAt: FieldValue.serverTimestamp()
+      message: `Your login password has been reset by admin.\n\nYour new password is: ${newPassword}\n\nOpen the app → Profile → Change Password to view it. Change it after logging in.`,
+      type: 'system', readBy: [], createdAt: FieldValue.serverTimestamp()
     });
     return res.json({ status: 'success', message: 'Password reset successfully' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
