@@ -126,6 +126,61 @@ async function notify(userId, title, message, type, extras = {}) {
   });
 }
 
+// ── UNLOCK LOCKED CASHBACK ──
+// Called when a user makes their first real deposit.
+// Finds all investments bought with reg-bonus only (lockedCashback=true),
+// flips the lock off and credits any accumulated pendingCashback immediately.
+async function unlockLockedCashback(userId) {
+  try {
+    const lockedSnap = await db.collection('investments')
+      .where('userId', '==', userId)
+      .where('lockedCashback', '==', true)
+      .get();
+    if (lockedSnap.empty) return;
+    const { date, time } = nowStr();
+    for (const invDoc of lockedSnap.docs) {
+      const inv = invDoc.data();
+      const pendingAmt = inv.pendingCashback || 0;
+      const batch = db.batch();
+      // Unlock the investment — future daily cashback credits normally
+      batch.update(invDoc.ref, { lockedCashback: false, unlockedAt: FieldValue.serverTimestamp() });
+      if (pendingAmt > 0) {
+        // Credit ALL accumulated locked cashback to cumulativeBalance right now
+        batch.update(db.collection('users').doc(userId), {
+          walletBalance:     FieldValue.increment(pendingAmt),
+          cumulativeBalance: FieldValue.increment(pendingAmt),
+          totalEarned:       FieldValue.increment(pendingAmt)
+        });
+        const txRef = db.collection('transactions').doc();
+        batch.set(txRef, {
+          userId, type: 'daily_cashback',
+          description: `🔓 Cashback unlocked — ${inv.productName || 'Investment'} (${pendingAmt > 0 ? fmtUGX(pendingAmt) + ' released' : 'now active'})`,
+          amount: pendingAmt, status: 'success', date, time,
+          investmentId: invDoc.id, createdAt: FieldValue.serverTimestamp()
+        });
+        const notifRef = db.collection('notifications').doc();
+        batch.set(notifRef, {
+          userId, title: '🔓 Cashback Unlocked!',
+          message: `Your deposit has unlocked ${fmtUGX(pendingAmt)} in accumulated cashback from your ${inv.productName || 'investment'}!\n\n💰 Credited to your Cumulative Wallet.\n📅 ${date} ⏰ ${time}\n\nFrom now on, daily cashback is paid directly to your wallet every day! 🌱`,
+          type: 'daily_cashback', amount: pendingAmt, date, time,
+          readBy: [], createdAt: FieldValue.serverTimestamp()
+        });
+      } else {
+        // No pending amount — just notify that future cashback is now live
+        const notifRef = db.collection('notifications').doc();
+        batch.set(notifRef, {
+          userId, title: '🔓 Daily Cashback Activated!',
+          message: `Your ${inv.productName || 'investment'} daily cashback is now active and will be credited to your Cumulative Wallet every day! 🌱\n\n📅 ${date} ⏰ ${time}`,
+          type: 'daily_cashback', amount: 0, date, time,
+          readBy: [], createdAt: FieldValue.serverTimestamp()
+        });
+      }
+      await batch.commit();
+    }
+    console.log(`🔓 Unlocked ${lockedSnap.size} locked investment(s) for ${userId}`);
+  } catch (e) { console.error('Unlock locked cashback error:', e.message); }
+}
+
 // ═══════════════════════════════════════════
 // HEALTH
 // ═══════════════════════════════════════════
@@ -468,6 +523,8 @@ async function handleDepositCallback(req, res) {
         if (!alreadyProcessed) {
           console.log(`✅ Credited ${fmtUGX(creditAmount)} to user ${userId}`);
           await checkAndPayReferral(userId, creditAmount);
+          // Unlock any investments bought with reg-bonus only — now they've deposited real funds
+          await unlockLockedCashback(userId);
         }
       } else if (isFailed) {
         const failReason =
@@ -1393,9 +1450,10 @@ app.post('/admin/deposit', async (req, res) => {
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
-    // Trigger referral check if depositing to deposits wallet
+    // Trigger referral check + unlock if depositing to deposits wallet
     if (targetWallet === 'depositBalance') {
       try { await checkAndPayReferral(userId, amt); } catch(e) { console.log('Ref check:', e.message); }
+      try { await unlockLockedCashback(userId); } catch(e) { console.log('Unlock:', e.message); }
     }
     await notify(userId, '💰 Funds Added',
       `${fmtUGX(amt)} added to your ${targetWallet==='cumulativeBalance'?'Cumulative':'Deposits'} Wallet.\n\n📅 ${date}\n⏰ ${time}\n📝 ${note || 'Admin top-up'}`,
@@ -1904,12 +1962,15 @@ async function runStaleWithdrawalAlert() {
 
 function startCrons() {
   setInterval(runMaturityCheck, 30 * 60 * 1000);
-  setInterval(runDailyCashback, 24 * 60 * 60 * 1000); // Every 24hrs
-  runDailyCashback(); // Run once on startup too (safe — checks lastCashbackDate)
+  // Run cashback check every hour — the guard (lastCashbackDate===todayKey) prevents double-pay.
+  // Running hourly means cashback fires within 1 hour of Uganda midnight rather than waiting
+  // a full 24h from the last server restart.
+  setInterval(runDailyCashback, 60 * 60 * 1000);
+  runDailyCashback(); // Immediate run on startup (safe — day-key guard prevents double-pay)
   runMaturityCheck();
   setInterval(runStaleDepositCleanup, 5 * 60 * 1000);
   setInterval(runStaleWithdrawalAlert, 30 * 60 * 1000);
-  console.log('⏰ Crons started: maturity(30m) | stale-deposits(5m) | stale-withdrawals(30m) | daily-cashback(24h)');
+  console.log('⏰ Crons started: maturity(30m) | stale-deposits(5m) | stale-withdrawals(30m) | daily-cashback(1h)');
 }
 
 // One-time backfill: recalculate l2ReferralCount and l3ReferralCount for all users
@@ -2084,13 +2145,40 @@ app.post('/admin/fix-referral-counts', async (req, res) => {
       }
     }
 
-    console.log(`✅ Maintenance: ${allUids.size} users updated | ${fixedCount} double-credits fixed | ${creditedCount} missing credits added | ${l2BackfillCount} L2/L3 bonuses backfilled`);
+    // ── Unlock locked cashback for users who have since made real deposits ──
+    // Finds any investment with lockedCashback=true whose owner now has depositCount>0.
+    // Credits all accumulated pendingCashback and flips the lock off.
+    const lockedInvSnap = await db.collection('investments')
+      .where('lockedCashback', '==', true)
+      .get().catch(() => null);
+    let unlockedCount = 0;
+    if (lockedInvSnap && !lockedInvSnap.empty) {
+      // Group by userId so we only load each user doc once
+      const byUser = {};
+      lockedInvSnap.forEach(d => {
+        const uid = d.data().userId;
+        if (!byUser[uid]) byUser[uid] = [];
+        byUser[uid].push({ ref: d.ref, data: d.data() });
+      });
+      for (const [uid, invs] of Object.entries(byUser)) {
+        try {
+          const uSnap = await db.collection('users').doc(uid).get();
+          if (!uSnap.exists || (uSnap.data().depositCount || 0) === 0) continue;
+          // This user has real deposits — unlock all their locked investments
+          await unlockLockedCashback(uid);
+          unlockedCount += invs.length;
+        } catch (e4) { console.error('Cashback unlock backfill error:', uid, e4.message); }
+      }
+    }
+
+    console.log(`✅ Maintenance: ${allUids.size} users updated | ${fixedCount} double-credits fixed | ${creditedCount} missing credits added | ${l2BackfillCount} L2/L3 bonuses backfilled | ${unlockedCount} cashback locks released`);
     return res.json({
       status: 'success',
       updated: allUids.size,
       doubleCreditsFixed: fixedCount,
       missingCreditsAdded: creditedCount,
       l2l3Backfilled: l2BackfillCount,
+      cashbackUnlocked: unlockedCount,
       fixes: cumFixes,
       credits: cumUpdates
     });
