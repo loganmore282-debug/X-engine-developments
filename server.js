@@ -1156,10 +1156,15 @@ async function processWithdrawalSuccess(witId, wit, marzData) {
     recipientName,
     processedAt: FieldValue.serverTimestamp()
   });
-  // Track totalWithdrawn for invest-before-withdraw rule
-  await db.collection('users').doc(wit.userId).update({
-    totalWithdrawn: FieldValue.increment(wit.amount)
-  });
+  // Track totalWithdrawn for invest-before-withdraw rule + accumulate fee revenue
+  const updates = { totalWithdrawn: FieldValue.increment(wit.amount) };
+  await db.collection('users').doc(wit.userId).update(updates);
+  if (wit.fee > 0) {
+    await db.collection('settings').doc('stats').set({
+      totalFeesCollected: FieldValue.increment(wit.fee),
+      lastFeeAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
   const txSnap = await db.collection('transactions')
     .where('reference', '==', wit.reference).limit(1).get();
   if (!txSnap.empty) txSnap.docs[0].ref.update({ status: 'success', date, time });

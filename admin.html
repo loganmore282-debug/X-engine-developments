@@ -149,6 +149,9 @@ select.form-input{appearance:none}
       <div class="stat-box" style="cursor:pointer" onclick="showTab('withdrawals',document.querySelector('[onclick*=withdrawals]'))"><div class="stat-val gold" id="sPendingWit">0</div><div class="stat-lbl">Pending Withdrawals</div></div>
       <div class="stat-box" style="cursor:pointer" onclick="showTab('investments',document.querySelector('[onclick*=investments]'))"><div class="stat-val" id="sActiveInv">0</div><div class="stat-lbl">Active Investments</div></div>
     </div>
+    <div class="stat-grid" style="grid-template-columns:1fr">
+      <div class="stat-box" style="background:rgba(3,166,109,.08);border-color:rgba(3,166,109,.25)"><div class="stat-val" id="sTotalFees" style="color:#03A66D">0</div><div class="stat-lbl">💰 Total Fees Collected</div></div>
+    </div>
     <div class="card">
       <div class="card-title">⚡ Quick Actions</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -744,23 +747,26 @@ onSnapshot(query(collection(db,'adminRequests'),where('status','==','pending')),
 // ══════════════════════════════════════════════════
 async function loadDashboard(){
   try{
-    const [usersSnap,depsSnap,witsSnap,invSnap] = await Promise.all([
+    const [usersSnap,depsSnap,witsSnap,invSnap,statsSnap] = await Promise.all([
       getDocs(collection(db,'users')),
       getDocs(query(collection(db,'deposits'),where('status','==','success'))),
       getDocs(query(collection(db,'withdrawals'),where('status','==','processed'))),
-      getDocs(query(collection(db,'investments'),where('status','==','active')))
+      getDocs(query(collection(db,'investments'),where('status','==','active'))),
+      getDoc(doc(db,'settings','stats'))
     ]);
     const pendWit=await getDocs(query(collection(db,'withdrawals'),where('status','in',['pending','processing'])));
     let totalDep=0,totalWit=0,totalInv=0;
     depsSnap.forEach(d=>{ const a=d.data().amountCredited||d.data().amount||0; if(a>0) totalDep+=a; });
     witsSnap.forEach(d=>totalWit+=(d.data().amount||0));
     invSnap.forEach(d=>totalInv+=(d.data().amount||0));
+    const totalFees=statsSnap.exists()?( statsSnap.data().totalFeesCollected||0):0;
     document.getElementById('sTotal').textContent=usersSnap.size;
     document.getElementById('sTotalDep').textContent=ugx(totalDep);
     document.getElementById('sTotalWit').textContent=ugx(totalWit);
     document.getElementById('sTotalInv').textContent=ugx(totalInv);
     document.getElementById('sActiveInv').textContent=invSnap.size;
     document.getElementById('sPendingWit').textContent=pendWit.size;
+    document.getElementById('sTotalFees').textContent=ugx(totalFees);
     if(pendWit.size>0) document.getElementById('witBadge').style.display='inline-block';
   }catch(e){ console.error('Dashboard error:',e); }
 }
