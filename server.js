@@ -651,7 +651,70 @@ async function checkAndPayReferral(userId, depositAmount) {
         });
       });
       console.log(`✅ Referral L1 paid: ${fmtUGX(firstDepBonus)} → ${referredBy} (triggered by ${userId})`);
-      return; // Don't also pay L2 on the same event
+
+      // ── Also pay L2 & L3 parents on this first deposit ──
+      try {
+        const l1Snap = await db.collection('users').doc(referredBy).get();
+        const l2Uid  = l1Snap.exists ? l1Snap.data().referredBy : null;
+        if (l2Uid && l2Uid !== referredBy) {
+          await db.runTransaction(async (t) => {
+            const l2Ref  = db.collection('users').doc(l2Uid);
+            const l2Snap = await t.get(l2Ref);
+            if (!l2Snap.exists) return;
+            t.update(l2Ref, {
+              walletBalance: FieldValue.increment(ongoingFlat),
+              cumulativeBalance: FieldValue.increment(ongoingFlat),
+              refEarned: FieldValue.increment(ongoingFlat)
+            });
+            const txRef = db.collection('transactions').doc();
+            t.set(txRef, {
+              userId: l2Uid, type: 'referral_l2',
+              description: `L2 team bonus — ${user.name || 'network'} made first deposit`,
+              amount: ongoingFlat, status: 'success', date, time,
+              referredUserId: userId, createdAt: FieldValue.serverTimestamp()
+            });
+            const notifRef = db.collection('notifications').doc();
+            t.set(notifRef, {
+              userId: l2Uid, title: '🌐 L2 Team Bonus!',
+              message: `Your Level 2 network is growing!\n\n${user.name || 'A member'} made their first deposit.\n\nYou earned ${fmtUGX(ongoingFlat)} 🎯\n\n📅 Date: ${date}\n⏰ Time: ${time}`,
+              type: 'referral_l2', amount: ongoingFlat, date, time,
+              readBy: [], createdAt: FieldValue.serverTimestamp()
+            });
+          });
+          console.log(`✅ Referral L2 paid: ${fmtUGX(ongoingFlat)} → ${l2Uid}`);
+
+          const l2Doc  = await db.collection('users').doc(l2Uid).get();
+          const l3Uid  = l2Doc.exists ? l2Doc.data().referredBy : null;
+          if (l3Uid && l3Uid !== l2Uid) {
+            await db.runTransaction(async (t) => {
+              const l3Ref  = db.collection('users').doc(l3Uid);
+              const l3Snap = await t.get(l3Ref);
+              if (!l3Snap.exists) return;
+              t.update(l3Ref, {
+                walletBalance: FieldValue.increment(l3Flat),
+                cumulativeBalance: FieldValue.increment(l3Flat),
+                refEarned: FieldValue.increment(l3Flat)
+              });
+              const txRef = db.collection('transactions').doc();
+              t.set(txRef, {
+                userId: l3Uid, type: 'referral_l3',
+                description: `L3 team bonus — ${user.name || 'network'} made first deposit`,
+                amount: l3Flat, status: 'success', date, time,
+                referredUserId: userId, createdAt: FieldValue.serverTimestamp()
+              });
+              const notifRef = db.collection('notifications').doc();
+              t.set(notifRef, {
+                userId: l3Uid, title: '🌍 L3 Team Bonus!',
+                message: `Your Level 3 network is active!\n\n${user.name || 'A member'} made their first deposit.\n\nYou earned ${fmtUGX(l3Flat)} 🎯\n\n📅 Date: ${date}\n⏰ Time: ${time}`,
+                type: 'referral_l3', amount: l3Flat, date, time,
+                readBy: [], createdAt: FieldValue.serverTimestamp()
+              });
+            });
+            console.log(`✅ Referral L3 paid: ${fmtUGX(l3Flat)} → ${l3Uid}`);
+          }
+        }
+      } catch (e2) { console.error('L2/L3 first-dep error:', e2.message); }
+      return;
     }
 
     // ── L2: Ongoing % reward — L1 already paid, this is a subsequent deposit ──
