@@ -1989,12 +1989,99 @@ app.post('/admin/fix-referral-counts', async (req, res) => {
 
     const fixedCount = Object.keys(cumFixes).length;
     const creditedCount = Object.keys(cumUpdates).length;
-    console.log(`✅ Maintenance: ${allUids.size} users updated | ${fixedCount} double-credits fixed | ${creditedCount} missing credits added`);
+
+    // ── Backfill missed L2/L3 bonuses ──
+    // Find referral docs where L1 was paid but L2/L3 parent wasn't credited yet
+    const settSnap = await db.collection('settings').doc('main').get();
+    const settings = settSnap.exists ? settSnap.data() : {};
+    const ongoingFlat = settings.refL2 || 2000;
+    const l3Flat      = settings.refL3 || 200;
+
+    const unpaidL2Snap = await db.collection('referrals')
+      .where('paid', '==', true)
+      .where('l2Paid', '==', false)
+      .get().catch(()=>null);
+
+    // Also get referrals where l2Paid field doesn't exist yet
+    const noFieldSnap = await db.collection('referrals')
+      .where('paid', '==', true)
+      .get().catch(()=>null);
+
+    const toProcess = new Map();
+    if (noFieldSnap) {
+      noFieldSnap.forEach(d => {
+        const data = d.data();
+        if (data.l2Paid !== true) toProcess.set(d.id, { ref: d.ref, data });
+      });
+    }
+    if (unpaidL2Snap) {
+      unpaidL2Snap.forEach(d => toProcess.set(d.id, { ref: d.ref, data: d.data() }));
+    }
+
+    let l2BackfillCount = 0;
+    const { date, time } = nowStr();
+
+    for (const { ref: refDocRef, data: refData } of toProcess.values()) {
+      const depositorId = refData.referredUserId;
+      const l1Uid = refData.referrerId || refData.referredBy;
+      if (!depositorId || !l1Uid) continue;
+
+      const l2Uid = refMap[l1Uid];
+      if (!l2Uid || l2Uid === l1Uid) {
+        await refDocRef.update({ l2Paid: true });
+        continue;
+      }
+
+      try {
+        // Credit L2 parent
+        const batch = db.batch();
+        const l2Ref = db.collection('users').doc(l2Uid);
+        batch.update(l2Ref, {
+          walletBalance:     FieldValue.increment(ongoingFlat),
+          cumulativeBalance: FieldValue.increment(ongoingFlat),
+          refEarned:         FieldValue.increment(ongoingFlat)
+        });
+        const tx2Ref = db.collection('transactions').doc();
+        batch.set(tx2Ref, {
+          userId: l2Uid, type: 'referral_l2',
+          description: `L2 backfill bonus — network member deposited`,
+          amount: ongoingFlat, status: 'success', date, time,
+          referredUserId: depositorId, createdAt: FieldValue.serverTimestamp()
+        });
+
+        // Credit L3 parent if exists
+        const l3Uid = refMap[l2Uid];
+        if (l3Uid && l3Uid !== l2Uid) {
+          const l3Ref = db.collection('users').doc(l3Uid);
+          batch.update(l3Ref, {
+            walletBalance:     FieldValue.increment(l3Flat),
+            cumulativeBalance: FieldValue.increment(l3Flat),
+            refEarned:         FieldValue.increment(l3Flat)
+          });
+          const tx3Ref = db.collection('transactions').doc();
+          batch.set(tx3Ref, {
+            userId: l3Uid, type: 'referral_l3',
+            description: `L3 backfill bonus — network member deposited`,
+            amount: l3Flat, status: 'success', date, time,
+            referredUserId: depositorId, createdAt: FieldValue.serverTimestamp()
+          });
+        }
+
+        batch.update(refDocRef, { l2Paid: true });
+        await batch.commit();
+        l2BackfillCount++;
+      } catch (e3) {
+        console.error('L2/L3 backfill error for', depositorId, e3.message);
+      }
+    }
+
+    console.log(`✅ Maintenance: ${allUids.size} users updated | ${fixedCount} double-credits fixed | ${creditedCount} missing credits added | ${l2BackfillCount} L2/L3 bonuses backfilled`);
     return res.json({
       status: 'success',
       updated: allUids.size,
       doubleCreditsFixed: fixedCount,
       missingCreditsAdded: creditedCount,
+      l2l3Backfilled: l2BackfillCount,
       fixes: cumFixes,
       credits: cumUpdates
     });
