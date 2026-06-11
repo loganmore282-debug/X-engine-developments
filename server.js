@@ -773,6 +773,13 @@ async function checkAndPayReferral(userId, depositAmount) {
               cumulativeBalance: FieldValue.increment(l3Flat),
               refEarned:         FieldValue.increment(l3Flat)
             });
+            const tx3Ref = db.collection('transactions').doc();
+            t.set(tx3Ref, {
+              userId: referredBy2, type: 'referral_l3',
+              description: `L3 team bonus — ${user.name || 'network'} deposited`,
+              amount: l3Flat, status: 'success', date, time,
+              referredUserId: userId, createdAt: FieldValue.serverTimestamp()
+            });
             const notifRef = db.collection('notifications').doc();
             t.set(notifRef, {
               userId: referredBy2,
@@ -1332,7 +1339,9 @@ app.get('/withdraw/status/:id', async (req, res) => {
   try {
     const snap = await db.collection('withdrawals').doc(req.params.id).get();
     if (!snap.exists) return res.status(404).json({ status: 'error' });
-    return res.json({ status: 'success', data: { id: snap.id, ...snap.data() } });
+    const wit = snap.data();
+    // witStatus is the withdrawal doc status (pending/processing/processed/failed)
+    return res.json({ status: 'success', witStatus: wit.status, data: { id: snap.id, ...wit } });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -1544,7 +1553,7 @@ app.post('/invest/claim', async (req, res) => {
       if (!userSnap.exists) throw new Error('User not found');
       if (userSnap.data().status === 'banned') throw new Error('Account suspended');
       t.update(userRef, {
-        walletBalance: (userSnap.data().walletBalance || 0) + payout,
+        walletBalance: FieldValue.increment(payout),
         cumulativeBalance: FieldValue.increment(payout),
         totalEarned: FieldValue.increment(payout)   // tracks claimed returns for no-reinvest rule
       });
