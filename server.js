@@ -182,6 +182,36 @@ async function unlockLockedCashback(userId) {
 }
 
 // ═══════════════════════════════════════════
+// AUTH MIDDLEWARE — verify Firebase ID token owns the userId in the body
+// ═══════════════════════════════════════════
+// Rollout: if a Bearer token is present it is verified and MUST match
+// req.body.userId. Requests without a token are allowed until
+// REQUIRE_AUTH=true is set in the environment (so old cached clients
+// keep working during deploy), then they are rejected.
+async function verifyUser(req, res, next) {
+  const hdr = req.headers.authorization || '';
+  const token = hdr.startsWith('Bearer ') ? hdr.slice(7) : '';
+  if (token) {
+    try {
+      const decoded = await admin.auth().verifyIdToken(token);
+      req.authUid = decoded.uid;
+      if (req.body?.userId && req.body.userId !== decoded.uid) {
+        console.warn(`🚨 userId mismatch: token=${decoded.uid} body=${req.body.userId} path=${req.path}`);
+        return res.status(403).json({ status: 'error', message: 'Unauthorized — account mismatch' });
+      }
+      return next();
+    } catch (e) {
+      return res.status(401).json({ status: 'error', message: 'Session expired — please log in again' });
+    }
+  }
+  if (process.env.REQUIRE_AUTH === 'true') {
+    return res.status(401).json({ status: 'error', message: 'Authentication required — please update the app' });
+  }
+  console.warn(`⚠️ Unauthenticated request to ${req.path} (legacy mode)`);
+  return next();
+}
+
+// ═══════════════════════════════════════════
 // HEALTH
 // ═══════════════════════════════════════════
 app.get('/', (req, res) => res.json({
@@ -219,7 +249,7 @@ app.post('/verify-phone', async (req, res) => {
 // ═══════════════════════════════════════════
 // WITHDRAWAL PIN MANAGEMENT
 // ═══════════════════════════════════════════
-app.post('/pin/set', async (req, res) => {
+app.post('/pin/set', verifyUser, async (req, res) => {
   const { userId, pin } = req.body;
   if (!userId || !pin || String(pin).length !== 4 || !/^\d{4}$/.test(String(pin))) {
     return res.status(400).json({ status: 'error', message: 'Valid 4-digit PIN required' });
@@ -227,12 +257,12 @@ app.post('/pin/set', async (req, res) => {
   try {
     const userSnap = await db.collection('users').doc(userId).get();
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    await db.collection('users').doc(userId).update({ withdrawalPin: hashPin(pin), pinSetAt: FieldValue.serverTimestamp() });
+    await db.collection('users').doc(userId).update({ withdrawalPin: hashPin(pin), pinSetAt: FieldValue.serverTimestamp(), pinResetByAdmin: false });
     return res.json({ status: 'success', message: 'PIN set successfully' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 // ── Check if user has PIN set ──
-app.post('/pin/status', async (req, res) => {
+app.post('/pin/status', verifyUser, async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
@@ -246,7 +276,7 @@ app.post('/pin/status', async (req, res) => {
 });
 
 // ── User requests PIN reset (notifies admin) ──
-app.post('/pin/request-reset', async (req, res) => {
+app.post('/pin/request-reset', verifyUser, async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
@@ -266,7 +296,7 @@ app.post('/pin/request-reset', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-app.post('/password/request-reset', async (req, res) => {
+app.post('/password/request-reset', verifyUser, async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
@@ -286,7 +316,7 @@ app.post('/password/request-reset', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-app.post('/withdraw/request-phone-change', async (req, res) => {
+app.post('/withdraw/request-phone-change', verifyUser, async (req, res) => {
   const { userId, newPhone } = req.body;
   if (!userId || !newPhone) return res.status(400).json({ status: 'error', message: 'userId and newPhone required' });
   const cleanedNew = cleanPhone(newPhone);
@@ -342,7 +372,7 @@ app.post('/admin/approve-phone-change', async (req, res) => {
 
 
 
-app.post('/pin/verify', async (req, res) => {
+app.post('/pin/verify', verifyUser, async (req, res) => {
   const { userId, pin } = req.body;
   if (!userId || !pin) return res.status(400).json({ status: 'error', valid: false });
   try {
@@ -358,7 +388,7 @@ app.post('/pin/verify', async (req, res) => {
 // ═══════════════════════════════════════════
 // DEPOSITS
 // ═══════════════════════════════════════════
-app.post('/collect', async (req, res) => {
+app.post('/collect', verifyUser, async (req, res) => {
   const { userId, amount, phone } = req.body;
   if (!userId || !amount || !phone) return res.status(400).json({ status: 'error', message: 'userId, amount, phone required' });
   const amt = parseFloat(amount);
@@ -563,7 +593,7 @@ app.post('/deposit/callback', handleDepositCallback);
 // REGISTRATION BONUS
 // Called by frontend immediately after new user is created in Firestore
 // ═══════════════════════════════════════════
-app.post('/register/bonus', async (req, res) => {
+app.post('/register/bonus', verifyUser, async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
@@ -861,7 +891,7 @@ async function checkAndPayReferral(userId, depositAmount) {
 // INVEST BUY — server-side atomic validation
 // Prevents investing with reg bonus or negative depositBalance
 // ═══════════════════════════════════════════
-app.post('/invest/buy', async (req, res) => {
+app.post('/invest/buy', verifyUser, async (req, res) => {
   const { userId, productId, qty } = req.body;
   if (!userId || !productId) return res.status(400).json({ status: 'error', message: 'userId and productId required' });
   const quantity = Math.min(Math.max(parseInt(qty)||1, 1), 3);
@@ -929,7 +959,7 @@ app.post('/invest/buy', async (req, res) => {
   }
 });
 
-app.post('/invest/notify', async (req, res) => {
+app.post('/invest/notify', verifyUser, async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
@@ -962,7 +992,7 @@ app.get('/check/:reference', async (req, res) => {
 // ═══════════════════════════════════════════
 // WITHDRAWALS
 // ═══════════════════════════════════════════
-app.post('/withdraw/request', async (req, res) => {
+app.post('/withdraw/request', verifyUser, async (req, res) => {
   const { userId, amount, phone, pin } = req.body;
   if (!userId || !amount || !phone || !pin)
     return res.status(400).json({ status: 'error', message: 'userId, amount, phone and PIN required' });
@@ -1566,7 +1596,7 @@ app.post('/admin/reset-pin', async (req, res) => {
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const updateData = { pinAttempts: 0, pinLockUntil: null, updatedAt: FieldValue.serverTimestamp() };
+    const updateData = { pinAttempts: 0, pinLockUntil: null, pinResetByAdmin: true, pinResetAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
     updateData.withdrawalPin = FieldValue.delete();
     await db.collection('users').doc(userId).update(updateData);
     await db.collection('notifications').add({
@@ -1592,7 +1622,7 @@ app.post('/admin/unlock-pin', async (req, res) => {
 // ═══════════════════════════════════════════
 // INVESTMENT CLAIM (server-side atomic)
 // ═══════════════════════════════════════════
-app.post('/invest/claim', async (req, res) => {
+app.post('/invest/claim', verifyUser, async (req, res) => {
   const { userId, investmentId } = req.body;
   if (!userId || !investmentId)
     return res.status(400).json({ status: 'error', message: 'userId and investmentId required' });
@@ -1645,7 +1675,7 @@ app.post('/invest/claim', async (req, res) => {
 // ═══════════════════════════════════════════
 // BANK ACCOUNTS (Bound Mobile Money Accounts)
 // ═══════════════════════════════════════════
-app.post('/bank-account/add', async (req, res) => {
+app.post('/bank-account/add', verifyUser, async (req, res) => {
   const { userId, phone, name, network } = req.body;
   if (!userId || !phone || !name)
     return res.status(400).json({ status: 'error', message: 'userId, phone and name required' });
@@ -1675,7 +1705,7 @@ app.post('/bank-account/add', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-app.post('/bank-account/list', async (req, res) => {
+app.post('/bank-account/list', verifyUser, async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
@@ -1712,7 +1742,7 @@ app.post('/admin/bank-account/update', async (req, res) => {
 // ═══════════════════════════════════════════
 // DAILY CHECK-IN (server-side, fraud-proof)
 // ═══════════════════════════════════════════
-app.post('/checkin', async (req, res) => {
+app.post('/checkin', verifyUser, async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
