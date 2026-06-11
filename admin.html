@@ -808,22 +808,24 @@ function renderWithdrawals(){
   if(!filtered.length){ el.innerHTML='<div class="empty-state">No withdrawals found</div>'; return; }
   el.innerHTML=filtered.map(w=>{
     const sc={'pending':'badge-gold','processing':'badge-blue','processed':'badge-green','failed':'badge-red'}[w.status]||'badge-gray';
-    return `<div class="item-card">
+    return `<div class="item-card" onclick="showWitDetail('${w.id}')" style="cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='rgba(240,185,11,.4)'" onmouseleave="this.style.borderColor=''">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
         <div style="flex:1">
-          <div class="item-title">${w.userName||'User'}</div>
+          <div class="item-title">${w.withdrawalPhone||'—'}</div>
           <div class="item-sub">
-            📱 ${w.withdrawalPhone||'—'} &nbsp;|&nbsp; 💰 ${ugx(w.amount)}<br>
-            💸 Net: ${ugx(w.netAmount)} &nbsp;|&nbsp; Fee: ${ugx(w.fee)}<br>
-            📅 ${w.date||''} ${w.time||''}<br>
-            🔖 ${w.reference||w.id}
+            📱 ${w.userPhone||'—'} &nbsp;|&nbsp; 💰 ${ugx(w.amount)}<br>
+            💸 Net: ${ugx(w.netAmount)} &nbsp;|&nbsp; Fee: ${ugx(w.fee||0)}<br>
+            📅 ${w.date||''} ${w.time||''}
             ${w.recipientName?`<br>👤 ${w.recipientName}`:''}
             ${w.failReason?`<br><span style="color:var(--primary3)">❌ ${w.failReason}</span>`:''}
           </div>
         </div>
-        <span class="badge ${sc}">${w.status}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <span class="badge ${sc}">${w.status}</span>
+          <span style="font-size:10px;color:rgba(240,185,11,.5)">tap for details →</span>
+        </div>
       </div>
-      <div class="mini-actions">
+      <div class="mini-actions" onclick="event.stopPropagation()">
         ${w.status==='failed'?`<button class="btn btn-sm btn-green" onclick="manualApproveWit('${w.id}')">🔁 Retry</button>`:''}
         ${['pending','processing'].includes(w.status)?`<button class="btn btn-sm btn-red" onclick="rejectWithdrawal('${w.id}')">❌ Reject</button>`:''}
       </div>
@@ -831,7 +833,169 @@ function renderWithdrawals(){
   }).join('');
 }
 
-window.filterWit=function(f,btn){ _witFilter=f; document.querySelectorAll('.tab-btn').forEach(b=>{}); renderWithdrawals(); };
+window.filterWit=function(f,btn){ _witFilter=f; renderWithdrawals(); };
+
+// ── Detail overlay helpers ──
+function _detailRow(label, val, color){
+  return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px">
+    <span style="color:#6b7280">${label}</span>
+    <span style="font-weight:700;color:${color||'#f9fafb'};text-align:right;max-width:60%">${val}</span>
+  </div>`;
+}
+
+async function _loadUserSection(uid, container){
+  try{
+    const [uSnap, invSnap, witSnap] = await Promise.all([
+      getDoc(doc(db,'users',uid)),
+      getDocs(query(collection(db,'investments'),where('userId','==',uid),limit(20))),
+      getDocs(query(collection(db,'withdrawals'),where('userId','==',uid),where('status','==','processed'),limit(100)))
+    ]);
+    if(!uSnap.exists()){ container.innerHTML='<div style="color:#888;font-size:12px;padding:8px">User not found in database.</div>'; return; }
+    const u=uSnap.data();
+    let totalWit=0; witSnap.forEach(d=>totalWit+=(d.data().amount||0));
+    const invActive=invSnap.docs.filter(d=>d.data().status==='active').length;
+    const invTotal=invSnap.size;
+    const joined=u.createdAt?.toDate?.()?.toLocaleDateString('en-UG',{day:'2-digit',month:'short',year:'numeric'})||'—';
+    container.innerHTML=`
+      <div style="background:#0B0E11;border-radius:12px;padding:14px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div style="width:44px;height:44px;border-radius:50%;background:rgba(240,185,11,.12);border:2px solid rgba(240,185,11,.3);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${u.photoUrl?`<img src="${u.photoUrl}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`:'👤'}</div>
+          <div>
+            <div style="font-size:15px;font-weight:800;color:#fff">${u.name||u.phone||'—'}</div>
+            <div style="font-size:11px;color:#6b7280">${u.phone||''} &nbsp;·&nbsp; Joined ${joined}</div>
+          </div>
+          <span style="margin-left:auto;font-size:10px;font-weight:800;padding:3px 10px;border-radius:999px;background:${u.status==='banned'?'rgba(239,68,68,.15)':'rgba(3,166,109,.15)'};color:${u.status==='banned'?'#ef4444':'#03A66D'};border:1px solid ${u.status==='banned'?'rgba(239,68,68,.3)':'rgba(3,166,109,.3)'};text-transform:uppercase">${u.status||'active'}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+          <div style="background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.2);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:13px;font-weight:800;color:#F0B90B">${ugx(u.depositBalance||0)}</div>
+            <div style="font-size:10px;color:#6b7280;margin-top:2px">Deposit Wallet</div>
+          </div>
+          <div style="background:rgba(3,166,109,.08);border:1px solid rgba(3,166,109,.2);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:13px;font-weight:800;color:#03A66D">${ugx(u.cumulativeBalance||0)}</div>
+            <div style="font-size:10px;color:#6b7280;margin-top:2px">Cumulative Wallet</div>
+          </div>
+        </div>
+        ${_detailRow('💸 Total Withdrawn', ugx(u.totalWithdrawn||0),'#ef4444')}
+        ${_detailRow('📦 Total Invested', ugx(u.totalInvested||0),'#F0B90B')}
+        ${_detailRow('📊 Investments', invActive+' active / '+invTotal+' total')}
+        ${_detailRow('👥 Referrals', (u.referralCount||0)+' direct')}
+        ${_detailRow('🎁 Ref Earned', ugx(u.refEarned||0),'#F0B90B')}
+        ${_detailRow('📅 Deposits Made', u.depositCount||0)}
+        ${_detailRow('🏦 Withdrawals Made', u.withdrawalCount||0)}
+        ${_detailRow('✅ Check-in Earned', ugx(u.checkinEarned||0))}
+        <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-gold" onclick="window._adminCreditUser('${uid}')">💰 Credit</button>
+          <button class="btn btn-sm ${u.status==='banned'?'btn-green':'btn-red'}" onclick="window._adminToggleBan('${uid}','${u.status||'active'}','${(u.name||u.phone||'').replace(/'/g,'')}')">
+            ${u.status==='banned'?'✅ Unban':'🚫 Ban'}
+          </button>
+          <button class="btn btn-sm btn-outline" onclick="window._adminResetPin('${uid}')">🔓 Reset PIN</button>
+        </div>
+      </div>`;
+  }catch(e){
+    container.innerHTML=`<div style="color:#888;font-size:12px;padding:8px">Error loading user: ${e.message}</div>`;
+  }
+}
+
+window.showWitDetail = async function(witId){
+  const w=_allWits.find(x=>x.id===witId); if(!w) return;
+  const statusColors={processed:'#03A66D',processing:'#3b82f6',pending:'#F0B90B',failed:'#ef4444'};
+  const sc=statusColors[w.status]||'#888';
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.85);display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML=`
+    <div style="width:100%;max-width:520px;background:#1a1a1a;border-radius:20px 20px 0 0;max-height:92vh;display:flex;flex-direction:column">
+      <div style="padding:14px 16px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <div style="flex:1;font-size:15px;font-weight:800;color:#fff">💸 Withdrawal Detail</div>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:rgba(255,255,255,.08);border:none;border-radius:8px;color:#fff;width:32px;height:32px;cursor:pointer;font-size:18px;line-height:1">×</button>
+      </div>
+      <div style="overflow-y:auto;padding:14px;flex:1">
+        <div style="background:#0B0E11;border-radius:12px;padding:14px;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="font-size:24px;font-weight:900;color:#fff">${ugx(w.netAmount||w.amount)}</div>
+            <span style="background:${sc}22;color:${sc};border:1px solid ${sc}55;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:800;text-transform:uppercase">${w.status}</span>
+          </div>
+          ${_detailRow('📱 Sent To', w.withdrawalPhone||'—')}
+          ${_detailRow('👤 Account Name', w.recipientName||w.userName||'—')}
+          ${_detailRow('💰 Gross Amount', ugx(w.amount))}
+          ${_detailRow('💸 Fee ('+((w.fee||0)/(w.amount||1)*100).toFixed(0)+'%)', ugx(w.fee||0),'#ef4444')}
+          ${_detailRow('✅ Net Sent', ugx(w.netAmount),'#03A66D')}
+          ${_detailRow('📅 Date', (w.date||'')+(w.time?' · '+w.time:''))}
+          ${_detailRow('🔖 Ref', (w.reference||w.id||'').slice(0,22)+'…')}
+          ${w.failReason?_detailRow('❌ Fail Reason', w.failReason,'#ef4444'):''}
+        </div>
+        <div style="font-size:11px;font-weight:700;color:#F0B90B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">👤 User Profile</div>
+        <div id="_witUserSection_${witId}"><div style="text-align:center;padding:16px"><div class="spinner"></div></div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px" onclick="event.stopPropagation()">
+          ${w.status==='failed'?`<button class="btn btn-green btn-sm" style="flex:1" onclick="manualApproveWit('${w.id}');this.closest('[style*=fixed]').remove()">🔁 Retry</button>`:''}
+          ${['pending','processing'].includes(w.status)?`<button class="btn btn-sm btn-red" style="flex:1" onclick="rejectWithdrawal('${w.id}');this.closest('[style*=fixed]').remove()">❌ Reject & Refund</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) overlay.remove(); });
+  const container=document.getElementById('_witUserSection_'+witId);
+  if(container && w.userId) await _loadUserSection(w.userId, container);
+};
+
+window.showDepDetail = async function(depId){
+  const d=_allDeps.find(x=>x.id===depId); if(!d) return;
+  const statusColors={success:'#03A66D',processing:'#3b82f6',pending:'#F0B90B',failed:'#ef4444',marz_error:'#ef4444'};
+  const sc=statusColors[d.status]||'#888';
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.85);display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML=`
+    <div style="width:100%;max-width:520px;background:#1a1a1a;border-radius:20px 20px 0 0;max-height:92vh;display:flex;flex-direction:column">
+      <div style="padding:14px 16px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <div style="flex:1;font-size:15px;font-weight:800;color:#fff">💰 Deposit Detail</div>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:rgba(255,255,255,.08);border:none;border-radius:8px;color:#fff;width:32px;height:32px;cursor:pointer;font-size:18px;line-height:1">×</button>
+      </div>
+      <div style="overflow-y:auto;padding:14px;flex:1">
+        <div style="background:#0B0E11;border-radius:12px;padding:14px;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="font-size:24px;font-weight:900;color:#fff">${ugx(d.amountCredited||d.amount)}</div>
+            <span style="background:${sc}22;color:${sc};border:1px solid ${sc}55;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:800;text-transform:uppercase">${d.status}</span>
+          </div>
+          ${_detailRow('📱 Phone', d.phone||'—')}
+          ${_detailRow('💳 Provider', d.provider||'Mobile Money')}
+          ${_detailRow('💰 Amount', ugx(d.amount))}
+          ${_detailRow('✅ Credited', ugx(d.amountCredited||0),'#03A66D')}
+          ${_detailRow('📅 Date', d.createdAt?.toDate?.().toLocaleString('en-UG')||'—')}
+          ${_detailRow('🔖 Reference', (d.reference||d.id||'').slice(0,22)+'…')}
+          ${d.failReason?_detailRow('❌ Reason', d.failReason,'#ef4444'):''}
+        </div>
+        <div style="font-size:11px;font-weight:700;color:#03A66D;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">👤 User Profile</div>
+        <div id="_depUserSection_${d.id}"><div style="text-align:center;padding:16px"><div class="spinner"></div></div></div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) overlay.remove(); });
+  const container=document.getElementById('_depUserSection_'+d.id);
+  if(container && d.userId) await _loadUserSection(d.userId, container);
+};
+
+// ── Quick-action helpers callable from inside detail sheets ──
+window._adminCreditUser = function(uid){
+  const amt=prompt('Amount to credit (UGX):');
+  if(!amt||isNaN(Number(amt))) return;
+  const wallet=confirm('Credit to Cumulative Wallet?\n\nOK = Cumulative (withdrawable)\nCancel = Deposit Wallet (investable)')?'cumulativeBalance':'depositBalance';
+  const note=prompt('Note (optional):','Admin credit')||'Admin credit';
+  fetch(`${SERVER}/admin/deposit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,amount:Number(amt),wallet,note,adminKey:ADMIN_KEY})})
+    .then(r=>r.json()).then(d=>alert(d.status==='success'?'✅ Credited!':'❌ '+d.message)).catch(e=>alert('Error: '+e.message));
+};
+window._adminToggleBan = function(uid, currentStatus, name){
+  const isBan = currentStatus!=='banned';
+  const reason = isBan ? (prompt('Reason for ban:')||'Policy violation') : '';
+  if(!confirm((isBan?'BAN':'UNBAN')+' user '+name+'?')) return;
+  fetch(`${SERVER}/admin/ban`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,action:isBan?'ban':'unban',reason,adminKey:ADMIN_KEY})})
+    .then(r=>r.json()).then(d=>{ alert(d.status==='success'?'✅ Done':'❌ '+d.message); loadUsers?.(); }).catch(e=>alert('Error: '+e.message));
+};
+window._adminResetPin = function(uid){
+  if(!confirm('Reset this user\'s withdrawal PIN?')) return;
+  fetch(`${SERVER}/admin/reset-pin`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,adminKey:ADMIN_KEY})})
+    .then(r=>r.json()).then(d=>alert(d.status==='success'?'✅ PIN reset — user must set new PIN':'❌ '+d.message)).catch(e=>alert('Error: '+e.message));
+};
+
 window.rejectWithdrawal=async function(id){
   const reason=prompt('Reason for rejection (optional):');
   try{
@@ -870,18 +1034,20 @@ function renderDeposits(){
   if(!filtered.length){ el.innerHTML='<div class="empty-state">No deposits found</div>'; return; }
   el.innerHTML=filtered.map(d=>{
     const sc={'success':'badge-green','processing':'badge-blue','pending':'badge-gold','failed':'badge-red','marz_error':'badge-red'}[d.status]||'badge-gray';
-    return `<div class="item-card">
+    return `<div class="item-card" onclick="showDepDetail('${d.id}')" style="cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='rgba(3,166,109,.4)'" onmouseleave="this.style.borderColor=''">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
         <div style="flex:1">
           <div class="item-title">${ugx(d.amountCredited||d.amount)} via ${d.provider||'Mobile Money'}</div>
           <div class="item-sub">
             📱 ${d.phone||'—'}<br>
-            👤 ${d.userId||'—'}<br>
             📅 ${d.createdAt?.toDate?.().toLocaleDateString('en-UG')||'—'}
             ${d.failReason?`<br><span style="color:var(--primary3)">❌ ${d.failReason}</span>`:''}
           </div>
         </div>
-        <span class="badge ${sc}">${d.status}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <span class="badge ${sc}">${d.status}</span>
+          <span style="font-size:10px;color:rgba(3,166,109,.5)">tap for details →</span>
+        </div>
       </div>
     </div>`;
   }).join('');
