@@ -756,6 +756,7 @@ async function checkAndPayReferral(userId, depositAmount) {
         t.update(referrerRef, {
           walletBalance:     FieldValue.increment(firstDepBonus),
           cumulativeBalance: FieldValue.increment(firstDepBonus),
+          referralBalance:   FieldValue.increment(firstDepBonus),
           referralCount:     FieldValue.increment(1),
           refEarned:         FieldValue.increment(firstDepBonus)
         });
@@ -790,9 +791,10 @@ async function checkAndPayReferral(userId, depositAmount) {
             const l2Snap = await t.get(l2Ref);
             if (!l2Snap.exists) return;
             t.update(l2Ref, {
-              walletBalance: FieldValue.increment(ongoingFlat),
+              walletBalance:     FieldValue.increment(ongoingFlat),
               cumulativeBalance: FieldValue.increment(ongoingFlat),
-              refEarned: FieldValue.increment(ongoingFlat)
+              referralBalance:   FieldValue.increment(ongoingFlat),
+              refEarned:         FieldValue.increment(ongoingFlat)
             });
             const txRef = db.collection('transactions').doc();
             t.set(txRef, {
@@ -819,9 +821,10 @@ async function checkAndPayReferral(userId, depositAmount) {
               const l3Snap = await t.get(l3Ref);
               if (!l3Snap.exists) return;
               t.update(l3Ref, {
-                walletBalance: FieldValue.increment(l3Flat),
+                walletBalance:     FieldValue.increment(l3Flat),
                 cumulativeBalance: FieldValue.increment(l3Flat),
-                refEarned: FieldValue.increment(l3Flat)
+                referralBalance:   FieldValue.increment(l3Flat),
+                refEarned:         FieldValue.increment(l3Flat)
               });
               const txRef = db.collection('transactions').doc();
               t.set(txRef, {
@@ -863,6 +866,7 @@ async function checkAndPayReferral(userId, depositAmount) {
         t.update(referrerRef, {
           walletBalance:     FieldValue.increment(reward),
           cumulativeBalance: FieldValue.increment(reward),
+          referralBalance:   FieldValue.increment(reward),
           refEarned:         FieldValue.increment(reward)
         });
         t.update(refDoc.ref, {
@@ -899,6 +903,7 @@ async function checkAndPayReferral(userId, depositAmount) {
             t.update(l3Ref, {
               walletBalance:     FieldValue.increment(l3Flat),
               cumulativeBalance: FieldValue.increment(l3Flat),
+              referralBalance:   FieldValue.increment(l3Flat),
               refEarned:         FieldValue.increment(l3Flat)
             });
             const tx3Ref = db.collection('transactions').doc();
@@ -1067,11 +1072,11 @@ app.post('/withdraw/request', verifyUser, async (req, res) => {
     if (!allowedPhones.includes(fullPhone)) {
       return res.status(400).json({ status: 'error', message: 'Withdrawal phone must be your registered profile number or an activated bank account. Please bind and activate your account first.' });
     }
-    // Dynamic minimum: referral balance ≥ 10,000 → min is 10,000, otherwise 60,000
-    const refEarnedNow = user.refEarned || 0;
-    const minWithdraw  = refEarnedNow >= 10000 ? 10000 : 60000;
+    // Dynamic minimum: current unspent referral balance ≥ 10,000 → min is 10,000, otherwise 60,000
+    const currentRefBal = user.referralBalance || 0;
+    const minWithdraw   = currentRefBal >= 10000 ? 10000 : 60000;
     if (amt < minWithdraw)
-      return res.status(400).json({ status: 'error', message: refEarnedNow >= 10000 ? 'Minimum withdrawal is UGX 10,000' : 'Minimum withdrawal is UGX 60,000' });
+      return res.status(400).json({ status: 'error', message: currentRefBal >= 10000 ? 'Minimum withdrawal is UGX 10,000 (you have referral earnings)' : 'Minimum withdrawal is UGX 60,000' });
 
     // ── BRUTE-FORCE PIN PROTECTION ── 10 attempts → 1-hour lock
     const MAX_PIN_ATTEMPTS = 10;
@@ -1176,16 +1181,18 @@ app.post('/withdraw/request', verifyUser, async (req, res) => {
       const userRef = db.collection('users').doc(userId);
       const freshSnap = await t.get(userRef);
       const freshData = freshSnap.data();
-      const freshBal = freshData.walletBalance || 0;
-      const freshCum = freshData.cumulativeBalance || 0;
+      const freshBal    = freshData.walletBalance || 0;
+      const freshCum    = freshData.cumulativeBalance || 0;
+      const freshRefBal = freshData.referralBalance || 0;
       if (freshCum < amt) throw new Error(`Insufficient balance: ${fmtUGX(freshCum)}`);
-      // Deduct only from cumulativeBalance — refEarned is a lifetime tracker, never decremented
+      // Deduct referralBalance by the withdrawal amount (floor at 0)
       cumPortion = amt;
-      refPortion = 0;
+      refPortion = Math.min(amt, freshRefBal);
       const balUpdates = {
-        walletBalance: FieldValue.increment(-amt),
+        walletBalance:     FieldValue.increment(-amt),
         cumulativeBalance: FieldValue.increment(-amt),
-        withdrawalCount: FieldValue.increment(1),
+        referralBalance:   FieldValue.increment(-refPortion),
+        withdrawalCount:   FieldValue.increment(1),
         lastWithdrawalRequestAt: FieldValue.serverTimestamp()
       };
       t.update(userRef, balUpdates);
