@@ -1,0 +1,140 @@
+rules_version = '2';
+
+// ════════════════════════════════════════════════════════════════
+// X-ENGINE FIRESTORE SECURITY RULES
+//
+// Design principle: the SERVER (Firebase Admin SDK) bypasses ALL of
+// these rules, so every money operation (deposits, withdrawals,
+// referral payouts, cashback, registration, bonus) stays fully
+// functional. These rules ONLY restrict what the browser can do.
+//
+// The browser can: read its OWN data, read public catalog/settings,
+// update a few safe non-money fields, and mark its own notifications
+// read. It can NEVER write a balance — closing the drain hole.
+//
+// Admins are recognised via the existing admins/{uid} collection
+// (same one /admin/verify uses). exists() in rules bypasses read
+// permissions, so the admins collection itself stays fully locked.
+// ════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+    function isAdmin() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    // true only if the write changes ONLY the listed fields
+    function onlyFields(allowed) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
+    // ── USERS ──
+    // Read: only your own doc (or admin). Balances/phones of others stay private.
+    // Create/delete: server (Admin SDK) or admin only — browser cannot self-create
+    //   a doc with a fake balance because the server builds it with zeros.
+    // Update: you may change ONLY cosmetic / non-money fields. Everything else
+    //   (every balance, depositCount, PIN, status, referralBalance...) is server-only.
+    match /users/{uid} {
+      allow read:   if isOwner(uid) || isAdmin();
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+      allow update: if isAdmin() ||
+        ( isOwner(uid) &&
+          onlyFields(['photoUrl', 'tempPassword', 'tempPasswordSetAt', 'name']) );
+    }
+
+    // ── REFERRALS ──
+    // Read your own referrals (where referrerId == you). Writes are server-only.
+    match /referrals/{id} {
+      allow read:  if isAdmin() || (signedIn() && resource.data.referrerId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ── INVESTMENTS ── read your own; writes server-only
+    match /investments/{id} {
+      allow read:  if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ── TRANSACTIONS ── read your own; writes server-only
+    match /transactions/{id} {
+      allow read:  if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ── WITHDRAWALS ── read your own; writes server-only
+    match /withdrawals/{id} {
+      allow read:  if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ── DEPOSITS ── read your own; writes server-only
+    match /deposits/{id} {
+      allow read:  if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ── NOTIFICATIONS ──
+    // Read your own. Update only the readBy field of your own (to mark as read).
+    // Create/delete: admin (admin panel sends notifications) — server also bypasses.
+    match /notifications/{id} {
+      allow read:   if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+      allow update: if isAdmin() ||
+        ( signedIn() && resource.data.userId == request.auth.uid && onlyFields(['readBy']) );
+    }
+
+    // ── PRODUCTS ── public catalog (read by everyone); admin writes
+    match /products/{id} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    // ── ADS / BANNERS ── public read; admin writes
+    match /ads/{id} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    // ── SETTINGS ── public read (needed before login for banners/config); admin writes
+    match /settings/{id} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    // ── ADMIN REQUESTS ── admin only (server creates via Admin SDK)
+    match /adminRequests/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── BANK ACCOUNTS ── admin views them in the panel; users never read them
+    //   directly (they go through server endpoints). Writes are server-only.
+    match /bankAccounts/{id}    { allow read, write: if isAdmin(); }
+
+    // ── PENDING PAYMENTS ── admin views processing payments; server manages writes
+    match /pendingPayments/{id} { allow read, write: if isAdmin(); }
+
+    // ── OTPS ── never touched by any browser (admin or user). Server-only.
+    match /otps/{id}            { allow read, write: if false; }
+
+    // ── ADMINS REGISTRY ── locked to the browser entirely.
+    // isAdmin()'s exists() check still works because rule-context
+    // get()/exists() bypass these read rules.
+    match /admins/{id} {
+      allow read, write: if false;
+    }
+
+    // ── DEFAULT DENY ── anything not matched above is blocked
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

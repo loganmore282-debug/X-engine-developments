@@ -94,6 +94,7 @@ function cleanPhone(phone) {
   if (s.length === 9) return '+256' + s;
   return '+' + s;
 }
+function makeEmail(phone) { return cleanPhone(phone).slice(-9) + '@xengine.app'; }
 
 // ── MARZIPAY API CALLS ──
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
@@ -655,30 +656,23 @@ app.post('/deposit/callback', handleDepositCallback);
 // REGISTRATION BONUS
 // Called by frontend immediately after new user is created in Firestore
 // ═══════════════════════════════════════════
-app.post('/register/bonus', verifyUser, async (req, res) => {
-  const { userId } = req.body;
-  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+// Internal: credit the welcome bonus + update L2/L3 counts. Idempotent.
+async function creditRegistrationBonus(userId) {
+  const userRef  = db.collection('users').doc(userId);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) return { status: 'error', message: 'User not found' };
+  const user = userSnap.data();
+
+  if (user.regBonusPaid) return { status: 'already_paid', message: 'Registration bonus already credited' };
+
+  const settSnap = await db.collection('settings').doc('main').get();
+  const bonus = settSnap.exists ? (settSnap.data().registrationBonus || 50000) : 50000;
+  const { date, time } = nowStr();
+
+  let referralCode = user.referralCode;
+  if (!referralCode) referralCode = await generateUniqueReferralCode(userId);
+
   try {
-    const userRef  = db.collection('users').doc(userId);
-    const userSnap = await userRef.get();
-    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    const user = userSnap.data();
-
-    // Idempotency: only pay once
-    if (user.regBonusPaid) {
-      return res.json({ status: 'already_paid', message: 'Registration bonus already credited' });
-    }
-
-    const settSnap = await db.collection('settings').doc('main').get();
-    const bonus = settSnap.exists ? (settSnap.data().registrationBonus || 50000) : 50000;
-    const { date, time } = nowStr();
-
-    // Generate a globally unique referral code if user doesn't have one yet
-    let referralCode = user.referralCode;
-    if (!referralCode) {
-      referralCode = await generateUniqueReferralCode(userId);
-    }
-
     await db.runTransaction(async (t) => {
       const freshSnap = await t.get(userRef);
       if (freshSnap.data().regBonusPaid) throw new Error('ALREADY_PAID');
@@ -705,34 +699,97 @@ app.post('/register/bonus', verifyUser, async (req, res) => {
         readBy: [], createdAt: FieldValue.serverTimestamp()
       });
     });
-
-    console.log(`🎁 Registration bonus: ${fmtUGX(bonus)} → ${userId}`);
-
-    // ── Update L2/L3 referral counts up the chain ──
-    try {
-      const l1Uid = user.referredBy; // who referred this new user
-      if (l1Uid) {
-        const l1Snap = await db.collection('users').doc(l1Uid).get();
-        const l2Uid = l1Snap.exists ? l1Snap.data().referredBy : null; // L1's referrer = L2 parent
-        if (l2Uid) {
-          await db.collection('users').doc(l2Uid).update({
-            l2ReferralCount: FieldValue.increment(1)
-          });
-          const l2Snap = await db.collection('users').doc(l2Uid).get();
-          const l3Uid = l2Snap.exists ? l2Snap.data().referredBy : null; // L2's referrer = L3 parent
-          if (l3Uid) {
-            await db.collection('users').doc(l3Uid).update({
-              l3ReferralCount: FieldValue.increment(1)
-            });
-          }
-        }
-      }
-    } catch (e2) { console.error('L2/L3 count error:', e2.message); }
-
-    return res.json({ status: 'success', bonus, message: `${fmtUGX(bonus)} welcome bonus credited!` });
   } catch (e) {
-    if (e.message === 'ALREADY_PAID')
-      return res.json({ status: 'already_paid', message: 'Registration bonus already credited' });
+    if (e.message === 'ALREADY_PAID') return { status: 'already_paid', message: 'Registration bonus already credited' };
+    throw e;
+  }
+
+  console.log(`🎁 Registration bonus: ${fmtUGX(bonus)} → ${userId}`);
+
+  // ── Update L2/L3 referral counts up the chain ──
+  try {
+    const l1Uid = user.referredBy;
+    if (l1Uid) {
+      const l1Snap = await db.collection('users').doc(l1Uid).get();
+      const l2Uid = l1Snap.exists ? l1Snap.data().referredBy : null;
+      if (l2Uid) {
+        await db.collection('users').doc(l2Uid).update({ l2ReferralCount: FieldValue.increment(1) });
+        const l2Snap = await db.collection('users').doc(l2Uid).get();
+        const l3Uid = l2Snap.exists ? l2Snap.data().referredBy : null;
+        if (l3Uid) await db.collection('users').doc(l3Uid).update({ l3ReferralCount: FieldValue.increment(1) });
+      }
+    }
+  } catch (e2) { console.error('L2/L3 count error:', e2.message); }
+
+  return { status: 'success', bonus, message: `${fmtUGX(bonus)} welcome bonus credited!` };
+}
+
+// ── Secure registration: client creates the Firebase Auth user, then calls this.
+//    Server creates the user doc with VALIDATED zero balances, resolves the
+//    referral code, creates the referral doc, and credits the welcome bonus.
+//    No money fields ever touched by the client. ──
+app.post('/register', verifyUser, async (req, res) => {
+  const { userId, phone, referralCode } = req.body;
+  if (!userId || !phone) return res.status(400).json({ status: 'error', message: 'userId and phone required' });
+  try {
+    const userRef  = db.collection('users').doc(userId);
+    const existing = await userRef.get();
+    if (existing.exists) {
+      // Already created (idempotent retry) — just ensure bonus is credited
+      await creditRegistrationBonus(userId).catch(() => {});
+      return res.json({ status: 'success', message: 'Already registered' });
+    }
+
+    const formattedPhone = cleanPhone(phone);
+
+    // Resolve referral code → referrer uid (server-side, trusted)
+    let referredBy = '';
+    const ref = String(referralCode || '').trim().toUpperCase();
+    if (ref && ref.startsWith('XE-')) {
+      const rSnap = await db.collection('users').where('referralCode', '==', ref).limit(1).get();
+      if (!rSnap.empty && rSnap.docs[0].id !== userId) referredBy = rSnap.docs[0].id;
+    }
+
+    const myCode = 'XE-' + userId.slice(0, 6).toUpperCase();
+
+    await userRef.set({
+      phone: formattedPhone, name: formattedPhone, email: makeEmail(phone),
+      depositBalance: 0, cumulativeBalance: 0, walletBalance: 0,
+      totalWithdrawn: 0, totalInvested: 0, totalEarned: 0,
+      referralBalance: 0, refEarned: 0,
+      referralCode: myCode, referredBy,
+      checkinStreak: 0, checkinDays: 0, checkinEarned: 0,
+      depositCount: 0, withdrawalCount: 0,
+      regBonusPaid: false,
+      status: 'active', createdAt: FieldValue.serverTimestamp()
+    });
+
+    if (referredBy) {
+      await db.collection('referrals').add({
+        referrerId: referredBy, referredUserId: userId,
+        referredName: formattedPhone, referredEmail: makeEmail(phone),
+        referralCode: ref, paid: false, createdAt: FieldValue.serverTimestamp()
+      });
+    }
+
+    await creditRegistrationBonus(userId);
+
+    return res.json({ status: 'success', referralCode: myCode, message: 'Registered successfully' });
+  } catch (e) {
+    console.error('Register error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// Legacy endpoint kept for backward compatibility (old cached clients)
+app.post('/register/bonus', verifyUser, async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const result = await creditRegistrationBonus(userId);
+    const code = result.status === 'error' ? 404 : 200;
+    return res.status(code).json(result);
+  } catch (e) {
     console.error('Register bonus error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
   }
