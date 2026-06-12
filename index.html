@@ -1263,6 +1263,7 @@ document.head.appendChild(s);
 </div>
 <style>
 @keyframes slideDown{from{transform:translateY(-60px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes swipeOff{to{transform:translateX(var(--sw-dir,120%));opacity:0}}
 </style>
 <script>
 (function(){
@@ -1270,6 +1271,32 @@ document.head.appendChild(s);
   const banner=document.getElementById('pwaInstallBanner');
   const installBtn=document.getElementById('pwaInstallBtn');
   const dismissBtn=document.getElementById('pwaDismissBtn');
+
+  function dismissBanner(){
+    banner.style.transition='transform .28s ease,opacity .28s ease';
+    banner.style.transform='translateX(110%)';
+    banner.style.opacity='0';
+    setTimeout(function(){ banner.style.display='none'; banner.style.transform=''; banner.style.opacity=''; banner.style.transition=''; },300);
+  }
+
+  // Swipe to dismiss
+  let _tx=0,_startX=0,_dragging=false;
+  banner.addEventListener('touchstart',function(e){
+    _startX=e.touches[0].clientX; _tx=0; _dragging=true;
+    banner.style.transition='none';
+  },{passive:true});
+  banner.addEventListener('touchmove',function(e){
+    if(!_dragging) return;
+    _tx=e.touches[0].clientX-_startX;
+    banner.style.transform='translateX('+_tx+'px)';
+    banner.style.opacity=String(Math.max(0,1-Math.abs(_tx)/200));
+  },{passive:true});
+  banner.addEventListener('touchend',function(){
+    _dragging=false;
+    if(Math.abs(_tx)>80){ dismissBanner(); }
+    else{ banner.style.transition='transform .2s ease,opacity .2s ease'; banner.style.transform=''; banner.style.opacity=''; }
+  });
+
   window.addEventListener('beforeinstallprompt',function(e){
     e.preventDefault();
     _deferredPrompt=e;
@@ -1284,7 +1311,7 @@ document.head.appendChild(s);
   }
   window._triggerPWAInstall = triggerInstall;
   installBtn.addEventListener('click',function(){ triggerInstall(); });
-  dismissBtn.addEventListener('click',function(){ banner.style.display='none'; });
+  dismissBtn.addEventListener('click',function(){ dismissBanner(); });
   window.addEventListener('appinstalled',function(){ banner.style.display='none'; });
 })();
 </script>
