@@ -2361,10 +2361,11 @@ app.post('/admin/backfill-referral-balance', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// OTP — send (max 2 per 24 hrs) then verify + reset PIN
+// OTP — send (max 2 per 24 hrs) then verify + reset PIN or PASSWORD
+// purpose: 'pin' | 'password'
 // ═══════════════════════════════════════════
 app.post('/otp/send', async (req, res) => {
-  const { userId, phone } = req.body;
+  const { userId, phone, purpose = 'pin' } = req.body;
   if (!userId || !phone) return res.status(400).json({ status: 'error', message: 'userId and phone required' });
   try {
     const otpRef   = db.collection('otps').doc(userId);
@@ -2382,7 +2383,7 @@ app.post('/otp/send', async (req, res) => {
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
     await otpRef.set({
-      code,
+      code, purpose,
       expiresAt:    new Date(now + 10 * 60 * 1000),
       phone:        cleanPhone(phone),
       attempts:     0,
@@ -2391,8 +2392,9 @@ app.post('/otp/send', async (req, res) => {
       createdAt:    FieldValue.serverTimestamp()
     });
 
-    const smsRes = await marzSMS(cleanPhone(phone),
-      `X-Engine OTP: ${code}\nUse this to reset your PIN. Expires in 10 mins. Do NOT share this code.`);
+    const label   = purpose === 'password' ? 'password' : 'PIN';
+    const smsRes  = await marzSMS(cleanPhone(phone),
+      `X-Engine OTP: ${code}\nUse this to reset your ${label}. Expires in 10 mins. Do NOT share this code.`);
 
     if (!smsRes.success) return res.status(500).json({ status: 'error', message: 'SMS failed. Check your phone number.' });
     return res.json({ status: 'success', message: 'OTP sent to your phone number.' });
@@ -2434,6 +2436,43 @@ app.post('/pin/reset-via-otp', async (req, res) => {
     return res.json({ status: 'success', message: 'PIN reset successfully.' });
   } catch(e) {
     console.error('PIN reset OTP error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+app.post('/password/reset-via-otp', async (req, res) => {
+  const { userId, otp, newPassword } = req.body;
+  if (!userId || !otp || !newPassword) return res.status(400).json({ status: 'error', message: 'userId, otp and newPassword required' });
+  if (newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters' });
+  try {
+    const otpRef  = db.collection('otps').doc(userId);
+    const otpSnap = await otpRef.get();
+    if (!otpSnap.exists) return res.status(400).json({ status: 'error', message: 'No OTP found. Request a new one.' });
+    const otpData = otpSnap.data();
+
+    if ((otpData.purpose || 'pin') !== 'password')
+      return res.status(400).json({ status: 'error', message: 'OTP was not issued for password reset.' });
+
+    if (new Date(otpData.expiresAt.toDate ? otpData.expiresAt.toDate() : otpData.expiresAt) < new Date())
+      return res.status(400).json({ status: 'error', message: 'OTP has expired. Request a new one.' });
+
+    if ((otpData.attempts || 0) >= 5)
+      return res.status(400).json({ status: 'error', message: 'Too many wrong attempts. Request a new OTP.' });
+
+    if (otpData.code !== String(otp)) {
+      await otpRef.update({ attempts: FieldValue.increment(1) });
+      const left = 5 - ((otpData.attempts || 0) + 1);
+      return res.status(400).json({ status: 'error', message: `Wrong OTP. ${left} attempt(s) left.` });
+    }
+
+    // Update Firebase Auth password
+    await admin.auth().updateUser(userId, { password: newPassword });
+    // Clear temp password if admin had set one
+    await db.collection('users').doc(userId).update({ tempPassword: '', tempPasswordSetAt: null });
+    await otpRef.delete();
+    return res.json({ status: 'success', message: 'Password reset successfully.' });
+  } catch(e) {
+    console.error('Password reset OTP error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
   }
 });
