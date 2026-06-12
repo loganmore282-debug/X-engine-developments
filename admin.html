@@ -629,6 +629,13 @@ select.form-input{appearance:none}
           <div id="fixRefMsg" style="margin-top:6px"></div>
         </div>
         <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Send an SMS directly to all active users at once.</div>
+          <textarea id="bulkSmsMsg" placeholder="Type your message here... (max 160 chars for 1 SMS unit)" style="width:100%;background:#111;border:1px solid #333;border-radius:10px;color:#fff;padding:10px;font-size:12px;resize:vertical;min-height:70px;font-family:var(--fam);box-sizing:border-box" maxlength="320" oninput="document.getElementById('bulkSmsCount').textContent=this.value.length+'/320'"></textarea>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:6px" id="bulkSmsCount">0/320</div>
+          <button class="btn btn-primary btn-sm" onclick="adminSmsBulk()">📱 Send Bulk SMS to All Users</button>
+          <div id="bulkSmsMsg2" style="margin-top:6px"></div>
+        </div>
+        <div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Sets the new referralBalance field for old accounts (estimated from lifetime referral earnings minus withdrawals). Controls the 10k vs 60k withdrawal minimum. Safe to re-run — never overwrites accounts that already have it.</div>
           <button class="btn btn-primary btn-sm" onclick="backfillRefBalance()">💼 Backfill Referral Balance (10k/60k rule)</button>
           <div id="backfillRefMsg" style="margin-top:6px"></div>
@@ -1367,6 +1374,7 @@ function renderUsers(users){
         <button class="btn btn-sm btn-gold" onclick="manualCreditUser('${u.id}')">💰 Add Funds</button>
         <button class="btn btn-sm btn-outline" onclick="resetUserPassword('${u.id}','${u.phone||u.name||u.id}')">🔑 Reset Pass</button>
         <button class="btn btn-sm btn-outline" onclick="resetUserPin('${u.id}','${u.phone||u.name||u.id}')">🔓 Reset PIN</button>
+        <button class="btn btn-sm btn-outline" onclick="adminSmsUser('${u.id}','${u.phone||u.name||u.id}')">📱 Send SMS</button>
       </div>
     </div>`;
   }).join('');
@@ -1699,6 +1707,46 @@ window.fixReferralCounts = async function(){
   } finally {
     btn.disabled = false; btn.textContent = '🔁 Fix L2/L3 Referral Counts';
   }
+};
+
+window.adminSmsUser = async function(userId, label){
+  const msg = prompt(`Send SMS to ${label}:\n(max 320 chars)`);
+  if (!msg || !msg.trim()) return;
+  if (msg.length > 320) return alert('Message too long. Max 320 characters.');
+  try {
+    const res = await fetch(`${SERVER}/admin/sms/user`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, message: msg.trim() })
+    });
+    const data = await res.json();
+    if (data.status === 'success') showToast('✅ SMS sent to ' + label, 'success');
+    else showToast('❌ ' + data.message, 'error');
+  } catch(e) { showToast('❌ ' + e.message, 'error'); }
+};
+
+window.adminSmsBulk = async function(){
+  const msg = document.getElementById('bulkSmsMsg').value.trim();
+  const msgEl = document.getElementById('bulkSmsMsg2');
+  if (!msg) { msgEl.innerHTML='<span style="color:#ef4444;font-size:11px">❌ Type a message first</span>'; return; }
+  if (!confirm(`Send this SMS to ALL active users?\n\n"${msg}"\n\nThis will cost ~50 UGX per user.`)) return;
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = '⏳ Sending...'; msgEl.innerHTML = '';
+  try {
+    const res = await fetch(`${SERVER}/admin/sms/bulk`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      msgEl.innerHTML = `<span style="color:#22c55e;font-size:11px">✅ ${data.message}</span>`;
+      document.getElementById('bulkSmsMsg').value = '';
+      document.getElementById('bulkSmsCount').textContent = '0/320';
+    } else {
+      msgEl.innerHTML = `<span style="color:#ef4444;font-size:11px">❌ ${data.message}</span>`;
+    }
+  } catch(e) {
+    msgEl.innerHTML = `<span style="color:#ef4444;font-size:11px">❌ ${e.message}</span>`;
+  } finally { btn.disabled = false; btn.textContent = '📱 Send Bulk SMS to All Users'; }
 };
 
 window.backfillRefBalance = async function(){
@@ -2116,6 +2164,7 @@ window.openUserDetail = async function(uid){
         <button class="btn btn-sm btn-gold" onclick="manualCreditUser('${uid}')">💰 Add Funds</button>
         <button class="btn btn-sm btn-outline" onclick="resetUserPassword('${uid}','${u.phone||uid}')">🔑 Reset Pass</button>
         <button class="btn btn-sm btn-outline" onclick="resetUserPin('${uid}','${u.phone||uid}')">🔓 Reset PIN</button>
+        <button class="btn btn-sm btn-outline" onclick="adminSmsUser('${uid}','${u.phone||uid}')">📱 Send SMS</button>
       </div>
 
       <div style="display:flex;gap:4px;overflow-x:auto;margin-bottom:12px;scrollbar-width:none">

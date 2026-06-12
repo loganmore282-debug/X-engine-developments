@@ -28,6 +28,26 @@ const MARZ_AUTH = process.env.MARZ_AUTH || process.env.MARZ_API_KEY || Buffer.fr
 const RAILWAY_URL = (process.env.RAILWAY_URL || 'https://x-engine-server-production.up.railway.app').replace(/\/$/, '');
 const ADMIN_KEY = process.env.ADMIN_KEY || process.env.ADMIN_KEY || 'xengine_admin_2026';
 
+// ── MarzSMS ──
+const MARZ_SMS_KEY    = 'sk_U70q1IJmxVdiSOX0RvgvOABD6fXbPGWx';
+const MARZ_SMS_SECRET = 'Moj74ZHoMJunnBgNScgFupMjVvSbjHipZsFnY9enkWO1TV3mOwN21arBHG8MTUdX';
+async function marzSMS(phone, message) {
+  const creds = Buffer.from(`${MARZ_SMS_KEY}:${MARZ_SMS_SECRET}`).toString('base64');
+  try {
+    const r = await fetch('https://sms.wearemarz.com/api/v1/sms/send', {
+      method: 'POST',
+      headers: { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient: phone, message })
+    });
+    const data = await r.json();
+    console.log(`📱 SMS → ${phone}: ${data.success ? '✅ sent' : '❌ ' + data.message}`);
+    return data;
+  } catch(e) {
+    console.error('MarzSMS error:', e.message);
+    return { success: false, message: e.message };
+  }
+}
+
 // ── HELPERS ──
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -2336,6 +2356,129 @@ app.post('/admin/backfill-referral-balance', async (req, res) => {
     return res.json({ status: 'success', migrated: uids.length, withBalance });
   } catch (e) {
     console.error('referralBalance backfill error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// OTP — send (max 2 per 24 hrs) then verify + reset PIN
+// ═══════════════════════════════════════════
+app.post('/otp/send', async (req, res) => {
+  const { userId, phone } = req.body;
+  if (!userId || !phone) return res.status(400).json({ status: 'error', message: 'userId and phone required' });
+  try {
+    const otpRef   = db.collection('otps').doc(userId);
+    const otpSnap  = await otpRef.get();
+    const otpData  = otpSnap.exists ? otpSnap.data() : {};
+    const now      = Date.now();
+    const winStart = otpData.windowStart?.toMillis?.() || 0;
+    const count    = otpData.requestCount || 0;
+    const expired  = (now - winStart) >= 24 * 60 * 60 * 1000;
+
+    if (!expired && count >= 2) {
+      const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - (now - winStart)) / (60 * 60 * 1000));
+      return res.status(429).json({ status: 'error', message: `Maximum OTP attempts reached. Try again in ${hoursLeft} hour(s).` });
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await otpRef.set({
+      code,
+      expiresAt:    new Date(now + 10 * 60 * 1000),
+      phone:        cleanPhone(phone),
+      attempts:     0,
+      requestCount: expired ? 1 : count + 1,
+      windowStart:  expired ? FieldValue.serverTimestamp() : (otpData.windowStart || FieldValue.serverTimestamp()),
+      createdAt:    FieldValue.serverTimestamp()
+    });
+
+    const smsRes = await marzSMS(cleanPhone(phone),
+      `X-Engine OTP: ${code}\nUse this to reset your PIN. Expires in 10 mins. Do NOT share this code.`);
+
+    if (!smsRes.success) return res.status(500).json({ status: 'error', message: 'SMS failed. Check your phone number.' });
+    return res.json({ status: 'success', message: 'OTP sent to your phone number.' });
+  } catch(e) {
+    console.error('OTP send error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+app.post('/pin/reset-via-otp', async (req, res) => {
+  const { userId, otp, newPin } = req.body;
+  if (!userId || !otp || !newPin) return res.status(400).json({ status: 'error', message: 'userId, otp and newPin required' });
+  if (!/^\d{4}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'PIN must be 4 digits' });
+  try {
+    const otpRef  = db.collection('otps').doc(userId);
+    const otpSnap = await otpRef.get();
+    if (!otpSnap.exists) return res.status(400).json({ status: 'error', message: 'No OTP found. Request a new one.' });
+    const otpData = otpSnap.data();
+
+    if (new Date(otpData.expiresAt.toDate ? otpData.expiresAt.toDate() : otpData.expiresAt) < new Date())
+      return res.status(400).json({ status: 'error', message: 'OTP has expired. Request a new one.' });
+
+    if ((otpData.attempts || 0) >= 5)
+      return res.status(400).json({ status: 'error', message: 'Too many wrong attempts. Request a new OTP.' });
+
+    if (otpData.code !== String(otp)) {
+      await otpRef.update({ attempts: FieldValue.increment(1) });
+      const left = 5 - ((otpData.attempts || 0) + 1);
+      return res.status(400).json({ status: 'error', message: `Wrong OTP. ${left} attempt(s) left.` });
+    }
+
+    await db.collection('users').doc(userId).update({
+      withdrawalPin:   hashPin(newPin),
+      pinResetByAdmin: false,
+      pinAttempts:     0,
+      pinLockUntil:    null
+    });
+    await otpRef.delete();
+    return res.json({ status: 'success', message: 'PIN reset successfully.' });
+  } catch(e) {
+    console.error('PIN reset OTP error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// ADMIN SMS — single user or bulk
+// ═══════════════════════════════════════════
+app.post('/admin/sms/user', async (req, res) => {
+  const { userId, message } = req.body;
+  if (!userId || !message) return res.status(400).json({ status: 'error', message: 'userId and message required' });
+  if (message.length > 320) return res.status(400).json({ status: 'error', message: 'Message too long (max 320 chars)' });
+  try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const phone = uSnap.data().phone;
+    if (!phone) return res.status(400).json({ status: 'error', message: 'User has no phone number' });
+    const smsRes = await marzSMS(phone, message);
+    if (smsRes.success) return res.json({ status: 'success', message: `SMS sent to ${phone}` });
+    return res.status(500).json({ status: 'error', message: smsRes.message });
+  } catch(e) {
+    console.error('Admin SMS user error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+app.post('/admin/sms/bulk', async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ status: 'error', message: 'message required' });
+  if (message.length > 320) return res.status(400).json({ status: 'error', message: 'Message too long (max 320 chars)' });
+  try {
+    const snap   = await db.collection('users').where('status', '==', 'active').get();
+    const phones = [];
+    snap.forEach(d => { const p = d.data().phone; if (p) phones.push(p); });
+    if (!phones.length) return res.status(400).json({ status: 'error', message: 'No active users with phone numbers' });
+
+    let sent = 0, failed = 0;
+    for (let i = 0; i < phones.length; i += 50) {
+      const batch = phones.slice(i, i + 50).join(', ');
+      const r = await marzSMS(batch, message);
+      sent   += r.data?.successful || (r.success ? phones.slice(i, i + 50).length : 0);
+      failed += r.data?.failed     || (r.success ? 0 : phones.slice(i, i + 50).length);
+    }
+    return res.json({ status: 'success', message: `Bulk SMS: ${sent} sent, ${failed} failed`, sent, failed });
+  } catch(e) {
+    console.error('Admin bulk SMS error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
   }
 });
