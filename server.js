@@ -2421,10 +2421,17 @@ app.post('/admin/backfill-referral-balance', async (req, res) => {
 // OTP — send (max 2 per 24 hrs) then verify + reset PIN or PASSWORD
 // purpose: 'pin' | 'password'
 // ═══════════════════════════════════════════
-app.post('/otp/send', async (req, res) => {
-  const { userId, phone, purpose = 'pin' } = req.body;
-  if (!userId || !phone) return res.status(400).json({ status: 'error', message: 'userId and phone required' });
+app.post('/otp/send', verifyUser, async (req, res) => {
+  const { userId, purpose = 'pin' } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
+    // SECURITY: OTP only ever goes to the phone registered on the account —
+    // never to a number supplied in the request body.
+    const userSnap = await db.collection('users').doc(userId).get();
+    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'Account not found' });
+    const regPhone = userSnap.data().phone;
+    if (!regPhone) return res.status(400).json({ status: 'error', message: 'No phone number on this account. Contact support.' });
+
     const otpRef   = db.collection('otps').doc(userId);
     const otpSnap  = await otpRef.get();
     const otpData  = otpSnap.exists ? otpSnap.data() : {};
@@ -2442,7 +2449,7 @@ app.post('/otp/send', async (req, res) => {
     await otpRef.set({
       code, purpose,
       expiresAt:    new Date(now + 10 * 60 * 1000),
-      phone:        cleanPhone(phone),
+      phone:        cleanPhone(regPhone),
       attempts:     0,
       requestCount: expired ? 1 : count + 1,
       windowStart:  expired ? FieldValue.serverTimestamp() : (otpData.windowStart || FieldValue.serverTimestamp()),
@@ -2450,7 +2457,7 @@ app.post('/otp/send', async (req, res) => {
     });
 
     const label   = purpose === 'password' ? 'password' : 'PIN';
-    const smsRes  = await marzSMS(cleanPhone(phone),
+    const smsRes  = await marzSMS(cleanPhone(regPhone),
       `X-Engine OTP: ${code}\nUse this to reset your ${label}. Expires in 10 mins. Do NOT share this code.`);
 
     if (!smsRes.success) return res.status(500).json({ status: 'error', message: 'SMS failed. Check your phone number.' });
@@ -2461,7 +2468,7 @@ app.post('/otp/send', async (req, res) => {
   }
 });
 
-app.post('/pin/reset-via-otp', async (req, res) => {
+app.post('/pin/reset-via-otp', verifyUser, async (req, res) => {
   const { userId, otp, newPin } = req.body;
   if (!userId || !otp || !newPin) return res.status(400).json({ status: 'error', message: 'userId, otp and newPin required' });
   if (!/^\d{4}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'PIN must be 4 digits' });
@@ -2470,6 +2477,9 @@ app.post('/pin/reset-via-otp', async (req, res) => {
     const otpSnap = await otpRef.get();
     if (!otpSnap.exists) return res.status(400).json({ status: 'error', message: 'No OTP found. Request a new one.' });
     const otpData = otpSnap.data();
+
+    if ((otpData.purpose || 'pin') !== 'pin')
+      return res.status(400).json({ status: 'error', message: 'OTP was not issued for PIN reset.' });
 
     if (new Date(otpData.expiresAt.toDate ? otpData.expiresAt.toDate() : otpData.expiresAt) < new Date())
       return res.status(400).json({ status: 'error', message: 'OTP has expired. Request a new one.' });
@@ -2497,7 +2507,7 @@ app.post('/pin/reset-via-otp', async (req, res) => {
   }
 });
 
-app.post('/password/reset-via-otp', async (req, res) => {
+app.post('/password/reset-via-otp', verifyUser, async (req, res) => {
   const { userId, otp, newPassword } = req.body;
   if (!userId || !otp || !newPassword) return res.status(400).json({ status: 'error', message: 'userId, otp and newPassword required' });
   if (newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters' });
@@ -2538,7 +2548,8 @@ app.post('/password/reset-via-otp', async (req, res) => {
 // ADMIN SMS — single user or bulk
 // ═══════════════════════════════════════════
 app.post('/admin/sms/user', async (req, res) => {
-  const { userId, message } = req.body;
+  const { userId, message, adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   if (!userId || !message) return res.status(400).json({ status: 'error', message: 'userId and message required' });
   if (message.length > 320) return res.status(400).json({ status: 'error', message: 'Message too long (max 320 chars)' });
   try {
@@ -2556,7 +2567,8 @@ app.post('/admin/sms/user', async (req, res) => {
 });
 
 app.post('/admin/sms/bulk', async (req, res) => {
-  const { message } = req.body;
+  const { message, adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   if (!message) return res.status(400).json({ status: 'error', message: 'message required' });
   if (message.length > 320) return res.status(400).json({ status: 'error', message: 'Message too long (max 320 chars)' });
   try {

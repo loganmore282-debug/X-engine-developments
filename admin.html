@@ -1716,7 +1716,7 @@ window.adminSmsUser = async function(userId, label){
   try {
     const res = await fetch(`${SERVER}/admin/sms/user`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, message: msg.trim() })
+      body: JSON.stringify({ userId, message: msg.trim(), adminKey: ADMIN_KEY })
     });
     const data = await res.json();
     if (data.status === 'success') showToast('✅ SMS sent to ' + label, 'success');
@@ -1734,7 +1734,7 @@ window.adminSmsBulk = async function(){
   try {
     const res = await fetch(`${SERVER}/admin/sms/bulk`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg })
+      body: JSON.stringify({ message: msg, adminKey: ADMIN_KEY })
     });
     const data = await res.json();
     if (data.status === 'success') {
