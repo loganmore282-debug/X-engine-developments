@@ -628,6 +628,11 @@ select.form-input{appearance:none}
           <button class="btn btn-primary btn-sm" onclick="fixReferralCounts()">🔁 Fix Referral Counts + Credit Cumulative</button>
           <div id="fixRefMsg" style="margin-top:6px"></div>
         </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Sets the new referralBalance field for old accounts (estimated from lifetime referral earnings minus withdrawals). Controls the 10k vs 60k withdrawal minimum. Safe to re-run — never overwrites accounts that already have it.</div>
+          <button class="btn btn-primary btn-sm" onclick="backfillRefBalance()">💼 Backfill Referral Balance (10k/60k rule)</button>
+          <div id="backfillRefMsg" style="margin-top:6px"></div>
+        </div>
       </div>
     </div>
 
@@ -1693,6 +1698,30 @@ window.fixReferralCounts = async function(){
     msgEl.innerHTML = `<span style="color:#ef4444;font-size:11px">❌ ${e.message}</span>`;
   } finally {
     btn.disabled = false; btn.textContent = '🔁 Fix L2/L3 Referral Counts';
+  }
+};
+
+window.backfillRefBalance = async function(){
+  const btn = event.target;
+  const msgEl = document.getElementById('backfillRefMsg');
+  btn.disabled = true; btn.textContent = '⏳ Running...';
+  msgEl.innerHTML = '';
+  try {
+    const res = await fetch(`${SERVER}/admin/backfill-referral-balance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: 'xengine-fix-2026' })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      msgEl.innerHTML = `<span style="color:#22c55e;font-size:11px">✅ Done! ${data.migrated} users migrated, ${data.withBalance} have referral balance > 0.</span>`;
+    } else {
+      msgEl.innerHTML = `<span style="color:#ef4444;font-size:11px">❌ ${data.message}</span>`;
+    }
+  } catch(e) {
+    msgEl.innerHTML = `<span style="color:#ef4444;font-size:11px">❌ ${e.message}</span>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '💼 Backfill Referral Balance (10k/60k rule)';
   }
 };
 

@@ -2216,6 +2216,7 @@ app.post('/admin/fix-referral-counts', async (req, res) => {
         batch.update(l2Ref, {
           walletBalance:     FieldValue.increment(ongoingFlat),
           cumulativeBalance: FieldValue.increment(ongoingFlat),
+          referralBalance:   FieldValue.increment(ongoingFlat),
           refEarned:         FieldValue.increment(ongoingFlat)
         });
         const tx2Ref = db.collection('transactions').doc();
@@ -2233,6 +2234,7 @@ app.post('/admin/fix-referral-counts', async (req, res) => {
           batch.update(l3Ref, {
             walletBalance:     FieldValue.increment(l3Flat),
             cumulativeBalance: FieldValue.increment(l3Flat),
+            referralBalance:   FieldValue.increment(l3Flat),
             refEarned:         FieldValue.increment(l3Flat)
           });
           const tx3Ref = db.collection('transactions').doc();
@@ -2291,6 +2293,49 @@ app.post('/admin/fix-referral-counts', async (req, res) => {
     });
   } catch (e) {
     console.error('Backfill error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// ADMIN: BACKFILL referralBalance — one-time migration for users
+// created before the referralBalance field existed.
+// Estimate: unspent referral money = refEarned − totalWithdrawn,
+// floored at 0 and capped at current cumulativeBalance (can't have
+// more unspent referral money than total withdrawable balance).
+// Idempotent: only sets the field where it doesn't exist yet.
+// ═══════════════════════════════════════════
+app.post('/admin/backfill-referral-balance', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== (process.env.ADMIN_SECRET || 'xengine-fix-2026')) {
+    return res.status(403).json({ status: 'error', message: 'Forbidden' });
+  }
+  try {
+    const allUsers = await db.collection('users').get();
+    const updates = {}; // uid → estimated referralBalance
+    allUsers.forEach(d => {
+      const u = d.data();
+      if (u.referralBalance !== undefined) return; // already migrated — never overwrite live values
+      const refEarned      = u.refEarned || 0;
+      const totalWithdrawn = u.totalWithdrawn || 0;
+      const cumBalance     = u.cumulativeBalance || 0;
+      updates[d.id] = Math.max(0, Math.min(refEarned - totalWithdrawn, cumBalance));
+    });
+
+    const uids = Object.keys(updates);
+    for (let i = 0; i < uids.length; i += 400) {
+      const batch = db.batch();
+      uids.slice(i, i + 400).forEach(uid => {
+        batch.update(db.collection('users').doc(uid), { referralBalance: updates[uid] });
+      });
+      await batch.commit();
+    }
+
+    const withBalance = uids.filter(uid => updates[uid] > 0).length;
+    console.log(`✅ referralBalance backfill: ${uids.length} users migrated, ${withBalance} with balance > 0`);
+    return res.json({ status: 'success', migrated: uids.length, withBalance });
+  } catch (e) {
+    console.error('referralBalance backfill error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
   }
 });
