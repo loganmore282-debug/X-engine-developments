@@ -2468,6 +2468,42 @@ app.post('/otp/send', verifyUser, async (req, res) => {
   }
 });
 
+// Verify an OTP WITHOUT consuming it. Used by the "Verify OTP" button so the
+// user is told immediately whether the code is right — before they ever reach
+// the new-PIN / new-password screen. The OTP is finally consumed (deleted) by
+// the /pin/reset-via-otp and /password/reset-via-otp endpoints.
+app.post('/otp/verify', verifyUser, async (req, res) => {
+  const { userId, otp, purpose = 'pin' } = req.body;
+  if (!userId || !otp) return res.status(400).json({ status: 'error', message: 'userId and otp required' });
+  try {
+    const otpRef  = db.collection('otps').doc(userId);
+    const otpSnap = await otpRef.get();
+    if (!otpSnap.exists) return res.status(400).json({ status: 'error', message: 'No OTP found. Request a new one.' });
+    const otpData = otpSnap.data();
+
+    if ((otpData.purpose || 'pin') !== purpose)
+      return res.status(400).json({ status: 'error', message: `OTP was not issued for ${purpose === 'password' ? 'password' : 'PIN'} reset.` });
+
+    if (new Date(otpData.expiresAt.toDate ? otpData.expiresAt.toDate() : otpData.expiresAt) < new Date())
+      return res.status(400).json({ status: 'error', message: 'OTP has expired. Request a new one.' });
+
+    if ((otpData.attempts || 0) >= 5)
+      return res.status(400).json({ status: 'error', message: 'Too many wrong attempts. Request a new OTP.' });
+
+    if (otpData.code !== String(otp)) {
+      await otpRef.update({ attempts: FieldValue.increment(1) });
+      const left = 5 - ((otpData.attempts || 0) + 1);
+      return res.status(400).json({ status: 'error', message: `Wrong OTP. ${left} attempt(s) left.` });
+    }
+
+    // Correct — do NOT delete; the reset endpoint consumes it.
+    return res.json({ status: 'success', message: 'OTP verified.' });
+  } catch(e) {
+    console.error('OTP verify error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
 app.post('/pin/reset-via-otp', verifyUser, async (req, res) => {
   const { userId, otp, newPin } = req.body;
   if (!userId || !otp || !newPin) return res.status(400).json({ status: 'error', message: 'userId, otp and newPin required' });

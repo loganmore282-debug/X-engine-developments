@@ -1269,13 +1269,29 @@ window._sendPassOTP = async function(){
   }
 };
 
-window._verifyPassOTP = function(){
+window._verifyPassOTP = async function(){
   const code = document.getElementById('passOtpCodeInput').value.trim();
   const msg  = document.getElementById('passOtpMsg2');
   if(!code||code.length!==6){ msg.style.color='#ef4444'; msg.textContent='Enter the 6-digit code'; return; }
-  window._passOtpCode = code;
-  document.getElementById('passOtpStep2').style.display='none';
-  document.getElementById('passOtpStep3').style.display='block';
+  const btn = document.querySelector('#passOtpStep2 button');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Verifying...'; }
+  msg.textContent='';
+  // Verify on the server now — reject a wrong code before the new-password screen.
+  try{
+    const d = await api('/otp/verify',{userId:_user.uid, otp:code, purpose:'password'});
+    if(d.status==='success'){
+      window._passOtpCode = code;
+      msg.style.color='#22c55e'; msg.textContent='✅ Code verified';
+      document.getElementById('passOtpStep2').style.display='none';
+      document.getElementById('passOtpStep3').style.display='block';
+    } else {
+      msg.style.color='#ef4444'; msg.textContent = d.message||'Wrong OTP';
+    }
+  }catch(e){
+    msg.style.color='#ef4444'; msg.textContent='Error: '+e.message;
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='✅ Verify OTP'; }
+  }
 };
 
 window._saveNewPassword = async function(){
@@ -1383,12 +1399,23 @@ window._verifyOTP = async function(){
   if(!code||code.length!==6){ msg.style.color='#ef4444'; msg.textContent='Enter the 6-digit code'; return; }
   const btn = document.querySelector('#otpStep2 button');
   btn.disabled=true; btn.textContent='⏳ Verifying...'; msg.textContent='';
-  // Just validate the OTP looks right client-side, then show new PIN step
-  // Actual verification happens on /pin/reset-via-otp
-  window._otpVerifiedCode = code;
-  document.getElementById('otpStep2').style.display='none';
-  document.getElementById('otpStep3').style.display='block';
-  btn.disabled=false; btn.textContent='✅ Verify OTP';
+  // Verify the OTP on the server NOW so a wrong code is rejected here,
+  // before the new-PIN screen. The code is consumed later by /pin/reset-via-otp.
+  try{
+    const d = await api('/otp/verify',{userId:_user.uid, otp:code, purpose:'pin'});
+    if(d.status==='success'){
+      window._otpVerifiedCode = code;
+      msg.style.color='#22c55e'; msg.textContent='✅ Code verified';
+      document.getElementById('otpStep2').style.display='none';
+      document.getElementById('otpStep3').style.display='block';
+    } else {
+      msg.style.color='#ef4444'; msg.textContent = d.message||'Wrong OTP';
+    }
+  }catch(e){
+    msg.style.color='#ef4444'; msg.textContent='Error: '+e.message;
+  }finally{
+    btn.disabled=false; btn.textContent='✅ Verify OTP';
+  }
 };
 
 window._otpPinKey = function(k){
