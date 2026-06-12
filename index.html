@@ -634,27 +634,21 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
       <!-- Tier breakdown -->
       <div class="team-card">
         <div style="font-size:13px;font-weight:700;margin-bottom:12px">Network Breakdown</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-          <div style="background:#0B0E11;border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
-            <div>
-              <div style="font-size:11px;font-weight:800;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Level 1 — Direct Referral Reward</div>
-              <div style="font-size:12px;color:var(--muted)"><span id="l1Count" style="font-size:18px;font-weight:800;color:var(--text);margin-right:4px">0</span> members</div>
-            </div>
-            <div style="font-size:13px;font-weight:800;color:var(--primary)" id="refL1Display">UGX 20,000</div>
+        <div class="tier-grid">
+          <div class="tier-box">
+            <div class="tier-label">Level 1</div>
+            <div class="tier-count" id="l1Count">0</div>
+            <div class="tier-reward" id="refL1Display">UGX 20,000</div>
           </div>
-          <div style="background:#0B0E11;border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
-            <div>
-              <div style="font-size:11px;font-weight:800;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Level 2 — Referral of Your Referral Reward</div>
-              <div style="font-size:12px;color:var(--muted)"><span id="l2Count" style="font-size:18px;font-weight:800;color:var(--text);margin-right:4px">0</span> members</div>
-            </div>
-            <div style="font-size:13px;font-weight:800;color:var(--primary)" id="refL2Display">UGX 2,000</div>
+          <div class="tier-box">
+            <div class="tier-label">Level 2</div>
+            <div class="tier-count" id="l2Count">0</div>
+            <div class="tier-reward" id="refL2Display">UGX 2,000</div>
           </div>
-          <div style="background:#0B0E11;border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
-            <div>
-              <div style="font-size:11px;font-weight:800;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Level 3 — Third-Level Referral Reward</div>
-              <div style="font-size:12px;color:var(--muted)"><span id="l3Count" style="font-size:18px;font-weight:800;color:var(--text);margin-right:4px">0</span> members</div>
-            </div>
-            <div style="font-size:13px;font-weight:800;color:var(--primary)" id="refL3Display">UGX 200</div>
+          <div class="tier-box">
+            <div class="tier-label">Level 3</div>
+            <div class="tier-count" id="l3Count">0</div>
+            <div class="tier-reward" id="refL3Display">UGX 200</div>
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px;padding:10px 0;border-top:1px solid var(--border)">
