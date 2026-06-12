@@ -334,7 +334,7 @@ window._switchTab = function(tab){
 // TICKER
 // ══════════════════════════════════════════════════
 const TICK_PHONES=['256****234','256****891','256****567','256****123','256****788','256****345','256****012','256****456','256****999','256****677'];
-const TICK_DEP_AMTS=[11000,15500,20000,25300,30000,35700,40000,45500,50000,60500,75000,80300,100000,120000,150000,200000];
+const TICK_DEP_AMTS=[30000,35700,40000,45500,50000,60500,75000,80300,100000,120000,150000,200000];
 const TICK_WIT_AMTS=[11200,18500,22400,30000,37800,45000,52300,60500,67000,75000,80300,90000,100000,112500,133500,150000,178000,200000];
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function buildTicker(){
@@ -672,7 +672,7 @@ window._openDepositPage = function(){
 window._startDeposit = async function(){
   const amount=parseFloat(document.getElementById('depAmount').value);
   const phone=document.getElementById('depPhone').value.trim();
-  if(!amount||amount<20000) return showToast('Minimum deposit is UGX 20,000','error');
+  if(!amount||amount<30000) return showToast('Minimum deposit is UGX 30,000','error');
   if(amount>200000) return showToast('Maximum deposit is UGX 200,000','error');
   if(!phone||phone.length<7) return showToast('Enter a valid phone number','error');
   const btn=document.getElementById('depBtn'); btn.disabled=true; btn.textContent='Processing...';

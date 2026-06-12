@@ -439,7 +439,7 @@ app.post('/collect', verifyUser, async (req, res) => {
   const { userId, amount, phone } = req.body;
   if (!userId || !amount || !phone) return res.status(400).json({ status: 'error', message: 'userId, amount, phone required' });
   const amt = parseFloat(amount);
-  if (isNaN(amt) || amt < 20000 || amt > 200000) return res.status(400).json({ status: 'error', message: 'Amount must be 20,000–200,000 UGX' });
+  if (isNaN(amt) || amt < 30000 || amt > 200000) return res.status(400).json({ status: 'error', message: 'Amount must be 30,000–200,000 UGX' });
   const fullPhone = cleanPhone(phone);
   const reference = uuidv4();
   try {
