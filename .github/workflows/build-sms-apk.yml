@@ -8,6 +8,9 @@ on:
       - ".github/workflows/build-sms-apk.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,9 +35,19 @@ jobs:
         working-directory: sms-forwarder-app
         run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: xengine-sms-forwarder
           path: sms-forwarder-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish APK to a Release (direct download link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: sms-app
+          name: X-Engine SMS Forwarder
+          body: "Latest build of the X-Engine SMS forwarder app. Download app-debug.apk below and install on the phone."
+          files: sms-forwarder-app/app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
