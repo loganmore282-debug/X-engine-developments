@@ -14,7 +14,7 @@ const SERVER = 'https://x-engine-server-production.up.railway.app';
 // Get this from Firebase Console → Project Settings → Cloud Messaging →
 // "Web Push certificates" → Key pair (starts with "B..."). Paste it below.
 // Until it's filled in, in-app notifications still work; only phone push is off.
-const VAPID_KEY = 'PASTE_YOUR_WEB_PUSH_VAPID_KEY_HERE';
+const VAPID_KEY = 'BKj7WDl6XzHZu1lfoe0dMjgJg5ldAswei0BTkr_SHskr4JcKr8wmc5jgIxhh3DBsy9Qxdy63ijTgQjwSrBNWyMA';
 const CLOUDINARY_CLOUD = 'dcmfxgofa';
 const CLOUDINARY_PRESET = 'x-engineuploads';
 const APP_URL = window.location.origin + window.location.pathname;
