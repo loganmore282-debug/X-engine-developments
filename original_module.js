@@ -755,6 +755,29 @@ window._openWithdrawPage = function(){
         } else { sec.style.display='none'; }
       }).catch(()=>{sec.style.display='none';});
   }
+  // Show pool balance breakdown
+  const poolEl=document.getElementById('witPoolBreakdown');
+  if(poolEl && _userData){
+    const refBal=_userData.referralBalance||0;
+    const cumBal=_userData.cumulativeBalance||0;
+    const cbBal=Math.max(0,cumBal-refBal);
+    const refStatus=refBal>=10000?`<span style="color:#03A66D">✓ Withdraw min UGX 10,000</span>`:`<span style="color:#ef4444">Need UGX ${(10000-refBal).toLocaleString()} more</span>`;
+    const cbStatus=cbBal>=60000?`<span style="color:#03A66D">✓ Withdraw min UGX 60,000</span>`:`<span style="color:#ef4444">Locked — need UGX ${(60000-cbBal).toLocaleString()} more</span>`;
+    poolEl.innerHTML=`
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <div style="flex:1;background:rgba(240,185,11,.06);border:1px solid rgba(240,185,11,.18);border-radius:10px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px">👥 Referral Earnings</div>
+          <div style="font-weight:800;color:#F0B90B;font-size:15px">UGX ${refBal.toLocaleString()}</div>
+          <div style="font-size:10px;margin-top:3px">${refStatus}</div>
+        </div>
+        <div style="flex:1;background:rgba(3,166,109,.06);border:1px solid rgba(3,166,109,.18);border-radius:10px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px">📈 Daily Cashback</div>
+          <div style="font-weight:800;color:#03A66D;font-size:15px">UGX ${cbBal.toLocaleString()}</div>
+          <div style="font-size:10px;margin-top:3px">${cbStatus}</div>
+        </div>
+      </div>`;
+    poolEl.style.display='block';
+  }
   openPage('withdrawPage');
 };
 
@@ -888,22 +911,29 @@ window._startWithdrawal = async function(){
   const cum=_userData?.cumulativeBalance||0;
   const refBal=_userData?.referralBalance||0;
   const cashbackBal=Math.max(0,cum-refBal);
-  const canUseRef=refBal>=10000&&amount<=refBal;
-  const canUseCash=cashbackBal>=60000&&amount<=cashbackBal;
-  const canUseBoth=refBal>=10000&&cashbackBal>=60000&&amount<=(refBal+cashbackBal);
   if(!amount||amount<=0) return showToast('Enter withdrawal amount','error');
   if(amount>500000) return showToast('Maximum withdrawal is UGX 500,000','error');
   if(amount>cum) return showToast(`Insufficient balance. Available: ${ugx(cum)}`,'error');
+  const canUseRef =refBal>=10000&&amount>=10000&&amount<=refBal;
+  const canUseCash=cashbackBal>=60000&&amount>=60000&&amount<=cashbackBal;
+  const canUseBoth=refBal>=10000&&cashbackBal>=60000&&amount>=10000&&amount<=(refBal+cashbackBal);
   if(!canUseRef&&!canUseCash&&!canUseBoth){
     let msg;
-    if(refBal>=10000&&amount>refBal&&cashbackBal<60000)
-      msg=`Amount exceeds referral balance (${ugx(refBal)}). Daily cashback ${ugx(cashbackBal)} — needs UGX 60,000 min.`;
-    else if(refBal<10000&&cashbackBal<60000)
+    const refOk=refBal>=10000, cashOk=cashbackBal>=60000;
+    if(!refOk&&!cashOk)
       msg=`Referral: ${ugx(refBal)} (need 10,000) | Daily cashback: ${ugx(cashbackBal)} (need 60,000). Keep earning!`;
-    else if(refBal>=10000&&cashbackBal<60000)
-      msg=`Reduce amount to ${ugx(refBal)} or less (your referral balance), or wait for daily cashback to reach 60,000.`;
+    else if(refOk&&!cashOk&&amount<10000)
+      msg=`Minimum referral withdrawal is UGX 10,000. Your referral: ${ugx(refBal)}.`;
+    else if(refOk&&!cashOk&&amount>refBal)
+      msg=`Amount exceeds referral balance (${ugx(refBal)}). Daily cashback ${ugx(cashbackBal)} locked — needs UGX 60,000.`;
+    else if(refOk&&!cashOk)
+      msg=`Daily cashback ${ugx(cashbackBal)} is locked (need UGX 60,000). Withdraw up to ${ugx(refBal)} from referral.`;
+    else if(!refOk&&cashOk&&amount<60000)
+      msg=`Minimum daily cashback withdrawal is UGX 60,000.`;
+    else if(!refOk&&cashOk&&amount>cashbackBal)
+      msg=`Insufficient cashback. Available: ${ugx(cashbackBal)}.`;
     else
-      msg=refBal>=10000?`Minimum referral withdrawal is UGX 10,000`:`Minimum daily cashback withdrawal is UGX 60,000`;
+      msg=`Minimum withdrawal is UGX 10,000.`;
     return showToast(msg,'error');
   }
   if(!phone||phone.length<7) return showToast('Enter valid phone number','error');
@@ -1619,14 +1649,18 @@ function renderTxList(){
     const feeAmt=isWit && t.fee ? t.fee : null;
     const dispAmt=netAmt!==null ? netAmt : grossAmt;
     const feeNote=feeAmt ? `<div style="font-size:10px;color:#ef4444;margin-top:1px">Fee: -${ugx(feeAmt)} · Gross: ${ugx(grossAmt)}</div>` : '';
-    return `<div class="tx-item">
+    const safeId=t.id||'';
+    return `<div class="tx-item" style="cursor:pointer" onclick="window._showTxDetail('${safeId}')">
       <div class="tx-icon ${cls}">${em}</div>
       <div class="tx-info">
         <div class="tx-desc">${t.description||t.type}</div>
         <div class="tx-date">${t.date||''} ${t.time||''}</div>
         ${feeNote}
       </div>
-      <div class="tx-amount ${isPlus?'plus':'minus'}">${isPlus?'+':'-'}${ugx(dispAmt)}</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="tx-amount ${isPlus?'plus':'minus'}">${isPlus?'+':'-'}${ugx(dispAmt)}</div>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1636,6 +1670,43 @@ window._filterTx = function(type,btn){
   document.querySelectorAll('.btn-filter').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderTxList();
+};
+
+window._showTxDetail = function(id){
+  const t=(_allTxs||[]).find(x=>x.id===id); if(!t) return;
+  const rawAmt=t.amount||0;
+  const isWit=t.type==='withdrawal';
+  const _PLUS=['deposit','investment','investment_claim','checkin','referral_l1','referral_l2','referral_l3','referral','referral_ongoing','registration_bonus','admin_deposit','daily_cashback','daily_cashback_locked'];
+  const isPlus=_PLUS.includes(t.type)&&rawAmt>=0;
+  const grossAmt=Math.abs(rawAmt);
+  const rows=[
+    ['Type', (t.type||'').replace(/_/g,' ')],
+    ['Date', `${t.date||''} ${t.time||''}`.trim()||'—'],
+    ['Amount', `${isPlus?'+':'-'}${ugx(grossAmt)}`],
+    isWit&&t.fee ? ['Fee', `-${ugx(t.fee)}`] : null,
+    isWit&&t.netAmount ? ['You received', `+${ugx(t.netAmount)}`] : null,
+    t.reference ? ['Reference', t.reference] : null,
+    t.phone ? ['Phone', t.phone] : null,
+    t.withdrawalPhone ? ['Sent to', t.withdrawalPhone] : null,
+    t.status ? ['Status', t.status] : null,
+    t.description ? ['Description', t.description] : null,
+  ].filter(Boolean);
+  const html=`<div id="txDetailOverlay" onclick="if(event.target===this)this.remove()" style="position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:16px">
+    <div style="background:#1C2127;border-radius:20px 20px 16px 16px;width:100%;max-width:480px;padding:20px 18px 28px;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+        <div style="font-size:15px;font-weight:800;color:#fff">Transaction Details</div>
+        <div onclick="document.getElementById('txDetailOverlay').remove()" style="cursor:pointer;color:var(--muted);font-size:22px;line-height:1">×</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        ${rows.map(([k,v])=>`<tr>
+          <td style="padding:9px 0;color:var(--muted);font-size:13px;width:40%;vertical-align:top">${k}</td>
+          <td style="padding:9px 0;color:#fff;font-size:13px;font-weight:600;word-break:break-all">${v}</td>
+        </tr>`).join('<tr><td colspan="2" style="border-top:1px solid rgba(255,255,255,.05)"></td></tr>')}
+      </table>
+    </div>
+  </div>`;
+  const old=document.getElementById('txDetailOverlay'); if(old) old.remove();
+  document.body.insertAdjacentHTML('beforeend',html);
 };
 
 // ══════════════════════════════════════════════════

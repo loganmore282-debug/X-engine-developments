@@ -1411,24 +1411,36 @@ app.post('/withdraw/request', verifyUser, async (req, res) => {
     const currentCumBal  = user.cumulativeBalance || 0;
     const cashbackBal    = Math.max(0, currentCumBal - currentRefBal);
 
-    const canUseReferral = currentRefBal >= 10000 && amt <= currentRefBal;
-    const canUseCashback = cashbackBal   >= 60000 && amt <= cashbackBal;
-    const canUseBoth     = currentRefBal >= 10000 && cashbackBal >= 60000 && amt <= (currentRefBal + cashbackBal);
+    // Pool rules — amount minimum applies per pool used:
+    //   referral:   refBal >= 10k AND amount >= 10k AND amount <= refBal
+    //   cashback:   cashback >= 60k AND amount >= 60k AND amount <= cashback
+    //   combined:   both pools unlocked, any amount >= 10k up to total (referral exhausted first)
+    const canUseReferral = currentRefBal >= 10000 && amt >= 10000 && amt <= currentRefBal;
+    const canUseCashback = cashbackBal   >= 60000 && amt >= 60000 && amt <= cashbackBal;
+    const canUseBoth     = currentRefBal >= 10000 && cashbackBal >= 60000 && amt >= 10000 && amt <= (currentRefBal + cashbackBal);
 
     if (!canUseReferral && !canUseCashback && !canUseBoth) {
       let msg;
-      if (currentRefBal > 0 && currentRefBal < 10000 && cashbackBal < 60000)
-        msg = `Referral: ${fmtUGX(currentRefBal)} (need UGX 10,000 min) | Daily cashback: ${fmtUGX(cashbackBal)} (need UGX 60,000 min). Neither pool meets the minimum yet.`;
-      else if (currentRefBal >= 10000 && amt > currentRefBal && cashbackBal < 60000)
-        msg = `Amount exceeds your referral balance (${fmtUGX(currentRefBal)}). Daily cashback ${fmtUGX(cashbackBal)} — needs UGX 60,000 minimum before it can be used.`;
-      else if (currentRefBal < 10000 && cashbackBal >= 60000 && amt <= cashbackBal)
-        msg = `Daily cashback balance: ${fmtUGX(cashbackBal)} ✓. But referral balance ${fmtUGX(currentRefBal)} is below UGX 10,000 — lower your amount to within daily cashback or wait for more referral earnings.`;
-      else if (currentRefBal < 10000 && cashbackBal < 60000)
-        msg = `Daily cashback ${fmtUGX(cashbackBal)} — minimum UGX 60,000 required to withdraw.`;
-      else if (currentRefBal >= 10000 && cashbackBal < 60000 && amt > currentRefBal)
-        msg = `Amount ${fmtUGX(amt)} exceeds referral balance ${fmtUGX(currentRefBal)}. Reduce to ${fmtUGX(currentRefBal)} or less, or wait until daily cashback reaches UGX 60,000 (currently ${fmtUGX(cashbackBal)}).`;
+      const refOk  = currentRefBal >= 10000;
+      const cashOk = cashbackBal   >= 60000;
+      if (!refOk && !cashOk)
+        msg = `Referral: ${fmtUGX(currentRefBal)} (need UGX 10,000) | Daily cashback: ${fmtUGX(cashbackBal)} (need UGX 60,000). Keep earning!`;
+      else if (refOk && !cashOk && amt < 10000)
+        msg = `Minimum referral withdrawal is UGX 10,000. Your referral balance: ${fmtUGX(currentRefBal)}.`;
+      else if (refOk && !cashOk && amt > currentRefBal)
+        msg = `Amount ${fmtUGX(amt)} exceeds referral balance (${fmtUGX(currentRefBal)}). Daily cashback ${fmtUGX(cashbackBal)} is locked — needs UGX 60,000 minimum.`;
+      else if (refOk && !cashOk)
+        msg = `Daily cashback ${fmtUGX(cashbackBal)} is locked. Minimum UGX 60,000 required. Withdraw up to ${fmtUGX(currentRefBal)} from your referral balance instead.`;
+      else if (!refOk && cashOk && amt < 60000)
+        msg = `Minimum daily cashback withdrawal is UGX 60,000. Your cashback: ${fmtUGX(cashbackBal)}.`;
+      else if (!refOk && cashOk && amt > cashbackBal)
+        msg = `Insufficient cashback balance. Available: ${fmtUGX(cashbackBal)}.`;
+      else if (refOk && cashOk && amt < 10000)
+        msg = `Minimum withdrawal is UGX 10,000.`;
+      else if (refOk && cashOk && amt > (currentRefBal + cashbackBal))
+        msg = `Amount exceeds total balance. Max: ${fmtUGX(currentRefBal + cashbackBal)}.`;
       else
-        msg = `Minimum withdrawal is UGX ${currentRefBal >= 10000 ? '10,000 (referral) or UGX 60,000 (daily cashback)' : '60,000'}.`;
+        msg = `Insufficient withdrawable balance. Referral: ${fmtUGX(currentRefBal)} | Cashback: ${fmtUGX(cashbackBal)}.`;
       return res.status(400).json({ status: 'error', message: msg });
     }
 
@@ -1543,12 +1555,14 @@ app.post('/withdraw/request', verifyUser, async (req, res) => {
       // both: use referral first, cashback covers the remainder
       const freshCashback = Math.max(0, freshCum - freshRefBal);
       cumPortion = amt;
-      if (freshRefBal >= 10000 && amt <= freshRefBal) {
-        refPortion = amt;                          // pure referral
-      } else if (freshRefBal >= 10000 && freshCashback >= 60000) {
-        refPortion = freshRefBal;                  // referral exhausted first, rest from cashback
+      const pureRef  = freshRefBal >= 10000 && amt >= 10000 && amt <= freshRefBal;
+      const pureCash = freshCashback >= 60000 && amt >= 60000 && amt <= freshCashback;
+      if (pureRef) {
+        refPortion = amt;             // all from referral
+      } else if (pureCash) {
+        refPortion = 0;               // all from cashback, don't touch referral
       } else {
-        refPortion = 0;                            // pure cashback withdrawal
+        refPortion = freshRefBal;     // combined: drain referral first, rest from cashback
       }
       const balUpdates = {
         walletBalance:     FieldValue.increment(-amt),

@@ -914,9 +914,12 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
         <div style="font-size:11px;color:var(--muted)">Available (<span id="witFeeDisplay">11%</span> fee)</div>
         <span style="font-size:10px;font-weight:700;background:rgba(3,166,109,.15);color:#03A66D;border:1px solid rgba(3,166,109,.3);border-radius:999px;padding:2px 8px">⚡ 24/7</span>
       </div>
-      <div style="font-size:10px;color:rgba(240,185,11,.55);margin-bottom:6px">Includes referral earnings when ≥ UGX 10,000</div>
+      <div style="font-size:10px;color:rgba(240,185,11,.55);margin-bottom:6px">Referral (min UGX 10,000) · Daily cashback (min UGX 60,000)</div>
       <div style="font-size:22px;font-weight:900;font-family:var(--fam-mono);color:#F0B90B" id="witAvailDisplay">UGX 0</div>
     </div>
+
+    <!-- Pool balance breakdown (filled by JS) -->
+    <div id="witPoolBreakdown" style="display:none;margin-bottom:4px"></div>
 
     <!-- Saved Accounts Quick-Select -->
     <div id="savedAccountsSection" style="display:none;margin-bottom:14px">
@@ -927,7 +930,7 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
     <!-- Amount -->
     <div class="form-group">
       <label class="form-label">Amount (UGX)</label>
-      <input class="form-input" id="witAmount" type="number" placeholder="Min 10,000 (ref) / 60,000 — Max 500,000" style="background:#1a1a1a;border-color:#2a2a2a" oninput="calcWithdrawFee()">
+      <input class="form-input" id="witAmount" type="number" placeholder="Min 10,000 (referral) or 60,000 (cashback)" style="background:#1a1a1a;border-color:#2a2a2a" oninput="calcWithdrawFee()">
     </div>
 
     <!-- Fee preview -->
@@ -1219,7 +1222,7 @@ function waPinKey(k){ if(_waPin.length<4){_waPin+=k;updatePinDots('wa',_waPin,'p
 function waPinDel(){ _waPin=_waPin.slice(0,-1);updatePinDots('wa',_waPin,'pin-dot'); }
 </script>
 
-<script src="core.1cee963ac9dd.js" defer></script>
+<script src="core.fc95fb2e385b.js" defer></script>
 
 <!-- LIVE TX DIALOG -->
 <div id="txDialog">
