@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Built-in Material theme (no AppCompat dependency needed). The dark
+         window background matches the site so the launch frame isn't white. -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/brandDark</item>
+        <item name="android:statusBarColor">@color/brandDark</item>
+        <item name="android:navigationBarColor">@color/brandDark</item>
+    </style>
+</resources>
