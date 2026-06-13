@@ -1040,12 +1040,13 @@ window._saveWithdrawPin = async function(){
   }catch(e){ showToast('Error: '+e.message,'error'); }
 };
 
-// ── Fee calculator ──
+// ── Fee calculator + pool routing hint ──
 window.calcWithdrawFee = function(){
   const amt = parseFloat(document.getElementById('witAmount').value)||0;
   const preview = document.getElementById('witFeePreview');
+  const hintEl = document.getElementById('witRouteHint');
   if(!preview) return;
-  if(amt < 1){ preview.style.display='none'; return; }
+  if(amt < 1){ preview.style.display='none'; if(hintEl) hintEl.style.display='none'; return; }
   const feePct = parseFloat(document.getElementById('witFeeDisplay')?.textContent)||11;
   const fee = Math.round(amt * feePct / 100);
   const net = amt - fee;
@@ -1054,6 +1055,34 @@ window.calcWithdrawFee = function(){
   document.getElementById('feePreviewFee').textContent = '- '+ugx(fee);
   document.getElementById('feePreviewNet').textContent = ugx(net);
   document.getElementById('feePreviewPct').textContent = feePct;
+  // Pool routing hint
+  if(hintEl && _userData){
+    const refBal=_userData.referralBalance||0;
+    const cumBal=_userData.cumulativeBalance||0;
+    const cbBal=Math.max(0,cumBal-refBal);
+    const canRef=refBal>=10000&&amt<=refBal;
+    const canCash=cbBal>=60000&&amt<=cbBal;
+    const canBoth=refBal>=10000&&cbBal>=60000&&amt<=(refBal+cbBal);
+    let hint='',color='#ef4444';
+    if(canRef&&!canCash){
+      hint=`✅ From Referral Earnings (${ugx(refBal)} available)`;color='#03A66D';
+    } else if(canCash&&!canRef){
+      hint=`✅ From Daily Cashback (${ugx(cbBal)} available)`;color='#03A66D';
+    } else if(canBoth){
+      hint=`✅ Referral first, Daily Cashback covers remainder`;color='#03A66D';
+    } else if(refBal>=10000&&amt>refBal&&cbBal<60000){
+      hint=`⚠️ Exceeds referral (${ugx(refBal)}). Daily cashback ${ugx(cbBal)} needs UGX 60,000 min.`;
+    } else if(refBal<10000&&cbBal<60000){
+      hint=`❌ Referral ${ugx(refBal)} (need 10k) · Cashback ${ugx(cbBal)} (need 60k)`;
+    } else if(amt>cumBal){
+      hint=`❌ Insufficient — total available: ${ugx(cumBal)}`;
+    } else {
+      hint=`⚠️ Check pool minimums above`;
+    }
+    hintEl.textContent=hint;
+    hintEl.style.color=color;
+    hintEl.style.display='block';
+  }
 };
 
 // ── Withdrawal Account Page — Bank Accounts + PIN ──
