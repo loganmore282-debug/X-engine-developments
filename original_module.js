@@ -1680,18 +1680,20 @@ window.toggleTeamTree = async function(){
 };
 
 function renderTreeNodes(nodes, level){
-  const colors={1:'#F0B90B',2:'#03A66D',3:'#60a5fa'};
-  const dot=colors[level]||'#888';
+  const lvlColors={1:'#F0B90B',2:'#a78bfa',3:'#60a5fa'};
+  const lvlColor=lvlColors[level]||'#888';
   const indent=level*18;
   let out='';
   nodes.forEach(n=>{
     const nm=(n.name||'Member');
+    // Dot colour = status (green = active, yellow = pending) — level shown as text only
+    const dotColor=n.active?'#03A66D':'#F0B90B';
     const badge=n.active
       ?'<span style="font-size:9px;background:rgba(3,166,109,.15);color:#03A66D;border-radius:999px;padding:1px 7px;font-weight:700">Active</span>'
       :'<span style="font-size:9px;background:rgba(240,185,11,.12);color:#F8D12F;border-radius:999px;padding:1px 7px;font-weight:700">Pending</span>';
     out+=`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;margin-left:${indent}px;border-left:1.5px solid rgba(255,255,255,.08);padding-left:10px">
-      <div style="width:8px;height:8px;border-radius:50%;background:${dot};flex-shrink:0"></div>
-      <div style="font-size:9px;color:${dot};font-weight:800;min-width:18px">L${level}</div>
+      <div style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0"></div>
+      <div style="font-size:9px;color:${lvlColor};font-weight:800;min-width:18px">L${level}</div>
       <div style="font-size:12px;color:#fff;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nm}</div>
       ${badge}
     </div>`;
