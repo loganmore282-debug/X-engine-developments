@@ -1,1 +1,5 @@
 node_modules/
+
+# delivery artifacts
+x-engine-update.zip
+*.zip
