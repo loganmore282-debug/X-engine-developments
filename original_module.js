@@ -885,13 +885,27 @@ window._startWithdrawal = async function(){
   const amount=parseFloat(document.getElementById('witAmount').value);
   const phone=document.getElementById('witPhone').value.trim();
   const pin = window._witPin||'';
-  const _cum=_userData?.cumulativeBalance||0;
-  const _ref=_userData?.refEarned||0;
-  const cum = _cum;
-  const minWit = _ref>=10000 ? 10000 : 60000;
-  if(!amount||amount<minWit) return showToast(`Minimum withdrawal is ${ugx(minWit)}`,'error');
+  const cum=_userData?.cumulativeBalance||0;
+  const refBal=_userData?.referralBalance||0;
+  const cashbackBal=Math.max(0,cum-refBal);
+  const canUseRef=refBal>=10000&&amount<=refBal;
+  const canUseCash=cashbackBal>=60000&&amount<=cashbackBal;
+  const canUseBoth=refBal>=10000&&cashbackBal>=60000&&amount<=(refBal+cashbackBal);
+  if(!amount||amount<=0) return showToast('Enter withdrawal amount','error');
   if(amount>500000) return showToast('Maximum withdrawal is UGX 500,000','error');
   if(amount>cum) return showToast(`Insufficient balance. Available: ${ugx(cum)}`,'error');
+  if(!canUseRef&&!canUseCash&&!canUseBoth){
+    let msg;
+    if(refBal>=10000&&amount>refBal&&cashbackBal<60000)
+      msg=`Amount exceeds referral balance (${ugx(refBal)}). Daily cashback ${ugx(cashbackBal)} — needs UGX 60,000 min.`;
+    else if(refBal<10000&&cashbackBal<60000)
+      msg=`Referral: ${ugx(refBal)} (need 10,000) | Daily cashback: ${ugx(cashbackBal)} (need 60,000). Keep earning!`;
+    else if(refBal>=10000&&cashbackBal<60000)
+      msg=`Reduce amount to ${ugx(refBal)} or less (your referral balance), or wait for daily cashback to reach 60,000.`;
+    else
+      msg=refBal>=10000?`Minimum referral withdrawal is UGX 10,000`:`Minimum daily cashback withdrawal is UGX 60,000`;
+    return showToast(msg,'error');
+  }
   if(!phone||phone.length<7) return showToast('Enter valid phone number','error');
   if(!window._phoneVerified) return showToast('Verify your phone number first','error');
   if(pin.length!==4) return showToast('Enter your 4-digit PIN','error');

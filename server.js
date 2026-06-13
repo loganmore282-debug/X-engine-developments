@@ -1402,11 +1402,35 @@ app.post('/withdraw/request', verifyUser, async (req, res) => {
     if (!allowedPhones.includes(fullPhone)) {
       return res.status(400).json({ status: 'error', message: 'Withdrawal phone must be your registered profile number or an activated bank account. Please bind and activate your account first.' });
     }
-    // Dynamic minimum: current unspent referral balance ≥ 10,000 → min is 10,000, otherwise 60,000
-    const currentRefBal = user.referralBalance || 0;
-    const minWithdraw   = currentRefBal >= 10000 ? 10000 : 60000;
-    if (amt < minWithdraw)
-      return res.status(400).json({ status: 'error', message: currentRefBal >= 10000 ? 'Minimum withdrawal is UGX 10,000 (you have referral earnings)' : 'Minimum withdrawal is UGX 60,000' });
+    // ── PER-POT MINIMUM ENFORCEMENT ─────────────────────────────────────────────
+    // Two SEPARATE withdrawable pools:
+    //   referralBalance  (referral bonuses)        → min UGX 10,000, max = referralBalance
+    //   cashbackBalance  (daily investment returns) → min UGX 60,000, max = cumulativeBalance - referralBalance
+    // A single withdrawal may combine both pools only if BOTH minimums are already met.
+    const currentRefBal  = user.referralBalance  || 0;
+    const currentCumBal  = user.cumulativeBalance || 0;
+    const cashbackBal    = Math.max(0, currentCumBal - currentRefBal);
+
+    const canUseReferral = currentRefBal >= 10000 && amt <= currentRefBal;
+    const canUseCashback = cashbackBal   >= 60000 && amt <= cashbackBal;
+    const canUseBoth     = currentRefBal >= 10000 && cashbackBal >= 60000 && amt <= (currentRefBal + cashbackBal);
+
+    if (!canUseReferral && !canUseCashback && !canUseBoth) {
+      let msg;
+      if (currentRefBal > 0 && currentRefBal < 10000 && cashbackBal < 60000)
+        msg = `Referral: ${fmtUGX(currentRefBal)} (need UGX 10,000 min) | Daily cashback: ${fmtUGX(cashbackBal)} (need UGX 60,000 min). Neither pool meets the minimum yet.`;
+      else if (currentRefBal >= 10000 && amt > currentRefBal && cashbackBal < 60000)
+        msg = `Amount exceeds your referral balance (${fmtUGX(currentRefBal)}). Daily cashback ${fmtUGX(cashbackBal)} — needs UGX 60,000 minimum before it can be used.`;
+      else if (currentRefBal < 10000 && cashbackBal >= 60000 && amt <= cashbackBal)
+        msg = `Daily cashback balance: ${fmtUGX(cashbackBal)} ✓. But referral balance ${fmtUGX(currentRefBal)} is below UGX 10,000 — lower your amount to within daily cashback or wait for more referral earnings.`;
+      else if (currentRefBal < 10000 && cashbackBal < 60000)
+        msg = `Daily cashback ${fmtUGX(cashbackBal)} — minimum UGX 60,000 required to withdraw.`;
+      else if (currentRefBal >= 10000 && cashbackBal < 60000 && amt > currentRefBal)
+        msg = `Amount ${fmtUGX(amt)} exceeds referral balance ${fmtUGX(currentRefBal)}. Reduce to ${fmtUGX(currentRefBal)} or less, or wait until daily cashback reaches UGX 60,000 (currently ${fmtUGX(cashbackBal)}).`;
+      else
+        msg = `Minimum withdrawal is UGX ${currentRefBal >= 10000 ? '10,000 (referral) or UGX 60,000 (daily cashback)' : '60,000'}.`;
+      return res.status(400).json({ status: 'error', message: msg });
+    }
 
     // ── BRUTE-FORCE PIN PROTECTION ── 10 attempts → 1-hour lock
     const MAX_PIN_ATTEMPTS = 10;
@@ -1454,10 +1478,8 @@ app.post('/withdraw/request', verifyUser, async (req, res) => {
       await db.collection('users').doc(userId).update({ pinAttempts: 0, pinLockUntil: null });
     }
 
-    // Withdrawable = cumulativeBalance (investment returns + referral earnings combined)
-    // refEarned is now a lifetime tracker only — never deducted
-    // Deposit wallet funds are investable-only, not withdrawable
-    const cumBal = user.cumulativeBalance || 0;
+    // cumBal already validated per-pool above; final balance guard uses the combined total
+    const cumBal = currentCumBal;
     const refBal = user.refEarned || 0;
     const balance = cumBal;
     if (balance < amt) return res.status(400).json({ status: 'error', message: 'Insufficient withdrawable balance. Available: ' + fmtUGX(cumBal) });
@@ -1515,9 +1537,19 @@ app.post('/withdraw/request', verifyUser, async (req, res) => {
       const freshCum    = freshData.cumulativeBalance || 0;
       const freshRefBal = freshData.referralBalance || 0;
       if (freshCum < amt) throw new Error(`Insufficient balance: ${fmtUGX(freshCum)}`);
-      // Deduct referralBalance by the withdrawal amount (floor at 0)
+      // Route deduction to the correct pool(s):
+      // referral pot: amt <= freshRefBal → pure referral
+      // cashback pot: amt <= (freshCum - freshRefBal) → pure cashback (no touch to referralBalance)
+      // both: use referral first, cashback covers the remainder
+      const freshCashback = Math.max(0, freshCum - freshRefBal);
       cumPortion = amt;
-      refPortion = Math.min(amt, freshRefBal);
+      if (freshRefBal >= 10000 && amt <= freshRefBal) {
+        refPortion = amt;                          // pure referral
+      } else if (freshRefBal >= 10000 && freshCashback >= 60000) {
+        refPortion = freshRefBal;                  // referral exhausted first, rest from cashback
+      } else {
+        refPortion = 0;                            // pure cashback withdrawal
+      }
       const balUpdates = {
         walletBalance:     FieldValue.increment(-amt),
         cumulativeBalance: FieldValue.increment(-amt),
