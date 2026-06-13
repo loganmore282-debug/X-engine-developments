@@ -1,0 +1,86 @@
+(function(){
+  "use strict";
+  // ── CONFIG ─────────────────────────────────────────────
+  // Hostnames allowed to run the app. Anything else (a cloned/
+  // rehosted copy) is bounced back to the real site.
+  var REAL = "https://www.x-engine.site/";
+  function hostOk(){
+    var h = (location.hostname || "").toLowerCase();
+    if (!h) return true;                       // file:// local open
+    if (h === "localhost" || h === "127.0.0.1") return true;
+    return h === "x-engine.site" || h.indexOf(".x-engine.site") !== -1 ||
+           h.slice(-13) === "x-engine.site";
+  }
+
+  // 1. DOMAIN LOCK — block cloned rehosting
+  if (!hostOk()) {
+    try { document.documentElement.innerHTML = ""; } catch(e){}
+    location.replace(REAL);
+    return;
+  }
+
+  // 2. FRAME-BUST — refuse to be embedded / proxied in an iframe
+  try {
+    if (window.top !== window.self) {
+      window.top.location = REAL;
+      document.documentElement.innerHTML = "";
+      return;
+    }
+  } catch(e) {
+    // cross-origin top access throws => we are framed by a foreign site
+    document.documentElement.innerHTML = "";
+    return;
+  }
+
+  // 3. CONSOLE SELF-XSS WARNING
+  function warn(){
+    try {
+      console.log("%cSTOP", "color:#F0B90B;font-size:48px;font-weight:900;");
+      console.log("%cThis is a browser feature intended for developers. Do not paste or type anything here — it could give an attacker access to your X-Engine account and funds.",
+        "color:#ff4d4f;font-size:14px;");
+    } catch(e){}
+  }
+  warn();
+
+  // 4. BLOCK CONTEXT MENU (right-click / long-press save)
+  document.addEventListener("contextmenu", function(e){ e.preventDefault(); }, { capture:true });
+
+  // 5. BLOCK DEV / SOURCE SHORTCUTS
+  document.addEventListener("keydown", function(e){
+    var k = (e.key || "").toLowerCase();
+    var block =
+      e.key === "F12" ||
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && (k === "i" || k === "j" || k === "c")) ||
+      ((e.ctrlKey || e.metaKey) && (k === "u" || k === "s"));
+    if (block) { e.preventDefault(); e.stopPropagation(); return false; }
+  }, { capture:true });
+
+  // 6. BLOCK SELECTION / COPY / DRAG OUTSIDE INPUTS (keep forms usable)
+  function inForm(t){
+    return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" ||
+      (t.isContentEditable === true));
+  }
+  ["selectstart","copy","cut","dragstart"].forEach(function(ev){
+    document.addEventListener(ev, function(e){
+      if (!inForm(e.target)) { e.preventDefault(); }
+    }, { capture:true });
+  });
+
+  // 7. DEVTOOLS-OPEN DETECTION (dimension heuristic) → cover screen
+  var shield = null;
+  function showShield(){
+    if (shield) return;
+    shield = document.createElement("div");
+    shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#0B0E11;color:#F0B90B;display:flex;align-items:center;justify-content:center;text-align:center;font-family:sans-serif;font-size:18px;padding:24px;";
+    shield.textContent = "Developer tools detected. Close them to continue using X-Engine.";
+    (document.body || document.documentElement).appendChild(shield);
+  }
+  function hideShield(){ if (shield){ shield.remove(); shield = null; } }
+  function check(){
+    var t = 180;
+    var open = (window.outerWidth - window.innerWidth > t) ||
+               (window.outerHeight - window.innerHeight > t);
+    if (open) showShield(); else hideShield();
+  }
+  setInterval(check, 1000);
+})();
