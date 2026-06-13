@@ -11,10 +11,24 @@ app.use(cors({ origin: '*' }));
 app.set('trust proxy', true);
 
 // ── ANTI-SCRAPING / ABUSE PROTECTION ──
-// 1. Block obvious scraping tools by User-Agent (health check on '/' is exempt).
+// Payment-provider (MarzPay) server-to-server callbacks must bypass every
+// guard below: they arrive with non-browser User-Agents, carry no Origin
+// header, and must never be rate-limited — otherwise deposits/withdrawals
+// would silently fail to confirm. They are validated inside their handlers
+// by transaction reference instead.
+const GUARD_EXEMPT = new Set([
+  '/', '/health',
+  '/callback', '/deposit/callback', '/withdraw/callback',
+]);
+function guardExempt(req) {
+  if (req.method === 'OPTIONS') return true;     // CORS preflight
+  return GUARD_EXEMPT.has(req.path);
+}
+
+// 1. Block obvious scraping tools by User-Agent.
 const SCRAPER_UA = /(curl|wget|python-requests|python-urllib|scrapy|httpclient|go-http-client|libwww|java\/|okhttp|node-fetch|axios\/|aiohttp|httpx|headlesschrome|phantomjs|puppeteer|playwright|selenium|bot|spider|crawler|scrape)/i;
 app.use((req, res, next) => {
-  if (req.method === 'GET' && (req.path === '/' || req.path === '/health')) return next();
+  if (guardExempt(req)) return next();
   const ua = req.headers['user-agent'] || '';
   if (!ua || SCRAPER_UA.test(ua)) {
     return res.status(403).json({ status: 'error', message: 'Forbidden' });
@@ -22,7 +36,29 @@ app.use((req, res, next) => {
   next();
 });
 
-// 2. Lightweight in-memory per-IP rate limiter (sliding window).
+// 2. Origin lock — a cloned/phishing copy of the site served from any other
+//    domain cannot use this API, even if it strips the client-side guard
+//    (the cloner controls their HTML, but never this server). Browsers always
+//    send Origin on cross-origin fetches; a missing header is allowed so
+//    native/PWA/webview clients are never broken — only a present, foreign
+//    Origin/Referer is blocked.
+function originHostOk(req) {
+  const src = req.headers['origin'] || req.headers['referer'] || '';
+  if (!src) return true;                          // no header → don't block
+  let host;
+  try { host = new URL(src).hostname.toLowerCase(); } catch (e) { return true; }
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+  return host === 'x-engine.site' || host.endsWith('.x-engine.site');
+}
+app.use((req, res, next) => {
+  if (guardExempt(req)) return next();
+  if (!originHostOk(req)) {
+    return res.status(403).json({ status: 'error', message: 'Forbidden' });
+  }
+  next();
+});
+
+// 3. Lightweight in-memory per-IP rate limiter (sliding window).
 const RL_WINDOW_MS = 60 * 1000;   // 1 minute
 // High ceiling on purpose: mobile carriers (MTN/Airtel) use CGNAT, so many
 // real users share one public IP. Only genuinely abusive automated traffic
@@ -37,7 +73,7 @@ setInterval(() => {                // periodic cleanup of stale IPs
   }
 }, RL_WINDOW_MS).unref();
 app.use((req, res, next) => {
-  if (req.method === 'GET' && (req.path === '/' || req.path === '/health')) return next();
+  if (guardExempt(req)) return next();
   const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
   const now = Date.now();
   const arr = (_rlHits.get(ip) || []).filter(t => t > now - RL_WINDOW_MS);
