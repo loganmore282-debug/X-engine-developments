@@ -19,6 +19,7 @@ app.set('trust proxy', true);
 const GUARD_EXEMPT = new Set([
   '/', '/health',
   '/callback', '/deposit/callback', '/withdraw/callback',
+  '/sms/incoming',   // phone SMS-forwarder: non-browser UA, no Origin, secret-authed
 ]);
 function guardExempt(req) {
   if (req.method === 'OPTIONS') return true;     // CORS preflight
@@ -727,6 +728,182 @@ If any funds were deducted, they will be refunded within 24 hours. Reference: ${
 // /deposit/callback — what user app's MARZ_CALLBACK_URL points to (backward compat)
 app.post('/callback', handleDepositCallback);
 app.post('/deposit/callback', handleDepositCallback);
+
+// ════════════════════════════════════════════════════════════
+// SMS-BASED DEPOSITS  (collect Mobile Money on your own SIM)
+// Fully OPT-IN: inert unless SMS_DEPOSITS_ENABLED=true AND both
+// SMS_WEBHOOK_SECRET (>=16 chars) and MOMO_RECEIVE_NUMBER are set.
+// Runs alongside MarzPay without touching it. Withdrawals are NOT
+// automated here — keep those manual via the admin panel.
+// ════════════════════════════════════════════════════════════
+const SMS_DEPOSITS_ENABLED = (process.env.SMS_DEPOSITS_ENABLED || 'false') === 'true';
+const SMS_WEBHOOK_SECRET   = process.env.SMS_WEBHOOK_SECRET || '';
+const MOMO_RECEIVE_NUMBER  = process.env.MOMO_RECEIVE_NUMBER || '';
+const SMS_WINDOW_MS        = 30 * 60 * 1000;   // a pending SMS deposit stays valid 30 min
+const SMS_SUFFIX_MAX       = 999;              // unique shilling tag added to the base amount
+
+function smsConfigured() {
+  return SMS_DEPOSITS_ENABLED && SMS_WEBHOOK_SECRET.length >= 16 && !!MOMO_RECEIVE_NUMBER;
+}
+
+// Parse an MTN / Airtel Uganda "you have received" SMS.
+// Returns { amount, txId, sender, raw } or null if it isn't incoming money.
+function parseMoMoSms(text) {
+  if (!text) return null;
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  const isReceive  = /(received|you have received|received from|deposit of)/i.test(t);
+  const isOutgoing = /(sent to|you have sent|withdrawn|paid to|airtime|bundle|data)/i.test(t);
+  if (!isReceive || isOutgoing) return null;
+  // Amount: "UGX 30,047" / "Ugx 30047" / "30,047 UGX"
+  const m = t.match(/(?:ugx|ush|shs?)\s*([\d,]+(?:\.\d+)?)/i) ||
+            t.match(/([\d,]+(?:\.\d+)?)\s*(?:ugx|ush|shs?)/i);
+  if (!m) return null;
+  const amount = parseFloat(m[1].replace(/,/g, ''));
+  if (!amount || isNaN(amount)) return null;
+  // Transaction id (for idempotency)
+  let txId = '';
+  const idm = t.match(/(?:txn\s*id|transaction\s*id|trans\.?\s*id|ref(?:erence)?|financial transaction id)[:\s#]*([A-Za-z0-9.\-]{6,})/i);
+  if (idm) txId = idm[1].replace(/\.$/, '');
+  // Sender phone (best effort)
+  let sender = '';
+  const sm = t.match(/from\s+([+]?\d[\d\s\-]{7,15})/i);
+  if (sm) sender = sm[1].replace(/[\s\-]/g, '');
+  return { amount, txId, sender, raw: t };
+}
+
+// Credit a matched SMS deposit using the SAME wallet logic as the MarzPay path.
+async function creditSmsDeposit(pendingRef, pending, smsInfo) {
+  const userId = pending.userId;
+  const creditAmount = pending.baseAmount;     // credit the base; the tag shillings are a fee
+  const { date, time } = nowStr();
+  let done = false;
+  await db.runTransaction(async (t) => {
+    const fresh = await t.get(pendingRef);
+    if (!fresh.exists || fresh.data().status === 'success') throw new Error('ALREADY_PROCESSED');
+    const userRef = db.collection('users').doc(userId);
+    const userSnap = await t.get(userRef);
+    if (!userSnap.exists) throw new Error('User not found: ' + userId);
+    t.update(userRef, {
+      walletBalance: FieldValue.increment(creditAmount),
+      depositBalance: FieldValue.increment(creditAmount),
+      depositCount: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    if (pending.depositId) {
+      t.update(db.collection('deposits').doc(pending.depositId), {
+        status: 'success', amountCredited: creditAmount,
+        smsTxId: smsInfo.txId || '', smsSender: smsInfo.sender || '',
+        provider: 'Mobile Money (SIM)', paidAt: FieldValue.serverTimestamp()
+      });
+    }
+    t.update(pendingRef, {
+      status: 'success', amountCredited: creditAmount,
+      smsTxId: smsInfo.txId || '', processedAt: FieldValue.serverTimestamp()
+    });
+    t.set(db.collection('transactions').doc(), {
+      userId, type: 'deposit', description: 'Deposit via Mobile Money',
+      amount: creditAmount, phone: smsInfo.sender || pending.phone || '',
+      reference: pending.reference, provider: 'Mobile Money (SIM)',
+      status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    t.set(db.collection('notifications').doc(), {
+      userId, title: '⚡ Funds Received!',
+      message: `${fmtUGX(creditAmount)} has been credited to your wallet.\n\n📅 Date: ${date}\n⏰ Time: ${time}\n🔖 Reference: ${pending.reference}\n\nThank you for investing with X-Engine! ⚙️`,
+      type: 'deposit', amount: creditAmount, reference: pending.reference,
+      date, time, readBy: [], createdAt: FieldValue.serverTimestamp()
+    });
+    done = true;
+  });
+  if (done) {
+    console.log(`✅ SMS deposit credited ${fmtUGX(creditAmount)} to ${userId}`);
+    await checkAndPayReferral(userId, creditAmount);
+    await unlockLockedCashback(userId);
+  }
+}
+
+// 1. App asks for an SMS deposit → server returns a UNIQUE amount + the number.
+app.post('/deposit/sms/init', verifyUser, async (req, res) => {
+  if (!smsConfigured()) return res.status(503).json({ status: 'error', message: 'SMS deposits are not enabled.' });
+  const { userId, amount, phone } = req.body;
+  const base = parseFloat(amount);
+  if (!userId || isNaN(base) || base < 30000 || base > 200000)
+    return res.status(400).json({ status: 'error', message: 'Amount must be 30,000–200,000 UGX' });
+  try {
+    const userSnap = await db.collection('users').doc(userId).get();
+    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (userSnap.data().status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    const now = Date.now();
+    // pick a tagged amount not currently used by another active pending SMS deposit
+    let uniqueAmount = null;
+    for (let i = 0; i < 25; i++) {
+      const candidate = base + 1 + Math.floor(Math.random() * SMS_SUFFIX_MAX);
+      const clash = await db.collection('pendingPayments').where('uniqueAmount', '==', candidate).limit(10).get();
+      const active = clash.docs.some(d => { const x = d.data(); return x.status === 'pending' && (x.expiresAt || 0) > now; });
+      if (!active) { uniqueAmount = candidate; break; }
+    }
+    if (!uniqueAmount) return res.status(503).json({ status: 'error', message: 'Too many pending deposits, please try again shortly.' });
+    const reference = uuidv4();
+    const depRef = db.collection('deposits').doc();
+    const pendingRef = db.collection('pendingPayments').doc(reference);
+    const expiresAt = now + SMS_WINDOW_MS;
+    const batch = db.batch();
+    batch.set(depRef, {
+      userId, amount: base, phone: phone ? cleanPhone(phone) : '', reference,
+      status: 'pending', type: 'sms_mobile_money', createdAt: FieldValue.serverTimestamp()
+    });
+    batch.set(pendingRef, {
+      userId, method: 'sms', baseAmount: base, uniqueAmount,
+      phone: phone ? cleanPhone(phone) : '', depositId: depRef.id,
+      status: 'pending', expiresAt, createdAt: FieldValue.serverTimestamp()
+    });
+    await batch.commit();
+    return res.json({
+      status: 'success', reference, depositId: depRef.id,
+      amountToSend: uniqueAmount, momoNumber: MOMO_RECEIVE_NUMBER, expiresAt,
+      instructions: `Send EXACTLY ${fmtUGX(uniqueAmount)} to ${MOMO_RECEIVE_NUMBER}. The few extra shillings identify your payment — you are credited ${fmtUGX(base)}.`
+    });
+  } catch (e) {
+    console.error('sms init error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// 2. The phone SMS-forwarder POSTs every incoming SMS here (shared-secret auth).
+app.post('/sms/incoming', async (req, res) => {
+  if (!smsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
+  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
+  const expected = SMS_WEBHOOK_SECRET;
+  const ok = provided.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  if (!ok) return res.status(403).json({ status: 'error', message: 'Forbidden' });
+
+  const text = (req.body && (req.body.message || req.body.text || req.body.sms || req.body.body)) || '';
+  const info = parseMoMoSms(text);
+  if (!info) return res.json({ status: 'ignored', reason: 'not an incoming-money SMS' });
+  try {
+    // idempotency: MoMo transaction id, or a hash of the raw text as fallback
+    const tid = info.txId || crypto.createHash('sha256').update(info.raw).digest('hex').slice(0, 24);
+    const seenRef = db.collection('smsTxns').doc(tid);
+    if ((await seenRef.get()).exists) return res.json({ status: 'duplicate' });
+    await seenRef.set({ amount: info.amount, sender: info.sender || '', raw: info.raw, at: FieldValue.serverTimestamp() });
+
+    const now = Date.now();
+    const snap = await db.collection('pendingPayments').where('uniqueAmount', '==', info.amount).limit(10).get();
+    const match = snap.docs.find(d => { const x = d.data(); return x.method === 'sms' && x.status === 'pending' && (x.expiresAt || 0) > now; });
+    if (!match) {
+      await seenRef.update({ matched: false });
+      console.warn(`⚠️ SMS deposit unmatched: ${fmtUGX(info.amount)} (no active request)`);
+      return res.json({ status: 'unmatched', amount: info.amount });
+    }
+    await creditSmsDeposit(match.ref, match.data(), info);
+    await seenRef.update({ matched: true, reference: match.data().reference });
+    return res.json({ status: 'credited', reference: match.data().reference });
+  } catch (e) {
+    if (e.message === 'ALREADY_PROCESSED') return res.json({ status: 'duplicate' });
+    console.error('sms incoming error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
 
 // ═══════════════════════════════════════════
 // REGISTRATION BONUS
