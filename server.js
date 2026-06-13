@@ -8,6 +8,46 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({ origin: '*' }));
+app.set('trust proxy', true);
+
+// ── ANTI-SCRAPING / ABUSE PROTECTION ──
+// 1. Block obvious scraping tools by User-Agent (health check on '/' is exempt).
+const SCRAPER_UA = /(curl|wget|python-requests|python-urllib|scrapy|httpclient|go-http-client|libwww|java\/|okhttp|node-fetch|axios\/|aiohttp|httpx|headlesschrome|phantomjs|puppeteer|playwright|selenium|bot|spider|crawler|scrape)/i;
+app.use((req, res, next) => {
+  if (req.method === 'GET' && (req.path === '/' || req.path === '/health')) return next();
+  const ua = req.headers['user-agent'] || '';
+  if (!ua || SCRAPER_UA.test(ua)) {
+    return res.status(403).json({ status: 'error', message: 'Forbidden' });
+  }
+  next();
+});
+
+// 2. Lightweight in-memory per-IP rate limiter (sliding window).
+const RL_WINDOW_MS = 60 * 1000;   // 1 minute
+// High ceiling on purpose: mobile carriers (MTN/Airtel) use CGNAT, so many
+// real users share one public IP. Only genuinely abusive automated traffic
+// (which hammers thousands/min) should ever trip this.
+const RL_MAX = 600;               // requests per window per IP
+const _rlHits = new Map();
+setInterval(() => {                // periodic cleanup of stale IPs
+  const cutoff = Date.now() - RL_WINDOW_MS;
+  for (const [ip, arr] of _rlHits) {
+    const kept = arr.filter(t => t > cutoff);
+    if (kept.length) _rlHits.set(ip, kept); else _rlHits.delete(ip);
+  }
+}, RL_WINDOW_MS).unref();
+app.use((req, res, next) => {
+  if (req.method === 'GET' && (req.path === '/' || req.path === '/health')) return next();
+  const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown').toString();
+  const now = Date.now();
+  const arr = (_rlHits.get(ip) || []).filter(t => t > now - RL_WINDOW_MS);
+  arr.push(now);
+  _rlHits.set(ip, arr);
+  if (arr.length > RL_MAX) {
+    return res.status(429).json({ status: 'error', message: 'Too many requests. Please slow down.' });
+  }
+  next();
+});
 
 // ── FIREBASE ADMIN ──
 let serviceAccount;
