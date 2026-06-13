@@ -240,6 +240,51 @@ async function marzVerifyPhone(phone) {
   return resp.data;
 }
 
+// ── PUSH (FCM) HELPER ──
+// Sends a phone push to all of a user's registered devices. Cleans up any
+// tokens Firebase reports as dead. Never throws — push failure must never
+// break the in-app notification or the surrounding transaction.
+async function sendPush(userId, title, body, data = {}) {
+  try {
+    const snap = await db.collection('users').doc(userId).get();
+    if (!snap.exists) return;
+    const tokens = (snap.data().fcmTokens || []).filter(Boolean);
+    if (!tokens.length) return;
+
+    const strData = {};
+    for (const k of Object.keys(data)) strData[k] = String(data[k] ?? '');
+
+    const resp = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title: String(title || 'X-Engine'), body: String(body || '') },
+      data: { title: String(title || ''), message: String(body || ''), ...strData },
+      webpush: {
+        notification: { icon: '/icon-192.png', badge: '/icon-192.png' },
+        fcmOptions: { link: data.url || 'https://www.x-engine.site/' }
+      },
+      android: { priority: 'high' }
+    });
+
+    // Prune dead tokens
+    const dead = [];
+    resp.responses.forEach((r, i) => {
+      if (!r.success) {
+        const code = r.error?.code || '';
+        if (code.includes('registration-token-not-registered') ||
+            code.includes('invalid-registration-token') ||
+            code.includes('invalid-argument')) dead.push(tokens[i]);
+      }
+    });
+    if (dead.length) {
+      await db.collection('users').doc(userId).update({
+        fcmTokens: FieldValue.arrayRemove(...dead)
+      });
+    }
+  } catch (e) {
+    console.error('sendPush error:', e.message);
+  }
+}
+
 // ── NOTIFICATION HELPER ──
 async function notify(userId, title, message, type, extras = {}) {
   const { date, time } = nowStr();
@@ -248,6 +293,8 @@ async function notify(userId, title, message, type, extras = {}) {
     readBy: [], details: { ...extras, date, time },
     date, time, createdAt: FieldValue.serverTimestamp()
   });
+  // Fire a phone push too (best-effort, never blocks)
+  sendPush(userId, title, message, { type, url: 'https://www.x-engine.site/' });
 }
 
 // ── UNLOCK LOCKED CASHBACK ──
@@ -371,9 +418,79 @@ app.post('/verify-phone', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// WITHDRAWAL PIN MANAGEMENT
+// PUSH NOTIFICATIONS — register device token
 // ═══════════════════════════════════════════
-app.post('/pin/set', verifyUser, async (req, res) => {
+app.post('/fcm/register', verifyUser, async (req, res) => {
+  const { userId, token } = req.body;
+  if (!userId || !token) return res.status(400).json({ status: 'error', message: 'userId and token required' });
+  try {
+    const ref = db.collection('users').doc(userId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    // arrayUnion dedupes automatically; cap implicitly by pruning dead ones on send
+    await ref.update({ fcmTokens: FieldValue.arrayUnion(token), fcmUpdatedAt: FieldValue.serverTimestamp() });
+    return res.json({ status: 'success', message: 'Push enabled' });
+  } catch (e) {
+    console.error('fcm/register error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// REFERRAL TREE — nested L1 → L2 → L3 downline
+// ═══════════════════════════════════════════
+app.post('/team/tree', verifyUser, async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    // Pull a user's direct referrals (one level)
+    const childrenOf = async (uid) => {
+      const snap = await db.collection('referrals')
+        .where('referrerId', '==', uid).limit(200).get();
+      return snap.docs.map(d => {
+        const r = d.data();
+        return {
+          uid: r.referredUserId,
+          name: (r.referredName || 'Member').replace('+256', '0'),
+          active: !!r.paid
+        };
+      });
+    };
+
+    const l1 = await childrenOf(userId);
+    let activeCount = 0, totalCount = 0;
+
+    for (const a of l1) {
+      totalCount++; if (a.active) activeCount++;
+      a.children = await childrenOf(a.uid);           // L2
+      for (const b of a.children) {
+        totalCount++; if (b.active) activeCount++;
+        b.children = await childrenOf(b.uid);         // L3
+        for (const c of b.children) { totalCount++; if (c.active) activeCount++; }
+      }
+    }
+
+    return res.json({
+      status: 'success',
+      tree: l1,
+      summary: {
+        l1: l1.length,
+        l2: l1.reduce((s, a) => s + a.children.length, 0),
+        l3: l1.reduce((s, a) => s + a.children.reduce((s2, b) => s2 + b.children.length, 0), 0),
+        totalMembers: totalCount,
+        activeMembers: activeCount
+      }
+    });
+  } catch (e) {
+    console.error('team/tree error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// PUSH NOTIFICATIONS — register device token
+// ═══════════════════════════════════════════
+app.post('/fcm/register', verifyUser, async (req, res) => {
   const { userId, pin } = req.body;
   if (!userId || !pin || String(pin).length !== 4 || !/^\d{4}$/.test(String(pin))) {
     return res.status(400).json({ status: 'error', message: 'Valid 4-digit PIN required' });
@@ -1110,6 +1227,7 @@ async function checkAndPayReferral(userId, depositAmount) {
         });
       });
       console.log(`✅ Referral L1 paid: ${fmtUGX(firstDepBonus)} → ${referredBy} (triggered by ${userId})`);
+      sendPush(referredBy, '🔗 Team Earnings!', `${user.name || 'Your referral'} made their first deposit — you earned ${fmtUGX(firstDepBonus)}! 💰`, { type: 'referral' });
 
       // ── Also pay L2 & L3 parents on this first deposit ──
       try {
@@ -1142,6 +1260,7 @@ async function checkAndPayReferral(userId, depositAmount) {
             });
           });
           console.log(`✅ Referral L2 paid: ${fmtUGX(ongoingFlat)} → ${l2Uid}`);
+          sendPush(l2Uid, '🌐 L2 Team Bonus!', `Your Level 2 network grew — you earned ${fmtUGX(ongoingFlat)}! 🎯`, { type: 'referral_l2' });
 
           const l2Doc  = await db.collection('users').doc(l2Uid).get();
           const l3Uid  = l2Doc.exists ? l2Doc.data().referredBy : null;
@@ -1172,6 +1291,7 @@ async function checkAndPayReferral(userId, depositAmount) {
               });
             });
             console.log(`✅ Referral L3 paid: ${fmtUGX(l3Flat)} → ${l3Uid}`);
+            sendPush(l3Uid, '💎 L3 Team Bonus!', `Your network is active — you earned ${fmtUGX(l3Flat)}! 🎯`, { type: 'referral_l3' });
           }
         }
       } catch (e2) { console.error('L2/L3 first-dep error:', e2.message); }
@@ -1220,6 +1340,7 @@ async function checkAndPayReferral(userId, depositAmount) {
         });
       });
       console.log(`✅ Referral L2 paid: ${fmtUGX(reward)} (flat) → ${referredBy}`);
+      sendPush(referredBy, '💎 Ongoing Team Bonus!', `${user.name || 'Your referral'} deposited — you earned ${fmtUGX(reward)}! 🎯`, { type: 'referral_ongoing' });
 
       // ── L3: Pay referrer's referrer a flat 200 bonus ──
       try {
@@ -1253,6 +1374,7 @@ async function checkAndPayReferral(userId, depositAmount) {
             });
           });
           console.log(`✅ Referral L3 paid: ${fmtUGX(l3Flat)} (flat) → ${referredBy2}`);
+          sendPush(referredBy2, '💎 L3 Team Bonus!', `Your team network is active — you earned ${fmtUGX(l3Flat)}! 🎯`, { type: 'referral_l3' });
         }
       } catch (e) { console.error('L3 referral error:', e.message); }
     }

@@ -10,6 +10,11 @@ const FIREBASE_CONFIG = {
   appId:             "1:420172832235:web:735d05ea80069177ec4dae"
 };
 const SERVER = 'https://x-engine-server-production.up.railway.app';
+// ── PUSH NOTIFICATIONS (FCM) ──
+// Get this from Firebase Console → Project Settings → Cloud Messaging →
+// "Web Push certificates" → Key pair (starts with "B..."). Paste it below.
+// Until it's filled in, in-app notifications still work; only phone push is off.
+const VAPID_KEY = 'PASTE_YOUR_WEB_PUSH_VAPID_KEY_HERE';
 const CLOUDINARY_CLOUD = 'dcmfxgofa';
 const CLOUDINARY_PRESET = 'x-engineuploads';
 const APP_URL = window.location.origin + window.location.pathname;
@@ -183,6 +188,7 @@ onAuthStateChanged(auth, async (user)=>{
     loadProducts();
     loadSettings();
     startWitListener(user.uid);
+    initPush(user.uid);   // register phone push notifications (FCM)
     // Restore last active tab
     const savedTab = localStorage.getItem('xe_tab') || 'home';
     setTimeout(()=>{ if(window._switchTab) window._switchTab(savedTab); },100);
@@ -1637,6 +1643,63 @@ async function loadRefStats(){
   }catch(e){ console.error('Ref stats error:',e); }
 }
 
+// ── Referral Tree (visual downline L1 → L2 → L3) ──
+let _treeLoaded = false;
+window.toggleTeamTree = async function(){
+  const box=document.getElementById('teamTreeBox');
+  const btn=document.getElementById('treeToggleBtn');
+  if(!box) return;
+  if(box.style.display!=='none'){ box.style.display='none'; if(btn) btn.textContent='View Tree'; return; }
+  box.style.display='block'; if(btn) btn.textContent='Hide Tree';
+  if(_treeLoaded) return;
+  box.innerHTML='<div class="page-loader"><div class="spinner"></div></div>';
+  try{
+    const d=await api('/team/tree',{userId:_user.uid});
+    if(d.status!=='success'){ box.innerHTML='<div style="font-size:12px;color:var(--muted);padding:10px">Could not load tree.</div>'; return; }
+    const s=d.summary||{};
+    let html=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      <span style="font-size:11px;background:rgba(240,185,11,.12);color:#F0B90B;border-radius:999px;padding:4px 10px;font-weight:700">${s.totalMembers||0} members</span>
+      <span style="font-size:11px;background:rgba(3,166,109,.12);color:#03A66D;border-radius:999px;padding:4px 10px;font-weight:700">${s.activeMembers||0} active</span>
+      <span style="font-size:11px;background:rgba(255,255,255,.06);color:var(--muted);border-radius:999px;padding:4px 10px;font-weight:700">L1 ${s.l1||0} · L2 ${s.l2||0} · L3 ${s.l3||0}</span>
+    </div>`;
+    // YOU node
+    const myName=(_userData?.name||'You').replace('@xengine.app','').replace('+256','0');
+    html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div style="width:30px;height:30px;border-radius:50%;background:#F0B90B;color:#000;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px">★</div>
+      <div style="font-weight:800;color:#fff;font-size:13px">${myName} <span style="color:var(--muted);font-weight:500;font-size:11px">(you)</span></div>
+    </div>`;
+    const tree=d.tree||[];
+    if(!tree.length){
+      html+='<div style="font-size:12px;color:var(--muted);padding:8px 0 0 38px">No referrals yet — share your link to grow your tree.</div>';
+    } else {
+      html+=renderTreeNodes(tree,1);
+    }
+    box.innerHTML=html;
+    _treeLoaded=true;
+  }catch(e){ box.innerHTML='<div style="font-size:12px;color:var(--muted);padding:10px">Error loading tree.</div>'; }
+};
+
+function renderTreeNodes(nodes, level){
+  const colors={1:'#F0B90B',2:'#03A66D',3:'#60a5fa'};
+  const dot=colors[level]||'#888';
+  const indent=level*18;
+  let out='';
+  nodes.forEach(n=>{
+    const nm=(n.name||'Member');
+    const badge=n.active
+      ?'<span style="font-size:9px;background:rgba(3,166,109,.15);color:#03A66D;border-radius:999px;padding:1px 7px;font-weight:700">Active</span>'
+      :'<span style="font-size:9px;background:rgba(240,185,11,.12);color:#F8D12F;border-radius:999px;padding:1px 7px;font-weight:700">Pending</span>';
+    out+=`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;margin-left:${indent}px;border-left:1.5px solid rgba(255,255,255,.08);padding-left:10px">
+      <div style="width:8px;height:8px;border-radius:50%;background:${dot};flex-shrink:0"></div>
+      <div style="font-size:9px;color:${dot};font-weight:800;min-width:18px">L${level}</div>
+      <div style="font-size:12px;color:#fff;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nm}</div>
+      ${badge}
+    </div>`;
+    if(n.children&&n.children.length) out+=renderTreeNodes(n.children, level+1);
+  });
+  return out;
+}
+
 window._copyReferral = function(){
   const code=_userData?.referralCode||genRefCode(_user?.uid||'');
   navigator.clipboard.writeText(code).then(()=>showToast('Referral code copied! 🔗','success')).catch(()=>showToast(code,'info',5000));
@@ -1949,6 +2012,47 @@ function showWitSuccess(wit){
     }
   }catch(e){ console.error('ref prefill error:', e); }
 })();
+
+// ══════════════════════════════════════════════════
+// SERVICE WORKER + PUSH NOTIFICATIONS (FCM)
+// ══════════════════════════════════════════════════
+let _swReg = null;
+(async function registerSW(){
+  if(!('serviceWorker' in navigator)) return;
+  try{
+    _swReg = await navigator.serviceWorker.register('sw.js');
+  }catch(e){ console.warn('SW register failed:', e?.message); }
+})();
+
+// Called after login — asks permission, gets the FCM token, saves it server-side
+async function initPush(uid){
+  try{
+    if(!('serviceWorker' in navigator) || !('Notification' in window)) return;
+    if(!VAPID_KEY || VAPID_KEY.startsWith('PASTE_')) return; // key not configured yet
+    // Wait for the SW to be ready
+    const reg = _swReg || await navigator.serviceWorker.ready;
+
+    // Ask permission only if not already decided
+    let perm = Notification.permission;
+    if(perm === 'default') perm = await Notification.requestPermission();
+    if(perm !== 'granted') return;
+
+    const { getMessaging, getToken, onMessage } =
+      await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js');
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+    if(!token) return;
+
+    // Save the token to this user (deduped server-side)
+    await api('/fcm/register', { userId: uid, token });
+
+    // Foreground messages — show an in-app toast so it isn't missed
+    onMessage(messaging, (payload)=>{
+      const n = payload.notification || payload.data || {};
+      if(n.title || n.body) showToast(`${n.title||'X-Engine'}: ${n.body||n.message||''}`, 'info', 6000);
+    });
+  }catch(e){ console.warn('Push init skipped:', e?.message); }
+}
 
 // Load public settings on page load (for auth banners, before login)
 (async function loadPublicSettings(){
