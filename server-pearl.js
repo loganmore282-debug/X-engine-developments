@@ -28,6 +28,39 @@ const MARZ_AUTH = process.env.MARZ_AUTH || process.env.MARZ_API_KEY || Buffer.fr
 const RAILWAY_URL = (process.env.RAILWAY_URL || 'https://pearlinvest-server-production.up.railway.app').replace(/\/$/, '');
 const ADMIN_KEY = process.env.ADMIN_KEY || 'pearl_bane_2026';
 
+// ── MAINTENANCE MODE — cached, refreshed every 60 s ──
+let _maintenance = false;
+let _maintenanceCheckedAt = 0;
+async function isMaintenanceOn() {
+  const now = Date.now();
+  if (now - _maintenanceCheckedAt < 60000) return _maintenance;
+  try {
+    const snap = await db.collection('settings').doc('main').get();
+    _maintenance = snap.exists && !!snap.data().maintenanceMode;
+  } catch (e) { /* keep previous value */ }
+  _maintenanceCheckedAt = Date.now();
+  return _maintenance;
+}
+// Routes that must NEVER be blocked (payment callbacks, admin, status checks)
+const MAINTENANCE_BYPASS = [
+  '/', '/callback', '/deposit/callback', '/withdraw/callback',
+  '/withdraw/approve', '/withdraw/reject', '/withdraw/status',
+  '/admin/verify', '/admin/deposit', '/admin/check-maturities', '/admin/ban',
+];
+app.use(async (req, res, next) => {
+  const path = req.path.replace(/\/$/, '') || '/';
+  const bypass = MAINTENANCE_BYPASS.some(p => path === p || path.startsWith(p + '/'));
+  if (bypass) return next();
+  if (await isMaintenanceOn()) {
+    return res.status(503).json({
+      status: 'error',
+      maintenance: true,
+      message: 'Pearl Invest is currently under maintenance. Please check back shortly. 🌱'
+    });
+  }
+  next();
+});
+
 // ── HELPERS ──
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {

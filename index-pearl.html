@@ -410,6 +410,14 @@ select.form-input{appearance:none;-webkit-appearance:none}
 </head>
 <body>
 
+<!-- ── MAINTENANCE OVERLAY ── -->
+<div id="maintenanceOverlay" style="display:none;position:fixed;inset:0;background:#030f1a;z-index:99999;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:32px">
+  <div style="font-size:72px;margin-bottom:20px">🔧</div>
+  <h2 style="color:#f0fdf4;font-family:'Playfair Display',serif;font-size:26px;margin-bottom:12px">Under Maintenance</h2>
+  <p style="color:#4b7a5c;font-size:15px;line-height:1.7;max-width:320px">Pearl Invest is currently undergoing scheduled maintenance.<br>We'll be back shortly — thank you for your patience!</p>
+  <div style="margin-top:32px;color:#22c55e;font-size:13px;font-weight:700;letter-spacing:1px">🌱 PEARL INVEST TEAM</div>
+</div>
+
 <!-- ══════════════════════════════════════════
      AUTH CARD
 ══════════════════════════════════════════ -->
@@ -1322,6 +1330,11 @@ async function preloadLinks() {
       _appUrl = d.appDownloadUrl || d.appLink || d.settAppLink || d.appDownloadLink
               || d.downloadLink  || d.appUrl  || '';
       _settingsLoaded = true;
+      // Maintenance mode — show full-screen overlay if on
+      if (d.maintenanceMode) {
+        const ov = document.getElementById('maintenanceOverlay');
+        if (ov) ov.style.display = 'flex';
+      }
     }
   } catch(e) { console.warn('Settings preload failed:', e); }
 }
