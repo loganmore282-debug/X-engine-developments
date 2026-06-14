@@ -259,7 +259,7 @@ async function sendPush(userId, title, body, data = {}) {
       notification: { title: String(title || 'X-Engine'), body: String(body || '') },
       data: { title: String(title || ''), message: String(body || ''), ...strData },
       webpush: {
-        notification: { icon: '/icon-192.png', badge: '/icon-192.png' },
+        notification: { icon: '/icon-192.png', badge: '/notification-badge.png' },
         fcmOptions: { link: data.url || 'https://www.x-engine.site/' }
       },
       android: { priority: 'high' }

@@ -123,7 +123,7 @@ try {
     self.registration.showNotification(title, {
       body,
       icon: './icon-192.png',
-      badge: './icon-192.png',
+      badge: './notification-badge.png',
       tag: d.tag || 'xe-notify',
       data: { url: d.url || './' },
       vibrate: [120, 60, 120]
