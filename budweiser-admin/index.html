@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Budweiser — Admin Console</title>
+  <meta content="width=device-width, initial-scale=1" name="viewport" />
+  <link href="https://cdn.staticfile.org/layui/2.9.7/css/layui.css" rel="stylesheet" />
+  <script src="https://cdn.staticfile.org/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdn.staticfile.org/layui/2.9.7/layui.js"></script>
+  <style>
+    :root { --navy:#12284c; --red:#cf0a2c; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100%; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:#f3f5f9; }
+    /* Header */
+    .adm-head {
+      height:56px; background:var(--navy); color:#fff; display:flex; align-items:center;
+      padding:0 18px; position:fixed; top:0; left:0; right:0; z-index:1000;
+    }
+    .adm-head img { height:34px; margin-right:10px; }
+    .adm-head .ttl { font-weight:800; font-size:17px; letter-spacing:.3px; }
+    .adm-head .spacer { flex:1; }
+    .adm-head .who { font-size:12px; opacity:.85; margin-right:14px; }
+    .adm-head .logout {
+      background:var(--red); color:#fff; border:none; border-radius:8px;
+      padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer;
+    }
+    /* Layout */
+    .adm-body { display:flex; padding-top:56px; min-height:100%; }
+    .adm-side {
+      width:210px; background:#fff; border-right:1px solid #e7ebf0; position:fixed;
+      top:56px; bottom:0; left:0; overflow-y:auto;
+    }
+    .nav-item {
+      display:flex; align-items:center; gap:10px; padding:13px 20px; cursor:pointer;
+      color:#3b4256; font-size:14px; font-weight:600; border-left:3px solid transparent;
+    }
+    .nav-item i { font-size:17px; }
+    .nav-item:hover { background:#f5f7fb; }
+    .nav-item.on { background:#eef2fb; color:var(--navy); border-left-color:var(--red); }
+    .adm-main { margin-left:210px; flex:1; padding:22px; width:calc(100% - 210px); }
+    .sec-title { font-size:18px; font-weight:800; color:var(--navy); margin:0 0 16px; }
+    /* Stat cards */
+    .stat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; margin-bottom:8px; }
+    .stat {
+      background:#fff; border-radius:12px; padding:16px 18px; box-shadow:0 2px 10px rgba(18,40,76,.06);
+      border-top:3px solid var(--navy);
+    }
+    .stat .lbl { font-size:12px; color:#8b92a3; font-weight:600; }
+    .stat .val { font-size:24px; font-weight:800; color:var(--navy); margin-top:4px; font-family:Consolas,monospace; }
+    .stat.red { border-top-color:var(--red); } .stat.red .val { color:var(--red); }
+    .stat.green { border-top-color:#03A66D; } .stat.green .val { color:#03A66D; }
+    /* Toolbar */
+    .toolbar { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+    .toolbar input.search {
+      height:38px; border:1px solid #d9dee7; border-radius:8px; padding:0 12px; min-width:230px; font-size:13px;
+    }
+    .btn { border:none; border-radius:8px; padding:9px 16px; font-size:13px; font-weight:700; cursor:pointer; color:#fff; }
+    .btn.navy { background:var(--navy); } .btn.red { background:var(--red); }
+    .btn.green { background:#03A66D; } .btn.gray { background:#6b7280; }
+    .btn.sm { padding:5px 10px; font-size:12px; border-radius:6px; }
+    /* Table */
+    .panel { background:#fff; border-radius:12px; padding:6px 0; box-shadow:0 2px 10px rgba(18,40,76,.06); overflow-x:auto; }
+    table.t { width:100%; border-collapse:collapse; font-size:13px; }
+    table.t th { text-align:left; padding:12px 14px; color:#6b7280; font-weight:700; border-bottom:1px solid #eef1f5; white-space:nowrap; }
+    table.t td { padding:11px 14px; border-bottom:1px solid #f3f5f9; color:#2b3245; white-space:nowrap; }
+    table.t tr:hover td { background:#fafbfd; }
+    .pill { font-size:11px; font-weight:700; border-radius:999px; padding:2px 9px; display:inline-block; }
+    .pill.ok { background:rgba(3,166,109,.12); color:#03A66D; }
+    .pill.pend { background:rgba(240,185,11,.15); color:#b8860b; }
+    .pill.bad { background:rgba(207,10,44,.1); color:var(--red); }
+    .empty { text-align:center; color:#9aa0ab; padding:40px 0; font-size:14px; }
+    .mono { font-family:Consolas,monospace; }
+    /* Modal form rows */
+    .frm-row { margin-bottom:14px; } .frm-row label { display:block; font-size:12px; color:#6b7280; font-weight:700; margin-bottom:5px; }
+    .frm-row input, .frm-row select, .frm-row textarea {
+      width:100%; height:40px; border:1px solid #d9dee7; border-radius:8px; padding:0 12px; font-size:13px;
+    }
+    .frm-row textarea { height:90px; padding:10px 12px; resize:vertical; }
+    @media (max-width:760px){
+      .adm-side{ left:-210px; transition:.2s; z-index:1100; box-shadow:0 0 30px rgba(0,0,0,.2);}
+      .adm-side.show{ left:0; } .adm-main{ margin-left:0; width:100%; }
+      .menu-btn{ display:inline-block!important; }
+    }
+    .menu-btn{ display:none; background:transparent; border:none; color:#fff; font-size:22px; margin-right:10px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div class="adm-head">
+    <button class="menu-btn" id="menuBtn">☰</button>
+    <img src="images/bui/logo.png" alt="" />
+    <span class="ttl">Budweiser Admin</span>
+    <span class="spacer"></span>
+    <span class="who" id="whoAmI">admin</span>
+    <button class="logout" id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="adm-body">
+    <div class="adm-side" id="side">
+      <div class="nav-item on" data-sec="dashboard"><i class="layui-icon layui-icon-home"></i> Dashboard</div>
+      <div class="nav-item" data-sec="users"><i class="layui-icon layui-icon-user"></i> Users</div>
+      <div class="nav-item" data-sec="deposits"><i class="layui-icon layui-icon-rmb"></i> Deposits</div>
+      <div class="nav-item" data-sec="withdrawals"><i class="layui-icon layui-icon-transfer"></i> Withdrawals</div>
+      <div class="nav-item" data-sec="products"><i class="layui-icon layui-icon-template-1"></i> Products</div>
+      <div class="nav-item" data-sec="messages"><i class="layui-icon layui-icon-notice"></i> Messages</div>
+      <div class="nav-item" data-sec="settings"><i class="layui-icon layui-icon-set"></i> Settings</div>
+    </div>
+
+    <div class="adm-main" id="main"><!-- sections injected here --></div>
+  </div>
+
+  <script>
+  layui.use(['layer'], function () {
+    var $ = layui.jquery, layer = layui.layer;
+
+    /* ── API layer — matches budweiser .ashx convention {State,JsonResult,Data} ── */
+    var ADMIN_API = '/ashx/AdminServer.ashx';
+    function adm(action, params, cb, opts) {
+      opts = opts || {};
+      var idx = opts.silent ? 0 : layer.load();
+      var data = $.extend({ action: action, token: localStorage.getItem('adm_token') || '', time: Math.random() }, params || {});
+      $.getJSON(ADMIN_API, data, function (json) {
+        if (idx) layer.close(idx);
+        if (json && json.State == '500') { location.href = 'login.html'; return; }
+        if (json && json.State == '300' && !opts.quiet) layer.msg(json.JsonResult || 'Error', { time: 2500 });
+        cb && cb(json || {});
+      }).fail(function () {
+        if (idx) layer.close(idx);
+        cb && cb({ State: 'err', JsonResult: 'Server unreachable' });
+        if (!opts.quiet) layer.msg('Server unreachable — check backend URL', { time: 2500 });
+      });
+    }
+    function money(n){ n = Number(n||0); return 'UGX ' + n.toLocaleString(); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+    /* ── Navigation ── */
+    var SECTIONS = {};
+    $('.nav-item').on('click', function () {
+      $('.nav-item').removeClass('on'); $(this).addClass('on');
+      $('#side').removeClass('show');
+      var sec = $(this).data('sec');
+      (SECTIONS[sec] || function(){ $('#main').html('<div class="empty">Coming soon</div>'); })();
+    });
+    $('#menuBtn').on('click', function(){ $('#side').toggleClass('show'); });
+    $('#logoutBtn').on('click', function () {
+      layer.confirm('Log out of the admin console?', function () {
+        adm('logout', {}, function(){ localStorage.removeItem('adm_token'); location.href = 'login.html'; });
+      });
+    });
+
+    /* ── DASHBOARD ── */
+    SECTIONS.dashboard = function () {
+      $('#main').html('<h2 class="sec-title">Dashboard</h2>\
+        <div class="stat-grid" id="statGrid"><div class="empty">Loading…</div></div>\
+        <h2 class="sec-title" style="margin-top:24px">Recent Withdrawals (pending)</h2>\
+        <div class="panel" id="dashWit"></div>');
+      adm('stats', {}, function (j) {
+        var d = j.Data || {};
+        $('#statGrid').html(
+          card('Total Users', d.totalUsers, 'navy') +
+          card('Active Today', d.activeToday, 'green') +
+          card('Deposits (today)', money(d.depositsToday), 'green') +
+          card('Deposits (all)', money(d.depositsTotal), 'navy') +
+          card('Withdrawals (all)', money(d.withdrawalsTotal), 'red') +
+          card('Pending Withdrawals', d.pendingWithdrawals, 'red') +
+          card('Total Invested', money(d.totalInvested), 'navy') +
+          card('Platform Balance', money(d.platformBalance), 'green')
+        );
+      });
+      adm('withdrawals', { status: 'pending', limit: 8 }, function (j) {
+        renderWit($('#dashWit'), (j.Data || []), true);
+      });
+      function card(lbl, val, cls){
+        if (val == null) val = '—';
+        return '<div class="stat '+(cls||'')+'"><div class="lbl">'+lbl+'</div><div class="val">'+val+'</div></div>';
+      }
+    };
+
+    /* ── USERS ── */
+    SECTIONS.users = function () {
+      $('#main').html('<h2 class="sec-title">Users</h2>\
+        <div class="toolbar">\
+          <input class="search" id="uSearch" placeholder="Search mobile / name / ref code" />\
+          <button class="btn navy" id="uSearchBtn">Search</button>\
+          <button class="btn gray" id="uReload">Reload</button>\
+        </div><div class="panel" id="uPanel"></div>');
+      function load(q){
+        $('#uPanel').html('<div class="empty">Loading…</div>');
+        adm('users', { q: q || '', limit: 100 }, function (j) {
+          var rows = j.Data || [];
+          if (!rows.length) { $('#uPanel').html('<div class="empty">No users found</div>'); return; }
+          var h = '<table class="t"><thead><tr><th>Mobile</th><th>Name</th><th>Balance</th>\
+            <th>Deposited</th><th>Withdrawn</th><th>Ref code</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+          rows.forEach(function (u) {
+            var st = u.status === 'banned'
+              ? '<span class="pill bad">Banned</span>' : '<span class="pill ok">Active</span>';
+            h += '<tr><td class="mono">'+esc(u.phone)+'</td><td>'+esc(u.name||'-')+'</td>\
+              <td class="mono">'+money(u.walletBalance)+'</td>\
+              <td class="mono">'+money(u.totalDeposited)+'</td>\
+              <td class="mono">'+money(u.totalWithdrawn)+'</td>\
+              <td class="mono">'+esc(u.referralCode||'-')+'</td><td>'+st+'</td>\
+              <td><button class="btn navy sm uDetail" data-id="'+esc(u.id)+'">View</button></td></tr>';
+          });
+          h += '</tbody></table>';
+          $('#uPanel').html(h);
+        });
+      }
+      $('#uSearchBtn').on('click', function(){ load($('#uSearch').val().trim()); });
+      $('#uReload').on('click', function(){ $('#uSearch').val(''); load(''); });
+      $('#uSearch').on('keydown', function(e){ if(e.keyCode===13) load($(this).val().trim()); });
+      $('#main').on('click', '.uDetail', function(){ userDetail($(this).data('id')); });
+      load('');
+    };
+
+    function userDetail(id){
+      adm('user', { id: id }, function (j) {
+        var u = j.Data; if (!u) { layer.msg('User not found'); return; }
+        var banned = u.status === 'banned';
+        var html = '<div style="padding:18px 20px;max-width:560px">\
+          <div style="font-size:18px;font-weight:800;color:#cf0a2c">'+esc(u.phone)+'</div>\
+          <div style="font-size:12px;color:#8b92a3;margin-bottom:14px">'+esc(u.name||'')+' • joined '+esc(u.joined||'-')+'</div>\
+          <div class="stat-grid" style="grid-template-columns:1fr 1fr">\
+            '+mini('Wallet', money(u.walletBalance))+mini('Deposit wallet', money(u.depositBalance))+'\
+            '+mini('Cashback', money(u.cumulativeBalance))+mini('Referral', money(u.referralBalance))+'\
+            '+mini('Total invested', money(u.totalInvested))+mini('Total withdrawn', money(u.totalWithdrawn))+'\
+          </div>\
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">\
+            <button class="btn green sm" id="dAddFunds">Add funds</button>\
+            <button class="btn navy sm" id="dResetPass">Reset password</button>\
+            <button class="btn navy sm" id="dResetPin">Reset PIN</button>\
+            <button class="btn '+(banned?'green':'red')+' sm" id="dBan">'+(banned?'Unban':'Ban')+'</button>\
+            <button class="btn gray sm" id="dMsg">Send message</button>\
+          </div></div>';
+        var lidx = layer.open({ type:1, title:'User Detail', area:['600px','auto'], content:html });
+        function mini(l,v){ return '<div class="stat navy"><div class="lbl">'+l+'</div><div class="val" style="font-size:17px">'+v+'</div></div>'; }
+
+        $('#dAddFunds').on('click', function(){
+          layer.prompt({ title:'Amount to add (UGX)', formType:0 }, function(val, i){
+            adm('addfunds', { userId:id, amount:val }, function(r){
+              if(r.State=='200'){ layer.msg('Funds added'); layer.close(i); layer.close(lidx); }
+            });
+          });
+        });
+        $('#dResetPass').on('click', function(){
+          layer.prompt({ title:'New password for user', formType:0 }, function(val,i){
+            adm('resetpass', { userId:id, newPassword:val }, function(r){ if(r.State=='200'){layer.msg('Password reset');layer.close(i);} });
+          });
+        });
+        $('#dResetPin').on('click', function(){
+          adm('resetpin', { userId:id }, function(r){ if(r.State=='200') layer.msg('PIN reset — user can set a new one'); });
+        });
+        $('#dBan').on('click', function(){
+          adm('ban', { userId:id, action: banned?'unban':'ban' }, function(r){ if(r.State=='200'){ layer.msg('Done'); layer.close(lidx);} });
+        });
+        $('#dMsg').on('click', function(){
+          layer.prompt({ title:'Message to user', formType:2 }, function(val,i){
+            adm('message', { userId:id, message:val }, function(r){ if(r.State=='200'){layer.msg('Sent');layer.close(i);} });
+          });
+        });
+      });
+    }
+
+    /* ── DEPOSITS ── */
+    SECTIONS.deposits = function () {
+      $('#main').html('<h2 class="sec-title">Deposits</h2>\
+        <div class="toolbar">\
+          <select class="search" id="depFilter" style="min-width:160px">\
+            <option value="">All statuses</option><option value="pending">Pending</option>\
+            <option value="success">Success</option><option value="failed">Failed</option></select>\
+          <button class="btn navy" id="depLoad">Load</button>\
+        </div><div class="panel" id="depPanel"></div>');
+      function load(){
+        $('#depPanel').html('<div class="empty">Loading…</div>');
+        adm('deposits', { status:$('#depFilter').val(), limit:100 }, function(j){
+          var rows = j.Data||[];
+          if(!rows.length){ $('#depPanel').html('<div class="empty">No deposits</div>'); return; }
+          var h='<table class="t"><thead><tr><th>User</th><th>Amount</th><th>Method</th><th>Reference</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>';
+          rows.forEach(function(d){
+            h+='<tr><td class="mono">'+esc(d.userPhone||d.userId)+'</td><td class="mono">'+money(d.amount)+'</td>\
+              <td>'+esc(d.method||'MoMo')+'</td><td class="mono" style="font-size:11px">'+esc(d.reference||'-')+'</td>\
+              <td>'+statusPill(d.status)+'</td><td style="font-size:12px;color:#8b92a3">'+esc((d.date||'')+' '+(d.time||''))+'</td>\
+              <td>'+(d.status==='pending'
+                ? '<button class="btn green sm depOk" data-id="'+esc(d.id)+'">Approve</button> \
+                   <button class="btn red sm depNo" data-id="'+esc(d.id)+'">Reject</button>'
+                : '—')+'</td></tr>';
+          });
+          h+='</tbody></table>'; $('#depPanel').html(h);
+        });
+      }
+      $('#depLoad').on('click', load);
+      $('#main').on('click','.depOk',function(){ var id=$(this).data('id'); adm('deposit_approve',{id:id},function(r){ if(r.State=='200'){layer.msg('Approved');load();} }); });
+      $('#main').on('click','.depNo',function(){ var id=$(this).data('id'); adm('deposit_reject',{id:id},function(r){ if(r.State=='200'){layer.msg('Rejected');load();} }); });
+      load();
+    };
+
+    /* ── WITHDRAWALS ── */
+    SECTIONS.withdrawals = function () {
+      $('#main').html('<h2 class="sec-title">Withdrawals</h2>\
+        <div class="toolbar">\
+          <select class="search" id="witFilter" style="min-width:160px">\
+            <option value="pending">Pending</option><option value="">All</option>\
+            <option value="success">Success</option><option value="failed">Failed</option></select>\
+          <button class="btn navy" id="witLoad">Load</button>\
+        </div><div class="panel" id="witPanel"></div>');
+      function load(){
+        $('#witPanel').html('<div class="empty">Loading…</div>');
+        adm('withdrawals', { status:$('#witFilter').val(), limit:100 }, function(j){ renderWit($('#witPanel'), j.Data||[], false, load); });
+      }
+      $('#witLoad').on('click', load);
+      load();
+    };
+
+    function renderWit($el, rows, compact, reload){
+      if(!rows.length){ $el.html('<div class="empty">No withdrawals</div>'); return; }
+      var h='<table class="t"><thead><tr><th>User</th><th>Amount</th><th>Fee</th><th>Net</th><th>Phone</th><th>Source</th><th>Status</th><th>Time</th>'+(compact?'':'<th>Actions</th>')+'</tr></thead><tbody>';
+      rows.forEach(function(w){
+        var src = (w.refPortion>0 && w.refPortion>=w.amount) ? 'Referral'
+                : (w.refPortion>0 ? 'Ref+Cashback' : 'Cashback');
+        h+='<tr><td class="mono">'+esc(w.userPhone||w.userId)+'</td><td class="mono">'+money(w.amount)+'</td>\
+          <td class="mono">'+money(w.fee)+'</td><td class="mono">'+money(w.netAmount)+'</td>\
+          <td class="mono">'+esc(w.withdrawalPhone||'-')+'</td><td>'+src+'</td>\
+          <td>'+statusPill(w.status)+'</td><td style="font-size:12px;color:#8b92a3">'+esc((w.date||'')+' '+(w.time||''))+'</td>';
+        if(!compact){
+          h+='<td>'+(w.status==='pending'
+            ? '<button class="btn green sm witOk" data-id="'+esc(w.id)+'">Approve</button> \
+               <button class="btn red sm witNo" data-id="'+esc(w.id)+'">Decline</button>'
+            : '—')+'</td>';
+        }
+        h+='</tr>';
+      });
+      h+='</tbody></table>'; $el.html(h);
+      if(!compact){
+        $el.off('click','.witOk').on('click','.witOk',function(){ var id=$(this).data('id'); adm('withdraw_approve',{withdrawalId:id},function(r){ if(r.State=='200'){layer.msg('Approved');reload&&reload();} }); });
+        $el.off('click','.witNo').on('click','.witNo',function(){ var id=$(this).data('id');
+          layer.prompt({title:'Reason for declining',formType:2},function(val,i){ adm('withdraw_decline',{withdrawalId:id,reason:val},function(r){ if(r.State=='200'){layer.msg('Declined + refunded');layer.close(i);reload&&reload();} }); });
+        });
+      }
+    }
+
+    /* ── PRODUCTS ── */
+    SECTIONS.products = function () {
+      $('#main').html('<h2 class="sec-title">Investment Products</h2>\
+        <div class="toolbar"><button class="btn green" id="pAdd">+ New Product</button>\
+        <button class="btn gray" id="pReload">Reload</button></div>\
+        <div class="panel" id="pPanel"></div>');
+      function load(){
+        $('#pPanel').html('<div class="empty">Loading…</div>');
+        adm('products', {}, function(j){
+          var rows=j.Data||[];
+          if(!rows.length){ $('#pPanel').html('<div class="empty">No products</div>'); return; }
+          var h='<table class="t"><thead><tr><th>Name</th><th>Price</th><th>Daily return</th><th>Cycle (days)</th><th>Total return</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+          rows.forEach(function(p){
+            h+='<tr><td>'+esc(p.name)+'</td><td class="mono">'+money(p.price)+'</td>\
+              <td class="mono">'+money(p.dailyReturn)+'</td><td>'+esc(p.cycle)+'</td>\
+              <td class="mono">'+money(p.totalReturn)+'</td>\
+              <td>'+(p.active!==false?'<span class="pill ok">Active</span>':'<span class="pill bad">Hidden</span>')+'</td>\
+              <td><button class="btn navy sm pEdit" data-id="'+esc(p.id)+'">Edit</button> \
+                  <button class="btn red sm pDel" data-id="'+esc(p.id)+'">Delete</button></td></tr>';
+          });
+          h+='</tbody></table>'; $('#pPanel').html(h);
+        });
+      }
+      function form(p){
+        p = p||{};
+        var html='<div style="padding:18px 20px;max-width:480px">\
+          <div class="frm-row"><label>Name</label><input id="pf_name" value="'+esc(p.name||'')+'"></div>\
+          <div class="frm-row"><label>Price (UGX)</label><input id="pf_price" type="number" value="'+(p.price||'')+'"></div>\
+          <div class="frm-row"><label>Daily return (UGX)</label><input id="pf_daily" type="number" value="'+(p.dailyReturn||'')+'"></div>\
+          <div class="frm-row"><label>Cycle (days)</label><input id="pf_cycle" type="number" value="'+(p.cycle||'')+'"></div>\
+          <div class="frm-row"><label>Status</label><select id="pf_active"><option value="1"'+(p.active!==false?' selected':'')+'>Active</option><option value="0"'+(p.active===false?' selected':'')+'>Hidden</option></select></div>\
+          <button class="btn green" id="pf_save">Save</button></div>';
+        var pidx=layer.open({type:1,title:(p.id?'Edit':'New')+' Product',area:['520px','auto'],content:html});
+        $('#pf_save').on('click',function(){
+          adm('product_save',{ id:p.id||'', name:$('#pf_name').val(), price:$('#pf_price').val(),
+            dailyReturn:$('#pf_daily').val(), cycle:$('#pf_cycle').val(), active:$('#pf_active').val() },
+            function(r){ if(r.State=='200'){layer.msg('Saved');layer.close(pidx);load();} });
+        });
+      }
+      $('#pAdd').on('click',function(){ form({}); });
+      $('#pReload').on('click',load);
+      $('#main').on('click','.pEdit',function(){ var id=$(this).data('id'); adm('product',{id:id},function(j){ form(j.Data||{id:id}); }); });
+      $('#main').on('click','.pDel',function(){ var id=$(this).data('id'); layer.confirm('Delete this product?',function(){ adm('product_delete',{id:id},function(r){ if(r.State=='200'){layer.msg('Deleted');load();} }); }); });
+      load();
+    };
+
+    /* ── MESSAGES ── */
+    SECTIONS.messages = function () {
+      $('#main').html('<h2 class="sec-title">Send Message / Notification</h2>\
+        <div class="panel" style="padding:20px;max-width:560px">\
+          <div class="frm-row"><label>Audience</label>\
+            <select id="mAud"><option value="all">All users (broadcast)</option><option value="one">Single user (by mobile)</option></select></div>\
+          <div class="frm-row" id="mUserRow" style="display:none"><label>User mobile</label><input id="mUser" placeholder="0700000000"></div>\
+          <div class="frm-row"><label>Title</label><input id="mTitle" placeholder="Notification title"></div>\
+          <div class="frm-row"><label>Message</label><textarea id="mBody" placeholder="Write your message…"></textarea></div>\
+          <button class="btn navy" id="mSend">Send</button>\
+        </div>');
+      $('#mAud').on('change',function(){ $('#mUserRow').toggle($(this).val()==='one'); });
+      $('#mSend').on('click',function(){
+        var aud=$('#mAud').val(), title=$('#mTitle').val().trim(), body=$('#mBody').val().trim();
+        if(!title||!body){ layer.msg('Title and message required'); return; }
+        if(aud==='all'){
+          layer.confirm('Broadcast to ALL users?',function(){
+            adm('broadcast',{title:title,message:body},function(r){ if(r.State=='200') layer.msg('Broadcast sent'); });
+          });
+        } else {
+          adm('message',{ phone:$('#mUser').val().trim(), title:title, message:body },function(r){ if(r.State=='200') layer.msg('Sent'); });
+        }
+      });
+    };
+
+    /* ── SETTINGS ── */
+    SECTIONS.settings = function () {
+      $('#main').html('<h2 class="sec-title">Settings</h2><div class="panel" id="setPanel" style="padding:20px;max-width:560px"><div class="empty">Loading…</div></div>');
+      adm('settings_get',{},function(j){
+        var s=j.Data||{};
+        $('#setPanel').html(
+          row('withdrawalFee','Withdrawal fee (%)',s.withdrawalFee)+
+          row('minWithdrawReferral','Min withdrawal — referral (UGX)',s.minWithdrawReferral)+
+          row('minWithdrawCashback','Min withdrawal — cashback (UGX)',s.minWithdrawCashback)+
+          row('minDeposit','Minimum deposit (UGX)',s.minDeposit)+
+          row('refL1','Referral L1 bonus (UGX)',s.refL1)+
+          row('refL2','Referral L2 bonus (UGX)',s.refL2)+
+          row('refL3','Referral L3 bonus (UGX)',s.refL3)+
+          '<div class="frm-row"><label>Maintenance mode</label><select id="set_maint"><option value="0"'+(!s.maintenanceMode?' selected':'')+'>Off</option><option value="1"'+(s.maintenanceMode?' selected':'')+'>On</option></select></div>'+
+          '<button class="btn green" id="setSave">Save settings</button>'
+        );
+        $('#setSave').on('click',function(){
+          adm('settings_save',{
+            withdrawalFee:$('#set_withdrawalFee').val(), minWithdrawReferral:$('#set_minWithdrawReferral').val(),
+            minWithdrawCashback:$('#set_minWithdrawCashback').val(), minDeposit:$('#set_minDeposit').val(),
+            refL1:$('#set_refL1').val(), refL2:$('#set_refL2').val(), refL3:$('#set_refL3').val(),
+            maintenanceMode:$('#set_maint').val()
+          },function(r){ if(r.State=='200') layer.msg('Settings saved'); });
+        });
+      });
+      function row(k,l,v){ return '<div class="frm-row"><label>'+l+'</label><input id="set_'+k+'" type="number" value="'+(v==null?'':v)+'"></div>'; }
+    };
+
+    function statusPill(s){
+      s=(s||'').toLowerCase();
+      if(s==='success'||s==='completed'||s==='activated') return '<span class="pill ok">'+esc(s)+'</span>';
+      if(s==='pending'||s==='processing') return '<span class="pill pend">'+esc(s)+'</span>';
+      return '<span class="pill bad">'+esc(s||'unknown')+'</span>';
+    }
+
+    /* ── Boot ── */
+    adm('whoami', {}, function (j) {
+      if (j && j.State == '200' && j.Data) $('#whoAmI').text(j.Data.name || j.Data.phone || 'admin');
+    }, { quiet:true, silent:true });
+    SECTIONS.dashboard();
+  });
+  </script>
+</body>
+</html>

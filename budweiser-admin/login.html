@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Budweiser — Admin Login</title>
+  <meta content="width=device-width, initial-scale=1, maximum-scale=1" name="viewport" />
+  <link href="https://cdn.staticfile.org/layui/2.9.7/css/layui.css" rel="stylesheet" />
+  <script src="https://cdn.staticfile.org/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdn.staticfile.org/layui/2.9.7/layui.js"></script>
+  <style>
+    html, body { width:100%; height:100%; margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+    body { background: linear-gradient(180deg,#cf0a2c,#12284c); background-size:100% 100%; }
+    .wrap { max-width:430px; margin:0 auto; position:relative; min-height:100%; }
+    .logo-box { width:100%; text-align:center; padding-top:80px; }
+    .logo-box img { height:110px; }
+    .card {
+      width:88%; margin:48px auto 0; background:rgba(255,255,255,.95);
+      border-radius:14px; padding:26px 22px 30px; box-shadow:0 12px 40px rgba(0,0,0,.35);
+    }
+    .card h2 { margin:0 0 4px; color:#12284c; font-size:20px; font-weight:800; text-align:center; }
+    .card .sub { text-align:center; color:#8a8f99; font-size:12px; margin-bottom:22px; }
+    .inputdiv {
+      display:flex; align-items:center; border:1px solid #e6e6e6; background:#fff;
+      height:46px; padding:0 12px; border-radius:25px; margin-bottom:14px;
+    }
+    .inputdiv .pre { color:#12284c; font-weight:700; margin-right:6px; font-size:14px; }
+    .inputdiv input { border:none; outline:none; flex:1; height:44px; background:transparent; font-size:14px; color:#000; }
+    .adm-btn {
+      width:100%; height:44px; line-height:44px; border:none; border-radius:25px;
+      background:#12284c; color:#fff; font-size:16px; font-weight:700; cursor:pointer; margin-top:8px;
+    }
+    .adm-btn:active { opacity:.9; }
+    .hint { text-align:center; color:#9aa0ab; font-size:11px; margin-top:18px; }
+    .lock-row { display:flex; align-items:center; gap:6px; justify-content:center; color:#12284c; font-size:12px; margin-bottom:18px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo-box"><img src="images/bui/logo.png" alt="Budweiser" /></div>
+    <div class="card">
+      <h2>Admin Console</h2>
+      <div class="sub">Authorized administrators only</div>
+
+      <div class="inputdiv">
+        <span class="pre">+256</span>
+        <input id="moblie" type="text" placeholder="Admin mobile number" autocomplete="off"
+               oninput="if(value.length>11)value=value.slice(0,11)" />
+      </div>
+      <div class="inputdiv">
+        <input id="password" type="password" maxlength="40" placeholder="Password" autocomplete="off" />
+      </div>
+
+      <button class="adm-btn" id="login" type="button">Log in to Console</button>
+      <div class="hint">Budweiser Admin • secure session</div>
+    </div>
+  </div>
+
+  <script>
+  layui.use(['layer'], function () {
+    var $ = layui.jquery, layer = layui.layer;
+
+    function doLogin() {
+      var moblie = $('#moblie').val().trim();
+      var password = $('#password').val();
+      if (!moblie || !password) { layer.msg('Enter mobile and password'); return; }
+      var idx = layer.load();
+      $.getJSON('/ashx/LoginServer.ashx', {
+        action: 'adminlogin',
+        moblie_qu: '256',
+        moblie: moblie,
+        password: password,
+        time: Math.random()
+      }, function (json) {
+        layer.close(idx);
+        if (json && json.State == '200') {
+          // backend sets the session cookie; token (if any) stashed for header use
+          if (json.Token) localStorage.setItem('adm_token', json.Token);
+          location.href = 'index.html?t=' + Math.random();
+        } else {
+          layer.msg((json && json.JsonResult) || 'Login failed', { time: 2500 });
+        }
+      }).fail(function () {
+        layer.close(idx);
+        layer.msg('Server unreachable. Check the backend URL.', { time: 3000 });
+      });
+    }
+
+    $('#login').on('click', doLogin);
+    $('#password').on('keydown', function (e) { if (e.keyCode === 13) doLogin(); });
+  });
+  </script>
+</body>
+</html>
