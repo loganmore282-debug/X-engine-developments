@@ -93,6 +93,17 @@ body{padding-bottom:80px}
 .balance-stat .st-val{font-size:12px;font-weight:800;color:#111;font-family:'Share Tech Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .balance-stat .st-lbl{font-size:9px;color:#999;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
 
+/* ── CUMULATIVE CARD ── */
+.cumulative-card{background:var(--card2);border:1px solid var(--border2);border-radius:16px;padding:18px 20px;margin-bottom:16px}
+.cum-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.cum-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.cum-amount{font-size:26px;font-weight:900;color:var(--white);font-family:'Share Tech Mono',monospace;line-height:1.1}
+.cum-icon{font-size:28px;color:var(--border2)}
+.cum-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:10px;overflow:hidden}
+.cum-item{background:var(--bg2);padding:12px;text-align:center}
+.cum-item-val{font-size:14px;font-weight:800;color:var(--white);font-family:'Share Tech Mono',monospace}
+.cum-item-lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+
 /* ── QUICK CHECKIN ── */
 .checkin-card{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;cursor:pointer}
 .checkin-left .ck-title{font-size:13px;font-weight:700;color:var(--white)}
@@ -377,27 +388,34 @@ body{padding-bottom:80px}
 
   <!-- ── HOME SECTION ── -->
   <div class="section active" id="homeSection">
-    <!-- Balance Card -->
+    <!-- Account Balance Card -->
     <div class="balance-card">
-      <div class="balance-label">Total Balance</div>
+      <div class="balance-label">Account Balance</div>
       <div class="balance-amount" id="homeBalance">UGX 0</div>
       <div class="balance-sub" id="homeBalanceSub">Tap deposit to add funds</div>
       <div class="balance-actions">
         <button class="balance-btn deposit" onclick="openDepositModal()">⬇ Deposit</button>
         <button class="balance-btn withdraw" onclick="openWithdrawModal()">⬆ Withdraw</button>
       </div>
-      <div class="balance-stats">
-        <div class="balance-stat">
-          <div class="st-val" id="homeTotalDep">0</div>
-          <div class="st-lbl">Deposited</div>
+    </div>
+
+    <!-- Cumulative Card -->
+    <div class="cumulative-card">
+      <div class="cum-top">
+        <div>
+          <div class="cum-label">Cumulative Income</div>
+          <div class="cum-amount" id="homeCumulative">UGX 0</div>
         </div>
-        <div class="balance-stat">
-          <div class="st-val" id="homeTotalInv">0</div>
-          <div class="st-lbl">Invested</div>
+        <div class="cum-icon">◈</div>
+      </div>
+      <div class="cum-breakdown">
+        <div class="cum-item">
+          <div class="cum-item-val" id="homeCommEarned">UGX 0</div>
+          <div class="cum-item-lbl">Referral</div>
         </div>
-        <div class="balance-stat">
-          <div class="st-val" id="homeCommEarned">0</div>
-          <div class="st-lbl">Commission</div>
+        <div class="cum-item">
+          <div class="cum-item-val" id="homeCashback">UGX 0</div>
+          <div class="cum-item-lbl">Cashback</div>
         </div>
       </div>
     </div>
@@ -562,15 +580,11 @@ body{padding-bottom:80px}
     </button>
     <button class="bnav-item" data-sec="products" onclick="showSection('products')">
       <span class="bnav-icon">◧</span>
-      <span class="bnav-label">Plans</span>
-    </button>
-    <button class="bnav-item" data-sec="invest" onclick="showSection('records')">
-      <span class="bnav-icon">≡</span>
-      <span class="bnav-label">Records</span>
+      <span class="bnav-label">Products</span>
     </button>
     <button class="bnav-item" data-sec="commission" onclick="showSection('commission')">
       <span class="bnav-icon">◎</span>
-      <span class="bnav-label">Commission</span>
+      <span class="bnav-label">Team</span>
     </button>
     <button class="bnav-item" data-sec="more" onclick="showSection('more')">
       <span class="bnav-icon">⋯</span>
@@ -927,9 +941,12 @@ function startListener(uid) {
 function renderHome(u) {
   document.getElementById('homeBalance').textContent = ugx(u.walletBalance);
   document.getElementById('homeBalanceSub').textContent = u.walletBalance > 0 ? 'Invest in a plan to earn returns' : 'Tap deposit to add funds';
-  document.getElementById('homeTotalDep').textContent    = shortUgx(u.totalDeposited || 0);
-  document.getElementById('homeTotalInv').textContent    = shortUgx(u.totalInvested  || 0);
-  document.getElementById('homeCommEarned').textContent  = shortUgx(u.commissionEarned || 0);
+  // Cumulative income = referral commission + cashback (check-in + investment returns)
+  const referral = u.commissionEarned || 0;
+  const cashback = (u.checkinEarned || 0) + (u.totalEarned || 0);
+  document.getElementById('homeCumulative').textContent = ugx(referral + cashback);
+  document.getElementById('homeCommEarned').textContent = ugx(referral);
+  document.getElementById('homeCashback').textContent   = ugx(cashback);
   document.getElementById('topGreeting').textContent = 'Hi, ' + (u.name ? u.name.split(' ')[0] : '');
   const initial = (u.name || '?')[0].toUpperCase();
   document.getElementById('avatarInitial').textContent = initial;
@@ -999,13 +1016,15 @@ function renderMore(u) {
 // ── NAVIGATION ──
 window.showSection = (sec) => {
   const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection' };
-  const navMap = { home:'home', products:'products', invest:'invest', records:'invest', commission:'commission', more:'more' };
+  // Records lives under More, so its bottom-nav highlight stays on "more"
+  const navMap = { home:'home', products:'products', invest:'more', records:'more', commission:'commission', more:'more' };
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(secMap[sec] || sec + 'Section')?.classList.add('active');
   document.querySelectorAll('.bnav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.sec === (navMap[sec] || sec));
   });
   if (sec === 'records' || sec === 'invest') { loadRecords('income'); }
+  window.scrollTo(0, 0);
 };
 
 // ── CHECK-IN ──
