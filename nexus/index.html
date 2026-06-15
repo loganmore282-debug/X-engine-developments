@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Nexus</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#f0f4f9; --bg2:#ffffff; --bg3:#f4f7fc;
@@ -127,7 +127,7 @@ body{padding-bottom:106px}
 .balance-card{background:linear-gradient(135deg,#1a48d4 0%,#0d2fa8 60%,#091f80 100%);color:#fff;border-radius:16px;padding:24px;margin-bottom:16px;position:relative;overflow:hidden;border:none}
 .balance-card::before{content:'◈';position:absolute;right:-10px;top:-10px;font-size:120px;color:rgba(255,255,255,0.06);font-weight:900;line-height:1;pointer-events:none}
 .balance-label{font-size:12px;font-weight:700;color:rgba(255,255,255,0.65);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.balance-amount{font-size:32px;font-weight:900;color:#fff;font-family:'Share Tech Mono',monospace;line-height:1.1;margin-bottom:4px}
+.balance-amount{font-size:32px;font-weight:900;color:#fff;font-family:'Outfit',sans-serif;line-height:1.1;margin-bottom:4px}
 .balance-sub{font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:20px}
 .balance-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .balance-btn{height:44px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s}
@@ -136,18 +136,18 @@ body{padding-bottom:106px}
 .balance-btn.withdraw{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.85);border:1.5px solid rgba(255,255,255,0.18)}
 .balance-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:rgba(255,255,255,0.12);border-radius:10px;overflow:hidden;margin-top:14px}
 .balance-stat{background:rgba(255,255,255,0.08);padding:10px;text-align:center}
-.balance-stat .st-val{font-size:12px;font-weight:800;color:#fff;font-family:'Share Tech Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.balance-stat .st-val{font-size:12px;font-weight:800;color:#fff;font-family:'Outfit',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .balance-stat .st-lbl{font-size:9px;color:rgba(255,255,255,0.5);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
 
 /* ── CUMULATIVE CARD ── */
 .cumulative-card{background:var(--card2);border:1px solid var(--border2);border-radius:16px;padding:18px 20px;margin-bottom:16px}
 .cum-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
 .cum-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.cum-amount{font-size:26px;font-weight:900;color:var(--text);font-family:'Share Tech Mono',monospace;line-height:1.1}
+.cum-amount{font-size:26px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;line-height:1.1}
 .cum-icon{font-size:28px;color:var(--border2)}
 .cum-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:10px;overflow:hidden}
 .cum-item{background:var(--bg2);padding:12px;text-align:center}
-.cum-item-val{font-size:14px;font-weight:800;color:var(--text);font-family:'Share Tech Mono',monospace}
+.cum-item-val{font-size:14px;font-weight:800;color:var(--text);font-family:'Outfit',sans-serif}
 .cum-item-lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
 
 /* ── HOME — brand header ── */
@@ -191,7 +191,7 @@ body{padding-bottom:106px}
 .ticker-inner{display:inline-block;animation:ticker-move 28s linear infinite}
 @keyframes ticker-move{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 .ticker-inner:hover{animation-play-state:paused}
-.ticker-item{display:inline;font-size:12px;color:var(--text2);padding:0 24px;font-family:'Share Tech Mono',monospace}
+.ticker-item{display:inline;font-size:12px;color:var(--text2);padding:0 24px;font-family:'Outfit',sans-serif}
 .ticker-item span{color:var(--text);font-weight:600}
 
 /* ── HOME — 2-col balance grid ── */
@@ -201,7 +201,7 @@ body{padding-bottom:106px}
 .hbg-icon{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#fff}
 .hbg-icon svg{width:18px;height:18px}
 .hbg-label{font-size:10px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
-.hbg-val{font-size:15px;font-weight:900;color:#fff;font-family:'Share Tech Mono',monospace;line-height:1.2}
+.hbg-val{font-size:15px;font-weight:900;color:#fff;font-family:'Outfit',sans-serif;line-height:1.2}
 .hbg-sub{font-size:9px;color:rgba(255,255,255,0.4);margin-top:3px}
 
 /* ── HOME — inner padding wrapper ── */
@@ -222,7 +222,7 @@ body{padding-bottom:106px}
 /* ── TEAM — invitation rows ── */
 .inv-row{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;gap:12px}
 .inv-row-left{flex:1;min-width:0}
-.inv-row-val{font-size:14px;font-weight:800;color:var(--text);font-family:'Share Tech Mono',monospace;letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inv-row-val{font-size:14px;font-weight:800;color:var(--text);font-family:'Outfit',sans-serif;letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .inv-row-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .inv-row-btn{height:34px;padding:0 16px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-size:12px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;flex-shrink:0}
 
@@ -230,7 +230,7 @@ body{padding-bottom:106px}
 .team-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
 .team-tile{background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px;position:relative;overflow:hidden;cursor:pointer}
 .team-tile::before{content:'>>'; position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted)}
-.team-tile .tt-val{font-size:18px;font-weight:900;color:var(--text);font-family:'Share Tech Mono',monospace;margin-bottom:4px}
+.team-tile .tt-val{font-size:18px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;margin-bottom:4px}
 .team-tile .tt-lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 
 /* ── TEAM — level rows ── */
@@ -238,10 +238,10 @@ body{padding-bottom:106px}
 .lrow-badge{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#1040c0,#0d2fa8);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:14px}
 .lrow-badge-text{font-size:12px;font-weight:900;color:#fff}
 .lrow-rate{flex:1}
-.lrow-pct{font-size:20px;font-weight:900;color:var(--text);font-family:'Share Tech Mono',monospace;line-height:1}
+.lrow-pct{font-size:20px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;line-height:1}
 .lrow-rate-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600}
 .lrow-stat{text-align:center;min-width:52px;padding:0 8px;border-left:1px solid var(--border)}
-.lrow-stat-val{font-size:15px;font-weight:800;color:var(--text);font-family:'Share Tech Mono',monospace}
+.lrow-stat-val{font-size:15px;font-weight:800;color:var(--text);font-family:'Outfit',sans-serif}
 .lrow-stat-lbl{font-size:9px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
 
 /* ── TEAM — how it works ── */
@@ -274,7 +274,7 @@ body{padding-bottom:106px}
 .inv-name{font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .inv-meta{font-size:11px;color:var(--text2);margin-top:2px}
 .inv-right{text-align:right;flex-shrink:0}
-.inv-return{font-size:13px;font-weight:800;color:var(--green);font-family:'Share Tech Mono',monospace}
+.inv-return{font-size:13px;font-weight:800;color:var(--green);font-family:'Outfit',sans-serif}
 .inv-days{font-size:10px;color:var(--text2)}
 .inv-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
 .inv-badge.active{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
@@ -295,7 +295,7 @@ body{padding-bottom:106px}
 .product-stock.out{background:rgba(239,68,68,0.9);color:#fff}
 .product-body{padding:12px}
 .product-name{font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.product-price{font-size:15px;font-weight:900;color:var(--text);font-family:'Share Tech Mono',monospace;margin-bottom:4px}
+.product-price{font-size:15px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;margin-bottom:4px}
 .product-detail{font-size:10px;color:var(--text2);line-height:1.6}
 .product-btn{display:block;width:100%;margin-top:10px;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s}
 .product-btn.buy{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}
@@ -314,7 +314,7 @@ body{padding-bottom:106px}
 .tx-info{flex:1;min-width:0}
 .tx-desc{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tx-date{font-size:10px;color:var(--text2);margin-top:2px}
-.tx-amount{text-align:right;font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:700;flex-shrink:0}
+.tx-amount{text-align:right;font-family:'Outfit',sans-serif;font-size:13px;font-weight:700;flex-shrink:0}
 .tx-amount.pos{color:var(--green)}
 .tx-amount.neg{color:var(--red)}
 .tx-status{font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px;text-align:right}
@@ -324,16 +324,16 @@ body{padding-bottom:106px}
 /* ── COMMISSION SECTION ── */
 .ref-card{background:linear-gradient(135deg,#1a48d4 0%,#0d2fa8 60%,#091f80 100%);color:#fff;border-radius:16px;padding:20px;margin-bottom:16px;border:none}
 .ref-code-label{font-size:11px;font-weight:700;color:rgba(255,255,255,0.65);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.ref-code{font-size:22px;font-weight:900;font-family:'Share Tech Mono',monospace;color:#fff;letter-spacing:2px;margin-bottom:12px}
+.ref-code{font-size:22px;font-weight:900;font-family:'Outfit',sans-serif;color:#fff;letter-spacing:2px;margin-bottom:12px}
 .ref-actions{display:flex;gap:8px}
 .ref-btn{flex:1;height:38px;border:1.5px solid rgba(255,255,255,0.25);border-radius:8px;background:transparent;font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;color:#fff;transition:background .2s}
 .ref-btn:hover{background:rgba(255,255,255,0.08)}
 .level-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
 .level-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
-.level-card .lv-pct{font-size:20px;font-weight:900;color:var(--text);font-family:'Share Tech Mono',monospace}
+.level-card .lv-pct{font-size:20px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif}
 .level-card .lv-label{font-size:9px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
 .level-card .lv-count{font-size:16px;font-weight:800;color:var(--text);margin-top:6px}
-.level-card .lv-earned{font-size:10px;color:var(--text2);margin-top:1px;font-family:'Share Tech Mono',monospace}
+.level-card .lv-earned{font-size:10px;color:var(--text2);margin-top:1px;font-family:'Outfit',sans-serif}
 .comm-how{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
 .comm-how h4{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px}
 .comm-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
@@ -342,14 +342,14 @@ body{padding-bottom:106px}
 .comm-row p{font-size:12px;color:var(--text2);line-height:1.5}
 .comm-total-card{background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .comm-total-label{font-size:12px;color:var(--text2);font-weight:600}
-.comm-total-val{font-size:18px;font-weight:900;color:var(--text);font-family:'Share Tech Mono',monospace}
+.comm-total-val{font-size:18px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif}
 
 /* ── MORE SECTION ── */
 .profile-row{display:flex;align-items:center;gap:14px;padding:16px;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);margin-bottom:16px}
 .profile-avatar{width:52px;height:52px;border-radius:50%;background:var(--card);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex-shrink:0;cursor:pointer}
 .profile-avatar img{width:100%;height:100%;object-fit:cover}
 .profile-info .pi-name{font-size:15px;font-weight:800;color:var(--text)}
-.profile-info .pi-phone{font-size:12px;color:var(--text2);font-family:'Share Tech Mono',monospace;margin-top:2px}
+.profile-info .pi-phone{font-size:12px;color:var(--text2);font-family:'Outfit',sans-serif;margin-top:2px}
 .profile-info .pi-balance{font-size:11px;color:var(--text2);margin-top:2px}
 .menu-list{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
 .menu-item{display:flex;align-items:center;gap:14px;padding:15px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
@@ -371,24 +371,21 @@ body{padding-bottom:106px}
 .modal-sub{font-size:12px;color:var(--text2);margin-bottom:20px}
 .modal-close{float:right;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1;margin-top:-2px}
 .form-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
-.form-input{width:100%;height:46px;border:1.5px solid rgba(0,0,0,0.1);border-radius:10px;padding:0 14px;font-size:15px;font-family:'Share Tech Mono',monospace;color:var(--text);background:#fff;outline:none;margin-bottom:14px;transition:border-color .2s}
+.form-input{width:100%;height:46px;border:1.5px solid rgba(0,0,0,0.1);border-radius:10px;padding:0 14px;font-size:15px;font-family:'Outfit',sans-serif;color:var(--text);background:#fff;outline:none;margin-bottom:14px;transition:border-color .2s}
 .form-input:focus{border-color:rgba(37,99,235,0.5)}
 .form-input::placeholder{color:#b0bec5;font-family:'Outfit',sans-serif}
 .phone-form-wrap{display:flex;align-items:center;border:1.5px solid rgba(0,0,0,0.1);border-radius:10px;background:#fff;margin-bottom:14px;overflow:hidden;transition:border-color .2s}
 .phone-form-wrap:focus-within{border-color:rgba(37,99,235,0.5)}
 .phone-form-prefix{padding:0 12px;font-size:13px;font-weight:700;color:var(--text2);border-right:1px solid var(--border);height:44px;display:flex;align-items:center;background:var(--bg3);flex-shrink:0}
-.phone-form-wrap input{border:none;background:transparent;height:44px;flex:1;padding:0 12px;font-size:15px;font-family:'Share Tech Mono',monospace;outline:none;color:var(--text)}
+.phone-form-wrap input{border:none;background:transparent;height:44px;flex:1;padding:0 12px;font-size:15px;font-family:'Outfit',sans-serif;outline:none;color:var(--text)}
 .form-info{font-size:12px;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.5}
 .btn-submit{width:100%;height:48px;border:none;border-radius:12px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .2s;margin-top:4px;box-shadow:0 4px 16px rgba(37,99,235,0.3)}
 .btn-submit:active{opacity:.85}
 .btn-submit:disabled{opacity:.45;cursor:not-allowed}
 .btn-outline{width:100%;height:44px;border:1px solid var(--border2);border-radius:10px;background:transparent;color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;margin-top:8px}
-.pin-row{display:flex;gap:10px;justify-content:center;margin-bottom:14px}
-.pin-box{width:52px;height:56px;border:1.5px solid rgba(0,0,0,0.12);border-radius:10px;background:#fff;text-align:center;font-size:22px;font-family:'Share Tech Mono',monospace;color:var(--text);outline:none;caret-color:transparent}
-.pin-box:focus{border-color:rgba(255,255,255,0.5)}
 .dep-momo-box{background:var(--bg3);border:1px solid rgba(37,99,235,0.3);border-radius:14px;padding:22px;text-align:center;margin-bottom:18px}
 .dep-momo-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;font-weight:700}
-.dep-momo-num{font-size:22px;font-weight:900;color:#2563eb;letter-spacing:2px;margin-bottom:14px;font-family:'Share Tech Mono',monospace}
+.dep-momo-num{font-size:22px;font-weight:900;color:#2563eb;letter-spacing:2px;margin-bottom:14px;font-family:'Outfit',sans-serif}
 .dep-copy-btn{background:none;border:1.5px solid rgba(37,99,235,0.35);color:#2563eb;border-radius:8px;padding:7px 18px;font-size:12px;font-weight:700;cursor:pointer}
 .dep-copy-btn:active{opacity:.7}
 .dep-inst-list{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
@@ -403,7 +400,7 @@ body{padding-bottom:106px}
 .product-modal-img img{width:100%;height:100%;object-fit:cover}
 .product-stat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
 .pstat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
-.pstat .pst-val{font-size:15px;font-weight:800;color:var(--text);font-family:'Share Tech Mono',monospace}
+.pstat .pst-val{font-size:15px;font-weight:800;color:var(--text);font-family:'Outfit',sans-serif}
 .pstat .pst-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 
 /* ── BANK ACCOUNT ── */
@@ -412,7 +409,7 @@ body{padding-bottom:106px}
 .bank-icon svg{width:18px;height:18px}
 .bank-info{flex:1}
 .bank-name{font-size:13px;font-weight:700;color:var(--text)}
-.bank-phone{font-size:11px;color:var(--text2);font-family:'Share Tech Mono',monospace}
+.bank-phone{font-size:11px;color:var(--text2);font-family:'Outfit',sans-serif}
 .bank-del{background:none;border:none;color:var(--red);cursor:pointer;padding:4px;display:flex}
 .bank-del svg{width:18px;height:18px}
 
@@ -882,43 +879,8 @@ body{padding-bottom:106px}
       <span class="phone-form-prefix">+256</span>
       <input type="tel" id="witPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
     </div>
-    <label class="form-label">Withdrawal PIN</label>
-    <div class="pin-row" id="witPinRow">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="0">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="1">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="2">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="3">
-    </div>
-    <div class="form-info" id="witFeeNote">First withdrawal is free. Subsequent withdrawals: 17% liquidity fee.</div>
+    <div class="form-info">17% liquidity fee applies. Net amount will be deducted on processing.</div>
     <button class="btn-submit" onclick="submitWithdrawal()">Request Withdrawal</button>
-    <button class="btn-outline" onclick="openPinModal('setup')">Change / Set PIN</button>
-  </div>
-</div>
-
-<!-- PIN MODAL -->
-<div id="pinModal" class="modal-overlay" onclick="if(event.target===this)closeModal('pinModal')">
-  <div class="modal-sheet">
-    <span class="modal-handle"></span>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <div class="modal-title" id="pinModalTitle">Set Withdrawal PIN</div>
-      <button class="modal-close" onclick="closeModal('pinModal')">×</button>
-    </div>
-    <div class="modal-sub">Enter a 4-digit PIN to secure your withdrawals</div>
-    <label class="form-label">New PIN</label>
-    <div class="pin-row" id="pinSetRow">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="0">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="1">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="2">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="3">
-    </div>
-    <label class="form-label">Confirm PIN</label>
-    <div class="pin-row" id="pinConfirmRow">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="0">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="1">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="2">
-      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="3">
-    </div>
-    <button class="btn-submit" onclick="submitPin()">Save PIN</button>
   </div>
 </div>
 
@@ -1587,68 +1549,26 @@ window.openWithdrawModal = () => {
   document.getElementById('witBalSub').textContent = `Available: ${ugx(_userData.walletBalance)}`;
   document.getElementById('witAmount').value = '';
   document.getElementById('witPhone').value  = _userData.phone?.replace('+256','') || '';
-  document.querySelectorAll('#witPinRow .pin-box').forEach(b => b.value = '');
-  const wc = _userData.withdrawalCount || 0;
-  document.getElementById('witFeeNote').textContent = wc === 0
-    ? 'First withdrawal — no liquidity fee!' : '17% liquidity fee applies. Net amount will be shown after deduction.';
   openModal('withdrawModal');
-  setupPinBoxes('witPinRow');
 };
 
 window.submitWithdrawal = async () => {
   if (!_user || !_userData) return;
   const amount = parseInt(document.getElementById('witAmount').value, 10);
   const phone  = document.getElementById('witPhone').value.trim().replace(/\D/g,'');
-  const pin    = Array.from(document.querySelectorAll('#witPinRow .pin-box')).map(b=>b.value).join('');
   if (!amount || amount < 15000) { showToast('Minimum withdrawal is UGX 15,000', 'error'); return; }
   if (amount > (_userData.walletBalance || 0)) { showToast('Insufficient balance', 'error'); return; }
   if (!phone)  { showToast('Enter withdrawal phone number', 'error'); return; }
-  if (pin.length !== 4) { showToast('Enter your 4-digit PIN', 'error'); return; }
   closeModal('withdrawModal');
   showLoading(true);
   try {
-    const r = await api('/withdraw/request', { userId:_user.uid, amount, phone:'+256'+phone, pin });
+    const r = await api('/withdraw/request', { userId:_user.uid, amount, phone:'+256'+phone });
     showLoading(false);
     if (r.status === 'success') showToast('Withdrawal submitted!\nPending admin approval.', 'success');
-    else if (r.needsPin) { showToast('Set your withdrawal PIN first', 'error'); openPinModal('setup'); }
     else showToast(r.message || 'Withdrawal failed', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
 
-// ── PIN ──
-window.openPinModal = (mode) => {
-  document.getElementById('pinModalTitle').textContent = mode === 'setup' ? 'Set Withdrawal PIN' : 'Change PIN';
-  document.querySelectorAll('#pinSetRow .pin-box, #pinConfirmRow .pin-box').forEach(b => b.value = '');
-  openModal('pinModal');
-  setupPinBoxes('pinSetRow');
-  setupPinBoxes('pinConfirmRow');
-};
-window.submitPin = async () => {
-  const newPin  = Array.from(document.querySelectorAll('#pinSetRow .pin-box')).map(b=>b.value).join('');
-  const confPin = Array.from(document.querySelectorAll('#pinConfirmRow .pin-box')).map(b=>b.value).join('');
-  if (newPin.length !== 4)  { showToast('Enter a 4-digit PIN', 'error'); return; }
-  if (newPin !== confPin)   { showToast('PINs do not match', 'error'); return; }
-  closeModal('pinModal');
-  showLoading(true);
-  try {
-    const r = await api('/pin/set', { userId: _user.uid, pin: newPin });
-    showLoading(false);
-    if (r.status === 'success') showToast('PIN set successfully', 'success');
-    else showToast(r.message || 'Failed to set PIN', 'error');
-  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
-};
-
-function setupPinBoxes(rowId) {
-  const boxes = document.querySelectorAll('#' + rowId + ' .pin-box');
-  boxes.forEach((box, i) => {
-    box.addEventListener('input', () => {
-      if (box.value && i < boxes.length - 1) boxes[i+1].focus();
-    });
-    box.addEventListener('keydown', e => {
-      if (e.key === 'Backspace' && !box.value && i > 0) boxes[i-1].focus();
-    });
-  });
-}
 
 // ── GIFT CODE ──
 window.openGiftModal = () => {
@@ -1731,7 +1651,7 @@ const CONTENT = {
       <ul>
         <li>Minimum deposit is UGX 30,000</li>
         <li>Minimum withdrawal is UGX 15,000</li>
-        <li>First withdrawal is free; subsequent withdrawals carry a 17% liquidity fee</li>
+        <li>A 17% liquidity fee applies on all withdrawals</li>
         <li>Investment plans run for a fixed cycle and mature automatically</li>
         <li>Daily check-in bonus is UGX 500 per day</li>
       </ul>
