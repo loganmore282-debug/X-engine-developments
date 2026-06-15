@@ -882,12 +882,12 @@ window.loadWithdrawals = async () => {
   const tbody = document.getElementById('withdrawalsTable');
   tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Loading…</td></tr>';
   try {
-    let q;
-    if (_witFilter === 'all') q = query(collection(db,'withdrawals'), orderBy('createdAt','desc'), limit(50));
-    else q = query(collection(db,'withdrawals'), where('status','==',_witFilter), orderBy('createdAt','desc'), limit(50));
-    const snap = await getDocs(q);
-    if (snap.empty) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No records</td></tr>'; return; }
-    tbody.innerHTML = snap.docs.map(d => {
+    // Single orderBy only (no composite index needed) — filter status client-side
+    const snap = await getDocs(query(collection(db,'withdrawals'), orderBy('createdAt','desc'), limit(150)));
+    let docs = snap.docs;
+    if (_witFilter !== 'all') docs = docs.filter(d => (d.data().status||'pending') === _witFilter);
+    if (!docs.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No records</td></tr>'; return; }
+    tbody.innerHTML = docs.map(d => {
       const w = d.data();
       const actions = w.status === 'pending'
         ? `<button class="action-btn btn-green" onclick="openProcess('${d.id}','${w.userName||''}',${w.netAmount},'${w.withdrawalPhone}')">✓ Process</button>
@@ -928,9 +928,10 @@ window.confirmProcess = async () => {
       status: 'processed', adminRef: ref, adminNote: note, processedAt: serverTimestamp()
     });
     batch.update(doc(db,'users',w.userId), { totalWithdrawn: increment(w.amount) });
-    // Update transaction status
-    const txSnap = await getDocs(query(collection(db,'transactions'), where('userId','==',w.userId), where('type','==','withdrawal'), where('status','==','pending'), limit(1)));
-    txSnap.forEach(t => batch.update(t.ref, { status: 'success', adminRef: ref }));
+    // Update matching pending withdrawal transaction (single where — filter client-side, no composite index)
+    const txSnap = await getDocs(query(collection(db,'transactions'), where('userId','==',w.userId), limit(50)));
+    const pendingTx = txSnap.docs.find(t => { const x=t.data(); return x.type==='withdrawal' && x.status==='pending'; });
+    if (pendingTx) batch.update(pendingTx.ref, { status: 'success', adminRef: ref });
     await batch.commit();
     // Notify user
     await addDoc(collection(db,'notifications'), {
