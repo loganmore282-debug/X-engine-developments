@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Nexus Investment</title>
+<title>Nexus</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -454,7 +454,7 @@ body{padding-bottom:106px}
   <div class="auth-screen">
     <div class="auth-brand">
       <div class="auth-mark">◈<span>NEXUS</span></div>
-      <div class="auth-tagline">Investment Platform</div>
+      <div class="auth-tagline">Grow. Earn. Prosper.</div>
     </div>
 
     <!-- LOGIN -->
@@ -487,7 +487,7 @@ body{padding-bottom:106px}
     <!-- REGISTER -->
     <div id="registerForm" class="auth-card" style="display:none">
       <h2>Create Account</h2>
-      <div class="auth-sub">Join Nexus Investment today</div>
+      <div class="auth-sub">Join Nexus today</div>
 
       <div class="auth-field">
         <label>Full Name</label>
@@ -538,7 +538,6 @@ body{padding-bottom:106px}
     <div class="home-header">
       <div>
         <div class="home-logo-text">◈<span>NEXUS</span></div>
-        <div class="home-tagline-text">Investment Platform</div>
       </div>
       <div class="home-header-right">
         <div class="topbar-avatar" onclick="showSection('more')">
@@ -1159,7 +1158,7 @@ async function loadTicker(uid) {
   try {
     const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',uid), orderBy('createdAt','desc'), limit(10)));
     const items = snap.docs.map(d => d.data());
-    if (!items.length) { document.getElementById('homeTicker').innerHTML = '<span class="ticker-item">🔔 Welcome to <span>NEXUS</span> Investment Platform! Start investing today.</span>'; return; }
+    if (!items.length) { document.getElementById('homeTicker').innerHTML = '<span class="ticker-item">🔔 Welcome to <span>NEXUS</span>! Start investing today.</span>'; return; }
     const icons = { deposit:'⬇', commission:'💰', checkin:'📅', investment_return:'🎯', withdrawal:'⬆', investment:'📈' };
     const text = items.map(t => {
       const icon = icons[t.type] || '•';
@@ -1506,9 +1505,9 @@ window.copyRefCode = () => {
 window.shareRefLink = () => {
   const code = _userData?.referralCode || '';
   const link = window.location.origin + window.location.pathname + '?ref=' + code;
-  const text = `Join Nexus Investment and earn returns!\n\nUse my referral code: ${code}\nSign up here: ${link}`;
+  const text = `Join Nexus and earn returns!\n\nUse my referral code: ${code}\nSign up here: ${link}`;
   if (navigator.share) {
-    navigator.share({ title: 'Nexus Investment', text, url: link }).catch(() => {});
+    navigator.share({ title: 'Nexus', text, url: link }).catch(() => {});
   } else {
     navigator.clipboard?.writeText(text).then(() => showToast('Share link copied!', 'success'));
   }
@@ -1671,8 +1670,8 @@ window.removeBankAccount = async (idx) => {
 const CONTENT = {
   about: {
     title: 'About Nexus',
-    body: `<h3>◈ Nexus Investment Platform</h3>
-      <p>Nexus is a modern investment platform designed to help you grow your money through structured investment plans and a powerful commission referral system.</p>
+    body: `<h3>◈ About Nexus</h3>
+      <p>Nexus is a modern platform designed to help you grow your money through structured investment plans and a powerful commission referral system.</p>
       <p>Our platform is built on transparency, security, and consistent returns for all our investors.</p>
       <h3 style="margin-top:16px">Our Mission</h3>
       <p>To make structured investment accessible to everyone, with clear returns and instant commission rewards for building your network.</p>`
