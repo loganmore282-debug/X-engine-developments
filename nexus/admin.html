@@ -7,11 +7,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#070707;--bg2:#0f0f0f;--bg3:#171717;
+  --bg:#03080f;--bg2:#06101e;--bg3:#0b192e;
   --card:rgba(255,255,255,0.03);--card2:rgba(255,255,255,0.06);
-  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
-  --text:#f0f0f0;--text2:#888;--muted:#444;
-  --gold:#f5c842;--goldfade:rgba(245,200,66,0.12);--goldborder:rgba(245,200,66,0.25);
+  --border:rgba(201,168,76,0.1);--border2:rgba(201,168,76,0.2);
+  --text:#dce8f5;--text2:#6b7d96;--muted:#243452;
+  --gold:#c9a84c;--goldfade:rgba(201,168,76,0.1);--goldborder:rgba(201,168,76,0.22);
   --red:#ef4444;--green:#22c55e;--radius:10px;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -24,21 +24,21 @@ input,button,select,textarea{font-family:'Outfit',sans-serif}
   min-height:100vh;display:flex;align-items:center;justify-content:center;
   background:var(--bg) url('assets/auth-bg.png') center/cover no-repeat;position:relative
 }
-#loginScreen::before{content:'';position:absolute;inset:0;background:rgba(0,0,0,0.6)}
+#loginScreen::before{content:'';position:absolute;inset:0;background:rgba(3,8,15,0.65)}
 .login-box{
-  position:relative;z-index:1;background:rgba(10,10,10,0.9);
+  position:relative;z-index:1;background:rgba(4,10,22,0.92);
   backdrop-filter:blur(24px);border:1px solid var(--goldborder);
   border-radius:18px;padding:36px 32px;width:100%;max-width:380px;
   box-shadow:0 24px 80px rgba(0,0,0,0.8)
 }
-.login-logo{font-size:36px;font-weight:900;color:var(--gold);text-shadow:0 0 30px rgba(245,200,66,0.4);letter-spacing:-2px;margin-bottom:4px}
-.login-sub{font-size:12px;color:rgba(245,200,66,0.5);letter-spacing:3px;text-transform:uppercase;margin-bottom:28px}
+.login-logo{font-size:36px;font-weight:900;color:var(--gold);text-shadow:0 0 30px rgba(201,168,76,0.4);letter-spacing:-2px;margin-bottom:4px}
+.login-sub{font-size:12px;color:rgba(201,168,76,0.5);letter-spacing:3px;text-transform:uppercase;margin-bottom:28px}
 .login-box h2{font-size:18px;font-weight:800;margin-bottom:4px}
 .login-box p{font-size:13px;color:var(--text2);margin-bottom:22px}
 .lbl{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
 .inp{width:100%;height:46px;background:rgba(255,255,255,0.07);border:1px solid var(--border2);border-radius:10px;padding:0 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:16px;font-family:'Share Tech Mono',monospace;letter-spacing:2px}
 .inp:focus{border-color:var(--goldborder)}
-.btn-gold{width:100%;height:48px;background:linear-gradient(135deg,#f5c842,#e0a800);color:#111;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;transition:opacity .2s}
+.btn-gold{width:100%;height:48px;background:linear-gradient(135deg,#c9a84c,#a8893e);color:#0a1628;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;transition:opacity .2s}
 .btn-gold:active{opacity:.85}
 .login-err{color:var(--red);font-size:13px;margin-bottom:12px;display:none}
 
@@ -54,7 +54,7 @@ input,button,select,textarea{font-family:'Outfit',sans-serif}
 }
 .sidebar-logo{padding:20px 16px 16px;border-bottom:1px solid var(--border)}
 .sidebar-logo .s-mark{font-size:20px;font-weight:900;color:var(--gold);letter-spacing:-1px}
-.sidebar-logo .s-sub{font-size:10px;color:rgba(245,200,66,0.45);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+.sidebar-logo .s-sub{font-size:10px;color:rgba(201,168,76,0.45);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
 .sidebar-nav{flex:1;padding:12px 8px;display:flex;flex-direction:column;gap:2px}
 .nav-item{
   display:flex;align-items:center;gap:10px;padding:10px 12px;
@@ -103,7 +103,7 @@ tr:hover td{background:var(--card)}
 .badge.rejected{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
 .badge.active{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
 .badge.expired{background:var(--card2);color:var(--text2);border:1px solid var(--border)}
-.badge.redeemed{background:rgba(245,200,66,0.12);color:var(--gold);border:1px solid var(--goldborder)}
+.badge.redeemed{background:rgba(201,168,76,0.12);color:var(--gold);border:1px solid var(--goldborder)}
 .badge.banned{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
 .badge.instock{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
 .badge.soldout{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
@@ -115,7 +115,7 @@ tr:hover td{background:var(--card)}
 .btn-blue{background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3)}
 .btn-yellow{background:var(--goldfade);color:var(--gold);border:1px solid var(--goldborder)}
 .btn-sm{height:36px;padding:0 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:opacity .2s;font-family:'Outfit',sans-serif}
-.btn-sm.gold{background:linear-gradient(135deg,#f5c842,#e0a800);color:#111}
+.btn-sm.gold{background:linear-gradient(135deg,#c9a84c,#a8893e);color:#0a1628}
 .btn-sm.outline{background:transparent;border:1px solid var(--border2);color:var(--text)}
 .empty-row td{text-align:center;color:var(--text2);padding:32px;font-size:13px}
 
