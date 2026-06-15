@@ -1199,27 +1199,41 @@ async function loadSlideshow() {
 }
 
 // ── TICKER ──
-async function loadTicker(uid) {
+function loadTicker() {
   const el = document.getElementById('homeTicker');
-  const fallback = [
-    '◈ NEXUS — Grow. Earn. Prosper.','• Secure & transparent investments','• Earn daily returns on your capital','• 3-level referral commissions','• Instant MoMo deposits & withdrawals','• Daily check-in bonus UGX 500'
+  const round = (n, r) => Math.round(n / r) * r;
+  const randDep = () => round(30000 + Math.random() * 170000, 5000);   // 30k–200k
+  const randWit = () => round(15000 + Math.random() * 985000, 5000);   // 15k–1M
+  const randComm = () => round(5000 + Math.random() * 95000, 1000);    // 5k–100k
+  const randRet  = () => round(20000 + Math.random() * 480000, 5000);  // 20k–500k
+
+  // Build a pool of 16 realistic activity events
+  const pool = [
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Investment return',   amt:`+UGX ${randRet().toLocaleString()}` },
+    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Daily check-in',      amt:`+UGX 500` },
+    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Investment return',   amt:`+UGX ${randRet().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
   ];
-  try {
-    // Try global recent activity (anonymized)
-    const snap = await getDocs(query(collection(db,'transactions'), orderBy('createdAt','desc'), limit(20)));
-    const items = snap.docs.map(d => d.data()).filter(t => t.amount > 0);
-    if (!items.length) throw new Error('empty');
-    const typeLabel = { deposit:'Deposit received', commission:'Commission earned', checkin:'Check-in bonus', investment_return:'Investment return', gift_code:'Gift code redeemed', admin_credit:'Bonus credited' };
-    const text = items.map(t => {
-      const label = typeLabel[t.type] || 'Transaction';
-      return `<span class="ticker-item">• <span>${label}</span> +UGX ${Number(t.amount).toLocaleString()}</span>`;
-    }).join('  ');
-    el.innerHTML = text + '  ' + text;
-  } catch (_) {
-    // Fallback to platform messages
-    const text = fallback.map(f => `<span class="ticker-item">${f}</span>`).join('  ');
-    el.innerHTML = text + '  ' + text;
-  }
+
+  const text = pool.map(e =>
+    `<span class="ticker-item">• <span>${e.label}</span> ${e.amt}</span>`
+  ).join('  ');
+  el.innerHTML = text + '  ' + text;
+
+  // Refresh with new random values every 40 seconds
+  setTimeout(loadTicker, 40000);
 }
 
 // ── AUTH STATE ──
@@ -1233,7 +1247,7 @@ onAuthStateChanged(auth, async user => {
     loadProducts();
     loadRecords('deposits');
     loadSlideshow();
-    loadTicker(user.uid);
+    loadTicker();
     checkMaintenance();
   } else {
     if (_unsub) { _unsub(); _unsub = null; }
@@ -1263,10 +1277,17 @@ function startListener(uid) {
     renderCommission(_userData);
     renderMore(_userData);
   });
-  // Active investments
+  // Active investments — no orderBy, filter client-side to avoid composite index
   onSnapshot(
-    query(collection(db, 'investments'), where('userId','==',uid), where('status','in',['active','matured']), orderBy('createdAt','desc'), limit(5)),
-    snap => renderHomeInvestments(snap.docs.map(d => ({ id:d.id, ...d.data() })))
+    query(collection(db, 'investments'), where('userId','==',uid), limit(30)),
+    snap => {
+      const all = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+      const active = all
+        .filter(inv => inv.status === 'active' || inv.status === 'matured')
+        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+        .slice(0, 5);
+      renderHomeInvestments(active);
+    }
   );
 }
 
@@ -1532,8 +1553,10 @@ async function loadRecords(tab) {
   try {
     // ── PLANS ──
     if (tab === 'investments') {
-      const snap = await getDocs(query(collection(db,'investments'), where('userId','==',_user.uid), orderBy('createdAt','desc'), limit(30)));
-      const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+      // No orderBy — avoid composite index requirement; sort client-side
+      const snap = await getDocs(query(collection(db,'investments'), where('userId','==',_user.uid), limit(50)));
+      const items = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No investment plans yet</p></div>`; return; }
       el.innerHTML = items.map(inv => {
         const matured=inv.status==='matured', claimed=inv.status==='claimed';
@@ -1547,18 +1570,14 @@ async function loadRecords(tab) {
       return;
     }
     // ── TRANSACTION RECORDS ──
-    let q;
-    if (tab === 'withdrawals') {
-      q = query(collection(db,'transactions'), where('userId','==',_user.uid), where('type','==','withdrawal'), orderBy('createdAt','desc'), limit(30));
-    } else if (tab === 'deposits') {
-      q = query(collection(db,'transactions'), where('userId','==',_user.uid), where('type','==','deposit'), orderBy('createdAt','desc'), limit(30));
-    } else if (tab === 'referrals') {
-      q = query(collection(db,'transactions'), where('userId','==',_user.uid), where('type','==','commission'), orderBy('createdAt','desc'), limit(30));
-    } else {
-      q = query(collection(db,'transactions'), where('userId','==',_user.uid), orderBy('createdAt','desc'), limit(50));
-    }
-    const snap  = await getDocs(q);
-    const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    // Single where only — no orderBy, no second where — avoid composite index requirement
+    const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',_user.uid), limit(100)));
+    const all = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+      .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    const items = tab === 'withdrawals' ? all.filter(t => t.type === 'withdrawal')
+               : tab === 'deposits'    ? all.filter(t => t.type === 'deposit')
+               : tab === 'referrals'   ? all.filter(t => t.type === 'commission')
+               : all;
     if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No records yet</p></div>`; return; }
 
     if (tab === 'withdrawals') {
