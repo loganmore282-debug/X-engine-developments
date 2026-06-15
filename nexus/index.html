@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Nexus Investment</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080808; --bg2:#111; --bg3:#1a1a1a;
+  --card:rgba(255,255,255,0.03); --card2:rgba(255,255,255,0.07);
+  --border:rgba(255,255,255,0.08); --border2:rgba(255,255,255,0.16);
+  --text:#f0f0f0; --text2:#888; --muted:#444;
+  --white:#fff; --red:#ef4444; --green:#22c55e;
+  --radius:12px; --shadow:0 8px 32px rgba(0,0,0,0.6);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;overflow-x:hidden}
+body{padding-bottom:80px}
+
+/* ── AUTH SCREEN ── */
+.auth-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:var(--bg)}
+.auth-brand{text-align:center;margin-bottom:36px}
+.auth-mark{font-size:48px;color:var(--white);letter-spacing:-2px;font-weight:900;line-height:1;margin-bottom:6px}
+.auth-mark span{color:var(--text2)}
+.auth-tagline{font-size:12px;color:var(--text2);letter-spacing:3px;font-weight:500;text-transform:uppercase}
+.auth-card{background:#fff;border-radius:16px;padding:28px 24px;width:100%;max-width:400px;box-shadow:0 24px 80px rgba(0,0,0,0.7)}
+.auth-card h2{color:#111;font-size:20px;font-weight:800;margin-bottom:4px}
+.auth-card .auth-sub{color:#888;font-size:13px;margin-bottom:22px}
+.auth-field{margin-bottom:14px}
+.auth-field label{display:block;font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.auth-field input{width:100%;height:44px;border:1.5px solid #e5e5e5;border-radius:10px;padding:0 14px;font-size:14px;font-family:'Outfit',sans-serif;color:#111;background:#fafafa;outline:none;transition:border-color .2s}
+.auth-field input:focus{border-color:#111;background:#fff}
+.phone-wrap{display:flex;align-items:center;border:1.5px solid #e5e5e5;border-radius:10px;background:#fafafa;overflow:hidden;transition:border-color .2s}
+.phone-wrap:focus-within{border-color:#111;background:#fff}
+.phone-prefix{padding:0 12px;font-size:13px;font-weight:700;color:#555;border-right:1.5px solid #e5e5e5;height:42px;display:flex;align-items:center;background:#f0f0f0}
+.phone-wrap input{border:none;background:transparent;height:42px;flex:1;padding:0 12px;font-size:14px;font-family:'Outfit',sans-serif;outline:none;color:#111}
+.pass-wrap{position:relative}
+.pass-wrap input{padding-right:44px}
+.pass-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:#888;padding:4px}
+.remember-row{display:flex;align-items:center;gap:8px;margin-bottom:18px;margin-top:-4px}
+.remember-row input[type=checkbox]{width:17px;height:17px;cursor:pointer;accent-color:#111}
+.remember-row label{font-size:13px;color:#555;cursor:pointer;user-select:none}
+.btn-auth{width:100%;height:46px;border:none;border-radius:10px;background:#111;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;letter-spacing:.3px;transition:opacity .2s}
+.btn-auth:active{opacity:.85}
+.auth-switch{text-align:center;margin-top:16px;font-size:13px;color:#888}
+.auth-switch span{color:#111;font-weight:700;cursor:pointer;text-decoration:underline}
+.optional{color:#aaa;font-weight:400;font-size:10px}
+
+/* ── MAINTENANCE ── */
+#maintenanceOverlay{display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:32px}
+
+/* ── TOPBAR ── */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(8,8,8,0.97);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-logo{font-size:20px;font-weight:900;color:var(--white);letter-spacing:-1px}
+.topbar-logo span{color:var(--text2)}
+.topbar-greeting{font-size:12px;color:var(--text2);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.topbar-avatar{width:34px;height:34px;border-radius:50%;background:var(--card2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;overflow:hidden}
+.topbar-avatar img{width:100%;height:100%;object-fit:cover}
+
+/* ── SECTIONS ── */
+.section{display:none;padding:16px;min-height:calc(100vh - 140px)}
+.section.active{display:block}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(8,8,8,0.98);backdrop-filter:blur(30px);border-top:1px solid var(--border);display:none;grid-template-columns:repeat(5,1fr);padding:8px 4px calc(8px + env(safe-area-inset-bottom))}
+.bottom-nav.show{display:grid}
+.bnav-item{background:transparent;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 2px;cursor:pointer;color:var(--text2);transition:color .2s;font-family:'Outfit',sans-serif}
+.bnav-item.active{color:var(--white)}
+.bnav-item .bnav-icon{font-size:20px;line-height:1}
+.bnav-item .bnav-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+
+/* ── CARDS ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.card2{background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:16px}
+.sec-title{font-size:16px;font-weight:800;color:var(--white);margin-bottom:14px}
+
+/* ── BALANCE CARD ── */
+.balance-card{background:#fff;color:#111;border-radius:16px;padding:24px;margin-bottom:16px;position:relative;overflow:hidden}
+.balance-card::before{content:'◈';position:absolute;right:-10px;top:-10px;font-size:120px;color:rgba(0,0,0,0.04);font-weight:900;line-height:1;pointer-events:none}
+.balance-label{font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.balance-amount{font-size:32px;font-weight:900;color:#111;font-family:'Share Tech Mono',monospace;line-height:1.1;margin-bottom:4px}
+.balance-sub{font-size:11px;color:#aaa;margin-bottom:20px}
+.balance-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.balance-btn{height:44px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s}
+.balance-btn:active{opacity:.8}
+.balance-btn.deposit{background:#111;color:#fff}
+.balance-btn.withdraw{background:rgba(17,17,17,0.08);color:#111;border:1.5px solid rgba(17,17,17,0.2)}
+.balance-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e5e5e5;border-radius:10px;overflow:hidden;margin-top:14px}
+.balance-stat{background:#fff;padding:10px;text-align:center}
+.balance-stat .st-val{font-size:12px;font-weight:800;color:#111;font-family:'Share Tech Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.balance-stat .st-lbl{font-size:9px;color:#999;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+
+/* ── QUICK CHECKIN ── */
+.checkin-card{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;cursor:pointer}
+.checkin-left .ck-title{font-size:13px;font-weight:700;color:var(--white)}
+.checkin-left .ck-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.btn-checkin{height:34px;padding:0 16px;border:1px solid var(--border2);border-radius:8px;background:transparent;color:var(--white);font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap}
+.btn-checkin.done{color:var(--text2);cursor:default}
+
+/* ── SECTION DIVIDER ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.section-header .sh-title{font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px}
+.link-btn{background:none;border:none;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;padding:0}
+
+/* ── INVESTMENT CARD (HOME) ── */
+.inv-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.inv-img{width:42px;height:42px;border-radius:8px;object-fit:cover;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden}
+.inv-img img{width:100%;height:100%;object-fit:cover}
+.inv-info{flex:1;min-width:0}
+.inv-name{font-size:13px;font-weight:700;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inv-meta{font-size:11px;color:var(--text2);margin-top:2px}
+.inv-right{text-align:right;flex-shrink:0}
+.inv-return{font-size:13px;font-weight:800;color:var(--green);font-family:'Share Tech Mono',monospace}
+.inv-days{font-size:10px;color:var(--text2)}
+.inv-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
+.inv-badge.active{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
+.inv-badge.matured{background:rgba(234,179,8,0.12);color:#eab308;border:1px solid rgba(234,179,8,0.25)}
+.inv-badge.claimed{background:var(--card2);color:var(--text2);border:1px solid var(--border)}
+
+/* ── PRODUCTS GRID ── */
+.products-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.product-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .2s}
+.product-card:hover{border-color:var(--border2)}
+.product-img{width:100%;height:130px;object-fit:cover;background:var(--bg3);display:block;position:relative}
+.product-img-wrap{position:relative;height:130px;background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.product-img-wrap img{width:100%;height:100%;object-fit:cover}
+.product-img-wrap .no-img{font-size:40px;color:var(--muted)}
+.product-stock{position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
+.product-stock.in{background:rgba(34,197,94,0.9);color:#fff}
+.product-stock.out{background:rgba(239,68,68,0.9);color:#fff}
+.product-body{padding:12px}
+.product-name{font-size:13px;font-weight:800;color:var(--white);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.product-price{font-size:15px;font-weight:900;color:var(--white);font-family:'Share Tech Mono',monospace;margin-bottom:4px}
+.product-detail{font-size:10px;color:var(--text2);line-height:1.6}
+.product-btn{display:block;width:100%;margin-top:10px;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s}
+.product-btn.buy{background:var(--white);color:#111}
+.product-btn.sold{background:var(--card);color:var(--text2);cursor:not-allowed;border:1px solid var(--border)}
+
+/* ── RECORDS (TABS + LIST) ── */
+.pill-tabs{display:flex;gap:8px;margin-bottom:16px}
+.pill-tab{height:34px;padding:0 16px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s}
+.pill-tab.active{background:var(--white);color:#111;border-color:var(--white)}
+.tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.tx-item:last-child{border-bottom:none}
+.tx-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:var(--card2)}
+.tx-info{flex:1;min-width:0}
+.tx-desc{font-size:13px;font-weight:600;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx-date{font-size:10px;color:var(--text2);margin-top:2px}
+.tx-amount{text-align:right;font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:700;flex-shrink:0}
+.tx-amount.pos{color:var(--green)}
+.tx-amount.neg{color:var(--red)}
+.tx-status{font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px;text-align:right}
+.tx-status.ok{color:var(--green)}
+.tx-status.pend{color:#eab308}
+
+/* ── COMMISSION SECTION ── */
+.ref-card{background:#fff;color:#111;border-radius:16px;padding:20px;margin-bottom:16px}
+.ref-code-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.ref-code{font-size:22px;font-weight:900;font-family:'Share Tech Mono',monospace;color:#111;letter-spacing:2px;margin-bottom:12px}
+.ref-actions{display:flex;gap:8px}
+.ref-btn{flex:1;height:38px;border:1.5px solid #e5e5e5;border-radius:8px;background:transparent;font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;color:#111;transition:background .2s}
+.ref-btn:hover{background:#f5f5f5}
+.level-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
+.level-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.level-card .lv-pct{font-size:20px;font-weight:900;color:var(--white);font-family:'Share Tech Mono',monospace}
+.level-card .lv-label{font-size:9px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.level-card .lv-count{font-size:16px;font-weight:800;color:var(--white);margin-top:6px}
+.level-card .lv-earned{font-size:10px;color:var(--text2);margin-top:1px;font-family:'Share Tech Mono',monospace}
+.comm-how{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.comm-how h4{font-size:13px;font-weight:700;color:var(--white);margin-bottom:12px}
+.comm-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.comm-row:last-child{margin-bottom:0}
+.comm-dot{width:6px;height:6px;border-radius:50%;background:var(--white);flex-shrink:0;margin-top:5px}
+.comm-row p{font-size:12px;color:var(--text2);line-height:1.5}
+.comm-total-card{background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.comm-total-label{font-size:12px;color:var(--text2);font-weight:600}
+.comm-total-val{font-size:18px;font-weight:900;color:var(--white);font-family:'Share Tech Mono',monospace}
+
+/* ── MORE SECTION ── */
+.profile-row{display:flex;align-items:center;gap:14px;padding:16px;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);margin-bottom:16px}
+.profile-avatar{width:52px;height:52px;border-radius:50%;background:var(--card);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex-shrink:0;cursor:pointer}
+.profile-avatar img{width:100%;height:100%;object-fit:cover}
+.profile-info .pi-name{font-size:15px;font-weight:800;color:var(--white)}
+.profile-info .pi-phone{font-size:12px;color:var(--text2);font-family:'Share Tech Mono',monospace;margin-top:2px}
+.profile-info .pi-balance{font-size:11px;color:var(--text2);margin-top:2px}
+.menu-list{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.menu-item{display:flex;align-items:center;gap:14px;padding:15px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.menu-item:last-child{border-bottom:none}
+.menu-item:active{background:var(--card2)}
+.menu-item .mi-icon{font-size:18px;width:28px;text-align:center;flex-shrink:0}
+.menu-item .mi-label{font-size:14px;font-weight:600;color:var(--white);flex:1}
+.menu-item .mi-arrow{color:var(--muted);font-size:12px}
+.menu-item.danger .mi-label{color:var(--red)}
+
+/* ── MODALS ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:500;align-items:flex-end;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal-sheet{background:var(--bg2);border:1px solid var(--border);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px;max-height:90vh;overflow-y:auto}
+.modal-handle{width:40px;height:4px;background:var(--border2);border-radius:2px;margin:0 auto 20px;display:block}
+.modal-title{font-size:17px;font-weight:800;color:var(--white);margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--text2);margin-bottom:20px}
+.modal-close{float:right;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1;margin-top:-2px}
+.form-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
+.form-input{width:100%;height:46px;border:1px solid var(--border2);border-radius:10px;padding:0 14px;font-size:15px;font-family:'Share Tech Mono',monospace;color:var(--white);background:var(--bg3);outline:none;margin-bottom:14px;transition:border-color .2s}
+.form-input:focus{border-color:rgba(255,255,255,0.35)}
+.form-input::placeholder{color:var(--muted);font-family:'Outfit',sans-serif}
+.phone-form-wrap{display:flex;align-items:center;border:1px solid var(--border2);border-radius:10px;background:var(--bg3);margin-bottom:14px;overflow:hidden;transition:border-color .2s}
+.phone-form-wrap:focus-within{border-color:rgba(255,255,255,0.35)}
+.phone-form-prefix{padding:0 12px;font-size:13px;font-weight:700;color:var(--text2);border-right:1px solid var(--border);height:44px;display:flex;align-items:center;background:var(--bg3);flex-shrink:0}
+.phone-form-wrap input{border:none;background:transparent;height:44px;flex:1;padding:0 12px;font-size:15px;font-family:'Share Tech Mono',monospace;outline:none;color:var(--white)}
+.form-info{font-size:12px;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.5}
+.btn-submit{width:100%;height:48px;border:none;border-radius:12px;background:var(--white);color:#111;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .2s;margin-top:4px}
+.btn-submit:active{opacity:.85}
+.btn-submit:disabled{opacity:.45;cursor:not-allowed}
+.btn-outline{width:100%;height:44px;border:1px solid var(--border2);border-radius:10px;background:transparent;color:var(--white);font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;margin-top:8px}
+.pin-row{display:flex;gap:10px;justify-content:center;margin-bottom:14px}
+.pin-box{width:52px;height:56px;border:1.5px solid var(--border2);border-radius:10px;background:var(--bg3);text-align:center;font-size:22px;font-family:'Share Tech Mono',monospace;color:var(--white);outline:none;caret-color:transparent}
+.pin-box:focus{border-color:rgba(255,255,255,0.5)}
+.deposit-status{text-align:center;padding:20px 0}
+.dep-spinner{width:56px;height:56px;border:3px solid var(--border);border-top-color:var(--white);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dep-status-text{font-size:15px;font-weight:700;color:var(--white);margin-bottom:6px}
+.dep-status-sub{font-size:12px;color:var(--text2)}
+.dep-success{font-size:48px;margin-bottom:12px}
+
+/* ── PRODUCT MODAL ── */
+.product-modal-img{width:100%;height:180px;border-radius:12px;object-fit:cover;background:var(--bg3);margin-bottom:16px;display:flex;align-items:center;justify-content:center;font-size:48px;overflow:hidden}
+.product-modal-img img{width:100%;height:100%;object-fit:cover}
+.product-stat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.pstat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.pstat .pst-val{font-size:15px;font-weight:800;color:var(--white);font-family:'Share Tech Mono',monospace}
+.pstat .pst-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+
+/* ── BANK ACCOUNT ── */
+.bank-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.bank-icon{width:36px;height:36px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:18px}
+.bank-info{flex:1}
+.bank-name{font-size:13px;font-weight:700;color:var(--white)}
+.bank-phone{font-size:11px;color:var(--text2);font-family:'Share Tech Mono',monospace}
+.bank-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;padding:4px}
+
+/* ── ABOUT / RULES ── */
+.content-page{padding:4px 0}
+.content-page h3{font-size:15px;font-weight:800;color:var(--white);margin-bottom:12px}
+.content-page p,.content-page li{font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:8px}
+.content-page ul{padding-left:18px}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:40px 20px;color:var(--text2)}
+.empty-state .es-icon{font-size:40px;margin-bottom:12px;display:block}
+.empty-state p{font-size:13px}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(40,40,40,0.97);border:1px solid var(--border2);border-radius:10px;padding:10px 18px;font-size:13px;color:var(--white);font-weight:600;z-index:9000;opacity:0;transition:all .25s;pointer-events:none;text-align:center;max-width:300px;white-space:pre-line}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.success{border-color:rgba(34,197,94,.4)}
+#toast.error{border-color:rgba(239,68,68,.4)}
+
+/* ── LOADING ── */
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+.loading-overlay.show{display:flex}
+.load-spin{width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--white);border-radius:50%;animation:spin 1s linear infinite}
+.load-text{font-size:13px;color:var(--text2);font-weight:600}
+
+@media(max-width:400px){
+  .products-grid{grid-template-columns:1fr 1fr}
+  .level-cards{grid-template-columns:1fr 1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ── LOADING OVERLAY ── -->
+<div id="loadingOverlay" class="loading-overlay show">
+  <div class="load-spin"></div>
+  <div class="load-text">Loading Nexus…</div>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+<!-- ── MAINTENANCE OVERLAY ── -->
+<div id="maintenanceOverlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:32px">
+  <div style="font-size:64px;margin-bottom:20px">🔧</div>
+  <h2 style="color:#f0f0f0;font-size:24px;font-weight:900;margin-bottom:12px">Under Maintenance</h2>
+  <p style="color:#888;font-size:14px;line-height:1.7;max-width:300px">Nexus is undergoing scheduled maintenance. We'll be back shortly — thank you for your patience!</p>
+  <div style="margin-top:28px;color:#555;font-size:12px;font-weight:700;letter-spacing:2px">◈ NEXUS INVESTMENT</div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     AUTH SCREEN
+══════════════════════════════════════════ -->
+<div id="authScreen" style="display:none">
+  <div class="auth-screen">
+    <div class="auth-brand">
+      <div class="auth-mark">◈<span>NEXUS</span></div>
+      <div class="auth-tagline">Investment Platform</div>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="loginForm" class="auth-card">
+      <h2>Welcome Back</h2>
+      <div class="auth-sub">Sign in to your Nexus account</div>
+
+      <div class="auth-field">
+        <label>Phone Number</label>
+        <div class="phone-wrap">
+          <span class="phone-prefix">+256</span>
+          <input type="tel" id="loginPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
+        </div>
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <div class="pass-wrap">
+          <input type="password" id="loginPass" placeholder="Your password" maxlength="40">
+          <button class="pass-eye" type="button" onclick="togglePass('loginPass',this)">👁</button>
+        </div>
+      </div>
+      <div class="remember-row">
+        <input type="checkbox" id="rememberMe">
+        <label for="rememberMe">Remember password</label>
+      </div>
+      <button class="btn-auth" id="loginBtn" onclick="doLogin()">Sign In</button>
+      <div class="auth-switch">Don't have an account? <span onclick="showRegister()">Create one</span></div>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="registerForm" class="auth-card" style="display:none">
+      <h2>Create Account</h2>
+      <div class="auth-sub">Join Nexus Investment today</div>
+
+      <div class="auth-field">
+        <label>Full Name</label>
+        <input type="text" id="regName" placeholder="Your full name">
+      </div>
+      <div class="auth-field">
+        <label>Phone Number</label>
+        <div class="phone-wrap">
+          <span class="phone-prefix">+256</span>
+          <input type="tel" id="regPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
+        </div>
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="regPass" placeholder="Create password (min 6 chars)" maxlength="40">
+      </div>
+      <div class="auth-field">
+        <label>Referral Code <span class="optional">(optional)</span></label>
+        <input type="text" id="regRef" placeholder="Enter referral code" style="text-transform:uppercase">
+      </div>
+      <button class="btn-auth" id="registerBtn" onclick="doRegister()">Create Account</button>
+      <div class="auth-switch">Already have an account? <span onclick="showLogin()">Sign in</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════ -->
+<div id="appScreen" style="display:none">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">◈<span>NEXUS</span></div>
+      <div class="topbar-greeting" id="topGreeting">Hello…</div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-avatar" id="avatarBtn" onclick="showSection('more')">
+        <span id="avatarInitial">?</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HOME SECTION ── -->
+  <div class="section active" id="homeSection">
+    <!-- Balance Card -->
+    <div class="balance-card">
+      <div class="balance-label">Total Balance</div>
+      <div class="balance-amount" id="homeBalance">UGX 0</div>
+      <div class="balance-sub" id="homeBalanceSub">Tap deposit to add funds</div>
+      <div class="balance-actions">
+        <button class="balance-btn deposit" onclick="openDepositModal()">⬇ Deposit</button>
+        <button class="balance-btn withdraw" onclick="openWithdrawModal()">⬆ Withdraw</button>
+      </div>
+      <div class="balance-stats">
+        <div class="balance-stat">
+          <div class="st-val" id="homeTotalDep">0</div>
+          <div class="st-lbl">Deposited</div>
+        </div>
+        <div class="balance-stat">
+          <div class="st-val" id="homeTotalInv">0</div>
+          <div class="st-lbl">Invested</div>
+        </div>
+        <div class="balance-stat">
+          <div class="st-val" id="homeCommEarned">0</div>
+          <div class="st-lbl">Commission</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Check-in -->
+    <div class="checkin-card" onclick="doCheckin()">
+      <div class="checkin-left">
+        <div class="ck-title">📅 Daily Check-in</div>
+        <div class="ck-sub" id="checkinSub">Earn UGX 500 free today</div>
+      </div>
+      <button class="btn-checkin" id="checkinBtn">Claim</button>
+    </div>
+
+    <!-- Active Investments -->
+    <div class="section-header">
+      <div class="sh-title">Active Plans</div>
+      <button class="link-btn" onclick="showSection('invest')">View All →</button>
+    </div>
+    <div id="homeActiveInvest">
+      <div class="empty-state"><span class="es-icon">📈</span><p>No active plans yet<br>Browse Products to invest</p></div>
+    </div>
+  </div>
+
+  <!-- ── PRODUCTS SECTION ── -->
+  <div class="section" id="productsSection">
+    <div class="sec-title">Investment Plans</div>
+    <div class="products-grid" id="productsGrid">
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="load-spin" style="margin:0 auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RECORDS SECTION ── -->
+  <div class="section" id="recordsSection">
+    <div class="sec-title">Account Records</div>
+    <div class="pill-tabs">
+      <button class="pill-tab active" onclick="switchRecord('income',this)">Income</button>
+      <button class="pill-tab" onclick="switchRecord('withdrawals',this)">Withdrawals</button>
+      <button class="pill-tab" onclick="switchRecord('investments',this)">Plans</button>
+    </div>
+    <div id="recordsContent">
+      <div class="empty-state"><span class="es-icon">📊</span><p>Loading records…</p></div>
+    </div>
+  </div>
+
+  <!-- ── COMMISSION SECTION ── -->
+  <div class="section" id="commissionSection">
+    <div class="sec-title">My Commission</div>
+
+    <div class="comm-total-card">
+      <div>
+        <div class="comm-total-label">Total Commission Earned</div>
+        <div class="comm-total-val" id="commTotal">UGX 0</div>
+      </div>
+      <div style="text-align:right">
+        <div class="comm-total-label">Streak</div>
+        <div class="comm-total-val" id="checkinStreak">0 days</div>
+      </div>
+    </div>
+
+    <!-- Referral Code Card -->
+    <div class="ref-card">
+      <div class="ref-code-label">Your Referral Code</div>
+      <div class="ref-code" id="myRefCode">——————</div>
+      <div class="ref-actions">
+        <button class="ref-btn" onclick="copyRefCode()">📋 Copy Code</button>
+        <button class="ref-btn" onclick="shareRefLink()">🔗 Share Link</button>
+      </div>
+    </div>
+
+    <!-- Level Cards -->
+    <div class="level-cards">
+      <div class="level-card">
+        <div class="lv-pct">35%</div>
+        <div class="lv-label">Level 1</div>
+        <div class="lv-count" id="teamL1Count">0</div>
+        <div class="lv-earned" id="teamL1Earned">UGX 0</div>
+      </div>
+      <div class="level-card">
+        <div class="lv-pct">5%</div>
+        <div class="lv-label">Level 2</div>
+        <div class="lv-count" id="teamL2Count">0</div>
+        <div class="lv-earned" id="teamL2Earned">UGX 0</div>
+      </div>
+      <div class="level-card">
+        <div class="lv-pct">2%</div>
+        <div class="lv-label">Level 3</div>
+        <div class="lv-count" id="teamL3Count">0</div>
+        <div class="lv-earned" id="teamL3Earned">UGX 0</div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="comm-how">
+      <h4>How Commission Works</h4>
+      <div class="comm-row"><div class="comm-dot"></div><p><strong>Level 1 (35%)</strong> — When a friend you invite invests, you instantly earn 35% of their investment amount as commission.</p></div>
+      <div class="comm-row"><div class="comm-dot"></div><p><strong>Level 2 (5%)</strong> — When members of your Level 2 team invest, you earn a 5% cash bonus instantly.</p></div>
+      <div class="comm-row"><div class="comm-dot"></div><p><strong>Level 3 (2%)</strong> — When members of your Level 3 team invest, you earn a 2% cash bonus instantly.</p></div>
+      <div class="comm-row"><div class="comm-dot"></div><p>All commissions are <strong>instantly credited</strong> to your wallet and can be <strong>withdrawn immediately</strong>.</p></div>
+    </div>
+  </div>
+
+  <!-- ── MORE SECTION ── -->
+  <div class="section" id="moreSection">
+    <div class="profile-row">
+      <div class="profile-avatar" id="moreAvatarWrap" onclick="triggerPhotoUpload()">
+        <span id="moreAvatarInitial">?</span>
+      </div>
+      <div class="profile-info">
+        <div class="pi-name" id="moreName">—</div>
+        <div class="pi-phone" id="morePhone">—</div>
+        <div class="pi-balance" id="moreBalance">Balance: UGX 0</div>
+      </div>
+    </div>
+    <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="uploadPhoto(this)">
+
+    <div class="menu-list">
+      <div class="menu-item" onclick="showSection('records')">
+        <span class="mi-icon">📊</span>
+        <span class="mi-label">Account Sessions</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openGiftModal()">
+        <span class="mi-icon">🎁</span>
+        <span class="mi-label">Gift Code</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openBankModal()">
+        <span class="mi-icon">🏦</span>
+        <span class="mi-label">Bank Account Management</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openContentModal('about')">
+        <span class="mi-icon">ℹ️</span>
+        <span class="mi-label">About Nexus</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openContentModal('rules')">
+        <span class="mi-icon">📋</span>
+        <span class="mi-label">Platform Rules</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openContentModal('support')">
+        <span class="mi-icon">💬</span>
+        <span class="mi-label">Customer Service</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item danger" onclick="doLogout()">
+        <span class="mi-icon">🚪</span>
+        <span class="mi-label">Exit / Logout</span>
+        <span class="mi-arrow">›</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav show">
+    <button class="bnav-item active" data-sec="home" onclick="showSection('home')">
+      <span class="bnav-icon">⌂</span>
+      <span class="bnav-label">Home</span>
+    </button>
+    <button class="bnav-item" data-sec="products" onclick="showSection('products')">
+      <span class="bnav-icon">◧</span>
+      <span class="bnav-label">Plans</span>
+    </button>
+    <button class="bnav-item" data-sec="invest" onclick="showSection('records')">
+      <span class="bnav-icon">≡</span>
+      <span class="bnav-label">Records</span>
+    </button>
+    <button class="bnav-item" data-sec="commission" onclick="showSection('commission')">
+      <span class="bnav-icon">◎</span>
+      <span class="bnav-label">Commission</span>
+    </button>
+    <button class="bnav-item" data-sec="more" onclick="showSection('more')">
+      <span class="bnav-icon">⋯</span>
+      <span class="bnav-label">More</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODALS
+══════════════════════════════════════════ -->
+
+<!-- DEPOSIT MODAL -->
+<div id="depositModal" class="modal-overlay" onclick="if(event.target===this)closeModal('depositModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title">Deposit Funds</div>
+      <button class="modal-close" onclick="closeModal('depositModal')">×</button>
+    </div>
+    <div class="modal-sub">Minimum: UGX 30,000</div>
+    <div id="depositFormArea">
+      <label class="form-label">Amount (UGX)</label>
+      <input class="form-input" id="depAmount" type="number" placeholder="30000" min="30000" inputmode="numeric">
+      <label class="form-label">Mobile Money Phone</label>
+      <div class="phone-form-wrap">
+        <span class="phone-form-prefix">+256</span>
+        <input type="tel" id="depPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
+      </div>
+      <div class="form-info">Enter the phone number linked to your Mobile Money account. A payment prompt will appear on your phone.</div>
+      <button class="btn-submit" id="depSubmitBtn" onclick="submitDeposit()">Pay with Mobile Money</button>
+    </div>
+    <div id="depositStatusArea" style="display:none">
+      <div class="deposit-status">
+        <div class="dep-spinner" id="depSpinner"></div>
+        <div class="dep-status-text" id="depStatusText">Sending payment request…</div>
+        <div class="dep-status-sub" id="depStatusSub">Check your phone and enter your PIN</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WITHDRAW MODAL -->
+<div id="withdrawModal" class="modal-overlay" onclick="if(event.target===this)closeModal('withdrawModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title">Request Withdrawal</div>
+      <button class="modal-close" onclick="closeModal('withdrawModal')">×</button>
+    </div>
+    <div class="modal-sub" id="witBalSub">Available: UGX 0</div>
+    <label class="form-label">Amount (UGX)</label>
+    <input class="form-input" id="witAmount" type="number" placeholder="15000" min="15000" inputmode="numeric">
+    <label class="form-label">Receive on Phone</label>
+    <div class="phone-form-wrap">
+      <span class="phone-form-prefix">+256</span>
+      <input type="tel" id="witPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
+    </div>
+    <label class="form-label">Withdrawal PIN</label>
+    <div class="pin-row" id="witPinRow">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="0">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="1">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="2">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="3">
+    </div>
+    <div class="form-info" id="witFeeNote">First withdrawal is free. Subsequent withdrawals: 10% fee.</div>
+    <button class="btn-submit" onclick="submitWithdrawal()">Request Withdrawal</button>
+    <button class="btn-outline" onclick="openPinModal('setup')">Change / Set PIN</button>
+  </div>
+</div>
+
+<!-- PIN MODAL -->
+<div id="pinModal" class="modal-overlay" onclick="if(event.target===this)closeModal('pinModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title" id="pinModalTitle">Set Withdrawal PIN</div>
+      <button class="modal-close" onclick="closeModal('pinModal')">×</button>
+    </div>
+    <div class="modal-sub">Enter a 4-digit PIN to secure your withdrawals</div>
+    <label class="form-label">New PIN</label>
+    <div class="pin-row" id="pinSetRow">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="0">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="1">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="2">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="3">
+    </div>
+    <label class="form-label">Confirm PIN</label>
+    <div class="pin-row" id="pinConfirmRow">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="0">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="1">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="2">
+      <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="3">
+    </div>
+    <button class="btn-submit" onclick="submitPin()">Save PIN</button>
+  </div>
+</div>
+
+<!-- PRODUCT MODAL -->
+<div id="productModal" class="modal-overlay" onclick="if(event.target===this)closeModal('productModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="modal-title" id="productModalName">Plan</div>
+      <button class="modal-close" onclick="closeModal('productModal')">×</button>
+    </div>
+    <div class="product-modal-img" id="productModalImgWrap">
+      <span id="productModalImgEmpty">📦</span>
+    </div>
+    <div class="product-stat-row">
+      <div class="pstat"><div class="pst-val" id="pmPrice">—</div><div class="pst-lbl">Investment</div></div>
+      <div class="pstat"><div class="pst-val" id="pmDaily">—</div><div class="pst-lbl">Daily Return</div></div>
+      <div class="pstat"><div class="pst-val" id="pmCycle">—</div><div class="pst-lbl">Duration</div></div>
+      <div class="pstat"><div class="pst-val" id="pmReturn">—</div><div class="pst-lbl">Total Return</div></div>
+    </div>
+    <div class="form-info" id="pmWalletNote">Your wallet: UGX 0</div>
+    <button class="btn-submit" id="pmBuyBtn" onclick="confirmBuy()">Confirm Investment</button>
+  </div>
+</div>
+
+<!-- GIFT CODE MODAL -->
+<div id="giftModal" class="modal-overlay" onclick="if(event.target===this)closeModal('giftModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title">Redeem Gift Code</div>
+      <button class="modal-close" onclick="closeModal('giftModal')">×</button>
+    </div>
+    <div class="modal-sub">Enter a gift code to receive bonus funds</div>
+    <label class="form-label">Gift Code</label>
+    <input class="form-input" id="giftCodeInput" placeholder="NEXUS-XXXXXX" style="text-transform:uppercase;letter-spacing:2px">
+    <button class="btn-submit" onclick="redeemGiftCode()">Redeem Code</button>
+  </div>
+</div>
+
+<!-- BANK ACCOUNT MODAL -->
+<div id="bankModal" class="modal-overlay" onclick="if(event.target===this)closeModal('bankModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title">Bank Accounts</div>
+      <button class="modal-close" onclick="closeModal('bankModal')">×</button>
+    </div>
+    <div class="modal-sub">Manage your withdrawal accounts</div>
+    <div id="bankList"></div>
+    <label class="form-label" style="margin-top:8px">Add Account Name</label>
+    <input class="form-input" id="bankName" placeholder="e.g. MTN Mobile Money">
+    <label class="form-label">Phone / Account Number</label>
+    <div class="phone-form-wrap" style="margin-bottom:14px">
+      <span class="phone-form-prefix">+256</span>
+      <input type="tel" id="bankPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
+    </div>
+    <button class="btn-submit" onclick="addBankAccount()">Add Account</button>
+  </div>
+</div>
+
+<!-- CONTENT MODAL (About / Rules / Support) -->
+<div id="contentModal" class="modal-overlay" onclick="if(event.target===this)closeModal('contentModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="modal-title" id="contentModalTitle">About</div>
+      <button class="modal-close" onclick="closeModal('contentModal')">×</button>
+    </div>
+    <div id="contentModalBody" class="content-page"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     FIREBASE + APP LOGIC
+══════════════════════════════════════════ -->
+<script type="module">
+import { initializeApp, getApps }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, onSnapshot, addDoc, arrayUnion, arrayRemove, serverTimestamp, getDocs }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+// ══ FIREBASE CONFIG — replace with your config ══
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const SERVER = ''; // Railway URL e.g. https://nexus-server.up.railway.app
+
+const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// ── STATE ──
+let _user = null, _userData = null, _unsub = null;
+let _currentProduct = null;
+
+// ── UTILS ──
+function ugx(n) { return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+function shortUgx(n) { n = Number(n||0); return n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : n.toString(); }
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ''; }, 3200);
+}
+function showLoading(show) {
+  document.getElementById('loadingOverlay').classList.toggle('show', show);
+}
+function phoneToEmail(phone) { return phone.replace(/\D/g,'') + '@nexus-app.com'; }
+function genRefCode(uid) { return ('NX' + uid.slice(-6)).toUpperCase(); }
+
+// ── AUTH FORMS ──
+window.showRegister = () => {
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'block';
+};
+window.showLogin = () => {
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
+};
+window.togglePass = (id, btn) => {
+  const inp = document.getElementById(id);
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  if (btn) btn.textContent = show ? '🙈' : '👁';
+};
+
+// Remember password
+const savedPhone = localStorage.getItem('nx_saved_phone');
+const savedPass  = localStorage.getItem('nx_saved_pass');
+if (savedPhone) { document.getElementById('loginPhone').value = savedPhone; document.getElementById('rememberMe').checked = true; }
+if (savedPass)  { document.getElementById('loginPass').value  = savedPass; }
+
+window.doLogin = async () => {
+  const phone = document.getElementById('loginPhone').value.trim().replace(/\D/g,'');
+  const pass  = document.getElementById('loginPass').value;
+  if (!phone || !pass) { showToast('Enter phone and password', 'error'); return; }
+  const remember = document.getElementById('rememberMe').checked;
+  showLoading(true);
+  try {
+    await signInWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+    if (remember) { localStorage.setItem('nx_saved_phone', phone); localStorage.setItem('nx_saved_pass', pass); }
+    else { localStorage.removeItem('nx_saved_phone'); localStorage.removeItem('nx_saved_pass'); }
+  } catch (e) {
+    showLoading(false);
+    const msg = e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential'
+      ? 'Incorrect phone or password' : 'Login failed: ' + e.message;
+    showToast(msg, 'error');
+  }
+};
+
+window.doRegister = async () => {
+  const name  = document.getElementById('regName').value.trim();
+  const phone = document.getElementById('regPhone').value.trim().replace(/\D/g,'');
+  const pass  = document.getElementById('regPass').value;
+  const ref   = document.getElementById('regRef').value.trim().toUpperCase();
+  if (!name)  { showToast('Enter your name', 'error'); return; }
+  if (!phone) { showToast('Enter your phone number', 'error'); return; }
+  if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+  showLoading(true);
+  try {
+    const cred   = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+    const uid    = cred.user.uid;
+    const refCode = genRefCode(uid);
+    await setDoc(doc(db, 'users', uid), {
+      name, phone: '+256' + phone, email: phoneToEmail(phone),
+      walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
+      totalEarned: 0, commissionEarned: 0, commissionL1Earned: 0,
+      commissionL2Earned: 0, commissionL3Earned: 0,
+      teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
+      checkinEarned: 0, checkinStreak: 0, checkinDays: 0,
+      referralCode: refCode, withdrawalCount: 0, status: 'active',
+      bankAccounts: [], createdAt: serverTimestamp()
+    });
+    // Register with server to set up referral chain
+    await api('/register', { userId: uid, referralCode: ref });
+  } catch (e) {
+    showLoading(false);
+    const msg = e.code === 'auth/email-already-in-use'
+      ? 'This phone number is already registered' : 'Registration failed: ' + e.message;
+    showToast(msg, 'error');
+  }
+};
+
+window.doLogout = async () => {
+  if (!confirm('Log out of Nexus?')) return;
+  if (_unsub) { _unsub(); _unsub = null; }
+  await signOut(auth);
+  _user = null; _userData = null;
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('authScreen').style.display = 'block';
+};
+
+// ── API HELPER ──
+async function api(path, body = {}) {
+  const resp = await fetch(SERVER + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return resp.json();
+}
+
+// ── AUTH STATE ──
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    _user = user;
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display  = 'block';
+    showLoading(false);
+    startListener(user.uid);
+    loadProducts();
+    loadRecords('income');
+    checkMaintenance();
+  } else {
+    if (_unsub) { _unsub(); _unsub = null; }
+    document.getElementById('appScreen').style.display  = 'none';
+    document.getElementById('authScreen').style.display = 'block';
+    showLoading(false);
+  }
+});
+
+// ── MAINTENANCE CHECK ──
+async function checkMaintenance() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'main'));
+    if (snap.exists() && snap.data().maintenanceMode) {
+      document.getElementById('maintenanceOverlay').style.display = 'flex';
+    }
+  } catch (_) {}
+}
+
+// ── REAL-TIME LISTENER ──
+function startListener(uid) {
+  if (_unsub) _unsub();
+  _unsub = onSnapshot(doc(db, 'users', uid), snap => {
+    if (!snap.exists()) return;
+    _userData = snap.data();
+    renderHome(_userData);
+    renderCommission(_userData);
+    renderMore(_userData);
+  });
+  // Active investments
+  onSnapshot(
+    query(collection(db, 'investments'), where('userId','==',uid), where('status','in',['active','matured']), orderBy('createdAt','desc'), limit(5)),
+    snap => renderHomeInvestments(snap.docs.map(d => ({ id:d.id, ...d.data() })))
+  );
+}
+
+// ── RENDER HOME ──
+function renderHome(u) {
+  document.getElementById('homeBalance').textContent = ugx(u.walletBalance);
+  document.getElementById('homeBalanceSub').textContent = u.walletBalance > 0 ? 'Invest in a plan to earn returns' : 'Tap deposit to add funds';
+  document.getElementById('homeTotalDep').textContent    = shortUgx(u.totalDeposited || 0);
+  document.getElementById('homeTotalInv').textContent    = shortUgx(u.totalInvested  || 0);
+  document.getElementById('homeCommEarned').textContent  = shortUgx(u.commissionEarned || 0);
+  document.getElementById('topGreeting').textContent = 'Hi, ' + (u.name ? u.name.split(' ')[0] : '');
+  const initial = (u.name || '?')[0].toUpperCase();
+  document.getElementById('avatarInitial').textContent = initial;
+  // Check-in
+  const eat = new Date(Date.now() + 3*60*60*1000);
+  const todayKey = eat.toISOString().slice(0,10);
+  const doneCi = u.lastCheckinDate === todayKey;
+  document.getElementById('checkinSub').textContent = doneCi ? `✓ Checked in today (Streak: ${u.checkinStreak || 0} days)` : 'Earn UGX 500 free today';
+  const ciBtn = document.getElementById('checkinBtn');
+  ciBtn.textContent = doneCi ? '✓ Done' : 'Claim';
+  ciBtn.className   = 'btn-checkin' + (doneCi ? ' done' : '');
+}
+
+function renderHomeInvestments(invs) {
+  const el = document.getElementById('homeActiveInvest');
+  if (!invs.length) {
+    el.innerHTML = '<div class="empty-state"><span class="es-icon">📈</span><p>No active plans<br>Browse Plans to invest</p></div>';
+    return;
+  }
+  el.innerHTML = invs.map(inv => {
+    const matured = inv.status === 'matured';
+    const daysLeft = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
+    const imgHtml = inv.productImage
+      ? `<div class="inv-img"><img src="${inv.productImage}" alt=""></div>`
+      : `<div class="inv-img">📦</div>`;
+    return `<div class="inv-item" onclick="${matured ? `claimInvestment('${inv.id}')` : ''}">
+      ${imgHtml}
+      <div class="inv-info">
+        <div class="inv-name">${inv.productName || 'Investment'}</div>
+        <div class="inv-meta">${ugx(inv.amount)} invested</div>
+      </div>
+      <div class="inv-right">
+        <div class="inv-return">${ugx(inv.expectedReturn)}</div>
+        <div class="inv-days">${matured ? '🎯 Ready to claim!' : daysLeft + ' day(s) left'}</div>
+        <span class="inv-badge ${matured ? 'matured' : 'active'}">${matured ? 'Matured' : 'Active'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER COMMISSION ──
+function renderCommission(u) {
+  document.getElementById('commTotal').textContent      = ugx(u.commissionEarned   || 0);
+  document.getElementById('myRefCode').textContent      = u.referralCode           || '——';
+  document.getElementById('checkinStreak').textContent  = (u.checkinStreak || 0)   + ' days';
+  document.getElementById('teamL1Count').textContent    = u.teamL1Count            || 0;
+  document.getElementById('teamL2Count').textContent    = u.teamL2Count            || 0;
+  document.getElementById('teamL3Count').textContent    = u.teamL3Count            || 0;
+  document.getElementById('teamL1Earned').textContent   = ugx(u.commissionL1Earned || 0);
+  document.getElementById('teamL2Earned').textContent   = ugx(u.commissionL2Earned || 0);
+  document.getElementById('teamL3Earned').textContent   = ugx(u.commissionL3Earned || 0);
+}
+
+// ── RENDER MORE ──
+function renderMore(u) {
+  document.getElementById('moreName').textContent    = u.name    || '—';
+  document.getElementById('morePhone').textContent   = u.phone   || '—';
+  document.getElementById('moreBalance').textContent = 'Balance: ' + ugx(u.walletBalance);
+  const initial = (u.name || '?')[0].toUpperCase();
+  document.getElementById('moreAvatarInitial').textContent = initial;
+  if (u.profilePhoto) {
+    document.getElementById('moreAvatarInitial').innerHTML = `<img src="${u.profilePhoto}" style="width:52px;height:52px;border-radius:50%;object-fit:cover">`;
+    document.getElementById('avatarInitial').innerHTML = `<img src="${u.profilePhoto}" style="width:34px;height:34px;border-radius:50%;object-fit:cover">`;
+  }
+}
+
+// ── NAVIGATION ──
+window.showSection = (sec) => {
+  const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection' };
+  const navMap = { home:'home', products:'products', invest:'invest', records:'invest', commission:'commission', more:'more' };
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(secMap[sec] || sec + 'Section')?.classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.sec === (navMap[sec] || sec));
+  });
+  if (sec === 'records' || sec === 'invest') { loadRecords('income'); }
+};
+
+// ── CHECK-IN ──
+window.doCheckin = async () => {
+  if (!_user) return;
+  const eat = new Date(Date.now() + 3*60*60*1000);
+  const todayKey = eat.toISOString().slice(0,10);
+  if (_userData?.lastCheckinDate === todayKey) { showToast('Already checked in today!', 'error'); return; }
+  showLoading(true);
+  try {
+    const r = await api('/checkin', { userId: _user.uid });
+    showLoading(false);
+    if (r.status === 'success') showToast(`✅ ${r.message} (Day ${r.streak})`, 'success');
+    else showToast(r.message || 'Check-in failed', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── PRODUCTS ──
+async function loadProducts() {
+  try {
+    const snap = await getDocs(query(collection(db,'products'), where('active','==',true)));
+    const products = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderProducts(products);
+  } catch (e) { console.error('Load products:', e); }
+}
+
+function renderProducts(products) {
+  const grid = document.getElementById('productsGrid');
+  if (!products.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">📦</span><p>No plans available yet</p></div>';
+    return;
+  }
+  grid.innerHTML = products.map(p => {
+    const inStock = p.isInStock !== false;
+    const imgHtml = p.image
+      ? `<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover">`
+      : `<span class="no-img">📦</span>`;
+    return `<div class="product-card" onclick="openProductModal('${p.id}')">
+      <div class="product-img-wrap">
+        ${imgHtml}
+        <span class="product-stock ${inStock?'in':'out'}">${inStock?'In Stock':'Sold Out'}</span>
+      </div>
+      <div class="product-body">
+        <div class="product-name">${p.name}</div>
+        <div class="product-price">${ugx(p.price)}</div>
+        <div class="product-detail">
+          Daily: ${ugx(p.dailyReturn)} · ${p.cycle} days<br>
+          Total: <strong style="color:#f0f0f0">${ugx(p.expectedReturn)}</strong>
+        </div>
+        <button class="product-btn ${inStock?'buy':'sold'}" ${inStock?'':'disabled'}>${inStock?'Buy Now':'Sold Out'}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.openProductModal = async (productId) => {
+  try {
+    const snap = await getDoc(doc(db,'products',productId));
+    if (!snap.exists()) return;
+    _currentProduct = { id: snap.id, ...snap.data() };
+    const p = _currentProduct;
+    const inStock = p.isInStock !== false;
+    document.getElementById('productModalName').textContent = p.name;
+    const imgWrap = document.getElementById('productModalImgWrap');
+    if (p.image) {
+      imgWrap.innerHTML = `<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`;
+    } else {
+      imgWrap.innerHTML = '<span style="font-size:48px">📦</span>';
+    }
+    document.getElementById('pmPrice').textContent  = ugx(p.price);
+    document.getElementById('pmDaily').textContent  = ugx(p.dailyReturn);
+    document.getElementById('pmCycle').textContent  = p.cycle + ' days';
+    document.getElementById('pmReturn').textContent = ugx(p.expectedReturn);
+    document.getElementById('pmWalletNote').textContent = `Your wallet: ${ugx(_userData?.walletBalance || 0)}` + (!inStock ? ' — This plan is currently sold out' : '');
+    const btn = document.getElementById('pmBuyBtn');
+    btn.textContent = inStock ? 'Confirm Investment' : 'Sold Out';
+    btn.disabled    = !inStock;
+    openModal('productModal');
+  } catch (e) { showToast('Failed to load plan', 'error'); }
+};
+
+window.confirmBuy = async () => {
+  if (!_currentProduct || !_user) return;
+  const p = _currentProduct;
+  if (!p.isInStock) { showToast('This plan is sold out', 'error'); return; }
+  if ((_userData?.walletBalance || 0) < p.price) {
+    showToast(`Insufficient balance. Need ${ugx(p.price)}, have ${ugx(_userData?.walletBalance||0)}`, 'error'); return;
+  }
+  if (!confirm(`Invest ${ugx(p.price)} in ${p.name}?`)) return;
+  closeModal('productModal');
+  showLoading(true);
+  try {
+    const r = await api('/invest/create', { userId: _user.uid, productId: p.id });
+    showLoading(false);
+    if (r.status === 'success') showToast('✅ ' + r.message, 'success');
+    else showToast(r.message || 'Investment failed', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── CLAIM INVESTMENT ──
+window.claimInvestment = async (invId) => {
+  if (!_user) return;
+  if (!confirm('Claim your returns now?')) return;
+  showLoading(true);
+  try {
+    const r = await api('/invest/claim', { userId: _user.uid, investmentId: invId });
+    showLoading(false);
+    if (r.status === 'success') showToast('✅ ' + r.message, 'success');
+    else showToast(r.message || 'Claim failed', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── RECORDS ──
+let _recordTab = 'income';
+window.switchRecord = (tab, btn) => {
+  _recordTab = tab;
+  document.querySelectorAll('.pill-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadRecords(tab);
+};
+
+async function loadRecords(tab) {
+  if (!_user) return;
+  _recordTab = tab;
+  const el = document.getElementById('recordsContent');
+  el.innerHTML = '<div class="empty-state"><div class="load-spin" style="margin:0 auto 12px"></div><p>Loading…</p></div>';
+  try {
+    let q;
+    if (tab === 'investments') {
+      q = query(collection(db,'investments'), where('userId','==',_user.uid), orderBy('createdAt','desc'), limit(30));
+      const snap = await getDocs(q);
+      const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+      if (!items.length) { el.innerHTML = '<div class="empty-state"><span class="es-icon">📦</span><p>No investment plans yet</p></div>'; return; }
+      el.innerHTML = items.map(inv => {
+        const matured = inv.status === 'matured';
+        const claimed = inv.status === 'claimed';
+        const badge = matured ? '<span class="inv-badge matured">Matured</span>' : claimed ? '<span class="inv-badge claimed">Claimed</span>' : '<span class="inv-badge active">Active</span>';
+        return `<div class="inv-item" style="cursor:${matured?'pointer':'default'}" onclick="${matured?`claimInvestment('${inv.id}')`:''}" >
+          <div class="inv-img">${inv.productImage ? `<img src="${inv.productImage}" alt="">` : '📦'}</div>
+          <div class="inv-info">
+            <div class="inv-name">${inv.productName || 'Plan'}</div>
+            <div class="inv-meta">${inv.date || ''}</div>
+          </div>
+          <div class="inv-right">
+            <div class="inv-return">${ugx(inv.expectedReturn)}</div>
+            ${badge}
+            ${matured ? '<div class="inv-days" style="color:#22c55e;font-size:10px">Tap to claim →</div>' : ''}
+          </div>
+        </div>`;
+      }).join('');
+      return;
+    }
+    if (tab === 'withdrawals') {
+      q = query(collection(db,'transactions'), where('userId','==',_user.uid), where('type','==','withdrawal'), orderBy('createdAt','desc'), limit(30));
+    } else {
+      // income: deposits, commissions, check-ins, investment returns
+      q = query(collection(db,'transactions'), where('userId','==',_user.uid), orderBy('createdAt','desc'), limit(50));
+    }
+    const snap  = await getDocs(q);
+    const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const filtered = tab === 'income' ? items.filter(t => t.amount > 0) : items;
+    if (!filtered.length) { el.innerHTML = '<div class="empty-state"><span class="es-icon">📊</span><p>No records yet</p></div>'; return; }
+    el.innerHTML = '<div>' + filtered.map(tx => {
+      const icons = { deposit:'⬇', commission:'💰', checkin:'📅', investment_return:'🎯', withdrawal:'⬆', investment:'📈', admin_credit:'💎', gift_code:'🎁' };
+      const icon  = icons[tx.type] || '•';
+      const pos   = tx.amount > 0;
+      const statusCls = tx.status === 'success' ? 'ok' : 'pend';
+      return `<div class="tx-item">
+        <div class="tx-icon">${icon}</div>
+        <div class="tx-info">
+          <div class="tx-desc">${tx.description || tx.type || 'Transaction'}</div>
+          <div class="tx-date">${tx.date || ''} ${tx.time || ''}</div>
+        </div>
+        <div>
+          <div class="tx-amount ${pos?'pos':'neg'}">${pos?'+':''}${ugx(tx.amount)}</div>
+          <div class="tx-status ${statusCls}">${tx.status || ''}</div>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+  } catch (e) { el.innerHTML = '<div class="empty-state"><span class="es-icon">⚠️</span><p>Failed to load records</p></div>'; console.error(e); }
+}
+
+// ── REFERRAL ──
+window.copyRefCode = () => {
+  const code = _userData?.referralCode || '';
+  if (!code) return;
+  navigator.clipboard?.writeText(code).then(() => showToast('Referral code copied!', 'success')).catch(() => showToast(code, ''));
+};
+window.shareRefLink = () => {
+  const code = _userData?.referralCode || '';
+  const link = window.location.origin + window.location.pathname + '?ref=' + code;
+  const text = `Join Nexus Investment and earn returns!\n\nUse my referral code: ${code}\nSign up here: ${link}`;
+  if (navigator.share) {
+    navigator.share({ title: 'Nexus Investment', text, url: link }).catch(() => {});
+  } else {
+    navigator.clipboard?.writeText(text).then(() => showToast('Share link copied!', 'success'));
+  }
+};
+
+// ── DEPOSIT ──
+window.openDepositModal = () => {
+  document.getElementById('depositFormArea').style.display   = 'block';
+  document.getElementById('depositStatusArea').style.display = 'none';
+  document.getElementById('depAmount').value = '';
+  document.getElementById('depPhone').value  = _userData?.phone?.replace('+256','') || '';
+  openModal('depositModal');
+};
+
+window.submitDeposit = async () => {
+  if (!_user) return;
+  const amount = parseInt(document.getElementById('depAmount').value, 10);
+  const phone  = document.getElementById('depPhone').value.trim().replace(/\D/g,'');
+  if (!amount || amount < 30000) { showToast('Minimum deposit is UGX 30,000', 'error'); return; }
+  if (!phone)  { showToast('Enter your Mobile Money phone number', 'error'); return; }
+  document.getElementById('depositFormArea').style.display   = 'none';
+  document.getElementById('depositStatusArea').style.display = 'block';
+  document.getElementById('depSpinner').style.display   = 'block';
+  document.getElementById('depStatusText').textContent = 'Sending payment request…';
+  document.getElementById('depStatusSub').textContent  = 'Check your phone and enter your Mobile Money PIN';
+  try {
+    const r = await api('/collect', { userId: _user.uid, amount, phone: '+256' + phone });
+    if (r.status !== 'success') {
+      document.getElementById('depSpinner').style.display = 'none';
+      document.getElementById('depStatusText').textContent = '❌ Failed';
+      document.getElementById('depStatusSub').textContent  = r.message || 'Payment could not be initiated';
+      return;
+    }
+    const ref = r.reference;
+    document.getElementById('depStatusText').textContent = 'Waiting for payment…';
+    document.getElementById('depStatusSub').textContent  = 'Approve on your phone then wait for confirmation';
+    // Poll
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const check = await fetch(SERVER + '/check/' + ref).then(r=>r.json());
+        if (check.status === 'success') {
+          clearInterval(poll);
+          document.getElementById('depSpinner').style.display = 'none';
+          document.getElementById('depStatusText').textContent = '✅ Deposit Successful!';
+          document.getElementById('depStatusSub').textContent  = `${ugx(check.amountCredited || amount)} has been credited to your wallet.`;
+        } else if (check.status === 'failed') {
+          clearInterval(poll);
+          document.getElementById('depSpinner').style.display = 'none';
+          document.getElementById('depStatusText').textContent = '❌ Payment Failed';
+          document.getElementById('depStatusSub').textContent  = check.failReason || 'Payment was declined. No funds deducted.';
+        } else if (attempts > 36) {
+          clearInterval(poll);
+          document.getElementById('depStatusText').textContent = '⏳ Still Processing';
+          document.getElementById('depStatusSub').textContent  = 'Payment is taking longer than expected. Funds will be credited once confirmed.';
+        }
+      } catch (_) {}
+    }, 5000);
+  } catch (e) {
+    document.getElementById('depSpinner').style.display = 'none';
+    document.getElementById('depStatusText').textContent = '❌ Connection Error';
+    document.getElementById('depStatusSub').textContent  = 'Could not connect to server. Please try again.';
+  }
+};
+
+// ── WITHDRAWAL ──
+window.openWithdrawModal = () => {
+  if (!_userData) return;
+  document.getElementById('witBalSub').textContent = `Available: ${ugx(_userData.walletBalance)}`;
+  document.getElementById('witAmount').value = '';
+  document.getElementById('witPhone').value  = _userData.phone?.replace('+256','') || '';
+  document.querySelectorAll('#witPinRow .pin-box').forEach(b => b.value = '');
+  const wc = _userData.withdrawalCount || 0;
+  document.getElementById('witFeeNote').textContent = wc === 0
+    ? '🎉 First withdrawal — no fee!' : '10% fee applies. Net amount shown after deduction.';
+  openModal('withdrawModal');
+  setupPinBoxes('witPinRow');
+};
+
+window.submitWithdrawal = async () => {
+  if (!_user || !_userData) return;
+  const amount = parseInt(document.getElementById('witAmount').value, 10);
+  const phone  = document.getElementById('witPhone').value.trim().replace(/\D/g,'');
+  const pin    = Array.from(document.querySelectorAll('#witPinRow .pin-box')).map(b=>b.value).join('');
+  if (!amount || amount < 15000) { showToast('Minimum withdrawal is UGX 15,000', 'error'); return; }
+  if (amount > (_userData.walletBalance || 0)) { showToast('Insufficient balance', 'error'); return; }
+  if (!phone)  { showToast('Enter withdrawal phone number', 'error'); return; }
+  if (pin.length !== 4) { showToast('Enter your 4-digit PIN', 'error'); return; }
+  closeModal('withdrawModal');
+  showLoading(true);
+  try {
+    const r = await api('/withdraw/request', { userId:_user.uid, amount, phone:'+256'+phone, pin });
+    showLoading(false);
+    if (r.status === 'success') showToast('✅ Withdrawal submitted!\nPending admin approval.', 'success');
+    else if (r.needsPin) { showToast('Set your withdrawal PIN first', 'error'); openPinModal('setup'); }
+    else showToast(r.message || 'Withdrawal failed', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── PIN ──
+window.openPinModal = (mode) => {
+  document.getElementById('pinModalTitle').textContent = mode === 'setup' ? 'Set Withdrawal PIN' : 'Change PIN';
+  document.querySelectorAll('#pinSetRow .pin-box, #pinConfirmRow .pin-box').forEach(b => b.value = '');
+  openModal('pinModal');
+  setupPinBoxes('pinSetRow');
+  setupPinBoxes('pinConfirmRow');
+};
+window.submitPin = async () => {
+  const newPin  = Array.from(document.querySelectorAll('#pinSetRow .pin-box')).map(b=>b.value).join('');
+  const confPin = Array.from(document.querySelectorAll('#pinConfirmRow .pin-box')).map(b=>b.value).join('');
+  if (newPin.length !== 4)  { showToast('Enter a 4-digit PIN', 'error'); return; }
+  if (newPin !== confPin)   { showToast('PINs do not match', 'error'); return; }
+  closeModal('pinModal');
+  showLoading(true);
+  try {
+    const r = await api('/pin/set', { userId: _user.uid, pin: newPin });
+    showLoading(false);
+    if (r.status === 'success') showToast('✅ PIN set successfully', 'success');
+    else showToast(r.message || 'Failed to set PIN', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+function setupPinBoxes(rowId) {
+  const boxes = document.querySelectorAll('#' + rowId + ' .pin-box');
+  boxes.forEach((box, i) => {
+    box.addEventListener('input', () => {
+      if (box.value && i < boxes.length - 1) boxes[i+1].focus();
+    });
+    box.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !box.value && i > 0) boxes[i-1].focus();
+    });
+  });
+}
+
+// ── GIFT CODE ──
+window.openGiftModal = () => {
+  document.getElementById('giftCodeInput').value = '';
+  openModal('giftModal');
+};
+window.redeemGiftCode = async () => {
+  const code = document.getElementById('giftCodeInput').value.trim().toUpperCase();
+  if (!code) { showToast('Enter a gift code', 'error'); return; }
+  closeModal('giftModal');
+  showLoading(true);
+  try {
+    const r = await api('/giftcode/redeem', { userId: _user.uid, code });
+    showLoading(false);
+    if (r.status === 'success') showToast('🎁 ' + r.message, 'success');
+    else showToast(r.message || 'Invalid code', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── BANK ACCOUNTS ──
+window.openBankModal = () => {
+  renderBankList();
+  document.getElementById('bankName').value  = '';
+  document.getElementById('bankPhone').value = '';
+  openModal('bankModal');
+};
+function renderBankList() {
+  const accounts = _userData?.bankAccounts || [];
+  const el = document.getElementById('bankList');
+  if (!accounts.length) { el.innerHTML = '<div class="empty-state" style="padding:16px 0"><p style="font-size:12px">No saved accounts yet</p></div>'; return; }
+  el.innerHTML = accounts.map((a,i) => `
+    <div class="bank-item">
+      <div class="bank-icon">📱</div>
+      <div class="bank-info">
+        <div class="bank-name">${a.name || 'Account'}</div>
+        <div class="bank-phone">+256${a.phone}</div>
+      </div>
+      <button class="bank-del" onclick="removeBankAccount(${i})">🗑</button>
+    </div>`).join('');
+}
+window.addBankAccount = async () => {
+  const name  = document.getElementById('bankName').value.trim();
+  const phone = document.getElementById('bankPhone').value.trim().replace(/\D/g,'');
+  if (!name || !phone) { showToast('Enter account name and phone', 'error'); return; }
+  try {
+    await updateDoc(doc(db,'users',_user.uid), {
+      bankAccounts: arrayUnion({ name, phone })
+    });
+    document.getElementById('bankName').value  = '';
+    document.getElementById('bankPhone').value = '';
+    showToast('Account saved', 'success');
+    renderBankList();
+  } catch (e) { showToast('Failed to save', 'error'); }
+};
+window.removeBankAccount = async (idx) => {
+  if (!confirm('Remove this account?')) return;
+  const accounts = [...(_userData?.bankAccounts || [])];
+  const removed  = accounts[idx];
+  if (!removed) return;
+  try {
+    await updateDoc(doc(db,'users',_user.uid), { bankAccounts: arrayRemove(removed) });
+    showToast('Account removed', '');
+    renderBankList();
+  } catch (e) { showToast('Failed to remove', 'error'); }
+};
+
+// ── CONTENT PAGES ──
+const CONTENT = {
+  about: {
+    title: 'About Nexus',
+    body: `<h3>◈ Nexus Investment Platform</h3>
+      <p>Nexus is a modern investment platform designed to help you grow your money through structured investment plans and a powerful commission referral system.</p>
+      <p>Our platform is built on transparency, security, and consistent returns for all our investors.</p>
+      <h3 style="margin-top:16px">Our Mission</h3>
+      <p>To make structured investment accessible to everyone, with clear returns and instant commission rewards for building your network.</p>`
+  },
+  rules: {
+    title: 'Platform Rules',
+    body: `<h3>Investment Rules</h3>
+      <ul>
+        <li>Minimum deposit is UGX 30,000</li>
+        <li>Minimum withdrawal is UGX 15,000</li>
+        <li>First withdrawal is free; subsequent withdrawals carry a 10% fee</li>
+        <li>Investment plans run for a fixed cycle and mature automatically</li>
+        <li>Daily check-in bonus is UGX 500 per day</li>
+      </ul>
+      <h3 style="margin-top:16px">Commission Rules</h3>
+      <ul>
+        <li>Level 1: 35% of every investment your direct referral makes</li>
+        <li>Level 2: 5% of every investment by your L2 team</li>
+        <li>Level 3: 2% of every investment by your L3 team</li>
+        <li>Commission is credited instantly and can be withdrawn immediately</li>
+      </ul>
+      <h3 style="margin-top:16px">Account Rules</h3>
+      <ul>
+        <li>One account per person only</li>
+        <li>Fraudulent activity will result in permanent suspension</li>
+        <li>All transactions are final and subject to review</li>
+      </ul>`
+  },
+  support: {
+    title: 'Customer Service',
+    body: `<h3>Contact Us</h3>
+      <p>Our support team is available to help you with any issues or questions about your Nexus account.</p>
+      <p><strong>Telegram:</strong> Contact via our Telegram support channel</p>
+      <p><strong>WhatsApp:</strong> Send us a message on WhatsApp</p>
+      <p><strong>Email:</strong> support@nexusinvest.com</p>
+      <p style="margin-top:16px">Support hours: Monday – Saturday, 8:00 AM – 8:00 PM (EAT)</p>
+      <p>For urgent withdrawal issues, please contact us directly via Telegram for fastest response.</p>`
+  }
+};
+window.openContentModal = (type) => {
+  const c = CONTENT[type];
+  if (!c) return;
+  document.getElementById('contentModalTitle').textContent = c.title;
+  document.getElementById('contentModalBody').innerHTML    = c.body;
+  openModal('contentModal');
+};
+
+// ── MODAL HELPERS ──
+function openModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+window.openModal  = openModal;
+window.closeModal = closeModal;
+
+// ── PHOTO UPLOAD ──
+const CLOUD  = 'dcmfxgofa';
+const PRESET = 'x-engineuploads';
+
+window.triggerPhotoUpload = () => document.getElementById('photoInput').click();
+
+window.uploadPhoto = async (input) => {
+  const file = input.files[0];
+  if (!file || !_user) return;
+  showLoading(true);
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', PRESET);
+    const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, { method:'POST', body:fd });
+    const data = await resp.json();
+    if (data.secure_url) {
+      await updateDoc(doc(db,'users',_user.uid), { profilePhoto: data.secure_url });
+      showToast('Profile photo updated', 'success');
+    }
+  } catch (e) { showToast('Photo upload failed', 'error'); }
+  finally { showLoading(false); input.value = ''; }
+};
+
+// ── REFERRAL CODE FROM URL ──
+const urlRef = new URLSearchParams(window.location.search).get('ref');
+if (urlRef) document.getElementById('regRef').value = urlRef.toUpperCase();
+
+</script>
+</body>
+</html>
