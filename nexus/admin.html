@@ -7,12 +7,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#03080f;--bg2:#06101e;--bg3:#0b192e;
-  --card:rgba(255,255,255,0.03);--card2:rgba(255,255,255,0.06);
-  --border:rgba(37,99,235,0.1);--border2:rgba(37,99,235,0.2);
-  --text:#dce8f5;--text2:#6b7d96;--muted:#243452;
-  --gold:#2563eb;--goldfade:rgba(37,99,235,0.1);--goldborder:rgba(37,99,235,0.22);
-  --red:#ef4444;--green:#22c55e;--radius:10px;
+  --bg:#f0f4f9;--bg2:#ffffff;--bg3:#f4f7fc;
+  --card:#ffffff;--card2:#f4f7fc;
+  --border:rgba(0,0,0,0.07);--border2:rgba(0,0,0,0.13);
+  --text:#0d1b2e;--text2:#64748b;--muted:#c0cde0;
+  --gold:#2563eb;--goldfade:rgba(37,99,235,0.08);--goldborder:rgba(37,99,235,0.22);
+  --red:#ef4444;--green:#16a34a;--radius:10px;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif}
@@ -35,8 +35,9 @@ input,button,select,textarea{font-family:'Outfit',sans-serif}
 .login-box h2{font-size:18px;font-weight:800;margin-bottom:4px}
 .login-box p{font-size:13px;color:var(--text2);margin-bottom:22px}
 .lbl{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
-.inp{width:100%;height:46px;background:rgba(255,255,255,0.07);border:1px solid var(--border2);border-radius:10px;padding:0 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:16px;font-family:'Share Tech Mono',monospace;letter-spacing:2px}
-.inp:focus{border-color:var(--goldborder)}
+.inp{width:100%;height:46px;background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.25);border-radius:10px;padding:0 14px;color:#fff;font-size:15px;outline:none;margin-bottom:16px;font-family:'Share Tech Mono',monospace;letter-spacing:2px}
+.inp::placeholder{color:rgba(255,255,255,0.4)}
+.inp:focus{border-color:rgba(255,255,255,0.5)}
 .btn-gold{width:100%;height:48px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;transition:opacity .2s}
 .btn-gold:active{opacity:.85}
 .login-err{color:var(--red);font-size:13px;margin-bottom:12px;display:none}
@@ -121,7 +122,7 @@ tr:hover td{background:var(--card)}
 /* ── FILTER TABS ── */
 .filter-tabs{display:flex;gap:6px;padding:14px 16px;border-bottom:1px solid var(--border)}
 .ftab{height:30px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Outfit',sans-serif}
-.ftab.active{background:var(--white);color:#111;border-color:var(--white)}
+.ftab.active{background:var(--white);color:#111;border-color:var(--text)}
 .ftab.active{background:var(--text);color:var(--bg)}
 
 /* ── FORMS ── */
