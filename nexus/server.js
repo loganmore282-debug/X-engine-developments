@@ -188,8 +188,26 @@ app.post('/register', async (req, res) => {
       }
     }
 
+    const WELCOME_BONUS = 10000;
+    const { date, time } = nowStr();
     const batch = db.batch();
     const update = { registrationDone: true };
+
+    // Credit UGX 10,000 welcome bonus
+    batch.update(userRef, { walletBalance: FieldValue.increment(WELCOME_BONUS) });
+    batch.set(db.collection('transactions').doc(), {
+      userId, type: 'admin_credit',
+      description: 'Welcome bonus — new account',
+      amount: WELCOME_BONUS, status: 'success', date, time,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    batch.set(db.collection('notifications').doc(), {
+      userId, title: '🎉 Welcome to Nexus!',
+      message: `${fmtUGX(WELCOME_BONUS)} welcome bonus has been credited to your account!\n\nStart investing in a plan to earn daily returns.\n\n📅 ${date}\n⏰ ${time}\n\n◈ Nexus Investment Platform`,
+      type: 'admin_credit', amount: WELCOME_BONUS, date, time,
+      readBy: [], createdAt: FieldValue.serverTimestamp()
+    });
+
     if (referrerId) {
       update.referredBy = referrerId;
       // L1 referrer count
