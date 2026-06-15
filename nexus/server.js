@@ -536,9 +536,9 @@ app.post('/invest/claim', async (req, res) => {
 // WITHDRAWALS — user requests, admin processes manually
 // ═══════════════════════════════════════════
 app.post('/withdraw/request', async (req, res) => {
-  const { userId, amount, phone, pin } = req.body;
-  if (!userId || !amount || !phone || !pin)
-    return res.status(400).json({ status: 'error', message: 'userId, amount, phone and PIN required' });
+  const { userId, amount, phone } = req.body;
+  if (!userId || !amount || !phone)
+    return res.status(400).json({ status: 'error', message: 'userId, amount and phone required' });
   const amt = parseFloat(amount);
   if (isNaN(amt) || amt < MIN_WITHDRAWAL)
     return res.status(400).json({ status: 'error', message: `Minimum withdrawal is ${fmtUGX(MIN_WITHDRAWAL)}` });
@@ -548,29 +548,12 @@ app.post('/withdraw/request', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
-    if (!user.withdrawalPin) return res.status(400).json({ status: 'error', message: 'Set your withdrawal PIN first', needsPin: true });
-
-    // PIN brute-force guard
-    const lockUntil = user.pinLockUntil?.toDate?.() || null;
-    if (lockUntil && lockUntil > new Date()) {
-      const mins = Math.ceil((lockUntil - new Date()) / 60000);
-      return res.status(429).json({ status: 'error', message: `Account locked. Try in ${mins} min.` });
-    }
-    if (user.withdrawalPin !== hashPin(pin)) {
-      const att  = (user.pinAttempts || 0) + 1;
-      const upd  = { pinAttempts: att };
-      if (att >= 10) { upd.pinLockUntil = new Date(Date.now() + 3600000); upd.pinAttempts = 0; }
-      await db.collection('users').doc(userId).update(upd);
-      const left = att >= 10 ? 0 : 10 - att;
-      return res.status(400).json({ status: 'error', message: att >= 10 ? 'Too many wrong PINs. Locked 1 hour.' : `Wrong PIN. ${left} attempt(s) left.` });
-    }
-    if (user.pinAttempts > 0) await db.collection('users').doc(userId).update({ pinAttempts: 0, pinLockUntil: null });
 
     if ((user.walletBalance || 0) < amt)
       return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });
 
-    const wc     = user.withdrawalCount || 0;
-    const fee    = wc === 0 ? 0 : Math.round(amt * LIQUIDITY_FEE);
+    // 17% liquidity fee on all withdrawals
+    const fee    = Math.round(amt * LIQUIDITY_FEE);
     const netAmt = amt - fee;
     const { date, time } = nowStr();
     let witId;
@@ -595,7 +578,7 @@ app.post('/withdraw/request', async (req, res) => {
       });
     });
     await notify(userId, '⏳ Withdrawal Submitted',
-      `Your withdrawal request for ${fmtUGX(netAmt)} (after ${fmtUGX(fee)} liquidity fee) to ${fullPhone} has been submitted.\n\nWe will process it shortly.\n\n📅 ${date}\n⏰ ${time}`,
+      `Your withdrawal request for ${fmtUGX(netAmt)} (after ${fmtUGX(fee)} liquidity fee, 17%) to ${fullPhone} has been submitted.\n\nWe will process it shortly.\n\n📅 ${date}\n⏰ ${time}`,
       'withdrawal', { amount: amt, net: netAmt, fee, phone: fullPhone });
     console.log(`📋 Withdrawal ${witId}: ${fmtUGX(amt)} → ${fullPhone}`);
     return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });

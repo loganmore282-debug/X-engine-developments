@@ -244,8 +244,20 @@ tr:hover td{background:var(--card)}
       <button class="nav-item" data-tab="products" onclick="showTab('products',this)">
         <span class="ni-icon">📦</span> Products
       </button>
+      <button class="nav-item" data-tab="investments" onclick="showTab('investments',this)">
+        <span class="ni-icon">📈</span> Investments
+      </button>
+      <button class="nav-item" data-tab="transactions" onclick="showTab('transactions',this)">
+        <span class="ni-icon">🧾</span> Transactions
+      </button>
       <button class="nav-item" data-tab="users" onclick="showTab('users',this)">
         <span class="ni-icon">👥</span> Users
+      </button>
+      <button class="nav-item" data-tab="referrals" onclick="showTab('referrals',this)">
+        <span class="ni-icon">🌐</span> Referrals
+      </button>
+      <button class="nav-item" data-tab="broadcast" onclick="showTab('broadcast',this)">
+        <span class="ni-icon">📣</span> Broadcast
       </button>
       <button class="nav-item" data-tab="settings" onclick="showTab('settings',this)">
         <span class="ni-icon">⚙️</span> Settings
@@ -270,10 +282,7 @@ tr:hover td{background:var(--card)}
       </div>
       <div class="page-body">
         <div class="stats-grid" id="statsGrid">
-          <div class="stat-card"><div class="sc-val">—</div><div class="sc-lbl">Total Users</div></div>
-          <div class="stat-card"><div class="sc-val">—</div><div class="sc-lbl">Active Investments</div></div>
-          <div class="stat-card gold-accent"><div class="sc-val">—</div><div class="sc-lbl">Pending Withdrawals</div></div>
-          <div class="stat-card"><div class="sc-val">—</div><div class="sc-lbl">Unmatched Deposits</div></div>
+          <div class="stat-card"><div class="sc-val">—</div><div class="sc-lbl">Loading…</div></div>
         </div>
         <div class="table-wrap">
           <div class="table-header">
@@ -382,6 +391,116 @@ tr:hover td{background:var(--card)}
           <table>
             <thead><tr><th>Name</th><th>Phone</th><th>Balance</th><th>Invested</th><th>Commission</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody id="usersTable"><tr class="empty-row"><td colspan="7">Search for a user above</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INVESTMENTS ── -->
+    <div class="tab-page" id="tab-investments">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Investments</div>
+          <div class="page-sub">All user investment plans</div>
+        </div>
+        <button class="btn-sm gold" onclick="loadInvestments()">↺ Refresh</button>
+      </div>
+      <div class="table-wrap" style="margin:24px">
+        <div class="filter-tabs">
+          <button class="ftab active" onclick="filterInv('active',this)">Active</button>
+          <button class="ftab" onclick="filterInv('matured',this)">Matured</button>
+          <button class="ftab" onclick="filterInv('claimed',this)">Claimed</button>
+          <button class="ftab" onclick="filterInv('all',this)">All</button>
+        </div>
+        <table>
+          <thead><tr><th>User</th><th>Plan</th><th>Invested</th><th>Expected Return</th><th>Started</th><th>Matures</th><th>Status</th></tr></thead>
+          <tbody id="investmentsTable"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── TRANSACTIONS ── -->
+    <div class="tab-page" id="tab-transactions">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Transactions</div>
+          <div class="page-sub">Full financial activity log</div>
+        </div>
+        <button class="btn-sm gold" onclick="loadTransactions()">↺ Refresh</button>
+      </div>
+      <div class="table-wrap" style="margin:24px">
+        <div class="filter-tabs">
+          <button class="ftab active" onclick="filterTx('all',this)">All</button>
+          <button class="ftab" onclick="filterTx('deposit',this)">Deposits</button>
+          <button class="ftab" onclick="filterTx('commission',this)">Commissions</button>
+          <button class="ftab" onclick="filterTx('checkin',this)">Check-ins</button>
+          <button class="ftab" onclick="filterTx('investment_return',this)">Returns</button>
+          <button class="ftab" onclick="filterTx('gift_code',this)">Gift Codes</button>
+        </div>
+        <table>
+          <thead><tr><th>Type</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody id="transactionsTable"><tr class="empty-row"><td colspan="5">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── REFERRALS ── -->
+    <div class="tab-page" id="tab-referrals">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Referrals & Teams</div>
+          <div class="page-sub">Top referrers by team size and commission earned</div>
+        </div>
+        <button class="btn-sm gold" onclick="loadReferrals()">↺ Refresh</button>
+      </div>
+      <div class="page-body">
+        <div class="search-bar">
+          <input class="search-input" id="refSearch" placeholder="Search referrer by phone, name, or referral code…" onkeydown="if(event.key==='Enter')loadReferrals()">
+          <button class="btn-sm gold" onclick="loadReferrals()">Search</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Referrer</th><th>Ref Code</th><th>L1</th><th>L2</th><th>L3</th><th>Team Total</th><th>Commission Earned</th></tr></thead>
+            <tbody id="referralsTable"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BROADCAST ── -->
+    <div class="tab-page" id="tab-broadcast">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Broadcast</div>
+          <div class="page-sub">Send a notification to users</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:600px">
+        <div class="form-group">
+          <label class="form-label">Audience</label>
+          <select class="form-select" id="bcAudience">
+            <option value="all">All users</option>
+            <option value="one">Single user (by phone)</option>
+          </select>
+        </div>
+        <div class="form-group" id="bcPhoneGroup" style="display:none">
+          <label class="form-label">User Phone</label>
+          <input class="form-input mono-input" id="bcPhone" placeholder="+256700000000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input class="form-input" id="bcTitle" placeholder="e.g. New investment plans available!">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Message</label>
+          <textarea class="form-textarea" id="bcMessage" placeholder="Write your message…"></textarea>
+        </div>
+        <button class="btn-sm gold" style="width:100%" onclick="sendBroadcast()">📣 Send Notification</button>
+        <div class="table-wrap" style="margin-top:24px">
+          <div class="table-header"><span class="table-title">Recent Broadcasts</span></div>
+          <table>
+            <thead><tr><th>Title</th><th>Audience</th><th>Sent</th></tr></thead>
+            <tbody id="broadcastTable"><tr class="empty-row"><td colspan="3">No broadcasts yet</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -584,6 +703,18 @@ tr:hover td{background:var(--card)}
   </div>
 </div>
 
+<!-- User detail -->
+<div id="userDetailModal" class="modal-overlay" onclick="if(event.target===this)closeModal('userDetailModal')">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-title" id="udName">User</div>
+    <div class="modal-sub" id="udPhone">—</div>
+    <div id="udBody"><div style="text-align:center;color:var(--text2);padding:20px">Loading…</div></div>
+    <div class="modal-footer">
+      <button class="btn-sm outline" onclick="closeModal('userDetailModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════
      FIREBASE + ADMIN JS
 ══════════════════════════════════════════ -->
@@ -672,12 +803,16 @@ window.showTab = (tab, btn) => {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab)?.classList.add('active');
   btn.classList.add('active');
-  if (tab === 'giftcodes')  loadCodes();
-  if (tab === 'products')   loadProducts();
-  if (tab === 'withdrawals')loadWithdrawals();
-  if (tab === 'deposits')   loadUnmatched();
-  if (tab === 'settings')   loadSettings();
-  if (tab === 'dashboard')  loadDashboard();
+  if (tab === 'giftcodes')    loadCodes();
+  if (tab === 'products')     loadProducts();
+  if (tab === 'withdrawals')  loadWithdrawals();
+  if (tab === 'deposits')     loadUnmatched();
+  if (tab === 'settings')     loadSettings();
+  if (tab === 'dashboard')    loadDashboard();
+  if (tab === 'investments')  loadInvestments();
+  if (tab === 'transactions') loadTransactions();
+  if (tab === 'referrals')    loadReferrals();
+  if (tab === 'broadcast')    loadBroadcasts();
 };
 
 // ── DASHBOARD ──
@@ -689,12 +824,29 @@ window.loadDashboard = async () => {
       getDocs(query(collection(db,'withdrawals'),  where('status','==','pending'))),
       getDocs(query(collection(db,'unmatchedDeposits'), where('status','==','unmatched')))
     ]);
+    // Aggregate financials from user docs
+    let totalBal = 0, totalDeposited = 0, totalWithdrawn = 0, totalInvested = 0, totalCommission = 0, banned = 0;
+    usersSnap.forEach(d => {
+      const u = d.data();
+      totalBal        += u.walletBalance     || 0;
+      totalDeposited  += u.totalDeposited     || 0;
+      totalWithdrawn  += u.totalWithdrawn     || 0;
+      totalInvested   += u.totalInvested      || 0;
+      totalCommission += u.commissionEarned   || 0;
+      if (u.status === 'banned') banned++;
+    });
     const sg = document.getElementById('statsGrid');
     sg.innerHTML = `
       <div class="stat-card"><div class="sc-val">${usersSnap.size}</div><div class="sc-lbl">Total Users</div></div>
       <div class="stat-card"><div class="sc-val">${invSnap.size}</div><div class="sc-lbl">Active Plans</div></div>
       <div class="stat-card gold-accent"><div class="sc-val">${witSnap.size}</div><div class="sc-lbl">Pending Withdrawals</div></div>
-      <div class="stat-card"><div class="sc-val">${unmSnap.size}</div><div class="sc-lbl">Unmatched Deposits</div></div>`;
+      <div class="stat-card"><div class="sc-val">${unmSnap.size}</div><div class="sc-lbl">Unmatched Deposits</div></div>
+      <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalBal)}</div><div class="sc-lbl">Wallet Liability</div></div>
+      <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalDeposited)}</div><div class="sc-lbl">Total Deposited</div></div>
+      <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalWithdrawn)}</div><div class="sc-lbl">Total Withdrawn</div></div>
+      <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalInvested)}</div><div class="sc-lbl">Total Invested</div></div>
+      <div class="stat-card gold-accent"><div class="sc-val" style="font-size:18px">${ugx(totalCommission)}</div><div class="sc-lbl">Commission Paid</div></div>
+      <div class="stat-card"><div class="sc-val">${banned}</div><div class="sc-lbl">Banned Accounts</div></div>`;
     // Update badges
     const pb = document.getElementById('pendingBadge');
     pb.textContent = witSnap.size; pb.style.display = witSnap.size ? '' : 'none';
@@ -1083,7 +1235,8 @@ window.searchUsers = async () => {
         <td>${ugx(u.commissionEarned)}</td>
         <td><span class="badge ${status}">${status}</span></td>
         <td>
-          <button class="action-btn btn-green" onclick="openAddFunds('${d.id}','${u.name||''}')">+ Funds</button>
+          <button class="action-btn btn-blue" onclick="openUserDetail('${d.id}')">View</button>
+          <button class="action-btn btn-green" onclick="openAddFunds('${d.id}','${(u.name||'').replace(/'/g,'')}')">+ Funds</button>
           <button class="action-btn ${status==='banned'?'btn-green':'btn-red'}" onclick="toggleBan('${d.id}','${status}')">
             ${status==='banned'?'Unban':'Ban'}
           </button>
@@ -1128,6 +1281,182 @@ window.toggleBan = async (uid, currentStatus) => {
     if (r.status === 'success') { toast(`User ${action}ned`,'success'); searchUsers(); }
     else toast(r.message||'Error','error');
   } catch (e) { toast('Error: '+e.message,'error'); }
+};
+
+// ── INVESTMENTS ──
+let _invFilter = 'active';
+window.filterInv = (f, btn) => {
+  _invFilter = f;
+  document.querySelectorAll('#tab-investments .ftab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadInvestments();
+};
+window.loadInvestments = async () => {
+  const tbody = document.getElementById('investmentsTable');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Loading…</td></tr>';
+  try {
+    const snap = await getDocs(query(collection(db,'investments'), orderBy('createdAt','desc'), limit(200)));
+    let items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    if (_invFilter !== 'all') items = items.filter(i => (i.status||'active') === _invFilter);
+    if (!items.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No investments</td></tr>'; return; }
+    tbody.innerHTML = items.map(i => `<tr>
+      <td><strong>${i.userName || i.userId?.slice(0,8) || '—'}</strong><br><span style="font-size:11px;color:var(--text2)">${i.userPhone||''}</span></td>
+      <td>${i.productName || 'Plan'}</td>
+      <td>${ugx(i.amount)}</td>
+      <td><strong style="color:var(--green)">${ugx(i.expectedReturn)}</strong></td>
+      <td style="font-size:12px">${fmtDate(i.createdAt)}</td>
+      <td style="font-size:12px">${i.maturityDate ? fmtDate(i.maturityDate) : '—'}</td>
+      <td><span class="badge ${i.status==='matured'?'pending':i.status==='claimed'?'processed':'active'}">${i.status||'active'}</span></td>
+    </tr>`).join('');
+  } catch (e) { toast('Error: '+e.message,'error'); }
+};
+
+// ── TRANSACTIONS ──
+let _txFilter = 'all';
+window.filterTx = (f, btn) => {
+  _txFilter = f;
+  document.querySelectorAll('#tab-transactions .ftab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadTransactions();
+};
+window.loadTransactions = async () => {
+  const tbody = document.getElementById('transactionsTable');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Loading…</td></tr>';
+  try {
+    const snap = await getDocs(query(collection(db,'transactions'), orderBy('createdAt','desc'), limit(200)));
+    let items = snap.docs.map(d => d.data());
+    if (_txFilter !== 'all') items = items.filter(t => t.type === _txFilter);
+    if (!items.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No transactions</td></tr>'; return; }
+    const typeLabel = { deposit:'Deposit', withdrawal:'Withdrawal', commission:'Commission', checkin:'Check-in', investment:'Investment', investment_return:'Return', gift_code:'Gift Code', admin_credit:'Admin Credit' };
+    tbody.innerHTML = items.map(t => {
+      const pos = (t.amount||0) >= 0;
+      return `<tr>
+        <td><span class="badge ${pos?'active':'rejected'}">${typeLabel[t.type]||t.type}</span></td>
+        <td style="font-size:12px">${t.description || '—'}</td>
+        <td style="color:${pos?'var(--green)':'var(--red)'};font-weight:700">${pos?'+':''}${ugx(t.amount)}</td>
+        <td><span class="badge ${t.status==='success'?'processed':t.status==='pending'?'pending':'rejected'}">${t.status||'—'}</span></td>
+        <td style="font-size:12px">${t.date || fmtDate(t.createdAt)} ${t.time||''}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) { toast('Error: '+e.message,'error'); }
+};
+
+// ── REFERRALS ──
+window.loadReferrals = async () => {
+  const tbody = document.getElementById('referralsTable');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Loading…</td></tr>';
+  try {
+    const q = (document.getElementById('refSearch').value || '').trim().toLowerCase();
+    const snap = await getDocs(collection(db,'users'));
+    let users = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    // Only referrers with at least one team member
+    users = users.filter(u => (u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0) > 0);
+    if (q) users = users.filter(u =>
+      (u.name||'').toLowerCase().includes(q) ||
+      (u.phone||'').includes(q) ||
+      (u.referralCode||'').toLowerCase().includes(q)
+    );
+    users.sort((a,b) => (b.commissionEarned||0) - (a.commissionEarned||0));
+    users = users.slice(0, 50);
+    if (!users.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No referrers found</td></tr>'; return; }
+    tbody.innerHTML = users.map(u => {
+      const total = (u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0);
+      return `<tr>
+        <td><strong>${u.name||'—'}</strong><br><span style="font-size:11px;color:var(--text2)">${u.phone||''}</span></td>
+        <td><span class="mono" style="color:var(--gold);font-weight:700">${u.referralCode||'—'}</span></td>
+        <td>${u.teamL1Count||0}</td>
+        <td>${u.teamL2Count||0}</td>
+        <td>${u.teamL3Count||0}</td>
+        <td><strong>${total}</strong></td>
+        <td><strong style="color:var(--green)">${ugx(u.commissionEarned)}</strong></td>
+      </tr>`;
+    }).join('');
+  } catch (e) { toast('Error: '+e.message,'error'); }
+};
+
+// ── BROADCAST ──
+document.getElementById('bcAudience')?.addEventListener('change', e => {
+  document.getElementById('bcPhoneGroup').style.display = e.target.value === 'one' ? 'block' : 'none';
+});
+window.loadBroadcasts = async () => {
+  const tbody = document.getElementById('broadcastTable');
+  try {
+    const snap = await getDocs(query(collection(db,'broadcasts'), orderBy('createdAt','desc'), limit(20)));
+    if (snap.empty) { tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No broadcasts yet</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map(d => {
+      const b = d.data();
+      return `<tr><td><strong>${b.title||'—'}</strong></td><td>${b.audience==='all'?'All users':b.targetPhone||'Single'}</td><td style="font-size:12px">${fmtDate(b.createdAt)}</td></tr>`;
+    }).join('');
+  } catch (e) { tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No broadcasts yet</td></tr>'; }
+};
+window.sendBroadcast = async () => {
+  const audience = document.getElementById('bcAudience').value;
+  const title    = document.getElementById('bcTitle').value.trim();
+  const message  = document.getElementById('bcMessage').value.trim();
+  const phone    = document.getElementById('bcPhone').value.trim();
+  if (!title || !message) { toast('Title and message required','error'); return; }
+  if (audience === 'one' && !phone) { toast('Enter a user phone','error'); return; }
+  if (!confirm(audience === 'all' ? 'Send this notification to ALL users?' : 'Send to ' + phone + '?')) return;
+  try {
+    let targets = [];
+    if (audience === 'one') {
+      targets = [ await phoneToUid(phone) ];
+    } else {
+      const snap = await getDocs(collection(db,'users'));
+      targets = snap.docs.map(d => d.id);
+    }
+    const now = new Date();
+    const date = now.toLocaleDateString('en-UG');
+    // Batch notifications (chunks of 400 to stay under 500-write batch limit)
+    for (let i = 0; i < targets.length; i += 400) {
+      const batch = writeBatch(db);
+      targets.slice(i, i+400).forEach(uid => {
+        batch.set(doc(collection(db,'notifications')), {
+          userId: uid, title, message, type: 'admin_credit',
+          date, readBy: [], createdAt: serverTimestamp()
+        });
+      });
+      await batch.commit();
+    }
+    await addDoc(collection(db,'broadcasts'), {
+      title, message, audience, targetPhone: audience==='one'?phone:'', count: targets.length, createdAt: serverTimestamp()
+    });
+    toast(`📣 Sent to ${targets.length} user(s)`, 'success');
+    document.getElementById('bcTitle').value = '';
+    document.getElementById('bcMessage').value = '';
+    loadBroadcasts();
+  } catch (e) { toast('Error: '+e.message,'error'); }
+};
+
+// ── USER DETAIL ──
+window.openUserDetail = async (uid) => {
+  openModal('userDetailModal');
+  document.getElementById('udBody').innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px">Loading…</div>';
+  try {
+    const snap = await getDoc(doc(db,'users',uid));
+    if (!snap.exists()) { document.getElementById('udBody').innerHTML = 'User not found'; return; }
+    const u = snap.data();
+    document.getElementById('udName').textContent = u.name || '—';
+    document.getElementById('udPhone').textContent = u.phone || '—';
+    const team = (u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0);
+    const row = (l,v) => `<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2);font-size:13px">${l}</span><span style="font-weight:700;font-size:13px">${v}</span></div>`;
+    document.getElementById('udBody').innerHTML = `
+      <div style="margin-bottom:16px">
+        ${row('Wallet Balance', ugx(u.walletBalance))}
+        ${row('Total Deposited', ugx(u.totalDeposited))}
+        ${row('Total Invested', ugx(u.totalInvested))}
+        ${row('Total Withdrawn', ugx(u.totalWithdrawn))}
+        ${row('Commission Earned', ugx(u.commissionEarned))}
+        ${row('Referral Code', u.referralCode || '—')}
+        ${row('Team (L1/L2/L3)', `${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0} (${team})`)}
+        ${row('Check-in Streak', (u.checkinStreak||0) + ' days')}
+        ${row('Status', u.status || 'active')}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-sm gold" onclick="closeModal('userDetailModal');openAddFunds('${uid}','${(u.name||'').replace(/'/g,'')}')">+ Add Funds</button>
+        <button class="btn-sm outline" onclick="closeModal('userDetailModal');toggleBan('${uid}','${u.status||'active'}')">${u.status==='banned'?'Unban':'Ban'} User</button>
+      </div>`;
+  } catch (e) { document.getElementById('udBody').innerHTML = 'Error: ' + e.message; }
 };
 
 // ── SETTINGS ──
