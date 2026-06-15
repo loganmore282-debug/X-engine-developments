@@ -642,30 +642,22 @@ function genCode6() {
 }
 
 // ── LOGIN ──
-window.doAdminLogin = async () => {
+const ADMIN_ACCESS = 'FAHAD8800';
+window.doAdminLogin = () => {
   const key = document.getElementById('adminKeyInput').value.trim();
   if (!key) return;
-  try {
-    const resp = await fetch(SERVER + '/admin/check-key', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ key })
-    });
-    const r = await resp.json();
-    if (!r.valid) {
-      document.getElementById('loginErr').style.display = 'block'; return;
-    }
-    _adminKey = key;
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('adminPanel').classList.add('show');
-    loadDashboard();
-    loadWithdrawals();
-    loadCodes();
-    loadProducts();
-    loadSettings();
-  } catch (e) {
-    // If server not available yet, check against local key for dev
-    document.getElementById('loginErr').style.display = 'block';
+  if (key !== ADMIN_ACCESS) {
+    document.getElementById('loginErr').style.display = 'block'; return;
   }
+  _adminKey = key;
+  document.getElementById('loginErr').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('adminPanel').classList.add('show');
+  loadDashboard();
+  loadWithdrawals();
+  loadCodes();
+  loadProducts();
+  loadSettings();
 };
 window.adminLogout = () => {
   _adminKey = '';
