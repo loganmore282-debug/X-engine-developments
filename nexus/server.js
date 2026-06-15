@@ -625,7 +625,7 @@ app.post('/withdraw/request', async (req, res) => {
 
     const witCount  = user.withdrawalCount || 0;
     const isTop     = user.isTopInvestor   || false;
-    const fee       = (witCount === 0 || isTop) ? 0 : Math.round(amt * 0.1);
+    const fee       = (witCount === 0 || isTop) ? 0 : Math.round(amt * 0.17); // 17% liquidity fee
     const netAmount = amt - fee;
     const reference = uuidv4();
     let witId;

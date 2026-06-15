@@ -673,7 +673,7 @@ body{padding-bottom:80px}
       <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="2">
       <input class="pin-box" type="password" maxlength="1" inputmode="numeric" data-idx="3">
     </div>
-    <div class="form-info" id="witFeeNote">First withdrawal is free. Subsequent withdrawals: 10% fee.</div>
+    <div class="form-info" id="witFeeNote">First withdrawal is free. Subsequent withdrawals: 17% liquidity fee.</div>
     <button class="btn-submit" onclick="submitWithdrawal()">Request Withdrawal</button>
     <button class="btn-outline" onclick="openPinModal('setup')">Change / Set PIN</button>
   </div>
@@ -1317,7 +1317,7 @@ window.openWithdrawModal = () => {
   document.querySelectorAll('#witPinRow .pin-box').forEach(b => b.value = '');
   const wc = _userData.withdrawalCount || 0;
   document.getElementById('witFeeNote').textContent = wc === 0
-    ? '🎉 First withdrawal — no fee!' : '10% fee applies. Net amount shown after deduction.';
+    ? '🎉 First withdrawal — no liquidity fee!' : '17% liquidity fee applies. Net amount will be shown after deduction.';
   openModal('withdrawModal');
   setupPinBoxes('witPinRow');
 };
@@ -1458,7 +1458,7 @@ const CONTENT = {
       <ul>
         <li>Minimum deposit is UGX 30,000</li>
         <li>Minimum withdrawal is UGX 15,000</li>
-        <li>First withdrawal is free; subsequent withdrawals carry a 10% fee</li>
+        <li>First withdrawal is free; subsequent withdrawals carry a 17% liquidity fee</li>
         <li>Investment plans run for a fixed cycle and mature automatically</li>
         <li>Daily check-in bonus is UGX 500 per day</li>
       </ul>
