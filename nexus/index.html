@@ -302,7 +302,8 @@ body{padding-bottom:106px}
 .product-btn.sold{background:var(--card);color:var(--text2);cursor:not-allowed;border:1px solid var(--border)}
 
 /* ── RECORDS (TABS + LIST) ── */
-.pill-tabs{display:flex;gap:8px;margin-bottom:16px}
+.pill-tabs{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+.pill-tabs::-webkit-scrollbar{display:none}
 .pill-tab{height:34px;padding:0 16px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s}
 .pill-tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
 .tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
@@ -320,6 +321,19 @@ body{padding-bottom:106px}
 .tx-status{font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px;text-align:right}
 .tx-status.ok{color:var(--green)}
 .tx-status.pend{color:#eab308}
+
+/* ── RECORD CARDS ── */
+.rec-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:12px}
+.rec-card-hd{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1.5px solid var(--border)}
+.rec-card-hd-title{font-size:14px;font-weight:800;color:var(--text)}
+.rec-card-hd-amt{font-size:14px;font-weight:900;color:var(--text)}
+.rec-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px dotted rgba(0,0,0,0.07)}
+.rec-row:last-child{border-bottom:none}
+.rec-row-lbl{font-size:13px;color:var(--text2)}
+.rec-row-val{font-size:13px;font-weight:500;color:var(--text);text-align:right;max-width:60%;word-break:break-all}
+.s-green{color:var(--green)!important;font-weight:700!important}
+.s-orange{color:#f59e0b!important;font-weight:700!important}
+.s-red{color:var(--red)!important;font-weight:700!important}
 
 /* ── COMMISSION SECTION ── */
 .ref-card{background:linear-gradient(135deg,#1a48d4 0%,#0d2fa8 60%,#091f80 100%);color:#fff;border-radius:16px;padding:20px;margin-bottom:16px;border:none}
@@ -641,8 +655,9 @@ body{padding-bottom:106px}
   <div class="section" id="recordsSection">
     <div class="sec-title">Account Records</div>
     <div class="pill-tabs">
-      <button class="pill-tab active" onclick="switchRecord('income',this)">Income</button>
+      <button class="pill-tab active" onclick="switchRecord('deposits',this)">Deposits</button>
       <button class="pill-tab" onclick="switchRecord('withdrawals',this)">Withdrawals</button>
+      <button class="pill-tab" onclick="switchRecord('referrals',this)">Referrals</button>
       <button class="pill-tab" onclick="switchRecord('investments',this)">Plans</button>
     </div>
     <div id="recordsContent">
@@ -1191,7 +1206,7 @@ onAuthStateChanged(auth, async user => {
     showLoading(false);
     startListener(user.uid);
     loadProducts();
-    loadRecords('income');
+    loadRecords('deposits');
     loadSlideshow();
     loadTicker(user.uid);
     checkMaintenance();
@@ -1238,13 +1253,8 @@ function renderHome(u) {
   const referral = u.commissionEarned || 0;
   const cashback = (u.checkinEarned || 0) + (u.totalEarned || 0);
   document.getElementById('homeCumulative').textContent = ugx(referral + cashback);
-  document.getElementById('homeCommEarned').textContent = ugx(referral);
-  document.getElementById('homeCashback').textContent   = ugx(cashback);
   const firstName = u.name ? u.name.split(' ')[0] : '';
   document.getElementById('topGreeting').textContent = 'Hi, ' + firstName;
-  const initial = (u.name || '?')[0].toUpperCase();
-  document.getElementById('avatarInitial').textContent    = initial;
-  document.getElementById('avatarInitialTop').textContent = initial;
   // Check-in
   const eat = new Date(Date.now() + 3*60*60*1000);
   const todayKey = eat.toISOString().slice(0,10);
@@ -1304,12 +1314,20 @@ function renderMore(u) {
   document.getElementById('moreName').textContent    = u.name    || '—';
   document.getElementById('morePhone').textContent   = u.phone   || '—';
   document.getElementById('moreBalance').textContent = 'Balance: ' + ugx(u.walletBalance);
+  renderAvatars(u);
+}
+
+function renderAvatars(u) {
   const initial = (u.name || '?')[0].toUpperCase();
-  document.getElementById('moreAvatarInitial').textContent = initial;
-  if (u.profilePhoto) {
-    document.getElementById('moreAvatarInitial').innerHTML = `<img src="${u.profilePhoto}" style="width:52px;height:52px;border-radius:50%;object-fit:cover">`;
-    document.getElementById('avatarInitial').innerHTML = `<img src="${u.profilePhoto}" style="width:34px;height:34px;border-radius:50%;object-fit:cover">`;
-  }
+  [['moreAvatarInitial',52],['avatarInitial',34],['avatarInitialTop',34]].forEach(([id,size]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (u.profilePhoto) {
+      el.innerHTML = `<img src="${u.profilePhoto}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
+    } else {
+      el.textContent = initial;
+    }
+  });
 }
 
 // ── NAVIGATION ──
@@ -1324,7 +1342,7 @@ window.showSection = (sec) => {
   // topbar only visible on non-home sections
   const tb = document.getElementById('mainTopbar');
   if (tb) tb.style.display = (sec === 'home') ? 'none' : 'flex';
-  if (sec === 'records' || sec === 'invest') loadRecords('income');
+  if (sec === 'records' || sec === 'invest') loadRecords('deposits');
   window.scrollTo(0, 0);
 };
 
@@ -1447,63 +1465,111 @@ window.switchRecord = (tab, btn) => {
   loadRecords(tab);
 };
 
+function orderRef(tx) {
+  if (tx.createdAt?.toDate) {
+    const d = tx.createdAt.toDate();
+    const p = n => String(n).padStart(2,'0');
+    return 'T'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+String(d.getMilliseconds()).padStart(3,'0');
+  }
+  return tx.id ? tx.id.slice(0,20) : 'T——';
+}
+
+function fmtDT(tx) {
+  if (tx.createdAt?.toDate) {
+    const d = tx.createdAt.toDate();
+    const p = n => String(n).padStart(2,'0');
+    return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+  return ((tx.date||'') + (tx.time ? ' '+tx.time : '')).trim() || '—';
+}
+
+function statusCls(s) {
+  if (!s) return 's-orange';
+  const v = s.toLowerCase();
+  if (v==='success'||v==='approved') return 's-green';
+  if (v==='failed'||v==='rejected') return 's-red';
+  return 's-orange';
+}
+
+function statusLabel(s) {
+  const m={success:'Success',approved:'Approved',pending:'Payment in progress',failed:'Failed',rejected:'Rejected'};
+  return m[s?.toLowerCase()] || (s||'Pending');
+}
+
 async function loadRecords(tab) {
   if (!_user) return;
   _recordTab = tab;
   const el = document.getElementById('recordsContent');
   el.innerHTML = '<div class="empty-state"><div class="load-spin" style="margin:0 auto 12px"></div><p>Loading…</p></div>';
   try {
-    let q;
+    // ── PLANS ──
     if (tab === 'investments') {
-      q = query(collection(db,'investments'), where('userId','==',_user.uid), orderBy('createdAt','desc'), limit(30));
-      const snap = await getDocs(q);
+      const snap = await getDocs(query(collection(db,'investments'), where('userId','==',_user.uid), orderBy('createdAt','desc'), limit(30)));
       const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
       if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No investment plans yet</p></div>`; return; }
       el.innerHTML = items.map(inv => {
-        const matured = inv.status === 'matured';
-        const claimed = inv.status === 'claimed';
-        const badge = matured ? '<span class="inv-badge matured">Matured</span>' : claimed ? '<span class="inv-badge claimed">Claimed</span>' : '<span class="inv-badge active">Active</span>';
+        const matured=inv.status==='matured', claimed=inv.status==='claimed';
+        const badge = matured?'<span class="inv-badge matured">Matured</span>':claimed?'<span class="inv-badge claimed">Claimed</span>':'<span class="inv-badge active">Active</span>';
         return `<div class="inv-item" style="cursor:${matured?'pointer':'default'}" onclick="${matured?`claimInvestment('${inv.id}')`:''}" >
-          <div class="inv-img">${inv.productImage ? `<img src="${inv.productImage}" alt="">` : ICN.box}</div>
-          <div class="inv-info">
-            <div class="inv-name">${inv.productName || 'Plan'}</div>
-            <div class="inv-meta">${inv.date || ''}</div>
-          </div>
-          <div class="inv-right">
-            <div class="inv-return">${ugx(inv.expectedReturn)}</div>
-            ${badge}
-            ${matured ? '<div class="inv-days" style="color:#22c55e;font-size:10px">Tap to claim →</div>' : ''}
-          </div>
+          <div class="inv-img">${inv.productImage?`<img src="${inv.productImage}" alt="">`:ICN.box}</div>
+          <div class="inv-info"><div class="inv-name">${inv.productName||'Plan'}</div><div class="inv-meta">${inv.date||''}</div></div>
+          <div class="inv-right"><div class="inv-return">${ugx(inv.expectedReturn)}</div>${badge}${matured?'<div class="inv-days" style="color:#22c55e;font-size:10px">Tap to claim →</div>':''}</div>
         </div>`;
       }).join('');
       return;
     }
+    // ── TRANSACTION RECORDS ──
+    let q;
     if (tab === 'withdrawals') {
       q = query(collection(db,'transactions'), where('userId','==',_user.uid), where('type','==','withdrawal'), orderBy('createdAt','desc'), limit(30));
+    } else if (tab === 'deposits') {
+      q = query(collection(db,'transactions'), where('userId','==',_user.uid), where('type','==','deposit'), orderBy('createdAt','desc'), limit(30));
+    } else if (tab === 'referrals') {
+      q = query(collection(db,'transactions'), where('userId','==',_user.uid), where('type','==','commission'), orderBy('createdAt','desc'), limit(30));
     } else {
-      // income: deposits, commissions, check-ins, investment returns
       q = query(collection(db,'transactions'), where('userId','==',_user.uid), orderBy('createdAt','desc'), limit(50));
     }
     const snap  = await getDocs(q);
     const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    const filtered = tab === 'income' ? items.filter(t => t.amount > 0) : items;
-    if (!filtered.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No records yet</p></div>`; return; }
-    el.innerHTML = '<div>' + filtered.map(tx => {
-      const icon  = ICN[tx.type] || ICN.box;
-      const pos   = tx.amount > 0;
-      const statusCls = tx.status === 'success' ? 'ok' : 'pend';
-      return `<div class="tx-item">
-        <div class="tx-icon ${pos?'pos':'neg'}">${icon}</div>
-        <div class="tx-info">
-          <div class="tx-desc">${tx.description || tx.type || 'Transaction'}</div>
-          <div class="tx-date">${tx.date || ''} ${tx.time || ''}</div>
-        </div>
-        <div>
-          <div class="tx-amount ${pos?'pos':'neg'}">${pos?'+':''}${ugx(tx.amount)}</div>
-          <div class="tx-status ${statusCls}">${tx.status || ''}</div>
-        </div>
-      </div>`;
-    }).join('') + '</div>';
+    if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No records yet</p></div>`; return; }
+
+    if (tab === 'withdrawals') {
+      el.innerHTML = items.map(tx => {
+        const net = Math.round((tx.amount||0) * 0.83);
+        return `<div class="rec-card">
+          <div class="rec-card-hd"><div class="rec-card-hd-title">Withdrawal order</div><div class="rec-card-hd-amt">${ugx(tx.amount)}</div></div>
+          <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Amount received</span><span class="rec-row-val">${ugx(net)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status)}">${statusLabel(tx.status)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
+        </div>`;
+      }).join('');
+    } else if (tab === 'deposits') {
+      el.innerHTML = items.map(tx => `<div class="rec-card">
+        <div class="rec-card-hd"><div class="rec-card-hd-title">Deposit</div><div class="rec-card-hd-amt">${ugx(tx.amount)}</div></div>
+        <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
+        <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status||'success')}">${statusLabel(tx.status||'success')}</span></div>
+        <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
+      </div>`).join('');
+    } else if (tab === 'referrals') {
+      el.innerHTML = items.map(tx => `<div class="rec-card">
+        <div class="rec-card-hd"><div class="rec-card-hd-title">Commission</div><div class="rec-card-hd-amt s-green">+${ugx(tx.amount)}</div></div>
+        <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
+        <div class="rec-row"><span class="rec-row-lbl">From</span><span class="rec-row-val">${tx.description||'Referral'}</span></div>
+        <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val s-green">Success</span></div>
+        <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
+      </div>`).join('');
+    } else {
+      el.innerHTML = items.map(tx => {
+        const pos = tx.amount > 0;
+        return `<div class="rec-card">
+          <div class="rec-card-hd"><div class="rec-card-hd-title">${tx.description||tx.type||'Transaction'}</div><div class="rec-card-hd-amt ${pos?'s-green':'s-red'}">${pos?'+':''}${ugx(tx.amount)}</div></div>
+          <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status)}">${statusLabel(tx.status)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
+        </div>`;
+      }).join('');
+    }
   } catch (e) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.warn}</span><p>Failed to load records</p></div>`; console.error(e); }
 }
 
