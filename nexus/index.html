@@ -51,7 +51,8 @@ body{padding-bottom:106px}
 .auth-field input::placeholder{color:rgba(10,22,40,0.35)}
 .pass-wrap{position:relative}
 .pass-wrap input{padding-right:48px}
-.pass-eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:17px;color:rgba(10,22,40,0.35);padding:4px}
+.pass-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(10,22,40,0.4);padding:4px;display:flex}
+.pass-eye svg{width:19px;height:19px}
 .remember-row{display:flex;align-items:center;gap:9px;margin-bottom:20px;margin-top:4px}
 .remember-row input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#2563eb;flex-shrink:0}
 .remember-row label{font-size:14px;color:rgba(255,255,255,0.7);cursor:pointer;user-select:none}
@@ -113,7 +114,8 @@ body{padding-bottom:106px}
   background:#2563eb;
   box-shadow:0 0 6px rgba(37,99,235,0.6);
 }
-.bnav-icon{font-size:21px;line-height:1}
+.bnav-icon{line-height:1;display:flex;align-items:center;justify-content:center}
+.bnav-icon svg{width:22px;height:22px}
 .bnav-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}
 
 /* ── CARDS ── */
@@ -166,7 +168,8 @@ body{padding-bottom:106px}
 .ha-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px;background:transparent;border:none;cursor:pointer;font-family:'Outfit',sans-serif;border-right:1px solid var(--border);transition:background .18s}
 .ha-btn:last-child{border-right:none}
 .ha-btn:active{background:var(--card2)}
-.ha-icon{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--card2);border:1px solid var(--border2)}
+.ha-icon{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bluefade);border:1px solid rgba(37,99,235,0.18);color:var(--blue)}
+.ha-icon svg{width:21px;height:21px}
 .ha-label{font-size:12px;font-weight:700;color:var(--text);letter-spacing:.3px}
 
 /* ── SLIDESHOW ── */
@@ -248,7 +251,10 @@ body{padding-bottom:106px}
 .team-howit strong{color:var(--text)}
 
 /* ── QUICK CHECKIN ── */
-.checkin-card{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;cursor:pointer}
+.checkin-card{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;cursor:pointer;gap:12px}
+.checkin-left{display:flex;align-items:center;gap:12px;flex:1}
+.checkin-icon{width:40px;height:40px;border-radius:10px;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.checkin-icon svg{width:20px;height:20px}
 .checkin-left .ck-title{font-size:13px;font-weight:700;color:var(--text)}
 .checkin-left .ck-sub{font-size:11px;color:var(--text2);margin-top:2px}
 .btn-checkin{height:34px;padding:0 16px;border:1px solid var(--border2);border-radius:8px;background:transparent;color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap}
@@ -261,7 +267,8 @@ body{padding-bottom:106px}
 
 /* ── INVESTMENT CARD (HOME) ── */
 .inv-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
-.inv-img{width:42px;height:42px;border-radius:8px;object-fit:cover;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden}
+.inv-img{width:42px;height:42px;border-radius:8px;object-fit:cover;background:var(--bluefade);color:var(--blue);flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.inv-img svg{width:20px;height:20px}
 .inv-img img{width:100%;height:100%;object-fit:cover}
 .inv-info{flex:1;min-width:0}
 .inv-name{font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -281,7 +288,8 @@ body{padding-bottom:106px}
 .product-img{width:100%;height:130px;object-fit:cover;background:var(--bg3);display:block;position:relative}
 .product-img-wrap{position:relative;height:130px;background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center}
 .product-img-wrap img{width:100%;height:100%;object-fit:cover}
-.product-img-wrap .no-img{font-size:40px;color:var(--muted)}
+.product-img-wrap .no-img{color:var(--muted);display:flex}
+.product-img-wrap .no-img svg{width:40px;height:40px}
 .product-stock{position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
 .product-stock.in{background:rgba(34,197,94,0.9);color:#fff}
 .product-stock.out{background:rgba(239,68,68,0.9);color:#fff}
@@ -299,7 +307,10 @@ body{padding-bottom:106px}
 .pill-tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
 .tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
 .tx-item:last-child{border-bottom:none}
-.tx-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:var(--card2)}
+.tx-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--bluefade);color:var(--blue)}
+.tx-icon svg{width:17px;height:17px}
+.tx-icon.pos{background:rgba(22,163,74,0.1);color:var(--green)}
+.tx-icon.neg{background:rgba(239,68,68,0.1);color:var(--red)}
 .tx-info{flex:1;min-width:0}
 .tx-desc{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tx-date{font-size:10px;color:var(--text2);margin-top:2px}
@@ -344,10 +355,12 @@ body{padding-bottom:106px}
 .menu-item{display:flex;align-items:center;gap:14px;padding:15px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
 .menu-item:last-child{border-bottom:none}
 .menu-item:active{background:var(--card2)}
-.menu-item .mi-icon{font-size:18px;width:28px;text-align:center;flex-shrink:0}
+.menu-item .mi-icon{width:36px;height:36px;border-radius:10px;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.menu-item .mi-icon svg{width:19px;height:19px}
 .menu-item .mi-label{font-size:14px;font-weight:600;color:var(--text);flex:1}
 .menu-item .mi-arrow{color:var(--muted);font-size:12px}
 .menu-item.danger .mi-label{color:var(--red)}
+.menu-item.danger .mi-icon{background:rgba(239,68,68,0.1);color:var(--red)}
 
 /* ── MODALS ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:flex-end;justify-content:center}
@@ -381,10 +394,12 @@ body{padding-bottom:106px}
 .dep-inst-list{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
 .dep-inst-row{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--text2);line-height:1.45}
 .dep-inst-row strong{color:var(--text)}
-.dep-inst-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.dep-inst-icon{flex-shrink:0;margin-top:1px;color:var(--blue);display:flex}
+.dep-inst-icon svg{width:17px;height:17px}
 
 /* ── PRODUCT MODAL ── */
-.product-modal-img{width:100%;height:180px;border-radius:12px;object-fit:cover;background:var(--bg3);margin-bottom:16px;display:flex;align-items:center;justify-content:center;font-size:48px;overflow:hidden}
+.product-modal-img{width:100%;height:180px;border-radius:12px;object-fit:cover;background:var(--card2);color:var(--muted);margin-bottom:16px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.product-modal-img svg{width:52px;height:52px}
 .product-modal-img img{width:100%;height:100%;object-fit:cover}
 .product-stat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
 .pstat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
@@ -393,11 +408,13 @@ body{padding-bottom:106px}
 
 /* ── BANK ACCOUNT ── */
 .bank-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
-.bank-icon{width:36px;height:36px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:18px}
+.bank-icon{width:36px;height:36px;border-radius:8px;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center}
+.bank-icon svg{width:18px;height:18px}
 .bank-info{flex:1}
 .bank-name{font-size:13px;font-weight:700;color:var(--text)}
 .bank-phone{font-size:11px;color:var(--text2);font-family:'Share Tech Mono',monospace}
-.bank-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;padding:4px}
+.bank-del{background:none;border:none;color:var(--red);cursor:pointer;padding:4px;display:flex}
+.bank-del svg{width:18px;height:18px}
 
 /* ── ABOUT / RULES ── */
 .content-page{padding:4px 0}
@@ -407,7 +424,8 @@ body{padding-bottom:106px}
 
 /* ── EMPTY STATE ── */
 .empty-state{text-align:center;padding:40px 20px;color:var(--text2)}
-.empty-state .es-icon{font-size:40px;margin-bottom:12px;display:block}
+.empty-state .es-icon{margin-bottom:12px;display:flex;align-items:center;justify-content:center}
+.empty-state .es-icon svg{width:42px;height:42px;color:var(--muted)}
 .empty-state p{font-size:13px}
 
 /* ── TOAST ── */
@@ -441,10 +459,10 @@ body{padding-bottom:106px}
 
 <!-- ── MAINTENANCE OVERLAY ── -->
 <div id="maintenanceOverlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:32px">
-  <div style="font-size:64px;margin-bottom:20px">🔧</div>
-  <h2 style="color:#f0f0f0;font-size:24px;font-weight:900;margin-bottom:12px">Under Maintenance</h2>
-  <p style="color:#888;font-size:14px;line-height:1.7;max-width:300px">Nexus is undergoing scheduled maintenance. We'll be back shortly — thank you for your patience!</p>
-  <div style="margin-top:28px;color:#555;font-size:12px;font-weight:700;letter-spacing:2px">◈ NEXUS INVESTMENT</div>
+  <div style="color:var(--blue);margin-bottom:20px"><svg viewBox="0 0 24 24" width="60" height="60" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+  <h2 style="color:var(--text);font-size:24px;font-weight:900;margin-bottom:12px">Under Maintenance</h2>
+  <p style="color:var(--text2);font-size:14px;line-height:1.7;max-width:300px">Nexus is undergoing scheduled maintenance. We'll be back shortly — thank you for your patience!</p>
+  <div style="margin-top:28px;color:var(--blue);font-size:12px;font-weight:700;letter-spacing:2px">◈ NEXUS</div>
 </div>
 
 <!-- ══════════════════════════════════════════
@@ -473,7 +491,7 @@ body{padding-bottom:106px}
         <label>Password</label>
         <div class="pass-wrap">
           <input type="password" id="loginPass" placeholder="Your password" maxlength="40">
-          <button class="pass-eye" type="button" onclick="togglePass('loginPass',this)">👁</button>
+          <button class="pass-eye" type="button" onclick="togglePass('loginPass',this)"></button>
         </div>
       </div>
       <div class="remember-row">
@@ -549,11 +567,11 @@ body{padding-bottom:106px}
     <!-- Quick actions -->
     <div class="home-actions">
       <button class="ha-btn" onclick="openDepositModal()">
-        <div class="ha-icon">⬇</div>
+        <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>
         <div class="ha-label">Deposit</div>
       </button>
       <button class="ha-btn" onclick="openWithdrawModal()">
-        <div class="ha-icon">⬆</div>
+        <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></div>
         <div class="ha-label">Withdraw</div>
       </button>
     </div>
@@ -567,7 +585,7 @@ body{padding-bottom:106px}
     <!-- Activity ticker -->
     <div class="ticker-wrap">
       <div class="ticker-inner" id="homeTicker">
-        <span class="ticker-item">🔔 Loading activity…</span>
+        <span class="ticker-item">Loading activity…</span>
       </div>
     </div>
 
@@ -590,8 +608,11 @@ body{padding-bottom:106px}
       <!-- Check-in -->
       <div class="checkin-card" onclick="doCheckin()" style="margin-bottom:16px">
         <div class="checkin-left">
-          <div class="ck-title">📅 Daily Check-in</div>
-          <div class="ck-sub" id="checkinSub">Earn UGX 500 free today</div>
+          <div class="checkin-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+          <div>
+            <div class="ck-title">Daily Check-in</div>
+            <div class="ck-sub" id="checkinSub">Earn UGX 500 free today</div>
+          </div>
         </div>
         <button class="btn-checkin" id="checkinBtn">Claim</button>
       </div>
@@ -602,7 +623,7 @@ body{padding-bottom:106px}
         <button class="link-btn" onclick="showSection('products')">Browse →</button>
       </div>
       <div id="homeActiveInvest">
-        <div class="empty-state"><span class="es-icon">📈</span><p>No active plans yet<br>Browse Products to invest</p></div>
+        <div class="empty-state"><span class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span><p>No active plans yet<br>Browse Products to invest</p></div>
       </div>
     </div>
   </div>
@@ -626,7 +647,7 @@ body{padding-bottom:106px}
       <button class="pill-tab" onclick="switchRecord('investments',this)">Plans</button>
     </div>
     <div id="recordsContent">
-      <div class="empty-state"><span class="es-icon">📊</span><p>Loading records…</p></div>
+      <div class="empty-state"><span class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><p>Loading records…</p></div>
     </div>
   </div>
 
@@ -748,37 +769,37 @@ body{padding-bottom:106px}
 
     <div class="menu-list">
       <div class="menu-item" onclick="showSection('records')">
-        <span class="mi-icon">📊</span>
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
         <span class="mi-label">Account Sessions</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openGiftModal()">
-        <span class="mi-icon">🎁</span>
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></span>
         <span class="mi-label">Gift Code</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openBankModal()">
-        <span class="mi-icon">🏦</span>
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg></span>
         <span class="mi-label">Bank Account Management</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openContentModal('about')">
-        <span class="mi-icon">ℹ️</span>
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
         <span class="mi-label">About Nexus</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openContentModal('rules')">
-        <span class="mi-icon">📋</span>
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v0a2 2 0 0 1 2-2z"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span>
         <span class="mi-label">Platform Rules</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openContentModal('support')">
-        <span class="mi-icon">💬</span>
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
         <span class="mi-label">Customer Service</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item danger" onclick="doLogout()">
-        <span class="mi-icon">🚪</span>
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
         <span class="mi-label">Exit / Logout</span>
         <span class="mi-arrow">›</span>
       </div>
@@ -788,19 +809,19 @@ body{padding-bottom:106px}
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav show">
     <button class="bnav-item active" data-sec="home" onclick="showSection('home')">
-      <span class="bnav-icon">⌂</span>
+      <span class="bnav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg></span>
       <span class="bnav-label">Home</span>
     </button>
     <button class="bnav-item" data-sec="products" onclick="showSection('products')">
-      <span class="bnav-icon">◧</span>
+      <span class="bnav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
       <span class="bnav-label">Products</span>
     </button>
     <button class="bnav-item" data-sec="commission" onclick="showSection('commission')">
-      <span class="bnav-icon">◎</span>
+      <span class="bnav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
       <span class="bnav-label">Team</span>
     </button>
     <button class="bnav-item" data-sec="more" onclick="showSection('more')">
-      <span class="bnav-icon">⋯</span>
+      <span class="bnav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
       <span class="bnav-label">More</span>
     </button>
   </nav>
@@ -826,15 +847,15 @@ body{padding-bottom:106px}
     </div>
     <div class="dep-inst-list">
       <div class="dep-inst-row">
-        <span class="dep-inst-icon">📱</span>
+        <span class="dep-inst-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
         <span>Send from your registered number: <strong id="depUserPhone">—</strong></span>
       </div>
       <div class="dep-inst-row">
-        <span class="dep-inst-icon">📩</span>
+        <span class="dep-inst-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span>
         <span>Your deposit is detected automatically from the MoMo SMS you receive — no extra steps needed</span>
       </div>
       <div class="dep-inst-row">
-        <span class="dep-inst-icon">⚡</span>
+        <span class="dep-inst-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
         <span>Funds are credited to your wallet within minutes</span>
       </div>
     </div>
@@ -908,7 +929,7 @@ body{padding-bottom:106px}
       <button class="modal-close" onclick="closeModal('productModal')">×</button>
     </div>
     <div class="product-modal-img" id="productModalImgWrap">
-      <span id="productModalImgEmpty">📦</span>
+      <span id="productModalImgEmpty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
     </div>
     <div class="product-stat-row">
       <div class="pstat"><div class="pst-val" id="pmPrice">—</div><div class="pst-lbl">Investment</div></div>
@@ -999,6 +1020,30 @@ const db   = getFirestore(app);
 let _user = null, _userData = null, _unsub = null;
 let _currentProduct = null;
 
+// ── SVG ICONS ──
+const _svg = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const ICN = {
+  deposit:           _svg('<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'),
+  withdrawal:        _svg('<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>'),
+  commission:        _svg('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+  checkin:           _svg('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'),
+  investment:        _svg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>'),
+  investment_return: _svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/>'),
+  admin_credit:      _svg('<polygon points="12 2 2 8.5 12 15 22 8.5 12 2"/><polyline points="2 15.5 12 22 22 15.5"/>'),
+  gift_code:         _svg('<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>'),
+  box:               _svg('<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'),
+  chart:             _svg('<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'),
+  trend:             _svg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>'),
+  bell:              _svg('<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>'),
+  phone:             _svg('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>'),
+  message:           _svg('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  bolt:              _svg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
+  trash:             _svg('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+  warn:              _svg('<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'),
+  eye:               _svg('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff:            _svg('<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'),
+};
+
 // ── UTILS ──
 function ugx(n) { return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function shortUgx(n) { n = Number(n||0); return n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : n.toString(); }
@@ -1027,8 +1072,11 @@ window.togglePass = (id, btn) => {
   const inp = document.getElementById(id);
   const show = inp.type === 'password';
   inp.type = show ? 'text' : 'password';
-  if (btn) btn.textContent = show ? '🙈' : '👁';
+  if (btn) btn.innerHTML = show ? ICN.eyeOff : ICN.eye;
 };
+
+// Init password eye icon
+document.querySelectorAll('.pass-eye').forEach(b => b.innerHTML = ICN.eye);
 
 // Remember password
 const savedPhone = localStorage.getItem('nx_saved_phone');
@@ -1158,8 +1206,8 @@ async function loadTicker(uid) {
   try {
     const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',uid), orderBy('createdAt','desc'), limit(10)));
     const items = snap.docs.map(d => d.data());
-    if (!items.length) { document.getElementById('homeTicker').innerHTML = '<span class="ticker-item">🔔 Welcome to <span>NEXUS</span>! Start investing today.</span>'; return; }
-    const icons = { deposit:'⬇', commission:'💰', checkin:'📅', investment_return:'🎯', withdrawal:'⬆', investment:'📈' };
+    if (!items.length) { document.getElementById('homeTicker').innerHTML = '<span class="ticker-item">Welcome to <span>NEXUS</span>! Start investing today.</span>'; return; }
+    const icons = { deposit:'+', commission:'+', checkin:'+', investment_return:'+', withdrawal:'−', investment:'−' };
     const text = items.map(t => {
       const icon = icons[t.type] || '•';
       const amt  = t.amount > 0 ? '+UGX ' + Number(t.amount).toLocaleString() : 'UGX ' + Number(Math.abs(t.amount)).toLocaleString();
@@ -1246,7 +1294,7 @@ function renderHome(u) {
 function renderHomeInvestments(invs) {
   const el = document.getElementById('homeActiveInvest');
   if (!invs.length) {
-    el.innerHTML = '<div class="empty-state"><span class="es-icon">📈</span><p>No active plans<br>Browse Plans to invest</p></div>';
+    el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.trend}</span><p>No active plans<br>Browse Plans to invest</p></div>`;
     return;
   }
   el.innerHTML = invs.map(inv => {
@@ -1254,7 +1302,7 @@ function renderHomeInvestments(invs) {
     const daysLeft = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
     const imgHtml = inv.productImage
       ? `<div class="inv-img"><img src="${inv.productImage}" alt=""></div>`
-      : `<div class="inv-img">📦</div>`;
+      : `<div class="inv-img">${ICN.box}</div>`;
     return `<div class="inv-item" onclick="${matured ? `claimInvestment('${inv.id}')` : ''}">
       ${imgHtml}
       <div class="inv-info">
@@ -1263,7 +1311,7 @@ function renderHomeInvestments(invs) {
       </div>
       <div class="inv-right">
         <div class="inv-return">${ugx(inv.expectedReturn)}</div>
-        <div class="inv-days">${matured ? '🎯 Ready to claim!' : daysLeft + ' day(s) left'}</div>
+        <div class="inv-days">${matured ? 'Ready to claim!' : daysLeft + ' day(s) left'}</div>
         <span class="inv-badge ${matured ? 'matured' : 'active'}">${matured ? 'Matured' : 'Active'}</span>
       </div>
     </div>`;
@@ -1326,7 +1374,7 @@ window.doCheckin = async () => {
   try {
     const r = await api('/checkin', { userId: _user.uid });
     showLoading(false);
-    if (r.status === 'success') showToast(`✅ ${r.message} (Day ${r.streak})`, 'success');
+    if (r.status === 'success') showToast(`${r.message} (Day ${r.streak})`, 'success');
     else showToast(r.message || 'Check-in failed', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
@@ -1343,14 +1391,14 @@ async function loadProducts() {
 function renderProducts(products) {
   const grid = document.getElementById('productsGrid');
   if (!products.length) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">📦</span><p>No plans available yet</p></div>';
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No plans available yet</p></div>`;
     return;
   }
   grid.innerHTML = products.map(p => {
     const inStock = p.isInStock !== false;
     const imgHtml = p.image
       ? `<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover">`
-      : `<span class="no-img">📦</span>`;
+      : `<span class="no-img">${ICN.box}</span>`;
     return `<div class="product-card" onclick="openProductModal('${p.id}')">
       <div class="product-img-wrap">
         ${imgHtml}
@@ -1381,7 +1429,7 @@ window.openProductModal = async (productId) => {
     if (p.image) {
       imgWrap.innerHTML = `<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`;
     } else {
-      imgWrap.innerHTML = '<span style="font-size:48px">📦</span>';
+      imgWrap.innerHTML = ICN.box;
     }
     document.getElementById('pmPrice').textContent  = ugx(p.price);
     document.getElementById('pmDaily').textContent  = ugx(p.dailyReturn);
@@ -1408,7 +1456,7 @@ window.confirmBuy = async () => {
   try {
     const r = await api('/invest/create', { userId: _user.uid, productId: p.id });
     showLoading(false);
-    if (r.status === 'success') showToast('✅ ' + r.message, 'success');
+    if (r.status === 'success') showToast(r.message, 'success');
     else showToast(r.message || 'Investment failed', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
@@ -1421,7 +1469,7 @@ window.claimInvestment = async (invId) => {
   try {
     const r = await api('/invest/claim', { userId: _user.uid, investmentId: invId });
     showLoading(false);
-    if (r.status === 'success') showToast('✅ ' + r.message, 'success');
+    if (r.status === 'success') showToast(r.message, 'success');
     else showToast(r.message || 'Claim failed', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
@@ -1446,13 +1494,13 @@ async function loadRecords(tab) {
       q = query(collection(db,'investments'), where('userId','==',_user.uid), orderBy('createdAt','desc'), limit(30));
       const snap = await getDocs(q);
       const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-      if (!items.length) { el.innerHTML = '<div class="empty-state"><span class="es-icon">📦</span><p>No investment plans yet</p></div>'; return; }
+      if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No investment plans yet</p></div>`; return; }
       el.innerHTML = items.map(inv => {
         const matured = inv.status === 'matured';
         const claimed = inv.status === 'claimed';
         const badge = matured ? '<span class="inv-badge matured">Matured</span>' : claimed ? '<span class="inv-badge claimed">Claimed</span>' : '<span class="inv-badge active">Active</span>';
         return `<div class="inv-item" style="cursor:${matured?'pointer':'default'}" onclick="${matured?`claimInvestment('${inv.id}')`:''}" >
-          <div class="inv-img">${inv.productImage ? `<img src="${inv.productImage}" alt="">` : '📦'}</div>
+          <div class="inv-img">${inv.productImage ? `<img src="${inv.productImage}" alt="">` : ICN.box}</div>
           <div class="inv-info">
             <div class="inv-name">${inv.productName || 'Plan'}</div>
             <div class="inv-meta">${inv.date || ''}</div>
@@ -1475,14 +1523,13 @@ async function loadRecords(tab) {
     const snap  = await getDocs(q);
     const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
     const filtered = tab === 'income' ? items.filter(t => t.amount > 0) : items;
-    if (!filtered.length) { el.innerHTML = '<div class="empty-state"><span class="es-icon">📊</span><p>No records yet</p></div>'; return; }
+    if (!filtered.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No records yet</p></div>`; return; }
     el.innerHTML = '<div>' + filtered.map(tx => {
-      const icons = { deposit:'⬇', commission:'💰', checkin:'📅', investment_return:'🎯', withdrawal:'⬆', investment:'📈', admin_credit:'💎', gift_code:'🎁' };
-      const icon  = icons[tx.type] || '•';
+      const icon  = ICN[tx.type] || ICN.box;
       const pos   = tx.amount > 0;
       const statusCls = tx.status === 'success' ? 'ok' : 'pend';
       return `<div class="tx-item">
-        <div class="tx-icon">${icon}</div>
+        <div class="tx-icon ${pos?'pos':'neg'}">${icon}</div>
         <div class="tx-info">
           <div class="tx-desc">${tx.description || tx.type || 'Transaction'}</div>
           <div class="tx-date">${tx.date || ''} ${tx.time || ''}</div>
@@ -1493,7 +1540,7 @@ async function loadRecords(tab) {
         </div>
       </div>`;
     }).join('') + '</div>';
-  } catch (e) { el.innerHTML = '<div class="empty-state"><span class="es-icon">⚠️</span><p>Failed to load records</p></div>'; console.error(e); }
+  } catch (e) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.warn}</span><p>Failed to load records</p></div>`; console.error(e); }
 }
 
 // ── REFERRAL ──
@@ -1541,7 +1588,7 @@ window.openWithdrawModal = () => {
   document.querySelectorAll('#witPinRow .pin-box').forEach(b => b.value = '');
   const wc = _userData.withdrawalCount || 0;
   document.getElementById('witFeeNote').textContent = wc === 0
-    ? '🎉 First withdrawal — no liquidity fee!' : '17% liquidity fee applies. Net amount will be shown after deduction.';
+    ? 'First withdrawal — no liquidity fee!' : '17% liquidity fee applies. Net amount will be shown after deduction.';
   openModal('withdrawModal');
   setupPinBoxes('witPinRow');
 };
@@ -1560,7 +1607,7 @@ window.submitWithdrawal = async () => {
   try {
     const r = await api('/withdraw/request', { userId:_user.uid, amount, phone:'+256'+phone, pin });
     showLoading(false);
-    if (r.status === 'success') showToast('✅ Withdrawal submitted!\nPending admin approval.', 'success');
+    if (r.status === 'success') showToast('Withdrawal submitted!\nPending admin approval.', 'success');
     else if (r.needsPin) { showToast('Set your withdrawal PIN first', 'error'); openPinModal('setup'); }
     else showToast(r.message || 'Withdrawal failed', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
@@ -1584,7 +1631,7 @@ window.submitPin = async () => {
   try {
     const r = await api('/pin/set', { userId: _user.uid, pin: newPin });
     showLoading(false);
-    if (r.status === 'success') showToast('✅ PIN set successfully', 'success');
+    if (r.status === 'success') showToast('PIN set successfully', 'success');
     else showToast(r.message || 'Failed to set PIN', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
@@ -1614,7 +1661,7 @@ window.redeemGiftCode = async () => {
   try {
     const r = await api('/giftcode/redeem', { userId: _user.uid, code });
     showLoading(false);
-    if (r.status === 'success') showToast('🎁 ' + r.message, 'success');
+    if (r.status === 'success') showToast(r.message, 'success');
     else showToast(r.message || 'Invalid code', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
@@ -1632,12 +1679,12 @@ function renderBankList() {
   if (!accounts.length) { el.innerHTML = '<div class="empty-state" style="padding:16px 0"><p style="font-size:12px">No saved accounts yet</p></div>'; return; }
   el.innerHTML = accounts.map((a,i) => `
     <div class="bank-item">
-      <div class="bank-icon">📱</div>
+      <div class="bank-icon">${ICN.phone}</div>
       <div class="bank-info">
         <div class="bank-name">${a.name || 'Account'}</div>
         <div class="bank-phone">+256${a.phone}</div>
       </div>
-      <button class="bank-del" onclick="removeBankAccount(${i})">🗑</button>
+      <button class="bank-del" onclick="removeBankAccount(${i})">${ICN.trash}</button>
     </div>`).join('');
 }
 window.addBankAccount = async () => {
