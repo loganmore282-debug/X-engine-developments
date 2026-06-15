@@ -223,6 +223,12 @@ async function payCommissions(investorId, amount) {
 // ═══════════════════════════════════════════
 app.get('/', (req, res) => res.json({ status: '◈ Nexus Server', time: new Date().toISOString() }));
 
+// ── GIFT CODE GENERATION HELPER ──
+function genGiftCode() {
+  const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // 31 chars — no I/L/O/0/1
+  return Array.from(crypto.randomBytes(6)).map(b => CHARS[b % CHARS.length]).join('');
+}
+
 // ═══════════════════════════════════════════
 // ADMIN KEY CHECK
 // ═══════════════════════════════════════════

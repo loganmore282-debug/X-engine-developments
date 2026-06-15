@@ -634,8 +634,11 @@ function fmtDate(ts) {
 }
 function eatNow() { return new Date(Date.now() + 3*3600000); }
 function genCode6() {
-  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join('');
+  // Web Crypto — cryptographically unpredictable, not Math.random
+  const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // 31 chars, no I/L/O/0/1 ambiguity
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => CHARS[b % CHARS.length]).join('');
 }
 
 // ── LOGIN ──
