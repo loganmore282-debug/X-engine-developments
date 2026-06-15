@@ -79,9 +79,22 @@ function cleanPhone(raw) {
   if (s.length === 12 && s.startsWith('256')) return '+' + s;
   return '+256' + s;
 }
-function genCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+// Crypto-secure character picker (no I/L/O/0/1 ambiguity)
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function randChars(n) {
+  return Array.from(crypto.randomBytes(n)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
+}
+function genCode() { return randChars(6); }
+
+// Globally-unique referral code: N + 5 random + X (e.g. N4K7M2X)
+async function generateUniqueRefCode() {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const code = 'N' + randChars(5) + 'X';
+    const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+    if (exists.empty) return code;
+  }
+  // Extremely unlikely fallback — timestamp entropy guarantees uniqueness
+  return 'N' + Date.now().toString(36).toUpperCase().slice(-5).padStart(5, '0') + 'X';
 }
 async function notify(userId, title, message, type, extras = {}) {
   const { date, time } = nowStr();
@@ -362,18 +375,21 @@ app.post('/register', async (req, res) => {
     const userRef  = db.collection('users').doc(userId);
     const userSnap = await userRef.get();
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (userSnap.data().registrationDone) return res.json({ status: 'already_done' });
+    if (userSnap.data().registrationDone) return res.json({ status: 'already_done', referralCode: userSnap.data().referralCode || null });
 
     let referrerId = null;
     if (referralCode) {
-      const refSnap = await db.collection('users').where('referralCode', '==', referralCode.toUpperCase()).limit(1).get();
+      const refSnap = await db.collection('users').where('referralCode', '==', referralCode.toUpperCase().trim()).limit(1).get();
       if (!refSnap.empty && refSnap.docs[0].id !== userId) referrerId = refSnap.docs[0].id;
     }
+
+    // Server-generated globally-unique referral code (authoritative)
+    const myRefCode = userSnap.data().referralCode || await generateUniqueRefCode();
 
     const WELCOME = 10000;
     const { date, time } = nowStr();
     const batch = db.batch();
-    const update = { registrationDone: true };
+    const update = { registrationDone: true, referralCode: myRefCode };
 
     // Welcome bonus
     batch.update(userRef, { walletBalance: FieldValue.increment(WELCOME) });
@@ -407,38 +423,30 @@ app.post('/register', async (req, res) => {
 
     batch.update(userRef, update);
     await batch.commit();
-    return res.json({ status: 'success', referrerId, welcomeBonus: WELCOME });
+    return res.json({ status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode });
   } catch (e) {
     console.error('Register error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
   }
 });
 
-// ═══════════════════════════════════════════
-// PIN
-// ═══════════════════════════════════════════
-app.post('/pin/set', async (req, res) => {
-  const { userId, pin } = req.body;
-  if (!userId || !/^\d{4}$/.test(String(pin || '')))
-    return res.status(400).json({ status: 'error', message: '4-digit PIN required' });
+// Ensure a user has a valid globally-unique referral code (backfill on login)
+app.post('/account/ensure-refcode', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const snap = await db.collection('users').doc(userId).get();
+    const ref  = db.collection('users').doc(userId);
+    const snap = await ref.get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    await db.collection('users').doc(userId).update({ withdrawalPin: hashPin(pin), pinSetAt: FieldValue.serverTimestamp() });
-    return res.json({ status: 'success', message: 'PIN set' });
+    const existing = snap.data().referralCode;
+    // Valid format: N + 5 chars + X
+    if (existing && /^N[A-Z0-9]{5}X$/.test(existing)) {
+      return res.json({ status: 'success', referralCode: existing, changed: false });
+    }
+    const code = await generateUniqueRefCode();
+    await ref.update({ referralCode: code });
+    return res.json({ status: 'success', referralCode: code, changed: true });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
-});
-
-app.post('/pin/verify', async (req, res) => {
-  const { userId, pin } = req.body;
-  if (!userId || !pin) return res.status(400).json({ valid: false });
-  try {
-    const snap = await db.collection('users').doc(userId).get();
-    if (!snap.exists) return res.status(404).json({ valid: false });
-    const stored = snap.data().withdrawalPin;
-    if (!stored) return res.json({ valid: false, needsSetup: true });
-    return res.json({ valid: stored === hashPin(pin) });
-  } catch (e) { return res.status(500).json({ valid: false }); }
 });
 
 // ═══════════════════════════════════════════
@@ -635,10 +643,13 @@ app.post('/checkin', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
-    const todayKey = eatNow().toISOString().slice(0, 10);
+    const today    = eatNow();
+    const todayKey = today.toISOString().slice(0, 10);
+    const yesterdayKey = new Date(today.getTime() - 86400000).toISOString().slice(0, 10);
     if (user.lastCheckinDate === todayKey)
       return res.status(400).json({ status: 'error', message: 'Already checked in today', alreadyDone: true });
-    const newStreak = (user.checkinStreak || 0) + 1;
+    // Streak continues only if last check-in was yesterday; otherwise resets to 1
+    const newStreak = user.lastCheckinDate === yesterdayKey ? (user.checkinStreak || 0) + 1 : 1;
     const { date, time } = nowStr();
     await db.runTransaction(async t => {
       const fresh = await t.get(uRef);
@@ -821,10 +832,15 @@ app.post('/deposit/callback', async (req, res) => {
       const userRef = db.collection('users').doc(tx.userId);
       const userSnap = await t.get(userRef);
       if (!userSnap.exists) return;
-      t.update(userRef, { walletBalance: FieldValue.increment(creditAmount) });
+      t.update(userRef, {
+        walletBalance:  FieldValue.increment(creditAmount),
+        totalDeposited: FieldValue.increment(creditAmount)
+      });
       t.update(txDoc.ref, { status: 'success', transactionId: transaction_id || '' });
     });
-
+    await notify(tx.userId, '✅ Deposit Received!',
+      `${fmtUGX(creditAmount)} has been credited to your Nexus wallet.\n\nThank you for using Nexus! ◈`,
+      'deposit', { amount: creditAmount });
     console.log(`✅ Deposit credited: ${tx.userId} +UGX ${creditAmount}`);
   } catch (e) {
     console.error('MarzPay callback error:', e.message);

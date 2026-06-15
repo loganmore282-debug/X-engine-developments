@@ -1061,17 +1061,6 @@ function showLoading(show) {
   document.getElementById('loadingOverlay').classList.toggle('show', show);
 }
 function phoneToEmail(phone) { return phone.replace(/\D/g,'') + '@nexus-app.com'; }
-function genRefCode(uid) {
-  // Format: N + 4 chars from uid + X (e.g. N4K7MX)
-  const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  // Use 4 well-spread positions from the 28-char Firebase UID
-  const pos = [3, 9, 16, 22];
-  const mid = pos.map(p => {
-    const hex = uid.substring(p, p + 2);
-    return CHARS[parseInt(hex, 16) % CHARS.length];
-  }).join('');
-  return 'N' + mid + 'X';
-}
 
 // ── AUTH FORMS ──
 window.showRegister = () => {
@@ -1128,7 +1117,7 @@ window.doRegister = async () => {
   try {
     const cred   = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
     const uid    = cred.user.uid;
-    const refCode = genRefCode(uid);
+    // referralCode is assigned server-side (globally unique) by /register
     await setDoc(doc(db, 'users', uid), {
       name, phone: '+256' + phone, email: phoneToEmail(phone),
       walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
@@ -1136,7 +1125,7 @@ window.doRegister = async () => {
       commissionL2Earned: 0, commissionL3Earned: 0,
       teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
       checkinEarned: 0, checkinStreak: 0, checkinDays: 0,
-      referralCode: refCode, withdrawalCount: 0, status: 'active',
+      withdrawalCount: 0, status: 'active',
       bankAccounts: [], createdAt: serverTimestamp()
     });
     // Register with server to set up referral chain
@@ -1266,6 +1255,8 @@ onAuthStateChanged(auth, async user => {
     loadSlideshow();
     loadTicker();
     checkMaintenance();
+    // Ensure this account has a globally-unique referral code (backfill legacy users)
+    api('/account/ensure-refcode', { userId: user.uid }).catch(() => {});
   } else {
     if (_unsub) { _unsub(); _unsub = null; }
     document.getElementById('appScreen').style.display  = 'none';
@@ -1599,9 +1590,11 @@ async function loadRecords(tab) {
 
     if (tab === 'withdrawals') {
       el.innerHTML = items.map(tx => {
-        const net = Math.round((tx.amount||0) * 0.83);
+        // Use server-stored netAmount for accuracy; fall back to 17% calc only if absent
+        const net = tx.netAmount != null ? tx.netAmount : Math.round(Math.abs(tx.amount||0) * 0.83);
+        const gross = Math.abs(tx.amount||0);
         return `<div class="rec-card">
-          <div class="rec-card-hd"><div class="rec-card-hd-title">Withdrawal order</div><div class="rec-card-hd-amt">${ugx(tx.amount)}</div></div>
+          <div class="rec-card-hd"><div class="rec-card-hd-title">Withdrawal order</div><div class="rec-card-hd-amt">${ugx(gross)}</div></div>
           <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
           <div class="rec-row"><span class="rec-row-lbl">Amount received</span><span class="rec-row-val">${ugx(net)}</span></div>
           <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status)}">${statusLabel(tx.status)}</span></div>
