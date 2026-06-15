@@ -16,7 +16,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;overflow-x:hidden}
-body{padding-bottom:80px}
+body{padding-bottom:106px}
 
 /* ── AUTH SCREEN ── */
 .auth-screen{
@@ -84,16 +84,44 @@ body{padding-bottom:80px}
 .topbar-avatar img{width:100%;height:100%;object-fit:cover}
 
 /* ── SECTIONS ── */
-.section{display:none;padding:16px;min-height:calc(100vh - 140px)}
+.section{display:none;min-height:calc(100vh - 100px)}
 .section.active{display:block}
+/* home has no padding — its own header bleeds edge-to-edge */
+#homeSection{padding:0}
+#productsSection,#recordsSection,#commissionSection,#moreSection{padding:16px}
 
-/* ── BOTTOM NAV ── */
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(8,8,8,0.98);backdrop-filter:blur(30px);border-top:1px solid var(--border);display:none;grid-template-columns:repeat(5,1fr);padding:8px 4px calc(8px + env(safe-area-inset-bottom))}
+/* ── BOTTOM NAV — gold pill ── */
+.bottom-nav{
+  position:fixed;bottom:14px;left:12px;right:12px;z-index:200;
+  background:rgba(10,10,10,0.97);
+  backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  border:1px solid rgba(245,200,66,0.28);
+  border-radius:22px;
+  display:none;
+  grid-template-columns:repeat(4,1fr);
+  padding:6px 0;
+  box-shadow:0 0 24px rgba(245,200,66,0.08),0 8px 40px rgba(0,0,0,0.7);
+}
 .bottom-nav.show{display:grid}
-.bnav-item{background:transparent;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 2px;cursor:pointer;color:var(--text2);transition:color .2s;font-family:'Outfit',sans-serif}
-.bnav-item.active{color:var(--white)}
-.bnav-item .bnav-icon{font-size:20px;line-height:1}
-.bnav-item .bnav-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.bnav-item{
+  position:relative;background:transparent;border:none;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:8px 4px 10px;cursor:pointer;
+  color:rgba(255,255,255,0.35);
+  transition:color .2s;font-family:'Outfit',sans-serif;
+  border-right:1px solid rgba(255,255,255,0.06);
+}
+.bnav-item:last-child{border-right:none}
+.bnav-item.active{color:#f5c842}
+/* gold underline dot on active */
+.bnav-item.active::after{
+  content:'';position:absolute;bottom:4px;
+  width:18px;height:2.5px;border-radius:2px;
+  background:#f5c842;
+  box-shadow:0 0 6px rgba(245,200,66,0.6);
+}
+.bnav-icon{font-size:21px;line-height:1}
+.bnav-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}
 
 /* ── CARDS ── */
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
@@ -126,6 +154,104 @@ body{padding-bottom:80px}
 .cum-item{background:var(--bg2);padding:12px;text-align:center}
 .cum-item-val{font-size:14px;font-weight:800;color:var(--white);font-family:'Share Tech Mono',monospace}
 .cum-item-lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+
+/* ── HOME — brand header ── */
+.home-header{
+  background:linear-gradient(180deg,rgba(20,14,0,0.97) 0%,rgba(10,10,10,0.99) 100%);
+  border-bottom:1px solid rgba(245,200,66,0.15);
+  padding:14px 16px 12px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.home-logo-text{font-size:22px;font-weight:900;letter-spacing:-1px;
+  color:#f5c842;text-shadow:0 0 20px rgba(245,200,66,0.4)}
+.home-logo-text span{color:rgba(245,200,66,0.4)}
+.home-tagline-text{font-size:10px;color:rgba(245,200,66,0.45);font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:1px}
+.home-header-right{display:flex;align-items:center;gap:10px}
+
+/* ── HOME — quick action buttons ── */
+.home-actions{display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
+.ha-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px;background:transparent;border:none;cursor:pointer;font-family:'Outfit',sans-serif;border-right:1px solid var(--border);transition:background .18s}
+.ha-btn:last-child{border-right:none}
+.ha-btn:active{background:var(--card2)}
+.ha-icon{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--card2);border:1px solid var(--border2)}
+.ha-label{font-size:12px;font-weight:700;color:var(--text);letter-spacing:.3px}
+
+/* ── SLIDESHOW ── */
+.slideshow-wrap{position:relative;height:200px;overflow:hidden;background:#0a0a0a}
+.slide{position:absolute;inset:0;opacity:0;transition:opacity 0.9s ease-in-out;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.slide.active{opacity:1}
+.slide img{width:100%;height:100%;object-fit:cover}
+.slide-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,0.7) 100%)}
+.slide-caption{position:absolute;bottom:14px;left:16px;right:16px}
+.slide-caption-text{font-size:14px;font-weight:800;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.8)}
+.slide-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
+.slide-watermark{font-size:72px;color:rgba(245,200,66,0.08);font-weight:900;position:absolute}
+.slide-slogan{font-size:15px;font-weight:800;color:rgba(255,255,255,0.7);text-align:center;padding:0 20px;z-index:1;line-height:1.4}
+.sdots{position:absolute;bottom:10px;right:14px;display:flex;gap:5px;z-index:2}
+.sdot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.3);transition:all .3s}
+.sdot.active{background:#f5c842;width:14px;border-radius:3px}
+
+/* ── TICKER ── */
+.ticker-wrap{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:7px 0;overflow:hidden;white-space:nowrap}
+.ticker-inner{display:inline-block;animation:ticker-move 28s linear infinite}
+@keyframes ticker-move{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.ticker-inner:hover{animation-play-state:paused}
+.ticker-item{display:inline;font-size:12px;color:var(--text2);padding:0 24px;font-family:'Share Tech Mono',monospace}
+.ticker-item span{color:var(--white);font-weight:600}
+
+/* ── HOME — 2-col balance grid ── */
+.home-balance-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;background:var(--border);border-top:1px solid var(--border)}
+.hbg-card{background:var(--bg2);padding:16px;position:relative;overflow:hidden}
+.hbg-card::after{content:'◈';position:absolute;right:-4px;bottom:-10px;font-size:56px;color:rgba(245,200,66,0.04);font-weight:900;pointer-events:none}
+.hbg-label{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.hbg-val{font-size:16px;font-weight:900;color:var(--white);font-family:'Share Tech Mono',monospace;line-height:1.2}
+.hbg-sub{font-size:9px;color:var(--muted);margin-top:3px}
+
+/* ── HOME — inner padding wrapper ── */
+.home-inner{padding:14px 16px}
+
+/* ── TEAM HEADER BAND ── */
+.team-header-band{
+  background:linear-gradient(135deg,#0f0900 0%,#1a1200 50%,#0f0900 100%);
+  border-bottom:1px solid rgba(245,200,66,0.2);
+  padding:16px;margin:-16px -16px 16px;
+  display:flex;align-items:center;gap:10px;
+}
+.team-header-logo{font-size:28px;color:#f5c842;font-weight:900;text-shadow:0 0 16px rgba(245,200,66,0.4)}
+.team-header-info{}
+.team-header-title{font-size:14px;font-weight:800;color:#f5c842}
+.team-header-sub{font-size:11px;color:rgba(245,200,66,0.45);margin-top:1px}
+
+/* ── TEAM — invitation rows ── */
+.inv-row{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;gap:12px}
+.inv-row-left{flex:1;min-width:0}
+.inv-row-val{font-size:14px;font-weight:800;color:var(--white);font-family:'Share Tech Mono',monospace;letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inv-row-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.inv-row-btn{height:34px;padding:0 16px;border:none;border-radius:8px;background:#f5c842;color:#111;font-size:12px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;flex-shrink:0}
+
+/* ── TEAM — stat tiles ── */
+.team-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.team-tile{background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px;position:relative;overflow:hidden;cursor:pointer}
+.team-tile::before{content:'>>'; position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted)}
+.team-tile .tt-val{font-size:18px;font-weight:900;color:var(--white);font-family:'Share Tech Mono',monospace;margin-bottom:4px}
+.team-tile .tt-lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+
+/* ── TEAM — level rows ── */
+.level-row{display:flex;align-items:center;gap:0;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px}
+.lrow-badge{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#1a1200,#2a1e00);border:1px solid rgba(245,200,66,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:14px}
+.lrow-badge-text{font-size:12px;font-weight:900;color:#f5c842}
+.lrow-rate{flex:1}
+.lrow-pct{font-size:20px;font-weight:900;color:var(--white);font-family:'Share Tech Mono',monospace;line-height:1}
+.lrow-rate-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600}
+.lrow-stat{text-align:center;min-width:52px;padding:0 8px;border-left:1px solid var(--border)}
+.lrow-stat-val{font-size:15px;font-weight:800;color:var(--white);font-family:'Share Tech Mono',monospace}
+.lrow-stat-lbl{font-size:9px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+
+/* ── TEAM — how it works ── */
+.team-howit{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:4px}
+.team-howit p{font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:8px}
+.team-howit p:last-child{margin-bottom:0}
+.team-howit strong{color:var(--white)}
 
 /* ── QUICK CHECKIN ── */
 .checkin-card{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;cursor:pointer}
@@ -396,69 +522,92 @@ body{padding-bottom:80px}
 ══════════════════════════════════════════ -->
 <div id="appScreen" style="display:none">
 
-  <!-- TOP BAR -->
-  <div class="topbar">
+  <!-- TOP BAR — shown on non-home sections -->
+  <div class="topbar" id="mainTopbar" style="display:none">
     <div class="topbar-left">
       <div class="topbar-logo">◈<span>NEXUS</span></div>
       <div class="topbar-greeting" id="topGreeting">Hello…</div>
     </div>
     <div class="topbar-right">
-      <div class="topbar-avatar" id="avatarBtn" onclick="showSection('more')">
-        <span id="avatarInitial">?</span>
+      <div class="topbar-avatar" onclick="showSection('more')">
+        <span id="avatarInitialTop">?</span>
       </div>
     </div>
   </div>
 
   <!-- ── HOME SECTION ── -->
   <div class="section active" id="homeSection">
-    <!-- Account Balance Card -->
-    <div class="balance-card">
-      <div class="balance-label">Account Balance</div>
-      <div class="balance-amount" id="homeBalance">UGX 0</div>
-      <div class="balance-sub" id="homeBalanceSub">Tap deposit to add funds</div>
-      <div class="balance-actions">
-        <button class="balance-btn deposit" onclick="openDepositModal()">⬇ Deposit</button>
-        <button class="balance-btn withdraw" onclick="openWithdrawModal()">⬆ Withdraw</button>
+    <!-- Brand header -->
+    <div class="home-header">
+      <div>
+        <div class="home-logo-text">◈<span>NEXUS</span></div>
+        <div class="home-tagline-text">Investment Platform</div>
       </div>
-    </div>
-
-    <!-- Cumulative Card -->
-    <div class="cumulative-card">
-      <div class="cum-top">
-        <div>
-          <div class="cum-label">Cumulative Income</div>
-          <div class="cum-amount" id="homeCumulative">UGX 0</div>
-        </div>
-        <div class="cum-icon">◈</div>
-      </div>
-      <div class="cum-breakdown">
-        <div class="cum-item">
-          <div class="cum-item-val" id="homeCommEarned">UGX 0</div>
-          <div class="cum-item-lbl">Referral</div>
-        </div>
-        <div class="cum-item">
-          <div class="cum-item-val" id="homeCashback">UGX 0</div>
-          <div class="cum-item-lbl">Cashback</div>
+      <div class="home-header-right">
+        <div class="topbar-avatar" onclick="showSection('more')">
+          <span id="avatarInitial">?</span>
         </div>
       </div>
     </div>
 
-    <!-- Check-in -->
-    <div class="checkin-card" onclick="doCheckin()">
-      <div class="checkin-left">
-        <div class="ck-title">📅 Daily Check-in</div>
-        <div class="ck-sub" id="checkinSub">Earn UGX 500 free today</div>
-      </div>
-      <button class="btn-checkin" id="checkinBtn">Claim</button>
+    <!-- Quick actions -->
+    <div class="home-actions">
+      <button class="ha-btn" onclick="openDepositModal()">
+        <div class="ha-icon">⬇</div>
+        <div class="ha-label">Deposit</div>
+      </button>
+      <button class="ha-btn" onclick="openWithdrawModal()">
+        <div class="ha-icon">⬆</div>
+        <div class="ha-label">Withdraw</div>
+      </button>
     </div>
 
-    <!-- Active Investments -->
-    <div class="section-header">
-      <div class="sh-title">Active Plans</div>
-      <button class="link-btn" onclick="showSection('invest')">View All →</button>
+    <!-- Slideshow -->
+    <div class="slideshow-wrap">
+      <div id="slideshowContainer"></div>
+      <div class="sdots" id="slideshowDots"></div>
     </div>
-    <div id="homeActiveInvest">
-      <div class="empty-state"><span class="es-icon">📈</span><p>No active plans yet<br>Browse Products to invest</p></div>
+
+    <!-- Activity ticker -->
+    <div class="ticker-wrap">
+      <div class="ticker-inner" id="homeTicker">
+        <span class="ticker-item">🔔 Loading activity…</span>
+      </div>
+    </div>
+
+    <!-- 2-col balance grid -->
+    <div class="home-balance-grid">
+      <div class="hbg-card" style="border-right:1px solid var(--border)">
+        <div class="hbg-label">Account Balance</div>
+        <div class="hbg-val" id="homeBalance">UGX 0</div>
+        <div class="hbg-sub" id="homeBalanceSub">Available</div>
+      </div>
+      <div class="hbg-card">
+        <div class="hbg-label">Cumulative Income</div>
+        <div class="hbg-val" id="homeCumulative">UGX 0</div>
+        <div class="hbg-sub">Referral + Cashback</div>
+      </div>
+    </div>
+
+    <!-- Inner padded area -->
+    <div class="home-inner">
+      <!-- Check-in -->
+      <div class="checkin-card" onclick="doCheckin()" style="margin-bottom:16px">
+        <div class="checkin-left">
+          <div class="ck-title">📅 Daily Check-in</div>
+          <div class="ck-sub" id="checkinSub">Earn UGX 500 free today</div>
+        </div>
+        <button class="btn-checkin" id="checkinBtn">Claim</button>
+      </div>
+
+      <!-- Active Investments -->
+      <div class="section-header">
+        <div class="sh-title">Active Plans</div>
+        <button class="link-btn" onclick="showSection('products')">Browse →</button>
+      </div>
+      <div id="homeActiveInvest">
+        <div class="empty-state"><span class="es-icon">📈</span><p>No active plans yet<br>Browse Products to invest</p></div>
+      </div>
     </div>
   </div>
 
@@ -485,60 +634,105 @@ body{padding-bottom:80px}
     </div>
   </div>
 
-  <!-- ── COMMISSION SECTION ── -->
+  <!-- ── TEAM / COMMISSION SECTION ── -->
   <div class="section" id="commissionSection">
-    <div class="sec-title">My Commission</div>
 
-    <div class="comm-total-card">
-      <div>
-        <div class="comm-total-label">Total Commission Earned</div>
-        <div class="comm-total-val" id="commTotal">UGX 0</div>
-      </div>
-      <div style="text-align:right">
-        <div class="comm-total-label">Streak</div>
-        <div class="comm-total-val" id="checkinStreak">0 days</div>
+    <!-- Header band -->
+    <div class="team-header-band">
+      <div class="team-header-logo">◈</div>
+      <div class="team-header-info">
+        <div class="team-header-title">NEXUS Team</div>
+        <div class="team-header-sub">Build your network. Earn instantly.</div>
       </div>
     </div>
 
-    <!-- Referral Code Card -->
-    <div class="ref-card">
-      <div class="ref-code-label">Your Referral Code</div>
-      <div class="ref-code" id="myRefCode">——————</div>
-      <div class="ref-actions">
-        <button class="ref-btn" onclick="copyRefCode()">📋 Copy Code</button>
-        <button class="ref-btn" onclick="shareRefLink()">🔗 Share Link</button>
+    <!-- Invitation code row -->
+    <div class="inv-row">
+      <div class="inv-row-left">
+        <div class="inv-row-val" id="myRefCode">——————</div>
+        <div class="inv-row-lbl">Invitation Code</div>
+      </div>
+      <button class="inv-row-btn" onclick="copyRefCode()">Copy</button>
+    </div>
+
+    <!-- Invitation link row -->
+    <div class="inv-row">
+      <div class="inv-row-left">
+        <div class="inv-row-val" id="myRefLink" style="font-size:11px;letter-spacing:0">nexus.app?ref=——</div>
+        <div class="inv-row-lbl">Invitation Link</div>
+      </div>
+      <button class="inv-row-btn" onclick="shareRefLink()">Copy</button>
+    </div>
+
+    <!-- Team stat tiles -->
+    <div class="team-tiles">
+      <div class="team-tile">
+        <div class="tt-val" id="teamTotalSize">0</div>
+        <div class="tt-lbl">Team Size</div>
+      </div>
+      <div class="team-tile">
+        <div class="tt-val" id="commTotal">UGX 0</div>
+        <div class="tt-lbl">Total Revenue</div>
       </div>
     </div>
 
-    <!-- Level Cards -->
-    <div class="level-cards">
-      <div class="level-card">
-        <div class="lv-pct">35%</div>
-        <div class="lv-label">Level 1</div>
-        <div class="lv-count" id="teamL1Count">0</div>
-        <div class="lv-earned" id="teamL1Earned">UGX 0</div>
+    <!-- Level 1 row -->
+    <div class="level-row">
+      <div class="lrow-badge"><span class="lrow-badge-text">L1</span></div>
+      <div class="lrow-rate">
+        <div class="lrow-pct">35%</div>
+        <div class="lrow-rate-lbl">Commission rate</div>
       </div>
-      <div class="level-card">
-        <div class="lv-pct">5%</div>
-        <div class="lv-label">Level 2</div>
-        <div class="lv-count" id="teamL2Count">0</div>
-        <div class="lv-earned" id="teamL2Earned">UGX 0</div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL1Count">0</div>
+        <div class="lrow-stat-lbl">Valid user</div>
       </div>
-      <div class="level-card">
-        <div class="lv-pct">2%</div>
-        <div class="lv-label">Level 3</div>
-        <div class="lv-count" id="teamL3Count">0</div>
-        <div class="lv-earned" id="teamL3Earned">UGX 0</div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL1Earned">0</div>
+        <div class="lrow-stat-lbl">Income</div>
+      </div>
+    </div>
+
+    <!-- Level 2 row -->
+    <div class="level-row">
+      <div class="lrow-badge"><span class="lrow-badge-text">L2</span></div>
+      <div class="lrow-rate">
+        <div class="lrow-pct">5%</div>
+        <div class="lrow-rate-lbl">Commission rate</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL2Count">0</div>
+        <div class="lrow-stat-lbl">Valid user</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL2Earned">0</div>
+        <div class="lrow-stat-lbl">Income</div>
+      </div>
+    </div>
+
+    <!-- Level 3 row -->
+    <div class="level-row">
+      <div class="lrow-badge"><span class="lrow-badge-text">L3</span></div>
+      <div class="lrow-rate">
+        <div class="lrow-pct">2%</div>
+        <div class="lrow-rate-lbl">Commission rate</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL3Count">0</div>
+        <div class="lrow-stat-lbl">Valid user</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL3Earned">0</div>
+        <div class="lrow-stat-lbl">Income</div>
       </div>
     </div>
 
     <!-- How it works -->
-    <div class="comm-how">
-      <h4>How Commission Works</h4>
-      <div class="comm-row"><div class="comm-dot"></div><p><strong>Level 1 (35%)</strong> — When a friend you invite invests, you instantly earn 35% of their investment amount as commission.</p></div>
-      <div class="comm-row"><div class="comm-dot"></div><p><strong>Level 2 (5%)</strong> — When members of your Level 2 team invest, you earn a 5% cash bonus instantly.</p></div>
-      <div class="comm-row"><div class="comm-dot"></div><p><strong>Level 3 (2%)</strong> — When members of your Level 3 team invest, you earn a 2% cash bonus instantly.</p></div>
-      <div class="comm-row"><div class="comm-dot"></div><p>All commissions are <strong>instantly credited</strong> to your wallet and can be <strong>withdrawn immediately</strong>.</p></div>
+    <div class="team-howit">
+      <p>When a friend you invite signs up and invests, you immediately receive a cash reward of <strong>35%</strong> of their investment amount.</p>
+      <p>When members of your Level 2 team invest, you receive a <strong>5%</strong> cash bonus.</p>
+      <p>When members of your Level 3 team invest, you receive a <strong>2%</strong> cash bonus.</p>
+      <p>Once a team member invests, the cash bonus is <strong>instantly credited</strong> to your account and you can withdraw it immediately.</p>
     </div>
   </div>
 
@@ -914,6 +1108,70 @@ async function api(path, body = {}) {
   return resp.json();
 }
 
+// ── SLIDESHOW ──
+const SLIDE_DEFAULTS = [
+  { bg:'linear-gradient(135deg,#0d0d00 0%,#1c1400 60%,#0a0800 100%)', slogan:'Invest Smart.\nEarn More.' },
+  { bg:'linear-gradient(135deg,#0a0a0a 0%,#130e00 50%,#0a0a0a 100%)', slogan:'Daily Returns.\nInstant Commission.' },
+  { bg:'linear-gradient(135deg,#0d0800 0%,#1a1200 60%,#0a0a0a 100%)', slogan:'Your Money.\nWorking For You.' },
+];
+function setupSlideshow(images) {
+  const wrap  = document.getElementById('slideshowContainer');
+  const dotsEl = document.getElementById('slideshowDots');
+  const count = images.length || SLIDE_DEFAULTS.length;
+  wrap.innerHTML   = '';
+  dotsEl.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const img = images[i];
+    const def = SLIDE_DEFAULTS[i % SLIDE_DEFAULTS.length];
+    const slide = document.createElement('div');
+    slide.className = 'slide' + (i === 0 ? ' active' : '');
+    if (img) {
+      slide.innerHTML = `<img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover"><div class="slide-overlay"></div>`;
+    } else {
+      slide.style.background = def.bg;
+      slide.innerHTML = `<div class="slide-watermark">◈</div><div class="slide-slogan">${def.slogan.replace('\n','<br>')}</div>`;
+    }
+    wrap.appendChild(slide);
+    const dot = document.createElement('span');
+    dot.className = 'sdot' + (i === 0 ? ' active' : '');
+    dotsEl.appendChild(dot);
+  }
+  let cur = 0;
+  setInterval(() => {
+    const slides = wrap.querySelectorAll('.slide');
+    const dots   = dotsEl.querySelectorAll('.sdot');
+    slides[cur].classList.remove('active');
+    dots[cur].classList.remove('active');
+    cur = (cur + 1) % slides.length;
+    slides[cur].classList.add('active');
+    dots[cur].classList.add('active');
+  }, 3500);
+}
+async function loadSlideshow() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'main'));
+    const imgs = snap.exists() ? (snap.data().slideshowImages || []) : [];
+    setupSlideshow(imgs);
+  } catch (_) { setupSlideshow([]); }
+}
+
+// ── TICKER ──
+async function loadTicker(uid) {
+  try {
+    const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',uid), orderBy('createdAt','desc'), limit(10)));
+    const items = snap.docs.map(d => d.data());
+    if (!items.length) { document.getElementById('homeTicker').innerHTML = '<span class="ticker-item">🔔 Welcome to <span>NEXUS</span> Investment Platform! Start investing today.</span>'; return; }
+    const icons = { deposit:'⬇', commission:'💰', checkin:'📅', investment_return:'🎯', withdrawal:'⬆', investment:'📈' };
+    const text = items.map(t => {
+      const icon = icons[t.type] || '•';
+      const amt  = t.amount > 0 ? '+UGX ' + Number(t.amount).toLocaleString() : 'UGX ' + Number(Math.abs(t.amount)).toLocaleString();
+      return `<span class="ticker-item">${icon} <span>${t.description || t.type}</span> ${amt}</span>`;
+    }).join(' | ');
+    const doubled = text + ' | ' + text; // duplicate for seamless loop
+    document.getElementById('homeTicker').innerHTML = doubled;
+  } catch (_) {}
+}
+
 // ── AUTH STATE ──
 onAuthStateChanged(auth, async user => {
   if (user) {
@@ -924,6 +1182,8 @@ onAuthStateChanged(auth, async user => {
     startListener(user.uid);
     loadProducts();
     loadRecords('income');
+    loadSlideshow();
+    loadTicker(user.uid);
     checkMaintenance();
   } else {
     if (_unsub) { _unsub(); _unsub = null; }
@@ -970,9 +1230,11 @@ function renderHome(u) {
   document.getElementById('homeCumulative').textContent = ugx(referral + cashback);
   document.getElementById('homeCommEarned').textContent = ugx(referral);
   document.getElementById('homeCashback').textContent   = ugx(cashback);
-  document.getElementById('topGreeting').textContent = 'Hi, ' + (u.name ? u.name.split(' ')[0] : '');
+  const firstName = u.name ? u.name.split(' ')[0] : '';
+  document.getElementById('topGreeting').textContent = 'Hi, ' + firstName;
   const initial = (u.name || '?')[0].toUpperCase();
-  document.getElementById('avatarInitial').textContent = initial;
+  document.getElementById('avatarInitial').textContent    = initial;
+  document.getElementById('avatarInitialTop').textContent = initial;
   // Check-in
   const eat = new Date(Date.now() + 3*60*60*1000);
   const todayKey = eat.toISOString().slice(0,10);
@@ -1012,15 +1274,19 @@ function renderHomeInvestments(invs) {
 
 // ── RENDER COMMISSION ──
 function renderCommission(u) {
-  document.getElementById('commTotal').textContent      = ugx(u.commissionEarned   || 0);
-  document.getElementById('myRefCode').textContent      = u.referralCode           || '——';
-  document.getElementById('checkinStreak').textContent  = (u.checkinStreak || 0)   + ' days';
-  document.getElementById('teamL1Count').textContent    = u.teamL1Count            || 0;
-  document.getElementById('teamL2Count').textContent    = u.teamL2Count            || 0;
-  document.getElementById('teamL3Count').textContent    = u.teamL3Count            || 0;
-  document.getElementById('teamL1Earned').textContent   = ugx(u.commissionL1Earned || 0);
-  document.getElementById('teamL2Earned').textContent   = ugx(u.commissionL2Earned || 0);
-  document.getElementById('teamL3Earned').textContent   = ugx(u.commissionL3Earned || 0);
+  const code = u.referralCode || '——';
+  document.getElementById('commTotal').textContent     = ugx(u.commissionEarned || 0);
+  document.getElementById('myRefCode').textContent     = code;
+  document.getElementById('myRefLink').textContent     = 'nexus.app?ref=' + code;
+  const totalSize = (u.teamL1Count||0) + (u.teamL2Count||0) + (u.teamL3Count||0);
+  document.getElementById('teamTotalSize').textContent = totalSize;
+  document.getElementById('teamL1Count').textContent   = u.teamL1Count || 0;
+  document.getElementById('teamL2Count').textContent   = u.teamL2Count || 0;
+  document.getElementById('teamL3Count').textContent   = u.teamL3Count || 0;
+  // Income shown as short numbers for the narrow columns
+  document.getElementById('teamL1Earned').textContent  = shortUgx(u.commissionL1Earned || 0);
+  document.getElementById('teamL2Earned').textContent  = shortUgx(u.commissionL2Earned || 0);
+  document.getElementById('teamL3Earned').textContent  = shortUgx(u.commissionL3Earned || 0);
 }
 
 // ── RENDER MORE ──
@@ -1039,14 +1305,16 @@ function renderMore(u) {
 // ── NAVIGATION ──
 window.showSection = (sec) => {
   const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection' };
-  // Records lives under More, so its bottom-nav highlight stays on "more"
   const navMap = { home:'home', products:'products', invest:'more', records:'more', commission:'commission', more:'more' };
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(secMap[sec] || sec + 'Section')?.classList.add('active');
   document.querySelectorAll('.bnav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.sec === (navMap[sec] || sec));
   });
-  if (sec === 'records' || sec === 'invest') { loadRecords('income'); }
+  // topbar only visible on non-home sections
+  const tb = document.getElementById('mainTopbar');
+  if (tb) tb.style.display = (sec === 'home') ? 'none' : 'flex';
+  if (sec === 'records' || sec === 'invest') loadRecords('income');
   window.scrollTo(0, 0);
 };
 
