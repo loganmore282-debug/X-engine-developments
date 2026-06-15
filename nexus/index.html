@@ -164,13 +164,12 @@ body{padding-bottom:106px}
 .home-header-right{display:flex;align-items:center;gap:10px}
 
 /* ── HOME — quick action buttons ── */
-.home-actions{display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid var(--border)}
-.ha-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px;background:transparent;border:none;cursor:pointer;font-family:'Outfit',sans-serif;border-right:1px solid var(--border);transition:background .18s}
-.ha-btn:last-child{border-right:none}
-.ha-btn:active{background:var(--card2)}
-.ha-icon{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bluefade);border:1px solid rgba(37,99,235,0.18);color:var(--blue)}
-.ha-icon svg{width:21px;height:21px}
-.ha-label{font-size:12px;font-weight:700;color:var(--text);letter-spacing:.3px}
+.home-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.ha-btn{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px;background:var(--card);border:1px solid var(--border);border-radius:16px;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s}
+.ha-btn:active{opacity:.85}
+.ha-icon{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bluefade);color:var(--blue)}
+.ha-icon svg{width:27px;height:27px}
+.ha-label{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px}
 
 /* ── SLIDESHOW ── */
 .slideshow-wrap{position:relative;height:200px;overflow:hidden;background:#0a0a0a}
@@ -196,12 +195,13 @@ body{padding-bottom:106px}
 .ticker-item span{color:var(--text);font-weight:600}
 
 /* ── HOME — 2-col balance grid ── */
-.home-balance-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;background:rgba(37,99,235,0.12);border-top:1px solid rgba(37,99,235,0.15)}
-.hbg-card{background:linear-gradient(135deg,#1540bf 0%,#0e2e9a 100%);padding:16px;position:relative;overflow:hidden}
-.hbg-card:first-child{border-right:1px solid rgba(255,255,255,0.1)}
-.hbg-card::after{content:'◈';position:absolute;right:-4px;bottom:-10px;font-size:56px;color:rgba(255,255,255,0.06);font-weight:900;pointer-events:none}
+.home-balance-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px;background:var(--bg)}
+.hbg-card{background:linear-gradient(135deg,#1540bf 0%,#0e2e9a 100%);padding:16px 14px;position:relative;overflow:hidden;border-radius:14px}
+.hbg-card::after{content:'◈';position:absolute;right:-6px;bottom:-8px;font-size:58px;color:rgba(255,255,255,0.07);font-weight:900;pointer-events:none}
+.hbg-icon{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#fff}
+.hbg-icon svg{width:18px;height:18px}
 .hbg-label{font-size:10px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
-.hbg-val{font-size:16px;font-weight:900;color:#fff;font-family:'Share Tech Mono',monospace;line-height:1.2}
+.hbg-val{font-size:15px;font-weight:900;color:#fff;font-family:'Share Tech Mono',monospace;line-height:1.2}
 .hbg-sub{font-size:9px;color:rgba(255,255,255,0.4);margin-top:3px}
 
 /* ── HOME — inner padding wrapper ── */
@@ -591,12 +591,14 @@ body{padding-bottom:106px}
 
     <!-- 2-col balance grid -->
     <div class="home-balance-grid">
-      <div class="hbg-card" style="border-right:1px solid var(--border)">
+      <div class="hbg-card">
+        <div class="hbg-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></div>
         <div class="hbg-label">Account Balance</div>
         <div class="hbg-val" id="homeBalance">UGX 0</div>
-        <div class="hbg-sub" id="homeBalanceSub">Available</div>
+        <div class="hbg-sub" id="homeBalanceSub">Invest to earn returns</div>
       </div>
       <div class="hbg-card">
+        <div class="hbg-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
         <div class="hbg-label">Cumulative Income</div>
         <div class="hbg-val" id="homeCumulative">UGX 0</div>
         <div class="hbg-sub">Referral + Cashback</div>
