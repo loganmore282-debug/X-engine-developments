@@ -446,10 +446,34 @@ body{padding-bottom:106px}
 #toast.error{border-color:rgba(239,68,68,.4)}
 
 /* ── LOADING ── */
-.loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+.loading-overlay{display:none;position:fixed;inset:0;background:linear-gradient(180deg,#0f2d80 0%,#030c2a 100%);z-index:2000;align-items:center;justify-content:center;flex-direction:column}
 .loading-overlay.show{display:flex}
-.load-spin{width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--text);border-radius:50%;animation:spin 1s linear infinite}
-.load-text{font-size:13px;color:var(--text2);font-weight:600}
+.nexus-loader{display:flex;flex-direction:column;align-items:center;gap:6px}
+.nl-mark{font-size:58px;font-weight:900;color:#fff;line-height:1;animation:nl-pulse 1.6s ease-in-out infinite;text-shadow:0 0 40px rgba(37,99,235,0.8)}
+.nl-brand{font-size:13px;font-weight:900;color:rgba(255,255,255,0.55);letter-spacing:4px;margin-bottom:20px}
+.nl-dots{display:flex;gap:9px}
+.nl-dots span{width:9px;height:9px;border-radius:50%;background:#2563eb;animation:nl-bounce 1.1s ease-in-out infinite}
+.nl-dots span:nth-child(2){animation-delay:.18s}
+.nl-dots span:nth-child(3){animation-delay:.36s}
+@keyframes nl-pulse{0%,100%{opacity:.7;transform:scale(.94)}50%{opacity:1;transform:scale(1.06)}}
+@keyframes nl-bounce{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-9px)}}
+/* small inline spinner still used in records/products */
+.load-spin{width:36px;height:36px;border:3px solid var(--border);border-top-color:#2563eb;border-radius:50%;animation:spin 0.9s linear infinite}
+
+/* ── FULL-SCREEN PAGE OVERLAY ── */
+.page-overlay{position:fixed;inset:0;z-index:600;background:var(--bg);transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.page-overlay.open{transform:translateX(0)}
+.page-hdr{position:sticky;top:0;z-index:10;background:rgba(255,255,255,0.98);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 6px rgba(0,0,0,0.06)}
+.page-back{width:38px;height:38px;border:none;background:var(--card2);border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text)}
+.page-back svg{width:20px;height:20px}
+.page-hdr-title{font-size:17px;font-weight:800;color:var(--text);flex:1}
+.page-body{padding:20px 16px 100px}
+/* deposit network pills */
+.net-pills{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.net-pill{height:44px;border:1.5px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .18s}
+.net-pill.active{border-color:#2563eb;background:var(--bluefade);color:#2563eb}
+/* withdraw info badge */
+.page-bal-badge{background:var(--bluefade);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#2563eb;font-weight:700}
 
 @media(max-width:400px){
   .products-grid{grid-template-columns:1fr 1fr}
@@ -461,8 +485,11 @@ body{padding-bottom:106px}
 
 <!-- ── LOADING OVERLAY ── -->
 <div id="loadingOverlay" class="loading-overlay show">
-  <div class="load-spin"></div>
-  <div class="load-text">Loading Nexus…</div>
+  <div class="nexus-loader">
+    <div class="nl-mark">◈</div>
+    <div class="nl-brand">NEXUS</div>
+    <div class="nl-dots"><span></span><span></span><span></span></div>
+  </div>
 </div>
 
 <!-- ── TOAST ── -->
@@ -577,11 +604,11 @@ body{padding-bottom:106px}
 
     <!-- Quick actions -->
     <div class="home-actions">
-      <button class="ha-btn" onclick="openDepositModal()">
+      <button class="ha-btn" onclick="openDepositPage()">
         <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>
         <div class="ha-label">Deposit</div>
       </button>
-      <button class="ha-btn" onclick="openWithdrawModal()">
+      <button class="ha-btn" onclick="openWithdrawPage()">
         <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></div>
         <div class="ha-label">Withdraw</div>
       </button>
@@ -845,48 +872,39 @@ body{padding-bottom:106px}
      MODALS
 ══════════════════════════════════════════ -->
 
-<!-- DEPOSIT MODAL -->
-<div id="depositModal" class="modal-overlay" onclick="if(event.target===this)closeModal('depositModal')">
-  <div class="modal-sheet">
-    <span class="modal-handle"></span>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <div class="modal-title">Deposit Funds</div>
-      <button class="modal-close" onclick="closeModal('depositModal')">×</button>
+<!-- ══ DEPOSIT PAGE ══ -->
+<div id="depositPage" class="page-overlay">
+  <div class="page-hdr">
+    <button class="page-back" onclick="closePage('depositPage')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <div class="page-hdr-title">Deposit Funds</div>
+  </div>
+  <div class="page-body">
+    <div class="page-bal-badge">Wallet: <span id="depWalBadge">UGX 0</span> &nbsp;·&nbsp; Min UGX 30,000</div>
+    <label class="form-label">Amount (UGX)</label>
+    <input class="form-input" id="depAmount" type="number" placeholder="30000" min="30000" inputmode="numeric" style="margin-bottom:20px">
+    <label class="form-label">Mobile Money Number</label>
+    <div class="phone-form-wrap" style="margin-bottom:14px">
+      <span class="phone-form-prefix">+256</span>
+      <input type="tel" id="depMomoPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
     </div>
-    <div class="modal-sub">Minimum: UGX 30,000</div>
-    <div class="dep-momo-box">
-      <div class="dep-momo-label">Send to this MoMo Number</div>
-      <div class="dep-momo-num" id="depMomoNum">Loading…</div>
-      <button class="dep-copy-btn" onclick="copyDepositPhone()">Copy Number</button>
+    <label class="form-label">Network</label>
+    <div class="net-pills" style="margin-bottom:20px">
+      <button class="net-pill active" id="netMTN" onclick="selectNet('MTN',this)">MTN MoMo</button>
+      <button class="net-pill" id="netAirtel" onclick="selectNet('Airtel',this)">Airtel Money</button>
     </div>
-    <div class="dep-inst-list">
-      <div class="dep-inst-row">
-        <span class="dep-inst-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
-        <span>Send from your registered number: <strong id="depUserPhone">—</strong></span>
-      </div>
-      <div class="dep-inst-row">
-        <span class="dep-inst-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span>
-        <span>Your deposit is detected automatically from the MoMo SMS you receive — no extra steps needed</span>
-      </div>
-      <div class="dep-inst-row">
-        <span class="dep-inst-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
-        <span>Funds are credited to your wallet within minutes</span>
-      </div>
-    </div>
-    <div class="form-info">Minimum deposit: UGX 30,000 &nbsp;·&nbsp; Use your registered phone number for instant credit</div>
-    <button class="btn-submit" onclick="closeModal('depositModal')">OK, I'll Send Now</button>
+    <div class="form-info" style="margin-bottom:20px">A payment prompt will be sent to your phone. Open it and enter your MoMo PIN to complete the deposit. Funds are credited instantly after confirmation.</div>
+    <button class="btn-submit" id="depSubmitBtn" onclick="submitDeposit()">Pay Now</button>
   </div>
 </div>
 
-<!-- WITHDRAW MODAL -->
-<div id="withdrawModal" class="modal-overlay" onclick="if(event.target===this)closeModal('withdrawModal')">
-  <div class="modal-sheet">
-    <span class="modal-handle"></span>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <div class="modal-title">Request Withdrawal</div>
-      <button class="modal-close" onclick="closeModal('withdrawModal')">×</button>
-    </div>
-    <div class="modal-sub" id="witBalSub">Available: UGX 0</div>
+<!-- ══ WITHDRAW PAGE ══ -->
+<div id="withdrawPage" class="page-overlay">
+  <div class="page-hdr">
+    <button class="page-back" onclick="closePage('withdrawPage')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <div class="page-hdr-title">Request Withdrawal</div>
+  </div>
+  <div class="page-body">
+    <div class="page-bal-badge">Available: <span id="witBalBadge">UGX 0</span></div>
     <label class="form-label">Amount (UGX)</label>
     <input class="form-input" id="witAmount" type="number" placeholder="15000" min="15000" inputmode="numeric">
     <label class="form-label">Receive on Phone</label>
@@ -894,7 +912,7 @@ body{padding-bottom:106px}
       <span class="phone-form-prefix">+256</span>
       <input type="tel" id="witPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
     </div>
-    <div class="form-info">17% liquidity fee applies. Net amount will be deducted on processing.</div>
+    <div class="form-info">17% liquidity fee applies. Net amount will be deducted on processing. Your withdrawal will be processed within 24 hours by our team.</div>
     <button class="btn-submit" onclick="submitWithdrawal()">Request Withdrawal</button>
   </div>
 </div>
@@ -1182,19 +1200,26 @@ async function loadSlideshow() {
 
 // ── TICKER ──
 async function loadTicker(uid) {
+  const el = document.getElementById('homeTicker');
+  const fallback = [
+    '◈ NEXUS — Grow. Earn. Prosper.','• Secure & transparent investments','• Earn daily returns on your capital','• 3-level referral commissions','• Instant MoMo deposits & withdrawals','• Daily check-in bonus UGX 500'
+  ];
   try {
-    const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',uid), orderBy('createdAt','desc'), limit(10)));
-    const items = snap.docs.map(d => d.data());
-    if (!items.length) { document.getElementById('homeTicker').innerHTML = '<span class="ticker-item">Welcome to <span>NEXUS</span>! Start investing today.</span>'; return; }
-    const icons = { deposit:'+', commission:'+', checkin:'+', investment_return:'+', withdrawal:'−', investment:'−' };
+    // Try global recent activity (anonymized)
+    const snap = await getDocs(query(collection(db,'transactions'), orderBy('createdAt','desc'), limit(20)));
+    const items = snap.docs.map(d => d.data()).filter(t => t.amount > 0);
+    if (!items.length) throw new Error('empty');
+    const typeLabel = { deposit:'Deposit received', commission:'Commission earned', checkin:'Check-in bonus', investment_return:'Investment return', gift_code:'Gift code redeemed', admin_credit:'Bonus credited' };
     const text = items.map(t => {
-      const icon = icons[t.type] || '•';
-      const amt  = t.amount > 0 ? '+UGX ' + Number(t.amount).toLocaleString() : 'UGX ' + Number(Math.abs(t.amount)).toLocaleString();
-      return `<span class="ticker-item">${icon} <span>${t.description || t.type}</span> ${amt}</span>`;
-    }).join(' | ');
-    const doubled = text + ' | ' + text; // duplicate for seamless loop
-    document.getElementById('homeTicker').innerHTML = doubled;
-  } catch (_) {}
+      const label = typeLabel[t.type] || 'Transaction';
+      return `<span class="ticker-item">• <span>${label}</span> +UGX ${Number(t.amount).toLocaleString()}</span>`;
+    }).join('  ');
+    el.innerHTML = text + '  ' + text;
+  } catch (_) {
+    // Fallback to platform messages
+    const text = fallback.map(f => `<span class="ticker-item">${f}</span>`).join('  ');
+    el.innerHTML = text + '  ' + text;
+  }
 }
 
 // ── AUTH STATE ──
@@ -1259,7 +1284,10 @@ function renderHome(u) {
   const eat = new Date(Date.now() + 3*60*60*1000);
   const todayKey = eat.toISOString().slice(0,10);
   const doneCi = u.lastCheckinDate === todayKey;
-  document.getElementById('checkinSub').textContent = doneCi ? `✓ Checked in today (Streak: ${u.checkinStreak || 0} days)` : 'Earn UGX 500 free today';
+  const streakDays = u.checkinStreak || 0;
+  document.getElementById('checkinSub').textContent = doneCi
+    ? `✓ Checked in today  ·  ${streakDays} day${streakDays===1?'':'s'} series`
+    : 'Earn UGX 500 free today';
   const ciBtn = document.getElementById('checkinBtn');
   ciBtn.textContent = doneCi ? '✓ Done' : 'Claim';
   ciBtn.className   = 'btn-checkin' + (doneCi ? ' done' : '');
@@ -1590,32 +1618,55 @@ window.shareRefLink = () => {
   }
 };
 
-// ── DEPOSIT ──
-window.openDepositModal = async () => {
-  document.getElementById('depUserPhone').textContent = _userData?.phone || '—';
-  const numEl = document.getElementById('depMomoNum');
-  numEl.textContent = '…';
-  try {
-    const snap = await getDoc(doc(db, 'settings', 'main'));
-    numEl.textContent = snap.data()?.depositPhone || 'Contact support';
-  } catch (_) { numEl.textContent = 'Contact support'; }
-  openModal('depositModal');
+// ── PAGE NAVIGATION ──
+let _selectedNet = 'MTN';
+window.openPage = (id) => { document.getElementById(id).classList.add('open'); window.scrollTo(0,0); };
+window.closePage = (id) => { document.getElementById(id).classList.remove('open'); };
+window.selectNet = (net, btn) => {
+  _selectedNet = net;
+  document.querySelectorAll('.net-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
 };
 
-window.copyDepositPhone = () => {
-  const t = document.getElementById('depMomoNum').textContent;
-  if (t && t !== '…' && t !== 'Contact support' && t !== 'Loading…') {
-    navigator.clipboard.writeText(t).then(() => showToast('Number copied!', 'success')).catch(() => {});
-  }
-};
-
-// ── WITHDRAWAL ──
-window.openWithdrawModal = () => {
+// ── DEPOSIT PAGE ──
+window.openDepositPage = () => {
   if (!_userData) return;
-  document.getElementById('witBalSub').textContent = `Available: ${ugx(_userData.walletBalance)}`;
+  document.getElementById('depWalBadge').textContent = ugx(_userData.walletBalance);
+  document.getElementById('depAmount').value = '';
+  document.getElementById('depMomoPhone').value = _userData.phone?.replace('+256','') || '';
+  _selectedNet = 'MTN';
+  document.querySelectorAll('.net-pill').forEach(b => b.classList.remove('active'));
+  document.getElementById('netMTN')?.classList.add('active');
+  openPage('depositPage');
+};
+
+window.submitDeposit = async () => {
+  if (!_user || !_userData) return;
+  const amount = parseInt(document.getElementById('depAmount').value, 10);
+  const phone  = document.getElementById('depMomoPhone').value.trim().replace(/\D/g,'');
+  if (!amount || amount < 30000) { showToast('Minimum deposit is UGX 30,000', 'error'); return; }
+  if (!phone) { showToast('Enter your MoMo phone number', 'error'); return; }
+  const btn = document.getElementById('depSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Processing…';
+  try {
+    const r = await api('/deposit/initiate', { userId:_user.uid, amount, phone:'+256'+phone, network:_selectedNet });
+    btn.disabled = false; btn.textContent = 'Pay Now';
+    if (r.status === 'success') {
+      closePage('depositPage');
+      showToast('Payment prompt sent!\nApprove it on your phone to complete.', 'success');
+    } else {
+      showToast(r.message || 'Payment initiation failed', 'error');
+    }
+  } catch (e) { btn.disabled=false; btn.textContent='Pay Now'; showToast('Network error', 'error'); }
+};
+
+// ── WITHDRAW PAGE ──
+window.openWithdrawPage = () => {
+  if (!_userData) return;
+  document.getElementById('witBalBadge').textContent = ugx(_userData.walletBalance);
   document.getElementById('witAmount').value = '';
   document.getElementById('witPhone').value  = _userData.phone?.replace('+256','') || '';
-  openModal('withdrawModal');
+  openPage('withdrawPage');
 };
 
 window.submitWithdrawal = async () => {
@@ -1625,7 +1676,7 @@ window.submitWithdrawal = async () => {
   if (!amount || amount < 15000) { showToast('Minimum withdrawal is UGX 15,000', 'error'); return; }
   if (amount > (_userData.walletBalance || 0)) { showToast('Insufficient balance', 'error'); return; }
   if (!phone)  { showToast('Enter withdrawal phone number', 'error'); return; }
-  closeModal('withdrawModal');
+  closePage('withdrawPage');
   showLoading(true);
   try {
     const r = await api('/withdraw/request', { userId:_user.uid, amount, phone:'+256'+phone });

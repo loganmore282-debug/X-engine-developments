@@ -2,6 +2,8 @@ const express    = require('express');
 const admin      = require('firebase-admin');
 const cors       = require('cors');
 const crypto     = require('crypto');
+// Node 18+ has built-in fetch; for older Node fallback
+if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
 const app = express();
 app.use(express.json());
@@ -752,6 +754,109 @@ app.post('/admin/ban', async (req, res) => {
       isBan ? 'warning' : 'info', {});
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════
+// MARZPAY — DEPOSIT INITIATION & CALLBACK
+// ═══════════════════════════════════════════
+const MARZPAY_KEY = process.env.MARZPAY_KEY || '';
+const MARZPAY_URL = (process.env.MARZPAY_URL || 'https://api.marzpay.co.ug').replace(/\/$/, '');
+
+app.post('/deposit/initiate', async (req, res) => {
+  const { userId, amount, phone, network } = req.body;
+  if (!userId || !amount || !phone) return res.json({ status: 'error', message: 'Missing required fields' });
+  if (amount < 30000) return res.json({ status: 'error', message: 'Minimum deposit is UGX 30,000' });
+
+  try {
+    const userSnap = await db.collection('users').doc(userId).get();
+    if (!userSnap.exists) return res.json({ status: 'error', message: 'User not found' });
+
+    const ref = 'NX' + Date.now() + Math.floor(Math.random() * 1000);
+    const callbackUrl = RAILWAY_URL + '/deposit/callback';
+
+    let payStatus = 'pending';
+    let mpMessage = 'Payment prompt sent';
+
+    if (MARZPAY_KEY) {
+      const mpRes = await fetch(`${MARZPAY_URL}/v1/collections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MARZPAY_KEY}` },
+        body: JSON.stringify({ amount, phone_number: phone, network: network || 'MTN', reference: ref, callback_url: callbackUrl })
+      });
+      const mpData = await mpRes.json();
+      if (mpData.status !== 'success' && mpData.code !== '200' && !mpData.transaction_id) {
+        return res.json({ status: 'error', message: mpData.message || 'Payment provider error' });
+      }
+      mpMessage = mpData.message || 'Payment prompt sent to your phone';
+    }
+
+    // Record pending deposit transaction
+    const now = new Date();
+    await db.collection('transactions').add({
+      userId, type: 'deposit', amount, phone, network: network || 'MTN',
+      status: payStatus, reference: ref,
+      description: `${network || 'MTN'} Deposit`,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      date: now.toLocaleDateString('en-GB'), time: now.toLocaleTimeString('en-GB')
+    });
+
+    return res.json({ status: 'success', message: mpMessage, reference: ref });
+  } catch (e) {
+    console.error('MarzPay initiate error:', e.message);
+    return res.json({ status: 'error', message: 'Payment service unavailable' });
+  }
+});
+
+app.post('/deposit/callback', async (req, res) => {
+  // MarzPay webhook — called when user approves payment on phone
+  const { reference, status, amount, transaction_id } = req.body;
+  res.json({ received: true }); // Respond immediately
+
+  const txStatus = (status || '').toLowerCase();
+  if (txStatus !== 'successful' && txStatus !== 'success') return;
+
+  try {
+    const snap = await db.collection('transactions')
+      .where('reference', '==', reference)
+      .where('type', '==', 'deposit')
+      .limit(1).get();
+    if (snap.empty) return;
+
+    const txDoc = snap.docs[0];
+    const tx = txDoc.data();
+    if (tx.status === 'success') return; // already credited
+
+    const creditAmount = Number(amount) || tx.amount;
+
+    await db.runTransaction(async t => {
+      const userRef = db.collection('users').doc(tx.userId);
+      const userSnap = await t.get(userRef);
+      if (!userSnap.exists) return;
+      t.update(userRef, { walletBalance: FieldValue.increment(creditAmount) });
+      t.update(txDoc.ref, { status: 'success', transactionId: transaction_id || '' });
+    });
+
+    console.log(`✅ Deposit credited: ${tx.userId} +UGX ${creditAmount}`);
+  } catch (e) {
+    console.error('MarzPay callback error:', e.message);
+  }
+});
+
+// ── TICKER (anonymized global activity) ──
+app.get('/ticker', async (req, res) => {
+  try {
+    const snap = await db.collection('transactions')
+      .where('status', '==', 'success')
+      .orderBy('createdAt', 'desc')
+      .limit(20).get();
+    const items = snap.docs.map(d => {
+      const t = d.data();
+      return { type: t.type, amount: t.amount };
+    });
+    res.json({ status: 'success', items });
+  } catch (e) {
+    res.json({ status: 'success', items: [] });
+  }
 });
 
 app.post('/admin/check-maturities', async (req, res) => {
