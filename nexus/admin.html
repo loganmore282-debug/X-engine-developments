@@ -832,8 +832,8 @@ window.doLogout = () => {
   document.getElementById('adminKeyInput').value = '';
 };
 
-// Auto-login if previously authenticated
-if (localStorage.getItem('nx_admin_auth') === '1') _showAdminApp();
+// Defer auto-login until after all window.* functions are assigned
+setTimeout(() => { if (localStorage.getItem('nx_admin_auth') === '1') _showAdminApp(); }, 0);
 
 // ── INIT ──
 window.initAdmin = async () => {
