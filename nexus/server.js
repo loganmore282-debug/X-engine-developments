@@ -28,6 +28,9 @@ const ADMIN_KEY    = process.env.ADMIN_KEY    || '';
 const SMS_SECRET   = process.env.SMS_SECRET   || '';
 const RAILWAY_URL  = (process.env.RAILWAY_URL || '').replace(/\/$/, '');
 
+const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
+const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
+
 const MIN_WITHDRAWAL = 15000;
 const CHECKIN_BONUS  = 500;
 const WELCOME_BONUS  = 10000;
@@ -35,6 +38,22 @@ const COMM_L1        = 0.35;
 const COMM_L2        = 0.05;
 const COMM_L3        = 0.02;
 const LIQUIDITY_FEE  = 0.17;
+
+// ── UUID v4 generator ──
+function uuidv4() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ── FormData helper for MarzPay ──
+function marzForm(fields) {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(fields)) fd.append(k, String(v));
+  return fd;
+}
 
 // ── MAINTENANCE — cached 60 s ──
 let _maint = false, _maintTs = 0;
@@ -47,7 +66,8 @@ async function isMaintenanceOn() {
   _maintTs = Date.now();
   return _maint;
 }
-const BYPASS = ['/', '/sms/incoming', '/admin'];
+// Webhooks and admin routes must never be blocked by maintenance
+const BYPASS = ['/', '/sms/incoming', '/admin', '/deposit/callback', '/withdraw/callback'];
 app.use(async (req, res, next) => {
   const p = req.path;
   if (BYPASS.some(b => p === b || p.startsWith(b + '/'))) return next();
@@ -84,7 +104,6 @@ const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function randChars(n) {
   return Array.from(crypto.randomBytes(n)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
-function genCode() { return randChars(6); }
 
 // Globally-unique referral code: N + 5 random + X (e.g. N4K7M2X)
 async function generateUniqueRefCode() {
@@ -93,9 +112,9 @@ async function generateUniqueRefCode() {
     const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
     if (exists.empty) return code;
   }
-  // Extremely unlikely fallback — timestamp entropy guarantees uniqueness
   return 'N' + Date.now().toString(36).toUpperCase().slice(-5).padStart(5, '0') + 'X';
 }
+
 async function notify(userId, title, message, type, extras = {}) {
   const { date, time } = nowStr();
   await db.collection('notifications').add({
@@ -108,14 +127,11 @@ async function notify(userId, title, message, type, extras = {}) {
 // ── SMS PARSING ──
 function parseMoMoSMS(sms) {
   if (!sms) return null;
-  // Must contain UGX and look like a received-money SMS
   if (!/received|deposited|credited/i.test(sms)) return null;
-  // Amount
   const amtMatch = sms.match(/UGX\s*([0-9,]+)/i);
   if (!amtMatch) return null;
   const amount = parseInt(amtMatch[1].replace(/,/g, ''), 10);
   if (!amount || amount < 100) return null;
-  // Sender phone — MTN/Airtel Uganda formats
   const phonePatterns = [
     /from\s+(\+?256[347]\d{8})/i,
     /from\s+(0[347]\d{8})/i,
@@ -127,7 +143,6 @@ function parseMoMoSMS(sms) {
     const m = sms.match(p);
     if (m) { senderPhone = m[1]; break; }
   }
-  // Transaction ID
   const txnMatch = sms.match(/[Ff]inancial\s*[Tt]ransaction\s*[Ii]d\s+(\d+)/) ||
                    sms.match(/[Tt]xn\s*[Ii]d[:\s]+([A-Z0-9]+)/i) ||
                    sms.match(/[Tt]ransaction\s*[Ii][Dd][:\s]+([A-Z0-9]+)/i) ||
@@ -238,8 +253,7 @@ app.get('/', (req, res) => res.json({ status: '◈ Nexus Server', time: new Date
 
 // ── GIFT CODE GENERATION HELPER ──
 function genGiftCode() {
-  const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // 31 chars — no I/L/O/0/1
-  return Array.from(crypto.randomBytes(6)).map(b => CHARS[b % CHARS.length]).join('');
+  return 'NEXUS-' + Array.from(crypto.randomBytes(6)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
 
 // ═══════════════════════════════════════════
@@ -258,7 +272,6 @@ app.post('/sms/incoming', async (req, res) => {
   const { smsBody, senderPhone, secret, raw } = req.body;
   const body = smsBody || raw || '';
 
-  // Verify secret if configured
   if (SMS_SECRET && secret !== SMS_SECRET)
     return res.status(401).json({ status: 'error', message: 'Unauthorized' });
 
@@ -277,17 +290,14 @@ app.post('/sms/incoming', async (req, res) => {
 
       console.log(`📩 SMS deposit: ${fmtUGX(amount)} from ${phone} | txn: ${txnId}`);
 
-      // Deduplication — check if txnId already processed
       const dupSnap = await db.collection('processedSMS').doc(txnId).get();
       if (dupSnap.exists) {
         console.log('⚠️ Duplicate SMS txnId:', txnId);
         return;
       }
 
-      // Find user by phone
       const userSnap = await db.collection('users').where('phone', '==', phone).limit(1).get();
       if (userSnap.empty) {
-        // Store as unmatched for admin review
         await db.collection('unmatchedDeposits').add({
           smsBody: body, senderPhone: phone, amount, txnId,
           status: 'unmatched', receivedAt: FieldValue.serverTimestamp()
@@ -299,7 +309,6 @@ app.post('/sms/incoming', async (req, res) => {
       const userId = userSnap.docs[0].id;
       const { date, time } = nowStr();
 
-      // Credit in transaction + mark txnId as processed atomically
       await db.runTransaction(async t => {
         const uRef   = db.collection('users').doc(userId);
         const uSnap  = await t.get(uRef);
@@ -383,7 +392,6 @@ app.post('/register', async (req, res) => {
       if (!refSnap.empty && refSnap.docs[0].id !== userId) referrerId = refSnap.docs[0].id;
     }
 
-    // Server-generated globally-unique referral code (authoritative)
     const myRefCode = userSnap.data().referralCode || await generateUniqueRefCode();
 
     const WELCOME = 10000;
@@ -391,7 +399,6 @@ app.post('/register', async (req, res) => {
     const batch = db.batch();
     const update = { registrationDone: true, referralCode: myRefCode };
 
-    // Welcome bonus
     batch.update(userRef, { walletBalance: FieldValue.increment(WELCOME) });
     batch.set(db.collection('transactions').doc(), {
       userId, type: 'admin_credit', description: 'Welcome bonus — new account',
@@ -439,7 +446,6 @@ app.post('/account/ensure-refcode', async (req, res) => {
     const snap = await ref.get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const existing = snap.data().referralCode;
-    // Valid format: N + 5 chars + X
     if (existing && /^N[A-Z0-9]{5}X$/.test(existing)) {
       return res.json({ status: 'success', referralCode: existing, changed: false });
     }
@@ -541,7 +547,7 @@ app.post('/invest/claim', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// WITHDRAWALS — user requests, admin processes manually
+// WITHDRAWALS — user requests, admin processes via MarzPay
 // ═══════════════════════════════════════════
 app.post('/withdraw/request', async (req, res) => {
   const { userId, amount, phone } = req.body;
@@ -560,7 +566,6 @@ app.post('/withdraw/request', async (req, res) => {
     if ((user.walletBalance || 0) < amt)
       return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });
 
-    // 17% liquidity fee on all withdrawals
     const fee    = Math.round(amt * LIQUIDITY_FEE);
     const netAmt = amt - fee;
     const { date, time } = nowStr();
@@ -630,6 +635,191 @@ app.get('/withdraw/status/:id', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// ADMIN — PROCESS WITHDRAWAL VIA MARZPAY
+// ═══════════════════════════════════════════
+app.post('/admin/withdraw/process', async (req, res) => {
+  const { withdrawalId, adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+
+  try {
+    const witSnap = await db.collection('withdrawals').doc(withdrawalId).get();
+    if (!witSnap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    const wit = witSnap.data();
+
+    if (wit.status !== 'pending')
+      return res.status(400).json({ status: 'error', message: `Cannot process — status is '${wit.status}'` });
+
+    const phone     = wit.withdrawalPhone || wit.userPhone || '';
+    const netAmount = wit.netAmount || wit.amount;
+    const reference = uuidv4();
+    const callbackUrl = RAILWAY_URL + '/withdraw/callback';
+
+    // Call MarzPay send-money (multipart form)
+    const fd = marzForm({
+      phone_number: phone,
+      amount:       String(netAmount),
+      country:      'UG',
+      reference,
+      description:  `Nexus withdrawal - ${wit.userName || wit.userId}`,
+      callback_url: callbackUrl
+    });
+
+    const mpRes = await fetch(`${MARZPAY_BASE}/send-money`, {
+      method: 'POST',
+      headers: { 'Authorization': `Basic ${MARZPAY_KEY}` },
+      body: fd
+    });
+    const mpData = await mpRes.json();
+    console.log('MarzPay send-money response:', JSON.stringify(mpData));
+
+    if (mpData.status !== 'success' && mpData.status !== 'pending') {
+      return res.status(400).json({ status: 'error', message: mpData.message || 'MarzPay disbursement failed' });
+    }
+
+    // Update withdrawal to processing
+    const batch = db.batch();
+    batch.update(db.collection('withdrawals').doc(withdrawalId), {
+      status: 'processing',
+      marzReference: reference,
+      processedAt: FieldValue.serverTimestamp()
+    });
+
+    // Update matching transactions doc
+    const txSnap = await db.collection('transactions')
+      .where('type', '==', 'withdrawal')
+      .where('userId', '==', wit.userId)
+      .orderBy('createdAt', 'desc')
+      .limit(10)
+      .get();
+    for (const txDoc of txSnap.docs) {
+      const txData = txDoc.data();
+      if (txData.status === 'pending' && Math.abs(txData.amount) === wit.amount) {
+        batch.update(txDoc.ref, { status: 'processing', marzReference: reference });
+        break;
+      }
+    }
+
+    await batch.commit();
+
+    await notify(wit.userId, '⏳ Withdrawal Processing',
+      `Your withdrawal of ${fmtUGX(netAmount)} is being sent to ${phone}.\n\nYou will receive the funds shortly. ◈`,
+      'withdrawal', { amount: netAmount, phone });
+
+    console.log(`💸 Withdrawal processing: ${withdrawalId} → ${phone} ${fmtUGX(netAmount)}`);
+    return res.json({ status: 'success', message: `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}` });
+  } catch (e) {
+    console.error('Process withdrawal error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// MARZPAY WITHDRAWAL CALLBACK (disbursement webhook)
+// ═══════════════════════════════════════════
+app.post('/withdraw/callback', async (req, res) => {
+  res.json({ received: true });
+
+  const body      = req.body;
+  const eventType = body.event_type || '';
+  const reference = body.transaction?.reference || body.reference || '';
+
+  console.log('Withdraw callback:', eventType, reference);
+
+  try {
+    if (!reference) return;
+
+    const witSnap = await db.collection('withdrawals')
+      .where('marzReference', '==', reference)
+      .limit(1).get();
+    if (witSnap.empty) {
+      console.log('No withdrawal found for marzReference:', reference);
+      return;
+    }
+
+    const witDoc = witSnap.docs[0];
+    const wit    = witDoc.data();
+    const { date, time } = nowStr();
+
+    if (eventType === 'disbursement.completed') {
+      const batch = db.batch();
+      batch.update(witDoc.ref, {
+        status: 'processed',
+        completedAt: FieldValue.serverTimestamp()
+      });
+      batch.update(db.collection('users').doc(wit.userId), {
+        totalWithdrawn: FieldValue.increment(wit.netAmount || wit.amount)
+      });
+      await batch.commit();
+
+      // Update matching transaction status
+      const txSnap = await db.collection('transactions')
+        .where('userId', '==', wit.userId)
+        .where('type', '==', 'withdrawal')
+        .orderBy('createdAt', 'desc')
+        .limit(10).get();
+      for (const txDoc of txSnap.docs) {
+        const txData = txDoc.data();
+        if (txData.marzReference === reference || txData.status === 'processing') {
+          await txDoc.ref.update({ status: 'success' });
+          break;
+        }
+      }
+
+      await notify(wit.userId, '✅ Withdrawal Processed',
+        `${fmtUGX(wit.netAmount || wit.amount)} has been sent to your phone ${wit.withdrawalPhone || wit.userPhone}.\n\n📅 ${date}\n◈ Nexus Investment Platform`,
+        'withdrawal', { amount: wit.netAmount || wit.amount });
+
+      console.log(`✅ Withdrawal complete: ${witDoc.id} → ${wit.userId}`);
+
+    } else if (eventType === 'disbursement.failed') {
+      const refundAmount = wit.amount;
+      await db.runTransaction(async t => {
+        const uRef  = db.collection('users').doc(wit.userId);
+        const uSnap = await t.get(uRef);
+        if (!uSnap.exists) throw new Error('User not found');
+        t.update(uRef, {
+          walletBalance:   (uSnap.data().walletBalance || 0) + refundAmount,
+          withdrawalCount: FieldValue.increment(-1)
+        });
+        t.update(witDoc.ref, {
+          status: 'failed',
+          failedAt: FieldValue.serverTimestamp(),
+          failureReason: body.transaction?.failure_reason || 'Disbursement failed'
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId: wit.userId, type: 'refund',
+          description: 'Withdrawal refund — disbursement failed',
+          amount: refundAmount, status: 'success', date, time,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      });
+
+      const txSnap = await db.collection('transactions')
+        .where('userId', '==', wit.userId)
+        .where('type', '==', 'withdrawal')
+        .orderBy('createdAt', 'desc')
+        .limit(10).get();
+      for (const txDoc of txSnap.docs) {
+        const txData = txDoc.data();
+        if (txData.marzReference === reference || txData.status === 'processing') {
+          await txDoc.ref.update({ status: 'failed' });
+          break;
+        }
+      }
+
+      await notify(wit.userId, '❌ Withdrawal Failed',
+        `Your withdrawal of ${fmtUGX(wit.netAmount || wit.amount)} could not be processed.\n\n${fmtUGX(refundAmount)} has been refunded to your wallet.\n\nPlease try again.\n\n📅 ${date}`,
+        'withdrawal_failed', { amount: refundAmount });
+
+      console.log(`❌ Withdrawal failed & refunded: ${witDoc.id} → ${wit.userId}`);
+    }
+  } catch (e) {
+    console.error('Withdraw callback error:', e.message);
+  }
+});
+
+// ═══════════════════════════════════════════
 // CHECK-IN
 // ═══════════════════════════════════════════
 app.post('/checkin', async (req, res) => {
@@ -648,7 +838,6 @@ app.post('/checkin', async (req, res) => {
     const yesterdayKey = new Date(today.getTime() - 86400000).toISOString().slice(0, 10);
     if (user.lastCheckinDate === todayKey)
       return res.status(400).json({ status: 'error', message: 'Already checked in today', alreadyDone: true });
-    // Streak continues only if last check-in was yesterday; otherwise resets to 1
     const newStreak = user.lastCheckinDate === yesterdayKey ? (user.checkinStreak || 0) + 1 : 1;
     const { date, time } = nowStr();
     await db.runTransaction(async t => {
@@ -689,7 +878,6 @@ app.post('/giftcode/redeem', async (req, res) => {
     if (!gcd.active) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
     if ((gcd.usedBy || []).includes(userId)) return res.status(400).json({ status: 'error', message: 'You have already redeemed this code' });
     if (gcd.expiresAt && gcd.expiresAt.toDate() < new Date()) return res.status(400).json({ status: 'error', message: 'This gift code has expired' });
-    // Random amount at redemption — 100 to 15,000
     const amount = Math.floor(Math.random() * 14901) + 100;
     const { date, time } = nowStr();
     await db.runTransaction(async t => {
@@ -757,11 +945,181 @@ app.post('/admin/ban', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// ADMIN — STATS
+// ═══════════════════════════════════════════
+app.post('/admin/stats', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [usersSnap, withdrawalsSnap, investmentsSnap] = await Promise.all([
+      db.collection('users').get(),
+      db.collection('withdrawals').where('status', '==', 'pending').get(),
+      db.collection('investments').where('status', '==', 'active').get()
+    ]);
+
+    let totalUsers = 0, activeUsers = 0, bannedUsers = 0;
+    let totalWalletBalance = 0, totalDeposited = 0, totalWithdrawn = 0, totalInvested = 0;
+
+    usersSnap.forEach(doc => {
+      const u = doc.data();
+      totalUsers++;
+      if (u.status === 'banned') bannedUsers++;
+      else activeUsers++;
+      totalWalletBalance += u.walletBalance   || 0;
+      totalDeposited     += u.totalDeposited  || 0;
+      totalWithdrawn     += u.totalWithdrawn  || 0;
+      totalInvested      += u.totalInvested   || 0;
+    });
+
+    return res.json({
+      status: 'success',
+      stats: {
+        totalUsers,
+        activeUsers,
+        bannedUsers,
+        totalWalletBalance,
+        totalDeposited,
+        totalWithdrawn,
+        totalInvested,
+        pendingWithdrawals: withdrawalsSnap.size,
+        activeInvestments:  investmentsSnap.size
+      }
+    });
+  } catch (e) {
+    console.error('Admin stats error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// ADMIN — USERS LIST
+// ═══════════════════════════════════════════
+app.post('/admin/users', async (req, res) => {
+  const { adminKey, limit: lim = 200 } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('users')
+      .orderBy('createdAt', 'desc')
+      .limit(Number(lim) || 200)
+      .get();
+    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return res.json({ status: 'success', users });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// ADMIN — GIFT CODES: GENERATE
+// ═══════════════════════════════════════════
+app.post('/admin/gift-codes/generate', async (req, res) => {
+  const { adminKey, count = 1, expiresInDays } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const n = Math.min(Math.max(parseInt(count) || 1, 1), 50);
+  try {
+    const existingSnap = await db.collection('giftCodes').select('code').get();
+    const existingCodes = new Set(existingSnap.docs.map(d => d.data().code));
+
+    const generatedCodes = [];
+    const batch = db.batch();
+    const expiresAt = expiresInDays
+      ? new Date(Date.now() + Number(expiresInDays) * 86400000)
+      : null;
+
+    let attempts = 0;
+    while (generatedCodes.length < n && attempts < n * 10) {
+      attempts++;
+      const code = genGiftCode();
+      if (existingCodes.has(code) || generatedCodes.includes(code)) continue;
+      generatedCodes.push(code);
+      existingCodes.add(code);
+
+      const docRef  = db.collection('giftCodes').doc();
+      const docData = {
+        code,
+        active:    true,
+        usedBy:    [],
+        createdAt: FieldValue.serverTimestamp()
+      };
+      if (expiresAt) docData.expiresAt = admin.firestore.Timestamp.fromDate(expiresAt);
+      batch.set(docRef, docData);
+    }
+
+    await batch.commit();
+    console.log(`🎁 Generated ${generatedCodes.length} gift codes`);
+    return res.json({ status: 'success', codes: generatedCodes, count: generatedCodes.length });
+  } catch (e) {
+    console.error('Generate codes error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// ADMIN — GIFT CODES: DEACTIVATE
+// ═══════════════════════════════════════════
+app.post('/admin/gift-codes/deactivate', async (req, res) => {
+  const { adminKey, codeId } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!codeId) return res.status(400).json({ status: 'error', message: 'codeId required' });
+  try {
+    await db.collection('giftCodes').doc(codeId).update({ active: false });
+    return res.json({ status: 'success', message: 'Gift code deactivated' });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// ADMIN — BROADCAST
+// ═══════════════════════════════════════════
+app.post('/admin/broadcast', async (req, res) => {
+  const { adminKey, title, message } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!title || !message) return res.status(400).json({ status: 'error', message: 'title and message required' });
+  try {
+    const usersSnap = await db.collection('users').get();
+    const { date, time } = nowStr();
+    let count = 0;
+    const batchSize = 400;
+    let batch = db.batch();
+    let batchCount = 0;
+
+    for (const userDoc of usersSnap.docs) {
+      const notifRef = db.collection('notifications').doc();
+      batch.set(notifRef, {
+        userId:    userDoc.id,
+        title,
+        message,
+        type:      'broadcast',
+        readBy:    [],
+        date,
+        time,
+        details:   { date, time },
+        createdAt: FieldValue.serverTimestamp()
+      });
+      count++;
+      batchCount++;
+
+      if (batchCount >= batchSize) {
+        await batch.commit();
+        batch = db.batch();
+        batchCount = 0;
+      }
+    }
+
+    if (batchCount > 0) await batch.commit();
+
+    console.log(`📣 Broadcast sent to ${count} users`);
+    return res.json({ status: 'success', count, message: `Broadcast sent to ${count} users` });
+  } catch (e) {
+    console.error('Broadcast error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
 // MARZPAY — DEPOSIT INITIATION & CALLBACK
 // ═══════════════════════════════════════════
-const MARZPAY_KEY = process.env.MARZPAY_KEY || '';
-const MARZPAY_URL = (process.env.MARZPAY_URL || 'https://api.marzpay.co.ug').replace(/\/$/, '');
-
 app.post('/deposit/initiate', async (req, res) => {
   const { userId, amount, phone, network } = req.body;
   if (!userId || !amount || !phone) return res.json({ status: 'error', message: 'Missing required fields' });
@@ -771,79 +1129,155 @@ app.post('/deposit/initiate', async (req, res) => {
     const userSnap = await db.collection('users').doc(userId).get();
     if (!userSnap.exists) return res.json({ status: 'error', message: 'User not found' });
 
-    const ref = 'NX' + Date.now() + Math.floor(Math.random() * 1000);
+    const reference   = uuidv4();
     const callbackUrl = RAILWAY_URL + '/deposit/callback';
+    const { date, time } = nowStr();
 
-    let payStatus = 'pending';
-    let mpMessage = 'Payment prompt sent';
-
-    if (MARZPAY_KEY) {
-      const mpRes = await fetch(`${MARZPAY_URL}/v1/collections`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MARZPAY_KEY}` },
-        body: JSON.stringify({ amount, phone_number: phone, network: network || 'MTN', reference: ref, callback_url: callbackUrl })
+    if (!MARZPAY_KEY) {
+      // No API key — store pending only
+      await db.collection('pendingDeposits').add({
+        userId, amount, phone, network: network || 'MTN',
+        reference, status: 'pending', date, time,
+        createdAt: FieldValue.serverTimestamp()
       });
-      const mpData = await mpRes.json();
-      if (mpData.status !== 'success' && mpData.code !== '200' && !mpData.transaction_id) {
-        return res.json({ status: 'error', message: mpData.message || 'Payment provider error' });
-      }
-      mpMessage = mpData.message || 'Payment prompt sent to your phone';
+      return res.json({ status: 'success', message: 'Deposit request recorded. Contact admin for manual processing.', reference });
     }
 
-    // Record pending deposit transaction
-    const now = new Date();
-    await db.collection('transactions').add({
-      userId, type: 'deposit', amount, phone, network: network || 'MTN',
-      status: payStatus, reference: ref,
-      description: `${network || 'MTN'} Deposit`,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      date: now.toLocaleDateString('en-GB'), time: now.toLocaleTimeString('en-GB')
+    const fd = marzForm({
+      phone_number: phone,
+      amount:       String(amount),
+      country:      'UG',
+      reference,
+      description:  `Nexus deposit — ${userId}`,
+      callback_url: callbackUrl
     });
 
-    return res.json({ status: 'success', message: mpMessage, reference: ref });
+    const mpRes = await fetch(`${MARZPAY_BASE}/collect-money`, {
+      method: 'POST',
+      headers: { 'Authorization': `Basic ${MARZPAY_KEY}` },
+      body: fd
+    });
+    const mpData = await mpRes.json();
+    console.log('MarzPay collect-money response:', JSON.stringify(mpData));
+
+    if (mpData.status !== 'success') {
+      return res.json({ status: 'error', message: mpData.message || 'Payment provider error. Please try again.' });
+    }
+
+    // Store pending deposit
+    await db.collection('pendingDeposits').add({
+      userId, amount, phone, network: network || 'MTN',
+      reference, status: 'pending', date, time,
+      createdAt: FieldValue.serverTimestamp()
+    });
+
+    return res.json({
+      status: 'success',
+      message: mpData.message || 'A USSD prompt has been sent to your phone. Enter your PIN to confirm the payment.',
+      reference
+    });
   } catch (e) {
     console.error('MarzPay initiate error:', e.message);
-    return res.json({ status: 'error', message: 'Payment service unavailable' });
+    return res.json({ status: 'error', message: 'Payment service unavailable. Please try again.' });
   }
 });
 
 app.post('/deposit/callback', async (req, res) => {
-  // MarzPay webhook — called when user approves payment on phone
-  const { reference, status, amount, transaction_id } = req.body;
-  res.json({ received: true }); // Respond immediately
+  res.json({ received: true });
 
-  const txStatus = (status || '').toLowerCase();
-  if (txStatus !== 'successful' && txStatus !== 'success') return;
+  const body      = req.body;
+  const eventType = body.event_type || '';
+  const reference = body.transaction?.reference || body.reference || '';
+  const txStatus  = body.transaction?.status || '';
+  const rawAmount = body.transaction?.amount?.raw || body.amount || 0;
+
+  console.log('Deposit callback:', eventType, reference, txStatus);
+
+  const isCompleted = eventType === 'collection.completed' || txStatus === 'completed';
+  if (!isCompleted) return;
 
   try {
-    const snap = await db.collection('transactions')
+    if (!reference) return;
+
+    // Find pending deposit by reference
+    const pendingSnap = await db.collection('pendingDeposits')
+      .where('reference', '==', reference)
+      .limit(1).get();
+
+    // Also check transactions for reference
+    const txSnap = await db.collection('transactions')
       .where('reference', '==', reference)
       .where('type', '==', 'deposit')
       .limit(1).get();
-    if (snap.empty) return;
 
-    const txDoc = snap.docs[0];
-    const tx = txDoc.data();
-    if (tx.status === 'success') return; // already credited
+    let userId, amount, phone, network;
 
-    const creditAmount = Number(amount) || tx.amount;
+    if (!pendingSnap.empty) {
+      const pd = pendingSnap.docs[0].data();
+      if (pd.status === 'success') {
+        console.log('Already credited for reference:', reference);
+        return;
+      }
+      userId  = pd.userId;
+      amount  = Number(rawAmount) || pd.amount;
+      phone   = pd.phone;
+      network = pd.network || 'MTN';
+    } else if (!txSnap.empty) {
+      const tx = txSnap.docs[0].data();
+      if (tx.status === 'success') {
+        console.log('Transaction already credited:', reference);
+        return;
+      }
+      userId  = tx.userId;
+      amount  = Number(rawAmount) || tx.amount;
+      phone   = tx.phone;
+      network = tx.network || 'MTN';
+    } else {
+      console.log('No pending deposit found for reference:', reference);
+      return;
+    }
+
+    const { date, time } = nowStr();
 
     await db.runTransaction(async t => {
-      const userRef = db.collection('users').doc(tx.userId);
-      const userSnap = await t.get(userRef);
-      if (!userSnap.exists) return;
-      t.update(userRef, {
-        walletBalance:  FieldValue.increment(creditAmount),
-        totalDeposited: FieldValue.increment(creditAmount)
+      const uRef  = db.collection('users').doc(userId);
+      const uSnap = await t.get(uRef);
+      if (!uSnap.exists) throw new Error('User not found');
+      t.update(uRef, {
+        walletBalance:  (uSnap.data().walletBalance || 0) + amount,
+        totalDeposited: FieldValue.increment(amount)
       });
-      t.update(txDoc.ref, { status: 'success', transactionId: transaction_id || '' });
+
+      if (!pendingSnap.empty) {
+        t.update(pendingSnap.docs[0].ref, {
+          status: 'success',
+          creditedAt: FieldValue.serverTimestamp(),
+          creditedAmount: amount
+        });
+      }
+      if (!txSnap.empty) {
+        t.update(txSnap.docs[0].ref, { status: 'success' });
+      }
+
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'deposit',
+        description: `${network || 'MoMo'} deposit via MarzPay`,
+        amount, phone: phone || '', reference, network: network || 'MTN',
+        status: 'success', date, time,
+        createdAt: FieldValue.serverTimestamp()
+      });
+
+      t.set(db.collection('notifications').doc(), {
+        userId, title: '✅ Deposit Received!',
+        message: `${fmtUGX(amount)} has been credited to your Nexus wallet.\n\n📅 ${date}\n⏰ ${time}\n\nThank you for using Nexus! ◈`,
+        type: 'deposit', amount, reference, date, time,
+        readBy: [], createdAt: FieldValue.serverTimestamp()
+      });
     });
-    await notify(tx.userId, '✅ Deposit Received!',
-      `${fmtUGX(creditAmount)} has been credited to your Nexus wallet.\n\nThank you for using Nexus! ◈`,
-      'deposit', { amount: creditAmount });
-    console.log(`✅ Deposit credited: ${tx.userId} +UGX ${creditAmount}`);
+
+    console.log(`✅ Deposit credited: ${userId} +${fmtUGX(amount)} ref:${reference}`);
   } catch (e) {
-    console.error('MarzPay callback error:', e.message);
+    console.error('Deposit callback error:', e.message);
   }
 });
 
