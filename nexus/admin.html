@@ -7,12 +7,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --primary:#F0B90B;--primary2:#F8D12F;
-  --bg:#0f0f0f;--bg2:#1a1a1a;--bg3:#252525;
-  --border:rgba(240,185,11,.12);--border2:rgba(240,185,11,.28);
-  --text:#f9fafb;--text2:#9ca3af;--muted:#6b7280;
-  --green:#03A66D;--red:#ef4444;--blue:#3b82f6;
-  --gold:#F0B90B;--r:12px;--fam:'Outfit',sans-serif
+  --primary:#2563eb;--primary2:#3b82f6;
+  --bg:#0d1117;--bg2:#161b27;--bg3:#1e2436;
+  --border:rgba(37,99,235,.13);--border2:rgba(37,99,235,.28);
+  --text:#f1f5f9;--text2:#94a3b8;--muted:#64748b;
+  --green:#03A66D;--red:#ef4444;--blue:#2563eb;
+  --gold:#eab308;--r:12px;--fam:'Outfit',sans-serif
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--fam);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
@@ -23,7 +23,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
 /* ── LOGIN SCREEN ── */
 #loginScreen{
   position:fixed;inset:0;z-index:9999;
-  background:linear-gradient(135deg,#0a0a0a 0%,#111 50%,#0f0a00 100%);
+  background:linear-gradient(135deg,#060912 0%,#0b1120 50%,#0a0e1e 100%);
   display:flex;align-items:center;justify-content:center
 }
 .login-box{
@@ -31,7 +31,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
   border-radius:20px;padding:48px 36px;width:100%;max-width:380px;
   text-align:center
 }
-.login-logo{font-size:42px;font-weight:700;color:var(--primary);letter-spacing:-1px;margin-bottom:6px}
+.login-logo{font-size:42px;font-weight:700;color:#60a5fa;letter-spacing:-1px;margin-bottom:6px}
 .login-sub{color:var(--muted);font-size:13px;margin-bottom:32px}
 .login-input{
   width:100%;background:var(--bg3);border:1px solid var(--border2);
@@ -57,7 +57,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
   position:sticky;top:0;z-index:100
 }
 .topbar-brand{display:flex;flex-direction:column}
-.topbar-logo{font-size:20px;font-weight:700;color:var(--primary)}
+.topbar-logo{font-size:20px;font-weight:700;color:#60a5fa}
 .topbar-subtitle{font-size:11px;color:var(--muted);margin-top:1px}
 .topbar-right{display:flex;gap:10px;align-items:center}
 .btn-logout{
@@ -80,7 +80,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
   transition:.15s;position:relative;border:1px solid transparent;
   display:flex;align-items:center;gap:6px
 }
-.tab-btn.active{background:rgba(240,185,11,.12);color:var(--primary);border-color:var(--border2)}
+.tab-btn.active{background:rgba(37,99,235,.14);color:var(--primary);border-color:var(--border2)}
 .tab-btn:hover:not(.active){background:var(--bg3);color:var(--text)}
 .badge{
   background:var(--red);color:#fff;font-size:10px;font-weight:700;
@@ -115,7 +115,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
   border-radius:var(--r);padding:16px;
 }
 .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-.stat-val{font-size:20px;font-weight:700;color:var(--primary)}
+.stat-val{font-size:20px;font-weight:700;color:#60a5fa}
 .stat-val.green{color:var(--green)}
 .stat-val.red{color:var(--red)}
 .stat-val.blue{color:var(--blue)}
@@ -155,7 +155,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
   background:var(--bg3);color:var(--text2);border:1px solid var(--border);
   cursor:pointer;transition:.15s
 }
-.filter-tab.active{background:rgba(240,185,11,.15);color:var(--primary);border-color:var(--border2)}
+.filter-tab.active{background:rgba(37,99,235,.14);color:var(--primary);border-color:var(--border2)}
 
 /* ── SEARCH ── */
 .search-input{
@@ -190,7 +190,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
   content:'';position:absolute;width:18px;height:18px;background:#666;
   border-radius:50%;left:3px;top:2px;transition:.2s
 }
-.toggle-switch input:checked+.toggle-slider{background:rgba(240,185,11,.2);border-color:var(--primary)}
+.toggle-switch input:checked+.toggle-slider{background:rgba(37,99,235,.2);border-color:var(--primary)}
 .toggle-switch input:checked+.toggle-slider:before{transform:translateX(20px);background:var(--primary)}
 
 /* ── BUTTONS ── */
@@ -198,7 +198,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
   padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;
   cursor:pointer;transition:.15s;border:none
 }
-.btn-primary{background:var(--primary);color:#000}
+.btn-primary{background:var(--primary);color:#fff}
 .btn-primary:hover{background:var(--primary2)}
 .btn-success{background:rgba(3,166,109,.15);color:var(--green);border:1px solid rgba(3,166,109,.3)}
 .btn-success:hover{background:rgba(3,166,109,.25)}
@@ -1020,7 +1020,7 @@ async function loadDeposits() {
   try {
     const [pdSnap, txSnap] = await Promise.all([
       getDocs(query(collection(db,'pendingDeposits'), orderBy('createdAt','desc'), limit(100))),
-      getDocs(query(collection(db,'transactions'), where('type','==','deposit'), orderBy('createdAt','desc'), limit(100)))
+      getDocs(query(collection(db,'transactions'), where('type','==','deposit'), limit(100)))
     ]);
 
     const pdList = pdSnap.docs.map(d => ({ id:d.id, _src:'pending', ...d.data() }));
