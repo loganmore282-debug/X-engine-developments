@@ -806,6 +806,12 @@ function statusBadge(s) {
 }
 
 // ── LOGIN ──
+function _showAdminApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('adminApp').classList.add('show');
+  initAdmin();
+}
+
 window.doAdminLogin = () => {
   const input = document.getElementById('adminKeyInput');
   const err   = document.getElementById('loginErr');
@@ -814,18 +820,20 @@ window.doAdminLogin = () => {
     input.value = '';
     return;
   }
+  localStorage.setItem('nx_admin_auth', '1');
   err.style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'none';
-  const app = document.getElementById('adminApp');
-  app.classList.add('show');
-  initAdmin();
+  _showAdminApp();
 };
 
 window.doLogout = () => {
+  localStorage.removeItem('nx_admin_auth');
   document.getElementById('adminApp').classList.remove('show');
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('adminKeyInput').value = '';
 };
+
+// Auto-login if previously authenticated
+if (localStorage.getItem('nx_admin_auth') === '1') _showAdminApp();
 
 // ── INIT ──
 window.initAdmin = async () => {
@@ -868,21 +876,35 @@ async function loadWithdrawalsCount() {
 // ═══════════════════════════════════════════
 async function loadDashboard() {
   try {
-    const r = await api('/admin/stats', { adminKey: ADMIN_PASS });
-    if (r.status === 'success') {
-      const s = r.stats;
-      document.getElementById('sTotalUsers').textContent    = s.totalUsers || 0;
-      document.getElementById('sActiveUsers').textContent   = s.activeUsers || 0;
-      document.getElementById('sTotalDeposited').textContent= ugx(s.totalDeposited);
-      document.getElementById('sPendingWit').textContent    = s.pendingWithdrawals || 0;
-      document.getElementById('sActiveInv').textContent     = s.activeInvestments || 0;
-      document.getElementById('sTotalWallet').textContent   = ugx(s.totalWalletBalance);
-      document.getElementById('sTotalWithdrawn').textContent= ugx(s.totalWithdrawn);
-      document.getElementById('sTotalInvested').textContent = ugx(s.totalInvested);
-      const badge = document.getElementById('pendingBadge');
-      if (s.pendingWithdrawals > 0) { badge.textContent = s.pendingWithdrawals; badge.style.display = 'inline-block'; }
-    }
-  } catch(e) { console.error(e); }
+    const [usersSnap, witSnap, invSnap] = await Promise.all([
+      getDocs(collection(db, 'users')),
+      getDocs(query(collection(db, 'withdrawals'), where('status', '==', 'pending'))),
+      getDocs(query(collection(db, 'investments'), where('status', '==', 'active'))),
+    ]);
+    let totalUsers = 0, activeUsers = 0;
+    let totalWallet = 0, totalDeposited = 0, totalWithdrawn = 0, totalInvested = 0;
+    usersSnap.forEach(d => {
+      const u = d.data();
+      totalUsers++;
+      if (u.status !== 'banned') activeUsers++;
+      totalWallet    += u.walletBalance  || 0;
+      totalDeposited += u.totalDeposited || 0;
+      totalWithdrawn += u.totalWithdrawn || 0;
+      totalInvested  += u.totalInvested  || 0;
+    });
+    const pendingWit = witSnap.size;
+    document.getElementById('sTotalUsers').textContent    = totalUsers;
+    document.getElementById('sActiveUsers').textContent   = activeUsers;
+    document.getElementById('sTotalDeposited').textContent= ugx(totalDeposited);
+    document.getElementById('sPendingWit').textContent    = pendingWit;
+    document.getElementById('sActiveInv').textContent     = invSnap.size;
+    document.getElementById('sTotalWallet').textContent   = ugx(totalWallet);
+    document.getElementById('sTotalWithdrawn').textContent= ugx(totalWithdrawn);
+    document.getElementById('sTotalInvested').textContent = ugx(totalInvested);
+    const badge = document.getElementById('pendingBadge');
+    if (pendingWit > 0) { badge.textContent = pendingWit; badge.style.display = 'inline-block'; }
+    else badge.style.display = 'none';
+  } catch(e) { console.error('Stats error:', e); }
 
   // Recent transactions
   try {
@@ -909,7 +931,7 @@ async function loadDashboard() {
         </table>
       </div>`;
   } catch(e) {
-    document.getElementById('recentTxTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Failed to load</div></div>';
+    document.getElementById('recentTxTable').innerHTML = '<div class="empty"><div class="empty-text">Failed to load transactions</div></div>';
   }
 }
 
