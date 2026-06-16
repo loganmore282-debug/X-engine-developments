@@ -1098,6 +1098,10 @@ const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
+// Start fetching settings + preloading slideshow images immediately,
+// before auth resolves, so images are ready when the home screen shows.
+loadSlideshow().catch(() => {});
+
 // ── STATE ──
 let _user = null, _userData = null, _unsub = null;
 let _currentProduct = null;
@@ -1253,7 +1257,7 @@ function setupSlideshow(images) {
     const slide = document.createElement('div');
     slide.className = 'slide' + (i === 0 ? ' active' : '');
     if (img) {
-      slide.innerHTML = `<img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover"><div class="slide-overlay"></div>`;
+      slide.innerHTML = `<img src="${img}" alt="" fetchpriority="${i===0?'high':'low'}" decoding="async" style="width:100%;height:100%;object-fit:cover"><div class="slide-overlay"></div>`;
     } else {
       slide.style.background = def.bg;
       slide.innerHTML = `<div class="slide-watermark">◈</div><div class="slide-slogan">${def.slogan.replace('\n','<br>')}</div>`;
@@ -1279,7 +1283,19 @@ async function loadSlideshow() {
     const snap = await getDoc(doc(db, 'settings', 'main'));
     if (!snap.exists()) { setupSlideshow([]); return; }
     const s = snap.data();
-    setupSlideshow(s.slideshowImages || []);
+    const images = s.slideshowImages || [];
+
+    // Preload all slideshow images in parallel before injecting DOM
+    if (images.length) {
+      await Promise.allSettled(images.map(url => new Promise(res => {
+        const img = new Image();
+        img.onload = img.onerror = res;
+        img.fetchPriority = 'high';
+        img.src = url;
+      })));
+    }
+
+    setupSlideshow(images);
     // Products banner
     if (s.productsBannerImage) {
       const wrap = document.getElementById('productsBannerWrap');
@@ -1371,7 +1387,6 @@ onAuthStateChanged(auth, async user => {
     startListener(user.uid);
     loadProducts();
     loadRecords('deposits');
-    loadSlideshow();
     loadTicker();
     checkMaintenance();
     // Ensure this account has a globally-unique referral code (backfill legacy users)
