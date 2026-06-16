@@ -164,24 +164,29 @@ async function payCommissions(investorId, amount) {
     const l1Snap = await db.collection('users').doc(l1Id).get();
     if (!l1Snap.exists) return;
     const l1Amt = Math.round(amount * COMM_L1);
-    if (l1Amt > 0) {
+    // L1 commission: only on the FIRST investment by this referral
+    const paidL1To = l1Snap.data().paidL1To || [];
+    if (l1Amt > 0 && !paidL1To.includes(investorId)) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l1Id);
         const f   = await t.get(ref);
+        const alreadyPaid = (f.data().paidL1To || []).includes(investorId);
+        if (alreadyPaid) return; // double-check inside transaction
         t.update(ref, {
           walletBalance:      (f.data().walletBalance || 0) + l1Amt,
           commissionEarned:   FieldValue.increment(l1Amt),
-          commissionL1Earned: FieldValue.increment(l1Amt)
+          commissionL1Earned: FieldValue.increment(l1Amt),
+          paidL1To:           FieldValue.arrayUnion(investorId)
         });
         t.set(db.collection('transactions').doc(), {
           userId: l1Id, type: 'commission',
-          description: `L1 commission — ${investor.name || investor.phone} invested ${fmtUGX(amount)}`,
+          description: `L1 commission — ${investor.name || investor.phone} first investment ${fmtUGX(amount)}`,
           amount: l1Amt, level: 1, fromUserId: investorId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         t.set(db.collection('notifications').doc(), {
-          userId: l1Id, title: '💰 Commission Earned!',
-          message: `${investor.name || 'Your referral'} invested ${fmtUGX(amount)}!\n\nYou earned 35% = ${fmtUGX(l1Amt)} — credited now.\n\n📅 ${date} ⏰ ${time}`,
+          userId: l1Id, title: '💰 Referral Commission!',
+          message: `${investor.name || 'Your referral'} made their first investment of ${fmtUGX(amount)}!\n\nYou earned 35% = ${fmtUGX(l1Amt)} — credited to your wallet.\n\n📅 ${date} ⏰ ${time}`,
           type: 'commission', amount: l1Amt, date, time,
           readBy: [], createdAt: FieldValue.serverTimestamp()
         });

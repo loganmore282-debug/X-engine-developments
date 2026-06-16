@@ -480,6 +480,39 @@ body{padding-bottom:106px}
   .products-grid{grid-template-columns:1fr 1fr}
   .level-cards{grid-template-columns:1fr 1fr 1fr}
 }
+
+/* ── ANNOUNCEMENT DIALOG ── */
+#announcementDialog{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.9);z-index:3000;align-items:flex-end;justify-content:center}
+#announcementDialog.show{display:flex}
+.ann-sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:500px;overflow:hidden;max-height:88vh;overflow-y:auto}
+.ann-img{width:100%;height:180px;object-fit:cover;display:block;background:linear-gradient(135deg,#1040c0,#0d2fa8)}
+.ann-body{padding:20px 20px 28px}
+.ann-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:10px}
+.ann-msg{font-size:13px;color:var(--text2);line-height:1.75;margin-bottom:18px;white-space:pre-line}
+.btn-tg{width:100%;height:48px;border:none;border-radius:12px;background:#229ED9;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;text-decoration:none}
+.btn-tg svg{width:22px;height:22px;flex-shrink:0}
+.btn-okay{width:100%;height:48px;border:none;border-radius:12px;background:linear-gradient(135deg,#1a48d4,#0d2fa8);color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif}
+
+/* ── PRODUCTS BANNER ── */
+.products-banner-wrap{display:none;border-radius:12px;overflow:hidden;margin-bottom:16px;position:relative;height:160px;background:#0a0a1a}
+.products-banner-img{width:100%;height:100%;object-fit:cover}
+.products-banner-stats{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:12px 14px;display:flex;gap:20px}
+.pbs-item .pbs-val{font-size:15px;font-weight:900;color:#fff;font-family:'Outfit',sans-serif}
+.pbs-item .pbs-lbl{font-size:9px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-top:1px}
+
+/* ── QUICK AMOUNTS ── */
+.quick-amounts{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
+.qa-btn{height:36px;border:1.5px solid rgba(37,99,235,0.25);border-radius:8px;background:var(--card2);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s}
+.qa-btn:active,.qa-btn.sel{background:#2563eb;color:#fff;border-color:#2563eb}
+
+/* ── DEPOSIT PROMO IMAGE ── */
+.dep-promo-img{width:100%;height:140px;object-fit:cover;border-radius:12px;margin-bottom:16px;display:none;background:linear-gradient(135deg,#1040c0,#0d2fa8)}
+
+/* ── DEPOSIT INSTRUCTIONS ── */
+.dep-inst-section{margin-top:24px;border-top:1px solid var(--border);padding-top:16px}
+.dep-inst-title{font-size:13px;font-weight:800;color:var(--text);margin-bottom:12px}
+.dep-inst-item{display:flex;gap:10px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.5}
+.dep-inst-num{width:20px;height:20px;border-radius:50%;background:var(--bluefade);color:var(--blue);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
 </style>
 </head>
 <body>
@@ -606,11 +639,11 @@ body{padding-bottom:106px}
     <!-- Quick actions -->
     <div class="home-actions">
       <button class="ha-btn" onclick="openDepositPage()">
-        <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>
+        <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="20" rx="2.5"/><circle cx="17.5" cy="12" r="4"/><line x1="17.5" y1="10" x2="17.5" y2="14"/><line x1="15.5" y1="11" x2="19.5" y2="11"/><path d="M15 12H11"/><polyline points="13 10 11 12 13 14"/></svg></div>
         <div class="ha-label">Deposit</div>
       </button>
       <button class="ha-btn" onclick="openWithdrawPage()">
-        <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></div>
+        <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><rect x="6" y="14" width="6" height="4" rx="1"/><line x1="16" y1="14" x2="19" y2="14"/><line x1="16" y1="17" x2="18" y2="17"/></svg></div>
         <div class="ha-label">Withdraw</div>
       </button>
     </div>
@@ -671,6 +704,13 @@ body{padding-bottom:106px}
 
   <!-- ── PRODUCTS SECTION ── -->
   <div class="section" id="productsSection">
+    <div id="productsBannerWrap" class="products-banner-wrap">
+      <img id="productsBannerImg" class="products-banner-img" src="" alt="">
+      <div class="products-banner-stats">
+        <div class="pbs-item"><div class="pbs-val" id="prodBannerCount">0</div><div class="pbs-lbl">Total Plans</div></div>
+        <div class="pbs-item"><div class="pbs-val" id="prodBannerBenefit">—</div><div class="pbs-lbl">Best Return</div></div>
+      </div>
+    </div>
     <div class="sec-title">Investment Plans</div>
     <div class="products-grid" id="productsGrid">
       <div class="empty-state" style="grid-column:1/-1">
@@ -879,10 +919,20 @@ body{padding-bottom:106px}
     <button class="page-back" onclick="closePage('depositPage')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     <div class="page-hdr-title">Deposit Funds</div>
   </div>
-  <div class="page-body">
+  <div class="page-body" style="padding-top:0">
+    <img id="depPromoImg" class="dep-promo-img" src="" alt="">
+    <div style="padding:16px 0 0">
     <div class="page-bal-badge">Wallet: <span id="depWalBadge">UGX 0</span> &nbsp;·&nbsp; Min UGX 30,000</div>
+    <label class="form-label">Quick Select Amount</label>
+    <div class="quick-amounts">
+      <button class="qa-btn" onclick="selectDepAmt(30000,this)">30K</button>
+      <button class="qa-btn" onclick="selectDepAmt(50000,this)">50K</button>
+      <button class="qa-btn" onclick="selectDepAmt(100000,this)">100K</button>
+      <button class="qa-btn" onclick="selectDepAmt(150000,this)">150K</button>
+      <button class="qa-btn" onclick="selectDepAmt(200000,this)">200K</button>
+    </div>
     <label class="form-label">Amount (UGX)</label>
-    <input class="form-input" id="depAmount" type="number" placeholder="30000" min="30000" inputmode="numeric" style="margin-bottom:20px">
+    <input class="form-input" id="depAmount" type="number" placeholder="30000" min="30000" inputmode="numeric" style="margin-bottom:14px">
     <label class="form-label">Mobile Money Number</label>
     <div class="phone-form-wrap" style="margin-bottom:14px">
       <span class="phone-form-prefix">+256</span>
@@ -899,8 +949,19 @@ body{padding-bottom:106px}
         Airtel Money
       </button>
     </div>
-    <div class="form-info" style="margin-bottom:20px">A payment prompt will be sent to your phone. Open it and enter your MoMo PIN to complete the deposit. Funds are credited instantly after confirmation.</div>
-    <button class="btn-submit" id="depSubmitBtn" onclick="submitDeposit()">Pay Now</button>
+    <div class="form-info" style="margin-bottom:20px">A USSD prompt will be sent to your phone. Open it and enter your MoMo PIN to complete the deposit. Funds are credited after confirmation.</div>
+    <button class="btn-submit" id="depSubmitBtn" onclick="submitDeposit()">Deposit Now</button>
+    <div class="dep-inst-section">
+      <div class="dep-inst-title">📋 Deposit Instructions</div>
+      <div id="depInstructions">
+        <div class="dep-inst-item"><span class="dep-inst-num">1</span><span>Minimum deposit amount is <strong style="color:var(--text)">UGX 30,000</strong>.</span></div>
+        <div class="dep-inst-item"><span class="dep-inst-num">2</span><span>Enter your MTN or Airtel Mobile Money number and select your network.</span></div>
+        <div class="dep-inst-item"><span class="dep-inst-num">3</span><span>A USSD prompt will appear on your phone — enter your Mobile Money PIN to approve.</span></div>
+        <div class="dep-inst-item"><span class="dep-inst-num">4</span><span>Funds are credited to your Nexus wallet within minutes of approval.</span></div>
+        <div class="dep-inst-item"><span class="dep-inst-num">5</span><span>If funds are not credited after 30 minutes, contact our customer support.</span></div>
+      </div>
+    </div>
+    </div>
   </div>
 </div>
 
@@ -991,6 +1052,22 @@ body{padding-bottom:106px}
       <button class="modal-close" onclick="closeModal('contentModal')">×</button>
     </div>
     <div id="contentModalBody" class="content-page"></div>
+  </div>
+</div>
+
+<!-- ══ ANNOUNCEMENT DIALOG ══ -->
+<div id="announcementDialog">
+  <div class="ann-sheet">
+    <img id="annImg" class="ann-img" src="" alt="" style="display:none">
+    <div class="ann-body">
+      <div class="ann-title" id="annTitle">Welcome to Nexus!</div>
+      <div class="ann-msg" id="annMsg"></div>
+      <a id="annTgBtn" class="btn-tg" href="#" target="_blank" rel="noopener" style="display:none">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>
+        Join our Telegram Channel
+      </a>
+      <button class="btn-okay" onclick="closeAnnouncement()">OKAY</button>
+    </div>
   </div>
 </div>
 
@@ -1199,10 +1276,51 @@ function setupSlideshow(images) {
 async function loadSlideshow() {
   try {
     const snap = await getDoc(doc(db, 'settings', 'main'));
-    const imgs = snap.exists() ? (snap.data().slideshowImages || []) : [];
-    setupSlideshow(imgs);
+    if (!snap.exists()) { setupSlideshow([]); return; }
+    const s = snap.data();
+    setupSlideshow(s.slideshowImages || []);
+    // Products banner
+    if (s.productsBannerImage) {
+      const wrap = document.getElementById('productsBannerWrap');
+      const img  = document.getElementById('productsBannerImg');
+      if (wrap && img) { img.src = s.productsBannerImage; wrap.style.display = 'block'; }
+    }
+    // Deposit promo image
+    if (s.depositImage) {
+      const img = document.getElementById('depPromoImg');
+      if (img) { img.src = s.depositImage; img.style.display = 'block'; }
+    }
+    // Deposit instructions override
+    if (s.depositInstructions) {
+      const el = document.getElementById('depInstructions');
+      if (el) el.innerHTML = s.depositInstructions;
+    }
+    // Announcement dialog (once per session)
+    if (s.announcement?.active && !sessionStorage.getItem('nx_ann_shown')) {
+      showAnnouncement(s.announcement);
+    }
   } catch (_) { setupSlideshow([]); }
 }
+
+function showAnnouncement(ann) {
+  const imgEl  = document.getElementById('annImg');
+  const titleEl = document.getElementById('annTitle');
+  const msgEl  = document.getElementById('annMsg');
+  const tgBtn  = document.getElementById('annTgBtn');
+  if (imgEl)  { if (ann.image) { imgEl.src = ann.image; imgEl.style.display = 'block'; } else imgEl.style.display = 'none'; }
+  if (titleEl) titleEl.textContent = ann.title || 'Welcome to Nexus!';
+  if (msgEl)  msgEl.textContent = ann.message || '';
+  if (tgBtn)  { if (ann.telegramLink) { tgBtn.href = ann.telegramLink; tgBtn.style.display = 'flex'; } else tgBtn.style.display = 'none'; }
+  document.getElementById('announcementDialog').classList.add('show');
+  sessionStorage.setItem('nx_ann_shown', '1');
+}
+window.closeAnnouncement = () => document.getElementById('announcementDialog').classList.remove('show');
+
+window.selectDepAmt = (amt, btn) => {
+  document.getElementById('depAmount').value = amt;
+  document.querySelectorAll('.qa-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+};
 
 // ── TICKER ──
 function loadTicker() {
@@ -1429,6 +1547,14 @@ async function loadProducts() {
 
 function renderProducts(products) {
   const grid = document.getElementById('productsGrid');
+  // Update banner stats
+  const countEl   = document.getElementById('prodBannerCount');
+  const benefitEl = document.getElementById('prodBannerBenefit');
+  if (countEl)   countEl.textContent   = products.length;
+  if (benefitEl) {
+    const maxReturn = products.reduce((m,p) => Math.max(m, p.expectedReturn||0), 0);
+    benefitEl.textContent = maxReturn ? ugx(maxReturn) : '—';
+  }
   if (!products.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No plans available yet</p></div>`;
     return;

@@ -553,6 +553,74 @@ tr:hover td{background:rgba(255,255,255,.02)}
         </div>
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
+      <!-- Announcement Dialog Settings -->
+      <div class="card" style="margin-top:12px">
+        <div class="card-title">📢 Announcement Dialog</div>
+        <div class="toggle-row" style="margin-bottom:12px">
+          <span class="toggle-label">Show announcement on login</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="annActive">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dialog Title</label>
+          <input class="form-input" type="text" id="annTitle" placeholder="Welcome to Nexus!">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Message (shown to users)</label>
+          <textarea class="form-textarea" id="annMessage" rows="5" placeholder="Enter announcement message…"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Telegram Link (optional)</label>
+          <input class="form-input" type="url" id="annTelegram" placeholder="https://t.me/yourchannel">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dialog Image (optional)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" type="url" id="annImageUrl" placeholder="Image URL or upload below" style="flex:1">
+            <label style="cursor:pointer">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadAnnImage(this)">
+              <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
+            </label>
+          </div>
+          <img id="annImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        </div>
+        <button class="btn btn-primary" onclick="saveAnnouncement()">Save Announcement</button>
+      </div>
+
+      <!-- Content Images Settings -->
+      <div class="card" style="margin-top:12px">
+        <div class="card-title">🖼️ Content Images</div>
+        <div class="form-group">
+          <label class="form-label">Products Page Banner</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" type="url" id="productsBannerUrl" placeholder="Image URL or upload" style="flex:1">
+            <label style="cursor:pointer">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'productsBannerUrl','productsBannerPreview','productsBannerImage')">
+              <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
+            </label>
+          </div>
+          <img id="productsBannerPreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Deposit Screen Image</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" type="url" id="depositImageUrl" placeholder="Image URL or upload" style="flex:1">
+            <label style="cursor:pointer">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'depositImageUrl','depositImagePreview','depositImage')">
+              <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
+            </label>
+          </div>
+          <img id="depositImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Deposit Instructions (HTML allowed)</label>
+          <textarea class="form-textarea" id="depositInstructions" rows="6" placeholder="Leave empty to use default instructions…"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="saveContentImages()">Save Content Images</button>
+      </div>
+
       <div class="danger-zone">
         <div class="card-title">⚠️ Danger Zone</div>
         <button class="btn btn-danger" onclick="if(confirm('Reload admin panel?'))location.reload()">Force Reload</button>
@@ -1552,6 +1620,23 @@ async function loadSettings() {
     document.getElementById('settWelcome').value  = s.welcomeBonus   || 10000;
     document.getElementById('settMinDep').value   = s.minDeposit     || 30000;
     document.getElementById('settMinWit').value   = s.minWithdrawal  || 15000;
+    // Announcement
+    const ann = s.announcement || {};
+    document.getElementById('annActive').checked    = !!ann.active;
+    document.getElementById('annTitle').value       = ann.title   || '';
+    document.getElementById('annMessage').value     = ann.message || '';
+    document.getElementById('annTelegram').value    = ann.telegramLink || '';
+    document.getElementById('annImageUrl').value    = ann.image   || '';
+    if (ann.image) { const p=document.getElementById('annImagePreview'); p.src=ann.image; p.style.display='block'; }
+    // Content images
+    const prodBanner = s.productsBannerImage || '';
+    const depImg     = s.depositImage || '';
+    const depInst    = s.depositInstructions || '';
+    document.getElementById('productsBannerUrl').value  = prodBanner;
+    document.getElementById('depositImageUrl').value    = depImg;
+    document.getElementById('depositInstructions').value = depInst;
+    if (prodBanner) { const p=document.getElementById('productsBannerPreview'); p.src=prodBanner; p.style.display='block'; }
+    if (depImg)     { const p=document.getElementById('depositImagePreview');   p.src=depImg;     p.style.display='block'; }
   } catch(e) { showToast('Failed to load settings', 'error'); }
 }
 
@@ -1566,6 +1651,54 @@ window.saveSettings = async () => {
   try {
     await setDoc(doc(db,'settings','main'), s, { merge:true });
     showToast('Settings saved!', 'success');
+  } catch(e) { showToast('Error saving', 'error'); }
+};
+
+window.saveAnnouncement = async () => {
+  const ann = {
+    active:       document.getElementById('annActive').checked,
+    title:        document.getElementById('annTitle').value.trim(),
+    message:      document.getElementById('annMessage').value.trim(),
+    telegramLink: document.getElementById('annTelegram').value.trim(),
+    image:        document.getElementById('annImageUrl').value.trim()
+  };
+  try {
+    await setDoc(doc(db,'settings','main'), { announcement: ann }, { merge:true });
+    showToast('Announcement saved!', 'success');
+  } catch(e) { showToast('Error saving announcement', 'error'); }
+};
+
+window.uploadAnnImage = async (input) => {
+  if (!input.files[0]) return;
+  showToast('Uploading…', '');
+  try {
+    const url = await uploadImage(input.files[0]);
+    document.getElementById('annImageUrl').value = url;
+    const p = document.getElementById('annImagePreview'); p.src = url; p.style.display = 'block';
+    showToast('Image uploaded!', 'success');
+  } catch(e) { showToast('Upload failed', 'error'); }
+};
+
+window.uploadContentImage = async (input, urlId, previewId, settingKey) => {
+  if (!input.files[0]) return;
+  showToast('Uploading…', '');
+  try {
+    const url = await uploadImage(input.files[0]);
+    document.getElementById(urlId).value = url;
+    const p = document.getElementById(previewId); p.src = url; p.style.display = 'block';
+    showToast('Image uploaded!', 'success');
+  } catch(e) { showToast('Upload failed', 'error'); }
+};
+
+window.saveContentImages = async () => {
+  const data = {
+    productsBannerImage:  document.getElementById('productsBannerUrl').value.trim(),
+    depositImage:         document.getElementById('depositImageUrl').value.trim(),
+    depositInstructions:  document.getElementById('depositInstructions').value.trim()
+  };
+  try {
+    await setDoc(doc(db,'settings','main'), data, { merge:true });
+    showToast('Content images saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
 </script>
