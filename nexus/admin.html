@@ -189,12 +189,50 @@ tr:hover td{background:var(--card)}
 #aToast.success{border-color:rgba(34,197,94,.4)}
 #aToast.error{border-color:rgba(239,68,68,.4)}
 
+/* ── MOBILE TOP BAR ── */
+.mobile-topbar{
+  display:none;position:sticky;top:0;z-index:200;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:0 14px;height:54px;align-items:center;justify-content:space-between;gap:12px
+}
+.mtb-left{display:flex;align-items:center;gap:10px}
+.mtb-logo{font-size:16px;font-weight:900;color:var(--gold);letter-spacing:-1px;flex-shrink:0}
+.mtb-title{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mtb-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.mtb-alert{background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;min-width:20px;text-align:center}
+.hamburger{width:40px;height:40px;border:1px solid var(--border2);background:var(--card2);border-radius:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;flex-shrink:0}
+.hamburger span{width:18px;height:2px;background:var(--text);border-radius:2px;display:block;transition:.2s}
+
+/* ── MOBILE DRAWER ── */
+.mob-overlay{display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.6);touch-action:none}
+.mob-overlay.open{display:block}
+.mob-drawer{
+  position:absolute;left:0;top:0;bottom:0;width:270px;
+  background:var(--bg2);display:flex;flex-direction:column;
+  transform:translateX(-100%);transition:transform .26s cubic-bezier(.4,0,.2,1);
+  border-right:1px solid var(--border);overflow:hidden
+}
+.mob-overlay.open .mob-drawer{transform:translateX(0)}
+.mob-drawer-hd{
+  padding:18px 14px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0
+}
+.mob-drawer-logo{font-size:20px;font-weight:900;color:var(--gold);letter-spacing:-1px}
+.mob-drawer-sub{font-size:10px;color:rgba(37,99,235,.5);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+.mob-close{width:34px;height:34px;border:1px solid var(--border);background:var(--card2);border-radius:8px;cursor:pointer;font-size:18px;color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mob-drawer-nav{flex:1;padding:10px 8px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.mob-drawer-ft{padding:14px;border-top:1px solid var(--border);flex-shrink:0}
+
 /* ── RESPONSIVE ── */
 @media(max-width:768px){
   .sidebar{display:none}
+  .mobile-topbar{display:flex}
   .form-grid{grid-template-columns:1fr}
   table{font-size:12px}
   th,td{padding:8px 10px}
+  .page-header{padding:14px 16px}
+  .page-body{padding:16px}
+  .stats-grid{grid-template-columns:1fr 1fr;gap:10px}
 }
 </style>
 </head>
@@ -268,8 +306,51 @@ tr:hover td{background:var(--card)}
     </div>
   </aside>
 
+  <!-- Mobile drawer -->
+  <div class="mob-overlay" id="mobOverlay" onclick="if(event.target===this||event.target===document.getElementById('mobOverlay'))closeDrawer()">
+    <div class="mob-drawer">
+      <div class="mob-drawer-hd">
+        <div>
+          <div class="mob-drawer-logo">◈ NEXUS</div>
+          <div class="mob-drawer-sub">Admin Control</div>
+        </div>
+        <button class="mob-close" onclick="closeDrawer()">✕</button>
+      </div>
+      <nav class="mob-drawer-nav">
+        <button class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard',this)"><span class="ni-icon">📊</span> Dashboard</button>
+        <button class="nav-item" data-tab="withdrawals" onclick="showTab('withdrawals',this)"><span class="ni-icon">💸</span> Withdrawals<span class="ni-badge" id="mobPendingBadge" style="display:none">0</span></button>
+        <button class="nav-item" data-tab="deposits" onclick="showTab('deposits',this)"><span class="ni-icon">📥</span> Unmatched Deposits<span class="ni-badge" id="mobUnmatchedBadge" style="display:none">0</span></button>
+        <button class="nav-item" data-tab="giftcodes" onclick="showTab('giftcodes',this)"><span class="ni-icon">🎁</span> Gift Codes</button>
+        <button class="nav-item" data-tab="products" onclick="showTab('products',this)"><span class="ni-icon">📦</span> Products</button>
+        <button class="nav-item" data-tab="investments" onclick="showTab('investments',this)"><span class="ni-icon">📈</span> Investments</button>
+        <button class="nav-item" data-tab="transactions" onclick="showTab('transactions',this)"><span class="ni-icon">🧾</span> Transactions</button>
+        <button class="nav-item" data-tab="users" onclick="showTab('users',this)"><span class="ni-icon">👥</span> Users</button>
+        <button class="nav-item" data-tab="referrals" onclick="showTab('referrals',this)"><span class="ni-icon">🌐</span> Referrals</button>
+        <button class="nav-item" data-tab="broadcast" onclick="showTab('broadcast',this)"><span class="ni-icon">📣</span> Broadcast</button>
+        <button class="nav-item" data-tab="settings" onclick="showTab('settings',this)"><span class="ni-icon">⚙️</span> Settings</button>
+      </nav>
+      <div class="mob-drawer-ft">
+        <button class="btn-logout" onclick="adminLogout()">🚪 Logout</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Main -->
   <div class="main-content">
+
+    <!-- Mobile top bar -->
+    <div class="mobile-topbar" id="mobileTopbar">
+      <div class="mtb-left">
+        <button class="hamburger" onclick="openDrawer()" aria-label="Open menu">
+          <span></span><span></span><span></span>
+        </button>
+        <span class="mtb-title" id="mobilePageTitle">Dashboard</span>
+      </div>
+      <div class="mtb-right">
+        <span class="mtb-alert" id="mobAlertBadge" style="display:none">0</span>
+        <div class="mtb-logo">◈</div>
+      </div>
+    </div>
 
     <!-- ── DASHBOARD ── -->
     <div class="tab-page active" id="tab-dashboard">
@@ -798,11 +879,25 @@ window.adminLogout = () => {
 };
 
 // ── NAV ──
+const TAB_NAMES = {
+  dashboard:'Dashboard', withdrawals:'Withdrawals', deposits:'Unmatched Deposits',
+  giftcodes:'Gift Codes', products:'Products', investments:'Investments',
+  transactions:'Transactions', users:'Users', referrals:'Referrals',
+  broadcast:'Broadcast', settings:'Settings'
+};
+window.openDrawer  = () => document.getElementById('mobOverlay').classList.add('open');
+window.closeDrawer = () => document.getElementById('mobOverlay').classList.remove('open');
+
 window.showTab = (tab, btn) => {
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+  // Sync active state across sidebar AND mobile drawer
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab)?.classList.add('active');
-  btn.classList.add('active');
+  document.querySelectorAll(`.nav-item[data-tab="${tab}"]`).forEach(b => b.classList.add('active'));
+  // Update mobile topbar title
+  const titleEl = document.getElementById('mobilePageTitle');
+  if (titleEl) titleEl.textContent = TAB_NAMES[tab] || tab;
+  closeDrawer();
   if (tab === 'giftcodes')    loadCodes();
   if (tab === 'products')     loadProducts();
   if (tab === 'withdrawals')  loadWithdrawals();
@@ -847,11 +942,20 @@ window.loadDashboard = async () => {
       <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalInvested)}</div><div class="sc-lbl">Total Invested</div></div>
       <div class="stat-card gold-accent"><div class="sc-val" style="font-size:18px">${ugx(totalCommission)}</div><div class="sc-lbl">Commission Paid</div></div>
       <div class="stat-card"><div class="sc-val">${banned}</div><div class="sc-lbl">Banned Accounts</div></div>`;
-    // Update badges
+    // Update badges (sidebar + mobile drawer + mobile topbar)
     const pb = document.getElementById('pendingBadge');
     pb.textContent = witSnap.size; pb.style.display = witSnap.size ? '' : 'none';
     const ub = document.getElementById('unmatchedBadge');
     ub.textContent = unmSnap.size; ub.style.display = unmSnap.size ? '' : 'none';
+    const mpb = document.getElementById('mobPendingBadge');
+    if (mpb) { mpb.textContent = witSnap.size; mpb.style.display = witSnap.size ? '' : 'none'; }
+    const mub = document.getElementById('mobUnmatchedBadge');
+    if (mub) { mub.textContent = unmSnap.size; mub.style.display = unmSnap.size ? '' : 'none'; }
+    const mab = document.getElementById('mobAlertBadge');
+    if (mab) {
+      const total = witSnap.size + unmSnap.size;
+      mab.textContent = total; mab.style.display = total ? '' : 'none';
+    }
     // Recent withdrawals
     const recSnap = await getDocs(query(collection(db,'withdrawals'), orderBy('createdAt','desc'), limit(10)));
     const tbody = document.getElementById('recentWithdrawals');
