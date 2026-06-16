@@ -115,15 +115,6 @@ async function generateUniqueRefCode() {
   return 'N' + Date.now().toString(36).toUpperCase().slice(-5).padStart(5, '0') + 'X';
 }
 
-async function notify(userId, title, message, type, extras = {}) {
-  const { date, time } = nowStr();
-  await db.collection('notifications').add({
-    userId, title, message, type,
-    readBy: [], date, time, details: { ...extras, date, time },
-    createdAt: FieldValue.serverTimestamp()
-  });
-}
-
 // ── SMS PARSING ──
 function parseMoMoSMS(sms) {
   if (!sms) return null;
@@ -184,12 +175,6 @@ async function payCommissions(investorId, amount) {
           amount: l1Amt, level: 1, fromUserId: investorId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
-        t.set(db.collection('notifications').doc(), {
-          userId: l1Id, title: '💰 Referral Commission!',
-          message: `${investor.name || 'Your referral'} made their first investment of ${fmtUGX(amount)}!\n\nYou earned 35% = ${fmtUGX(l1Amt)} — credited to your wallet.\n\n📅 ${date} ⏰ ${time}`,
-          type: 'commission', amount: l1Amt, date, time,
-          readBy: [], createdAt: FieldValue.serverTimestamp()
-        });
       });
     }
 
@@ -217,12 +202,6 @@ async function payCommissions(investorId, amount) {
           amount: l2Amt, level: 2, fromUserId: investorId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
-        t.set(db.collection('notifications').doc(), {
-          userId: l2Id, title: '💰 Team Commission!',
-          message: `L2 team member made their first investment of ${fmtUGX(amount)}!\nYou earned 5% = ${fmtUGX(l2Amt)}.\n\n📅 ${date}`,
-          type: 'commission', amount: l2Amt, date, time,
-          readBy: [], createdAt: FieldValue.serverTimestamp()
-        });
       });
     }
 
@@ -249,12 +228,6 @@ async function payCommissions(investorId, amount) {
           description: `L3 commission — ${investor.name || investor.phone} first investment ${fmtUGX(amount)}`,
           amount: l3Amt, level: 3, fromUserId: investorId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
-        });
-        t.set(db.collection('notifications').doc(), {
-          userId: l3Id, title: '💰 Team Commission!',
-          message: `L3 team member made their first investment of ${fmtUGX(amount)}!\nYou earned 2% = ${fmtUGX(l3Amt)}.\n\n📅 ${date}`,
-          type: 'commission', amount: l3Amt, date, time,
-          readBy: [], createdAt: FieldValue.serverTimestamp()
         });
       });
     }
@@ -341,12 +314,6 @@ app.post('/sms/incoming', async (req, res) => {
           amount, phone, txnId, status: 'success', date, time,
           createdAt: FieldValue.serverTimestamp()
         });
-        t.set(db.collection('notifications').doc(), {
-          userId, title: '✅ Deposit Received!',
-          message: `${fmtUGX(amount)} has been credited to your Nexus wallet.\n\n📅 ${date}\n⏰ ${time}\n📱 ${phone}\n🔖 Txn: ${txnId}\n\nThank you for investing with Nexus! ◈`,
-          type: 'deposit', amount, txnId, date, time,
-          readBy: [], createdAt: FieldValue.serverTimestamp()
-        });
       });
 
       console.log(`✅ Credited ${fmtUGX(amount)} → ${userId}`);
@@ -384,7 +351,6 @@ app.post('/admin/assign-deposit', async (req, res) => {
         createdAt: FieldValue.serverTimestamp()
       });
     });
-    await notify(userId, '✅ Deposit Credited', `${fmtUGX(dep.amount)} has been credited to your wallet.\n\n📅 ${date}`, 'deposit', { amount: dep.amount });
     return res.json({ status: 'success', message: `Credited ${fmtUGX(dep.amount)} to user` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -418,12 +384,6 @@ app.post('/register', async (req, res) => {
     batch.set(db.collection('transactions').doc(), {
       userId, type: 'admin_credit', description: 'Welcome bonus — new account',
       amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-    });
-    batch.set(db.collection('notifications').doc(), {
-      userId, title: '🎉 Welcome to Nexus!',
-      message: `${fmtUGX(WELCOME)} welcome bonus credited!\n\nStart investing in a plan to earn daily returns.\n\n📅 ${date}\n◈ Nexus Investment Platform`,
-      type: 'admin_credit', amount: WELCOME, date, time,
-      readBy: [], createdAt: FieldValue.serverTimestamp()
     });
 
     if (referrerId) {
@@ -548,12 +508,6 @@ app.post('/invest/claim', async (req, res) => {
         amount: payout, status: 'success', date, time, investmentId,
         createdAt: FieldValue.serverTimestamp()
       });
-      t.set(db.collection('notifications').doc(), {
-        userId, title: '🎯 Returns Claimed!',
-        message: `${fmtUGX(payout)} from ${inv.productName || 'your plan'} credited to wallet.\n\n📅 ${date}`,
-        type: 'investment_return', amount: payout, date, time,
-        readBy: [], createdAt: FieldValue.serverTimestamp()
-      });
     });
     return res.json({ status: 'success', payout, message: `${fmtUGX(payout)} credited` });
   } catch (e) {
@@ -605,9 +559,6 @@ app.post('/withdraw/request', async (req, res) => {
         status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
-    await notify(userId, '⏳ Withdrawal Submitted',
-      `Your withdrawal request for ${fmtUGX(netAmt)} (after ${fmtUGX(fee)} liquidity fee, 17%) to ${fullPhone} has been submitted.\n\nWe will process it shortly.\n\n📅 ${date}\n⏰ ${time}`,
-      'withdrawal', { amount: amt, net: netAmt, fee, phone: fullPhone });
     console.log(`📋 Withdrawal ${witId}: ${fmtUGX(amt)} → ${fullPhone}`);
     return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });
   } catch (e) {
@@ -634,9 +585,6 @@ app.post('/withdraw/reject', async (req, res) => {
       withdrawalCount: FieldValue.increment(-1)
     });
     await batch.commit();
-    await notify(wit.userId, '❌ Withdrawal Rejected',
-      `Your withdrawal of ${fmtUGX(wit.amount)} was rejected.\n\nReason: ${reason || 'Rejected by admin'}\n\n${fmtUGX(wit.amount)} has been refunded to your wallet.`,
-      'withdrawal_failed', { amount: wit.amount });
     return res.json({ status: 'success', message: `Rejected. ${fmtUGX(wit.amount)} refunded.` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -717,10 +665,6 @@ app.post('/admin/withdraw/process', async (req, res) => {
 
     await batch.commit();
 
-    await notify(wit.userId, '⏳ Withdrawal Processing',
-      `Your withdrawal of ${fmtUGX(netAmount)} is being sent to ${phone}.\n\nYou will receive the funds shortly. ◈`,
-      'withdrawal', { amount: netAmount, phone });
-
     console.log(`💸 Withdrawal processing: ${withdrawalId} → ${phone} ${fmtUGX(netAmount)}`);
     return res.json({ status: 'success', message: `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}` });
   } catch (e) {
@@ -781,10 +725,6 @@ app.post('/withdraw/callback', async (req, res) => {
         }
       }
 
-      await notify(wit.userId, '✅ Withdrawal Processed',
-        `${fmtUGX(wit.netAmount || wit.amount)} has been sent to your phone ${wit.withdrawalPhone || wit.userPhone}.\n\n📅 ${date}\n◈ Nexus Investment Platform`,
-        'withdrawal', { amount: wit.netAmount || wit.amount });
-
       console.log(`✅ Withdrawal complete: ${witDoc.id} → ${wit.userId}`);
 
     } else if (eventType === 'disbursement.failed') {
@@ -822,10 +762,6 @@ app.post('/withdraw/callback', async (req, res) => {
           break;
         }
       }
-
-      await notify(wit.userId, '❌ Withdrawal Failed',
-        `Your withdrawal of ${fmtUGX(wit.netAmount || wit.amount)} could not be processed.\n\n${fmtUGX(refundAmount)} has been refunded to your wallet.\n\nPlease try again.\n\n📅 ${date}`,
-        'withdrawal_failed', { amount: refundAmount });
 
       console.log(`❌ Withdrawal failed & refunded: ${witDoc.id} → ${wit.userId}`);
     }
@@ -936,7 +872,6 @@ app.post('/admin/deposit', async (req, res) => {
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
-    await notify(userId, '💰 Funds Added', `${fmtUGX(amt)} added to your wallet.\n📝 ${note || 'Admin credit'}\n📅 ${nowStr().date}`, 'deposit', { amount: amt });
     return res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -951,10 +886,6 @@ app.post('/admin/ban', async (req, res) => {
       banReason: isBan ? (reason || 'Policy violation') : null,
       bannedAt:  isBan ? FieldValue.serverTimestamp() : null
     });
-    await notify(userId, isBan ? '🚫 Account Suspended' : '✅ Account Restored',
-      isBan ? `Your account has been suspended.\nReason: ${reason || 'Policy violation'}\nContact support for help.`
-            : 'Your Nexus account has been restored. All features are available.',
-      isBan ? 'warning' : 'info', {});
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -1080,54 +1011,6 @@ app.post('/admin/gift-codes/deactivate', async (req, res) => {
     await db.collection('giftCodes').doc(codeId).update({ active: false });
     return res.json({ status: 'success', message: 'Gift code deactivated' });
   } catch (e) {
-    return res.status(500).json({ status: 'error', message: e.message });
-  }
-});
-
-// ═══════════════════════════════════════════
-// ADMIN — BROADCAST
-// ═══════════════════════════════════════════
-app.post('/admin/broadcast', async (req, res) => {
-  const { adminKey, title, message } = req.body;
-  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  if (!title || !message) return res.status(400).json({ status: 'error', message: 'title and message required' });
-  try {
-    const usersSnap = await db.collection('users').get();
-    const { date, time } = nowStr();
-    let count = 0;
-    const batchSize = 400;
-    let batch = db.batch();
-    let batchCount = 0;
-
-    for (const userDoc of usersSnap.docs) {
-      const notifRef = db.collection('notifications').doc();
-      batch.set(notifRef, {
-        userId:    userDoc.id,
-        title,
-        message,
-        type:      'broadcast',
-        readBy:    [],
-        date,
-        time,
-        details:   { date, time },
-        createdAt: FieldValue.serverTimestamp()
-      });
-      count++;
-      batchCount++;
-
-      if (batchCount >= batchSize) {
-        await batch.commit();
-        batch = db.batch();
-        batchCount = 0;
-      }
-    }
-
-    if (batchCount > 0) await batch.commit();
-
-    console.log(`📣 Broadcast sent to ${count} users`);
-    return res.json({ status: 'success', count, message: `Broadcast sent to ${count} users` });
-  } catch (e) {
-    console.error('Broadcast error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
   }
 });
@@ -1281,13 +1164,6 @@ app.post('/deposit/callback', async (req, res) => {
         status: 'success', date, time,
         createdAt: FieldValue.serverTimestamp()
       });
-
-      t.set(db.collection('notifications').doc(), {
-        userId, title: '✅ Deposit Received!',
-        message: `${fmtUGX(amount)} has been credited to your Nexus wallet.\n\n📅 ${date}\n⏰ ${time}\n\nThank you for using Nexus! ◈`,
-        type: 'deposit', amount, reference, date, time,
-        readBy: [], createdAt: FieldValue.serverTimestamp()
-      });
     });
 
     console.log(`✅ Deposit credited: ${userId} +${fmtUGX(amount)} ref:${reference}`);
@@ -1330,19 +1206,15 @@ async function runMaturityCheck() {
     let count = 0;
     const now = new Date();
     const batch = db.batch();
-    const notifPs = [];
     snap.forEach(doc => {
       const inv = doc.data();
       const mat = inv.maturityDate?.toDate?.() || null;
       if (mat && mat <= now) {
         batch.update(doc.ref, { status: 'matured', maturedAt: FieldValue.serverTimestamp() });
-        notifPs.push(notify(inv.userId, '🎉 Plan Matured!',
-          `Your ${inv.productName || 'plan'} is ready to claim!\n\n💰 Claim: ${fmtUGX(inv.expectedReturn)}\n\nOpen Nexus to claim your returns. ◈`,
-          'investment', { amount: inv.expectedReturn, investmentId: doc.id }));
         count++;
       }
     });
-    if (count > 0) { await batch.commit(); await Promise.allSettled(notifPs); }
+    if (count > 0) { await batch.commit(); }
     if (count > 0) console.log(`⏰ Matured: ${count} plan(s)`);
     return count;
   } catch (e) { console.error('Maturity error:', e.message); return 0; }
