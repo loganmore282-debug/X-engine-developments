@@ -80,6 +80,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
   transition:.15s;position:relative;border:1px solid transparent;
   display:flex;align-items:center;gap:6px
 }
+.tab-btn svg{width:14px;height:14px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .tab-btn.active{background:rgba(37,99,235,.14);color:var(--primary);border-color:var(--border2)}
 .tab-btn:hover:not(.active){background:var(--bg3);color:var(--text)}
 .badge{
@@ -333,16 +334,16 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
   <!-- TAB BAR -->
   <div class="tabbar" id="tabbar">
-    <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard',this)">📊 Dashboard</button>
-    <button class="tab-btn" data-tab="withdrawals" onclick="showTab('withdrawals',this)">💸 Withdrawals <span class="badge" id="pendingBadge" style="display:none">0</span></button>
-    <button class="tab-btn" data-tab="deposits" onclick="showTab('deposits',this)">📥 Deposits</button>
-    <button class="tab-btn" data-tab="users" onclick="showTab('users',this)">👥 Users</button>
-    <button class="tab-btn" data-tab="products" onclick="showTab('products',this)">📦 Products</button>
-    <button class="tab-btn" data-tab="slideshow" onclick="showTab('slideshow',this)">🖼️ Slideshow</button>
-    <button class="tab-btn" data-tab="giftcodes" onclick="showTab('giftcodes',this)">🎁 Gift Codes</button>
-    <button class="tab-btn" data-tab="transactions" onclick="showTab('transactions',this)">📋 Transactions</button>
-    <button class="tab-btn" data-tab="referrals" onclick="showTab('referrals',this)">🔗 Referrals</button>
-    <button class="tab-btn" data-tab="settings" onclick="showTab('settings',this)">⚙️ Settings</button>
+    <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard',this)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Dashboard</button>
+    <button class="tab-btn" data-tab="withdrawals" onclick="showTab('withdrawals',this)"><svg viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg> Withdrawals <span class="badge" id="pendingBadge" style="display:none">0</span></button>
+    <button class="tab-btn" data-tab="deposits" onclick="showTab('deposits',this)"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Deposits</button>
+    <button class="tab-btn" data-tab="users" onclick="showTab('users',this)"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Users</button>
+    <button class="tab-btn" data-tab="products" onclick="showTab('products',this)"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Products</button>
+    <button class="tab-btn" data-tab="slideshow" onclick="showTab('slideshow',this)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Slideshow</button>
+    <button class="tab-btn" data-tab="giftcodes" onclick="showTab('giftcodes',this)"><svg viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg> Gift Codes</button>
+    <button class="tab-btn" data-tab="transactions" onclick="showTab('transactions',this)"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> Transactions</button>
+    <button class="tab-btn" data-tab="referrals" onclick="showTab('referrals',this)"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Referrals</button>
+    <button class="tab-btn" data-tab="settings" onclick="showTab('settings',this)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
   </div>
 
   <!-- MAIN CONTENT -->
@@ -679,6 +680,16 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <input class="form-input" type="file" id="pImageFile" accept="image/*" style="padding:8px">
       <div id="pImagePreview" style="margin-top:8px"></div>
       <input type="hidden" id="pImageUrl">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Display Order</label>
+        <input class="form-input" type="number" id="pOrder" placeholder="1" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Star Rating (0–5)</label>
+        <input class="form-input" type="number" id="pStars" placeholder="4.5" min="0" max="5" step="0.1">
+      </div>
     </div>
     <div class="form-row">
       <div>
@@ -1199,17 +1210,19 @@ async function loadProducts() {
 
 function renderProductsList() {
   if (!_products.length) {
-    document.getElementById('productsList').innerHTML = '<div class="empty"><div class="empty-icon">📦</div><div class="empty-text">No products yet. Click Add Product to create one.</div></div>';
+    document.getElementById('productsList').innerHTML = '<div class="empty"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div><div class="empty-text">No products yet. Click Add Product to create one.</div></div>';
     return;
   }
-  const cards = _products.map(p => `
+  const sorted = [..._products].sort((a,b) => (a.displayOrder||999) - (b.displayOrder||999));
+  const cards = sorted.map(p => `
     <div class="product-card">
-      ${p.image ? `<img class="product-img" src="${p.image}" alt="${p.name}" loading="lazy">` : '<div class="product-img-placeholder">📦</div>'}
+      ${p.image ? `<img class="product-img" src="${p.image}" alt="${p.name}" loading="lazy">` : '<div class="product-img-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:32px;height:32px"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>'}
       <div class="product-info">
         <div class="product-name">${p.name||'Unnamed'}</div>
         <div class="product-price">${ugx(p.price)}</div>
         <div class="product-meta">
-          ${ugx(p.dailyReturn)}/day · ${p.cycle||0} days · Return: ${ugx(p.expectedReturn||0)}
+          ${ugx(p.dailyReturn)}/day · ${p.cycle||0} days · Return: ${ugx(p.expectedReturn||0)}<br>
+          ${p.stars ? `★ ${p.stars}  ` : ''}Order: #${p.displayOrder||'—'}
         </div>
         <div style="display:flex;gap:8px;margin-bottom:10px">
           ${p.active ? '<span class="badge-status bs-active">Active</span>' : '<span class="badge-status bs-rejected">Inactive</span>'}
@@ -1237,6 +1250,8 @@ window.openAddProduct = () => {
   document.getElementById('pImageFile').value = '';
   document.getElementById('pActive').checked = true;
   document.getElementById('pStock').checked = true;
+  document.getElementById('pOrder').value = '';
+  document.getElementById('pStars').value = '';
   document.getElementById('productModalTitle').textContent = 'Add Product';
   document.getElementById('pSaveBtn').textContent = 'Save Product';
   openModal('productOverlay');
@@ -1256,6 +1271,8 @@ window.openEditProduct = (id) => {
   document.getElementById('pImageFile').value = '';
   document.getElementById('pActive').checked = !!p.active;
   document.getElementById('pStock').checked  = !!p.isInStock;
+  document.getElementById('pOrder').value = p.displayOrder || '';
+  document.getElementById('pStars').value = p.stars || '';
   document.getElementById('productModalTitle').textContent = 'Edit Product';
   document.getElementById('pSaveBtn').textContent = 'Save Changes';
   openModal('productOverlay');
@@ -1270,6 +1287,8 @@ window.saveProduct = async () => {
   const total  = parseFloat(document.getElementById('pTotal').value) || (daily * cycle);
   const active = document.getElementById('pActive').checked;
   const stock  = document.getElementById('pStock').checked;
+  const order  = parseInt(document.getElementById('pOrder').value) || 999;
+  const stars  = parseFloat(document.getElementById('pStars').value) || 0;
   const imgFile= document.getElementById('pImageFile').files[0];
   let imageUrl = document.getElementById('pImageUrl').value;
 
@@ -1287,6 +1306,7 @@ window.saveProduct = async () => {
     const data = {
       name, price, dailyReturn: daily, cycle,
       expectedReturn: total, active, isInStock: stock,
+      displayOrder: order, stars,
       updatedAt: serverTimestamp()
     };
     if (imageUrl) data.image = imageUrl;

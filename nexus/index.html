@@ -281,25 +281,26 @@ body{padding-bottom:106px}
 .inv-badge.matured{background:rgba(234,179,8,0.12);color:#eab308;border:1px solid rgba(234,179,8,0.25)}
 .inv-badge.claimed{background:var(--card2);color:var(--text2);border:1px solid var(--border)}
 
-/* ── PRODUCTS GRID ── */
-.products-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.product-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .2s}
+/* ── PRODUCTS LIST ── */
+.products-grid{display:flex;flex-direction:column;gap:10px}
+.product-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;align-items:center;gap:12px;position:relative;cursor:pointer;transition:border-color .2s}
 .product-card:hover{border-color:var(--border2)}
-.product-img{width:100%;height:130px;object-fit:cover;background:var(--bg3);display:block;position:relative}
-.product-img-wrap{position:relative;height:130px;background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.product-img-wrap{width:84px;height:84px;border-radius:10px;flex-shrink:0;background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center}
 .product-img-wrap img{width:100%;height:100%;object-fit:cover}
 .product-img-wrap .no-img{color:var(--muted);display:flex}
-.product-img-wrap .no-img svg{width:40px;height:40px}
-.product-stock{position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
-.product-stock.in{background:rgba(34,197,94,0.9);color:#fff}
-.product-stock.out{background:rgba(239,68,68,0.9);color:#fff}
-.product-body{padding:12px}
-.product-name{font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.product-price{font-size:15px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;margin-bottom:4px}
-.product-detail{font-size:10px;color:var(--text2);line-height:1.6}
-.product-btn{display:block;width:100%;margin-top:10px;height:36px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s}
-.product-btn.buy{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}
-.product-btn.sold{background:var(--card);color:var(--text2);cursor:not-allowed;border:1px solid var(--border)}
+.product-img-wrap .no-img svg{width:36px;height:36px}
+.product-stock{position:absolute;top:8px;right:56px;font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
+.product-stock.in{background:rgba(34,197,94,0.88);color:#fff}
+.product-stock.out{background:rgba(239,68,68,0.88);color:#fff}
+.product-body{flex:1;min-width:0}
+.product-name{font-size:14px;font-weight:800;color:var(--text);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.product-meta-row{font-size:11px;color:var(--text2);margin-bottom:2px;line-height:1.4}
+.product-meta-row .pv{color:#22c55e;font-weight:700}
+.product-price-row{font-size:12px;font-weight:700;color:var(--text);margin-top:5px;display:flex;align-items:center;gap:6px}
+.product-stars{color:#eab308;font-size:11px;letter-spacing:1px}
+.product-cart{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .18s;align-self:center}
+.product-cart:disabled{background:var(--bg3);color:var(--muted);cursor:not-allowed}
+.product-cart svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
 /* ── RECORDS (TABS + LIST) ── */
 .pill-tabs{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
@@ -477,7 +478,6 @@ body{padding-bottom:106px}
 .page-bal-badge{background:var(--bluefade);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#2563eb;font-weight:700}
 
 @media(max-width:400px){
-  .products-grid{grid-template-columns:1fr 1fr}
   .level-cards{grid-template-columns:1fr 1fr 1fr}
 }
 
@@ -1560,25 +1560,27 @@ function renderProducts(products) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No plans available yet</p></div>`;
     return;
   }
+  products.sort((a,b) => (a.displayOrder||999) - (b.displayOrder||999));
   grid.innerHTML = products.map(p => {
-    const inStock = p.isInStock !== false;
-    const imgHtml = p.image
-      ? `<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover">`
+    const inStock  = p.isInStock !== false;
+    const stars    = p.stars || 0;
+    const starStr  = stars ? '★'.repeat(Math.round(stars)) : '';
+    const imgHtml  = p.image
+      ? `<img src="${p.image}" alt="${p.name}">`
       : `<span class="no-img">${ICN.box}</span>`;
     return `<div class="product-card" onclick="openProductModal('${p.id}')">
-      <div class="product-img-wrap">
-        ${imgHtml}
-        <span class="product-stock ${inStock?'in':'out'}">${inStock?'In Stock':'Sold Out'}</span>
-      </div>
+      <div class="product-img-wrap">${imgHtml}</div>
       <div class="product-body">
         <div class="product-name">${p.name}</div>
-        <div class="product-price">${ugx(p.price)}</div>
-        <div class="product-detail">
-          Daily: ${ugx(p.dailyReturn)} · ${p.cycle} days<br>
-          Total: <strong style="color:#f0f0f0">${ugx(p.expectedReturn)}</strong>
-        </div>
-        <button class="product-btn ${inStock?'buy':'sold'}" ${inStock?'':'disabled'}>${inStock?'Buy Now':'Sold Out'}</button>
+        <div class="product-meta-row">Cycle: ${p.cycle||0} Days</div>
+        <div class="product-meta-row">Daily income: <span class="pv">${ugx(p.dailyReturn)}</span></div>
+        <div class="product-meta-row">Total revenue: <span class="pv">${ugx(p.expectedReturn)}</span></div>
+        <div class="product-price-row">${starStr ? `<span class="product-stars">${starStr}</span> <span style="font-size:11px;color:var(--text2)">${stars}</span>` : ''} Price: ${ugx(p.price)}</div>
       </div>
+      <span class="product-stock ${inStock?'in':'out'}">${inStock?'On Sale':'Sold Out'}</span>
+      <button class="product-cart" ${inStock?'':'disabled'} onclick="event.stopPropagation();openProductModal('${p.id}')">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      </button>
     </div>`;
   }).join('');
 }
