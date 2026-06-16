@@ -1079,7 +1079,7 @@ import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, onSnapshot, addDoc, arrayUnion, arrayRemove, serverTimestamp, getDocs }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, onSnapshot, addDoc, arrayUnion, arrayRemove, serverTimestamp, getDocs, runTransaction, increment }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -1526,15 +1526,46 @@ window.showSection = (sec) => {
 window.doCheckin = async () => {
   if (!_user) return;
   const eat = new Date(Date.now() + 3*60*60*1000);
-  const todayKey = eat.toISOString().slice(0,10);
+  const todayKey      = eat.toISOString().slice(0,10);
+  const yesterdayKey  = new Date(eat.getTime() - 86400000).toISOString().slice(0,10);
   if (_userData?.lastCheckinDate === todayKey) { showToast('Already checked in today!', 'error'); return; }
+  if (_userData?.status === 'banned') { showToast('Account suspended', 'error'); return; }
   showLoading(true);
   try {
-    const r = await api('/checkin', { userId: _user.uid });
+    const settSnap = await getDoc(doc(db,'settings','main'));
+    const bonus    = settSnap.exists() ? (settSnap.data().checkinBonus || 500) : 500;
+    const uRef     = doc(db,'users',_user.uid);
+    let newStreak  = 1;
+    await runTransaction(db, async t => {
+      const fresh = await t.get(uRef);
+      if (!fresh.exists()) throw new Error('User not found');
+      const u = fresh.data();
+      if (u.lastCheckinDate === todayKey) throw new Error('ALREADY_DONE');
+      newStreak = u.lastCheckinDate === yesterdayKey ? (u.checkinStreak || 0) + 1 : 1;
+      const now   = new Date();
+      const date  = now.toLocaleDateString('en-GB');
+      const time  = now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+      t.update(uRef, {
+        walletBalance:   increment(bonus),
+        lastCheckinDate: todayKey,
+        checkinStreak:   newStreak,
+        checkinDays:     increment(1),
+        checkinEarned:   increment(bonus)
+      });
+      t.set(doc(collection(db,'transactions')), {
+        userId: _user.uid, type: 'checkin',
+        description: `Daily check-in — Day ${newStreak}`,
+        amount: bonus, status: 'success', date, time,
+        createdAt: serverTimestamp()
+      });
+    });
     showLoading(false);
-    if (r.status === 'success') showToast(`${r.message} (Day ${r.streak})`, 'success');
-    else showToast(r.message || 'Check-in failed', 'error');
-  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+    showToast(`UGX ${bonus.toLocaleString()} credited! Day ${newStreak}`, 'success');
+  } catch (e) {
+    showLoading(false);
+    if (e.message === 'ALREADY_DONE') showToast('Already checked in today!', 'error');
+    else showToast(e.message || 'Check-in failed', 'error');
+  }
 };
 
 // ── PRODUCTS ──
