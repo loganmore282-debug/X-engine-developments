@@ -1,4 +1,5 @@
 node_modules/
+.claude/
 
 # delivery artifacts
 x-engine-update.zip
