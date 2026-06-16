@@ -198,24 +198,28 @@ async function payCommissions(investorId, amount) {
     const l2Snap = await db.collection('users').doc(l2Id).get();
     if (!l2Snap.exists) return;
     const l2Amt = Math.round(amount * COMM_L2);
-    if (l2Amt > 0) {
+    // L2 commission: only on the FIRST investment by this investor
+    const paidL2To = l2Snap.data().paidL2To || [];
+    if (l2Amt > 0 && !paidL2To.includes(investorId)) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l2Id);
         const f   = await t.get(ref);
+        if ((f.data().paidL2To || []).includes(investorId)) return;
         t.update(ref, {
           walletBalance:      (f.data().walletBalance || 0) + l2Amt,
           commissionEarned:   FieldValue.increment(l2Amt),
-          commissionL2Earned: FieldValue.increment(l2Amt)
+          commissionL2Earned: FieldValue.increment(l2Amt),
+          paidL2To:           FieldValue.arrayUnion(investorId)
         });
         t.set(db.collection('transactions').doc(), {
           userId: l2Id, type: 'commission',
-          description: `L2 commission — team investment ${fmtUGX(amount)}`,
+          description: `L2 commission — ${investor.name || investor.phone} first investment ${fmtUGX(amount)}`,
           amount: l2Amt, level: 2, fromUserId: investorId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         t.set(db.collection('notifications').doc(), {
           userId: l2Id, title: '💰 Team Commission!',
-          message: `L2 team member invested ${fmtUGX(amount)}! You earned 5% = ${fmtUGX(l2Amt)}.\n\n📅 ${date}`,
+          message: `L2 team member made their first investment of ${fmtUGX(amount)}!\nYou earned 5% = ${fmtUGX(l2Amt)}.\n\n📅 ${date}`,
           type: 'commission', amount: l2Amt, date, time,
           readBy: [], createdAt: FieldValue.serverTimestamp()
         });
@@ -224,25 +228,31 @@ async function payCommissions(investorId, amount) {
 
     const l3Id = l2Snap.data().referredBy;
     if (!l3Id || l3Id === l2Id || l3Id === l1Id || l3Id === investorId) return;
+    const l3Snap = await db.collection('users').doc(l3Id).get();
+    if (!l3Snap.exists) return;
     const l3Amt = Math.round(amount * COMM_L3);
-    if (l3Amt > 0) {
+    // L3 commission: only on the FIRST investment by this investor
+    const paidL3To = l3Snap.data().paidL3To || [];
+    if (l3Amt > 0 && !paidL3To.includes(investorId)) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l3Id);
         const f   = await t.get(ref);
+        if ((f.data().paidL3To || []).includes(investorId)) return;
         t.update(ref, {
           walletBalance:      (f.data().walletBalance || 0) + l3Amt,
           commissionEarned:   FieldValue.increment(l3Amt),
-          commissionL3Earned: FieldValue.increment(l3Amt)
+          commissionL3Earned: FieldValue.increment(l3Amt),
+          paidL3To:           FieldValue.arrayUnion(investorId)
         });
         t.set(db.collection('transactions').doc(), {
           userId: l3Id, type: 'commission',
-          description: `L3 commission — team investment ${fmtUGX(amount)}`,
+          description: `L3 commission — ${investor.name || investor.phone} first investment ${fmtUGX(amount)}`,
           amount: l3Amt, level: 3, fromUserId: investorId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
         t.set(db.collection('notifications').doc(), {
           userId: l3Id, title: '💰 Team Commission!',
-          message: `L3 team member invested ${fmtUGX(amount)}! You earned 2% = ${fmtUGX(l3Amt)}.\n\n📅 ${date}`,
+          message: `L3 team member made their first investment of ${fmtUGX(amount)}!\nYou earned 2% = ${fmtUGX(l3Amt)}.\n\n📅 ${date}`,
           type: 'commission', amount: l3Amt, date, time,
           readBy: [], createdAt: FieldValue.serverTimestamp()
         });
