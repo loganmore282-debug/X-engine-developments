@@ -2,237 +2,242 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Nexus Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#f0f4f9;--bg2:#ffffff;--bg3:#f4f7fc;
-  --card:#ffffff;--card2:#f4f7fc;
-  --border:rgba(0,0,0,0.07);--border2:rgba(0,0,0,0.13);
-  --text:#0d1b2e;--text2:#64748b;--muted:#c0cde0;
-  --gold:#2563eb;--goldfade:rgba(37,99,235,0.08);--goldborder:rgba(37,99,235,0.22);
-  --red:#ef4444;--green:#16a34a;--radius:10px;
+  --primary:#F0B90B;--primary2:#F8D12F;
+  --bg:#0f0f0f;--bg2:#1a1a1a;--bg3:#252525;
+  --border:rgba(240,185,11,.12);--border2:rgba(240,185,11,.28);
+  --text:#f9fafb;--text2:#9ca3af;--muted:#6b7280;
+  --green:#03A66D;--red:#ef4444;--blue:#3b82f6;
+  --gold:#F0B90B;--r:12px;--fam:'Outfit',sans-serif
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif}
-a{color:inherit;text-decoration:none}
-input,button,select,textarea{font-family:'Outfit',sans-serif}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--fam)}
+input,button,select,textarea{font-family:var(--fam)}
 
 /* ── LOGIN ── */
 #loginScreen{
-  min-height:100vh;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(180deg,#0f2d80 0%,#071b5c 40%,#030c2a 100%);position:relative
+  position:fixed;inset:0;background:linear-gradient(180deg,#0f0f0f 0%,#1a1200 100%);
+  display:flex;align-items:center;justify-content:center;z-index:999;padding:24px
 }
-.login-box{
-  position:relative;z-index:1;background:rgba(4,10,22,0.75);
-  backdrop-filter:blur(24px);border:1px solid rgba(37,99,235,0.3);
-  border-radius:18px;padding:36px 32px;width:100%;max-width:380px;
-  box-shadow:0 24px 80px rgba(0,0,0,0.8)
+.login-box{width:100%;max-width:340px}
+.login-logo{text-align:center;margin-bottom:32px}
+.login-mark{font-size:44px;font-weight:900;color:var(--primary);letter-spacing:-2px;display:block}
+.login-sub{font-size:11px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:4px}
+.lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:block}
+.inp{
+  width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(240,185,11,.2);
+  border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;
+  margin-bottom:14px;transition:border-color .2s
 }
-.login-logo{font-size:36px;font-weight:900;color:#fff;text-shadow:0 0 30px rgba(255,255,255,0.2);letter-spacing:-2px;margin-bottom:4px}
-.login-sub{font-size:12px;color:rgba(255,255,255,0.5);letter-spacing:3px;text-transform:uppercase;margin-bottom:28px}
-.login-box h2{font-size:18px;font-weight:800;margin-bottom:4px}
-.login-box p{font-size:13px;color:var(--text2);margin-bottom:22px}
-.lbl{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
-.inp{width:100%;height:46px;background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.25);border-radius:10px;padding:0 14px;color:#fff;font-size:15px;outline:none;margin-bottom:16px;font-family:'Share Tech Mono',monospace;letter-spacing:2px}
-.inp::placeholder{color:rgba(255,255,255,0.4)}
-.inp:focus{border-color:rgba(255,255,255,0.5)}
-.btn-gold{width:100%;height:48px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;transition:opacity .2s}
-.btn-gold:active{opacity:.85}
-.login-err{color:var(--red);font-size:13px;margin-bottom:12px;display:none}
-
-/* ── LAYOUT ── */
-#adminPanel{display:none;min-height:100vh;flex-direction:row}
-#adminPanel.show{display:flex}
-
-/* Sidebar */
-.sidebar{
-  width:220px;background:var(--bg2);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;min-height:100vh;position:sticky;top:0;
-  flex-shrink:0;
+.inp:focus{border-color:var(--primary)}
+.inp::placeholder{color:var(--muted)}
+.btn-login{
+  width:100%;height:48px;background:linear-gradient(135deg,var(--primary),#d97706);
+  color:#000;border:none;border-radius:12px;font-size:15px;font-weight:900;
+  cursor:pointer;transition:opacity .2s;font-family:var(--fam)
 }
-.sidebar-logo{padding:20px 16px 16px;border-bottom:1px solid var(--border)}
-.sidebar-logo .s-mark{font-size:20px;font-weight:900;color:var(--gold);letter-spacing:-1px}
-.sidebar-logo .s-sub{font-size:10px;color:rgba(37,99,235,0.45);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
-.sidebar-nav{flex:1;padding:12px 8px;display:flex;flex-direction:column;gap:2px}
-.nav-item{
-  display:flex;align-items:center;gap:10px;padding:10px 12px;
-  border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:600;
-  transition:all .18s;border:none;background:none;width:100%;text-align:left
+.btn-login:active{opacity:.85}
+.login-err{color:var(--red);font-size:12px;margin-bottom:10px;display:none}
+
+/* ── TOPBAR ── */
+.topbar{
+  position:sticky;top:0;z-index:100;
+  background:rgba(15,15,15,.97);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);padding:12px 16px;
+  display:flex;align-items:center;justify-content:space-between
 }
-.nav-item:hover{background:var(--card2);color:var(--text)}
-.nav-item.active{background:var(--goldfade);color:var(--gold);border:1px solid var(--goldborder)}
-.nav-item .ni-icon{font-size:16px;width:22px;text-align:center;flex-shrink:0}
-.nav-item .ni-badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px}
-.sidebar-footer{padding:16px;border-top:1px solid var(--border)}
-.btn-logout{width:100%;height:36px;background:transparent;border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
-.btn-logout:hover{border-color:var(--red);color:var(--red)}
+.topbar-brand{font-size:18px;font-weight:900;color:var(--primary);letter-spacing:-1px}
+.topbar-sub{font-size:11px;color:var(--muted);margin-top:1px}
 
-/* Main content */
-.main-content{flex:1;overflow-y:auto;min-height:100vh}
-.page-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.page-title{font-size:20px;font-weight:800;color:var(--text)}
-.page-sub{font-size:12px;color:var(--text2);margin-top:2px}
-.page-body{padding:24px}
+/* ── TAB BAR ── */
+.tab-bar{
+  display:flex;overflow-x:auto;padding:10px 12px 0;gap:4px;
+  background:var(--bg2);border-bottom:1px solid var(--border);scrollbar-width:none;
+  -webkit-overflow-scrolling:touch
+}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-btn{
+  border:none;background:transparent;color:var(--muted);
+  font-family:var(--fam);font-size:11px;font-weight:700;
+  padding:8px 12px;border-radius:8px 8px 0 0;cursor:pointer;
+  white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;
+  border-bottom:3px solid transparent;transition:all .18s;flex-shrink:0
+}
+.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);background:rgba(240,185,11,.07)}
+.tab-count{
+  background:var(--red);color:#fff;font-size:9px;font-weight:800;
+  padding:1px 5px;border-radius:999px;margin-left:3px;vertical-align:middle
+}
 
-/* ── TAB PAGES ── */
-.tab-page{display:none}
-.tab-page.active{display:block}
+/* ── PANELS ── */
+.panel{display:none;padding:14px}
+.panel.active{display:block}
 
-/* ── STAT CARDS ── */
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
-.stat-card{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
-.stat-card .sc-val{font-size:24px;font-weight:900;color:var(--text);font-family:'Share Tech Mono',monospace;margin-bottom:4px}
-.stat-card .sc-lbl{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.stat-card.gold-accent{border-color:var(--goldborder);background:var(--goldfade)}
-.stat-card.gold-accent .sc-val{color:var(--gold)}
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.item-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px}
+.item-title{font-size:13px;font-weight:700;color:var(--text)}
+.item-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.6}
+
+/* ── STAT GRID ── */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.stat-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.stat-val{font-family:'Share Tech Mono',monospace;font-size:17px;font-weight:700;color:var(--primary)}
+.stat-val.green{color:var(--green)}.stat-val.red{color:var(--red)}.stat-val.blue{color:var(--blue)}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
 
 /* ── TABLE ── */
-.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.table-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
-.table-title{font-size:14px;font-weight:800;color:var(--text)}
-table{width:100%;border-collapse:collapse}
-th{padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;background:var(--card);border-bottom:1px solid var(--border);white-space:nowrap}
-td{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:500px}
+th{padding:9px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;background:var(--bg3);border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:11px 12px;font-size:12px;border-bottom:1px solid rgba(240,185,11,.05);vertical-align:middle}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:var(--card)}
-.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.4px}
-.badge.pending{background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.3)}
-.badge.processed{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
-.badge.rejected{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
-.badge.active{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
-.badge.expired{background:var(--card2);color:var(--text2);border:1px solid var(--border)}
-.badge.redeemed{background:rgba(37,99,235,0.12);color:var(--gold);border:1px solid var(--goldborder)}
-.badge.banned{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
-.badge.instock{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
-.badge.soldout{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
-.mono{font-family:'Share Tech Mono',monospace;letter-spacing:.5px}
-.action-btn{height:30px;padding:0 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s;border:none;margin-right:4px;white-space:nowrap}
-.action-btn:active{opacity:.8}
-.btn-green{background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.3)}
-.btn-red{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
-.btn-blue{background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3)}
-.btn-yellow{background:var(--goldfade);color:var(--gold);border:1px solid var(--goldborder)}
-.btn-sm{height:36px;padding:0 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:opacity .2s;font-family:'Outfit',sans-serif}
-.btn-sm.gold{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}
-.btn-sm.outline{background:transparent;border:1px solid var(--border2);color:var(--text)}
-.empty-row td{text-align:center;color:var(--text2);padding:32px;font-size:13px}
+tr:hover td{background:rgba(240,185,11,.03)}
+.empty-row td{text-align:center;color:var(--muted);padding:28px;font-size:13px}
 
 /* ── FILTER TABS ── */
-.filter-tabs{display:flex;gap:6px;padding:14px 16px;border-bottom:1px solid var(--border)}
-.ftab{height:30px;padding:0 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Outfit',sans-serif}
-.ftab.active{background:var(--white);color:#111;border-color:var(--text)}
-.ftab.active{background:var(--text);color:var(--bg)}
+.filter-tabs{display:flex;gap:5px;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.ftab{
+  height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-size:11px;font-weight:700;
+  cursor:pointer;transition:all .18s;font-family:var(--fam);white-space:nowrap
+}
+.ftab.active{background:var(--primary);color:#000;border-color:var(--primary)}
 
 /* ── FORMS ── */
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.form-group{margin-bottom:14px}
-.form-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
-.form-input{width:100%;height:42px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:0 12px;color:var(--text);font-size:14px;outline:none;transition:border-color .2s;font-family:'Outfit',sans-serif}
-.form-input:focus{border-color:var(--goldborder)}
-.form-input.mono-input{font-family:'Share Tech Mono',monospace;letter-spacing:1px}
-.form-textarea{width:100%;min-height:80px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;resize:vertical;font-family:'Outfit',sans-serif}
-.form-select{width:100%;height:42px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:0 12px;color:var(--text);font-size:14px;outline:none;cursor:pointer}
+.form-group{margin-bottom:10px}
+.form-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:block}
+.form-input{
+  width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;
+  padding:10px 12px;color:var(--text);font-size:13px;outline:none;
+  transition:border-color .2s;font-family:var(--fam)
+}
+.form-input:focus{border-color:var(--primary)}
+.form-input::placeholder{color:var(--muted)}
+textarea.form-input{min-height:80px;resize:vertical}
+select.form-input{appearance:none}
 
-/* ── MODAL ── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center;padding:16px}
-.modal-overlay.show{display:flex}
-.modal-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto}
-.modal-title{font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px}
-.modal-sub{font-size:12px;color:var(--text2);margin-bottom:20px}
-.modal-footer{display:flex;gap:10px;margin-top:20px}
-.modal-footer button{flex:1}
+/* ── BUTTONS ── */
+.btn{
+  padding:10px 14px;border:none;border-radius:8px;font-family:var(--fam);
+  font-size:12px;font-weight:800;cursor:pointer;transition:all .18s;
+  display:inline-flex;align-items:center;gap:5px
+}
+.btn-primary{background:linear-gradient(135deg,var(--primary),#d97706);color:#000}
+.btn-green{background:linear-gradient(135deg,var(--green),#15803d);color:#fff}
+.btn-red{background:linear-gradient(135deg,var(--red),#b91c1c);color:#fff}
+.btn-blue{background:linear-gradient(135deg,var(--blue),#1d4ed8);color:#fff}
+.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--muted)}
+.btn-sm{padding:6px 10px;font-size:10px;border-radius:6px}
+.btn-full{width:100%;justify-content:center}
+.mini-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.action-btn{
+  height:28px;padding:0 10px;border-radius:6px;font-size:10px;font-weight:700;
+  cursor:pointer;font-family:var(--fam);transition:opacity .15s;border:none;white-space:nowrap
+}
+.action-btn:active{opacity:.8}
+.btn-green.action-btn{background:rgba(3,166,109,.18);color:var(--green);border:1px solid rgba(3,166,109,.3)}
+.btn-red.action-btn{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.btn-blue.action-btn{background:rgba(59,130,246,.15);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+.btn-yellow.action-btn{background:rgba(240,185,11,.12);color:var(--primary);border:1px solid var(--border2)}
 
-/* ── PRODUCT CARDS ── */
-.products-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
-.product-admin-card{background:var(--card2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.pac-img{height:130px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:40px;position:relative;overflow:hidden}
-.pac-img img{width:100%;height:100%;object-fit:cover}
-.pac-stock{position:absolute;top:8px;right:8px;font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px}
-.pac-stock.in{background:rgba(34,197,94,.9);color:#fff}
-.pac-stock.out{background:rgba(239,68,68,.9);color:#fff}
-.pac-body{padding:12px}
-.pac-name{font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px}
-.pac-price{font-size:15px;font-weight:900;color:var(--text);font-family:'Share Tech Mono',monospace;margin-bottom:4px}
-.pac-detail{font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:10px}
-.pac-actions{display:flex;gap:6px}
-
-/* ── GIFT CODE LIST ── */
-.code-pill{display:inline-block;background:var(--goldfade);border:1px solid var(--goldborder);border-radius:8px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:14px;font-weight:700;color:var(--gold);letter-spacing:2px;cursor:pointer;margin:4px;transition:opacity .18s}
-.code-pill:active{opacity:.7}
-.codes-generated{margin-top:16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px}
+/* ── BADGES ── */
+.badge{display:inline-block;font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.4px}
+.badge.pending,.badge-gold{background:rgba(240,185,11,.15);color:var(--primary);border:1px solid rgba(240,185,11,.3)}
+.badge.processed,.badge-green{background:rgba(3,166,109,.15);color:var(--green);border:1px solid rgba(3,166,109,.3)}
+.badge.rejected,.badge.banned,.badge-red{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.badge.active{background:rgba(3,166,109,.15);color:var(--green);border:1px solid rgba(3,166,109,.3)}
+.badge.expired,.badge-gray{background:rgba(255,255,255,.06);color:var(--muted);border:1px solid rgba(255,255,255,.1)}
+.badge.redeemed,.badge-blue{background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.25)}
+.badge.instock{background:rgba(3,166,109,.15);color:var(--green);border:1px solid rgba(3,166,109,.3)}
+.badge.soldout{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.mono{font-family:'Share Tech Mono',monospace;letter-spacing:.5px}
 
 /* ── SEARCH ── */
-.search-bar{display:flex;gap:10px;margin-bottom:16px}
-.search-input{flex:1;height:42px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:0 14px;color:var(--text);font-size:14px;outline:none;font-family:'Outfit',sans-serif}
-.search-input:focus{border-color:var(--goldborder)}
+.search-bar{display:flex;gap:8px;margin-bottom:10px}
+.search-input{
+  flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;
+  padding:10px 12px;color:var(--text);font-size:13px;outline:none;font-family:var(--fam)
+}
+.search-input::placeholder{color:var(--muted)}
+.search-input:focus{border-color:var(--primary)}
+
+/* ── PRODUCT CARDS ── */
+.products-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.product-admin-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.pac-img{height:120px;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:36px;position:relative;overflow:hidden}
+.pac-img img{width:100%;height:100%;object-fit:cover}
+.pac-stock{position:absolute;top:7px;right:7px;font-size:9px;font-weight:800;padding:3px 7px;border-radius:999px}
+.pac-stock.in{background:rgba(3,166,109,.9);color:#fff}
+.pac-stock.out{background:rgba(239,68,68,.9);color:#fff}
+.pac-body{padding:10px}
+.pac-name{font-size:12px;font-weight:800;color:var(--text)}
+.pac-price{font-size:14px;font-weight:900;color:var(--primary);font-family:'Share Tech Mono',monospace;margin:3px 0}
+.pac-detail{font-size:10px;color:var(--muted);line-height:1.6;margin-bottom:8px}
+.pac-actions{display:flex;gap:5px;flex-wrap:wrap}
+
+/* ── GIFT CODE ── */
+.code-pill{
+  display:inline-block;background:rgba(240,185,11,.1);border:1px solid rgba(240,185,11,.3);
+  border-radius:7px;padding:6px 12px;font-family:'Share Tech Mono',monospace;
+  font-size:14px;font-weight:700;color:var(--primary);letter-spacing:2px;
+  cursor:pointer;margin:3px;transition:opacity .15s
+}
+.code-pill:active{opacity:.7}
+.codes-generated{margin-top:14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px}
 
 /* ── SETTING ROWS ── */
-.setting-row{display:flex;align-items:center;justify-content:space-between;padding:16px;background:var(--card2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
-.setting-info{flex:1}
-.setting-label{font-size:14px;font-weight:700;color:var(--text)}
-.setting-desc{font-size:12px;color:var(--text2);margin-top:2px}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
 .toggle{position:relative;width:44px;height:24px;flex-shrink:0;cursor:pointer}
 .toggle input{opacity:0;width:0;height:0}
-.toggle-slider{position:absolute;inset:0;background:var(--muted);border-radius:12px;transition:.3s}
+.toggle-slider{position:absolute;inset:0;background:#333;border-radius:12px;transition:.3s}
 .toggle-slider::before{content:'';position:absolute;width:18px;height:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s}
-.toggle input:checked + .toggle-slider{background:var(--gold)}
+.toggle input:checked + .toggle-slider{background:var(--primary)}
 .toggle input:checked + .toggle-slider::before{transform:translateX(20px)}
-.slideshow-url-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-.slideshow-url-row input{flex:1;height:38px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--text);font-size:12px;outline:none;font-family:'Outfit',sans-serif}
-.slideshow-url-row button{height:38px;padding:0 12px;border:none;border-radius:8px;background:var(--red);color:#fff;cursor:pointer;font-size:13px;font-family:'Outfit',sans-serif}
+.slideshow-url-row{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.slideshow-url-row input{flex:1;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:0 10px;color:var(--text);font-size:12px;outline:none;font-family:var(--fam)}
+.slideshow-url-row button{height:36px;padding:0 10px;border:none;border-radius:8px;background:rgba(239,68,68,.15);color:var(--red);cursor:pointer;font-size:13px}
+
+/* ── MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1000;align-items:flex-end;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal-box{
+  background:var(--bg2);border:1px solid var(--border2);border-top:2px solid var(--primary);
+  border-radius:20px 20px 0 0;padding:24px;width:100%;max-width:500px;
+  max-height:90vh;overflow-y:auto
+}
+.modal-title{font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+.modal-footer{display:flex;gap:10px;margin-top:18px}
+.modal-footer button{flex:1}
 
 /* ── TOAST ── */
-#aToast{position:fixed;top:20px;right:20px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:12px 18px;font-size:13px;color:var(--text);font-weight:600;z-index:9999;opacity:0;transition:all .25s;pointer-events:none;max-width:320px}
+#aToast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--bg2);border:1px solid var(--border2);border-radius:10px;
+  padding:12px 20px;font-size:13px;color:var(--text);font-weight:600;
+  z-index:9999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;
+  max-width:90vw;text-align:center
+}
 #aToast.show{opacity:1}
-#aToast.success{border-color:rgba(34,197,94,.4)}
-#aToast.error{border-color:rgba(239,68,68,.4)}
+#aToast.success{border-color:rgba(3,166,109,.5)}
+#aToast.error{border-color:rgba(239,68,68,.5)}
 
-/* ── MOBILE TOP BAR ── */
-.mobile-topbar{
-  display:none;position:sticky;top:0;z-index:200;
-  background:var(--bg2);border-bottom:1px solid var(--border);
-  padding:0 14px;height:54px;align-items:center;justify-content:space-between;gap:12px
-}
-.mtb-left{display:flex;align-items:center;gap:10px}
-.mtb-logo{font-size:16px;font-weight:900;color:var(--gold);letter-spacing:-1px;flex-shrink:0}
-.mtb-title{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mtb-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.mtb-alert{background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;min-width:20px;text-align:center}
-.hamburger{width:40px;height:40px;border:1px solid var(--border2);background:var(--card2);border-radius:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;flex-shrink:0}
-.hamburger span{width:18px;height:2px;background:var(--text);border-radius:2px;display:block;transition:.2s}
-
-/* ── MOBILE DRAWER ── */
-.mob-overlay{display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.6);touch-action:none}
-.mob-overlay.open{display:block}
-.mob-drawer{
-  position:absolute;left:0;top:0;bottom:0;width:270px;
-  background:var(--bg2);display:flex;flex-direction:column;
-  transform:translateX(-100%);transition:transform .26s cubic-bezier(.4,0,.2,1);
-  border-right:1px solid var(--border);overflow:hidden
-}
-.mob-overlay.open .mob-drawer{transform:translateX(0)}
-.mob-drawer-hd{
-  padding:18px 14px 14px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;flex-shrink:0
-}
-.mob-drawer-logo{font-size:20px;font-weight:900;color:var(--gold);letter-spacing:-1px}
-.mob-drawer-sub{font-size:10px;color:rgba(37,99,235,.5);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
-.mob-close{width:34px;height:34px;border:1px solid var(--border);background:var(--card2);border-radius:8px;cursor:pointer;font-size:18px;color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.mob-drawer-nav{flex:1;padding:10px 8px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
-.mob-drawer-ft{padding:14px;border-top:1px solid var(--border);flex-shrink:0}
+/* ── SPINNER ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:18px;height:18px;border:2px solid rgba(240,185,11,.2);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin:24px auto;display:block}
 
 /* ── RESPONSIVE ── */
-@media(max-width:768px){
-  .sidebar{display:none}
-  .mobile-topbar{display:flex}
-  .form-grid{grid-template-columns:1fr}
-  table{font-size:12px}
-  th,td{padding:8px 10px}
-  .page-header{padding:14px 16px}
-  .page-body{padding:16px}
-  .stats-grid{grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:480px){
+  .stat-grid{gap:6px}
+  .stat-val{font-size:14px}
+  td,th{padding:8px 10px}
+  .panel{padding:10px}
 }
 </style>
 </head>
@@ -243,401 +248,279 @@ tr:hover td{background:var(--card)}
 <!-- ══ LOGIN ══ -->
 <div id="loginScreen">
   <div class="login-box">
-    <div class="login-logo">◈NEXUS</div>
-    <div class="login-sub">Admin Panel</div>
-    <h2>Sign In</h2>
-    <p>Enter your admin key to access the panel</p>
-    <div class="login-err" id="loginErr">Invalid admin key</div>
+    <div class="login-logo">
+      <span class="login-mark">◈ NEXUS</span>
+      <div class="login-sub">Admin Control Panel</div>
+    </div>
+    <div class="login-err" id="loginErr">❌ Invalid admin key</div>
     <label class="lbl">Admin Key</label>
     <input type="password" class="inp" id="adminKeyInput" placeholder="••••••••••••" autocomplete="off"
       onkeydown="if(event.key==='Enter')doAdminLogin()">
-    <button class="btn-gold" onclick="doAdminLogin()">Access Panel</button>
+    <button class="btn-login" onclick="doAdminLogin()">🔓 Access Panel</button>
   </div>
 </div>
 
 <!-- ══ ADMIN PANEL ══ -->
-<div id="adminPanel">
+<div id="adminPanel" style="display:none">
 
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="sidebar-logo">
-      <div class="s-mark">◈ NEXUS</div>
-      <div class="s-sub">Admin Control</div>
+  <!-- Topbar -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-brand">◈ NEXUS</div>
+      <div class="topbar-sub">Admin Control</div>
     </div>
-    <nav class="sidebar-nav">
-      <button class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard',this)">
-        <span class="ni-icon">📊</span> Dashboard
-      </button>
-      <button class="nav-item" data-tab="withdrawals" onclick="showTab('withdrawals',this)">
-        <span class="ni-icon">💸</span> Withdrawals
-        <span class="ni-badge" id="pendingBadge" style="display:none">0</span>
-      </button>
-      <button class="nav-item" data-tab="deposits" onclick="showTab('deposits',this)">
-        <span class="ni-icon">📥</span> Unmatched Deposits
-        <span class="ni-badge" id="unmatchedBadge" style="display:none">0</span>
-      </button>
-      <button class="nav-item" data-tab="giftcodes" onclick="showTab('giftcodes',this)">
-        <span class="ni-icon">🎁</span> Gift Codes
-      </button>
-      <button class="nav-item" data-tab="products" onclick="showTab('products',this)">
-        <span class="ni-icon">📦</span> Products
-      </button>
-      <button class="nav-item" data-tab="investments" onclick="showTab('investments',this)">
-        <span class="ni-icon">📈</span> Investments
-      </button>
-      <button class="nav-item" data-tab="transactions" onclick="showTab('transactions',this)">
-        <span class="ni-icon">🧾</span> Transactions
-      </button>
-      <button class="nav-item" data-tab="users" onclick="showTab('users',this)">
-        <span class="ni-icon">👥</span> Users
-      </button>
-      <button class="nav-item" data-tab="referrals" onclick="showTab('referrals',this)">
-        <span class="ni-icon">🌐</span> Referrals
-      </button>
-      <button class="nav-item" data-tab="broadcast" onclick="showTab('broadcast',this)">
-        <span class="ni-icon">📣</span> Broadcast
-      </button>
-      <button class="nav-item" data-tab="settings" onclick="showTab('settings',this)">
-        <span class="ni-icon">⚙️</span> Settings
-      </button>
-    </nav>
-    <div class="sidebar-footer">
-      <button class="btn-logout" onclick="adminLogout()">🚪 Logout</button>
-    </div>
-  </aside>
+    <button class="btn btn-sm btn-outline" onclick="adminLogout()">🚪 Logout</button>
+  </div>
 
-  <!-- Mobile drawer -->
-  <div class="mob-overlay" id="mobOverlay" onclick="if(event.target===this||event.target===document.getElementById('mobOverlay'))closeDrawer()">
-    <div class="mob-drawer">
-      <div class="mob-drawer-hd">
-        <div>
-          <div class="mob-drawer-logo">◈ NEXUS</div>
-          <div class="mob-drawer-sub">Admin Control</div>
-        </div>
-        <button class="mob-close" onclick="closeDrawer()">✕</button>
-      </div>
-      <nav class="mob-drawer-nav">
-        <button class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard',this)"><span class="ni-icon">📊</span> Dashboard</button>
-        <button class="nav-item" data-tab="withdrawals" onclick="showTab('withdrawals',this)"><span class="ni-icon">💸</span> Withdrawals<span class="ni-badge" id="mobPendingBadge" style="display:none">0</span></button>
-        <button class="nav-item" data-tab="deposits" onclick="showTab('deposits',this)"><span class="ni-icon">📥</span> Unmatched Deposits<span class="ni-badge" id="mobUnmatchedBadge" style="display:none">0</span></button>
-        <button class="nav-item" data-tab="giftcodes" onclick="showTab('giftcodes',this)"><span class="ni-icon">🎁</span> Gift Codes</button>
-        <button class="nav-item" data-tab="products" onclick="showTab('products',this)"><span class="ni-icon">📦</span> Products</button>
-        <button class="nav-item" data-tab="investments" onclick="showTab('investments',this)"><span class="ni-icon">📈</span> Investments</button>
-        <button class="nav-item" data-tab="transactions" onclick="showTab('transactions',this)"><span class="ni-icon">🧾</span> Transactions</button>
-        <button class="nav-item" data-tab="users" onclick="showTab('users',this)"><span class="ni-icon">👥</span> Users</button>
-        <button class="nav-item" data-tab="referrals" onclick="showTab('referrals',this)"><span class="ni-icon">🌐</span> Referrals</button>
-        <button class="nav-item" data-tab="broadcast" onclick="showTab('broadcast',this)"><span class="ni-icon">📣</span> Broadcast</button>
-        <button class="nav-item" data-tab="settings" onclick="showTab('settings',this)"><span class="ni-icon">⚙️</span> Settings</button>
-      </nav>
-      <div class="mob-drawer-ft">
-        <button class="btn-logout" onclick="adminLogout()">🚪 Logout</button>
+  <!-- Tab bar — scrolls horizontally on mobile, all 11 tabs always reachable -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard',this)">📊 Dashboard</button>
+    <button class="tab-btn" data-tab="withdrawals" onclick="showTab('withdrawals',this)">💸 Withdrawals<span class="tab-count" id="pendingBadge" style="display:none">0</span></button>
+    <button class="tab-btn" data-tab="deposits" onclick="showTab('deposits',this)">📥 Deposits<span class="tab-count" id="unmatchedBadge" style="display:none">0</span></button>
+    <button class="tab-btn" data-tab="giftcodes" onclick="showTab('giftcodes',this)">🎁 Gift Codes</button>
+    <button class="tab-btn" data-tab="products" onclick="showTab('products',this)">📦 Products</button>
+    <button class="tab-btn" data-tab="investments" onclick="showTab('investments',this)">📈 Investments</button>
+    <button class="tab-btn" data-tab="transactions" onclick="showTab('transactions',this)">🧾 Transactions</button>
+    <button class="tab-btn" data-tab="users" onclick="showTab('users',this)">👥 Users</button>
+    <button class="tab-btn" data-tab="referrals" onclick="showTab('referrals',this)">🌐 Referrals</button>
+    <button class="tab-btn" data-tab="broadcast" onclick="showTab('broadcast',this)">📣 Broadcast</button>
+    <button class="tab-btn" data-tab="settings" onclick="showTab('settings',this)">⚙️ Settings</button>
+  </div>
+
+  <!-- ── DASHBOARD ── -->
+  <div class="panel active" id="dashboardPanel">
+    <div class="stat-grid" id="statsGrid">
+      <div class="stat-box"><div class="spinner"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚡ Recent Withdrawals <button class="btn btn-sm btn-primary" onclick="loadDashboard()">↺ Refresh</button></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>User</th><th>Phone</th><th>Amount</th><th>Net</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="recentWithdrawals"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
+        </table>
       </div>
     </div>
   </div>
 
-  <!-- Main -->
-  <div class="main-content">
-
-    <!-- Mobile top bar -->
-    <div class="mobile-topbar" id="mobileTopbar">
-      <div class="mtb-left">
-        <button class="hamburger" onclick="openDrawer()" aria-label="Open menu">
-          <span></span><span></span><span></span>
-        </button>
-        <span class="mtb-title" id="mobilePageTitle">Dashboard</span>
+  <!-- ── WITHDRAWALS ── -->
+  <div class="panel" id="withdrawalsPanel">
+    <div class="card">
+      <div class="card-title">💸 Withdrawals <button class="btn btn-sm btn-primary" onclick="loadWithdrawals()">↺ Refresh</button></div>
+      <div class="filter-tabs">
+        <button class="ftab active" onclick="filterWithdrawals('pending',this)">Pending</button>
+        <button class="ftab" onclick="filterWithdrawals('processed',this)">Processed</button>
+        <button class="ftab" onclick="filterWithdrawals('all',this)">All</button>
       </div>
-      <div class="mtb-right">
-        <span class="mtb-alert" id="mobAlertBadge" style="display:none">0</span>
-        <div class="mtb-logo">◈</div>
-      </div>
-    </div>
-
-    <!-- ── DASHBOARD ── -->
-    <div class="tab-page active" id="tab-dashboard">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Dashboard</div>
-          <div class="page-sub">Platform overview</div>
-        </div>
-        <button class="btn-sm gold" onclick="loadDashboard()">↺ Refresh</button>
-      </div>
-      <div class="page-body">
-        <div class="stats-grid" id="statsGrid">
-          <div class="stat-card"><div class="sc-val">—</div><div class="sc-lbl">Loading…</div></div>
-        </div>
-        <div class="table-wrap">
-          <div class="table-header">
-            <span class="table-title">Recent Withdrawals</span>
-          </div>
-          <table>
-            <thead><tr><th>User</th><th>Phone</th><th>Amount</th><th>Net</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody id="recentWithdrawals"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── WITHDRAWALS ── -->
-    <div class="tab-page" id="tab-withdrawals">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Withdrawals</div>
-          <div class="page-sub">Review and process user withdrawals</div>
-        </div>
-        <button class="btn-sm gold" onclick="loadWithdrawals()">↺ Refresh</button>
-      </div>
-      <div class="table-wrap" style="margin:24px">
-        <div class="filter-tabs">
-          <button class="ftab active" onclick="filterWithdrawals('pending',this)">Pending</button>
-          <button class="ftab" onclick="filterWithdrawals('processed',this)">Processed</button>
-          <button class="ftab" onclick="filterWithdrawals('all',this)">All</button>
-        </div>
+      <div class="table-wrap">
         <table>
-          <thead><tr><th>User</th><th>Phone (send to)</th><th>Requested</th><th>Net</th><th>Fee</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>User</th><th>Send To</th><th>Requested</th><th>Net</th><th>Fee</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="withdrawalsTable"><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
+  </div>
 
-    <!-- ── UNMATCHED DEPOSITS ── -->
-    <div class="tab-page" id="tab-deposits">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Unmatched Deposits</div>
-          <div class="page-sub">SMS deposits with no matching user phone</div>
-        </div>
-        <button class="btn-sm gold" onclick="loadUnmatched()">↺ Refresh</button>
-      </div>
-      <div class="table-wrap" style="margin:24px">
+  <!-- ── UNMATCHED DEPOSITS ── -->
+  <div class="panel" id="depositsPanel">
+    <div class="card">
+      <div class="card-title">📥 Unmatched Deposits <button class="btn btn-sm btn-primary" onclick="loadUnmatched()">↺ Refresh</button></div>
+      <div class="table-wrap">
         <table>
           <thead><tr><th>Phone</th><th>Amount</th><th>Txn ID</th><th>Received</th><th>Status</th><th>Action</th></tr></thead>
           <tbody id="unmatchedTable"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
+  </div>
 
-    <!-- ── GIFT CODES ── -->
-    <div class="tab-page" id="tab-giftcodes">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Gift Codes</div>
-          <div class="page-sub">Generate and manage codes (100–15,000 UGX random at redemption)</div>
-        </div>
-        <button class="btn-sm gold" onclick="openModal('generateModal')">+ Generate Codes</button>
+  <!-- ── GIFT CODES ── -->
+  <div class="panel" id="giftcodesPanel">
+    <div class="card">
+      <div class="card-title">
+        🎁 Gift Codes
+        <button class="btn btn-sm btn-primary" onclick="openModal('generateModal')">+ Generate Codes</button>
       </div>
-      <div class="table-wrap" style="margin:24px">
-        <div class="filter-tabs">
-          <button class="ftab active" onclick="filterCodes('active',this)">Active</button>
-          <button class="ftab" onclick="filterCodes('redeemed',this)">Redeemed</button>
-          <button class="ftab" onclick="filterCodes('expired',this)">Expired</button>
-          <button class="ftab" onclick="filterCodes('all',this)">All</button>
-        </div>
+      <div class="filter-tabs">
+        <button class="ftab active" onclick="filterCodes('active',this)">Active</button>
+        <button class="ftab" onclick="filterCodes('redeemed',this)">Redeemed</button>
+        <button class="ftab" onclick="filterCodes('expired',this)">Expired</button>
+        <button class="ftab" onclick="filterCodes('all',this)">All</button>
+      </div>
+      <div class="table-wrap">
         <table>
           <thead><tr><th>Code</th><th>Status</th><th>Redeemed By</th><th>Expires</th><th>Created</th><th>Action</th></tr></thead>
           <tbody id="codesTable"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
+  </div>
 
-    <!-- ── PRODUCTS ── -->
-    <div class="tab-page" id="tab-products">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Investment Plans</div>
-          <div class="page-sub">Manage available investment products</div>
-        </div>
-        <button class="btn-sm gold" onclick="openAddProduct()">+ Add Plan</button>
+  <!-- ── PRODUCTS ── -->
+  <div class="panel" id="productsPanel">
+    <div class="card">
+      <div class="card-title">
+        📦 Investment Plans
+        <button class="btn btn-sm btn-primary" onclick="openAddProduct()">+ Add Plan</button>
       </div>
-      <div class="page-body">
-        <div class="products-admin-grid" id="productsGrid">
-          <div style="color:var(--text2);grid-column:1/-1;padding:20px;text-align:center">Loading plans…</div>
-        </div>
+      <div class="products-admin-grid" id="productsGrid">
+        <div style="color:var(--muted);grid-column:1/-1;padding:30px;text-align:center">Loading plans…</div>
       </div>
     </div>
+  </div>
 
-    <!-- ── USERS ── -->
-    <div class="tab-page" id="tab-users">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Users</div>
-          <div class="page-sub">Search and manage user accounts</div>
-        </div>
+  <!-- ── INVESTMENTS ── -->
+  <div class="panel" id="investmentsPanel">
+    <div class="card">
+      <div class="card-title">📈 Investments <button class="btn btn-sm btn-primary" onclick="loadInvestments()">↺ Refresh</button></div>
+      <div class="filter-tabs">
+        <button class="ftab active" onclick="filterInv('active',this)">Active</button>
+        <button class="ftab" onclick="filterInv('matured',this)">Matured</button>
+        <button class="ftab" onclick="filterInv('claimed',this)">Claimed</button>
+        <button class="ftab" onclick="filterInv('all',this)">All</button>
       </div>
-      <div class="page-body">
-        <div class="search-bar">
-          <input class="search-input" id="userSearch" placeholder="Search by phone or name…" onkeydown="if(event.key==='Enter')searchUsers()">
-          <button class="btn-sm gold" onclick="searchUsers()">Search</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Name</th><th>Phone</th><th>Balance</th><th>Invested</th><th>Commission</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="usersTable"><tr class="empty-row"><td colspan="7">Search for a user above</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── INVESTMENTS ── -->
-    <div class="tab-page" id="tab-investments">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Investments</div>
-          <div class="page-sub">All user investment plans</div>
-        </div>
-        <button class="btn-sm gold" onclick="loadInvestments()">↺ Refresh</button>
-      </div>
-      <div class="table-wrap" style="margin:24px">
-        <div class="filter-tabs">
-          <button class="ftab active" onclick="filterInv('active',this)">Active</button>
-          <button class="ftab" onclick="filterInv('matured',this)">Matured</button>
-          <button class="ftab" onclick="filterInv('claimed',this)">Claimed</button>
-          <button class="ftab" onclick="filterInv('all',this)">All</button>
-        </div>
+      <div class="table-wrap">
         <table>
           <thead><tr><th>User</th><th>Plan</th><th>Invested</th><th>Expected Return</th><th>Started</th><th>Matures</th><th>Status</th></tr></thead>
           <tbody id="investmentsTable"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
+  </div>
 
-    <!-- ── TRANSACTIONS ── -->
-    <div class="tab-page" id="tab-transactions">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Transactions</div>
-          <div class="page-sub">Full financial activity log</div>
-        </div>
-        <button class="btn-sm gold" onclick="loadTransactions()">↺ Refresh</button>
+  <!-- ── TRANSACTIONS ── -->
+  <div class="panel" id="transactionsPanel">
+    <div class="card">
+      <div class="card-title">🧾 Transactions <button class="btn btn-sm btn-primary" onclick="loadTransactions()">↺ Refresh</button></div>
+      <div class="filter-tabs">
+        <button class="ftab active" onclick="filterTx('all',this)">All</button>
+        <button class="ftab" onclick="filterTx('deposit',this)">Deposits</button>
+        <button class="ftab" onclick="filterTx('commission',this)">Commissions</button>
+        <button class="ftab" onclick="filterTx('checkin',this)">Check-ins</button>
+        <button class="ftab" onclick="filterTx('investment_return',this)">Returns</button>
+        <button class="ftab" onclick="filterTx('gift_code',this)">Gift Codes</button>
       </div>
-      <div class="table-wrap" style="margin:24px">
-        <div class="filter-tabs">
-          <button class="ftab active" onclick="filterTx('all',this)">All</button>
-          <button class="ftab" onclick="filterTx('deposit',this)">Deposits</button>
-          <button class="ftab" onclick="filterTx('commission',this)">Commissions</button>
-          <button class="ftab" onclick="filterTx('checkin',this)">Check-ins</button>
-          <button class="ftab" onclick="filterTx('investment_return',this)">Returns</button>
-          <button class="ftab" onclick="filterTx('gift_code',this)">Gift Codes</button>
-        </div>
+      <div class="table-wrap">
         <table>
           <thead><tr><th>Type</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
           <tbody id="transactionsTable"><tr class="empty-row"><td colspan="5">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
+  </div>
 
-    <!-- ── REFERRALS ── -->
-    <div class="tab-page" id="tab-referrals">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Referrals & Teams</div>
-          <div class="page-sub">Top referrers by team size and commission earned</div>
-        </div>
-        <button class="btn-sm gold" onclick="loadReferrals()">↺ Refresh</button>
+  <!-- ── USERS ── -->
+  <div class="panel" id="usersPanel">
+    <div class="card">
+      <div class="card-title">👥 Users</div>
+      <div class="search-bar">
+        <input class="search-input" id="userSearch" placeholder="Search by phone or name…" onkeydown="if(event.key==='Enter')searchUsers()">
+        <button class="btn btn-sm btn-primary" onclick="searchUsers()">Search</button>
       </div>
-      <div class="page-body">
-        <div class="search-bar">
-          <input class="search-input" id="refSearch" placeholder="Search referrer by phone, name, or referral code…" onkeydown="if(event.key==='Enter')loadReferrals()">
-          <button class="btn-sm gold" onclick="loadReferrals()">Search</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Referrer</th><th>Ref Code</th><th>L1</th><th>L2</th><th>L3</th><th>Team Total</th><th>Commission Earned</th></tr></thead>
-            <tbody id="referralsTable"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
-          </table>
-        </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Phone</th><th>Balance</th><th>Invested</th><th>Commission</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="usersTable"><tr class="empty-row"><td colspan="7">Search for a user above</td></tr></tbody>
+        </table>
       </div>
     </div>
+  </div>
 
-    <!-- ── BROADCAST ── -->
-    <div class="tab-page" id="tab-broadcast">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Broadcast</div>
-          <div class="page-sub">Send a notification to users</div>
-        </div>
+  <!-- ── REFERRALS ── -->
+  <div class="panel" id="referralsPanel">
+    <div class="card">
+      <div class="card-title">🌐 Referrals &amp; Teams <button class="btn btn-sm btn-primary" onclick="loadReferrals()">↺ Refresh</button></div>
+      <div class="search-bar">
+        <input class="search-input" id="refSearch" placeholder="Search by phone, name, or ref code…" onkeydown="if(event.key==='Enter')loadReferrals()">
+        <button class="btn btn-sm btn-primary" onclick="loadReferrals()">Search</button>
       </div>
-      <div class="page-body" style="max-width:600px">
-        <div class="form-group">
-          <label class="form-label">Audience</label>
-          <select class="form-select" id="bcAudience">
-            <option value="all">All users</option>
-            <option value="one">Single user (by phone)</option>
-          </select>
-        </div>
-        <div class="form-group" id="bcPhoneGroup" style="display:none">
-          <label class="form-label">User Phone</label>
-          <input class="form-input mono-input" id="bcPhone" placeholder="+256700000000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Title</label>
-          <input class="form-input" id="bcTitle" placeholder="e.g. New investment plans available!">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Message</label>
-          <textarea class="form-textarea" id="bcMessage" placeholder="Write your message…"></textarea>
-        </div>
-        <button class="btn-sm gold" style="width:100%" onclick="sendBroadcast()">📣 Send Notification</button>
-        <div class="table-wrap" style="margin-top:24px">
-          <div class="table-header"><span class="table-title">Recent Broadcasts</span></div>
-          <table>
-            <thead><tr><th>Title</th><th>Audience</th><th>Sent</th></tr></thead>
-            <tbody id="broadcastTable"><tr class="empty-row"><td colspan="3">No broadcasts yet</td></tr></tbody>
-          </table>
-        </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Referrer</th><th>Ref Code</th><th>L1</th><th>L2</th><th>L3</th><th>Team</th><th>Commission</th></tr></thead>
+          <tbody id="referralsTable"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
+        </table>
       </div>
     </div>
+  </div>
 
-    <!-- ── SETTINGS ── -->
-    <div class="tab-page" id="tab-settings">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Platform Settings</div>
-          <div class="page-sub">Configure Nexus platform</div>
-        </div>
-        <button class="btn-sm gold" onclick="saveSettings()">Save All</button>
+  <!-- ── BROADCAST ── -->
+  <div class="panel" id="broadcastPanel">
+    <div class="card" style="max-width:600px">
+      <div class="card-title">📣 Send Notification</div>
+      <div class="form-group">
+        <label class="form-label">Audience</label>
+        <select class="form-input" id="bcAudience" onchange="document.getElementById('bcPhoneGroup').style.display=this.value==='one'?'block':'none'">
+          <option value="all">All Users</option>
+          <option value="one">Single User (by phone)</option>
+        </select>
       </div>
-      <div class="page-body" style="max-width:600px">
-
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">Maintenance Mode</div>
-            <div class="setting-desc">Disables the app for all users</div>
-          </div>
-          <label class="toggle"><input type="checkbox" id="settMaintenance" onchange="toggleMaintenance(this)"><span class="toggle-slider"></span></label>
-        </div>
-
-        <div class="form-group" style="margin-top:16px">
-          <label class="form-label">Platform MoMo Number (for deposits)</label>
-          <input class="form-input mono-input" id="settDepositPhone" placeholder="0700000000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Check-in Bonus (UGX)</label>
-          <input class="form-input" id="settCheckin" type="number" placeholder="500">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Welcome Bonus (UGX)</label>
-          <input class="form-input" id="settWelcome" type="number" placeholder="10000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Customer Service WhatsApp</label>
-          <input class="form-input" id="settWhatsapp" placeholder="+256700000000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Customer Service Telegram</label>
-          <input class="form-input" id="settTelegram" placeholder="@nexussupport">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Slideshow Images (one URL per row)</label>
-          <div id="slideshowUrls"></div>
-          <button class="btn-sm outline" style="margin-top:8px" onclick="addSlideshowUrl()">+ Add Image URL</button>
-        </div>
-
-        <button class="btn-sm gold" style="width:100%;margin-top:8px" onclick="saveSettings()">Save Settings</button>
+      <div class="form-group" id="bcPhoneGroup" style="display:none">
+        <label class="form-label">User Phone</label>
+        <input class="form-input mono" id="bcPhone" placeholder="+256700000000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input class="form-input" id="bcTitle" placeholder="e.g. New investment plans available!">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Message</label>
+        <textarea class="form-input" id="bcMessage" placeholder="Write your message…" style="min-height:100px"></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="sendBroadcast()">📣 Send Notification</button>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 Recent Broadcasts</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Title</th><th>Audience</th><th>Sent</th></tr></thead>
+          <tbody id="broadcastTable"><tr class="empty-row"><td colspan="3">No broadcasts yet</td></tr></tbody>
+        </table>
       </div>
     </div>
+  </div>
 
-  </div><!-- end main-content -->
+  <!-- ── SETTINGS ── -->
+  <div class="panel" id="settingsPanel">
+    <div class="card" style="max-width:600px">
+      <div class="card-title">⚙️ Platform Settings <button class="btn btn-sm btn-primary" onclick="saveSettings()">💾 Save All</button></div>
+
+      <div class="setting-row">
+        <div>
+          <div style="font-size:13px;font-weight:700">Maintenance Mode</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Disables app for all users</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="settMaintenance" onchange="toggleMaintenance(this)"><span class="toggle-slider"></span></label>
+      </div>
+
+      <div class="form-group" style="margin-top:14px">
+        <label class="form-label">Platform MoMo Number (for deposits)</label>
+        <input class="form-input mono" id="settDepositPhone" placeholder="0700000000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Check-in Bonus (UGX)</label>
+        <input class="form-input" id="settCheckin" type="number" placeholder="500">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Welcome Bonus (UGX)</label>
+        <input class="form-input" id="settWelcome" type="number" placeholder="10000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Customer Service WhatsApp</label>
+        <input class="form-input" id="settWhatsapp" placeholder="+256700000000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Customer Service Telegram</label>
+        <input class="form-input" id="settTelegram" placeholder="@nexussupport">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Slideshow Images (one URL per row)</label>
+        <div id="slideshowUrls"></div>
+        <button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="addSlideshowUrl()">+ Add Image URL</button>
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:6px" onclick="saveSettings()">💾 Save Settings</button>
+    </div>
+  </div>
+
 </div><!-- end adminPanel -->
 
 <!-- ══ MODALS ══ -->
@@ -645,8 +528,8 @@ tr:hover td{background:var(--card)}
 <!-- Generate gift codes -->
 <div id="generateModal" class="modal-overlay" onclick="if(event.target===this)closeModal('generateModal')">
   <div class="modal-box">
-    <div class="modal-title">Generate Gift Codes</div>
-    <div class="modal-sub">Codes expire after the set hours. Amount is random (100–15,000 UGX) at redemption.</div>
+    <div class="modal-title">🎁 Generate Gift Codes</div>
+    <div class="modal-sub">Random 100–15,000 UGX at redemption. Cryptographically secure.</div>
     <div class="form-group">
       <label class="form-label">Number of Codes</label>
       <input class="form-input" id="genCount" type="number" value="5" min="1" max="50">
@@ -656,12 +539,12 @@ tr:hover td{background:var(--card)}
       <input class="form-input" id="genExpiry" type="number" value="24" min="1">
     </div>
     <div id="generatedCodes" style="display:none" class="codes-generated">
-      <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Generated Codes — click to copy</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Generated Codes — tap to copy</div>
       <div id="codesList"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-sm outline" onclick="closeModal('generateModal')">Close</button>
-      <button class="btn-sm gold" onclick="generateCodes()">Generate</button>
+      <button class="btn btn-outline" onclick="closeModal('generateModal')">Close</button>
+      <button class="btn btn-primary" onclick="generateCodes()">Generate</button>
     </div>
   </div>
 </div>
@@ -669,19 +552,19 @@ tr:hover td{background:var(--card)}
 <!-- Process withdrawal -->
 <div id="processModal" class="modal-overlay" onclick="if(event.target===this)closeModal('processModal')">
   <div class="modal-box">
-    <div class="modal-title">Mark as Processed</div>
+    <div class="modal-title">✅ Mark as Processed</div>
     <div class="modal-sub" id="processSubtitle">Withdrawal details</div>
     <div class="form-group">
       <label class="form-label">Transaction Reference (optional)</label>
-      <input class="form-input mono-input" id="processRef" placeholder="e.g. MTN-ABC123456">
+      <input class="form-input mono" id="processRef" placeholder="e.g. MTN-ABC123456">
     </div>
     <div class="form-group">
       <label class="form-label">Note (optional)</label>
       <input class="form-input" id="processNote" placeholder="e.g. Sent via MTN MoMo">
     </div>
     <div class="modal-footer">
-      <button class="btn-sm outline" onclick="closeModal('processModal')">Cancel</button>
-      <button class="btn-sm gold" onclick="confirmProcess()">Confirm Processed</button>
+      <button class="btn btn-outline" onclick="closeModal('processModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmProcess()">✅ Confirm Processed</button>
     </div>
   </div>
 </div>
@@ -689,15 +572,15 @@ tr:hover td{background:var(--card)}
 <!-- Reject withdrawal -->
 <div id="rejectModal" class="modal-overlay" onclick="if(event.target===this)closeModal('rejectModal')">
   <div class="modal-box">
-    <div class="modal-title">Reject Withdrawal</div>
+    <div class="modal-title">❌ Reject Withdrawal</div>
     <div class="modal-sub">Amount will be refunded to user's wallet.</div>
     <div class="form-group">
       <label class="form-label">Reason</label>
       <input class="form-input" id="rejectReason" placeholder="e.g. Invalid phone number">
     </div>
     <div class="modal-footer">
-      <button class="btn-sm outline" onclick="closeModal('rejectModal')">Cancel</button>
-      <button class="btn-sm" style="background:var(--red);color:#fff;flex:1;border:none" onclick="confirmReject()">Reject & Refund</button>
+      <button class="btn btn-outline" onclick="closeModal('rejectModal')">Cancel</button>
+      <button class="btn btn-red" onclick="confirmReject()">❌ Reject &amp; Refund</button>
     </div>
   </div>
 </div>
@@ -705,16 +588,16 @@ tr:hover td{background:var(--card)}
 <!-- Add/Edit product -->
 <div id="productModal" class="modal-overlay" onclick="if(event.target===this)closeModal('productModal')">
   <div class="modal-box">
-    <div class="modal-title" id="productModalTitle">Add Investment Plan</div>
+    <div class="modal-title" id="productModalTitle">📦 Add Investment Plan</div>
     <div class="modal-sub">Fill in the plan details below</div>
     <input type="hidden" id="editProductId">
-    <div class="form-grid">
-      <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Plan Name</label>
-        <input class="form-input" id="pName" placeholder="e.g. Gold Plan">
-      </div>
+    <div class="form-group">
+      <label class="form-label">Plan Name</label>
+      <input class="form-input" id="pName" placeholder="e.g. Gold Plan">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group">
-        <label class="form-label">Investment Price (UGX)</label>
+        <label class="form-label">Price (UGX)</label>
         <input class="form-input" id="pPrice" type="number" placeholder="50000">
       </div>
       <div class="form-group">
@@ -733,15 +616,15 @@ tr:hover td{background:var(--card)}
     <div class="form-group">
       <label class="form-label">Product Image</label>
       <input class="form-input" id="pImageUrl" placeholder="Cloudinary URL or paste image URL">
-      <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
         <input type="file" id="pImageFile" accept="image/*" style="display:none" onchange="uploadProductImage(this)">
-        <button class="btn-sm outline" onclick="document.getElementById('pImageFile').click()">📷 Upload Image</button>
-        <span id="pImageStatus" style="font-size:12px;color:var(--text2)"></span>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('pImageFile').click()">📷 Upload Image</button>
+        <span id="pImageStatus" style="font-size:11px;color:var(--muted)"></span>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn-sm outline" onclick="closeModal('productModal')">Cancel</button>
-      <button class="btn-sm gold" onclick="saveProduct()">Save Plan</button>
+      <button class="btn btn-outline" onclick="closeModal('productModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProduct()">💾 Save Plan</button>
     </div>
   </div>
 </div>
@@ -749,7 +632,7 @@ tr:hover td{background:var(--card)}
 <!-- Add funds -->
 <div id="fundsModal" class="modal-overlay" onclick="if(event.target===this)closeModal('fundsModal')">
   <div class="modal-box">
-    <div class="modal-title">Add Funds</div>
+    <div class="modal-title">💰 Add Funds</div>
     <div class="modal-sub" id="fundsUserName">User</div>
     <input type="hidden" id="fundsUserId">
     <div class="form-group">
@@ -761,8 +644,8 @@ tr:hover td{background:var(--card)}
       <input class="form-input" id="fundsNote" placeholder="e.g. Manual deposit credit">
     </div>
     <div class="modal-footer">
-      <button class="btn-sm outline" onclick="closeModal('fundsModal')">Cancel</button>
-      <button class="btn-sm gold" onclick="confirmAddFunds()">Credit Funds</button>
+      <button class="btn btn-outline" onclick="closeModal('fundsModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAddFunds()">💰 Credit Funds</button>
     </div>
   </div>
 </div>
@@ -770,16 +653,16 @@ tr:hover td{background:var(--card)}
 <!-- Assign unmatched deposit -->
 <div id="assignModal" class="modal-overlay" onclick="if(event.target===this)closeModal('assignModal')">
   <div class="modal-box">
-    <div class="modal-title">Assign Deposit to User</div>
+    <div class="modal-title">🔗 Assign Deposit to User</div>
     <div class="modal-sub" id="assignSubtitle">Unmatched deposit details</div>
     <input type="hidden" id="assignDepId">
     <div class="form-group">
       <label class="form-label">User Phone (registered)</label>
-      <input class="form-input mono-input" id="assignPhone" placeholder="+256700000000">
+      <input class="form-input mono" id="assignPhone" placeholder="+256700000000">
     </div>
     <div class="modal-footer">
-      <button class="btn-sm outline" onclick="closeModal('assignModal')">Cancel</button>
-      <button class="btn-sm gold" onclick="confirmAssign()">Assign & Credit</button>
+      <button class="btn btn-outline" onclick="closeModal('assignModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAssign()">✅ Assign &amp; Credit</button>
     </div>
   </div>
 </div>
@@ -789,9 +672,9 @@ tr:hover td{background:var(--card)}
   <div class="modal-box" style="max-width:520px">
     <div class="modal-title" id="udName">User</div>
     <div class="modal-sub" id="udPhone">—</div>
-    <div id="udBody"><div style="text-align:center;color:var(--text2);padding:20px">Loading…</div></div>
+    <div id="udBody"><div class="spinner"></div></div>
     <div class="modal-footer">
-      <button class="btn-sm outline" onclick="closeModal('userDetailModal')">Close</button>
+      <button class="btn btn-outline" onclick="closeModal('userDetailModal')">Close</button>
     </div>
   </div>
 </div>
@@ -802,7 +685,7 @@ tr:hover td{background:var(--card)}
 <script type="module">
 import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, collection, doc, getDoc, getDocs, updateDoc, setDoc, addDoc, deleteDoc, query, where, orderBy, limit, writeBatch, serverTimestamp, increment, arrayUnion, Timestamp }
+import { getFirestore, collection, doc, getDoc, getDocs, updateDoc, setDoc, addDoc, deleteDoc, query, where, orderBy, limit, writeBatch, serverTimestamp, increment, Timestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -811,11 +694,10 @@ const firebaseConfig = {
   projectId:         "x--engine",
   storageBucket:     "x--engine.firebasestorage.app",
   messagingSenderId: "420172832235",
-  appId:             "1:420172832235:web:735d05ea80069177ec4dae"
+  appId:             "1:420172832255:web:735d05ea80069177ec4dae"
 };
 
 const SERVER = 'https://x-engine-server-production.up.railway.app';
-
 const CLOUD  = 'dcmfxgofa';
 const PRESET = 'x-engineuploads';
 
@@ -826,11 +708,13 @@ const db    = getFirestore(fbApp);
 let _adminKey = '';
 let _witFilter = 'pending';
 let _codesFilter = 'active';
+let _invFilter = 'active';
+let _txFilter = 'all';
 let _processingWitId = null;
 let _rejectingWitId  = null;
 
 // ── UTILS ──
-function ugx(n)  { return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+function ugx(n) { return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function toast(msg, type='') {
   const t = document.getElementById('aToast');
   t.textContent = msg; t.className = 'show ' + type;
@@ -844,10 +728,8 @@ function fmtDate(ts) {
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleDateString('en-UG', { day:'2-digit', month:'short', year:'numeric' });
 }
-function eatNow() { return new Date(Date.now() + 3*3600000); }
 function genCode6() {
-  // Web Crypto — cryptographically unpredictable, not Math.random
-  const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // 31 chars, no I/L/O/0/1 ambiguity
+  const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => CHARS[b % CHARS.length]).join('');
@@ -864,7 +746,7 @@ window.doAdminLogin = () => {
   _adminKey = key;
   document.getElementById('loginErr').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('adminPanel').classList.add('show');
+  document.getElementById('adminPanel').style.display = 'block';
   loadDashboard();
   loadWithdrawals();
   loadCodes();
@@ -873,31 +755,18 @@ window.doAdminLogin = () => {
 };
 window.adminLogout = () => {
   _adminKey = '';
-  document.getElementById('adminPanel').classList.remove('show');
+  document.getElementById('adminPanel').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('adminKeyInput').value = '';
 };
 
 // ── NAV ──
-const TAB_NAMES = {
-  dashboard:'Dashboard', withdrawals:'Withdrawals', deposits:'Unmatched Deposits',
-  giftcodes:'Gift Codes', products:'Products', investments:'Investments',
-  transactions:'Transactions', users:'Users', referrals:'Referrals',
-  broadcast:'Broadcast', settings:'Settings'
-};
-window.openDrawer  = () => document.getElementById('mobOverlay').classList.add('open');
-window.closeDrawer = () => document.getElementById('mobOverlay').classList.remove('open');
-
 window.showTab = (tab, btn) => {
-  document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
-  // Sync active state across sidebar AND mobile drawer
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + tab)?.classList.add('active');
-  document.querySelectorAll(`.nav-item[data-tab="${tab}"]`).forEach(b => b.classList.add('active'));
-  // Update mobile topbar title
-  const titleEl = document.getElementById('mobilePageTitle');
-  if (titleEl) titleEl.textContent = TAB_NAMES[tab] || tab;
-  closeDrawer();
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const panel = document.getElementById(tab + 'Panel');
+  if (panel) panel.classList.add('active');
+  if (btn) btn.classList.add('active');
   if (tab === 'giftcodes')    loadCodes();
   if (tab === 'products')     loadProducts();
   if (tab === 'withdrawals')  loadWithdrawals();
@@ -919,43 +788,33 @@ window.loadDashboard = async () => {
       getDocs(query(collection(db,'withdrawals'),  where('status','==','pending'))),
       getDocs(query(collection(db,'unmatchedDeposits'), where('status','==','unmatched')))
     ]);
-    // Aggregate financials from user docs
-    let totalBal = 0, totalDeposited = 0, totalWithdrawn = 0, totalInvested = 0, totalCommission = 0, banned = 0;
+    let totalBal=0, totalDeposited=0, totalWithdrawn=0, totalInvested=0, totalCommission=0, banned=0;
     usersSnap.forEach(d => {
       const u = d.data();
-      totalBal        += u.walletBalance     || 0;
-      totalDeposited  += u.totalDeposited     || 0;
-      totalWithdrawn  += u.totalWithdrawn     || 0;
-      totalInvested   += u.totalInvested      || 0;
-      totalCommission += u.commissionEarned   || 0;
+      totalBal        += u.walletBalance   || 0;
+      totalDeposited  += u.totalDeposited  || 0;
+      totalWithdrawn  += u.totalWithdrawn  || 0;
+      totalInvested   += u.totalInvested   || 0;
+      totalCommission += u.commissionEarned|| 0;
       if (u.status === 'banned') banned++;
     });
     const sg = document.getElementById('statsGrid');
     sg.innerHTML = `
-      <div class="stat-card"><div class="sc-val">${usersSnap.size}</div><div class="sc-lbl">Total Users</div></div>
-      <div class="stat-card"><div class="sc-val">${invSnap.size}</div><div class="sc-lbl">Active Plans</div></div>
-      <div class="stat-card gold-accent"><div class="sc-val">${witSnap.size}</div><div class="sc-lbl">Pending Withdrawals</div></div>
-      <div class="stat-card"><div class="sc-val">${unmSnap.size}</div><div class="sc-lbl">Unmatched Deposits</div></div>
-      <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalBal)}</div><div class="sc-lbl">Wallet Liability</div></div>
-      <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalDeposited)}</div><div class="sc-lbl">Total Deposited</div></div>
-      <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalWithdrawn)}</div><div class="sc-lbl">Total Withdrawn</div></div>
-      <div class="stat-card"><div class="sc-val" style="font-size:18px">${ugx(totalInvested)}</div><div class="sc-lbl">Total Invested</div></div>
-      <div class="stat-card gold-accent"><div class="sc-val" style="font-size:18px">${ugx(totalCommission)}</div><div class="sc-lbl">Commission Paid</div></div>
-      <div class="stat-card"><div class="sc-val">${banned}</div><div class="sc-lbl">Banned Accounts</div></div>`;
-    // Update badges (sidebar + mobile drawer + mobile topbar)
+      <div class="stat-box"><div class="stat-val">${usersSnap.size}</div><div class="stat-lbl">Total Users</div></div>
+      <div class="stat-box"><div class="stat-val">${invSnap.size}</div><div class="stat-lbl">Active Plans</div></div>
+      <div class="stat-box" style="border-color:rgba(239,68,68,.25)"><div class="stat-val red">${witSnap.size}</div><div class="stat-lbl">Pending Withdrawals</div></div>
+      <div class="stat-box"><div class="stat-val">${unmSnap.size}</div><div class="stat-lbl">Unmatched Deposits</div></div>
+      <div class="stat-box" style="grid-column:span 2"><div class="stat-val" style="font-size:14px">${ugx(totalBal)}</div><div class="stat-lbl">💰 Wallet Liability</div></div>
+      <div class="stat-box"><div class="stat-val green" style="font-size:13px">${ugx(totalDeposited)}</div><div class="stat-lbl">Total Deposited</div></div>
+      <div class="stat-box"><div class="stat-val red" style="font-size:13px">${ugx(totalWithdrawn)}</div><div class="stat-lbl">Total Withdrawn</div></div>
+      <div class="stat-box"><div class="stat-val blue" style="font-size:13px">${ugx(totalInvested)}</div><div class="stat-lbl">Total Invested</div></div>
+      <div class="stat-box"><div class="stat-val" style="font-size:13px">${ugx(totalCommission)}</div><div class="stat-lbl">Commission Paid</div></div>
+      <div class="stat-box"><div class="stat-val red">${banned}</div><div class="stat-lbl">Banned Accounts</div></div>`;
+    // Badges
     const pb = document.getElementById('pendingBadge');
     pb.textContent = witSnap.size; pb.style.display = witSnap.size ? '' : 'none';
     const ub = document.getElementById('unmatchedBadge');
     ub.textContent = unmSnap.size; ub.style.display = unmSnap.size ? '' : 'none';
-    const mpb = document.getElementById('mobPendingBadge');
-    if (mpb) { mpb.textContent = witSnap.size; mpb.style.display = witSnap.size ? '' : 'none'; }
-    const mub = document.getElementById('mobUnmatchedBadge');
-    if (mub) { mub.textContent = unmSnap.size; mub.style.display = unmSnap.size ? '' : 'none'; }
-    const mab = document.getElementById('mobAlertBadge');
-    if (mab) {
-      const total = witSnap.size + unmSnap.size;
-      mab.textContent = total; mab.style.display = total ? '' : 'none';
-    }
     // Recent withdrawals
     const recSnap = await getDocs(query(collection(db,'withdrawals'), orderBy('createdAt','desc'), limit(10)));
     const tbody = document.getElementById('recentWithdrawals');
@@ -963,30 +822,29 @@ window.loadDashboard = async () => {
     tbody.innerHTML = recSnap.docs.map(d => {
       const w = d.data();
       return `<tr>
-        <td>${w.userName || '—'}</td>
-        <td class="mono">${w.withdrawalPhone}</td>
+        <td>${w.userName||'—'}</td>
+        <td class="mono">${w.withdrawalPhone||'—'}</td>
         <td>${ugx(w.amount)}</td>
         <td>${ugx(w.netAmount)}</td>
-        <td>${w.date || fmtDate(w.createdAt)}</td>
+        <td style="font-size:11px">${w.date||fmtDate(w.createdAt)}</td>
         <td><span class="badge ${w.status}">${w.status}</span></td>
-        <td>${w.status==='pending' ? `<button class="action-btn btn-green" onclick="openProcess('${d.id}','${w.userName||''}',${w.netAmount},'${w.withdrawalPhone}')">Process</button>` : '—'}</td>
+        <td>${w.status==='pending'?`<button class="action-btn btn-green" onclick="openProcess('${d.id}','${w.userName||''}',${w.netAmount},'${w.withdrawalPhone||''}')">Process</button>`:'—'}</td>
       </tr>`;
     }).join('');
-  } catch (e) { toast('Dashboard error: ' + e.message, 'error'); }
+  } catch (e) { toast('Dashboard error: '+e.message,'error'); }
 };
 
 // ── WITHDRAWALS ──
 window.filterWithdrawals = (f, btn) => {
   _witFilter = f;
-  document.querySelectorAll('#tab-withdrawals .ftab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#withdrawalsPanel .ftab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   loadWithdrawals();
 };
 window.loadWithdrawals = async () => {
   const tbody = document.getElementById('withdrawalsTable');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Loading…</td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><div class="spinner"></div></td></tr>';
   try {
-    // Single orderBy only (no composite index needed) — filter status client-side
     const snap = await getDocs(query(collection(db,'withdrawals'), orderBy('createdAt','desc'), limit(150)));
     let docs = snap.docs;
     if (_witFilter !== 'all') docs = docs.filter(d => (d.data().status||'pending') === _witFilter);
@@ -994,26 +852,26 @@ window.loadWithdrawals = async () => {
     tbody.innerHTML = docs.map(d => {
       const w = d.data();
       const actions = w.status === 'pending'
-        ? `<button class="action-btn btn-green" onclick="openProcess('${d.id}','${w.userName||''}',${w.netAmount},'${w.withdrawalPhone}')">✓ Process</button>
+        ? `<button class="action-btn btn-green" onclick="openProcess('${d.id}','${w.userName||''}',${w.netAmount},'${w.withdrawalPhone||''}')">✓ Process</button>
            <button class="action-btn btn-red" onclick="openReject('${d.id}','${w.userName||''}',${w.amount})">✗ Reject</button>`
-        : w.status === 'processed' ? `<span style="color:var(--text2);font-size:12px">${w.adminRef||'—'}</span>` : '—';
+        : w.status === 'processed' ? `<span style="color:var(--muted);font-size:11px">${w.adminRef||'—'}</span>` : '—';
       return `<tr>
-        <td><strong>${w.userName||'—'}</strong><br><span style="font-size:11px;color:var(--text2)">${w.userPhone||''}</span></td>
-        <td class="mono">${w.withdrawalPhone}</td>
+        <td><strong>${w.userName||'—'}</strong><br><span style="font-size:10px;color:var(--muted)">${w.userPhone||''}</span></td>
+        <td class="mono">${w.withdrawalPhone||'—'}</td>
         <td>${ugx(w.amount)}</td>
-        <td><strong>${ugx(w.netAmount)}</strong></td>
+        <td><strong style="color:var(--green)">${ugx(w.netAmount)}</strong></td>
         <td>${ugx(w.fee||0)}</td>
-        <td>${w.date||fmtDate(w.createdAt)}</td>
+        <td style="font-size:11px">${w.date||fmtDate(w.createdAt)}</td>
         <td><span class="badge ${w.status}">${w.status}</span></td>
         <td>${actions}</td>
       </tr>`;
     }).join('');
-  } catch (e) { toast('Error: ' + e.message, 'error'); }
+  } catch (e) { toast('Error: '+e.message,'error'); }
 };
 
 window.openProcess = (witId, name, net, phone) => {
   _processingWitId = witId;
-  document.getElementById('processSubtitle').textContent = `Send ${ugx(net)} to ${phone} for ${name || 'user'}, then confirm below.`;
+  document.getElementById('processSubtitle').textContent = `Send ${ugx(net)} to ${phone} for ${name||'user'}, then confirm below.`;
   document.getElementById('processRef').value  = '';
   document.getElementById('processNote').value = '';
   openModal('processModal');
@@ -1023,36 +881,32 @@ window.confirmProcess = async () => {
   const ref  = document.getElementById('processRef').value.trim();
   const note = document.getElementById('processNote').value.trim();
   try {
-    const snap = await getDoc(doc(db, 'withdrawals', _processingWitId));
-    if (!snap.exists()) { toast('Not found', 'error'); return; }
+    const snap = await getDoc(doc(db,'withdrawals',_processingWitId));
+    if (!snap.exists()) { toast('Not found','error'); return; }
     const w = snap.data();
-    if (w.status !== 'pending') { toast('Already ' + w.status, 'error'); closeModal('processModal'); return; }
+    if (w.status !== 'pending') { toast('Already '+w.status,'error'); closeModal('processModal'); return; }
     const batch = writeBatch(db);
-    batch.update(doc(db,'withdrawals',_processingWitId), {
-      status: 'processed', adminRef: ref, adminNote: note, processedAt: serverTimestamp()
-    });
+    batch.update(doc(db,'withdrawals',_processingWitId), { status:'processed', adminRef:ref, adminNote:note, processedAt:serverTimestamp() });
     batch.update(doc(db,'users',w.userId), { totalWithdrawn: increment(w.amount) });
-    // Update matching pending withdrawal transaction (single where — filter client-side, no composite index)
     const txSnap = await getDocs(query(collection(db,'transactions'), where('userId','==',w.userId), limit(50)));
-    const pendingTx = txSnap.docs.find(t => { const x=t.data(); return x.type==='withdrawal' && x.status==='pending'; });
-    if (pendingTx) batch.update(pendingTx.ref, { status: 'success', adminRef: ref });
+    const pendingTx = txSnap.docs.find(t => { const x=t.data(); return x.type==='withdrawal'&&x.status==='pending'; });
+    if (pendingTx) batch.update(pendingTx.ref, { status:'success', adminRef:ref });
     await batch.commit();
-    // Notify user
     await addDoc(collection(db,'notifications'), {
-      userId: w.userId, title: '✅ Withdrawal Processed!',
-      message: `Your withdrawal of ${ugx(w.netAmount)} has been sent to ${w.withdrawalPhone}.\n\n${ref ? '🔖 Ref: '+ref+'\n' : ''}📱 Check your MoMo\n\nThank you! ◈`,
-      type: 'withdrawal', amount: w.netAmount, date: new Date().toLocaleDateString(),
-      readBy: [], createdAt: serverTimestamp()
+      userId:w.userId, title:'✅ Withdrawal Processed!',
+      message:`Your withdrawal of ${ugx(w.netAmount)} has been sent to ${w.withdrawalPhone}.\n\n${ref?'🔖 Ref: '+ref+'\n':''}📱 Check your MoMo\n\nThank you! ◈`,
+      type:'withdrawal', amount:w.netAmount, date:new Date().toLocaleDateString(),
+      readBy:[], createdAt:serverTimestamp()
     });
-    toast('✅ Withdrawal marked as processed', 'success');
+    toast('✅ Withdrawal marked as processed','success');
     closeModal('processModal');
     loadWithdrawals(); loadDashboard();
-  } catch (e) { toast('Error: ' + e.message, 'error'); }
+  } catch (e) { toast('Error: '+e.message,'error'); }
 };
 
 window.openReject = (witId, name, amount) => {
   _rejectingWitId = witId;
-  document.querySelector('#rejectModal .modal-sub').textContent = `Rejecting ${ugx(amount)} for ${name || 'user'} — amount will be refunded.`;
+  document.querySelector('#rejectModal .modal-sub').textContent = `Rejecting ${ugx(amount)} for ${name||'user'} — amount will be refunded.`;
   document.getElementById('rejectReason').value = '';
   openModal('rejectModal');
 };
@@ -1064,28 +918,25 @@ window.confirmReject = async () => {
     if (!snap.exists()) return;
     const w = snap.data();
     const batch = writeBatch(db);
-    batch.update(doc(db,'withdrawals',_rejectingWitId), { status:'rejected', rejectionReason: reason, rejectedAt: serverTimestamp() });
-    batch.update(doc(db,'users',w.userId), {
-      walletBalance:   increment(w.amount),
-      withdrawalCount: increment(-1)
-    });
+    batch.update(doc(db,'withdrawals',_rejectingWitId), { status:'rejected', rejectionReason:reason, rejectedAt:serverTimestamp() });
+    batch.update(doc(db,'users',w.userId), { walletBalance:increment(w.amount), withdrawalCount:increment(-1) });
     await batch.commit();
     await addDoc(collection(db,'notifications'), {
-      userId: w.userId, title: '❌ Withdrawal Rejected',
-      message: `Your withdrawal of ${ugx(w.amount)} was rejected.\n\nReason: ${reason}\n\n${ugx(w.amount)} has been refunded to your wallet.`,
-      type: 'withdrawal_failed', amount: w.amount, date: new Date().toLocaleDateString(),
-      readBy: [], createdAt: serverTimestamp()
+      userId:w.userId, title:'❌ Withdrawal Rejected',
+      message:`Your withdrawal of ${ugx(w.amount)} was rejected.\n\nReason: ${reason}\n\n${ugx(w.amount)} has been refunded to your wallet.`,
+      type:'withdrawal_failed', amount:w.amount, date:new Date().toLocaleDateString(),
+      readBy:[], createdAt:serverTimestamp()
     });
-    toast('Withdrawal rejected — ' + ugx(w.amount) + ' refunded', '');
+    toast('Withdrawal rejected — '+ugx(w.amount)+' refunded','');
     closeModal('rejectModal');
     loadWithdrawals(); loadDashboard();
-  } catch (e) { toast('Error: ' + e.message, 'error'); }
+  } catch (e) { toast('Error: '+e.message,'error'); }
 };
 
 // ── UNMATCHED DEPOSITS ──
 window.loadUnmatched = async () => {
   const tbody = document.getElementById('unmatchedTable');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Loading…</td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="spinner"></div></td></tr>';
   try {
     const snap = await getDocs(query(collection(db,'unmatchedDeposits'), orderBy('receivedAt','desc'), limit(50)));
     if (snap.empty) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No unmatched deposits</td></tr>'; return; }
@@ -1093,11 +944,11 @@ window.loadUnmatched = async () => {
       const dep = d.data();
       return `<tr>
         <td class="mono">${dep.senderPhone||'—'}</td>
-        <td><strong>${ugx(dep.amount)}</strong></td>
-        <td class="mono" style="font-size:11px">${dep.txnId||'—'}</td>
-        <td>${fmtDate(dep.receivedAt)}</td>
+        <td><strong style="color:var(--primary)">${ugx(dep.amount)}</strong></td>
+        <td class="mono" style="font-size:10px">${dep.txnId||'—'}</td>
+        <td style="font-size:11px">${fmtDate(dep.receivedAt)}</td>
         <td><span class="badge ${dep.status==='assigned'?'processed':dep.status||'pending'}">${dep.status||'unmatched'}</span></td>
-        <td>${dep.status==='unmatched' ? `<button class="action-btn btn-blue" onclick="openAssign('${d.id}',${dep.amount},'${dep.senderPhone||''}')">Assign</button>` : '—'}</td>
+        <td>${dep.status==='unmatched'?`<button class="action-btn btn-blue" onclick="openAssign('${d.id}',${dep.amount},'${dep.senderPhone||''}')">Assign</button>`:'—'}</td>
       </tr>`;
     }).join('');
   } catch (e) { toast('Error: '+e.message,'error'); }
@@ -1111,58 +962,55 @@ window.openAssign = (depId, amount, phone) => {
 window.confirmAssign = async () => {
   const depId = document.getElementById('assignDepId').value;
   const phone = document.getElementById('assignPhone').value.trim();
-  if (!phone) { toast('Enter user phone', 'error'); return; }
+  if (!phone) { toast('Enter user phone','error'); return; }
   try {
-    const resp = await fetch(SERVER + '/admin/assign-deposit', {
+    const resp = await fetch(SERVER+'/admin/assign-deposit', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ depositId: depId, userId: await phoneToUid(phone), adminKey: _adminKey })
+      body: JSON.stringify({ depositId:depId, userId:await phoneToUid(phone), adminKey:_adminKey })
     });
     const r = await resp.json();
-    if (r.status === 'success') { toast('✅ ' + r.message, 'success'); closeModal('assignModal'); loadUnmatched(); loadDashboard(); }
-    else toast(r.message || 'Error', 'error');
+    if (r.status==='success') { toast('✅ '+r.message,'success'); closeModal('assignModal'); loadUnmatched(); loadDashboard(); }
+    else toast(r.message||'Error','error');
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 async function phoneToUid(phone) {
   const clean = phone.replace(/\D/g,'');
-  const formatted = '+256' + (clean.startsWith('256') ? clean.slice(3) : clean.startsWith('0') ? clean.slice(1) : clean);
+  const formatted = '+256'+(clean.startsWith('256')?clean.slice(3):clean.startsWith('0')?clean.slice(1):clean);
   const snap = await getDocs(query(collection(db,'users'), where('phone','==',formatted), limit(1)));
-  if (snap.empty) throw new Error('No user found for phone ' + formatted);
+  if (snap.empty) throw new Error('No user found for '+formatted);
   return snap.docs[0].id;
 }
 
 // ── GIFT CODES ──
 window.filterCodes = (f, btn) => {
   _codesFilter = f;
-  document.querySelectorAll('#tab-giftcodes .ftab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#giftcodesPanel .ftab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   loadCodes();
 };
 window.loadCodes = async () => {
   const tbody = document.getElementById('codesTable');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Loading…</td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div class="spinner"></div></td></tr>';
   try {
     const now = new Date();
     const snap = await getDocs(query(collection(db,'giftCodes'), orderBy('createdAt','desc'), limit(100)));
     let codes = snap.docs.map(d => ({ id:d.id, ref:d.ref, ...d.data() }));
-    if (_codesFilter === 'active')   codes = codes.filter(c => c.active && (!c.expiresAt || c.expiresAt.toDate() > now) && !(c.usedBy||[]).length);
-    if (_codesFilter === 'redeemed') codes = codes.filter(c => (c.usedBy||[]).length > 0);
-    if (_codesFilter === 'expired')  codes = codes.filter(c => c.expiresAt && c.expiresAt.toDate() <= now);
+    if (_codesFilter==='active')   codes = codes.filter(c => c.active && (!c.expiresAt||c.expiresAt.toDate()>now) && !(c.usedBy||[]).length);
+    if (_codesFilter==='redeemed') codes = codes.filter(c => (c.usedBy||[]).length > 0);
+    if (_codesFilter==='expired')  codes = codes.filter(c => c.expiresAt && c.expiresAt.toDate()<=now);
     if (!codes.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No codes</td></tr>'; return; }
     tbody.innerHTML = codes.map(c => {
-      const isExpired  = c.expiresAt && c.expiresAt.toDate() <= now;
+      const isExpired  = c.expiresAt && c.expiresAt.toDate()<=now;
       const isRedeemed = (c.usedBy||[]).length > 0;
-      const statusBadge = !c.active ? 'badge expired" title="Deactivated">inactive'
-        : isExpired  ? 'badge expired">expired'
-        : isRedeemed ? 'badge redeemed">redeemed'
-        : 'badge active">active';
+      const statusBadge = !c.active?'badge expired">inactive':isExpired?'badge expired">expired':isRedeemed?'badge redeemed">redeemed':'badge active">active';
       return `<tr>
-        <td><span class="mono" style="font-size:15px;font-weight:800;color:var(--gold);letter-spacing:2px">${c.code}</span></td>
+        <td><span class="mono" style="font-size:15px;font-weight:800;color:var(--primary);letter-spacing:2px">${c.code}</span></td>
         <td><span class="${statusBadge}</span></td>
-        <td style="font-size:12px;color:var(--text2)">${(c.usedBy||[]).length} use(s)</td>
-        <td style="font-size:12px">${c.expiresAt ? fmtDate(c.expiresAt) : '—'}</td>
-        <td style="font-size:12px">${fmtDate(c.createdAt)}</td>
+        <td style="font-size:11px;color:var(--muted)">${(c.usedBy||[]).length} use(s)</td>
+        <td style="font-size:11px">${c.expiresAt?fmtDate(c.expiresAt):'—'}</td>
+        <td style="font-size:11px">${fmtDate(c.createdAt)}</td>
         <td>
-          ${c.active && !isExpired ? `<button class="action-btn btn-red" onclick="deactivateCode('${c.id}')">Deactivate</button>` : ''}
+          ${c.active&&!isExpired?`<button class="action-btn btn-red" onclick="deactivateCode('${c.id}')">Deactivate</button>`:''}
           <button class="action-btn btn-yellow" onclick="copyCode('${c.code}')">Copy</button>
         </td>
       </tr>`;
@@ -1170,63 +1018,52 @@ window.loadCodes = async () => {
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 window.generateCodes = async () => {
-  const count  = parseInt(document.getElementById('genCount').value,10) || 1;
-  const expiry = parseInt(document.getElementById('genExpiry').value,10) || 24;
-  if (count < 1 || count > 50) { toast('1–50 codes at a time','error'); return; }
+  const count  = parseInt(document.getElementById('genCount').value,10)||1;
+  const expiry = parseInt(document.getElementById('genExpiry').value,10)||24;
+  if (count<1||count>50) { toast('1–50 codes at a time','error'); return; }
   try {
     const generated = [];
-    for (let i = 0; i < count; i++) {
+    for (let i=0;i<count;i++) {
       const code = genCode6();
-      const expiresAt = Timestamp.fromDate(new Date(Date.now() + expiry * 3600000));
-      await addDoc(collection(db,'giftCodes'), {
-        code, usedBy: [], active: true, expiresAt,
-        createdAt: serverTimestamp()
-      });
+      const expiresAt = Timestamp.fromDate(new Date(Date.now()+expiry*3600000));
+      await addDoc(collection(db,'giftCodes'), { code, usedBy:[], active:true, expiresAt, createdAt:serverTimestamp() });
       generated.push(code);
     }
     document.getElementById('codesList').innerHTML = generated.map(c =>
-      `<span class="code-pill" onclick="copyCode('${c}')" title="Click to copy">${c}</span>`
+      `<span class="code-pill" onclick="copyCode('${c}')" title="Tap to copy">${c}</span>`
     ).join('');
     document.getElementById('generatedCodes').style.display = 'block';
-    toast(`✅ Generated ${count} code(s)`, 'success');
+    toast(`✅ Generated ${count} code(s)`,'success');
     loadCodes();
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 window.deactivateCode = async (id) => {
   if (!confirm('Deactivate this code?')) return;
-  try {
-    await updateDoc(doc(db,'giftCodes',id), { active: false });
-    toast('Code deactivated','');
-    loadCodes();
-  } catch (e) { toast('Error: '+e.message,'error'); }
+  try { await updateDoc(doc(db,'giftCodes',id),{active:false}); toast('Code deactivated',''); loadCodes(); }
+  catch (e) { toast('Error: '+e.message,'error'); }
 };
-window.copyCode = (code) => {
-  navigator.clipboard?.writeText(code).then(() => toast('Copied: ' + code,'success'));
-};
+window.copyCode = (code) => { navigator.clipboard?.writeText(code).then(()=>toast('Copied: '+code,'success')); };
 
 // ── PRODUCTS ──
 window.loadProducts = async () => {
   const grid = document.getElementById('productsGrid');
-  grid.innerHTML = '<div style="color:var(--text2);grid-column:1/-1;padding:20px;text-align:center">Loading…</div>';
+  grid.innerHTML = '<div style="color:var(--muted);grid-column:1/-1;padding:30px;text-align:center"><div class="spinner"></div></div>';
   try {
     const snap = await getDocs(query(collection(db,'products'), orderBy('createdAt','desc')));
-    if (snap.empty) { grid.innerHTML = '<div style="color:var(--text2);grid-column:1/-1;padding:40px;text-align:center">No products yet. Add one!</div>'; return; }
+    if (snap.empty) { grid.innerHTML = '<div style="color:var(--muted);grid-column:1/-1;padding:40px;text-align:center">No plans yet. Add one!</div>'; return; }
     grid.innerHTML = snap.docs.map(d => {
       const p = d.data();
       const inStock = p.isInStock !== false;
-      const imgHtml = p.image ? `<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover">` : '📦';
+      const imgHtml = p.image?`<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover">`:'📦';
       return `<div class="product-admin-card">
-        <div class="pac-img">
-          ${imgHtml}
-          <span class="pac-stock ${inStock?'in':'out'}">${inStock?'In Stock':'Sold Out'}</span>
-        </div>
+        <div class="pac-img">${imgHtml}<span class="pac-stock ${inStock?'in':'out'}">${inStock?'In Stock':'Sold Out'}</span></div>
         <div class="pac-body">
           <div class="pac-name">${p.name}</div>
           <div class="pac-price">${ugx(p.price)}</div>
-          <div class="pac-detail">Daily: ${ugx(p.dailyReturn)} · ${p.cycle} days<br>Total: ${ugx(p.expectedReturn)}<br>Status: ${p.active!==false?'✅ Active':'⏸ Inactive'}</div>
+          <div class="pac-detail">Daily: ${ugx(p.dailyReturn)} · ${p.cycle}d<br>Total: ${ugx(p.expectedReturn)}<br>${p.active!==false?'✅ Active':'⏸ Inactive'}</div>
           <div class="pac-actions">
             <button class="action-btn btn-yellow" onclick="editProduct('${d.id}')">Edit</button>
-            <button class="action-btn ${inStock?'btn-red':'btn-green'}" onclick="toggleStock('${d.id}',${!inStock})">${inStock?'Mark Sold Out':'Mark In Stock'}</button>
+            <button class="action-btn ${inStock?'btn-red':'btn-green'}" onclick="toggleStock('${d.id}',${!inStock})">${inStock?'Sold Out':'In Stock'}</button>
             <button class="action-btn btn-red" onclick="deleteProduct('${d.id}','${p.name}')">Del</button>
           </div>
         </div>
@@ -1237,7 +1074,7 @@ window.loadProducts = async () => {
 window.openAddProduct = () => {
   document.getElementById('productModalTitle').textContent = 'Add Investment Plan';
   document.getElementById('editProductId').value = '';
-  ['pName','pPrice','pCycle','pDaily','pReturn','pImageUrl'].forEach(id => document.getElementById(id).value = '');
+  ['pName','pPrice','pCycle','pDaily','pReturn','pImageUrl'].forEach(id => document.getElementById(id).value='');
   document.getElementById('pImageStatus').textContent = '';
   openModal('productModal');
 };
@@ -1248,90 +1085,77 @@ window.editProduct = async (id) => {
     const p = snap.data();
     document.getElementById('productModalTitle').textContent = 'Edit Plan';
     document.getElementById('editProductId').value = id;
-    document.getElementById('pName').value    = p.name || '';
-    document.getElementById('pPrice').value   = p.price || '';
-    document.getElementById('pCycle').value   = p.cycle || '';
-    document.getElementById('pDaily').value   = p.dailyReturn || '';
-    document.getElementById('pReturn').value  = p.expectedReturn || '';
-    document.getElementById('pImageUrl').value = p.image || '';
+    document.getElementById('pName').value   = p.name||'';
+    document.getElementById('pPrice').value  = p.price||'';
+    document.getElementById('pCycle').value  = p.cycle||'';
+    document.getElementById('pDaily').value  = p.dailyReturn||'';
+    document.getElementById('pReturn').value = p.expectedReturn||'';
+    document.getElementById('pImageUrl').value = p.image||'';
     document.getElementById('pImageStatus').textContent = '';
     openModal('productModal');
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 window.saveProduct = async () => {
-  const id    = document.getElementById('editProductId').value;
-  const name  = document.getElementById('pName').value.trim();
+  const id   = document.getElementById('editProductId').value;
+  const name = document.getElementById('pName').value.trim();
   const price = parseFloat(document.getElementById('pPrice').value);
   const cycle = parseInt(document.getElementById('pCycle').value);
   const daily = parseFloat(document.getElementById('pDaily').value);
   const ret   = parseFloat(document.getElementById('pReturn').value);
   const img   = document.getElementById('pImageUrl').value.trim();
-  if (!name || !price || !cycle) { toast('Name, price and cycle required','error'); return; }
-  const data = { name, price, cycle, dailyReturn: daily||0, expectedReturn: ret||price, image: img, active: true };
+  if (!name||!price||!cycle) { toast('Name, price and cycle required','error'); return; }
+  const data = { name, price, cycle, dailyReturn:daily||0, expectedReturn:ret||price, image:img, active:true };
   try {
-    if (id) {
-      await updateDoc(doc(db,'products',id), data);
-      toast('✅ Plan updated','success');
-    } else {
-      await addDoc(collection(db,'products'), { ...data, isInStock: true, createdAt: serverTimestamp() });
-      toast('✅ Plan created','success');
-    }
+    if (id) { await updateDoc(doc(db,'products',id),data); toast('✅ Plan updated','success'); }
+    else { await addDoc(collection(db,'products'),{...data,isInStock:true,createdAt:serverTimestamp()}); toast('✅ Plan created','success'); }
     closeModal('productModal');
     loadProducts();
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 window.toggleStock = async (id, inStock) => {
-  try {
-    await updateDoc(doc(db,'products',id), { isInStock: inStock });
-    toast(inStock ? 'Marked In Stock' : 'Marked Sold Out', '');
-    loadProducts();
-  } catch (e) { toast('Error: '+e.message,'error'); }
+  try { await updateDoc(doc(db,'products',id),{isInStock:inStock}); toast(inStock?'Marked In Stock':'Marked Sold Out',''); loadProducts(); }
+  catch (e) { toast('Error: '+e.message,'error'); }
 };
 window.deleteProduct = async (id, name) => {
-  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
-  try {
-    await deleteDoc(doc(db,'products',id));
-    toast('Plan deleted','');
-    loadProducts();
-  } catch (e) { toast('Error: '+e.message,'error'); }
+  if (!confirm(`Delete "${name}"? Cannot be undone.`)) return;
+  try { await deleteDoc(doc(db,'products',id)); toast('Plan deleted',''); loadProducts(); }
+  catch (e) { toast('Error: '+e.message,'error'); }
 };
 window.uploadProductImage = async (input) => {
-  const file = input.files[0];
-  if (!file) return;
-  document.getElementById('pImageStatus').textContent = 'Uploading…';
+  const file = input.files[0]; if (!file) return;
+  document.getElementById('pImageStatus').textContent = '⏳ Uploading…';
   try {
     const fd = new FormData();
-    fd.append('file', file); fd.append('upload_preset', PRESET);
-    const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, { method:'POST', body:fd });
+    fd.append('file',file); fd.append('upload_preset',PRESET);
+    const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`,{method:'POST',body:fd});
     const data = await resp.json();
     if (data.secure_url) {
       document.getElementById('pImageUrl').value = data.secure_url;
       document.getElementById('pImageStatus').textContent = '✅ Uploaded';
       toast('Image uploaded','success');
     }
-  } catch (e) { document.getElementById('pImageStatus').textContent = '❌ Failed'; toast('Upload failed','error'); }
-  input.value = '';
+  } catch (e) { document.getElementById('pImageStatus').textContent='❌ Failed'; toast('Upload failed','error'); }
+  input.value='';
 };
 
 // ── USERS ──
 window.searchUsers = async () => {
-  const q    = document.getElementById('userSearch').value.trim();
+  const q = document.getElementById('userSearch').value.trim();
   const tbody = document.getElementById('usersTable');
   if (!q) return;
   tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Searching…</td></tr>';
   try {
     let snap;
     if (q.match(/^\d/)) {
-      const phone = '+256' + q.replace(/\D/g,'').replace(/^256/,'').replace(/^0/,'');
+      const phone = '+256'+q.replace(/\D/g,'').replace(/^256/,'').replace(/^0/,'');
       snap = await getDocs(query(collection(db,'users'), where('phone','==',phone), limit(20)));
-      if (snap.empty) snap = await getDocs(query(collection(db,'users'), where('phone','>=',q), where('phone','<=',q+''), limit(20)));
+      if (snap.empty) snap = await getDocs(query(collection(db,'users'), where('phone','>=',q), where('phone','<=',q+''), limit(20)));
     } else {
-      snap = await getDocs(query(collection(db,'users'), where('name','>=',q), where('name','<=',q+''), limit(20)));
+      snap = await getDocs(query(collection(db,'users'), where('name','>=',q), where('name','<=',q+''), limit(20)));
     }
     if (snap.empty) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No users found</td></tr>'; return; }
     tbody.innerHTML = snap.docs.map(d => {
-      const u = d.data();
-      const status = u.status || 'active';
+      const u = d.data(); const status = u.status||'active';
       return `<tr>
         <td><strong>${u.name||'—'}</strong></td>
         <td class="mono">${u.phone||'—'}</td>
@@ -1352,7 +1176,7 @@ window.searchUsers = async () => {
 };
 window.openAddFunds = (uid, name) => {
   document.getElementById('fundsUserId').value = uid;
-  document.getElementById('fundsUserName').textContent = 'Adding funds for ' + (name || uid);
+  document.getElementById('fundsUserName').textContent = 'Adding funds for '+(name||uid);
   document.getElementById('fundsAmount').value = '';
   document.getElementById('fundsNote').value   = '';
   openModal('fundsModal');
@@ -1361,86 +1185,84 @@ window.confirmAddFunds = async () => {
   const uid    = document.getElementById('fundsUserId').value;
   const amount = parseFloat(document.getElementById('fundsAmount').value);
   const note   = document.getElementById('fundsNote').value.trim();
-  if (!amount || amount <= 0) { toast('Enter a valid amount','error'); return; }
+  if (!amount||amount<=0) { toast('Enter a valid amount','error'); return; }
   try {
-    const resp = await fetch(SERVER + '/admin/deposit', {
+    const resp = await fetch(SERVER+'/admin/deposit', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ userId: uid, amount, note, adminKey: _adminKey })
+      body: JSON.stringify({ userId:uid, amount, note, adminKey:_adminKey })
     });
     const r = await resp.json();
-    if (r.status === 'success') { toast('✅ '+r.message,'success'); closeModal('fundsModal'); searchUsers(); }
+    if (r.status==='success') { toast('✅ '+r.message,'success'); closeModal('fundsModal'); searchUsers(); }
     else toast(r.message||'Error','error');
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 window.toggleBan = async (uid, currentStatus) => {
-  const action = currentStatus === 'banned' ? 'unban' : 'ban';
-  const reason = action === 'ban' ? (prompt('Reason for ban:') || 'Policy violation') : '';
-  if (action === 'ban' && !confirm(`Ban this user? Reason: ${reason}`)) return;
-  if (action === 'unban' && !confirm('Restore this user account?')) return;
+  const action = currentStatus==='banned'?'unban':'ban';
+  const reason = action==='ban'?(prompt('Reason for ban:')||'Policy violation'):'';
+  if (action==='ban'&&!confirm(`Ban this user? Reason: ${reason}`)) return;
+  if (action==='unban'&&!confirm('Restore this user account?')) return;
   try {
-    const resp = await fetch(SERVER + '/admin/ban', {
+    const resp = await fetch(SERVER+'/admin/ban', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ userId: uid, action, reason, adminKey: _adminKey })
+      body: JSON.stringify({ userId:uid, action, reason, adminKey:_adminKey })
     });
     const r = await resp.json();
-    if (r.status === 'success') { toast(`User ${action}ned`,'success'); searchUsers(); }
+    if (r.status==='success') { toast(`User ${action}ned`,'success'); searchUsers(); }
     else toast(r.message||'Error','error');
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 
 // ── INVESTMENTS ──
-let _invFilter = 'active';
 window.filterInv = (f, btn) => {
   _invFilter = f;
-  document.querySelectorAll('#tab-investments .ftab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#investmentsPanel .ftab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   loadInvestments();
 };
 window.loadInvestments = async () => {
   const tbody = document.getElementById('investmentsTable');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Loading…</td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="spinner"></div></td></tr>';
   try {
     const snap = await getDocs(query(collection(db,'investments'), orderBy('createdAt','desc'), limit(200)));
-    let items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    if (_invFilter !== 'all') items = items.filter(i => (i.status||'active') === _invFilter);
+    let items = snap.docs.map(d => ({id:d.id,...d.data()}));
+    if (_invFilter!=='all') items = items.filter(i=>(i.status||'active')===_invFilter);
     if (!items.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No investments</td></tr>'; return; }
-    tbody.innerHTML = items.map(i => `<tr>
-      <td><strong>${i.userName || i.userId?.slice(0,8) || '—'}</strong><br><span style="font-size:11px;color:var(--text2)">${i.userPhone||''}</span></td>
-      <td>${i.productName || 'Plan'}</td>
+    tbody.innerHTML = items.map(i=>`<tr>
+      <td><strong>${i.userName||i.userId?.slice(0,8)||'—'}</strong><br><span style="font-size:10px;color:var(--muted)">${i.userPhone||''}</span></td>
+      <td>${i.productName||'Plan'}</td>
       <td>${ugx(i.amount)}</td>
       <td><strong style="color:var(--green)">${ugx(i.expectedReturn)}</strong></td>
-      <td style="font-size:12px">${fmtDate(i.createdAt)}</td>
-      <td style="font-size:12px">${i.maturityDate ? fmtDate(i.maturityDate) : '—'}</td>
+      <td style="font-size:11px">${fmtDate(i.createdAt)}</td>
+      <td style="font-size:11px">${i.maturityDate?fmtDate(i.maturityDate):'—'}</td>
       <td><span class="badge ${i.status==='matured'?'pending':i.status==='claimed'?'processed':'active'}">${i.status||'active'}</span></td>
     </tr>`).join('');
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 
 // ── TRANSACTIONS ──
-let _txFilter = 'all';
 window.filterTx = (f, btn) => {
   _txFilter = f;
-  document.querySelectorAll('#tab-transactions .ftab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#transactionsPanel .ftab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   loadTransactions();
 };
 window.loadTransactions = async () => {
   const tbody = document.getElementById('transactionsTable');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Loading…</td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="5"><div class="spinner"></div></td></tr>';
   try {
     const snap = await getDocs(query(collection(db,'transactions'), orderBy('createdAt','desc'), limit(200)));
-    let items = snap.docs.map(d => d.data());
-    if (_txFilter !== 'all') items = items.filter(t => t.type === _txFilter);
+    let items = snap.docs.map(d=>d.data());
+    if (_txFilter!=='all') items = items.filter(t=>t.type===_txFilter);
     if (!items.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No transactions</td></tr>'; return; }
-    const typeLabel = { deposit:'Deposit', withdrawal:'Withdrawal', commission:'Commission', checkin:'Check-in', investment:'Investment', investment_return:'Return', gift_code:'Gift Code', admin_credit:'Admin Credit' };
+    const typeLabel = {deposit:'Deposit',withdrawal:'Withdrawal',commission:'Commission',checkin:'Check-in',investment:'Investment',investment_return:'Return',gift_code:'Gift Code',admin_credit:'Admin Credit'};
     tbody.innerHTML = items.map(t => {
-      const pos = (t.amount||0) >= 0;
+      const pos = (t.amount||0)>=0;
       return `<tr>
         <td><span class="badge ${pos?'active':'rejected'}">${typeLabel[t.type]||t.type}</span></td>
-        <td style="font-size:12px">${t.description || '—'}</td>
+        <td style="font-size:11px">${t.description||'—'}</td>
         <td style="color:${pos?'var(--green)':'var(--red)'};font-weight:700">${pos?'+':''}${ugx(t.amount)}</td>
         <td><span class="badge ${t.status==='success'?'processed':t.status==='pending'?'pending':'rejected'}">${t.status||'—'}</span></td>
-        <td style="font-size:12px">${t.date || fmtDate(t.createdAt)} ${t.time||''}</td>
+        <td style="font-size:11px">${t.date||fmtDate(t.createdAt)} ${t.time||''}</td>
       </tr>`;
     }).join('');
   } catch (e) { toast('Error: '+e.message,'error'); }
@@ -1449,26 +1271,25 @@ window.loadTransactions = async () => {
 // ── REFERRALS ──
 window.loadReferrals = async () => {
   const tbody = document.getElementById('referralsTable');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Loading…</td></tr>';
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div class="spinner"></div></td></tr>';
   try {
-    const q = (document.getElementById('refSearch').value || '').trim().toLowerCase();
+    const q = (document.getElementById('refSearch').value||'').trim().toLowerCase();
     const snap = await getDocs(collection(db,'users'));
-    let users = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    // Only referrers with at least one team member
-    users = users.filter(u => (u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0) > 0);
-    if (q) users = users.filter(u =>
-      (u.name||'').toLowerCase().includes(q) ||
-      (u.phone||'').includes(q) ||
+    let users = snap.docs.map(d=>({id:d.id,...d.data()}));
+    users = users.filter(u=>(u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0)>0);
+    if (q) users = users.filter(u=>
+      (u.name||'').toLowerCase().includes(q)||
+      (u.phone||'').includes(q)||
       (u.referralCode||'').toLowerCase().includes(q)
     );
-    users.sort((a,b) => (b.commissionEarned||0) - (a.commissionEarned||0));
-    users = users.slice(0, 50);
+    users.sort((a,b)=>(b.commissionEarned||0)-(a.commissionEarned||0));
+    users = users.slice(0,50);
     if (!users.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">No referrers found</td></tr>'; return; }
-    tbody.innerHTML = users.map(u => {
-      const total = (u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0);
+    tbody.innerHTML = users.map(u=>{
+      const total=(u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0);
       return `<tr>
-        <td><strong>${u.name||'—'}</strong><br><span style="font-size:11px;color:var(--text2)">${u.phone||''}</span></td>
-        <td><span class="mono" style="color:var(--gold);font-weight:700">${u.referralCode||'—'}</span></td>
+        <td><strong>${u.name||'—'}</strong><br><span style="font-size:10px;color:var(--muted)">${u.phone||''}</span></td>
+        <td><span class="mono" style="color:var(--primary);font-weight:700">${u.referralCode||'—'}</span></td>
         <td>${u.teamL1Count||0}</td>
         <td>${u.teamL2Count||0}</td>
         <td>${u.teamL3Count||0}</td>
@@ -1480,9 +1301,6 @@ window.loadReferrals = async () => {
 };
 
 // ── BROADCAST ──
-document.getElementById('bcAudience')?.addEventListener('change', e => {
-  document.getElementById('bcPhoneGroup').style.display = e.target.value === 'one' ? 'block' : 'none';
-});
 window.loadBroadcasts = async () => {
   const tbody = document.getElementById('broadcastTable');
   try {
@@ -1490,7 +1308,7 @@ window.loadBroadcasts = async () => {
     if (snap.empty) { tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No broadcasts yet</td></tr>'; return; }
     tbody.innerHTML = snap.docs.map(d => {
       const b = d.data();
-      return `<tr><td><strong>${b.title||'—'}</strong></td><td>${b.audience==='all'?'All users':b.targetPhone||'Single'}</td><td style="font-size:12px">${fmtDate(b.createdAt)}</td></tr>`;
+      return `<tr><td><strong>${b.title||'—'}</strong></td><td>${b.audience==='all'?'All users':b.targetPhone||'Single'}</td><td style="font-size:11px">${fmtDate(b.createdAt)}</td></tr>`;
     }).join('');
   } catch (e) { tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No broadcasts yet</td></tr>'; }
 };
@@ -1499,36 +1317,29 @@ window.sendBroadcast = async () => {
   const title    = document.getElementById('bcTitle').value.trim();
   const message  = document.getElementById('bcMessage').value.trim();
   const phone    = document.getElementById('bcPhone').value.trim();
-  if (!title || !message) { toast('Title and message required','error'); return; }
-  if (audience === 'one' && !phone) { toast('Enter a user phone','error'); return; }
-  if (!confirm(audience === 'all' ? 'Send this notification to ALL users?' : 'Send to ' + phone + '?')) return;
+  if (!title||!message) { toast('Title and message required','error'); return; }
+  if (audience==='one'&&!phone) { toast('Enter a user phone','error'); return; }
+  if (!confirm(audience==='all'?'Send this notification to ALL users?':'Send to '+phone+'?')) return;
   try {
     let targets = [];
-    if (audience === 'one') {
-      targets = [ await phoneToUid(phone) ];
+    if (audience==='one') {
+      targets = [await phoneToUid(phone)];
     } else {
       const snap = await getDocs(collection(db,'users'));
-      targets = snap.docs.map(d => d.id);
+      targets = snap.docs.map(d=>d.id);
     }
-    const now = new Date();
-    const date = now.toLocaleDateString('en-UG');
-    // Batch notifications (chunks of 400 to stay under 500-write batch limit)
-    for (let i = 0; i < targets.length; i += 400) {
+    const date = new Date().toLocaleDateString('en-UG');
+    for (let i=0;i<targets.length;i+=400) {
       const batch = writeBatch(db);
-      targets.slice(i, i+400).forEach(uid => {
-        batch.set(doc(collection(db,'notifications')), {
-          userId: uid, title, message, type: 'admin_credit',
-          date, readBy: [], createdAt: serverTimestamp()
-        });
+      targets.slice(i,i+400).forEach(uid => {
+        batch.set(doc(collection(db,'notifications')),{userId:uid,title,message,type:'admin_credit',date,readBy:[],createdAt:serverTimestamp()});
       });
       await batch.commit();
     }
-    await addDoc(collection(db,'broadcasts'), {
-      title, message, audience, targetPhone: audience==='one'?phone:'', count: targets.length, createdAt: serverTimestamp()
-    });
-    toast(`📣 Sent to ${targets.length} user(s)`, 'success');
-    document.getElementById('bcTitle').value = '';
-    document.getElementById('bcMessage').value = '';
+    await addDoc(collection(db,'broadcasts'),{title,message,audience,targetPhone:audience==='one'?phone:'',count:targets.length,createdAt:serverTimestamp()});
+    toast(`📣 Sent to ${targets.length} user(s)`,'success');
+    document.getElementById('bcTitle').value='';
+    document.getElementById('bcMessage').value='';
     loadBroadcasts();
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
@@ -1536,32 +1347,32 @@ window.sendBroadcast = async () => {
 // ── USER DETAIL ──
 window.openUserDetail = async (uid) => {
   openModal('userDetailModal');
-  document.getElementById('udBody').innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px">Loading…</div>';
+  document.getElementById('udBody').innerHTML = '<div class="spinner"></div>';
   try {
     const snap = await getDoc(doc(db,'users',uid));
-    if (!snap.exists()) { document.getElementById('udBody').innerHTML = 'User not found'; return; }
+    if (!snap.exists()) { document.getElementById('udBody').innerHTML='User not found'; return; }
     const u = snap.data();
-    document.getElementById('udName').textContent = u.name || '—';
-    document.getElementById('udPhone').textContent = u.phone || '—';
-    const team = (u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0);
-    const row = (l,v) => `<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2);font-size:13px">${l}</span><span style="font-weight:700;font-size:13px">${v}</span></div>`;
-    document.getElementById('udBody').innerHTML = `
+    document.getElementById('udName').textContent  = u.name||'—';
+    document.getElementById('udPhone').textContent = u.phone||'—';
+    const team=(u.teamL1Count||0)+(u.teamL2Count||0)+(u.teamL3Count||0);
+    const row=(l,v,c='var(--text)')=>`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(240,185,11,.08)"><span style="color:var(--muted);font-size:13px">${l}</span><span style="font-weight:700;font-size:13px;color:${c}">${v}</span></div>`;
+    document.getElementById('udBody').innerHTML=`
       <div style="margin-bottom:16px">
-        ${row('Wallet Balance', ugx(u.walletBalance))}
-        ${row('Total Deposited', ugx(u.totalDeposited))}
-        ${row('Total Invested', ugx(u.totalInvested))}
-        ${row('Total Withdrawn', ugx(u.totalWithdrawn))}
-        ${row('Commission Earned', ugx(u.commissionEarned))}
-        ${row('Referral Code', u.referralCode || '—')}
-        ${row('Team (L1/L2/L3)', `${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0} (${team})`)}
-        ${row('Check-in Streak', (u.checkinStreak||0) + ' days')}
-        ${row('Status', u.status || 'active')}
+        ${row('Wallet Balance',ugx(u.walletBalance),'var(--primary)')}
+        ${row('Total Deposited',ugx(u.totalDeposited),'var(--green)')}
+        ${row('Total Invested',ugx(u.totalInvested),'var(--blue)')}
+        ${row('Total Withdrawn',ugx(u.totalWithdrawn),'var(--red)')}
+        ${row('Commission Earned',ugx(u.commissionEarned),'var(--primary)')}
+        ${row('Referral Code',u.referralCode||'—')}
+        ${row('Team (L1/L2/L3)',`${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0} (${team})`)}
+        ${row('Check-in Streak',(u.checkinStreak||0)+' days')}
+        ${row('Status',u.status||'active')}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-sm gold" onclick="closeModal('userDetailModal');openAddFunds('${uid}','${(u.name||'').replace(/'/g,'')}')">+ Add Funds</button>
-        <button class="btn-sm outline" onclick="closeModal('userDetailModal');toggleBan('${uid}','${u.status||'active'}')">${u.status==='banned'?'Unban':'Ban'} User</button>
+        <button class="btn btn-sm btn-primary" onclick="closeModal('userDetailModal');openAddFunds('${uid}','${(u.name||'').replace(/'/g,'')}')">+ Add Funds</button>
+        <button class="btn btn-sm btn-outline" onclick="closeModal('userDetailModal');toggleBan('${uid}','${u.status||'active'}')">${u.status==='banned'?'Unban':'Ban'} User</button>
       </div>`;
-  } catch (e) { document.getElementById('udBody').innerHTML = 'Error: ' + e.message; }
+  } catch (e) { document.getElementById('udBody').innerHTML='Error: '+e.message; }
 };
 
 // ── SETTINGS ──
@@ -1571,56 +1382,54 @@ window.loadSettings = async () => {
     if (!snap.exists()) return;
     const s = snap.data();
     document.getElementById('settMaintenance').checked = !!s.maintenanceMode;
-    document.getElementById('settDepositPhone').value  = s.depositPhone  || '';
-    document.getElementById('settCheckin').value       = s.checkinBonus  || 500;
-    document.getElementById('settWelcome').value       = s.welcomeBonus  || 10000;
-    document.getElementById('settWhatsapp').value      = s.whatsapp      || '';
-    document.getElementById('settTelegram').value      = s.telegram      || '';
-    renderSlideshowUrls(s.slideshowImages || []);
+    document.getElementById('settDepositPhone').value  = s.depositPhone ||'';
+    document.getElementById('settCheckin').value       = s.checkinBonus ||500;
+    document.getElementById('settWelcome').value       = s.welcomeBonus ||10000;
+    document.getElementById('settWhatsapp').value      = s.whatsapp     ||'';
+    document.getElementById('settTelegram').value      = s.telegram     ||'';
+    renderSlideshowUrls(s.slideshowImages||[]);
   } catch (e) {}
 };
 function renderSlideshowUrls(urls) {
   const wrap = document.getElementById('slideshowUrls');
-  wrap.innerHTML = urls.map((u, i) => `
+  wrap.innerHTML = urls.map((u,i)=>`
     <div class="slideshow-url-row">
       <input value="${u}" id="slideUrl_${i}" placeholder="https://…">
       <button onclick="removeSlideshowUrl(${i})">✕</button>
     </div>`).join('');
 }
 window.addSlideshowUrl = () => {
-  const wrap  = document.getElementById('slideshowUrls');
-  const idx   = wrap.children.length;
-  const row   = document.createElement('div');
-  row.className = 'slideshow-url-row';
-  row.innerHTML = `<input id="slideUrl_${idx}" placeholder="https://…"><button onclick="this.parentElement.remove()">✕</button>`;
+  const wrap = document.getElementById('slideshowUrls');
+  const idx  = wrap.children.length;
+  const row  = document.createElement('div');
+  row.className='slideshow-url-row';
+  row.innerHTML=`<input id="slideUrl_${idx}" placeholder="https://…"><button onclick="this.parentElement.remove()">✕</button>`;
   wrap.appendChild(row);
 };
-window.removeSlideshowUrl = (i) => {
-  document.getElementById(`slideUrl_${i}`)?.closest('.slideshow-url-row').remove();
-};
+window.removeSlideshowUrl = (i) => { document.getElementById(`slideUrl_${i}`)?.closest('.slideshow-url-row').remove(); };
 window.toggleMaintenance = async (cb) => {
   try {
-    await setDoc(doc(db,'settings','main'), { maintenanceMode: cb.checked }, { merge: true });
-    toast(cb.checked ? '🔧 Maintenance ON' : '✅ Maintenance OFF', cb.checked ? 'error' : 'success');
-  } catch (e) { toast('Error: '+e.message,'error'); cb.checked = !cb.checked; }
+    await setDoc(doc(db,'settings','main'),{maintenanceMode:cb.checked},{merge:true});
+    toast(cb.checked?'🔧 Maintenance ON':'✅ Maintenance OFF',cb.checked?'error':'success');
+  } catch (e) { toast('Error: '+e.message,'error'); cb.checked=!cb.checked; }
 };
 window.saveSettings = async () => {
-  const urls = [];
-  document.querySelectorAll('[id^="slideUrl_"]').forEach(i => { if(i.value.trim()) urls.push(i.value.trim()); });
+  const urls=[];
+  document.querySelectorAll('[id^="slideUrl_"]').forEach(i=>{if(i.value.trim())urls.push(i.value.trim());});
   try {
-    await setDoc(doc(db,'settings','main'), {
-      depositPhone:  document.getElementById('settDepositPhone').value.trim(),
-      checkinBonus:  parseInt(document.getElementById('settCheckin').value)||500,
-      welcomeBonus:  parseInt(document.getElementById('settWelcome').value)||10000,
-      whatsapp:      document.getElementById('settWhatsapp').value.trim(),
-      telegram:      document.getElementById('settTelegram').value.trim(),
+    await setDoc(doc(db,'settings','main'),{
+      depositPhone: document.getElementById('settDepositPhone').value.trim(),
+      checkinBonus: parseInt(document.getElementById('settCheckin').value)||500,
+      welcomeBonus: parseInt(document.getElementById('settWelcome').value)||10000,
+      whatsapp:     document.getElementById('settWhatsapp').value.trim(),
+      telegram:     document.getElementById('settTelegram').value.trim(),
       slideshowImages: urls
-    }, { merge: true });
+    },{merge:true});
     toast('✅ Settings saved','success');
   } catch (e) { toast('Error: '+e.message,'error'); }
 };
 
-// expose modal helpers
+// expose
 window.openModal  = openModal;
 window.closeModal = closeModal;
 </script>
