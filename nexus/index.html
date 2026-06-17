@@ -1554,12 +1554,13 @@ function renderHomeInvestments(invs) {
   }
   el.innerHTML = invs.map(inv => {
     const matured = inv.status === 'matured';
-    const daysLeft = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
+    const msLeft2   = inv.maturityDate ? Math.max(0, inv.maturityDate.toDate() - new Date()) : 0;
+    const daysLeft = Math.ceil(msLeft2 / 86400000);
     const imgHtml = inv.productImage
       ? `<div class="inv-img"><img src="${inv.productImage}" alt=""></div>`
       : `<div class="inv-img">${ICN.box}</div>`;
     const cycleDays = inv.cycle || 0;
-    const daysDone  = Math.max(0, cycleDays - daysLeft);
+    const daysDone  = Math.floor(Math.max(0, cycleDays * 86400000 - msLeft2) / 86400000);
     return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
       ${imgHtml}
       <div class="inv-info">
@@ -1796,10 +1797,13 @@ window.openInvDetail = async (invId) => {
     }
     const matured  = inv.status === 'matured';
     const claimed  = inv.status === 'claimed';
-    const daysLeft = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
-    const cycle      = inv.cycle || inv.durationDays || 1;
-    const daysElapsed = Math.max(0, cycle - daysLeft);
-    const progress   = matured || claimed ? 100 : Math.min(100, Math.max(0, Math.round(daysElapsed / cycle * 100)));
+    const cycle    = inv.cycle || inv.durationDays || 1;
+    const totalMs  = cycle * 86400000;
+    const msLeft   = inv.maturityDate ? Math.max(0, inv.maturityDate.toDate() - new Date()) : 0;
+    const daysLeft = Math.ceil(msLeft / 86400000);
+    const msElapsed   = Math.max(0, totalMs - msLeft);
+    const daysElapsed = Math.floor(msElapsed / 86400000);
+    const progress    = matured || claimed ? 100 : Math.min(100, Math.max(0, Math.round(msElapsed / totalMs * 100)));
     const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
     const stateBadge = claimed ? '<span class="inv-badge claimed">Claimed</span>'
                      : matured ? '<span class="inv-badge matured">Matured</span>'
