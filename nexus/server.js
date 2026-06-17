@@ -140,15 +140,16 @@ async function generateUniqueRefCode() {
 }
 
 // ── SMS PARSING ──
-// Handles the two real Ugandan carrier formats:
-//   MTN:   "You have received UGX 22120 from VICTOR KYOYAGALA, 256791269201 on 2026-06-14..."
-//   Airtel: "RECEIVED. TID 149730678579. UGX 27,200 from 743706731, HANIFAH. Bal UGX 332,358."
+// Handles three real Ugandan carrier formats:
+//   MTN→MTN:     "You have received UGX 22120 from VICTOR KYOYAGALA, 256791269201 on 2026-06-14..."
+//   Airtel→same: "RECEIVED. TID 149730678579. UGX 27,200 from 743706731, HANIFAH. Bal UGX 332,358."
+//   Airtel→MTN:  "You have received UGX 500 from Airtel Money on ... Reason: ABIIBA KANTONO, 0708523218. ... ID: 41454115808."
 function parseMoMoSMS(sms) {
   if (!sms) return null;
   const text = sms.trim();
   let amount, senderPhone, senderName, txnId;
 
-  // ── MTN Uganda MoMo ──
+  // ── MTN Uganda MoMo (same-network) ──
   const mtnM = text.match(
     /you have received UGX\s*([\d,]+)\s+from\s+([A-Z][A-Z ]+),\s*(256\d{9}|\d{9,10})\s+on/i
   );
@@ -160,7 +161,7 @@ function parseMoMoSMS(sms) {
     txnId = idM ? idM[1] : null;
   }
 
-  // ── Airtel Uganda Money ──
+  // ── Airtel Uganda Money (same-network) ──
   if (!amount) {
     const airM = text.match(
       /RECEIVED\.\s*TID\s+(\d+)\.\s*UGX\s*([\d,]+)\s+from\s+(\d{9,12}),\s*([A-Z][A-Z ]*)\.\s*Bal/i
@@ -170,6 +171,21 @@ function parseMoMoSMS(sms) {
       amount      = parseInt(airM[2].replace(/,/g, ''), 10);
       senderPhone = airM[3];
       senderName  = airM[4].trim();
+    }
+  }
+
+  // ── Cross-network: Airtel→MTN ──
+  // MTN account receives from Airtel; sender info is in the Reason field.
+  if (!amount) {
+    const crossM = text.match(
+      /you have received UGX\s*([\d,]+)\s+from Airtel Money.*?Reason:\s*([A-Z][A-Z ]+),\s*(\d{9,12})/i
+    );
+    if (crossM) {
+      amount      = parseInt(crossM[1].replace(/,/g, ''), 10);
+      senderName  = crossM[2].trim();
+      senderPhone = crossM[3];
+      const idM   = text.match(/\bID[:\s]+(\d{6,})/i);
+      txnId = idM ? idM[1] : null;
     }
   }
 
