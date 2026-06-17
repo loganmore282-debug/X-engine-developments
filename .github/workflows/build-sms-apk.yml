@@ -1,4 +1,4 @@
-name: Build SMS Forwarder APK
+name: Build Nexus SMS Forwarder APK
 
 on:
   push:
@@ -38,16 +38,16 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: xengine-sms-forwarder
+          name: nexus-sms-forwarder
           path: sms-forwarder-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Publish APK to a Release (direct download link)
+      - name: Publish APK to Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: sms-app
-          name: X-Engine SMS Forwarder
-          body: "Latest build of the X-Engine SMS forwarder app. Download app-debug.apk below and install on the phone."
+          tag_name: nexus-sms-app
+          name: Nexus SMS Forwarder
+          body: "Latest build of the Nexus SMS Forwarder app. Download app-debug.apk below and install on the phone that receives MoMo payments. Allow unknown sources in phone settings before installing."
           files: sms-forwarder-app/app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
