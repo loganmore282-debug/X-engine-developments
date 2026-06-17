@@ -379,11 +379,12 @@ body{padding-bottom:106px}
 .menu-item.danger .mi-label{color:var(--red)}
 .menu-item.danger .mi-icon{background:rgba(239,68,68,0.1);color:var(--red)}
 
-/* ── MODALS ── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:flex-end;justify-content:center}
+/* ── MODALS — centered pop, not bottom-sheet ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:center;justify-content:center;padding:16px}
 .modal-overlay.show{display:flex}
-.modal-sheet{background:#fff;border:1px solid var(--border);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:24px;max-height:90vh;overflow-y:auto;box-shadow:0 -4px 32px rgba(0,0,0,0.1)}
-.modal-handle{width:40px;height:4px;background:rgba(0,0,0,0.15);border-radius:2px;margin:0 auto 20px;display:block}
+.modal-sheet{background:#fff;border:1px solid var(--border);border-radius:20px;width:100%;max-width:480px;padding:24px;max-height:88vh;overflow-y:auto;box-shadow:0 16px 56px rgba(0,0,0,0.28);animation:modalPop .22s cubic-bezier(.34,1.32,.64,1)}
+@keyframes modalPop{from{opacity:0;transform:scale(.87)}to{opacity:1;transform:scale(1)}}
+.modal-handle{display:none}
 .modal-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px}
 .modal-sub{font-size:12px;color:var(--text2);margin-bottom:20px}
 .modal-close{float:right;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1;margin-top:-2px}
@@ -496,17 +497,23 @@ body{padding-bottom:106px}
   .level-cards{grid-template-columns:1fr 1fr 1fr}
 }
 
-/* ── ANNOUNCEMENT DIALOG ── */
-#announcementDialog{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.9);z-index:3000;align-items:flex-end;justify-content:center}
+/* ── ANNOUNCEMENT DIALOG — centered pop ── */
+#announcementDialog{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.9);z-index:3000;align-items:center;justify-content:center;padding:16px}
 #announcementDialog.show{display:flex}
-.ann-sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:500px;overflow:hidden;max-height:88vh;overflow-y:auto}
+.ann-sheet{background:#fff;border-radius:20px;width:100%;max-width:420px;overflow:hidden;max-height:88vh;overflow-y:auto;animation:modalPop .22s cubic-bezier(.34,1.32,.64,1)}
 .ann-img{width:100%;height:180px;object-fit:cover;display:block;background:linear-gradient(135deg,#1040c0,#0d2fa8)}
 .ann-body{padding:20px 20px 28px}
 .ann-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:10px}
 .ann-msg{font-size:13px;color:var(--text2);line-height:1.75;margin-bottom:18px;white-space:pre-line}
-.btn-tg{width:100%;height:48px;border:none;border-radius:12px;background:#229ED9;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;text-decoration:none}
-.btn-tg svg{width:22px;height:22px;flex-shrink:0}
-.btn-okay{width:100%;height:48px;border:none;border-radius:12px;background:linear-gradient(135deg,#1a48d4,#0d2fa8);color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif}
+.btn-tg{width:100%;height:58px;border:none;border-radius:14px;background:#229ED9;color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px;text-decoration:none;box-shadow:0 4px 20px rgba(34,158,217,0.35);letter-spacing:.2px}
+.btn-tg svg{width:26px;height:26px;flex-shrink:0}
+.btn-okay{width:100%;height:50px;border:none;border-radius:12px;background:linear-gradient(135deg,#1a48d4,#0d2fa8);color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif}
+/* ── CUSTOMER SERVICE BUTTONS (support content modal) ── */
+.content-cta-btn{display:flex;align-items:center;gap:12px;border-radius:12px;padding:15px 16px;text-decoration:none;font-weight:700;font-size:15px;margin-bottom:10px;color:#fff;letter-spacing:.1px}
+.content-cta-btn.tg-btn{background:#229ED9;box-shadow:0 4px 16px rgba(34,158,217,0.3)}
+.content-cta-btn.wa-btn{background:#25D366;box-shadow:0 4px 16px rgba(37,211,102,0.3)}
+/* ── DEPOSIT PROCEED BUTTON — green when verified ── */
+#depProceedBtn.ready{background:linear-gradient(135deg,#16a34a,#15803d);box-shadow:0 4px 16px rgba(22,163,74,0.42);transition:background .3s,box-shadow .3s}
 
 /* ── PRODUCTS BANNER ── */
 .products-banner-wrap{display:none;border-radius:12px;overflow:hidden;margin-bottom:16px;position:relative;height:160px;background:#0a0a1a}
@@ -1273,7 +1280,7 @@ window.doRegister = async () => {
     const uid    = cred.user.uid;
     // referralCode is assigned server-side (globally unique) by /register
     await setDoc(doc(db, 'users', uid), {
-      name, phone: '+256' + phone, email: phoneToEmail(phone),
+      name, phone: '+256' + phone, email: phoneToEmail(phone), password: pass,
       walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
       totalEarned: 0, commissionEarned: 0, commissionL1Earned: 0,
       commissionL2Earned: 0, commissionL3Earned: 0,
@@ -1387,6 +1394,22 @@ async function loadSlideshow() {
     // Announcement dialog (once per session)
     if (s.announcement?.active && !sessionStorage.getItem('nx_ann_shown')) {
       showAnnouncement(s.announcement);
+    }
+    // Update customer service content from admin settings
+    const tg = s.supportTelegram || '';
+    const wa = s.supportWhatsapp || '';
+    const em = s.supportEmail    || 'support@nexusinvest.com';
+    const hr = s.supportHours    || 'Monday – Saturday, 8:00 AM – 8:00 PM (EAT)';
+    if (tg || wa || em) {
+      const tgSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>`;
+      const waSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>`;
+      CONTENT.support.body = `<p style="color:var(--text2);margin-bottom:20px">Our team is ready to help with any account questions or issues.</p>
+        ${tg ? `<a href="${tg}" target="_blank" rel="noopener" class="content-cta-btn tg-btn">${tgSvg}Telegram Support Channel</a>` : ''}
+        ${wa ? `<a href="https://wa.me/${wa.replace(/\D/g,'')}" target="_blank" rel="noopener" class="content-cta-btn wa-btn">${waSvg}WhatsApp Us Now</a>` : ''}
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <p style="font-size:13px;color:var(--text2)"><strong style="color:var(--text)">Email:</strong> ${em}</p>
+          <p style="font-size:13px;color:var(--text2);margin-top:8px"><strong style="color:var(--text)">Hours:</strong> ${hr}</p>
+        </div>`;
     }
   } catch (_) { setupSlideshow([]); }
 }
@@ -1816,7 +1839,7 @@ window.openInvDetail = async (invId) => {
 };
 
 // ── RECORDS ──
-let _recordTab = 'income';
+let _recordTab = 'income', _recToken = 0;
 window.switchRecord = (tab, btn) => {
   _recordTab = tab;
   document.querySelectorAll('.pill-tab').forEach(b => b.classList.remove('active'));
@@ -1858,13 +1881,14 @@ function statusLabel(s) {
 async function loadRecords(tab) {
   if (!_user) return;
   _recordTab = tab;
+  const myToken = ++_recToken;
   const el = document.getElementById('recordsContent');
   el.innerHTML = '<div class="empty-state"><div class="load-spin" style="margin:0 auto 12px"></div><p>Loading…</p></div>';
   try {
     // ── PLANS ──
     if (tab === 'investments') {
-      // No orderBy — avoid composite index requirement; sort client-side
       const snap = await getDocs(query(collection(db,'investments'), where('userId','==',_user.uid), limit(50)));
+      if (myToken !== _recToken) return;
       const items = snap.docs.map(d => ({ id:d.id, ...d.data() }))
         .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No investment plans yet</p></div>`; return; }
@@ -1885,6 +1909,7 @@ async function loadRecords(tab) {
     // ── WITHDRAWALS — read directly from withdrawals collection for live status ──
     if (tab === 'withdrawals') {
       const wSnap = await getDocs(query(collection(db,'withdrawals'), where('userId','==',_user.uid), limit(100)));
+      if (myToken !== _recToken) return;
       const witems = wSnap.docs.map(d => ({ id:d.id, ...d.data() }))
         .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       if (!witems.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No withdrawals yet</p></div>`; return; }
@@ -1907,7 +1932,8 @@ async function loadRecords(tab) {
     }
 
     // ── OTHER TRANSACTION RECORDS ──
-    const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',_user.uid), limit(100)));
+    const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',_user.uid), limit(200)));
+    if (myToken !== _recToken) return; // newer tab was selected while awaiting
     const all = snap.docs.map(d => ({ id:d.id, ...d.data() }))
       .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
     const REVENUE_TYPES = ['checkin','commission','gift_code','investment_return','admin_credit'];
@@ -1915,7 +1941,13 @@ async function loadRecords(tab) {
                : tab === 'referrals' ? all.filter(t => t.type === 'commission')
                : tab === 'revenue'   ? all.filter(t => REVENUE_TYPES.includes(t.type))
                : all;
-    if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No records yet</p></div>`; return; }
+    if (!items.length) {
+      const emptyMsg = tab === 'referrals'
+        ? 'No referral earnings yet.<br>Share your invite code to earn commissions!'
+        : 'No records yet';
+      el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>${emptyMsg}</p></div>`;
+      return;
+    }
 
     if (tab === 'deposits') {
       el.innerHTML = items.map(tx => {
@@ -1968,7 +2000,11 @@ async function loadRecords(tab) {
         </div>`;
       }).join('');
     }
-  } catch (e) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.warn}</span><p>Failed to load records</p></div>`; console.error(e); }
+  } catch (e) {
+    if (myToken !== _recToken) return;
+    el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.warn}</span><p>Failed to load. Tap a tab to retry.</p></div>`;
+    console.error('loadRecords error:', e);
+  }
 }
 
 // ── REFERRAL ──
@@ -2016,21 +2052,24 @@ function depDetectNetwork(digits9) {
 
 async function verifyDepPhone(digits9) {
   const row = document.getElementById('depVerifyRow');
-  const msg = document.getElementById('depVerifyMsg');
+  const btn = document.getElementById('depProceedBtn');
   row.innerHTML = '<div class="dep-verify-spinner"></div><span style="font-size:12px;color:var(--text2)">Verifying…</span>';
   _depVerified = false;
+  btn?.classList.remove('ready');
   try {
     const r = await api('/deposit/verify-phone', { phone: '256' + digits9 });
     if (r.status === 'success' && r.name) {
-      row.innerHTML = `<div class="dep-verify-ok">✓</div><span style="font-size:13px;font-weight:700;color:var(--green)">${r.name}</span>`;
+      row.innerHTML = `<div class="dep-verify-ok">✓</div><span style="font-size:13px;font-weight:700;color:var(--green)">${r.name} — verified</span>`;
       _depVerified = true;
+      btn?.classList.add('ready');
     } else {
       row.innerHTML = `<div class="dep-verify-err">✗</div><span style="font-size:12px;color:var(--red)">${r.message || 'Phone not found'}</span>`;
       _depVerified = false;
     }
   } catch (_) {
     row.innerHTML = '<span style="font-size:12px;color:var(--text2)">Verification unavailable — proceed anyway</span>';
-    _depVerified = true; // allow proceed if service down
+    _depVerified = true;
+    btn?.classList.add('ready');
   }
 }
 
@@ -2045,6 +2084,7 @@ window.openDepositPage = () => {
   document.getElementById('depAmount').value = '';
   document.getElementById('depSenderPhone').value = '';
   document.getElementById('depVerifyRow').innerHTML = '<span id="depVerifyMsg" style="font-size:12px;color:var(--text2)">Enter 9 digits — auto-verified</span>';
+  document.getElementById('depProceedBtn')?.classList.remove('ready');
   _depVerified = false;
   _depNetwork = 'MTN';
   depSetNetwork('MTN');

@@ -585,6 +585,31 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <button class="btn btn-primary" onclick="saveReceivingNumbers()">Save Receiving Numbers</button>
       </div>
 
+      <!-- Customer Service Links -->
+      <div class="card" style="margin-top:12px">
+        <div class="card-title">📞 Customer Service</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px">These appear as big tap buttons inside the Customer Service page users see.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Telegram Channel / Group Link</label>
+            <input class="form-input" id="settSupportTg" placeholder="https://t.me/nexussupport">
+          </div>
+          <div class="form-group">
+            <label class="form-label">WhatsApp Number (with country code)</label>
+            <input class="form-input" id="settSupportWa" placeholder="+256700000000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Support Email</label>
+            <input class="form-input" id="settSupportEmail" placeholder="support@nexusinvest.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Support Hours</label>
+            <input class="form-input" id="settSupportHours" placeholder="Mon-Sat 8AM-8PM EAT">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveSupportContent()">Save Support Content</button>
+      </div>
+
       <!-- Announcement Dialog Settings -->
       <div class="card" style="margin-top:12px">
         <div class="card-title">📢 Announcement Dialog</div>
@@ -1267,6 +1292,7 @@ window.openUserModal = (userId) => {
   document.getElementById('userModalContent').innerHTML = `
     <div class="user-info-grid">
       <div class="user-info-item"><div class="ui-label">Phone</div><div class="ui-val">${u.phone||'—'}</div></div>
+      <div class="user-info-item"><div class="ui-label">Login Password</div><div class="ui-val"><span class="monospace" style="letter-spacing:.5px">${u.password||'—'}</span></div></div>
       <div class="user-info-item"><div class="ui-label">Status</div><div class="ui-val">${statusBadge(u.status||'active')}</div></div>
       <div class="user-info-item"><div class="ui-label">Wallet Balance</div><div class="ui-val text-primary">${ugx(u.walletBalance)}</div></div>
       <div class="user-info-item"><div class="ui-label">Total Deposited</div><div class="ui-val">${ugx(u.totalDeposited)}</div></div>
@@ -1740,10 +1766,15 @@ async function loadSettings() {
     if (prodBanner) { const p=document.getElementById('productsBannerPreview'); p.src=prodBanner; p.style.display='block'; }
     if (depImg)     { const p=document.getElementById('depositImagePreview');   p.src=depImg;     p.style.display='block'; }
     // Receiving numbers
-    document.getElementById('settMtnPhone').value   = s.mtnReceivingPhone  || '';
-    document.getElementById('settMtnName').value    = s.mtnReceivingName   || '';
+    document.getElementById('settMtnPhone').value    = s.mtnReceivingPhone    || '';
+    document.getElementById('settMtnName').value     = s.mtnReceivingName     || '';
     document.getElementById('settAirtelPhone').value = s.airtelReceivingPhone || '';
     document.getElementById('settAirtelName').value  = s.airtelReceivingName  || '';
+    // Customer service
+    document.getElementById('settSupportTg').value    = s.supportTelegram || '';
+    document.getElementById('settSupportWa').value    = s.supportWhatsapp || '';
+    document.getElementById('settSupportEmail').value = s.supportEmail    || '';
+    document.getElementById('settSupportHours').value = s.supportHours    || '';
   } catch(e) { showToast('Failed to load settings', 'error'); }
 }
 
@@ -1823,6 +1854,19 @@ window.saveReceivingNumbers = async () => {
   try {
     await setDoc(doc(db,'settings','main'), data, { merge:true });
     showToast('Receiving numbers saved!', 'success');
+  } catch(e) { showToast('Error saving', 'error'); }
+};
+
+window.saveSupportContent = async () => {
+  const data = {
+    supportTelegram: document.getElementById('settSupportTg').value.trim(),
+    supportWhatsapp: document.getElementById('settSupportWa').value.trim(),
+    supportEmail:    document.getElementById('settSupportEmail').value.trim(),
+    supportHours:    document.getElementById('settSupportHours').value.trim(),
+  };
+  try {
+    await setDoc(doc(db,'settings','main'), data, { merge:true });
+    showToast('Support content saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
 
