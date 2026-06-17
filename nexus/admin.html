@@ -538,6 +538,22 @@ tr:hover td{background:rgba(255,255,255,.02)}
             <label class="form-label">Minimum Withdrawal (UGX)</label>
             <input class="form-input" type="number" id="settMinWit" value="15000">
           </div>
+          <div class="form-group">
+            <label class="form-label">Liquidity Fee % (default 17)</label>
+            <input class="form-input" type="number" id="settLiqFee" value="17" min="0" max="100" step="0.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">L1 Commission % (default 35)</label>
+            <input class="form-input" type="number" id="settCommL1" value="35" min="0" max="100" step="0.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">L2 Commission % (default 5)</label>
+            <input class="form-input" type="number" id="settCommL2" value="5" min="0" max="100" step="0.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">L3 Commission % (default 2)</label>
+            <input class="form-input" type="number" id="settCommL3" value="2" min="0" max="100" step="0.1">
+          </div>
         </div>
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
@@ -1702,6 +1718,10 @@ async function loadSettings() {
     document.getElementById('settWelcome').value  = s.welcomeBonus   || 7000;
     document.getElementById('settMinDep').value   = s.minDeposit     || 30000;
     document.getElementById('settMinWit').value   = s.minWithdrawal  || 15000;
+    document.getElementById('settLiqFee').value   = s.liquidityFee  != null ? (s.liquidityFee  * 100).toFixed(1) : 17;
+    document.getElementById('settCommL1').value   = s.commL1        != null ? (s.commL1        * 100).toFixed(1) : 35;
+    document.getElementById('settCommL2').value   = s.commL2        != null ? (s.commL2        * 100).toFixed(1) : 5;
+    document.getElementById('settCommL3').value   = s.commL3        != null ? (s.commL3        * 100).toFixed(1) : 2;
     // Announcement
     const ann = s.announcement || {};
     document.getElementById('annActive').checked    = !!ann.active;
@@ -1734,6 +1754,10 @@ window.saveSettings = async () => {
     welcomeBonus:    parseInt(document.getElementById('settWelcome').value) || 10000,
     minDeposit:      parseInt(document.getElementById('settMinDep').value)  || 30000,
     minWithdrawal:   parseInt(document.getElementById('settMinWit').value)  || 15000,
+    liquidityFee:    (parseFloat(document.getElementById('settLiqFee').value) || 17) / 100,
+    commL1:          (parseFloat(document.getElementById('settCommL1').value) || 35) / 100,
+    commL2:          (parseFloat(document.getElementById('settCommL2').value) || 5)  / 100,
+    commL3:          (parseFloat(document.getElementById('settCommL3').value) || 2)  / 100,
   };
   try {
     await setDoc(doc(db,'settings','main'), s, { merge:true });

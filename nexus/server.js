@@ -39,6 +39,20 @@ const COMM_L2        = 0.05;
 const COMM_L3        = 0.02;
 const LIQUIDITY_FEE  = 0.17;
 
+// ── SETTINGS CACHE — reads Firestore `settings/main`, TTL 5 min ──
+// Admin-editable rates (commL1/L2/L3, liquidityFee, minWithdrawal) live here;
+// hardcoded constants above are fallbacks only so a bad Firestore value never breaks the server.
+let _settingsCache = null, _settingsCacheTs = 0;
+async function getSettings() {
+  if (Date.now() - _settingsCacheTs < 5 * 60 * 1000) return _settingsCache || {};
+  try {
+    const snap = await db.collection('settings').doc('main').get();
+    _settingsCache = snap.exists ? snap.data() : {};
+  } catch (_) { _settingsCache = _settingsCache || {}; }
+  _settingsCacheTs = Date.now();
+  return _settingsCache;
+}
+
 // ── UUID v4 generator ──
 function uuidv4() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -170,23 +184,30 @@ function parseMoMoSMS(sms) {
 async function payCommissions(investorId, amount, investmentId) {
   const { date, time } = nowStr();
   try {
-    const invSnap = await db.collection('users').doc(investorId).get();
+    const [invSnap, sett] = await Promise.all([
+      db.collection('users').doc(investorId).get(),
+      getSettings()
+    ]);
     if (!invSnap.exists) return;
     const investor = invSnap.data();
     const l1Id = investor.referredBy;
     if (!l1Id || l1Id === investorId) return;
 
+    // Rates from Firestore settings; hardcoded constants are fallbacks
+    const commL1 = sett.commL1 ?? COMM_L1;
+    const commL2 = sett.commL2 ?? COMM_L2;
+    const commL3 = sett.commL3 ?? COMM_L3;
     const dedupFlag = `commPaid_${investmentId}`;
 
-    // ── L1: direct referrer gets 35% of purchase price ──
+    // ── L1 ──
     const l1Snap = await db.collection('users').doc(l1Id).get();
     if (!l1Snap.exists) return;
-    const l1Amt = Math.round(amount * COMM_L1);
+    const l1Amt = Math.round(amount * commL1);
     if (l1Amt > 0 && !l1Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l1Id);
         const f   = await t.get(ref);
-        if (f.data()[dedupFlag]) return; // already paid for this investment
+        if (f.data()[dedupFlag]) return;
         t.update(ref, {
           walletBalance:      FieldValue.increment(l1Amt),
           commissionEarned:   FieldValue.increment(l1Amt),
@@ -195,19 +216,19 @@ async function payCommissions(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l1Id, type: 'commission',
-          description: `L1 commission (35%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          description: `L1 commission (${Math.round(commL1*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
           amount: l1Amt, level: 1, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
       });
     }
 
-    // ── L2: referrer's referrer gets 5% ──
+    // ── L2 ──
     const l2Id = l1Snap.data().referredBy;
     if (!l2Id || l2Id === l1Id || l2Id === investorId) return;
     const l2Snap = await db.collection('users').doc(l2Id).get();
     if (!l2Snap.exists) return;
-    const l2Amt = Math.round(amount * COMM_L2);
+    const l2Amt = Math.round(amount * commL2);
     if (l2Amt > 0 && !l2Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l2Id);
@@ -221,19 +242,19 @@ async function payCommissions(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l2Id, type: 'commission',
-          description: `L2 commission (5%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          description: `L2 commission (${Math.round(commL2*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
           amount: l2Amt, level: 2, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
       });
     }
 
-    // ── L3: 2% ──
+    // ── L3 ──
     const l3Id = l2Snap.data().referredBy;
     if (!l3Id || l3Id === l2Id || l3Id === l1Id || l3Id === investorId) return;
     const l3Snap = await db.collection('users').doc(l3Id).get();
     if (!l3Snap.exists) return;
-    const l3Amt = Math.round(amount * COMM_L3);
+    const l3Amt = Math.round(amount * commL3);
     if (l3Amt > 0 && !l3Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l3Id);
@@ -247,7 +268,7 @@ async function payCommissions(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l3Id, type: 'commission',
-          description: `L3 commission (2%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          description: `L3 commission (${Math.round(commL3*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
           amount: l3Amt, level: 3, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -360,6 +381,8 @@ app.post('/sms/incoming', async (req, res) => {
           });
         });
         console.log(`✅ Deposit matched: ${matchedRef.id} — ${fmtUGX(amount)} → ${userId}`);
+        // Referral commission fires on every successful deposit
+        payCommissions(userId, amount, 'dep_' + matchedRef.id).catch(e => console.error('Deposit commission err:', e.message));
       } else {
         // No match — store for admin review
         await db.collection('unmatchedDeposits').add({
@@ -585,11 +608,18 @@ app.post('/withdraw/request', async (req, res) => {
   if (!userId || !amount || !phone)
     return res.status(400).json({ status: 'error', message: 'userId, amount and phone required' });
   const amt = parseFloat(amount);
-  if (isNaN(amt) || amt < MIN_WITHDRAWAL)
-    return res.status(400).json({ status: 'error', message: `Minimum withdrawal is ${fmtUGX(MIN_WITHDRAWAL)}` });
+  if (isNaN(amt) || amt <= 0)
+    return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   const fullPhone = cleanPhone(phone);
   try {
-    const uSnap = await db.collection('users').doc(userId).get();
+    const [uSnap, sett] = await Promise.all([
+      db.collection('users').doc(userId).get(),
+      getSettings()
+    ]);
+    const feeRate = sett.liquidityFee ?? LIQUIDITY_FEE;
+    const minWit  = sett.minWithdrawal ?? MIN_WITHDRAWAL;
+    if (amt < minWit)
+      return res.status(400).json({ status: 'error', message: `Minimum withdrawal is ${fmtUGX(minWit)}` });
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
@@ -597,7 +627,7 @@ app.post('/withdraw/request', async (req, res) => {
     if ((user.walletBalance || 0) < amt)
       return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });
 
-    const fee    = Math.round(amt * LIQUIDITY_FEE);
+    const fee    = Math.round(amt * feeRate);
     const netAmt = amt - fee;
     const { date, time } = nowStr();
     let witId;
@@ -1333,14 +1363,31 @@ async function runMaturityCheck() {
   } catch (e) { console.error('Maturity error:', e.message); return 0; }
 }
 
+// Schedule runDailyCashback to fire at exactly 00:00 EAT (UTC+3) each night,
+// then reschedule itself so it self-corrects for drift.
+function scheduleMidnightEAT() {
+  const nowUtc = Date.now();
+  const eatNow = new Date(nowUtc + 3 * 3600000);
+  // 00:00 EAT tomorrow = UTC midnight of tomorrow (EAT date) minus 3 h
+  const midnightEATUtc = Date.UTC(
+    eatNow.getUTCFullYear(), eatNow.getUTCMonth(), eatNow.getUTCDate() + 1
+  ) - 3 * 3600000;
+  const delay = Math.max(60000, midnightEATUtc - nowUtc);
+  console.log(`⏰ Daily cashback next run: ${new Date(midnightEATUtc).toISOString()} (in ${Math.round(delay/60000)}m)`);
+  setTimeout(async () => {
+    await runDailyCashback();
+    scheduleMidnightEAT();
+  }, delay);
+}
+
 function startCrons() {
   // Maturity check every 30 min
   setInterval(runMaturityCheck, 30 * 60 * 1000);
   runMaturityCheck();
-  // Daily cashback every hour (catches any missed days quickly)
-  setInterval(runDailyCashback, 60 * 60 * 1000);
+  // Daily cashback at 00:00 EAT; also run once on startup to catch any missed credits
+  scheduleMidnightEAT();
   runDailyCashback();
-  console.log('⏰ Crons started (maturity + daily cashback)');
+  console.log('⏰ Crons started (maturity + daily cashback at midnight EAT)');
 }
 
 const PORT = process.env.PORT || 3000;
