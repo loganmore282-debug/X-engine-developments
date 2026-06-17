@@ -451,9 +451,13 @@ tr:hover td{background:rgba(255,255,255,.02)}
             <label class="form-label">Count (1–50)</label>
             <input class="form-input" type="number" id="codeCount" value="5" min="1" max="50" style="max-width:120px">
           </div>
-          <div class="form-group" style="margin:0;flex:1;min-width:160px">
+          <div class="form-group" style="margin:0;flex:1;min-width:140px">
+            <label class="form-label">Max users per code</label>
+            <input class="form-input" type="number" id="codeMaxUsers" value="1" min="1" max="500" placeholder="e.g. 27">
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:140px">
             <label class="form-label">Expires in days (optional)</label>
-            <input class="form-input" type="number" id="codeExpiry" placeholder="leave blank = no expiry" min="1">
+            <input class="form-input" type="number" id="codeExpiry" placeholder="no expiry" min="1">
           </div>
           <button class="btn btn-primary" onclick="generateCodes()">Generate</button>
         </div>
@@ -843,6 +847,8 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 window.closeModal = closeModal;
 
 function statusBadge(s) {
+  if (s === 'exhausted') return `<span class="badge badge-danger">Exhausted</span>`;
+  if (s === 'partial')   return `<span class="badge badge-warn">In Use</span>`;
   const map = {
     pending:'bs-pending', processing:'bs-processing', processed:'bs-success',
     success:'bs-success', active:'bs-active', rejected:'bs-rejected',
@@ -1511,9 +1517,9 @@ async function loadGiftCodes() {
 
 function renderCodes() {
   let list = _allCodes;
-  if (_codeFilter === 'active')      list = list.filter(c => c.active && (!c.usedBy || c.usedBy.length === 0));
+  if (_codeFilter === 'active')      list = list.filter(c => c.active && !(c.maxUsers && (c.usedBy||[]).length >= c.maxUsers));
   else if (_codeFilter === 'used')   list = list.filter(c => c.usedBy && c.usedBy.length > 0);
-  else if (_codeFilter === 'deactivated') list = list.filter(c => !c.active);
+  else if (_codeFilter === 'deactivated') list = list.filter(c => !c.active || (c.maxUsers && (c.usedBy||[]).length >= c.maxUsers));
 
   if (!list.length) {
     document.getElementById('codesTable').innerHTML = '<div class="empty"><div class="empty-icon">🎁</div><div class="empty-text">No gift codes found</div></div>';
@@ -1522,22 +1528,26 @@ function renderCodes() {
 
   const rows = list.map(c => {
     const usedCount = (c.usedBy||[]).length;
-    const status    = !c.active ? 'deactivated' : usedCount > 0 ? 'used' : 'active';
+    const maxU      = c.maxUsers || null;
+    const exhausted = maxU && usedCount >= maxU;
+    const status    = !c.active ? 'deactivated' : exhausted ? 'exhausted' : usedCount > 0 ? 'partial' : 'active';
+    const usedLabel = maxU ? `${usedCount}/${maxU}` : String(usedCount);
+    const canUse    = c.active && !exhausted;
     return `<tr>
       <td><span class="monospace">${c.code||'—'}</span></td>
-      <td>${c.active ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>'}</td>
-      <td>${usedCount}</td>
-      <td class="text-muted">${fmtDate(c.createdAt)}</td>
+      <td class="text-muted" style="font-size:12px">200–2000</td>
+      <td class="text-muted">${maxU || 'Unlimited'}</td>
+      <td>${usedLabel}</td>
       <td class="text-muted">${c.expiresAt ? fmtDate(c.expiresAt) : '—'}</td>
       <td>${statusBadge(status)}</td>
-      <td>${c.active ? `<button class="btn btn-danger btn-sm" onclick="deactivateCode('${c.id}')">Deactivate</button>` : '—'}</td>
+      <td>${canUse ? `<button class="btn btn-danger btn-sm" onclick="deactivateCode('${c.id}')">Deactivate</button>` : '—'}</td>
     </tr>`;
   }).join('');
 
   document.getElementById('codesTable').innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Code</th><th>Active</th><th>Used</th><th>Created</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Code</th><th>Amount</th><th>Max Users</th><th>Used</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -1556,7 +1566,8 @@ window.generateCodes = async () => {
   if (count < 1 || count > 50) { showToast('Count must be 1–50', 'error'); return; }
   showToast('Generating…');
   try {
-    const body = { count, adminKey: ADMIN_PASS };
+    const maxUsers = parseInt(document.getElementById('codeMaxUsers').value) || 1;
+  const body = { count, adminKey: ADMIN_PASS, maxUsers };
     if (expiry) body.expiresInDays = expiry;
     const r = await api('/admin/gift-codes/generate', body);
     if (r.status === 'success') {

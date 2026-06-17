@@ -889,8 +889,9 @@ app.post('/giftcode/redeem', async (req, res) => {
     const gcd = gc.data();
     if (!gcd.active) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
     if ((gcd.usedBy || []).includes(userId)) return res.status(400).json({ status: 'error', message: 'You have already redeemed this code' });
+    if (gcd.maxUsers && (gcd.usedBy || []).length >= gcd.maxUsers) return res.status(400).json({ status: 'error', message: 'Usage limit reached — this code has expired' });
     if (gcd.expiresAt && gcd.expiresAt.toDate() < new Date()) return res.status(400).json({ status: 'error', message: 'This gift code has expired' });
-    const amount = Math.floor(Math.random() * 14901) + 100;
+    const amount = Math.floor(Math.random() * 1801) + 200;
     const { date, time } = nowStr();
     await db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
@@ -1020,7 +1021,7 @@ app.post('/admin/users', async (req, res) => {
 // ADMIN — GIFT CODES: GENERATE
 // ═══════════════════════════════════════════
 app.post('/admin/gift-codes/generate', async (req, res) => {
-  const { adminKey, count = 1, expiresInDays } = req.body;
+  const { adminKey, count = 1, expiresInDays, maxUsers } = req.body;
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const n = Math.min(Math.max(parseInt(count) || 1, 1), 50);
   try {
@@ -1046,6 +1047,7 @@ app.post('/admin/gift-codes/generate', async (req, res) => {
         code,
         active:    true,
         usedBy:    [],
+        maxUsers:  maxUsers ? Math.max(1, parseInt(maxUsers)) : null,
         createdAt: FieldValue.serverTimestamp()
       };
       if (expiresAt) docData.expiresAt = admin.firestore.Timestamp.fromDate(expiresAt);
