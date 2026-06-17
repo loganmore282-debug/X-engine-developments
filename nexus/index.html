@@ -1324,10 +1324,12 @@ const SLIDE_DEFAULTS = [
   { bg:'linear-gradient(135deg,#0a0a0a 0%,#130e00 50%,#0a0a0a 100%)', slogan:'Daily Returns.\nInstant Commission.' },
   { bg:'linear-gradient(135deg,#03080f 0%,#06101e 60%,#030a18 100%)', slogan:'Your Money.\nWorking For You.' },
 ];
+let _slideTimer = null;
 function setupSlideshow(images) {
-  const wrap  = document.getElementById('slideshowContainer');
+  if (_slideTimer) { clearInterval(_slideTimer); _slideTimer = null; }
+  const wrap   = document.getElementById('slideshowContainer');
   const dotsEl = document.getElementById('slideshowDots');
-  const count = images.length || SLIDE_DEFAULTS.length;
+  const count  = images.length || SLIDE_DEFAULTS.length;
   wrap.innerHTML   = '';
   dotsEl.innerHTML = '';
   for (let i = 0; i < count; i++) {
@@ -1335,10 +1337,10 @@ function setupSlideshow(images) {
     const def = SLIDE_DEFAULTS[i % SLIDE_DEFAULTS.length];
     const slide = document.createElement('div');
     slide.className = 'slide' + (i === 0 ? ' active' : '');
+    slide.style.background = def.bg; // gradient shows instantly while image loads
     if (img) {
-      slide.innerHTML = `<img src="${img}" alt="" fetchpriority="${i===0?'high':'low'}" decoding="async" style="width:100%;height:100%;object-fit:cover"><div class="slide-overlay"></div>`;
+      slide.innerHTML = `<img src="${img}" alt="" fetchpriority="${i===0?'high':'low'}" decoding="async" loading="eager" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0"><div class="slide-overlay"></div>`;
     } else {
-      slide.style.background = def.bg;
       slide.innerHTML = `<div class="slide-watermark">◈</div><div class="slide-slogan">${def.slogan.replace('\n','<br>')}</div>`;
     }
     wrap.appendChild(slide);
@@ -1347,9 +1349,10 @@ function setupSlideshow(images) {
     dotsEl.appendChild(dot);
   }
   let cur = 0;
-  setInterval(() => {
+  _slideTimer = setInterval(() => {
     const slides = wrap.querySelectorAll('.slide');
     const dots   = dotsEl.querySelectorAll('.sdot');
+    if (!slides.length) return;
     slides[cur].classList.remove('active');
     dots[cur].classList.remove('active');
     cur = (cur + 1) % slides.length;
@@ -1358,23 +1361,13 @@ function setupSlideshow(images) {
   }, 3500);
 }
 async function loadSlideshow() {
+  setupSlideshow([]); // render gradient defaults immediately — no blank screen
   try {
     const snap = await getDoc(doc(db, 'settings', 'main'));
-    if (!snap.exists()) { setupSlideshow([]); return; }
+    if (!snap.exists()) return; // keep defaults
     const s = snap.data();
     const images = s.slideshowImages || [];
-
-    // Preload all slideshow images in parallel before injecting DOM
-    if (images.length) {
-      await Promise.allSettled(images.map(url => new Promise(res => {
-        const img = new Image();
-        img.onload = img.onerror = res;
-        img.fetchPriority = 'high';
-        img.src = url;
-      })));
-    }
-
-    setupSlideshow(images);
+    setupSlideshow(images); // swap in real slides once Firestore responds
     // Products banner
     if (s.productsBannerImage) {
       const wrap = document.getElementById('productsBannerWrap');
