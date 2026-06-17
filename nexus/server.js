@@ -126,42 +126,41 @@ async function generateUniqueRefCode() {
 }
 
 // ── SMS PARSING ──
+// Handles the two real Ugandan carrier formats:
+//   MTN:   "You have received UGX 22120 from VICTOR KYOYAGALA, 256791269201 on 2026-06-14..."
+//   Airtel: "RECEIVED. TID 149730678579. UGX 27,200 from 743706731, HANIFAH. Bal UGX 332,358."
 function parseMoMoSMS(sms) {
   if (!sms) return null;
-  if (!/received|deposited|credited/i.test(sms)) return null;
-  const amtMatch = sms.match(/UGX\s*([0-9,]+)/i);
-  if (!amtMatch) return null;
-  const amount = parseInt(amtMatch[1].replace(/,/g, ''), 10);
-  if (!amount || amount < 100) return null;
+  const text = sms.trim();
+  let amount, senderPhone, senderName, txnId;
 
-  // Phone extraction: try multiple patterns for MTN/Airtel Uganda
-  const phonePatterns = [
-    /from\s+(\+?256[347]\d{8})/i,
-    /from\s+(0[347]\d{8})/i,
-    /from\s+\w[^0-9]*?(0[347]\d{8})/i,   // "from NAME 0771234567"
-    /from\s+[A-Z\s]+\(?(0[347]\d{8})\)?/i, // "from JOHN DOE(0771234567)"
-    /(\+256[347]\d{8})/,
-    /(0[347]\d{8})/
-  ];
-  let senderPhone = null;
-  for (const p of phonePatterns) {
-    const m = sms.match(p);
-    if (m) { senderPhone = m[1]; break; }
+  // ── MTN Uganda MoMo ──
+  const mtnM = text.match(
+    /you have received UGX\s*([\d,]+)\s+from\s+([A-Z][A-Z ]+),\s*(256\d{9}|\d{9,10})\s+on/i
+  );
+  if (mtnM) {
+    amount      = parseInt(mtnM[1].replace(/,/g, ''), 10);
+    senderName  = mtnM[2].trim();
+    senderPhone = mtnM[3];
+    const idM   = text.match(/\bID[:\s]+(\d{6,})/i);
+    txnId = idM ? idM[1] : null;
   }
 
-  // Sender name extraction (best effort — useful for admin review)
-  let senderName = null;
-  const nameMatch = sms.match(/from\s+([A-Z][A-Z\s]{2,30?}?)(?:\s+via|\s+0|\s+\(|\.|\s+Your)/i);
-  if (nameMatch) senderName = nameMatch[1].trim();
+  // ── Airtel Uganda Money ──
+  if (!amount) {
+    const airM = text.match(
+      /RECEIVED\.\s*TID\s+(\d+)\.\s*UGX\s*([\d,]+)\s+from\s+(\d{9,12}),\s*([A-Z][A-Z ]*)\.\s*Bal/i
+    );
+    if (airM) {
+      txnId       = airM[1];
+      amount      = parseInt(airM[2].replace(/,/g, ''), 10);
+      senderPhone = airM[3];
+      senderName  = airM[4].trim();
+    }
+  }
 
-  // Transaction ID extraction
-  const txnMatch = sms.match(/[Ff]inancial\s*[Tt]ransaction\s*[Ii]d\s+(\d+)/) ||
-                   sms.match(/[Tt]xn\s*[Ii]d[:\s]+([A-Z0-9]+)/i) ||
-                   sms.match(/[Tt]ransaction\s*[Ii][Dd][:\s]+([A-Z0-9]+)/i) ||
-                   sms.match(/[Rr]ef(?:erence)?[:\s#]+([A-Z0-9]+)/i) ||
-                   sms.match(/ID[:\s]+([A-Z0-9]{6,})/i);
-  const txnId = txnMatch ? txnMatch[1] : crypto.randomBytes(6).toString('hex').toUpperCase();
-
+  if (!amount || amount < 100 || !senderPhone) return null;
+  if (!txnId) txnId = crypto.randomBytes(6).toString('hex').toUpperCase();
   return { amount, senderPhone, senderName, txnId };
 }
 
