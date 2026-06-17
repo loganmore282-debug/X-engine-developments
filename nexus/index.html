@@ -478,6 +478,19 @@ body{padding-bottom:106px}
 .net-logo{height:22px;width:auto;border-radius:3px;flex-shrink:0}
 /* withdraw info badge */
 .page-bal-badge{background:var(--bluefade);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#2563eb;font-weight:700}
+/* ── WITHDRAWAL SAVED ACCOUNTS ── */
+.wit-acc-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--border2);border-radius:12px;padding:13px 14px;cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;user-select:none}
+.wit-acc-card.sel{border-color:var(--blue);background:var(--bluefade)}
+.wit-acc-card:active{opacity:.75}
+.wit-acc-ico{width:38px;height:38px;border-radius:50%;background:var(--bluefade);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--blue)}
+.wit-acc-ico svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wit-acc-info{flex:1;min-width:0}
+.wit-acc-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wit-acc-num{font-size:12px;color:var(--text2);margin-top:2px}
+.wit-acc-chk{flex-shrink:0;color:var(--blue);display:none}
+.wit-acc-chk svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.wit-acc-card.sel .wit-acc-chk{display:block}
+.wit-fee-row{background:var(--bluefade);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#2563eb;font-weight:600;display:none}
 
 @media(max-width:400px){
   .level-cards{grid-template-columns:1fr 1fr 1fr}
@@ -1015,13 +1028,19 @@ body{padding-bottom:106px}
   <div class="page-body">
     <div class="page-bal-badge">Available: <span id="witBalBadge">UGX 0</span></div>
     <label class="form-label">Amount (UGX)</label>
-    <input class="form-input" id="witAmount" type="number" placeholder="15000" min="15000" inputmode="numeric">
-    <label class="form-label">Receive on Phone</label>
+    <input class="form-input" id="witAmount" type="number" placeholder="15000" inputmode="numeric" oninput="updateWitFee()">
+    <div class="wit-fee-row" id="witFeeRow"></div>
+    <!-- Saved accounts — tap to auto-fill -->
+    <div id="witAccountsWrap" style="display:none">
+      <label class="form-label">Saved Accounts</label>
+      <div id="witAccList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+    </div>
+    <label class="form-label" id="witPhoneLbl">Receive on Phone</label>
     <div class="phone-form-wrap">
       <span class="phone-form-prefix">+256</span>
       <input type="tel" id="witPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
     </div>
-    <div class="form-info">17% liquidity fee applies. Net amount will be deducted on processing. Your withdrawal will be processed within 24 hours by our team.</div>
+    <div class="form-info">17% liquidity fee applies on all withdrawals. Processing within 24 hours.</div>
     <button class="btn-submit" onclick="submitWithdrawal()">Request Withdrawal</button>
   </div>
 </div>
@@ -2194,17 +2213,66 @@ window.openWithdrawPage = () => {
   if (!_userData) return;
   document.getElementById('witBalBadge').textContent = ugx(_userData.walletBalance);
   document.getElementById('witAmount').value = '';
-  document.getElementById('witPhone').value  = _userData.phone?.replace('+256','') || '';
+  document.getElementById('witPhone').value  = '';
+  document.getElementById('witFeeRow').style.display = 'none';
+
+  // Render saved bank accounts as tappable cards
+  const accounts = _userData.bankAccounts || [];
+  const wrap = document.getElementById('witAccountsWrap');
+  const list = document.getElementById('witAccList');
+  const lbl  = document.getElementById('witPhoneLbl');
+  if (accounts.length) {
+    wrap.style.display = 'block';
+    lbl.textContent = 'Or enter phone manually';
+    list.innerHTML = accounts.map((a, i) => `
+      <div class="wit-acc-card" id="witAcc${i}" onclick="pickWitAccount(${i},'${String(a.phone).replace(/'/g,'')}')">
+        <div class="wit-acc-ico"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.63 4.4 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.13 1 .36 1.98.71 2.93a2 2 0 0 1-.45 2.11L7.91 9.91A16 16 0 0 0 14.09 16l.91-.91a2 2 0 0 1 2.11-.45c.95.35 1.93.58 2.93.71A2 2 0 0 1 22 16.92z"/></svg></div>
+        <div class="wit-acc-info">
+          <div class="wit-acc-name">${a.name}</div>
+          <div class="wit-acc-num">+256 ${a.phone}</div>
+        </div>
+        <div class="wit-acc-chk" id="witChk${i}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      </div>`).join('');
+  } else {
+    wrap.style.display = 'none';
+    lbl.textContent = 'Receive on Phone';
+  }
   openPage('withdrawPage');
+};
+
+window.pickWitAccount = (idx, phone) => {
+  const accounts = _userData?.bankAccounts || [];
+  accounts.forEach((_, i) => {
+    const c = document.getElementById('witAcc' + i);
+    const k = document.getElementById('witChk' + i);
+    if (c) c.classList.remove('sel');
+    if (k) k.style.display = 'none';
+  });
+  const card = document.getElementById('witAcc' + idx);
+  const chk  = document.getElementById('witChk' + idx);
+  if (card) card.classList.add('sel');
+  if (chk)  chk.style.display = 'block';
+  const num = String(phone).replace(/\D/g,'').replace(/^256/,'').replace(/^0/,'');
+  document.getElementById('witPhone').value = num;
+};
+
+window.updateWitFee = () => {
+  const amt = parseInt(document.getElementById('witAmount').value, 10);
+  const row = document.getElementById('witFeeRow');
+  if (!amt || amt <= 0) { row.style.display = 'none'; return; }
+  const fee = Math.round(amt * 0.17);
+  const net = amt - fee;
+  row.style.display = 'block';
+  row.textContent = `Fee: ${ugx(fee)} (17%)   →   You receive: ${ugx(net)}`;
 };
 
 window.submitWithdrawal = async () => {
   if (!_user || !_userData) return;
   const amount = parseInt(document.getElementById('witAmount').value, 10);
   const phone  = document.getElementById('witPhone').value.trim().replace(/\D/g,'');
-  if (!amount || amount < 15000) { showToast('Minimum withdrawal is UGX 15,000', 'error'); return; }
+  if (!amount || amount <= 0) { showToast('Enter withdrawal amount', 'error'); return; }
   if (amount > (_userData.walletBalance || 0)) { showToast('Insufficient balance', 'error'); return; }
-  if (!phone)  { showToast('Enter withdrawal phone number', 'error'); return; }
+  if (!phone || phone.length < 9) { showToast('Enter a valid phone number', 'error'); return; }
   closePage('withdrawPage');
   showLoading(true);
   try {
