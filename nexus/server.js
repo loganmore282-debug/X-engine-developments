@@ -165,7 +165,9 @@ function parseMoMoSMS(sms) {
 }
 
 // ── COMMISSION CHAIN ──
-async function payCommissions(investorId, amount) {
+// Commission fires on EVERY plan purchase at the investment price.
+// Each investmentId can only trigger commission once (dedup via commissionPaid_<invId> flag).
+async function payCommissions(investorId, amount, investmentId) {
   const { date, time } = nowStr();
   try {
     const invSnap = await db.collection('users').doc(investorId).get();
@@ -174,81 +176,79 @@ async function payCommissions(investorId, amount) {
     const l1Id = investor.referredBy;
     if (!l1Id || l1Id === investorId) return;
 
+    const dedupFlag = `commPaid_${investmentId}`;
+
+    // ── L1: direct referrer gets 35% of purchase price ──
     const l1Snap = await db.collection('users').doc(l1Id).get();
     if (!l1Snap.exists) return;
     const l1Amt = Math.round(amount * COMM_L1);
-    // L1 commission: only on the FIRST investment by this referral
-    const paidL1To = l1Snap.data().paidL1To || [];
-    if (l1Amt > 0 && !paidL1To.includes(investorId)) {
+    if (l1Amt > 0 && !l1Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l1Id);
         const f   = await t.get(ref);
-        const alreadyPaid = (f.data().paidL1To || []).includes(investorId);
-        if (alreadyPaid) return; // double-check inside transaction
+        if (f.data()[dedupFlag]) return; // already paid for this investment
         t.update(ref, {
-          walletBalance:      (f.data().walletBalance || 0) + l1Amt,
+          walletBalance:      FieldValue.increment(l1Amt),
           commissionEarned:   FieldValue.increment(l1Amt),
           commissionL1Earned: FieldValue.increment(l1Amt),
-          paidL1To:           FieldValue.arrayUnion(investorId)
+          [dedupFlag]:        true
         });
         t.set(db.collection('transactions').doc(), {
           userId: l1Id, type: 'commission',
-          description: `L1 commission — ${investor.name || investor.phone} first investment ${fmtUGX(amount)}`,
-          amount: l1Amt, level: 1, fromUserId: investorId, status: 'success',
+          description: `L1 commission (35%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          amount: l1Amt, level: 1, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
       });
     }
 
+    // ── L2: referrer's referrer gets 5% ──
     const l2Id = l1Snap.data().referredBy;
     if (!l2Id || l2Id === l1Id || l2Id === investorId) return;
     const l2Snap = await db.collection('users').doc(l2Id).get();
     if (!l2Snap.exists) return;
     const l2Amt = Math.round(amount * COMM_L2);
-    // L2 commission: only on the FIRST investment by this investor
-    const paidL2To = l2Snap.data().paidL2To || [];
-    if (l2Amt > 0 && !paidL2To.includes(investorId)) {
+    if (l2Amt > 0 && !l2Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l2Id);
         const f   = await t.get(ref);
-        if ((f.data().paidL2To || []).includes(investorId)) return;
+        if (f.data()[dedupFlag]) return;
         t.update(ref, {
-          walletBalance:      (f.data().walletBalance || 0) + l2Amt,
+          walletBalance:      FieldValue.increment(l2Amt),
           commissionEarned:   FieldValue.increment(l2Amt),
           commissionL2Earned: FieldValue.increment(l2Amt),
-          paidL2To:           FieldValue.arrayUnion(investorId)
+          [dedupFlag]:        true
         });
         t.set(db.collection('transactions').doc(), {
           userId: l2Id, type: 'commission',
-          description: `L2 commission — ${investor.name || investor.phone} first investment ${fmtUGX(amount)}`,
-          amount: l2Amt, level: 2, fromUserId: investorId, status: 'success',
+          description: `L2 commission (5%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          amount: l2Amt, level: 2, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
       });
     }
 
+    // ── L3: 2% ──
     const l3Id = l2Snap.data().referredBy;
     if (!l3Id || l3Id === l2Id || l3Id === l1Id || l3Id === investorId) return;
     const l3Snap = await db.collection('users').doc(l3Id).get();
     if (!l3Snap.exists) return;
     const l3Amt = Math.round(amount * COMM_L3);
-    // L3 commission: only on the FIRST investment by this investor
-    const paidL3To = l3Snap.data().paidL3To || [];
-    if (l3Amt > 0 && !paidL3To.includes(investorId)) {
+    if (l3Amt > 0 && !l3Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
         const ref = db.collection('users').doc(l3Id);
         const f   = await t.get(ref);
-        if ((f.data().paidL3To || []).includes(investorId)) return;
+        if (f.data()[dedupFlag]) return;
         t.update(ref, {
-          walletBalance:      (f.data().walletBalance || 0) + l3Amt,
+          walletBalance:      FieldValue.increment(l3Amt),
           commissionEarned:   FieldValue.increment(l3Amt),
           commissionL3Earned: FieldValue.increment(l3Amt),
-          paidL3To:           FieldValue.arrayUnion(investorId)
+          [dedupFlag]:        true
         });
         t.set(db.collection('transactions').doc(), {
           userId: l3Id, type: 'commission',
-          description: `L3 commission — ${investor.name || investor.phone} first investment ${fmtUGX(amount)}`,
-          amount: l3Amt, level: 3, fromUserId: investorId, status: 'success',
+          description: `L3 commission (2%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          amount: l3Amt, level: 3, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
       });
@@ -536,7 +536,7 @@ app.post('/invest/create', async (req, res) => {
         investmentId: invRef.id, productId, createdAt: FieldValue.serverTimestamp()
       });
     });
-    payCommissions(userId, price).catch(e => console.error('Commission err:', e.message));
+    payCommissions(userId, price, invId).catch(e => console.error('Commission err:', e.message));
     console.log(`✅ Investment: ${invId} — ${fmtUGX(price)} — ${userId}`);
     return res.json({ status: 'success', investmentId: invId, message: `Invested ${fmtUGX(price)} in ${product.name}` });
   } catch (e) {
