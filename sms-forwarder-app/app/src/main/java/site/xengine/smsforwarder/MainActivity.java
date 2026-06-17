@@ -24,7 +24,7 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
 
     private static final String DEFAULT_URL =
-            "https://nexus-server-production.up.railway.app/sms/incoming";
+            "https://nexus-server-production-921f.up.railway.app/sms/incoming";
 
     private Prefs prefs;
     private EditText urlField, secretField, sendersField;
