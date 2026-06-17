@@ -1742,7 +1742,7 @@ async function loadSettings() {
     document.getElementById('settMaintenance').checked = !!s.maintenanceMode;
     document.getElementById('settCheckin').value  = s.checkinBonus   || 500;
     document.getElementById('settWelcome').value  = s.welcomeBonus   || 7000;
-    document.getElementById('settMinDep').value   = s.minDeposit     || 30000;
+    document.getElementById('settMinDep').value   = s.minDeposit     || 500;
     document.getElementById('settMinWit').value   = s.minWithdrawal  || 15000;
     document.getElementById('settLiqFee').value   = s.liquidityFee  != null ? (s.liquidityFee  * 100).toFixed(1) : 17;
     document.getElementById('settCommL1').value   = s.commL1        != null ? (s.commL1        * 100).toFixed(1) : 10;
@@ -1783,7 +1783,7 @@ window.saveSettings = async () => {
     maintenanceMode: document.getElementById('settMaintenance').checked,
     checkinBonus:    parseInt(document.getElementById('settCheckin').value) || 500,
     welcomeBonus:    parseInt(document.getElementById('settWelcome').value) || 10000,
-    minDeposit:      parseInt(document.getElementById('settMinDep').value)  || 30000,
+    minDeposit:      parseInt(document.getElementById('settMinDep').value)  || 500,
     minWithdrawal:   parseInt(document.getElementById('settMinWit').value)  || 15000,
     liquidityFee:    (parseFloat(document.getElementById('settLiqFee').value) || 17) / 100,
     commL1:          (parseFloat(document.getElementById('settCommL1').value) || 10) / 100,

@@ -1156,7 +1156,7 @@ app.post('/deposit/initiate', async (req, res) => {
     // Get settings
     const settSnap = await db.collection('settings').doc('main').get();
     const settings = settSnap.exists ? settSnap.data() : {};
-    const minDep = settings.minDeposit || 30000;
+    const minDep = settings.minDeposit || 500;
     if (amt < minDep)
       return res.json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
 

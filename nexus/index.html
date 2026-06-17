@@ -972,7 +972,7 @@ body{padding-bottom:106px}
         <button class="qa-btn" onclick="selectDepAmt(200000,this)">200K</button>
       </div>
       <label class="form-label">Amount (UGX)</label>
-      <input class="form-input" id="depAmount" type="number" placeholder="30000" min="30000" inputmode="numeric" style="margin-bottom:14px">
+      <input class="form-input" id="depAmount" type="number" placeholder="500" min="500" inputmode="numeric" style="margin-bottom:14px">
 
       <div class="form-info" style="background:rgba(234,179,8,0.08);border-color:rgba(234,179,8,0.3);color:#92400e;margin-bottom:20px">
         <strong style="color:#78350f">Important:</strong> Use the exact number above to send money. Funds sent from a different number cannot be automatically credited.
@@ -2125,7 +2125,7 @@ window.proceedDeposit = async () => {
   const phoneDigits = document.getElementById('depSenderPhone').value.replace(/\D/g,'');
   const amount = parseInt(document.getElementById('depAmount').value, 10);
   if (phoneDigits.length !== 9) { showToast('Enter a valid 9-digit phone number', 'error'); return; }
-  if (!amount || amount < 30000) { showToast('Minimum deposit is UGX 30,000', 'error'); return; }
+  if (!amount || amount < 500) { showToast('Minimum deposit is UGX 500', 'error'); return; }
 
   const btn = document.getElementById('depProceedBtn');
   btn.disabled = true; btn.textContent = 'Please wait…';
