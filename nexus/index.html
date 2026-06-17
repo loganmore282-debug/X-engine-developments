@@ -1540,15 +1540,17 @@ function renderHomeInvestments(invs) {
     const imgHtml = inv.productImage
       ? `<div class="inv-img"><img src="${inv.productImage}" alt=""></div>`
       : `<div class="inv-img">${ICN.box}</div>`;
+    const cycleDays = inv.cycle || 0;
+    const daysDone  = Math.max(0, cycleDays - daysLeft);
     return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
       ${imgHtml}
       <div class="inv-info">
         <div class="inv-name">${inv.productName || 'Investment'}</div>
-        <div class="inv-meta">${ugx(inv.amount)} invested</div>
+        <div class="inv-meta">${ugx(inv.amount)} · ${cycleDays} day${cycleDays!==1?'s':''}</div>
       </div>
       <div class="inv-right">
         <div class="inv-return">${ugx(inv.expectedReturn)}</div>
-        <div class="inv-days">${matured ? 'Ready to claim!' : daysLeft + ' day(s) left'}</div>
+        <div class="inv-days" style="${matured?'color:#22c55e;font-weight:700':''}">${matured ? '✓ Matured' : 'Day '+Math.min(cycleDays,daysDone+1)+'/'+cycleDays}</div>
         <span class="inv-badge ${matured ? 'matured' : 'active'}">${matured ? 'Matured' : 'Active'}</span>
       </div>
     </div>`;
@@ -1777,7 +1779,9 @@ window.openInvDetail = async (invId) => {
     const matured  = inv.status === 'matured';
     const claimed  = inv.status === 'claimed';
     const daysLeft = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
-    const progress = inv.durationDays ? Math.min(100, Math.round((inv.durationDays - daysLeft) / inv.durationDays * 100)) : (matured||claimed ? 100 : 0);
+    const cycle      = inv.cycle || inv.durationDays || 1;
+    const daysElapsed = Math.max(0, cycle - daysLeft);
+    const progress   = matured || claimed ? 100 : Math.min(100, Math.max(0, Math.round(daysElapsed / cycle * 100)));
     const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
     const stateBadge = claimed ? '<span class="inv-badge claimed">Claimed</span>'
                      : matured ? '<span class="inv-badge matured">Matured</span>'
@@ -1796,14 +1800,17 @@ window.openInvDetail = async (invId) => {
       <div class="rec-row"><span class="rec-row-lbl">Paid to wallet</span><span class="rec-row-val s-green">+${ugx(inv.dailyCredited||0)}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Remaining at maturity</span><span class="rec-row-val">${ugx(Math.max(0,(inv.expectedReturn||0)-(inv.dailyCredited||0)))}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Duration</span><span class="rec-row-val">${inv.cycle||inv.durationDays||'—'} day(s)</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Matures</span><span class="rec-row-val">${inv.maturityDate ? inv.maturityDate.toDate().toLocaleDateString('en-GB') : '—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val">${claimed ? 'Claimed' : matured ? '✅ Ready!' : daysLeft + ' day(s)'}</span></div>
-      <div style="margin:14px 0 4px;font-size:12px;color:var(--text2)">Progress</div>
-      <div style="background:var(--border);border-radius:99px;height:8px;overflow:hidden">
+      <div class="rec-row"><span class="rec-row-lbl">Investment Duration</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Matures On</span><span class="rec-row-val">${inv.maturityDate ? inv.maturityDate.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured?'#22c55e':'var(--blue)'}">${claimed ? 'Completed ✓' : matured ? '✅ Matured — Claim now!' : daysLeft + ' day' + (daysLeft!==1?'s':'') + ' remaining'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
+      <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;color:var(--text2)">Progress</span>
+        <span style="font-size:12px;font-weight:700;color:${matured||claimed?'#22c55e':'#2563eb'}">${progress}%</span>
+      </div>
+      <div style="background:var(--border);border-radius:99px;height:10px;overflow:hidden">
         <div style="background:${matured||claimed?'#22c55e':'#2563eb'};height:100%;width:${progress}%;border-radius:99px;transition:width .4s"></div>
       </div>
-      <div style="text-align:right;font-size:11px;color:var(--text2);margin-top:4px">${progress}%</div>
       ${claimBtn}`;
   } catch(e) { body.innerHTML = '<p style="color:var(--red);text-align:center">Failed to load details</p>'; }
 };
@@ -1864,10 +1871,13 @@ async function loadRecords(tab) {
       el.innerHTML = items.map(inv => {
         const matured=inv.status==='matured', claimed=inv.status==='claimed';
         const badge = matured?'<span class="inv-badge matured">Matured</span>':claimed?'<span class="inv-badge claimed">Claimed</span>':'<span class="inv-badge active">Active</span>';
+        const invCycle = inv.cycle || inv.durationDays || '?';
+        const invDL = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
+        const invTimeStr = claimed ? 'Completed' : matured ? '✓ Ready' : invDL + 'd left';
         return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
           <div class="inv-img">${inv.productImage?`<img src="${inv.productImage}" alt="">`:ICN.box}</div>
-          <div class="inv-info"><div class="inv-name">${inv.productName||'Plan'}</div><div class="inv-meta">${inv.date||''}</div></div>
-          <div class="inv-right"><div class="inv-return">${ugx(inv.expectedReturn)}</div>${badge}${matured?'<div class="inv-days" style="color:#22c55e;font-size:10px">Tap for details →</div>':''}</div>
+          <div class="inv-info"><div class="inv-name">${inv.productName||'Plan'}</div><div class="inv-meta">${inv.date||''} · ${invCycle} days</div></div>
+          <div class="inv-right"><div class="inv-return">${ugx(inv.expectedReturn)}</div>${badge}<div class="inv-days" style="${matured?'color:#22c55e;font-weight:700':'color:var(--text2)'};font-size:10px">${invTimeStr}</div></div>
         </div>`;
       }).join('');
       return;
