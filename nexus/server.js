@@ -176,9 +176,10 @@ function parseMoMoSMS(sms) {
 
   // ── Cross-network: Airtel→MTN ──
   // MTN account receives from Airtel; sender info is in the Reason field.
+  // Uses [\s\S]*? so it still matches even if the SMS body has line breaks.
   if (!amount) {
     const crossM = text.match(
-      /you have received UGX\s*([\d,]+)\s+from Airtel Money.*?Reason:\s*([A-Z][A-Z ]+),\s*(\d{9,12})/i
+      /you have received UGX\s*([\d,]+)\s+from Airtel Money[\s\S]*?Reason:\s*([A-Z][A-Z ]+),\s*(\d{9,12})/i
     );
     if (crossM) {
       amount      = parseInt(crossM[1].replace(/,/g, ''), 10);
@@ -326,6 +327,7 @@ app.post('/sms/incoming', async (req, res) => {
 
   setImmediate(async () => {
     try {
+      console.log('📨 SMS received — full body:', JSON.stringify(body));
       const parsed = parseMoMoSMS(body);
       if (!parsed || !parsed.amount) {
         console.log('📵 SMS ignored (not a deposit):', body.slice(0, 80));
