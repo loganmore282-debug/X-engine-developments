@@ -1200,7 +1200,8 @@ app.post('/deposit/initiate', async (req, res) => {
     if (!receivingPhone)
       return res.json({ status: 'error', message: `${net} receiving number not configured. Contact admin.` });
 
-    // Expire any old pending deposits from this user
+    // Cancel ALL existing pending deposits — only one must exist at a time
+    // so the SMS matcher always finds the right one.
     const oldSnap = await db.collection('pendingDeposits')
       .where('userId', '==', userId)
       .where('status', '==', 'pending')
@@ -1209,10 +1210,7 @@ app.post('/deposit/initiate', async (req, res) => {
     const now = new Date();
     if (!oldSnap.empty) {
       const batch = db.batch();
-      oldSnap.forEach(d => {
-        const exp = d.data().expiresAt?.toDate?.() || new Date(0);
-        if (exp < now) batch.update(d.ref, { status: 'expired' });
-      });
+      oldSnap.forEach(d => batch.update(d.ref, { status: 'cancelled' }));
       await batch.commit();
     }
 

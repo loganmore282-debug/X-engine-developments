@@ -2035,6 +2035,7 @@ let _depCountdownTimer = null;
 let _depPollTimer = null;
 let _depDepositId = null;
 let _depReceivingPhone = '';
+let _depUnsubscribe = null;
 
 function depSetNetwork(net) {
   _depNetwork = net;
@@ -2204,6 +2205,7 @@ window.copyReceivingPhone = () => {
 function stopDepTimers() {
   if (_depCountdownTimer) { clearInterval(_depCountdownTimer); _depCountdownTimer = null; }
   if (_depPollTimer)      { clearInterval(_depPollTimer);      _depPollTimer = null; }
+  if (_depUnsubscribe)    { _depUnsubscribe(); _depUnsubscribe = null; }
 }
 
 window.goBackToDepStep1 = () => {
@@ -2214,10 +2216,29 @@ window.goBackToDepStep1 = () => {
   stopDepTimers();
 };
 
-// Auto-poll the server every 5s while waiting on Step 2 — no tap needed.
+// Listen to this deposit doc in real-time — fires instantly when server marks it 'matched'.
 function startDepPolling() {
-  if (_depPollTimer) clearInterval(_depPollTimer);
-  _depPollTimer = setInterval(() => pollDepositStatus(false), 5000);
+  if (_depUnsubscribe) { _depUnsubscribe(); _depUnsubscribe = null; }
+  if (_depPollTimer)   { clearInterval(_depPollTimer); _depPollTimer = null; }
+  if (!_depDepositId) return;
+
+  const depRef = doc(db, 'pendingDeposits', _depDepositId);
+  _depUnsubscribe = onSnapshot(depRef, snap => {
+    if (!snap.exists()) return;
+    const status = snap.data().status;
+    if (status === 'matched') {
+      stopDepTimers();
+      closePage('depositPage');
+      showToast(`Payment received! ${ugx(snap.data().creditedAmount || snap.data().amount)} credited to your wallet.`, 'success');
+    } else if (status === 'expired' || status === 'cancelled') {
+      stopDepTimers();
+    }
+  }, () => {
+    // Firestore listener error — fall back to HTTP polling
+    if (_depDepositId) {
+      _depPollTimer = setInterval(() => pollDepositStatus(false), 5000);
+    }
+  });
 }
 
 async function pollDepositStatus(manual) {
@@ -2231,10 +2252,9 @@ async function pollDepositStatus(manual) {
         stopDepTimers();
         closePage('depositPage');
         showToast(`Payment received! ${ugx(dep.amount)} credited to your wallet.`, 'success');
-        // wallet balance updates live via the user onSnapshot listener
         return true;
       }
-      if (dep.depositStatus === 'expired') {
+      if (dep.depositStatus === 'expired' || dep.depositStatus === 'cancelled') {
         stopDepTimers();
         if (manual) showToast('This deposit request has expired. Please create a new one.', 'error');
         return false;
