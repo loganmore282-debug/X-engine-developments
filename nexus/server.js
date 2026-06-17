@@ -317,8 +317,11 @@ app.post('/admin/check-key', (req, res) => {
 // SMS DEPOSIT DETECTION
 // ═══════════════════════════════════════════
 app.post('/sms/incoming', async (req, res) => {
-  const { smsBody, senderPhone, secret, raw } = req.body;
-  const body = smsBody || raw || '';
+  // Nexus SMS Forwarder app sends: { message, sender, secret }
+  // Legacy/manual callers may send: { smsBody, senderPhone, raw, secret }
+  const { smsBody, senderPhone, secret, raw, message, sender } = req.body;
+  const body       = message || smsBody || raw || '';
+  const fromPhone  = sender  || senderPhone || '';
 
   if (SMS_SECRET && secret !== SMS_SECRET)
     return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -335,7 +338,7 @@ app.post('/sms/incoming', async (req, res) => {
       }
 
       const { amount, txnId, senderName } = parsed;
-      const payerPhone = cleanPhone(parsed.senderPhone || senderPhone || '');
+      const payerPhone = cleanPhone(parsed.senderPhone || fromPhone || '');
 
       console.log(`📩 SMS deposit: ${fmtUGX(amount)} from ${payerPhone} | txn: ${txnId}`);
 
