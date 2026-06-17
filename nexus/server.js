@@ -555,7 +555,8 @@ app.post('/invest/claim', async (req, res) => {
     const inv = invSnap.data();
     if (inv.userId !== userId) return res.status(403).json({ status: 'error', message: 'Not your investment' });
     if (inv.status !== 'matured') return res.status(400).json({ status: 'error', message: 'Not ready to claim (status: ' + inv.status + ')' });
-    const payout = inv.expectedReturn || 0;
+    // Subtract daily cashback already paid out to avoid double-crediting
+    const payout = Math.max(0, (inv.expectedReturn || 0) - (inv.dailyCredited || 0));
     const { date, time } = nowStr();
     await db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
@@ -1248,8 +1249,69 @@ app.post('/admin/check-maturities', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// CRONS
+// CRONS — maturity + daily cashback
 // ═══════════════════════════════════════════
+async function runDailyCashback() {
+  try {
+    const snap = await db.collection('investments').where('status', '==', 'active').get();
+    if (snap.empty) return 0;
+    const now      = new Date();
+    const todayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    let credited   = 0;
+
+    // Group by userId so we do one wallet update per user
+    const byUser = {};
+    snap.forEach(docSnap => {
+      const inv = docSnap.data();
+      if (!inv.dailyReturn || inv.dailyReturn <= 0) return;
+
+      // Determine last credit date (default = investment creation day)
+      const lastKey = inv.lastCreditDate || inv.createdAt?.toDate?.()?.toISOString()?.slice(0, 10);
+      if (!lastKey || lastKey >= todayKey) return; // already credited today
+
+      // Count full days owed (cap at cycle to avoid over-crediting)
+      const startDate = new Date(lastKey + 'T00:00:00Z');
+      const diffMs    = now - startDate;
+      const daysDue   = Math.min(Math.floor(diffMs / 86400000), inv.cycle || 1);
+      if (daysDue <= 0) return;
+
+      const amount = Math.round(inv.dailyReturn * daysDue);
+      if (!byUser[inv.userId]) byUser[inv.userId] = { total: 0, docs: [] };
+      byUser[inv.userId].total += amount;
+      byUser[inv.userId].docs.push({ ref: docSnap.ref, amount, daysDue });
+      credited++;
+    });
+
+    for (const [userId, data] of Object.entries(byUser)) {
+      const { date, time } = nowStr();
+      await db.runTransaction(async t => {
+        const uRef  = db.collection('users').doc(userId);
+        const uSnap = await t.get(uRef);
+        if (!uSnap.exists) return;
+        t.update(uRef, {
+          walletBalance: FieldValue.increment(data.total),
+          totalEarned:   FieldValue.increment(data.total)
+        });
+        for (const d of data.docs) {
+          t.update(d.ref, {
+            lastCreditDate: todayKey,
+            dailyCredited:  FieldValue.increment(d.amount)
+          });
+          t.set(db.collection('transactions').doc(), {
+            userId, type: 'checkin',
+            description: `Daily cashback — ${d.daysDue} day(s)`,
+            amount: d.amount, status: 'success', date, time,
+            createdAt: FieldValue.serverTimestamp()
+          });
+        }
+      });
+    }
+
+    if (credited > 0) console.log(`💰 Daily cashback: ${credited} investment(s) credited`);
+    return credited;
+  } catch (e) { console.error('Daily cashback error:', e.message); return 0; }
+}
+
 async function runMaturityCheck() {
   try {
     const snap = await db.collection('investments').where('status', '==', 'active').get();
@@ -1272,9 +1334,13 @@ async function runMaturityCheck() {
 }
 
 function startCrons() {
+  // Maturity check every 30 min
   setInterval(runMaturityCheck, 30 * 60 * 1000);
   runMaturityCheck();
-  console.log('⏰ Crons started');
+  // Daily cashback every hour (catches any missed days quickly)
+  setInterval(runDailyCashback, 60 * 60 * 1000);
+  runDailyCashback();
+  console.log('⏰ Crons started (maturity + daily cashback)');
 }
 
 const PORT = process.env.PORT || 3000;

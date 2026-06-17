@@ -1541,7 +1541,7 @@ function renderCommission(u) {
   const code = u.referralCode || '——';
   document.getElementById('commTotal').textContent     = ugx(u.commissionEarned || 0);
   document.getElementById('myRefCode').textContent     = code;
-  document.getElementById('myRefLink').textContent     = 'nexus.app?ref=' + code;
+  document.getElementById('myRefLink').textContent     = location.origin + location.pathname + '?ref=' + code;
   const totalSize = (u.teamL1Count||0) + (u.teamL2Count||0) + (u.teamL3Count||0);
   document.getElementById('teamTotalSize').textContent = totalSize;
   document.getElementById('teamL1Count').textContent   = u.teamL1Count || 0;
@@ -1773,8 +1773,11 @@ window.openInvDetail = async (invId) => {
       <div class="rec-row"><span class="rec-row-lbl">Amount Invested</span><span class="rec-row-val">${ugx(inv.amount)}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Expected Return</span><span class="rec-row-val s-green">+${ugx(inv.expectedReturn)}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Profit</span><span class="rec-row-val s-green">+${ugx((inv.expectedReturn||0)-(inv.amount||0))}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Daily Cashback</span><span class="rec-row-val s-green">+${ugx(inv.dailyReturn||0)}/day</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Paid to wallet</span><span class="rec-row-val s-green">+${ugx(inv.dailyCredited||0)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Remaining at maturity</span><span class="rec-row-val">${ugx(Math.max(0,(inv.expectedReturn||0)-(inv.dailyCredited||0)))}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Duration</span><span class="rec-row-val">${inv.durationDays||'—'} day(s)</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Duration</span><span class="rec-row-val">${inv.cycle||inv.durationDays||'—'} day(s)</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Matures</span><span class="rec-row-val">${inv.maturityDate ? inv.maturityDate.toDate().toLocaleDateString('en-GB') : '—'}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val">${claimed ? 'Claimed' : matured ? '✅ Ready!' : daysLeft + ' day(s)'}</span></div>
       <div style="margin:14px 0 4px;font-size:12px;color:var(--text2)">Progress</div>
