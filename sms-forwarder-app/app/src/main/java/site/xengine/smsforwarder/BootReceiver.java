@@ -1,4 +1,4 @@
-package site.xengine.smsforwarder;
+package site.nexusug.smsforwarder;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;

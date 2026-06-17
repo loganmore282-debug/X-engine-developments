@@ -99,6 +99,16 @@ function cleanPhone(raw) {
   if (s.length === 12 && s.startsWith('256')) return '+' + s;
   return '+256' + s;
 }
+function detectNetwork(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  let num = digits;
+  if (num.startsWith('256') && num.length === 12) num = num.slice(3);
+  if (num.startsWith('0') && num.length === 10) num = num.slice(1);
+  const prefix2 = num.slice(0, 2);
+  if (['77','78','76','31','39'].includes(prefix2)) return 'MTN';
+  if (['70','74','75','71'].includes(prefix2)) return 'Airtel';
+  return 'MTN';
+}
 // Crypto-secure character picker (no I/L/O/0/1 ambiguity)
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function randChars(n) {
@@ -123,9 +133,13 @@ function parseMoMoSMS(sms) {
   if (!amtMatch) return null;
   const amount = parseInt(amtMatch[1].replace(/,/g, ''), 10);
   if (!amount || amount < 100) return null;
+
+  // Phone extraction: try multiple patterns for MTN/Airtel Uganda
   const phonePatterns = [
     /from\s+(\+?256[347]\d{8})/i,
     /from\s+(0[347]\d{8})/i,
+    /from\s+\w[^0-9]*?(0[347]\d{8})/i,   // "from NAME 0771234567"
+    /from\s+[A-Z\s]+\(?(0[347]\d{8})\)?/i, // "from JOHN DOE(0771234567)"
     /(\+256[347]\d{8})/,
     /(0[347]\d{8})/
   ];
@@ -134,12 +148,21 @@ function parseMoMoSMS(sms) {
     const m = sms.match(p);
     if (m) { senderPhone = m[1]; break; }
   }
+
+  // Sender name extraction (best effort — useful for admin review)
+  let senderName = null;
+  const nameMatch = sms.match(/from\s+([A-Z][A-Z\s]{2,30?}?)(?:\s+via|\s+0|\s+\(|\.|\s+Your)/i);
+  if (nameMatch) senderName = nameMatch[1].trim();
+
+  // Transaction ID extraction
   const txnMatch = sms.match(/[Ff]inancial\s*[Tt]ransaction\s*[Ii]d\s+(\d+)/) ||
                    sms.match(/[Tt]xn\s*[Ii]d[:\s]+([A-Z0-9]+)/i) ||
                    sms.match(/[Tt]ransaction\s*[Ii][Dd][:\s]+([A-Z0-9]+)/i) ||
-                   sms.match(/[Rr]ef(?:erence)?[:\s]+([A-Z0-9]+)/i);
+                   sms.match(/[Rr]ef(?:erence)?[:\s#]+([A-Z0-9]+)/i) ||
+                   sms.match(/ID[:\s]+([A-Z0-9]{6,})/i);
   const txnId = txnMatch ? txnMatch[1] : crypto.randomBytes(6).toString('hex').toUpperCase();
-  return { amount, senderPhone, txnId };
+
+  return { amount, senderPhone, senderName, txnId };
 }
 
 // ── COMMISSION CHAIN ──
@@ -273,50 +296,89 @@ app.post('/sms/incoming', async (req, res) => {
         return;
       }
 
-      const { amount, txnId } = parsed;
-      const phone = cleanPhone(parsed.senderPhone || senderPhone || '');
+      const { amount, txnId, senderName } = parsed;
+      const payerPhone = cleanPhone(parsed.senderPhone || senderPhone || '');
 
-      console.log(`📩 SMS deposit: ${fmtUGX(amount)} from ${phone} | txn: ${txnId}`);
+      console.log(`📩 SMS deposit: ${fmtUGX(amount)} from ${payerPhone} | txn: ${txnId}`);
 
+      // Dedup by transaction ID
       const dupSnap = await db.collection('processedSMS').doc(txnId).get();
       if (dupSnap.exists) {
-        console.log('⚠️ Duplicate SMS txnId:', txnId);
+        console.log('⚠️ Duplicate txnId:', txnId);
         return;
       }
 
-      const userSnap = await db.collection('users').where('phone', '==', phone).limit(1).get();
-      if (userSnap.empty) {
-        await db.collection('unmatchedDeposits').add({
-          smsBody: body, senderPhone: phone, amount, txnId,
-          status: 'unmatched', receivedAt: FieldValue.serverTimestamp()
-        });
-        console.log('❓ No user for phone:', phone, '— stored as unmatched');
-        return;
-      }
-
-      const userId = userSnap.docs[0].id;
+      const now = new Date();
       const { date, time } = nowStr();
 
-      await db.runTransaction(async t => {
-        const uRef   = db.collection('users').doc(userId);
-        const uSnap  = await t.get(uRef);
-        if (!uSnap.exists) throw new Error('User not found');
-        t.update(uRef, {
-          walletBalance:  (uSnap.data().walletBalance || 0) + amount,
-          totalDeposited: FieldValue.increment(amount)
-        });
-        t.set(db.collection('processedSMS').doc(txnId), {
-          userId, amount, phone, processedAt: FieldValue.serverTimestamp()
-        });
-        t.set(db.collection('transactions').doc(), {
-          userId, type: 'deposit',
-          description: 'MoMo deposit detected',
-          amount, phone, txnId, status: 'success', date, time,
-          createdAt: FieldValue.serverTimestamp()
-        });
-      });
+      // Find matching pending deposit: senderPhone + pending + not expired
+      let matchedDep = null, matchedRef = null;
+      if (payerPhone && payerPhone.length >= 9) {
+        const pendSnap = await db.collection('pendingDeposits')
+          .where('senderPhone', '==', payerPhone)
+          .where('status', '==', 'pending')
+          .limit(5)
+          .get();
+        for (const d of pendSnap.docs) {
+          const dep = d.data();
+          const exp = dep.expiresAt?.toDate?.() || new Date(0);
+          if (exp > now) {
+            matchedDep = dep;
+            matchedRef = d.ref;
+            if (dep.amount === amount) break; // exact match preferred
+          }
+        }
+      }
 
-      console.log(`✅ Credited ${fmtUGX(amount)} → ${userId}`);
+      if (matchedDep && matchedRef) {
+        const userId = matchedDep.userId;
+        await db.runTransaction(async t => {
+          const uRef  = db.collection('users').doc(userId);
+          const uSnap = await t.get(uRef);
+          if (!uSnap.exists) throw new Error('User not found');
+          t.update(uRef, {
+            walletBalance:  (uSnap.data().walletBalance || 0) + amount,
+            totalDeposited: FieldValue.increment(amount)
+          });
+          t.set(db.collection('processedSMS').doc(txnId), {
+            userId, amount, payerPhone, txnId,
+            depositId: matchedRef.id,
+            processedAt: FieldValue.serverTimestamp()
+          });
+          t.update(matchedRef, {
+            status: 'matched',
+            creditedAmount: amount,
+            txnId,
+            matchedAt: FieldValue.serverTimestamp()
+          });
+          t.set(db.collection('transactions').doc(), {
+            userId, type: 'deposit',
+            description: `${matchedDep.network || 'MoMo'} deposit — received`,
+            amount, phone: payerPhone, txnId,
+            network: matchedDep.network || 'MoMo',
+            status: 'success', date, time,
+            createdAt: FieldValue.serverTimestamp()
+          });
+        });
+        console.log(`✅ Deposit matched: ${matchedRef.id} — ${fmtUGX(amount)} → ${userId}`);
+      } else {
+        // No match — store for admin review
+        await db.collection('unmatchedDeposits').add({
+          smsBody: body,
+          payerPhone,
+          senderName: senderName || '',
+          amount,
+          txnId,
+          status: 'unmatched',
+          receivedAt: FieldValue.serverTimestamp()
+        });
+        // Mark as processed to avoid re-processing same SMS
+        await db.collection('processedSMS').doc(txnId).set({
+          amount, payerPhone, txnId, matched: false,
+          processedAt: FieldValue.serverTimestamp()
+        });
+        console.log(`❓ Unmatched deposit: ${payerPhone} ${fmtUGX(amount)}`);
+      }
     } catch (e) {
       console.error('SMS processing error:', e.message);
     }
@@ -1016,160 +1078,148 @@ app.post('/admin/gift-codes/deactivate', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// MARZPAY — DEPOSIT INITIATION & CALLBACK
+// DEPOSIT — PHONE VERIFICATION (proxies MarzPay)
 // ═══════════════════════════════════════════
-app.post('/deposit/initiate', async (req, res) => {
-  const { userId, amount, phone, network } = req.body;
-  if (!userId || !amount || !phone) return res.json({ status: 'error', message: 'Missing required fields' });
-  if (amount < 30000) return res.json({ status: 'error', message: 'Minimum deposit is UGX 30,000' });
-
+app.post('/deposit/verify-phone', async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.json({ status: 'error', message: 'Phone required' });
+  if (!MARZPAY_KEY) return res.json({ status: 'error', message: 'Verification not configured' });
   try {
-    const userSnap = await db.collection('users').doc(userId).get();
-    if (!userSnap.exists) return res.json({ status: 'error', message: 'User not found' });
-
-    const reference   = uuidv4();
-    const callbackUrl = RAILWAY_URL + '/deposit/callback';
-    const { date, time } = nowStr();
-
-    if (!MARZPAY_KEY) {
-      // No API key — store pending only
-      await db.collection('pendingDeposits').add({
-        userId, amount, phone, network: network || 'MTN',
-        reference, status: 'pending', date, time,
-        createdAt: FieldValue.serverTimestamp()
-      });
-      return res.json({ status: 'success', message: 'Deposit request recorded. Contact admin for manual processing.', reference });
-    }
-
-    const fd = marzForm({
-      phone_number: phone,
-      amount:       String(amount),
-      country:      'UG',
-      reference,
-      description:  `Nexus deposit — ${userId}`,
-      callback_url: callbackUrl
-    });
-
-    const mpRes = await fetch(`${MARZPAY_BASE}/collect-money`, {
+    const resp = await fetch(`${MARZPAY_BASE}/phone-verification/verify`, {
       method: 'POST',
-      headers: { 'Authorization': `Basic ${MARZPAY_KEY}` },
-      body: fd
+      headers: {
+        'Authorization': `Basic ${MARZPAY_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ phone_number: phone })
     });
-    const mpData = await mpRes.json();
-    console.log('MarzPay collect-money response:', JSON.stringify(mpData));
-
-    if (mpData.status !== 'success') {
-      return res.json({ status: 'error', message: mpData.message || 'Payment provider error. Please try again.' });
+    const data = await resp.json();
+    if (data.success && data.data) {
+      return res.json({
+        status: 'success',
+        name: data.data.full_name,
+        verification_status: data.data.verification_status
+      });
     }
-
-    // Store pending deposit
-    await db.collection('pendingDeposits').add({
-      userId, amount, phone, network: network || 'MTN',
-      reference, status: 'pending', date, time,
-      createdAt: FieldValue.serverTimestamp()
-    });
-
-    return res.json({
-      status: 'success',
-      message: mpData.message || 'A USSD prompt has been sent to your phone. Enter your PIN to confirm the payment.',
-      reference
-    });
+    return res.json({ status: 'error', message: data.message || 'Phone not found or not registered' });
   } catch (e) {
-    console.error('MarzPay initiate error:', e.message);
-    return res.json({ status: 'error', message: 'Payment service unavailable. Please try again.' });
+    console.error('Phone verify error:', e.message);
+    return res.json({ status: 'error', message: 'Verification service unavailable' });
   }
 });
 
-app.post('/deposit/callback', async (req, res) => {
-  res.json({ received: true });
+// ═══════════════════════════════════════════
+// DEPOSIT — INITIATE (SMS-based, no USSD push)
+// ═══════════════════════════════════════════
+app.post('/deposit/initiate', async (req, res) => {
+  const { userId, senderPhone, amount, network, senderName } = req.body;
+  if (!userId || !senderPhone || !amount)
+    return res.json({ status: 'error', message: 'userId, senderPhone and amount required' });
 
-  const body      = req.body;
-  const eventType = body.event_type || '';
-  const reference = body.transaction?.reference || body.reference || '';
-  const txStatus  = body.transaction?.status || '';
-  const rawAmount = body.transaction?.amount?.raw || body.amount || 0;
-
-  console.log('Deposit callback:', eventType, reference, txStatus);
-
-  const isCompleted = eventType === 'collection.completed' || txStatus === 'completed';
-  if (!isCompleted) return;
+  const amt = parseInt(amount, 10);
+  if (isNaN(amt) || amt <= 0)
+    return res.json({ status: 'error', message: 'Invalid amount' });
 
   try {
-    if (!reference) return;
+    // Get settings
+    const settSnap = await db.collection('settings').doc('main').get();
+    const settings = settSnap.exists ? settSnap.data() : {};
+    const minDep = settings.minDeposit || 30000;
+    if (amt < minDep)
+      return res.json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
 
-    // Find pending deposit by reference
-    const pendingSnap = await db.collection('pendingDeposits')
-      .where('reference', '==', reference)
-      .limit(1).get();
+    const userSnap = await db.collection('users').doc(userId).get();
+    if (!userSnap.exists) return res.json({ status: 'error', message: 'User not found' });
+    if (userSnap.data().status === 'banned')
+      return res.json({ status: 'error', message: 'Account suspended' });
 
-    // Also check transactions for reference
-    const txSnap = await db.collection('transactions')
-      .where('reference', '==', reference)
-      .where('type', '==', 'deposit')
-      .limit(1).get();
+    const cleanSender = cleanPhone(senderPhone);
+    const net = network || detectNetwork(cleanSender);
+    const isMTN = net === 'MTN';
 
-    let userId, amount, phone, network;
+    const receivingPhone = isMTN
+      ? (settings.mtnReceivingPhone || '')
+      : (settings.airtelReceivingPhone || '');
+    const receivingName = isMTN
+      ? (settings.mtnReceivingName || 'NEXUS INVESTMENTS')
+      : (settings.airtelReceivingName || 'NEXUS INVESTMENTS');
 
-    if (!pendingSnap.empty) {
-      const pd = pendingSnap.docs[0].data();
-      if (pd.status === 'success') {
-        console.log('Already credited for reference:', reference);
-        return;
-      }
-      userId  = pd.userId;
-      amount  = Number(rawAmount) || pd.amount;
-      phone   = pd.phone;
-      network = pd.network || 'MTN';
-    } else if (!txSnap.empty) {
-      const tx = txSnap.docs[0].data();
-      if (tx.status === 'success') {
-        console.log('Transaction already credited:', reference);
-        return;
-      }
-      userId  = tx.userId;
-      amount  = Number(rawAmount) || tx.amount;
-      phone   = tx.phone;
-      network = tx.network || 'MTN';
-    } else {
-      console.log('No pending deposit found for reference:', reference);
-      return;
+    if (!receivingPhone)
+      return res.json({ status: 'error', message: `${net} receiving number not configured. Contact admin.` });
+
+    // Expire any old pending deposits from this user
+    const oldSnap = await db.collection('pendingDeposits')
+      .where('userId', '==', userId)
+      .where('status', '==', 'pending')
+      .limit(10)
+      .get();
+    const now = new Date();
+    if (!oldSnap.empty) {
+      const batch = db.batch();
+      oldSnap.forEach(d => {
+        const exp = d.data().expiresAt?.toDate?.() || new Date(0);
+        if (exp < now) batch.update(d.ref, { status: 'expired' });
+      });
+      await batch.commit();
     }
 
+    const expiresAt = new Date(Date.now() + 12 * 3600000);
     const { date, time } = nowStr();
 
-    await db.runTransaction(async t => {
-      const uRef  = db.collection('users').doc(userId);
-      const uSnap = await t.get(uRef);
-      if (!uSnap.exists) throw new Error('User not found');
-      t.update(uRef, {
-        walletBalance:  (uSnap.data().walletBalance || 0) + amount,
-        totalDeposited: FieldValue.increment(amount)
-      });
-
-      if (!pendingSnap.empty) {
-        t.update(pendingSnap.docs[0].ref, {
-          status: 'success',
-          creditedAt: FieldValue.serverTimestamp(),
-          creditedAmount: amount
-        });
-      }
-      if (!txSnap.empty) {
-        t.update(txSnap.docs[0].ref, { status: 'success' });
-      }
-
-      t.set(db.collection('transactions').doc(), {
-        userId, type: 'deposit',
-        description: `${network || 'MoMo'} deposit via MarzPay`,
-        amount, phone: phone || '', reference, network: network || 'MTN',
-        status: 'success', date, time,
-        createdAt: FieldValue.serverTimestamp()
-      });
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId,
+      senderPhone: cleanSender,
+      senderName: senderName || '',
+      amount: amt,
+      network: net,
+      receivingPhone,
+      receivingName,
+      status: 'pending',
+      date, time,
+      expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+      createdAt: FieldValue.serverTimestamp()
     });
 
-    console.log(`✅ Deposit credited: ${userId} +${fmtUGX(amount)} ref:${reference}`);
+    console.log(`📋 Deposit pending: ${depRef.id} — ${fmtUGX(amt)} from ${cleanSender} → ${receivingPhone}`);
+
+    return res.json({
+      status: 'success',
+      depositId: depRef.id,
+      receivingPhone,
+      receivingName,
+      amount: amt,
+      network: net,
+      expiresAt: expiresAt.toISOString()
+    });
   } catch (e) {
-    console.error('Deposit callback error:', e.message);
+    console.error('Deposit initiate error:', e.message);
+    return res.json({ status: 'error', message: e.message });
   }
+});
+
+app.get('/deposit/status/:id', async (req, res) => {
+  try {
+    const snap = await db.collection('pendingDeposits').doc(req.params.id).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Not found' });
+    const dep = snap.data();
+    return res.json({
+      status: 'success',
+      deposit: {
+        id: snap.id,
+        depositStatus: dep.status,
+        amount: dep.amount,
+        network: dep.network,
+        expiresAt: dep.expiresAt?.toDate?.()?.toISOString?.() || null
+      }
+    });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Legacy MarzPay deposit callback — no longer used for deposits (SMS-based now)
+app.post('/deposit/callback', (req, res) => {
+  res.json({ received: true });
+  console.log('Deposit callback received (ignored — SMS-based deposits only):', req.body?.event_type);
 });
 
 // ── TICKER (anonymized global activity) ──

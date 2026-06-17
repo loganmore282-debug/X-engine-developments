@@ -1,4 +1,4 @@
-package site.xengine.smsforwarder;
+package site.nexusug.smsforwarder;
 
 import android.util.Log;
 
@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Posts a single SMS to the server's /sms/incoming webhook. */
 public final class Poster {
-    private static final String TAG = "XEngineSMS";
+    private static final String TAG = "NexusSMS";
 
     /** Runs the network call on a background thread. */
     public static void post(final String url, final String secret,

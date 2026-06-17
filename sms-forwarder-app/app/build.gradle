@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'site.xengine.smsforwarder'
+    namespace 'site.nexusug.smsforwarder'
     compileSdk 34
 
     defaultConfig {
-        applicationId "site.xengine.smsforwarder"
+        applicationId "site.nexusug.smsforwarder"
         minSdk 24
         targetSdk 34
         versionCode 1

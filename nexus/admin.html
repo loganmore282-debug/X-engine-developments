@@ -393,9 +393,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
       <div class="filter-tabs">
         <div class="filter-tab active" onclick="setDepFilter('all',this)">All</div>
-        <div class="filter-tab" onclick="setDepFilter('success',this)">Success</div>
+        <div class="filter-tab" onclick="setDepFilter('matched',this)">Matched</div>
         <div class="filter-tab" onclick="setDepFilter('pending',this)">Pending</div>
-        <div class="filter-tab" onclick="setDepFilter('failed',this)">Failed</div>
+        <div class="filter-tab" onclick="setDepFilter('expired',this)">Expired</div>
+        <div class="filter-tab" onclick="setDepFilter('unmatched',this)">Unmatched SMS</div>
       </div>
       <div class="card" style="padding:0;overflow:hidden">
         <div id="depTable"><div class="loading-row"><div class="spinner"></div></div></div>
@@ -536,6 +537,34 @@ tr:hover td{background:rgba(255,255,255,.02)}
         </div>
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
+
+      <!-- Receiving Numbers for SMS Deposits -->
+      <div class="card" style="margin-top:12px">
+        <div class="card-title">📱 Deposit Receiving Numbers</div>
+        <p class="text-muted" style="font-size:13px;margin-bottom:16px">Users send MoMo to these numbers. The SMS Forwarder on that phone forwards the SMS to the server to auto-credit wallets.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">MTN Receiving Number (+256...)</label>
+            <input class="form-input" id="settMtnPhone" placeholder="+256771234567">
+          </div>
+          <div class="form-group">
+            <label class="form-label">MTN Account Name</label>
+            <input class="form-input" id="settMtnName" placeholder="NEXUS INVESTMENTS">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Airtel Receiving Number (+256...)</label>
+            <input class="form-input" id="settAirtelPhone" placeholder="+256751234567">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Airtel Account Name</label>
+            <input class="form-input" id="settAirtelName" placeholder="NEXUS INVESTMENTS">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveReceivingNumbers()">Save Receiving Numbers</button>
+      </div>
+
       <!-- Announcement Dialog Settings -->
       <div class="card" style="margin-top:12px">
         <div class="card-title">📢 Announcement Dialog</div>
@@ -712,6 +741,25 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </div>
     <button class="btn btn-primary btn-full" id="pSaveBtn" onclick="saveProduct()">Save Plan</button>
+  </div>
+</div>
+
+<!-- ── ASSIGN DEPOSIT MODAL ── -->
+<div class="overlay" id="assignDepOverlay" onclick="if(event.target===this)closeModal('assignDepOverlay')">
+  <div class="modal">
+    <div class="modal-title">
+      <span>Assign Unmatched Deposit</span>
+      <button class="modal-close" onclick="closeModal('assignDepOverlay')">✕</button>
+    </div>
+    <input type="hidden" id="assignDepId">
+    <div id="assignDepInfo" style="background:var(--bg3);border-radius:10px;padding:12px;margin-bottom:16px;font-size:13px;color:var(--text2)"></div>
+    <div class="form-group">
+      <label class="form-label">Search user by phone or name</label>
+      <input class="form-input" id="assignUserSearch" placeholder="e.g. 0771234567" oninput="searchAssignUser(this.value)">
+    </div>
+    <div id="assignUserResults" style="max-height:200px;overflow-y:auto;margin-bottom:16px"></div>
+    <input type="hidden" id="assignTargetUserId">
+    <button class="btn btn-primary btn-full" id="assignDepBtn" onclick="confirmAssignDeposit()" disabled>Assign & Credit Wallet</button>
   </div>
 </div>
 
@@ -1031,30 +1079,19 @@ window.confirmReject = async () => {
 let _depFilter = 'all';
 let _allDeps   = [];
 
+let _unmatchedDeps = [];
+
 async function loadDeposits() {
   document.getElementById('depTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const [pdSnap, txSnap] = await Promise.all([
-      getDocs(query(collection(db,'pendingDeposits'), orderBy('createdAt','desc'), limit(100))),
-      getDocs(query(collection(db,'transactions'), where('type','==','deposit'), limit(100)))
+    const [pdSnap, unmatchedSnap] = await Promise.all([
+      getDocs(query(collection(db,'pendingDeposits'), orderBy('createdAt','desc'), limit(200))),
+      getDocs(query(collection(db,'unmatchedDeposits'), orderBy('receivedAt','desc'), limit(100)))
     ]);
 
-    const pdList = pdSnap.docs.map(d => ({ id:d.id, _src:'pending', ...d.data() }));
-    const txList = txSnap.docs.map(d => ({ id:d.id, _src:'tx', ...d.data() }));
+    _allDeps = pdSnap.docs.map(d => ({ id:d.id, _src:'pending', ...d.data() }));
+    _unmatchedDeps = unmatchedSnap.docs.map(d => ({ id:d.id, _src:'unmatched', ...d.data() }));
 
-    // Merge: deduplicate by reference
-    const seen = new Set();
-    const merged = [];
-    for (const item of [...pdList, ...txList]) {
-      const key = item.reference || item.id;
-      if (!seen.has(key)) { seen.add(key); merged.push(item); }
-    }
-    merged.sort((a,b) => {
-      const ta = a.createdAt?.seconds || 0;
-      const tb = b.createdAt?.seconds || 0;
-      return tb - ta;
-    });
-    _allDeps = merged;
     renderDeposits();
   } catch(e) {
     console.error(e);
@@ -1063,6 +1100,36 @@ async function loadDeposits() {
 }
 
 function renderDeposits() {
+  if (_depFilter === 'unmatched') {
+    // Show unmatchedDeposits (SMS with no matching pending deposit)
+    if (!_unmatchedDeps.length) {
+      document.getElementById('depTable').innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">No unmatched SMS deposits</div></div>';
+      return;
+    }
+    const rows = _unmatchedDeps.map(d => {
+      const btn = d.status === 'unmatched'
+        ? `<button class="btn btn-primary btn-sm" onclick="openAssignDeposit('${d.id}','${(d.payerPhone||'').replace(/'/g,"\\'")}',${d.amount||0})">Assign</button>`
+        : statusBadge(d.status);
+      return `<tr>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${(d.smsBody||'').replace(/"/g,'&quot;')}">${(d.smsBody||'—').slice(0,60)}…</td>
+        <td>${d.payerPhone||d.senderPhone||'—'}</td>
+        <td style="font-weight:600;color:var(--primary)">${ugx(d.amount)}</td>
+        <td class="text-muted">${fmtDate(d.receivedAt||d.createdAt)}</td>
+        <td>${statusBadge(d.status||'unmatched')}</td>
+        <td>${btn}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('depTable').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>SMS Preview</th><th>From Phone</th><th>Amount</th><th>Received</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    return;
+  }
+
+  // Normal pendingDeposits view
   const list = _depFilter === 'all' ? _allDeps : _allDeps.filter(d => (d.status||'').toLowerCase() === _depFilter);
   if (!list.length) {
     document.getElementById('depTable').innerHTML = '<div class="empty"><div class="empty-icon">📥</div><div class="empty-text">No deposits found</div></div>';
@@ -1070,10 +1137,10 @@ function renderDeposits() {
   }
   const rows = list.map(d => `<tr>
     <td>${d.userId ? d.userId.slice(0,10)+'…' : '—'}</td>
-    <td>${d.phone || '—'}</td>
+    <td>${d.senderPhone||d.phone||'—'}</td>
     <td style="font-weight:600;color:var(--primary)">${ugx(d.amount)}</td>
-    <td>${d.network || d.type || '—'}</td>
-    <td><span class="monospace">${(d.reference||'—').slice(0,20)}</span></td>
+    <td>${d.network||'—'}</td>
+    <td>${d.receivingPhone||'—'}</td>
     <td class="text-muted">${fmtDate(d.createdAt)}</td>
     <td>${statusBadge(d.status||'pending')}</td>
   </tr>`).join('');
@@ -1081,7 +1148,7 @@ function renderDeposits() {
   document.getElementById('depTable').innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>User</th><th>Phone</th><th>Amount</th><th>Network</th><th>Reference</th><th>Date</th><th>Status</th></tr></thead>
+        <thead><tr><th>User</th><th>Sender Phone</th><th>Amount</th><th>Network</th><th>Receiving #</th><th>Date</th><th>Status</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -1629,6 +1696,11 @@ async function loadSettings() {
     document.getElementById('depositInstructions').value = depInst;
     if (prodBanner) { const p=document.getElementById('productsBannerPreview'); p.src=prodBanner; p.style.display='block'; }
     if (depImg)     { const p=document.getElementById('depositImagePreview');   p.src=depImg;     p.style.display='block'; }
+    // Receiving numbers
+    document.getElementById('settMtnPhone').value   = s.mtnReceivingPhone  || '';
+    document.getElementById('settMtnName').value    = s.mtnReceivingName   || '';
+    document.getElementById('settAirtelPhone').value = s.airtelReceivingPhone || '';
+    document.getElementById('settAirtelName').value  = s.airtelReceivingName  || '';
   } catch(e) { showToast('Failed to load settings', 'error'); }
 }
 
@@ -1692,6 +1764,67 @@ window.saveContentImages = async () => {
     await setDoc(doc(db,'settings','main'), data, { merge:true });
     showToast('Content images saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
+};
+
+window.saveReceivingNumbers = async () => {
+  const data = {
+    mtnReceivingPhone:    document.getElementById('settMtnPhone').value.trim(),
+    mtnReceivingName:     document.getElementById('settMtnName').value.trim(),
+    airtelReceivingPhone: document.getElementById('settAirtelPhone').value.trim(),
+    airtelReceivingName:  document.getElementById('settAirtelName').value.trim()
+  };
+  try {
+    await setDoc(doc(db,'settings','main'), data, { merge:true });
+    showToast('Receiving numbers saved!', 'success');
+  } catch(e) { showToast('Error saving', 'error'); }
+};
+
+window.openAssignDeposit = (depId, phone, amount) => {
+  document.getElementById('assignDepId').value = depId;
+  document.getElementById('assignDepInfo').textContent = `Phone: ${phone}  |  Amount: ${ugx(amount)}`;
+  document.getElementById('assignUserSearch').value = '';
+  document.getElementById('assignUserResults').innerHTML = '';
+  document.getElementById('assignTargetUserId').value = '';
+  document.getElementById('assignDepBtn').disabled = true;
+  openModal('assignDepOverlay');
+};
+
+window.searchAssignUser = (q) => {
+  if (!q || q.length < 3) { document.getElementById('assignUserResults').innerHTML = ''; return; }
+  const ql = q.toLowerCase();
+  const matches = _allUsers.filter(u =>
+    (u.name||'').toLowerCase().includes(ql) ||
+    (u.phone||'').includes(q)
+  ).slice(0, 8);
+  if (!matches.length) {
+    document.getElementById('assignUserResults').innerHTML = '<div style="font-size:13px;color:var(--muted);padding:8px">No users found</div>';
+    return;
+  }
+  document.getElementById('assignUserResults').innerHTML = matches.map(u =>
+    `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:6px;background:var(--bg3)"
+      onclick="selectAssignUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}','${u.phone||''}')">
+      <div style="font-weight:600;color:var(--text)">${u.name||'—'}</div>
+      <div style="font-size:11px;color:var(--muted)">${u.phone||'—'}</div>
+    </div>`
+  ).join('');
+};
+
+window.selectAssignUser = (userId, name, phone) => {
+  document.getElementById('assignTargetUserId').value = userId;
+  document.getElementById('assignUserSearch').value = `${name} — ${phone}`;
+  document.getElementById('assignUserResults').innerHTML = '';
+  document.getElementById('assignDepBtn').disabled = false;
+};
+
+window.confirmAssignDeposit = async () => {
+  const depId  = document.getElementById('assignDepId').value;
+  const userId = document.getElementById('assignTargetUserId').value;
+  if (!depId || !userId) { showToast('Select a user', 'error'); return; }
+  try {
+    const r = await api('/admin/assign-deposit', { depositId: depId, userId, adminKey: ADMIN_PASS });
+    showToast(r.message || (r.status==='success' ? 'Assigned!' : 'Failed'), r.status==='success' ? 'success' : 'error');
+    if (r.status === 'success') { closeModal('assignDepOverlay'); loadDeposits(); }
+  } catch(e) { showToast('Error', 'error'); }
 };
 </script>
 </body>

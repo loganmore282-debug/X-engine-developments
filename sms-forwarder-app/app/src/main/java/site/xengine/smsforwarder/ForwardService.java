@@ -1,4 +1,4 @@
-package site.xengine.smsforwarder;
+package site.nexusug.smsforwarder;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -34,14 +34,14 @@ public class ForwardService extends Service {
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel ch = new NotificationChannel(
-                    CHANNEL, "X-Engine SMS Forwarder", NotificationManager.IMPORTANCE_LOW);
+                    CHANNEL, "Nexus SMS Forwarder", NotificationManager.IMPORTANCE_LOW);
             ch.setDescription("Keeps deposit SMS forwarding running");
             if (nm != null) nm.createNotificationChannel(ch);
         }
         Notification.Builder b = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 ? new Notification.Builder(this, CHANNEL)
                 : new Notification.Builder(this);
-        return b.setContentTitle("X-Engine SMS active")
+        return b.setContentTitle("Nexus SMS active")
                 .setContentText("Listening for Mobile Money deposit messages")
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setOngoing(true)

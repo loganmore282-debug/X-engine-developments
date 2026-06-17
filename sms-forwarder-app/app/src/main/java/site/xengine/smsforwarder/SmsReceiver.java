@@ -1,4 +1,4 @@
-package site.xengine.smsforwarder;
+package site.nexusug.smsforwarder;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -10,10 +10,10 @@ import android.util.Log;
 /**
  * Fires on every incoming SMS (even when the app is closed). Reconstructs the
  * full message, checks the sender against the allow-list, and forwards it to
- * the X-Engine server. The server decides whether it is a deposit.
+ * the Nexus server. The server decides whether it is a deposit.
  */
 public class SmsReceiver extends BroadcastReceiver {
-    private static final String TAG = "XEngineSMS";
+    private static final String TAG = "NexusSMS";
 
     @Override
     public void onReceive(Context context, Intent intent) {

@@ -1,4 +1,4 @@
-package site.xengine.smsforwarder;
+package site.nexusug.smsforwarder;
 
 import android.Manifest;
 import android.app.Activity;
@@ -24,7 +24,7 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
 
     private static final String DEFAULT_URL =
-            "https://x-engine-server-production.up.railway.app/sms/incoming";
+            "https://nexus-server-production.up.railway.app/sms/incoming";
 
     private Prefs prefs;
     private EditText urlField, secretField, sendersField;
@@ -42,7 +42,7 @@ public class MainActivity extends Activity {
         root.setPadding(pad, pad, pad, pad);
         root.setBackgroundColor(Color.parseColor("#0B0E11"));
 
-        root.addView(title("X-Engine SMS Forwarder"));
+        root.addView(title("Nexus SMS Forwarder"));
         root.addView(label("Server webhook URL"));
         urlField = input(prefs.url().isEmpty() ? DEFAULT_URL : prefs.url(), InputType.TYPE_TEXT_VARIATION_URI);
         root.addView(urlField);
@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
         final String secret = prefs.secret();
         status.setText("Testing...");
         Poster.post(url, secret,
-                "TEST: You have received UGX 1 from X-ENGINE TEST. Transaction ID TEST000001.",
+                "TEST: You have received UGX 1 from NEXUS TEST. Transaction ID TEST000001.",
                 "TEST",
                 new Poster.Callback() {
                     @Override public void onResult(final String result) {
@@ -152,7 +152,7 @@ public class MainActivity extends Activity {
     private TextView title(String t) {
         TextView tv = new TextView(this);
         tv.setText(t);
-        tv.setTextColor(Color.parseColor("#F0B90B"));
+        tv.setTextColor(Color.parseColor("#2563EB"));
         tv.setTextSize(22);
         tv.setPadding(0, 0, 0, dp(16));
         return tv;

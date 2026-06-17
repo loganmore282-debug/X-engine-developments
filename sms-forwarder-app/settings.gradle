@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "XEngineSmsForwarder"
+rootProject.name = "nexus-sms-forwarder"
 include ":app"
