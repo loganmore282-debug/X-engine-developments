@@ -1096,6 +1096,18 @@ body{padding-bottom:106px}
   </div>
 </div>
 
+<!-- ══ INVESTMENT DETAIL MODAL ══ -->
+<div id="invDetailModal" class="modal-overlay" onclick="if(event.target===this)closeModal('invDetailModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="modal-title">Plan Details</div>
+      <button class="modal-close" onclick="closeModal('invDetailModal')">×</button>
+    </div>
+    <div id="invDetailBody"></div>
+  </div>
+</div>
+
 <!-- ══ ANNOUNCEMENT DIALOG ══ -->
 <div id="announcementDialog">
   <div class="ann-sheet">
@@ -1509,7 +1521,7 @@ function renderHomeInvestments(invs) {
     const imgHtml = inv.productImage
       ? `<div class="inv-img"><img src="${inv.productImage}" alt=""></div>`
       : `<div class="inv-img">${ICN.box}</div>`;
-    return `<div class="inv-item" onclick="${matured ? `claimInvestment('${inv.id}')` : ''}">
+    return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
       ${imgHtml}
       <div class="inv-info">
         <div class="inv-name">${inv.productName || 'Investment'}</div>
@@ -1729,6 +1741,51 @@ window.claimInvestment = async (invId) => {
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
 
+// ── INVESTMENT DETAIL MODAL ──
+let _invCache = {};
+window.openInvDetail = async (invId) => {
+  openModal('invDetailModal');
+  const body = document.getElementById('invDetailBody');
+  body.innerHTML = '<div class="load-spin" style="margin:24px auto"></div>';
+  try {
+    let inv = _invCache[invId];
+    if (!inv) {
+      const snap = await getDoc(doc(db, 'investments', invId));
+      if (!snap.exists()) { body.innerHTML = '<p style="color:var(--text2);text-align:center">Plan not found</p>'; return; }
+      inv = { id: snap.id, ...snap.data() };
+      _invCache[invId] = inv;
+    }
+    const matured  = inv.status === 'matured';
+    const claimed  = inv.status === 'claimed';
+    const daysLeft = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
+    const progress = inv.durationDays ? Math.min(100, Math.round((inv.durationDays - daysLeft) / inv.durationDays * 100)) : (matured||claimed ? 100 : 0);
+    const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
+    const stateBadge = claimed ? '<span class="inv-badge claimed">Claimed</span>'
+                     : matured ? '<span class="inv-badge matured">Matured</span>'
+                     : '<span class="inv-badge active">Active</span>';
+    const claimBtn = matured ? `<button class="btn-submit" style="margin-top:16px" onclick="closeModal('invDetailModal');claimInvestment('${inv.id}')">🎉 Claim Return — ${ugx(inv.expectedReturn)}</button>` : '';
+    body.innerHTML = `
+      <div style="text-align:center">${imgHtml}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:17px;font-weight:800;color:var(--text)">${inv.productName||'Plan'}</div>
+        ${stateBadge}
+      </div>
+      <div class="rec-row"><span class="rec-row-lbl">Amount Invested</span><span class="rec-row-val">${ugx(inv.amount)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Expected Return</span><span class="rec-row-val s-green">+${ugx(inv.expectedReturn)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Profit</span><span class="rec-row-val s-green">+${ugx((inv.expectedReturn||0)-(inv.amount||0))}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Duration</span><span class="rec-row-val">${inv.durationDays||'—'} day(s)</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Matures</span><span class="rec-row-val">${inv.maturityDate ? inv.maturityDate.toDate().toLocaleDateString('en-GB') : '—'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val">${claimed ? 'Claimed' : matured ? '✅ Ready!' : daysLeft + ' day(s)'}</span></div>
+      <div style="margin:14px 0 4px;font-size:12px;color:var(--text2)">Progress</div>
+      <div style="background:var(--border);border-radius:99px;height:8px;overflow:hidden">
+        <div style="background:${matured||claimed?'#22c55e':'#2563eb'};height:100%;width:${progress}%;border-radius:99px;transition:width .4s"></div>
+      </div>
+      <div style="text-align:right;font-size:11px;color:var(--text2);margin-top:4px">${progress}%</div>
+      ${claimBtn}`;
+  } catch(e) { body.innerHTML = '<p style="color:var(--red);text-align:center">Failed to load details</p>'; }
+};
+
 // ── RECORDS ──
 let _recordTab = 'income';
 window.switchRecord = (tab, btn) => {
@@ -1785,41 +1842,50 @@ async function loadRecords(tab) {
       el.innerHTML = items.map(inv => {
         const matured=inv.status==='matured', claimed=inv.status==='claimed';
         const badge = matured?'<span class="inv-badge matured">Matured</span>':claimed?'<span class="inv-badge claimed">Claimed</span>':'<span class="inv-badge active">Active</span>';
-        return `<div class="inv-item" style="cursor:${matured?'pointer':'default'}" onclick="${matured?`claimInvestment('${inv.id}')`:''}" >
+        return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
           <div class="inv-img">${inv.productImage?`<img src="${inv.productImage}" alt="">`:ICN.box}</div>
           <div class="inv-info"><div class="inv-name">${inv.productName||'Plan'}</div><div class="inv-meta">${inv.date||''}</div></div>
-          <div class="inv-right"><div class="inv-return">${ugx(inv.expectedReturn)}</div>${badge}${matured?'<div class="inv-days" style="color:#22c55e;font-size:10px">Tap to claim →</div>':''}</div>
+          <div class="inv-right"><div class="inv-return">${ugx(inv.expectedReturn)}</div>${badge}${matured?'<div class="inv-days" style="color:#22c55e;font-size:10px">Tap for details →</div>':''}</div>
         </div>`;
       }).join('');
       return;
     }
-    // ── TRANSACTION RECORDS ──
-    // Single where only — no orderBy, no second where — avoid composite index requirement
+    // ── WITHDRAWALS — read directly from withdrawals collection for live status ──
+    if (tab === 'withdrawals') {
+      const wSnap = await getDocs(query(collection(db,'withdrawals'), where('userId','==',_user.uid), limit(100)));
+      const witems = wSnap.docs.map(d => ({ id:d.id, ...d.data() }))
+        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      if (!witems.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No withdrawals yet</p></div>`; return; }
+      el.innerHTML = witems.map(w => {
+        const net   = w.netAmount != null ? w.netAmount : Math.round((w.amount||0) * 0.83);
+        const phone = w.withdrawalPhone || w.phone || '—';
+        const rejNote = w.rejectionReason ? `<div class="rec-row"><span class="rec-row-lbl">Reason</span><span class="rec-row-val s-red">${w.rejectionReason}</span></div>` : '';
+        return `<div class="rec-card">
+          <div class="rec-card-hd"><div class="rec-card-hd-title">Withdrawal order</div><div class="rec-card-hd-amt">${ugx(w.amount)}</div></div>
+          <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(w)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Send to</span><span class="rec-row-val">${phone}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Amount received</span><span class="rec-row-val">${ugx(net)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(w.status)}">${statusLabel(w.status)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${w.date||'—'}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${w.time||fmtDT(w)}</span></div>
+          ${rejNote}
+        </div>`;
+      }).join('');
+      return;
+    }
+
+    // ── OTHER TRANSACTION RECORDS ──
     const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',_user.uid), limit(100)));
     const all = snap.docs.map(d => ({ id:d.id, ...d.data() }))
       .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
     const REVENUE_TYPES = ['checkin','commission','gift_code','investment_return','admin_credit'];
-    const items = tab === 'withdrawals' ? all.filter(t => t.type === 'withdrawal')
-               : tab === 'deposits'    ? all.filter(t => t.type === 'deposit' || t.type === 'admin_credit')
-               : tab === 'referrals'   ? all.filter(t => t.type === 'commission')
-               : tab === 'revenue'     ? all.filter(t => REVENUE_TYPES.includes(t.type))
+    const items = tab === 'deposits'  ? all.filter(t => t.type === 'deposit' || t.type === 'admin_credit')
+               : tab === 'referrals' ? all.filter(t => t.type === 'commission')
+               : tab === 'revenue'   ? all.filter(t => REVENUE_TYPES.includes(t.type))
                : all;
     if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No records yet</p></div>`; return; }
 
-    if (tab === 'withdrawals') {
-      el.innerHTML = items.map(tx => {
-        // Use server-stored netAmount for accuracy; fall back to 17% calc only if absent
-        const net = tx.netAmount != null ? tx.netAmount : Math.round(Math.abs(tx.amount||0) * 0.83);
-        const gross = Math.abs(tx.amount||0);
-        return `<div class="rec-card">
-          <div class="rec-card-hd"><div class="rec-card-hd-title">Withdrawal order</div><div class="rec-card-hd-amt">${ugx(gross)}</div></div>
-          <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Amount received</span><span class="rec-row-val">${ugx(net)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status)}">${statusLabel(tx.status)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
-        </div>`;
-      }).join('');
-    } else if (tab === 'deposits') {
+    if (tab === 'deposits') {
       el.innerHTML = items.map(tx => {
         const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'MoMo Deposit';
         return `<div class="rec-card">
