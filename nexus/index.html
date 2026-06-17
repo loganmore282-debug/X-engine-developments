@@ -1871,6 +1871,7 @@ let _depNetwork = 'MTN';
 let _depVerified = false;
 let _depVerifyTimer = null;
 let _depCountdownTimer = null;
+let _depPollTimer = null;
 let _depDepositId = null;
 let _depReceivingPhone = '';
 
@@ -1921,7 +1922,7 @@ window.openDepositPage = () => {
   _depVerified = false;
   _depNetwork = 'MTN';
   depSetNetwork('MTN');
-  if (_depCountdownTimer) { clearInterval(_depCountdownTimer); _depCountdownTimer = null; }
+  stopDepTimers();
 
   // Auto-fill phone from profile (strip +256 prefix)
   const savedPhone = _userData.phone?.replace(/^\+256/, '') || '';
@@ -1997,8 +1998,9 @@ window.proceedDeposit = async () => {
     document.getElementById('depPageTitle').textContent = 'Complete Payment';
     document.getElementById('depBackBtn').onclick = () => goBackToDepStep1();
 
-    // Start countdown
+    // Start countdown + auto-polling for payment
     startDepCountdown(r.expiresAt);
+    startDepPolling();
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Proceed';
     showToast('Network error. Try again.', 'error');
@@ -2034,40 +2036,60 @@ window.copyReceivingPhone = () => {
     .catch(() => showToast(_depReceivingPhone, ''));
 };
 
+function stopDepTimers() {
+  if (_depCountdownTimer) { clearInterval(_depCountdownTimer); _depCountdownTimer = null; }
+  if (_depPollTimer)      { clearInterval(_depPollTimer);      _depPollTimer = null; }
+}
+
 window.goBackToDepStep1 = () => {
   document.getElementById('depStep1').style.display = 'block';
   document.getElementById('depStep2').style.display = 'none';
   document.getElementById('depPageTitle').textContent = 'Deposit Funds';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
-  if (_depCountdownTimer) { clearInterval(_depCountdownTimer); _depCountdownTimer = null; }
+  stopDepTimers();
 };
+
+// Auto-poll the server every 5s while waiting on Step 2 — no tap needed.
+function startDepPolling() {
+  if (_depPollTimer) clearInterval(_depPollTimer);
+  _depPollTimer = setInterval(() => pollDepositStatus(false), 5000);
+}
+
+async function pollDepositStatus(manual) {
+  if (!_depDepositId) return false;
+  try {
+    const resp = await fetch(SERVER + '/deposit/status/' + _depDepositId);
+    const r = await resp.json();
+    if (r.status === 'success') {
+      const dep = r.deposit;
+      if (dep.depositStatus === 'matched') {
+        stopDepTimers();
+        closePage('depositPage');
+        showToast(`Payment received! ${ugx(dep.amount)} credited to your wallet.`, 'success');
+        // wallet balance updates live via the user onSnapshot listener
+        return true;
+      }
+      if (dep.depositStatus === 'expired') {
+        stopDepTimers();
+        if (manual) showToast('This deposit request has expired. Please create a new one.', 'error');
+        return false;
+      }
+      if (manual) showToast('Payment not received yet. Send the money then check again.', '');
+    } else if (manual) {
+      showToast('Could not check status. Try again.', 'error');
+    }
+  } catch (e) {
+    if (manual) showToast('Network error', 'error');
+  }
+  return false;
+}
 
 window.checkDepositStatus = async () => {
   if (!_depDepositId) { showToast('No pending deposit found', 'error'); return; }
   const btn = document.getElementById('depCheckBtn');
   btn.disabled = true; btn.textContent = 'Checking…';
-  try {
-    const resp = await fetch(SERVER + '/deposit/status/' + _depDepositId);
-    const r = await resp.json();
-    btn.disabled = false; btn.textContent = 'Check Payment Status';
-    if (r.status === 'success') {
-      const dep = r.deposit;
-      if (dep.depositStatus === 'matched') {
-        if (_depCountdownTimer) { clearInterval(_depCountdownTimer); _depCountdownTimer = null; }
-        closePage('depositPage');
-        showToast(`Payment received! ${ugx(dep.amount)} credited to your wallet.`, 'success');
-      } else if (dep.depositStatus === 'expired') {
-        showToast('This deposit request has expired. Please create a new one.', 'error');
-      } else {
-        showToast('Payment not received yet. Send the money then check again.', '');
-      }
-    } else {
-      showToast('Could not check status. Try again.', 'error');
-    }
-  } catch (e) {
-    btn.disabled = false; btn.textContent = 'Check Payment Status';
-    showToast('Network error', 'error');
-  }
+  await pollDepositStatus(true);
+  btn.disabled = false; btn.textContent = 'Check Payment Status';
 };
 
 // ── WITHDRAW PAGE ──

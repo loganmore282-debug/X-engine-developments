@@ -884,13 +884,25 @@ window.doLogout = () => {
 setTimeout(() => { if (localStorage.getItem('nx_admin_auth') === '1') _showAdminApp(); }, 0);
 
 // ── INIT ──
+let _activeTab = 'dashboard';
+let _adminPollTimer = null;
 window.initAdmin = async () => {
   loadDashboard();
   loadWithdrawalsCount();
+  // Auto-poll: keep the live tab fresh + refresh the pending-withdrawal badge.
+  if (_adminPollTimer) clearInterval(_adminPollTimer);
+  _adminPollTimer = setInterval(() => {
+    if (document.hidden) return;            // pause when tab not visible
+    loadWithdrawalsCount();
+    if (_activeTab === 'deposits')    loadDeposits();
+    if (_activeTab === 'withdrawals') loadWithdrawals();
+    if (_activeTab === 'dashboard')   loadDashboard();
+  }, 15000);
 };
 
 // ── TAB SWITCHING ──
 window.showTab = (tab, btn) => {
+  _activeTab = tab;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   const panel = document.getElementById(tab + 'Panel');
