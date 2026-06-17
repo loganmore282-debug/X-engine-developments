@@ -33,7 +33,7 @@ const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credential
 
 const MIN_WITHDRAWAL = 15000;
 const CHECKIN_BONUS  = 500;
-const WELCOME_BONUS  = 10000;
+const WELCOME_BONUS  = 7000;
 const COMM_L1        = 0.35;
 const COMM_L2        = 0.05;
 const COMM_L3        = 0.02;
@@ -375,7 +375,7 @@ app.post('/register', async (req, res) => {
 
     const myRefCode = userSnap.data().referralCode || await generateUniqueRefCode();
 
-    const WELCOME = 10000;
+    const WELCOME = WELCOME_BONUS;
     const { date, time } = nowStr();
     const batch = db.batch();
     const update = { registrationDone: true, referralCode: myRefCode };

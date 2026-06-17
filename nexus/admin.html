@@ -1609,7 +1609,7 @@ async function loadSettings() {
     const s = snap.exists() ? snap.data() : {};
     document.getElementById('settMaintenance').checked = !!s.maintenanceMode;
     document.getElementById('settCheckin').value  = s.checkinBonus   || 500;
-    document.getElementById('settWelcome').value  = s.welcomeBonus   || 10000;
+    document.getElementById('settWelcome').value  = s.welcomeBonus   || 7000;
     document.getElementById('settMinDep').value   = s.minDeposit     || 30000;
     document.getElementById('settMinWit').value   = s.minWithdrawal  || 15000;
     // Announcement
