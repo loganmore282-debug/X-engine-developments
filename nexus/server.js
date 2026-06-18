@@ -38,8 +38,15 @@ const COMM_L1          = 0.10;
 const COMM_L2          = 0.05;
 const COMM_L3          = 0.02;
 const LIQUIDITY_FEE    = 0.17;
-const AGENT_THRESHOLD  = 10;      // active referrals needed to become an agent
-const AGENT_WEEKLY_PAY = 150000;  // UGX paid every 7 days to agents
+// Agent tier ladder — ordered highest → lowest (array order matters for findIndex)
+const AGENT_TIERS = [
+  { key: 'regional_agent', label: 'Regional Agent', threshold: 20, weeklyPay: 300000 },
+  { key: 'senior_agent',   label: 'Senior Agent',   threshold: 15, weeklyPay: 200000 },
+  { key: 'agent',          label: 'Agent',           threshold: 10, weeklyPay: 150000 },
+];
+function getTierForCount(count) {
+  return AGENT_TIERS.find(t => count >= t.threshold) || null;
+}
 
 // ── SETTINGS CACHE — reads Firestore `settings/main`, TTL 5 min ──
 // Admin-editable rates (commL1/L2/L3, liquidityFee, minWithdrawal) live here;
@@ -242,8 +249,9 @@ function parseMoMoSMS(sms) {
 }
 
 // ── AGENT PROMOTION ──
-// Called after every investment. If the investor's referrer now has 10+ referrals
-// who have invested (totalInvested > 0), they are promoted to Agent atomically.
+// Called after every investment. Checks the investor's referrer for tier promotion
+// or upgrade (Agent → Senior Agent → Regional Agent). Uses a transaction to
+// prevent race conditions. Never downgrades a tier.
 async function checkAgentPromotion(investorId) {
   try {
     const invSnap = await db.collection('users').doc(investorId).get();
@@ -252,40 +260,53 @@ async function checkAgentPromotion(investorId) {
     if (!referrerId || referrerId === investorId) return;
 
     const refSnap = await db.collection('users').doc(referrerId).get();
-    if (!refSnap.exists || refSnap.data().isAgent) return;
+    if (!refSnap.exists) return;
 
-    // Count this referrer's direct referrals who have actually invested
+    // Already at highest tier — nothing to check
+    if (refSnap.data().agentTier === 'regional_agent') return;
+
+    // Count direct referrals who have actually invested
     const teamSnap = await db.collection('users')
       .where('referredBy', '==', referrerId)
       .where('totalInvested', '>', 0)
       .get();
-
     const count = teamSnap.size;
-    // Always keep activeReferralCount up to date even if not yet at threshold
     await db.collection('users').doc(referrerId).update({ activeReferralCount: count });
 
-    if (count >= AGENT_THRESHOLD && !refSnap.data().isAgent) {
-      const { date, time } = nowStr();
-      await db.runTransaction(async t => {
-        const rRef   = db.collection('users').doc(referrerId);
-        const rFresh = await t.get(rRef);
-        if (rFresh.data().isAgent) return; // already promoted (race-condition guard)
-        t.update(rRef, {
-          isAgent:             true,
-          activeReferralCount: count,
-          agentSince:          FieldValue.serverTimestamp(),
-          agentPayoutTotal:    0,
-          lastAgentPayoutDate: null
-        });
-        t.set(db.collection('transactions').doc(), {
-          userId: referrerId, type: 'agent_promotion',
-          description: `Promoted to Agent — ${count} active referrals`,
-          amount: 0, status: 'success', date, time,
-          createdAt: FieldValue.serverTimestamp()
-        });
+    const targetTier = getTierForCount(count);
+    if (!targetTier) return; // below lowest threshold
+
+    const currentTierKey = refSnap.data().agentTier || null;
+    if (currentTierKey === targetTier.key) return; // already at target tier
+
+    // Only upgrade, never downgrade (lower index in AGENT_TIERS = higher tier)
+    const currentIdx = currentTierKey ? AGENT_TIERS.findIndex(t => t.key === currentTierKey) : AGENT_TIERS.length;
+    const targetIdx  = AGENT_TIERS.findIndex(t => t.key === targetTier.key);
+    if (targetIdx >= currentIdx) return; // target is same or lower tier
+
+    const isFirstPromotion = !currentTierKey;
+    const { date, time } = nowStr();
+
+    await db.runTransaction(async t => {
+      const rRef   = db.collection('users').doc(referrerId);
+      const rFresh = await t.get(rRef);
+      const freshTierKey = rFresh.data().agentTier || null;
+      const freshIdx = freshTierKey ? AGENT_TIERS.findIndex(tt => tt.key === freshTierKey) : AGENT_TIERS.length;
+      if (targetIdx >= freshIdx) return; // race-condition guard
+      t.update(rRef, {
+        isAgent:             true,
+        agentTier:           targetTier.key,
+        activeReferralCount: count,
+        ...(isFirstPromotion ? { agentSince: FieldValue.serverTimestamp(), agentPayoutTotal: 0, lastAgentPayoutDate: null } : {})
       });
-      console.log(`⭐ Agent promoted: ${referrerId} (${count} active referrals)`);
-    }
+      t.set(db.collection('transactions').doc(), {
+        userId: referrerId, type: 'agent_promotion',
+        description: `${isFirstPromotion ? 'Promoted to' : 'Upgraded to'} ${targetTier.label} — ${count} active referrals`,
+        amount: 0, status: 'success', date, time,
+        createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    console.log(`⭐ ${isFirstPromotion ? 'Promoted' : 'Upgraded'}: ${referrerId} → ${targetTier.label} (${count} referrals)`);
   } catch (e) { console.error('Agent promotion error:', e.message); }
 }
 
@@ -1557,9 +1578,9 @@ function scheduleMidnightEAT() {
 }
 
 // ── AGENT WEEKLY PAYOUT ──
-// Runs every 6 hours. Pays AGENT_WEEKLY_PAY to every agent whose last payout
-// was 7+ days ago. The 7-day check is re-verified inside the transaction to
-// prevent double-payment from concurrent runs.
+// Runs every 6 hours. Pays tier-appropriate stipend to every agent whose last
+// payout was 7+ days ago. Weekly pay is re-read inside the transaction so a
+// tier upgrade between runs is immediately reflected.
 async function runAgentPayouts() {
   try {
     const EAT = 3 * 3600000;
@@ -1568,10 +1589,10 @@ async function runAgentPayouts() {
     if (agentsSnap.empty) return 0;
     let paid = 0;
     for (const agentDoc of agentsSnap.docs) {
-      const agent = agentDoc.data();
+      const agent  = agentDoc.data();
       const lastMs = agent.lastAgentPayoutDate
         ? new Date(agent.lastAgentPayoutDate).getTime() : 0;
-      if (nowMs - lastMs < 7 * 86400000) continue; // not yet 7 days since last pay
+      if (nowMs - lastMs < 7 * 86400000) continue;
       const { date, time } = nowStr();
       const todayKey = new Date(nowMs + EAT).toISOString().slice(0, 10);
       try {
@@ -1581,21 +1602,25 @@ async function runAgentPayouts() {
           if (!fresh.data().isAgent) return;
           const lastMsFresh = fresh.data().lastAgentPayoutDate
             ? new Date(fresh.data().lastAgentPayoutDate).getTime() : 0;
-          if (nowMs - lastMsFresh < 7 * 86400000) return; // guard inside transaction
+          if (nowMs - lastMsFresh < 7 * 86400000) return;
+          // Use the freshest tier for payout amount
+          const tierCfg    = AGENT_TIERS.find(tt => tt.key === (fresh.data().agentTier || 'agent')) || AGENT_TIERS[2];
+          const weeklyPay  = tierCfg.weeklyPay;
           t.update(uRef, {
-            walletBalance:       FieldValue.increment(AGENT_WEEKLY_PAY),
-            agentPayoutTotal:    FieldValue.increment(AGENT_WEEKLY_PAY),
+            walletBalance:       FieldValue.increment(weeklyPay),
+            agentPayoutTotal:    FieldValue.increment(weeklyPay),
             lastAgentPayoutDate: todayKey
           });
           t.set(db.collection('transactions').doc(), {
             userId: agentDoc.id, type: 'agent_bonus',
-            description: 'Weekly Agent stipend',
-            amount: AGENT_WEEKLY_PAY, status: 'success', date, time,
+            description: `Weekly ${tierCfg.label} stipend`,
+            amount: weeklyPay, status: 'success', date, time,
             createdAt: FieldValue.serverTimestamp()
           });
         });
         paid++;
-        console.log(`⭐ Agent payout: ${agentDoc.id} — ${fmtUGX(AGENT_WEEKLY_PAY)}`);
+        const tierCfg = AGENT_TIERS.find(tt => tt.key === (agent.agentTier || 'agent')) || AGENT_TIERS[2];
+        console.log(`⭐ Agent payout: ${agentDoc.id} — ${fmtUGX(tierCfg.weeklyPay)} (${tierCfg.label})`);
       } catch (e) { console.error('Agent payout tx error:', agentDoc.id, e.message); }
     }
     if (paid > 0) console.log(`⭐ Agent payouts complete: ${paid} agent(s) paid`);
@@ -1644,7 +1669,7 @@ app.post('/account/create-profile', async (req, res) => {
       teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
       checkinEarned: 0, checkinStreak: 0, checkinDays: 0,
       withdrawalCount: 0, status: 'active',
-      isAgent: false, activeReferralCount: 0,
+      isAgent: false, agentTier: null, activeReferralCount: 0,
       agentPayoutTotal: 0, lastAgentPayoutDate: null, agentSince: null,
       bankAccounts: [], createdAt: FieldValue.serverTimestamp()
     });

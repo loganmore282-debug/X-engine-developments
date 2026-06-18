@@ -889,6 +889,17 @@ function openModal(id)  { document.getElementById(id).classList.add('show'); }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 window.closeModal = closeModal;
 
+const ADMIN_TIER_CFG = {
+  regional_agent: { label: 'Regional Agent', stars: '⭐⭐⭐', color: '#a78bfa', bg: 'rgba(139,92,246,0.15)', border: 'rgba(139,92,246,0.3)' },
+  senior_agent:   { label: 'Senior Agent',   stars: '⭐⭐',   color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.3)' },
+  agent:          { label: 'Agent',           stars: '⭐',    color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' },
+};
+function agentTierBadge(u) {
+  if (!u.isAgent && !u.agentTier) return '';
+  const cfg = ADMIN_TIER_CFG[u.agentTier || 'agent'] || ADMIN_TIER_CFG.agent;
+  return `<span style="display:inline-flex;align-items:center;background:${cfg.bg};border:1px solid ${cfg.border};color:${cfg.color};font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:6px;white-space:nowrap">${cfg.stars} ${cfg.label}</span>`;
+}
+
 function statusBadge(s) {
   if (s === 'exhausted') return `<span class="badge badge-danger">Exhausted</span>`;
   if (s === 'partial')   return `<span class="badge badge-warn">In Use</span>`;
@@ -1255,7 +1266,7 @@ function renderUsers() {
   }
   const rows = list.map(u => `<tr>
     <td>
-      <div style="font-weight:600;color:var(--text)">${u.name||'—'}</div>
+      <div style="font-weight:600;color:var(--text)">${u.name||'—'}${agentTierBadge(u)}</div>
       <div style="font-size:11px;color:var(--muted)">${u.email||''}</div>
     </td>
     <td>${u.phone||'—'}</td>
@@ -1298,7 +1309,7 @@ window.openUserModal = (userId) => {
     <div style="display:flex;align-items:center;gap:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:16px;margin-bottom:14px">
       <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:2px">${u.name||'Unknown'}</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:2px">${u.name||'Unknown'}${agentTierBadge(u)}</div>
         <div style="font-size:12px;color:var(--text2)">${u.phone||'—'}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">Joined ${fmtDate(u.createdAt)} · Code: <span style="font-family:monospace;color:#60a5fa">${u.referralCode||'—'}</span></div>
       </div>
@@ -1343,6 +1354,42 @@ window.openUserModal = (userId) => {
         <div style="font-size:14px;font-weight:700;color:var(--text)">${u.teamL1Count||0}/${u.teamL2Count||0}/${u.teamL3Count||0}</div>
       </div>
     </div>
+
+    ${(u.isAgent || u.agentTier) ? (() => {
+      const cfg = ADMIN_TIER_CFG[u.agentTier || 'agent'] || ADMIN_TIER_CFG.agent;
+      const tierPay = { regional_agent: 300000, senior_agent: 200000, agent: 150000 };
+      const pay = tierPay[u.agentTier || 'agent'] || 150000;
+      const nextTiers = { agent: { label: 'Senior Agent', threshold: 15 }, senior_agent: { label: 'Regional Agent', threshold: 20 } };
+      const next = nextTiers[u.agentTier || 'agent'];
+      const refs = u.activeReferralCount || 0;
+      const progressPct = next ? Math.min(Math.max((refs - (u.agentTier === 'senior_agent' ? 15 : 10)) / (next.threshold - (u.agentTier === 'senior_agent' ? 15 : 10)) * 100, 0), 100) : 100;
+      return `<!-- Agent stats card -->
+    <div style="background:linear-gradient(135deg,#1c1200,#2d1f00);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:18px">${cfg.stars}</span>
+        <div>
+          <div style="font-size:12px;font-weight:800;color:${cfg.color};text-transform:uppercase;letter-spacing:.5px">${cfg.label}</div>
+          <div style="font-size:10px;color:rgba(245,158,11,0.5)">Agent Since ${u.agentSince ? fmtDate(u.agentSince) : '—'}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:rgba(245,158,11,0.08);border-radius:8px;padding:8px 10px;text-align:center">
+          <div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:3px">Weekly Pay</div>
+          <div style="font-size:12px;font-weight:800;color:#fbbf24">UGX ${pay.toLocaleString()}</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.08);border-radius:8px;padding:8px 10px;text-align:center">
+          <div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:3px">Total Earned</div>
+          <div style="font-size:12px;font-weight:800;color:#fbbf24">${ugx(u.agentPayoutTotal||0)}</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.08);border-radius:8px;padding:8px 10px;text-align:center">
+          <div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:3px">Active Refs</div>
+          <div style="font-size:12px;font-weight:800;color:#fbbf24">${refs}</div>
+        </div>
+      </div>
+      ${next ? `<div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:4px">${next.label}: ${refs}/${next.threshold} referrals</div>
+      <div style="height:5px;background:rgba(245,158,11,0.1);border-radius:3px;overflow:hidden"><div style="height:100%;width:${progressPct}%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:3px"></div></div>` : '<div style="font-size:10px;color:rgba(245,158,11,0.5);text-align:center">Maximum tier — Regional Agent</div>'}
+    </div>`;
+    })() : ''}
 
     <!-- Actions row -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">

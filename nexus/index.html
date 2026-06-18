@@ -881,15 +881,15 @@ body{padding-bottom:106px}
     <!-- Agent Banner (only visible for agents) -->
     <div class="agent-banner" id="agentBanner">
       <div class="agb-header">
-        <div class="agb-star">⭐</div>
+        <div class="agb-star" id="agbStar">⭐</div>
         <div>
-          <div class="agb-title">Nexus Agent</div>
-          <div class="agb-sub">Certified — earning weekly stipend</div>
+          <div class="agb-title" id="agbTierTitle">Nexus Agent</div>
+          <div class="agb-sub" id="agbTierSub">Certified — earning weekly stipend</div>
         </div>
       </div>
       <div class="agb-stats">
         <div class="agb-stat">
-          <div class="agb-stat-val">UGX 150,000</div>
+          <div class="agb-stat-val" id="agbWeeklyPay">UGX 150,000</div>
           <div class="agb-stat-lbl">Weekly Stipend</div>
         </div>
         <div class="agb-stat">
@@ -905,6 +905,7 @@ body{padding-bottom:106px}
         <div class="agb-bar"><div class="agb-bar-fill" id="agbRefBar" style="width:100%"></div></div>
       </div>
       <div class="agb-next-payout" id="agbNextPayout">Next payout: —</div>
+      <div class="agb-next-tier" id="agbNextTier" style="margin-top:8px;font-size:11px;color:rgba(245,158,11,0.55);text-align:center"></div>
     </div>
 
     <!-- Progress to Agent (only visible for non-agents) -->
@@ -1675,17 +1676,33 @@ function renderCommission(u) {
   document.getElementById('teamL2Earned').textContent  = shortUgx(u.commissionL2Earned || 0);
   document.getElementById('teamL3Earned').textContent  = shortUgx(u.commissionL3Earned || 0);
 
-  // Agent banner / progress
+  // Agent tier config (mirrors server AGENT_TIERS)
+  const TIERS = [
+    { key: 'regional_agent', label: 'Regional Agent', star: '⭐⭐⭐', threshold: 20, weeklyPay: 300000 },
+    { key: 'senior_agent',   label: 'Senior Agent',   star: '⭐⭐',   threshold: 15, weeklyPay: 200000 },
+    { key: 'agent',          label: 'Agent',           star: '⭐',    threshold: 10, weeklyPay: 150000 },
+  ];
   const agentBanner  = document.getElementById('agentBanner');
   const progressWrap = document.getElementById('agentProgressWrap');
   if (u.isAgent) {
     agentBanner.classList.add('show');
     progressWrap.classList.remove('show');
-    const refs = u.activeReferralCount || 0;
+    const tierKey  = u.agentTier || 'agent';
+    const tier     = TIERS.find(t => t.key === tierKey) || TIERS[2];
+    const refs     = u.activeReferralCount || 0;
+    document.getElementById('agbStar').textContent        = tier.star;
+    document.getElementById('agbTierTitle').textContent   = 'Nexus ' + tier.label;
+    document.getElementById('agbWeeklyPay').textContent   = ugx(tier.weeklyPay);
     document.getElementById('agbTotalEarned').textContent = ugx(u.agentPayoutTotal || 0);
-    document.getElementById('agbRefCount').textContent    = refs + ' / 10';
-    document.getElementById('agbRefBar').style.width      = Math.min(refs / 10 * 100, 100) + '%';
-    const lastPay = u.lastAgentPayoutDate;
+    // Progress bar spans current tier threshold → next tier threshold
+    const nextTier   = TIERS[TIERS.indexOf(tier) - 1] || null; // lower index = higher tier
+    const barMin     = tier.threshold;
+    const barMax     = nextTier ? nextTier.threshold : tier.threshold + 5;
+    const barPct     = nextTier ? Math.min((refs - barMin) / (barMax - barMin) * 100, 100) : 100;
+    document.getElementById('agbRefCount').textContent = refs + (nextTier ? ' / ' + nextTier.threshold : '+');
+    document.getElementById('agbRefBar').style.width   = Math.max(barPct, 4) + '%';
+    // Next payout
+    const lastPay   = u.lastAgentPayoutDate;
     const nextPayEl = document.getElementById('agbNextPayout');
     if (lastPay) {
       const nextMs = new Date(lastPay).getTime() + 7 * 86400000;
@@ -1698,15 +1715,28 @@ function renderCommission(u) {
     } else {
       nextPayEl.textContent = 'Next payout: Available now!';
     }
+    // Upgrade hint to next tier
+    const nextTierEl = document.getElementById('agbNextTier');
+    if (nextTier) {
+      const need = nextTier.threshold - refs;
+      nextTierEl.textContent = need > 0
+        ? `${need} more referral${need === 1 ? '' : 's'} to become ${nextTier.label} (${ugx(nextTier.weeklyPay)}/week)`
+        : `Eligible for ${nextTier.label} upgrade — waiting for next investment`;
+    } else {
+      nextTierEl.textContent = 'Maximum tier reached — Regional Agent';
+    }
   } else {
     agentBanner.classList.remove('show');
-    const refs = Math.min(u.activeReferralCount || 0, 10);
+    const refs = u.activeReferralCount || 0;
     if (refs > 0) {
       progressWrap.classList.add('show');
-      document.getElementById('apwBarFill').style.width = (refs / 10 * 100) + '%';
+      const pct  = Math.min(refs / 10 * 100, 100);
+      const left = Math.max(10 - refs, 0);
+      document.getElementById('apwBarFill').style.width = pct + '%';
       document.getElementById('apwVal').textContent     = refs + ' / 10';
-      const left = 10 - refs;
-      document.getElementById('apwHint').textContent    = left + ' more active referral' + (left === 1 ? '' : 's') + ' needed to become a Nexus Agent and earn UGX 150,000/week.';
+      document.getElementById('apwHint').textContent    = left > 0
+        ? left + ' more active referral' + (left === 1 ? '' : 's') + ' needed to become a Nexus Agent and earn UGX 150,000/week.'
+        : 'Eligible for Agent promotion — waiting for next investment';
     } else {
       progressWrap.classList.remove('show');
     }
@@ -1716,7 +1746,10 @@ function renderCommission(u) {
 // ── RENDER MORE ──
 function renderMore(u) {
   const nameEl = document.getElementById('moreName');
-  if (u.isAgent) {
+  const TIER_BADGES = { regional_agent: '★★★ Regional Agent', senior_agent: '★★ Senior Agent', agent: '★ Agent' };
+  if (u.isAgent && u.agentTier) {
+    nameEl.innerHTML = (u.name || '—') + ` <span class="agent-badge">${TIER_BADGES[u.agentTier] || '★ Agent'}</span>`;
+  } else if (u.isAgent) {
     nameEl.innerHTML = (u.name || '—') + ' <span class="agent-badge">★ Agent</span>';
   } else {
     nameEl.textContent = u.name || '—';
