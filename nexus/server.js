@@ -31,13 +31,15 @@ const RAILWAY_URL  = (process.env.RAILWAY_URL || '').replace(/\/$/, '');
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 
-const MIN_WITHDRAWAL = 15000;
-const CHECKIN_BONUS  = 500;
-const WELCOME_BONUS  = 7000;
-const COMM_L1        = 0.10;
-const COMM_L2        = 0.05;
-const COMM_L3        = 0.02;
-const LIQUIDITY_FEE  = 0.17;
+const MIN_WITHDRAWAL   = 15000;
+const CHECKIN_BONUS    = 500;
+const WELCOME_BONUS    = 7000;
+const COMM_L1          = 0.10;
+const COMM_L2          = 0.05;
+const COMM_L3          = 0.02;
+const LIQUIDITY_FEE    = 0.17;
+const AGENT_THRESHOLD  = 10;      // active referrals needed to become an agent
+const AGENT_WEEKLY_PAY = 150000;  // UGX paid every 7 days to agents
 
 // ── SETTINGS CACHE — reads Firestore `settings/main`, TTL 5 min ──
 // Admin-editable rates (commL1/L2/L3, liquidityFee, minWithdrawal) live here;
@@ -237,6 +239,54 @@ function parseMoMoSMS(sms) {
   if (!amount || amount < 100 || !senderPhone) return null;
   if (!txnId) txnId = crypto.randomBytes(6).toString('hex').toUpperCase();
   return { amount, senderPhone, senderName, txnId };
+}
+
+// ── AGENT PROMOTION ──
+// Called after every investment. If the investor's referrer now has 10+ referrals
+// who have invested (totalInvested > 0), they are promoted to Agent atomically.
+async function checkAgentPromotion(investorId) {
+  try {
+    const invSnap = await db.collection('users').doc(investorId).get();
+    if (!invSnap.exists) return;
+    const referrerId = invSnap.data().referredBy;
+    if (!referrerId || referrerId === investorId) return;
+
+    const refSnap = await db.collection('users').doc(referrerId).get();
+    if (!refSnap.exists || refSnap.data().isAgent) return;
+
+    // Count this referrer's direct referrals who have actually invested
+    const teamSnap = await db.collection('users')
+      .where('referredBy', '==', referrerId)
+      .where('totalInvested', '>', 0)
+      .get();
+
+    const count = teamSnap.size;
+    // Always keep activeReferralCount up to date even if not yet at threshold
+    await db.collection('users').doc(referrerId).update({ activeReferralCount: count });
+
+    if (count >= AGENT_THRESHOLD && !refSnap.data().isAgent) {
+      const { date, time } = nowStr();
+      await db.runTransaction(async t => {
+        const rRef   = db.collection('users').doc(referrerId);
+        const rFresh = await t.get(rRef);
+        if (rFresh.data().isAgent) return; // already promoted (race-condition guard)
+        t.update(rRef, {
+          isAgent:             true,
+          activeReferralCount: count,
+          agentSince:          FieldValue.serverTimestamp(),
+          agentPayoutTotal:    0,
+          lastAgentPayoutDate: null
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId: referrerId, type: 'agent_promotion',
+          description: `Promoted to Agent — ${count} active referrals`,
+          amount: 0, status: 'success', date, time,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      });
+      console.log(`⭐ Agent promoted: ${referrerId} (${count} active referrals)`);
+    }
+  } catch (e) { console.error('Agent promotion error:', e.message); }
 }
 
 // ── COMMISSION CHAIN ──
@@ -664,6 +714,7 @@ app.post('/invest/create', async (req, res) => {
       });
     });
     payCommissions(userId, price, invId).catch(e => console.error('Commission err:', e.message));
+    checkAgentPromotion(userId).catch(e => console.error('Agent check err:', e.message));
     console.log(`✅ Investment: ${invId} — ${fmtUGX(price)} — ${userId}`);
     return res.json({ status: 'success', investmentId: invId, message: `Invested ${fmtUGX(price)} in ${product.name}` });
   } catch (e) {
@@ -1505,6 +1556,53 @@ function scheduleMidnightEAT() {
   }, delay);
 }
 
+// ── AGENT WEEKLY PAYOUT ──
+// Runs every 6 hours. Pays AGENT_WEEKLY_PAY to every agent whose last payout
+// was 7+ days ago. The 7-day check is re-verified inside the transaction to
+// prevent double-payment from concurrent runs.
+async function runAgentPayouts() {
+  try {
+    const EAT = 3 * 3600000;
+    const nowMs = Date.now();
+    const agentsSnap = await db.collection('users').where('isAgent', '==', true).get();
+    if (agentsSnap.empty) return 0;
+    let paid = 0;
+    for (const agentDoc of agentsSnap.docs) {
+      const agent = agentDoc.data();
+      const lastMs = agent.lastAgentPayoutDate
+        ? new Date(agent.lastAgentPayoutDate).getTime() : 0;
+      if (nowMs - lastMs < 7 * 86400000) continue; // not yet 7 days since last pay
+      const { date, time } = nowStr();
+      const todayKey = new Date(nowMs + EAT).toISOString().slice(0, 10);
+      try {
+        await db.runTransaction(async t => {
+          const uRef  = db.collection('users').doc(agentDoc.id);
+          const fresh = await t.get(uRef);
+          if (!fresh.data().isAgent) return;
+          const lastMsFresh = fresh.data().lastAgentPayoutDate
+            ? new Date(fresh.data().lastAgentPayoutDate).getTime() : 0;
+          if (nowMs - lastMsFresh < 7 * 86400000) return; // guard inside transaction
+          t.update(uRef, {
+            walletBalance:       FieldValue.increment(AGENT_WEEKLY_PAY),
+            agentPayoutTotal:    FieldValue.increment(AGENT_WEEKLY_PAY),
+            lastAgentPayoutDate: todayKey
+          });
+          t.set(db.collection('transactions').doc(), {
+            userId: agentDoc.id, type: 'agent_bonus',
+            description: 'Weekly Agent stipend',
+            amount: AGENT_WEEKLY_PAY, status: 'success', date, time,
+            createdAt: FieldValue.serverTimestamp()
+          });
+        });
+        paid++;
+        console.log(`⭐ Agent payout: ${agentDoc.id} — ${fmtUGX(AGENT_WEEKLY_PAY)}`);
+      } catch (e) { console.error('Agent payout tx error:', agentDoc.id, e.message); }
+    }
+    if (paid > 0) console.log(`⭐ Agent payouts complete: ${paid} agent(s) paid`);
+    return paid;
+  } catch (e) { console.error('Agent payout error:', e.message); return 0; }
+}
+
 function startCrons() {
   // Maturity check every 30 min
   setInterval(runMaturityCheck, 30 * 60 * 1000);
@@ -1513,7 +1611,10 @@ function startCrons() {
   scheduleMidnightEAT();
   setInterval(runDailyCashback, 60 * 60 * 1000);
   runDailyCashback();
-  console.log('⏰ Crons started (maturity every 30m + daily cashback at midnight EAT + hourly safety)');
+  // Agent weekly payouts: check every 6 hours (dedup prevents double-pay)
+  setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
+  runAgentPayouts();
+  console.log('⏰ Crons started (maturity + cashback + agent payouts)');
 }
 
 // ═══════════════════════════════════════════
@@ -1543,6 +1644,8 @@ app.post('/account/create-profile', async (req, res) => {
       teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
       checkinEarned: 0, checkinStreak: 0, checkinDays: 0,
       withdrawalCount: 0, status: 'active',
+      isAgent: false, activeReferralCount: 0,
+      agentPayoutTotal: 0, lastAgentPayoutDate: null, agentSince: null,
       bankAccounts: [], createdAt: FieldValue.serverTimestamp()
     });
     return res.json({ status: 'success' });

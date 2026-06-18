@@ -379,6 +379,35 @@ body{padding-bottom:106px}
 .menu-item.danger .mi-label{color:var(--red)}
 .menu-item.danger .mi-icon{background:rgba(239,68,68,0.1);color:var(--red)}
 
+/* ── AGENT / PRO ── */
+.profile-avatar.agent-ring{border:2.5px solid #f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,0.22),0 0 16px rgba(245,158,11,0.18)}
+.agent-badge{display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:9px;font-weight:900;letter-spacing:.8px;padding:2px 7px;border-radius:5px;text-transform:uppercase;vertical-align:middle;margin-left:7px;box-shadow:0 2px 6px rgba(245,158,11,0.35)}
+.agent-banner{background:linear-gradient(135deg,#1c1200 0%,#2d1f00 60%,#1c1200 100%);border:1px solid rgba(245,158,11,0.35);border-radius:var(--radius);padding:16px;margin-bottom:16px;display:none}
+.agent-banner.show{display:block}
+.agb-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.agb-star{font-size:24px;line-height:1;filter:drop-shadow(0 0 6px rgba(245,158,11,0.7))}
+.agb-title{font-size:14px;font-weight:900;color:#f59e0b;letter-spacing:.6px;text-transform:uppercase}
+.agb-sub{font-size:11px;color:rgba(245,158,11,0.6);margin-top:2px}
+.agb-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.agb-stat{background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.15);border-radius:9px;padding:10px 12px}
+.agb-stat-val{font-size:15px;font-weight:900;color:#fbbf24;font-family:'Outfit',sans-serif}
+.agb-stat-lbl{font-size:10px;color:rgba(245,158,11,0.55);margin-top:2px;text-transform:uppercase;letter-spacing:.4px}
+.agb-progress-wrap{background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.12);border-radius:9px;padding:10px 12px}
+.agb-progress-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.agb-progress-lbl{font-size:11px;color:rgba(245,158,11,0.65);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.agb-progress-val{font-size:12px;font-weight:900;color:#f59e0b}
+.agb-bar{height:6px;background:rgba(245,158,11,0.12);border-radius:3px;overflow:hidden}
+.agb-bar-fill{height:100%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:3px;transition:width .5s ease}
+.agb-next-payout{margin-top:10px;font-size:11px;color:rgba(245,158,11,0.6);text-align:center;font-weight:600}
+.agent-progress-wrap{background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px;margin-bottom:14px;display:none}
+.agent-progress-wrap.show{display:block}
+.apw-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
+.apw-bar-row{display:flex;align-items:center;gap:10px}
+.apw-bar{flex:1;height:6px;background:var(--border2);border-radius:3px;overflow:hidden}
+.apw-bar-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:3px;transition:width .5s ease}
+.apw-val{font-size:11px;font-weight:900;color:#f59e0b;white-space:nowrap}
+.apw-hint{font-size:11px;color:var(--text2);margin-top:6px}
+
 /* ── MODALS — centered pop, not bottom-sheet ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:center;justify-content:center;padding:16px}
 .modal-overlay.show{display:flex}
@@ -847,6 +876,45 @@ body{padding-bottom:106px}
       <p>When members of your Level 2 team invest, you receive a <strong>5%</strong> cash bonus.</p>
       <p>When members of your Level 3 team invest, you receive a <strong>2%</strong> cash bonus.</p>
       <p>Once a team member invests, the cash bonus is <strong>instantly credited</strong> to your account and you can withdraw it immediately.</p>
+    </div>
+
+    <!-- Agent Banner (only visible for agents) -->
+    <div class="agent-banner" id="agentBanner">
+      <div class="agb-header">
+        <div class="agb-star">⭐</div>
+        <div>
+          <div class="agb-title">Nexus Agent</div>
+          <div class="agb-sub">Certified — earning weekly stipend</div>
+        </div>
+      </div>
+      <div class="agb-stats">
+        <div class="agb-stat">
+          <div class="agb-stat-val">UGX 150,000</div>
+          <div class="agb-stat-lbl">Weekly Stipend</div>
+        </div>
+        <div class="agb-stat">
+          <div class="agb-stat-val" id="agbTotalEarned">UGX 0</div>
+          <div class="agb-stat-lbl">Total Earned</div>
+        </div>
+      </div>
+      <div class="agb-progress-wrap">
+        <div class="agb-progress-label">
+          <span class="agb-progress-lbl">Active Referrals</span>
+          <span class="agb-progress-val" id="agbRefCount">0 / 10</span>
+        </div>
+        <div class="agb-bar"><div class="agb-bar-fill" id="agbRefBar" style="width:100%"></div></div>
+      </div>
+      <div class="agb-next-payout" id="agbNextPayout">Next payout: —</div>
+    </div>
+
+    <!-- Progress to Agent (only visible for non-agents) -->
+    <div class="agent-progress-wrap" id="agentProgressWrap">
+      <div class="apw-label">Progress to Agent Status</div>
+      <div class="apw-bar-row">
+        <div class="apw-bar"><div class="apw-bar-fill" id="apwBarFill" style="width:0%"></div></div>
+        <span class="apw-val" id="apwVal">0 / 10</span>
+      </div>
+      <div class="apw-hint" id="apwHint">Invite friends to invest and reach 10 active referrals to become a Nexus Agent — earn UGX 150,000 every week.</div>
     </div>
   </div>
 
@@ -1603,15 +1671,56 @@ function renderCommission(u) {
   document.getElementById('teamL1Count').textContent   = u.teamL1Count || 0;
   document.getElementById('teamL2Count').textContent   = u.teamL2Count || 0;
   document.getElementById('teamL3Count').textContent   = u.teamL3Count || 0;
-  // Income shown as short numbers for the narrow columns
   document.getElementById('teamL1Earned').textContent  = shortUgx(u.commissionL1Earned || 0);
   document.getElementById('teamL2Earned').textContent  = shortUgx(u.commissionL2Earned || 0);
   document.getElementById('teamL3Earned').textContent  = shortUgx(u.commissionL3Earned || 0);
+
+  // Agent banner / progress
+  const agentBanner  = document.getElementById('agentBanner');
+  const progressWrap = document.getElementById('agentProgressWrap');
+  if (u.isAgent) {
+    agentBanner.classList.add('show');
+    progressWrap.classList.remove('show');
+    const refs = u.activeReferralCount || 0;
+    document.getElementById('agbTotalEarned').textContent = ugx(u.agentPayoutTotal || 0);
+    document.getElementById('agbRefCount').textContent    = refs + ' / 10';
+    document.getElementById('agbRefBar').style.width      = Math.min(refs / 10 * 100, 100) + '%';
+    const lastPay = u.lastAgentPayoutDate;
+    const nextPayEl = document.getElementById('agbNextPayout');
+    if (lastPay) {
+      const nextMs = new Date(lastPay).getTime() + 7 * 86400000;
+      if (nextMs <= Date.now()) {
+        nextPayEl.textContent = 'Next payout: Available now!';
+      } else {
+        const daysLeft = Math.ceil((nextMs - Date.now()) / 86400000);
+        nextPayEl.textContent = 'Next payout: in ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's');
+      }
+    } else {
+      nextPayEl.textContent = 'Next payout: Available now!';
+    }
+  } else {
+    agentBanner.classList.remove('show');
+    const refs = Math.min(u.activeReferralCount || 0, 10);
+    if (refs > 0) {
+      progressWrap.classList.add('show');
+      document.getElementById('apwBarFill').style.width = (refs / 10 * 100) + '%';
+      document.getElementById('apwVal').textContent     = refs + ' / 10';
+      const left = 10 - refs;
+      document.getElementById('apwHint').textContent    = left + ' more active referral' + (left === 1 ? '' : 's') + ' needed to become a Nexus Agent and earn UGX 150,000/week.';
+    } else {
+      progressWrap.classList.remove('show');
+    }
+  }
 }
 
 // ── RENDER MORE ──
 function renderMore(u) {
-  document.getElementById('moreName').textContent    = u.name    || '—';
+  const nameEl = document.getElementById('moreName');
+  if (u.isAgent) {
+    nameEl.innerHTML = (u.name || '—') + ' <span class="agent-badge">★ Agent</span>';
+  } else {
+    nameEl.textContent = u.name || '—';
+  }
   document.getElementById('morePhone').textContent   = u.phone   || '—';
   document.getElementById('moreBalance').textContent = 'Balance: ' + ugx(u.walletBalance);
   renderAvatars(u);
@@ -1628,6 +1737,8 @@ function renderAvatars(u) {
       el.textContent = initial;
     }
   });
+  const avatarWrap = document.getElementById('moreAvatarWrap');
+  if (avatarWrap) avatarWrap.classList.toggle('agent-ring', !!u.isAgent);
 }
 
 // ── NAVIGATION ──
