@@ -1302,25 +1302,36 @@ app.post('/admin/check-maturities', async (req, res) => {
 // ═══════════════════════════════════════════
 async function runDailyCashback() {
   try {
-    const snap = await db.collection('investments').where('status', '==', 'active').get();
-    if (snap.empty) return 0;
-    const now      = new Date();
-    const todayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    // Query both active AND matured-but-unclaimed investments so late cashback still pays
+    const [activeSnap, maturedSnap] = await Promise.all([
+      db.collection('investments').where('status', '==', 'active').get(),
+      db.collection('investments').where('status', '==', 'matured').get()
+    ]);
+    const docs = [...activeSnap.docs, ...maturedSnap.docs];
+    if (!docs.length) return 0;
+
+    const now = new Date();
+    // Use EAT (UTC+3) date — the midnight EAT cron fires at 21:00 UTC where UTC date
+    // is still "yesterday", so using UTC would always skip. EAT date is correct.
+    const EAT = 3 * 3600000;
+    const eatMs    = now.getTime() + EAT;
+    const todayKey = new Date(eatMs).toISOString().slice(0, 10);
     let credited   = 0;
 
     // Group by userId so we do one wallet update per user
     const byUser = {};
-    snap.forEach(docSnap => {
+    docs.forEach(docSnap => {
       const inv = docSnap.data();
       if (!inv.dailyReturn || inv.dailyReturn <= 0) return;
 
-      // Determine last credit date (default = investment creation day)
-      const lastKey = inv.lastCreditDate || inv.createdAt?.toDate?.()?.toISOString()?.slice(0, 10);
+      // Last credit date — use EAT date of createdAt as fallback
+      const createdEatMs = (inv.createdAt?.toDate?.()?.getTime() || now.getTime()) + EAT;
+      const lastKey = inv.lastCreditDate || new Date(createdEatMs).toISOString().slice(0, 10);
       if (!lastKey || lastKey >= todayKey) return; // already credited today
 
-      // Count full days owed (cap at cycle to avoid over-crediting)
+      // Count full days owed since last credit (cap at remaining cycle days)
       const startDate = new Date(lastKey + 'T00:00:00Z');
-      const diffMs    = now - startDate;
+      const diffMs    = eatMs - startDate.getTime();
       const daysDue   = Math.min(Math.floor(diffMs / 86400000), inv.cycle || 1);
       if (daysDue <= 0) return;
 
@@ -1403,10 +1414,11 @@ function startCrons() {
   // Maturity check every 30 min
   setInterval(runMaturityCheck, 30 * 60 * 1000);
   runMaturityCheck();
-  // Daily cashback at 00:00 EAT; also run once on startup to catch any missed credits
+  // Daily cashback: fires at 00:00 EAT via scheduler + hourly safety net + once on startup
   scheduleMidnightEAT();
+  setInterval(runDailyCashback, 60 * 60 * 1000);
   runDailyCashback();
-  console.log('⏰ Crons started (maturity + daily cashback at midnight EAT)');
+  console.log('⏰ Crons started (maturity every 30m + daily cashback at midnight EAT + hourly safety)');
 }
 
 const PORT = process.env.PORT || 3000;
