@@ -156,6 +156,38 @@ async function generateUniqueRefCode() {
 //   MTN→MTN:     "You have received UGX 22120 from VICTOR KYOYAGALA, 256791269201 on 2026-06-14..."
 //   Airtel→same: "RECEIVED. TID 149730678579. UGX 27,200 from 743706731, HANIFAH. Bal UGX 332,358."
 //   Airtel→MTN:  "You have received UGX 500 from Airtel Money on ... Reason: ABIIBA KANTONO, 0708523218. ... ID: 41454115808."
+
+// Trusted MoMo sender names — reject SMS from any other sender to block spoofed messages.
+const TRUSTED_SENDERS = new Set([
+  'mtnmobmoney', 'mtnmobilemoney', 'mtn momo', 'mtn uganda',
+  'airtelmoney', 'airtel money', 'airtel uganda',
+  'momo', 'mobilemoney'
+]);
+function isTrustedSender(sender) {
+  if (!sender) return false;
+  return TRUSTED_SENDERS.has(String(sender).toLowerCase().trim());
+}
+
+// Parse MoMo REVERSAL SMS — returns { txnId, amount } or null.
+// MTN reversal: "Your transaction of UGX 500 ... has been reversed. TxnID: 12345678."
+// Airtel reversal: "REVERSED. TID 149730678579. UGX 500 ..."
+function parseReversalSMS(sms) {
+  if (!sms) return null;
+  const text = sms.trim();
+
+  // MTN reversal
+  const mtnR = text.match(/reversed[\s\S]*?(?:TxnID|ID)[:\s]+(\d{6,})/i);
+  if (mtnR && /reversed/i.test(text)) {
+    const amtM = text.match(/UGX\s*([\d,]+)/i);
+    return { txnId: mtnR[1], amount: amtM ? parseInt(amtM[1].replace(/,/g,''),10) : 0 };
+  }
+  // Airtel reversal
+  const airR = text.match(/REVERSED\.\s*TID\s+(\d+)\.\s*UGX\s*([\d,]+)/i);
+  if (airR) return { txnId: airR[1], amount: parseInt(airR[2].replace(/,/g,''),10) };
+
+  return null;
+}
+
 function parseMoMoSMS(sms) {
   if (!sms) return null;
   const text = sms.trim();
@@ -343,6 +375,46 @@ app.post('/sms/incoming', async (req, res) => {
   setImmediate(async () => {
     try {
       console.log('📨 SMS received — full body:', JSON.stringify(body));
+
+      // ── FRAUD: reject SMS from untrusted senders (blocks spoofed messages) ──
+      if (!isTrustedSender(fromPhone)) {
+        console.log(`🚫 SMS rejected — untrusted sender: "${fromPhone}"`);
+        return;
+      }
+
+      // ── FRAUD: handle reversal SMS before trying to parse as deposit ──
+      const reversal = parseReversalSMS(body);
+      if (reversal && reversal.txnId) {
+        console.log(`🔄 Reversal SMS: txnId ${reversal.txnId} — ${fmtUGX(reversal.amount)}`);
+        // Find the original processed deposit
+        const origSnap = await db.collection('processedSMS').doc(reversal.txnId).get();
+        if (origSnap.exists) {
+          const orig = origSnap.data();
+          if (orig.userId && orig.matched !== false) {
+            const { date, time } = nowStr();
+            await db.runTransaction(async t => {
+              const uRef  = db.collection('users').doc(orig.userId);
+              const uSnap = await t.get(uRef);
+              if (!uSnap.exists) return;
+              const debit = reversal.amount || orig.amount || 0;
+              const newBal = Math.max(0, (uSnap.data().walletBalance || 0) - debit);
+              t.update(uRef, { walletBalance: newBal, totalDeposited: FieldValue.increment(-debit) });
+              t.update(origSnap.ref, { reversed: true, reversedAt: FieldValue.serverTimestamp() });
+              t.set(db.collection('transactions').doc(), {
+                userId: orig.userId, type: 'reversal',
+                description: `MoMo deposit reversed — ${reversal.txnId}`,
+                amount: -debit, status: 'reversed', date, time,
+                createdAt: FieldValue.serverTimestamp()
+              });
+            });
+            console.log(`↩️ Deposit reversed: ${reversal.txnId} — ${fmtUGX(reversal.amount || orig.amount)} debited from ${orig.userId}`);
+          }
+        } else {
+          console.log(`⚠️ Reversal for unknown txnId: ${reversal.txnId}`);
+        }
+        return;
+      }
+
       const parsed = parseMoMoSMS(body);
       if (!parsed || !parsed.amount) {
         console.log('📵 SMS ignored (not a deposit):', body.slice(0, 80));
@@ -363,6 +435,8 @@ app.post('/sms/incoming', async (req, res) => {
 
       const now = new Date();
       const { date, time } = nowStr();
+      // Deposit hold: credits are withdrawable after 1 hour (reversal window protection)
+      const withdrawableAt = new Date(now.getTime() + 60 * 60 * 1000);
 
       // Find matching pending deposit: senderPhone + pending + not expired
       let matchedDep = null, matchedRef = null;
@@ -390,12 +464,14 @@ app.post('/sms/incoming', async (req, res) => {
           const uSnap = await t.get(uRef);
           if (!uSnap.exists) throw new Error('User not found');
           t.update(uRef, {
-            walletBalance:  (uSnap.data().walletBalance || 0) + amount,
-            totalDeposited: FieldValue.increment(amount)
+            walletBalance:    (uSnap.data().walletBalance || 0) + amount,
+            totalDeposited:   FieldValue.increment(amount),
+            lastDepositAt:    FieldValue.serverTimestamp(),
+            withdrawableFrom: admin.firestore.Timestamp.fromDate(withdrawableAt)
           });
           t.set(db.collection('processedSMS').doc(txnId), {
             userId, amount, payerPhone, txnId,
-            depositId: matchedRef.id,
+            depositId: matchedRef.id, matched: true,
             processedAt: FieldValue.serverTimestamp()
           });
           t.update(matchedRef, {
@@ -413,21 +489,15 @@ app.post('/sms/incoming', async (req, res) => {
             createdAt: FieldValue.serverTimestamp()
           });
         });
-        console.log(`✅ Deposit matched: ${matchedRef.id} — ${fmtUGX(amount)} → ${userId}`);
-        // Referral commission fires on every successful deposit
+        console.log(`✅ Deposit matched: ${matchedRef.id} — ${fmtUGX(amount)} → ${userId} (withdrawable after 1h)`);
         payCommissions(userId, amount, 'dep_' + matchedRef.id).catch(e => console.error('Deposit commission err:', e.message));
       } else {
         // No match — store for admin review
         await db.collection('unmatchedDeposits').add({
-          smsBody: body,
-          payerPhone,
-          senderName: senderName || '',
-          amount,
-          txnId,
-          status: 'unmatched',
-          receivedAt: FieldValue.serverTimestamp()
+          smsBody: body, payerPhone,
+          senderName: senderName || '', amount, txnId,
+          status: 'unmatched', receivedAt: FieldValue.serverTimestamp()
         });
-        // Mark as processed to avoid re-processing same SMS
         await db.collection('processedSMS').doc(txnId).set({
           amount, payerPhone, txnId, matched: false,
           processedAt: FieldValue.serverTimestamp()
@@ -659,6 +729,14 @@ app.post('/withdraw/request', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+
+    // Deposit hold: block withdrawal if a recent deposit hasn't cleared its 1-hour hold yet.
+    // Protects against send-and-reverse fraud (MoMo reversals typically happen within minutes).
+    const withdrawableFrom = user.withdrawableFrom?.toDate?.() || null;
+    if (withdrawableFrom && withdrawableFrom > new Date()) {
+      const minsLeft = Math.ceil((withdrawableFrom - Date.now()) / 60000);
+      return res.status(400).json({ status: 'error', message: `Recent deposit is still clearing. Withdrawals available in ${minsLeft} minute${minsLeft===1?'':'s'}.` });
+    }
 
     if ((user.walletBalance || 0) < amt)
       return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });

@@ -1937,8 +1937,8 @@ async function loadRecords(tab) {
       }).join('');
     } else if (tab === 'revenue') {
       const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
-      const typeIcon = { checkin: '📅', cashback: '💰', commission: '👥', gift_code: '🎁', investment_return: '📈', admin_credit: '🏦' };
-      const typeLabel = { checkin: 'Daily Check-in', cashback: 'Daily Cashback', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit' };
+      const typeIcon = { checkin: '📅', cashback: '💰', commission: '👥', gift_code: '🎁', investment_return: '📈', admin_credit: '🏦', reversal: '↩️' };
+      const typeLabel = { checkin: 'Daily Check-in', cashback: 'Daily Cashback', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit', reversal: 'Deposit Reversed' };
       el.innerHTML = `
         <div class="rec-card" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);margin-bottom:8px">
           <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-bottom:4px">Total Revenue Earned</div>
