@@ -1357,7 +1357,7 @@ window.openUserModal = (userId) => {
 
     ${(u.isAgent || u.agentTier) ? (() => {
       const cfg = ADMIN_TIER_CFG[u.agentTier || 'agent'] || ADMIN_TIER_CFG.agent;
-      const tierPay = { regional_agent: 300000, senior_agent: 200000, agent: 150000 };
+      const tierPay = { regional_agent: 200000, senior_agent: 125000, agent: 75000 };
       const pay = tierPay[u.agentTier || 'agent'] || 150000;
       const nextTiers = { agent: { label: 'Senior Agent', threshold: 15 }, senior_agent: { label: 'Regional Agent', threshold: 20 } };
       const next = nextTiers[u.agentTier || 'agent'];

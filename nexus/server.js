@@ -40,9 +40,9 @@ const COMM_L3          = 0.02;
 const LIQUIDITY_FEE    = 0.17;
 // Agent tier ladder — ordered highest → lowest (array order matters for findIndex)
 const AGENT_TIERS = [
-  { key: 'regional_agent', label: 'Regional Agent', threshold: 20, weeklyPay: 300000 },
-  { key: 'senior_agent',   label: 'Senior Agent',   threshold: 15, weeklyPay: 200000 },
-  { key: 'agent',          label: 'Agent',           threshold: 10, weeklyPay: 150000 },
+  { key: 'regional_agent', label: 'Regional Agent', threshold: 20, weeklyPay: 200000 },
+  { key: 'senior_agent',   label: 'Senior Agent',   threshold: 15, weeklyPay: 125000 },
+  { key: 'agent',          label: 'Agent',           threshold: 10, weeklyPay:  75000 },
 ];
 function getTierForCount(count) {
   return AGENT_TIERS.find(t => count >= t.threshold) || null;
