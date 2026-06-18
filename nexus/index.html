@@ -401,12 +401,19 @@ body{padding-bottom:106px}
 .agb-next-payout{margin-top:10px;font-size:11px;color:rgba(245,158,11,0.6);text-align:center;font-weight:600}
 .agent-progress-wrap{background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px;margin-bottom:14px;display:none}
 .agent-progress-wrap.show{display:block}
+.apw-title{font-size:13px;font-weight:800;color:var(--text);margin-bottom:2px}
+.apw-sub{font-size:11px;color:var(--text2);margin-bottom:12px}
+.apw-ranks{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}
+.apw-ranks th{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)}
+.apw-ranks td{padding:7px 6px;border-bottom:1px solid var(--border);color:var(--text)}
+.apw-ranks tr:last-child td{border-bottom:none}
+.apw-ranks .apw-rank-pay{font-weight:700;color:#f59e0b;font-family:'Outfit',sans-serif}
 .apw-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
 .apw-bar-row{display:flex;align-items:center;gap:10px}
 .apw-bar{flex:1;height:6px;background:var(--border2);border-radius:3px;overflow:hidden}
 .apw-bar-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:3px;transition:width .5s ease}
 .apw-val{font-size:11px;font-weight:900;color:#f59e0b;white-space:nowrap}
-.apw-hint{font-size:11px;color:var(--text2);margin-top:6px}
+.apw-hint{font-size:11px;color:var(--text2);margin-top:7px}
 
 /* ── MODALS — centered pop, not bottom-sheet ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:center;justify-content:center;padding:16px}
@@ -908,14 +915,24 @@ body{padding-bottom:106px}
       <div class="agb-next-tier" id="agbNextTier" style="margin-top:8px;font-size:11px;color:rgba(245,158,11,0.55);text-align:center"></div>
     </div>
 
-    <!-- Progress to Agent (only visible for non-agents) -->
+    <!-- Agent Program card (always visible for non-agents) -->
     <div class="agent-progress-wrap" id="agentProgressWrap">
-      <div class="apw-label">Progress to Agent Status</div>
+      <div class="apw-title">⭐ Nexus Agent Program</div>
+      <div class="apw-sub">Grow your team and earn a weekly salary</div>
+      <table class="apw-ranks">
+        <thead><tr><th>Rank</th><th>Referrals</th><th>Weekly Salary</th></tr></thead>
+        <tbody>
+          <tr><td>⭐ Agent</td><td>10</td><td class="apw-rank-pay">UGX 75,000</td></tr>
+          <tr><td>⭐⭐ Senior Agent</td><td>15</td><td class="apw-rank-pay">UGX 125,000</td></tr>
+          <tr><td>⭐⭐⭐ Regional Agent</td><td>20</td><td class="apw-rank-pay">UGX 200,000</td></tr>
+        </tbody>
+      </table>
+      <div class="apw-label">Your Progress</div>
       <div class="apw-bar-row">
         <div class="apw-bar"><div class="apw-bar-fill" id="apwBarFill" style="width:0%"></div></div>
         <span class="apw-val" id="apwVal">0 / 10</span>
       </div>
-      <div class="apw-hint" id="apwHint">Invite friends to invest and reach 10 active referrals to become a Nexus Agent — earn UGX 150,000 every week.</div>
+      <div class="apw-hint" id="apwHint">Invite friends to invest and reach 10 active referrals to become a Nexus Agent.</div>
     </div>
   </div>
 
@@ -1727,19 +1744,17 @@ function renderCommission(u) {
     }
   } else {
     agentBanner.classList.remove('show');
+    progressWrap.classList.add('show');
     const refs = u.activeReferralCount || 0;
-    if (refs > 0) {
-      progressWrap.classList.add('show');
-      const pct  = Math.min(refs / 10 * 100, 100);
-      const left = Math.max(10 - refs, 0);
-      document.getElementById('apwBarFill').style.width = pct + '%';
-      document.getElementById('apwVal').textContent     = refs + ' / 10';
-      document.getElementById('apwHint').textContent    = left > 0
-        ? left + ' more active referral' + (left === 1 ? '' : 's') + ' needed to become a Nexus Agent and earn UGX 150,000/week.'
+    const pct  = Math.min(refs / 10 * 100, 100);
+    const left = Math.max(10 - refs, 0);
+    document.getElementById('apwBarFill').style.width = pct + '%';
+    document.getElementById('apwVal').textContent     = refs + ' / 10';
+    document.getElementById('apwHint').textContent    = refs === 0
+      ? 'Invite friends to invest and reach 10 active referrals to become a Nexus Agent.'
+      : left > 0
+        ? left + ' more active referral' + (left === 1 ? '' : 's') + ' needed to unlock Agent status.'
         : 'Eligible for Agent promotion — waiting for next investment';
-    } else {
-      progressWrap.classList.remove('show');
-    }
   }
 }
 
