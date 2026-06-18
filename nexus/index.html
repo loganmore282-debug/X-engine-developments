@@ -379,46 +379,49 @@ body{padding-bottom:106px}
 .menu-item.danger .mi-label{color:var(--red)}
 .menu-item.danger .mi-icon{background:rgba(239,68,68,0.1);color:var(--red)}
 
-/* ── AGENT / PRO ── */
+/* ── AGENT / PRO — ring + name badge in More section ── */
 .profile-avatar.agent-ring{border:2.5px solid #f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,0.22),0 0 16px rgba(245,158,11,0.18)}
 .agent-badge{display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:9px;font-weight:900;letter-spacing:.8px;padding:2px 7px;border-radius:5px;text-transform:uppercase;vertical-align:middle;margin-left:7px;box-shadow:0 2px 6px rgba(245,158,11,0.35)}
-.agent-banner{background:linear-gradient(135deg,#1c1200 0%,#2d1f00 60%,#1c1200 100%);border:1px solid rgba(245,158,11,0.35);border-radius:var(--radius);padding:16px;margin-bottom:16px;display:none}
-.agent-banner.show{display:block}
-.agb-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.agb-star{font-size:24px;line-height:1;filter:drop-shadow(0 0 6px rgba(245,158,11,0.7))}
-.agb-title{font-size:14px;font-weight:900;color:#f59e0b;letter-spacing:.6px;text-transform:uppercase}
-.agb-sub{font-size:11px;color:rgba(245,158,11,0.6);margin-top:2px}
-.agb-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-.agb-stat{background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.15);border-radius:9px;padding:10px 12px}
-.agb-stat-val{font-size:15px;font-weight:900;color:#fbbf24;font-family:'Outfit',sans-serif}
-.agb-stat-lbl{font-size:10px;color:rgba(245,158,11,0.55);margin-top:2px;text-transform:uppercase;letter-spacing:.4px}
-.agb-progress-wrap{background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.12);border-radius:9px;padding:10px 12px}
-.agb-progress-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
-.agb-progress-lbl{font-size:11px;color:rgba(245,158,11,0.65);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
-.agb-progress-val{font-size:12px;font-weight:900;color:#f59e0b}
-.agb-bar{height:6px;background:rgba(245,158,11,0.12);border-radius:3px;overflow:hidden}
-.agb-bar-fill{height:100%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:3px;transition:width .5s ease}
-.agb-next-payout{margin-top:10px;font-size:11px;color:rgba(245,158,11,0.6);text-align:center;font-weight:600}
-.agent-progress-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px;display:none}
-.agent-progress-wrap.show{display:block}
-.apg-header{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
-.apg-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 3px 10px rgba(245,158,11,0.3)}
-.apg-title{font-size:14px;font-weight:800;color:var(--text)}
-.apg-sub{font-size:11px;color:var(--text2);margin-top:1px}
-.apg-tiers{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)}
-.apg-tier{padding:12px 8px;border-right:1px solid var(--border);text-align:center}
-.apg-tier:last-child{border-right:none}
-.apg-tier-star{font-size:15px;line-height:1;margin-bottom:5px}
-.apg-tier-name{font-size:10px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px}
-.apg-tier-req{font-size:10px;color:var(--text2);background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:2px 8px;display:inline-block;margin-bottom:6px}
-.apg-tier-pay{font-size:13px;font-weight:900;color:#f59e0b;font-family:'Outfit',sans-serif}
-.apg-progress{padding:14px 16px}
-.apg-prog-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.apg-prog-lbl{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px}
-.apg-prog-val{font-size:12px;font-weight:900;color:#f59e0b}
-.apg-prog-bar{height:7px;background:var(--border2);border-radius:4px;overflow:hidden;margin-bottom:8px}
-.apg-prog-fill{height:100%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:4px;transition:width .5s ease}
-.apg-prog-hint{font-size:11px;color:var(--text2);line-height:1.5}
+
+/* ── AGENT CENTRE SECTION ── */
+.ac-hero{border-radius:var(--radius);padding:20px 16px;margin-bottom:14px;text-align:center;position:relative;overflow:hidden}
+.ac-hero.is-agent{background:linear-gradient(135deg,#1a1105,#2d1f00);border:1px solid rgba(245,158,11,0.3)}
+.ac-hero.no-agent{background:var(--card2);border:1px solid var(--border2)}
+.ac-hero-star{font-size:34px;margin-bottom:6px;display:block}
+.ac-hero-tier{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+.is-agent .ac-hero-tier{color:#f59e0b}
+.no-agent .ac-hero-tier{color:var(--text2)}
+.ac-hero-name{font-size:20px;font-weight:900;color:var(--text);margin-bottom:6px}
+.ac-hero-meta{font-size:11px;color:var(--text2)}
+.is-agent .ac-hero-meta{color:rgba(245,158,11,0.6)}
+.ac-hero-payout{margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:#fbbf24}
+.ac-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.ac-stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.ac-stat-val{font-size:17px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif}
+.ac-stat-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.ac-section-lbl{font-size:10px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;padding-left:2px}
+.ac-tier-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
+.ac-tier-card.achieved{border-color:rgba(34,197,94,0.35);background:linear-gradient(135deg,rgba(34,197,94,0.04),var(--card))}
+.ac-tier-card.inprogress{border-color:rgba(37,99,235,0.35);background:linear-gradient(135deg,rgba(37,99,235,0.04),var(--card))}
+.ac-tier-card.locked{opacity:.55}
+.ac-tier-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ac-tier-info{display:flex;align-items:center;gap:10px}
+.ac-tier-stars{font-size:18px;line-height:1}
+.ac-tier-name{font-size:13px;font-weight:800;color:var(--text)}
+.ac-tier-refs{font-size:11px;color:var(--text2);margin-top:1px}
+.ac-status-pill{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.ac-status-pill.achieved{background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
+.ac-status-pill.inprogress{background:rgba(37,99,235,0.12);color:#60a5fa;border:1px solid rgba(37,99,235,0.25)}
+.ac-status-pill.locked{background:var(--card2);color:var(--muted);border:1px solid var(--border)}
+.ac-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ac-bar{flex:1;height:7px;background:var(--border2);border-radius:4px;overflow:hidden}
+.ac-bar-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.ac-bar-fill.gold{background:linear-gradient(90deg,#d97706,#fbbf24)}
+.ac-bar-fill.blue{background:linear-gradient(90deg,#2563eb,#60a5fa)}
+.ac-bar-fill.gray{background:var(--muted)}
+.ac-bar-val{font-size:11px;font-weight:800;color:var(--text2);white-space:nowrap}
+.ac-tier-pay{font-size:12px;color:var(--text2)}
+.ac-tier-pay b{color:#f59e0b;font-family:'Outfit',sans-serif}
 
 /* ── MODALS — centered pop, not bottom-sheet ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:center;justify-content:center;padding:16px}
@@ -889,75 +892,6 @@ body{padding-bottom:106px}
       <p>When members of your Level 3 team invest, you receive a <strong>2%</strong> cash bonus.</p>
       <p>Once a team member invests, the cash bonus is <strong>instantly credited</strong> to your account and you can withdraw it immediately.</p>
     </div>
-
-    <!-- Agent Banner (only visible for agents) -->
-    <div class="agent-banner" id="agentBanner">
-      <div class="agb-header">
-        <div class="agb-star" id="agbStar">⭐</div>
-        <div>
-          <div class="agb-title" id="agbTierTitle">Nexus Agent</div>
-          <div class="agb-sub" id="agbTierSub">Certified — earning weekly stipend</div>
-        </div>
-      </div>
-      <div class="agb-stats">
-        <div class="agb-stat">
-          <div class="agb-stat-val" id="agbWeeklyPay">UGX 150,000</div>
-          <div class="agb-stat-lbl">Weekly Stipend</div>
-        </div>
-        <div class="agb-stat">
-          <div class="agb-stat-val" id="agbTotalEarned">UGX 0</div>
-          <div class="agb-stat-lbl">Total Earned</div>
-        </div>
-      </div>
-      <div class="agb-progress-wrap">
-        <div class="agb-progress-label">
-          <span class="agb-progress-lbl">Active Referrals</span>
-          <span class="agb-progress-val" id="agbRefCount">0 / 10</span>
-        </div>
-        <div class="agb-bar"><div class="agb-bar-fill" id="agbRefBar" style="width:100%"></div></div>
-      </div>
-      <div class="agb-next-payout" id="agbNextPayout">Next payout: —</div>
-      <div class="agb-next-tier" id="agbNextTier" style="margin-top:8px;font-size:11px;color:rgba(245,158,11,0.55);text-align:center"></div>
-    </div>
-
-    <!-- Agent Program card (always visible for non-agents) -->
-    <div class="agent-progress-wrap" id="agentProgressWrap">
-      <div class="apg-header">
-        <div class="apg-icon">◈</div>
-        <div>
-          <div class="apg-title">Agent Program</div>
-          <div class="apg-sub">Build your team, earn weekly salary</div>
-        </div>
-      </div>
-      <div class="apg-tiers">
-        <div class="apg-tier">
-          <div class="apg-tier-star">⭐</div>
-          <div class="apg-tier-name">Agent</div>
-          <div class="apg-tier-req">10 refs</div>
-          <div class="apg-tier-pay">75K<span style="font-size:9px;font-weight:600;color:var(--text2)">/wk</span></div>
-        </div>
-        <div class="apg-tier">
-          <div class="apg-tier-star">⭐⭐</div>
-          <div class="apg-tier-name">Senior</div>
-          <div class="apg-tier-req">15 refs</div>
-          <div class="apg-tier-pay">125K<span style="font-size:9px;font-weight:600;color:var(--text2)">/wk</span></div>
-        </div>
-        <div class="apg-tier">
-          <div class="apg-tier-star">⭐⭐⭐</div>
-          <div class="apg-tier-name">Regional</div>
-          <div class="apg-tier-req">20 refs</div>
-          <div class="apg-tier-pay">200K<span style="font-size:9px;font-weight:600;color:var(--text2)">/wk</span></div>
-        </div>
-      </div>
-      <div class="apg-progress">
-        <div class="apg-prog-row">
-          <span class="apg-prog-lbl">Your Progress</span>
-          <span class="apg-prog-val" id="apwVal">0 / 10</span>
-        </div>
-        <div class="apg-prog-bar"><div class="apg-prog-fill" id="apwBarFill" style="width:0%"></div></div>
-        <div class="apg-prog-hint" id="apwHint">Invite friends to invest and reach 10 active referrals to become a Nexus Agent.</div>
-      </div>
-    </div>
   </div>
 
   <!-- ── MORE SECTION ── -->
@@ -975,6 +909,11 @@ body{padding-bottom:106px}
     <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="uploadPhoto(this)">
 
     <div class="menu-list">
+      <div class="menu-item" onclick="showSection('agentCentre')">
+        <span class="mi-icon" style="background:rgba(245,158,11,0.12);color:#f59e0b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-3-3.87"/><path d="M9 21v-2a4 4 0 0 1 4-4h.5"/><circle cx="9" cy="7" r="4"/><path d="M18 9.5 16 11v2.5c0 1.5 1.2 2.5 2.5 3 1.3-.5 2.5-1.5 2.5-3V11L18 9.5z"/><polyline points="16.8 13 17.6 13.8 19.4 12"/></svg></span>
+        <span class="mi-label">Agent Centre</span>
+        <span class="mi-arrow">›</span>
+      </div>
       <div class="menu-item" onclick="showSection('records')">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
         <span class="mi-label">Account Sessions</span>
@@ -1011,6 +950,11 @@ body{padding-bottom:106px}
         <span class="mi-arrow">›</span>
       </div>
     </div>
+  </div>
+
+  <!-- ── AGENT CENTRE SECTION ── -->
+  <div class="section" id="agentCentreSection">
+    <div id="agentCentreContent"><div class="empty-state"><p>Loading…</p></div></div>
   </div>
 
   <!-- BOTTOM NAV -->
@@ -1634,6 +1578,7 @@ function startListener(uid) {
     renderHome(_userData);
     renderCommission(_userData);
     renderMore(_userData);
+    renderAgentCentre(_userData);
   });
   // Active investments — no orderBy, filter client-side to avoid composite index
   onSnapshot(
@@ -1716,70 +1661,6 @@ function renderCommission(u) {
   document.getElementById('teamL1Earned').textContent  = shortUgx(u.commissionL1Earned || 0);
   document.getElementById('teamL2Earned').textContent  = shortUgx(u.commissionL2Earned || 0);
   document.getElementById('teamL3Earned').textContent  = shortUgx(u.commissionL3Earned || 0);
-
-  // Agent tier config (mirrors server AGENT_TIERS)
-  const TIERS = [
-    { key: 'regional_agent', label: 'Regional Agent', star: '⭐⭐⭐', threshold: 20, weeklyPay: 200000 },
-    { key: 'senior_agent',   label: 'Senior Agent',   star: '⭐⭐',   threshold: 15, weeklyPay: 125000 },
-    { key: 'agent',          label: 'Agent',           star: '⭐',    threshold: 10, weeklyPay:  75000 },
-  ];
-  const agentBanner  = document.getElementById('agentBanner');
-  const progressWrap = document.getElementById('agentProgressWrap');
-  if (u.isAgent) {
-    agentBanner.classList.add('show');
-    progressWrap.classList.remove('show');
-    const tierKey  = u.agentTier || 'agent';
-    const tier     = TIERS.find(t => t.key === tierKey) || TIERS[2];
-    const refs     = u.activeReferralCount || 0;
-    document.getElementById('agbStar').textContent        = tier.star;
-    document.getElementById('agbTierTitle').textContent   = 'Nexus ' + tier.label;
-    document.getElementById('agbWeeklyPay').textContent   = ugx(tier.weeklyPay);
-    document.getElementById('agbTotalEarned').textContent = ugx(u.agentPayoutTotal || 0);
-    // Progress bar spans current tier threshold → next tier threshold
-    const nextTier   = TIERS[TIERS.indexOf(tier) - 1] || null; // lower index = higher tier
-    const barMin     = tier.threshold;
-    const barMax     = nextTier ? nextTier.threshold : tier.threshold + 5;
-    const barPct     = nextTier ? Math.min((refs - barMin) / (barMax - barMin) * 100, 100) : 100;
-    document.getElementById('agbRefCount').textContent = refs + (nextTier ? ' / ' + nextTier.threshold : '+');
-    document.getElementById('agbRefBar').style.width   = Math.max(barPct, 4) + '%';
-    // Next payout
-    const lastPay   = u.lastAgentPayoutDate;
-    const nextPayEl = document.getElementById('agbNextPayout');
-    if (lastPay) {
-      const nextMs = new Date(lastPay).getTime() + 7 * 86400000;
-      if (nextMs <= Date.now()) {
-        nextPayEl.textContent = 'Next payout: Available now!';
-      } else {
-        const daysLeft = Math.ceil((nextMs - Date.now()) / 86400000);
-        nextPayEl.textContent = 'Next payout: in ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's');
-      }
-    } else {
-      nextPayEl.textContent = 'Next payout: Available now!';
-    }
-    // Upgrade hint to next tier
-    const nextTierEl = document.getElementById('agbNextTier');
-    if (nextTier) {
-      const need = nextTier.threshold - refs;
-      nextTierEl.textContent = need > 0
-        ? `${need} more referral${need === 1 ? '' : 's'} to become ${nextTier.label} (${ugx(nextTier.weeklyPay)}/week)`
-        : `Eligible for ${nextTier.label} upgrade — waiting for next investment`;
-    } else {
-      nextTierEl.textContent = 'Maximum tier reached — Regional Agent';
-    }
-  } else {
-    agentBanner.classList.remove('show');
-    progressWrap.classList.add('show');
-    const refs = u.activeReferralCount || 0;
-    const pct  = Math.min(refs / 10 * 100, 100);
-    const left = Math.max(10 - refs, 0);
-    document.getElementById('apwBarFill').style.width = pct + '%';
-    document.getElementById('apwVal').textContent     = refs + ' / 10';
-    document.getElementById('apwHint').textContent    = refs === 0
-      ? 'Invite friends to invest and reach 10 active referrals to become a Nexus Agent.'
-      : left > 0
-        ? left + ' more active referral' + (left === 1 ? '' : 's') + ' needed to unlock Agent status.'
-        : 'Eligible for Agent promotion — waiting for next investment';
-  }
 }
 
 // ── RENDER MORE ──
@@ -1796,6 +1677,122 @@ function renderMore(u) {
   document.getElementById('morePhone').textContent   = u.phone   || '—';
   document.getElementById('moreBalance').textContent = 'Balance: ' + ugx(u.walletBalance);
   renderAvatars(u);
+}
+
+// ── RENDER AGENT CENTRE ──
+function renderAgentCentre(u) {
+  const TIERS = [
+    { key: 'agent',          label: 'Agent',           stars: '⭐',    threshold: 10, weeklyPay:  75000 },
+    { key: 'senior_agent',   label: 'Senior Agent',    stars: '⭐⭐',   threshold: 15, weeklyPay: 125000 },
+    { key: 'regional_agent', label: 'Regional Agent',  stars: '⭐⭐⭐',  threshold: 20, weeklyPay: 200000 },
+  ];
+  const refs          = u.activeReferralCount || 0;
+  const currentTier   = TIERS.find(t => t.key === u.agentTier) || null;
+  const currentTierIdx = currentTier ? TIERS.indexOf(currentTier) : -1; // -1 = not yet agent
+
+  // ── Hero ──
+  let heroHtml;
+  if (u.isAgent && currentTier) {
+    const agentSinceDate = u.agentSince
+      ? (u.agentSince.toDate ? u.agentSince.toDate() : new Date(u.agentSince.seconds * 1000)).toLocaleDateString('en-UG', { day:'numeric', month:'short', year:'numeric' })
+      : '—';
+    const lastPay = u.lastAgentPayoutDate;
+    let payoutLine = 'Next payout: Available now!';
+    if (lastPay) {
+      const nextMs = new Date(lastPay).getTime() + 7 * 86400000;
+      if (nextMs > Date.now()) {
+        const d = Math.ceil((nextMs - Date.now()) / 86400000);
+        payoutLine = 'Next payout: in ' + d + ' day' + (d === 1 ? '' : 's');
+      }
+    }
+    heroHtml = `
+      <div class="ac-hero is-agent">
+        <span class="ac-hero-star">${currentTier.stars}</span>
+        <div class="ac-hero-tier">${currentTier.label}</div>
+        <div class="ac-hero-name">${u.name || '—'}</div>
+        <div class="ac-hero-meta">Agent since ${agentSinceDate}</div>
+        <div class="ac-hero-payout">⏰ ${payoutLine}</div>
+      </div>
+      <div class="ac-stats">
+        <div class="ac-stat">
+          <div class="ac-stat-val">${ugx(u.agentPayoutTotal || 0)}</div>
+          <div class="ac-stat-lbl">Total Earned</div>
+        </div>
+        <div class="ac-stat">
+          <div class="ac-stat-val">${ugx(currentTier.weeklyPay)}</div>
+          <div class="ac-stat-lbl">Weekly Salary</div>
+        </div>
+      </div>`;
+  } else {
+    heroHtml = `
+      <div class="ac-hero no-agent">
+        <span class="ac-hero-star">◈</span>
+        <div class="ac-hero-tier">Not Yet an Agent</div>
+        <div class="ac-hero-name">${u.name || '—'}</div>
+        <div class="ac-hero-meta">Get ${Math.max(10 - refs, 0)} more active referrals to become a Nexus Agent</div>
+      </div>
+      <div class="ac-stats">
+        <div class="ac-stat">
+          <div class="ac-stat-val">${refs}</div>
+          <div class="ac-stat-lbl">Active Referrals</div>
+        </div>
+        <div class="ac-stat">
+          <div class="ac-stat-val">${Math.max(10 - refs, 0)}</div>
+          <div class="ac-stat-lbl">Needed for Agent</div>
+        </div>
+      </div>`;
+  }
+
+  // ── Tier cards ──
+  const tierCards = TIERS.map((tier, idx) => {
+    let state, barClass, barPct, barLabel;
+
+    if (idx <= currentTierIdx) {
+      // Achieved
+      state    = 'achieved';
+      barClass = 'gold';
+      barPct   = 100;
+      barLabel = tier.threshold + ' / ' + tier.threshold;
+    } else if (idx === currentTierIdx + 1) {
+      // Immediate next tier — in progress
+      const prevThreshold = currentTierIdx >= 0 ? TIERS[currentTierIdx].threshold : 0;
+      state    = 'inprogress';
+      barClass = 'blue';
+      barPct   = Math.min(Math.max((refs - prevThreshold) / (tier.threshold - prevThreshold) * 100, 0), 100);
+      barLabel = refs + ' / ' + tier.threshold;
+    } else {
+      // Further locked tier
+      state    = 'locked';
+      barClass = 'gray';
+      barPct   = Math.min(refs / tier.threshold * 100, 100);
+      barLabel = refs + ' / ' + tier.threshold;
+    }
+
+    const pillLabel = state === 'achieved' ? '✓ Achieved' : state === 'inprogress' ? 'In Progress' : 'Locked';
+
+    return `<div class="ac-tier-card ${state}">
+      <div class="ac-tier-top">
+        <div class="ac-tier-info">
+          <span class="ac-tier-stars">${tier.stars}</span>
+          <div>
+            <div class="ac-tier-name">${tier.label}</div>
+            <div class="ac-tier-refs">${tier.threshold} active referrals</div>
+          </div>
+        </div>
+        <span class="ac-status-pill ${state}">${pillLabel}</span>
+      </div>
+      <div class="ac-bar-row">
+        <div class="ac-bar"><div class="ac-bar-fill ${barClass}" style="width:${Math.max(barPct, barPct > 0 ? 3 : 0)}%"></div></div>
+        <span class="ac-bar-val">${barLabel}</span>
+      </div>
+      <div class="ac-tier-pay">Weekly salary: <b>${ugx(tier.weeklyPay)}</b></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('agentCentreContent').innerHTML =
+    heroHtml +
+    '<div class="ac-section-lbl">Agent Tier Journey</div>' +
+    tierCards;
 }
 
 function renderAvatars(u) {
@@ -1815,8 +1812,8 @@ function renderAvatars(u) {
 
 // ── NAVIGATION ──
 window.showSection = (sec) => {
-  const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection' };
-  const navMap = { home:'home', products:'products', invest:'more', records:'more', commission:'commission', more:'more' };
+  const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection', agentCentre:'agentCentreSection' };
+  const navMap = { home:'home', products:'products', invest:'more', records:'more', commission:'commission', more:'more', agentCentre:'more' };
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(secMap[sec] || sec + 'Section')?.classList.add('active');
   document.querySelectorAll('.bnav-item').forEach(b => {
