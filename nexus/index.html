@@ -399,21 +399,26 @@ body{padding-bottom:106px}
 .agb-bar{height:6px;background:rgba(245,158,11,0.12);border-radius:3px;overflow:hidden}
 .agb-bar-fill{height:100%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:3px;transition:width .5s ease}
 .agb-next-payout{margin-top:10px;font-size:11px;color:rgba(245,158,11,0.6);text-align:center;font-weight:600}
-.agent-progress-wrap{background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px;margin-bottom:14px;display:none}
+.agent-progress-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px;display:none}
 .agent-progress-wrap.show{display:block}
-.apw-title{font-size:13px;font-weight:800;color:var(--text);margin-bottom:2px}
-.apw-sub{font-size:11px;color:var(--text2);margin-bottom:12px}
-.apw-ranks{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}
-.apw-ranks th{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)}
-.apw-ranks td{padding:7px 6px;border-bottom:1px solid var(--border);color:var(--text)}
-.apw-ranks tr:last-child td{border-bottom:none}
-.apw-ranks .apw-rank-pay{font-weight:700;color:#f59e0b;font-family:'Outfit',sans-serif}
-.apw-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
-.apw-bar-row{display:flex;align-items:center;gap:10px}
-.apw-bar{flex:1;height:6px;background:var(--border2);border-radius:3px;overflow:hidden}
-.apw-bar-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:3px;transition:width .5s ease}
-.apw-val{font-size:11px;font-weight:900;color:#f59e0b;white-space:nowrap}
-.apw-hint{font-size:11px;color:var(--text2);margin-top:7px}
+.apg-header{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.apg-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 3px 10px rgba(245,158,11,0.3)}
+.apg-title{font-size:14px;font-weight:800;color:var(--text)}
+.apg-sub{font-size:11px;color:var(--text2);margin-top:1px}
+.apg-tiers{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)}
+.apg-tier{padding:12px 8px;border-right:1px solid var(--border);text-align:center}
+.apg-tier:last-child{border-right:none}
+.apg-tier-star{font-size:15px;line-height:1;margin-bottom:5px}
+.apg-tier-name{font-size:10px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px}
+.apg-tier-req{font-size:10px;color:var(--text2);background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:2px 8px;display:inline-block;margin-bottom:6px}
+.apg-tier-pay{font-size:13px;font-weight:900;color:#f59e0b;font-family:'Outfit',sans-serif}
+.apg-progress{padding:14px 16px}
+.apg-prog-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.apg-prog-lbl{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px}
+.apg-prog-val{font-size:12px;font-weight:900;color:#f59e0b}
+.apg-prog-bar{height:7px;background:var(--border2);border-radius:4px;overflow:hidden;margin-bottom:8px}
+.apg-prog-fill{height:100%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:4px;transition:width .5s ease}
+.apg-prog-hint{font-size:11px;color:var(--text2);line-height:1.5}
 
 /* ── MODALS — centered pop, not bottom-sheet ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:center;justify-content:center;padding:16px}
@@ -917,22 +922,41 @@ body{padding-bottom:106px}
 
     <!-- Agent Program card (always visible for non-agents) -->
     <div class="agent-progress-wrap" id="agentProgressWrap">
-      <div class="apw-title">⭐ Nexus Agent Program</div>
-      <div class="apw-sub">Grow your team and earn a weekly salary</div>
-      <table class="apw-ranks">
-        <thead><tr><th>Rank</th><th>Referrals</th><th>Weekly Salary</th></tr></thead>
-        <tbody>
-          <tr><td>⭐ Agent</td><td>10</td><td class="apw-rank-pay">UGX 75,000</td></tr>
-          <tr><td>⭐⭐ Senior Agent</td><td>15</td><td class="apw-rank-pay">UGX 125,000</td></tr>
-          <tr><td>⭐⭐⭐ Regional Agent</td><td>20</td><td class="apw-rank-pay">UGX 200,000</td></tr>
-        </tbody>
-      </table>
-      <div class="apw-label">Your Progress</div>
-      <div class="apw-bar-row">
-        <div class="apw-bar"><div class="apw-bar-fill" id="apwBarFill" style="width:0%"></div></div>
-        <span class="apw-val" id="apwVal">0 / 10</span>
+      <div class="apg-header">
+        <div class="apg-icon">◈</div>
+        <div>
+          <div class="apg-title">Agent Program</div>
+          <div class="apg-sub">Build your team, earn weekly salary</div>
+        </div>
       </div>
-      <div class="apw-hint" id="apwHint">Invite friends to invest and reach 10 active referrals to become a Nexus Agent.</div>
+      <div class="apg-tiers">
+        <div class="apg-tier">
+          <div class="apg-tier-star">⭐</div>
+          <div class="apg-tier-name">Agent</div>
+          <div class="apg-tier-req">10 refs</div>
+          <div class="apg-tier-pay">75K<span style="font-size:9px;font-weight:600;color:var(--text2)">/wk</span></div>
+        </div>
+        <div class="apg-tier">
+          <div class="apg-tier-star">⭐⭐</div>
+          <div class="apg-tier-name">Senior</div>
+          <div class="apg-tier-req">15 refs</div>
+          <div class="apg-tier-pay">125K<span style="font-size:9px;font-weight:600;color:var(--text2)">/wk</span></div>
+        </div>
+        <div class="apg-tier">
+          <div class="apg-tier-star">⭐⭐⭐</div>
+          <div class="apg-tier-name">Regional</div>
+          <div class="apg-tier-req">20 refs</div>
+          <div class="apg-tier-pay">200K<span style="font-size:9px;font-weight:600;color:var(--text2)">/wk</span></div>
+        </div>
+      </div>
+      <div class="apg-progress">
+        <div class="apg-prog-row">
+          <span class="apg-prog-lbl">Your Progress</span>
+          <span class="apg-prog-val" id="apwVal">0 / 10</span>
+        </div>
+        <div class="apg-prog-bar"><div class="apg-prog-fill" id="apwBarFill" style="width:0%"></div></div>
+        <div class="apg-prog-hint" id="apwHint">Invite friends to invest and reach 10 active referrals to become a Nexus Agent.</div>
+      </div>
     </div>
   </div>
 
