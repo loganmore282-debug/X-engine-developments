@@ -423,6 +423,23 @@ body{padding-bottom:106px}
 .ac-tier-pay{font-size:12px;color:var(--text2)}
 .ac-tier-pay b{color:#f59e0b;font-family:'Outfit',sans-serif}
 
+/* ── AGENT PROGRAM BREAKDOWN (Team tab, informational) ── */
+.apg-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+.apg-head{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.apg-head-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 10px rgba(245,158,11,0.3)}
+.apg-head-icon svg{width:20px;height:20px;color:#fff}
+.apg-head-title{font-size:14px;font-weight:800;color:var(--text)}
+.apg-head-sub{font-size:11px;color:var(--text2);margin-top:1px}
+.apg-rows{padding:6px 0}
+.apg-rank-row{display:flex;align-items:center;gap:12px;padding:11px 16px}
+.apg-rank-row+.apg-rank-row{border-top:1px solid var(--border)}
+.apg-rank-stars{font-size:15px;line-height:1;width:54px;flex-shrink:0}
+.apg-rank-mid{flex:1;min-width:0}
+.apg-rank-name{font-size:13px;font-weight:700;color:var(--text)}
+.apg-rank-req{font-size:11px;color:var(--text2);margin-top:1px}
+.apg-rank-pay{font-size:13px;font-weight:900;color:#f59e0b;font-family:'Outfit',sans-serif;white-space:nowrap}
+.apg-foot{padding:11px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.5}
+
 /* ── MODALS — centered pop, not bottom-sheet ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:center;justify-content:center;padding:16px}
 .modal-overlay.show{display:flex}
@@ -892,6 +909,45 @@ body{padding-bottom:106px}
       <p>When members of your Level 3 team invest, you receive a <strong>2%</strong> cash bonus.</p>
       <p>Once a team member invests, the cash bonus is <strong>instantly credited</strong> to your account and you can withdraw it immediately.</p>
     </div>
+
+    <!-- Agent Program breakdown -->
+    <div class="apg-card" onclick="showSection('agentCentre')" style="cursor:pointer">
+      <div class="apg-head">
+        <div class="apg-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6.5" r="4"/><path d="M2.5 21v-1.2c0-3.2 2.9-5.3 6.5-5.3 1 0 1.95.16 2.8.46"/><path d="M18 12.2c-1.4.95-2.9 1.3-2.9 1.3s0 4.3 2.9 6.3c2.9-2 2.9-6.3 2.9-6.3s-1.5-.35-2.9-1.3z"/><polyline points="16.7 16.4 17.7 17.4 19.5 15.4"/></svg></div>
+        <div style="flex:1">
+          <div class="apg-head-title">Agent Program</div>
+          <div class="apg-head-sub">Build your team, earn a weekly salary</div>
+        </div>
+        <span class="mi-arrow" style="color:var(--muted);font-size:13px">›</span>
+      </div>
+      <div class="apg-rows">
+        <div class="apg-rank-row">
+          <span class="apg-rank-stars">⭐</span>
+          <div class="apg-rank-mid">
+            <div class="apg-rank-name">Agent</div>
+            <div class="apg-rank-req">10 active referrals</div>
+          </div>
+          <span class="apg-rank-pay">UGX 75,000</span>
+        </div>
+        <div class="apg-rank-row">
+          <span class="apg-rank-stars">⭐⭐</span>
+          <div class="apg-rank-mid">
+            <div class="apg-rank-name">Senior Agent</div>
+            <div class="apg-rank-req">15 active referrals</div>
+          </div>
+          <span class="apg-rank-pay">UGX 125,000</span>
+        </div>
+        <div class="apg-rank-row">
+          <span class="apg-rank-stars">⭐⭐⭐</span>
+          <div class="apg-rank-mid">
+            <div class="apg-rank-name">Regional Agent</div>
+            <div class="apg-rank-req">20 active referrals</div>
+          </div>
+          <span class="apg-rank-pay">UGX 200,000</span>
+        </div>
+      </div>
+      <div class="apg-foot">Active referrals are friends who used your code <strong>and invested</strong>. Salary is paid to your wallet every 7 days. Tap to open your Agent Centre.</div>
+    </div>
   </div>
 
   <!-- ── MORE SECTION ── -->
@@ -910,7 +966,7 @@ body{padding-bottom:106px}
 
     <div class="menu-list">
       <div class="menu-item" onclick="showSection('agentCentre')">
-        <span class="mi-icon" style="background:rgba(245,158,11,0.12);color:#f59e0b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-3-3.87"/><path d="M9 21v-2a4 4 0 0 1 4-4h.5"/><circle cx="9" cy="7" r="4"/><path d="M18 9.5 16 11v2.5c0 1.5 1.2 2.5 2.5 3 1.3-.5 2.5-1.5 2.5-3V11L18 9.5z"/><polyline points="16.8 13 17.6 13.8 19.4 12"/></svg></span>
+        <span class="mi-icon" style="background:rgba(245,158,11,0.12);color:#f59e0b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6.5" r="4"/><path d="M2.5 21v-1.2c0-3.2 2.9-5.3 6.5-5.3 1 0 1.95.16 2.8.46"/><path d="M18 12.2c-1.4.95-2.9 1.3-2.9 1.3s0 4.3 2.9 6.3c2.9-2 2.9-6.3 2.9-6.3s-1.5-.35-2.9-1.3z"/><polyline points="16.7 16.4 17.7 17.4 19.5 15.4"/></svg></span>
         <span class="mi-label">Agent Centre</span>
         <span class="mi-arrow">›</span>
       </div>
