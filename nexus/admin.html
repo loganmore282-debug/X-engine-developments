@@ -516,10 +516,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <div class="toggle-row">
           <span class="toggle-label">Maintenance Mode</span>
           <label class="toggle-switch">
-            <input type="checkbox" id="settMaintenance">
+            <input type="checkbox" id="settMaintenance" onchange="toggleMaintenance(this.checked)">
             <span class="toggle-slider"></span>
           </label>
         </div>
+        <div id="maintStatus" style="font-size:12px;margin-top:4px;margin-bottom:4px"></div>
         <div class="divider"></div>
         <div class="form-row">
           <div class="form-group">
@@ -1739,7 +1740,13 @@ async function loadSettings() {
   try {
     const snap = await getDoc(doc(db,'settings','main'));
     const s = snap.exists() ? snap.data() : {};
-    document.getElementById('settMaintenance').checked = !!s.maintenanceMode;
+    const maintOn = !!s.maintenanceMode;
+    document.getElementById('settMaintenance').checked = maintOn;
+    const mEl = document.getElementById('maintStatus');
+    if (mEl) {
+      mEl.textContent = maintOn ? '🔴 Maintenance is ON — users see the maintenance screen' : '🟢 Maintenance is OFF — app is live';
+      mEl.style.color = maintOn ? '#ef4444' : '#22c55e';
+    }
     document.getElementById('settCheckin').value  = s.checkinBonus   || 500;
     document.getElementById('settWelcome').value  = s.welcomeBonus   || 7000;
     document.getElementById('settMinDep').value   = s.minDeposit     || 500;
@@ -1777,6 +1784,22 @@ async function loadSettings() {
     document.getElementById('settSupportHours').value = s.supportHours    || '';
   } catch(e) { showToast('Failed to load settings', 'error'); }
 }
+
+// Auto-save maintenance mode the instant the toggle is flipped — no Save button needed.
+window.toggleMaintenance = async (on) => {
+  const el = document.getElementById('maintStatus');
+  el.textContent = 'Saving…';
+  el.style.color = 'var(--text-muted)';
+  try {
+    await setDoc(doc(db,'settings','main'), { maintenanceMode: on }, { merge:true });
+    el.textContent = on ? '🔴 Maintenance is ON — users see the maintenance screen' : '🟢 Maintenance is OFF — app is live';
+    el.style.color = on ? '#ef4444' : '#22c55e';
+  } catch(e) {
+    el.textContent = 'Failed to save — ' + e.message;
+    el.style.color = '#ef4444';
+    document.getElementById('settMaintenance').checked = !on; // revert toggle
+  }
+};
 
 window.saveSettings = async () => {
   const s = {
