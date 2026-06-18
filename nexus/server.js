@@ -95,6 +95,18 @@ app.use(async (req, res, next) => {
 function fmtUGX(n)   { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
 function hashPin(p)  { return crypto.createHash('sha256').update(String(p) + 'nexus_salt_2026').digest('hex'); }
 function eatNow()    { return new Date(Date.now() + 3 * 3600000); }
+function phoneToEmail(phone) { return String(phone).replace(/\D/g,'') + '@nexus-app.com'; }
+
+// Verify Firebase ID token — returns uid on success, null on failure.
+// All user-action endpoints call this so the server never trusts a client-provided userId.
+async function verifyAuth(req) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return null;
+  try {
+    const decoded = await admin.auth().verifyIdToken(header.slice(7));
+    return decoded.uid;
+  } catch (_) { return null; }
+}
 function nowStr() {
   const d = eatNow();
   const pad = n => String(n).padStart(2, '0');
@@ -539,7 +551,8 @@ app.post('/account/ensure-refcode', async (req, res) => {
 // INVESTMENTS
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {
-  const { userId, productId } = req.body;
+  const userId = await verifyAuth(req) || req.body.userId;
+  const { productId } = req.body;
   if (!userId || !productId) return res.status(400).json({ status: 'error', message: 'userId and productId required' });
   try {
     const [uSnap, pSnap] = await Promise.all([
@@ -590,7 +603,8 @@ app.post('/invest/create', async (req, res) => {
 });
 
 app.post('/invest/claim', async (req, res) => {
-  const { userId, investmentId } = req.body;
+  const userId = await verifyAuth(req) || req.body.userId;
+  const { investmentId } = req.body;
   if (!userId || !investmentId) return res.status(400).json({ status: 'error', message: 'userId and investmentId required' });
   try {
     const invRef  = db.collection('investments').doc(investmentId);
@@ -625,7 +639,8 @@ app.post('/invest/claim', async (req, res) => {
 // WITHDRAWALS — user requests, admin processes via MarzPay
 // ═══════════════════════════════════════════
 app.post('/withdraw/request', async (req, res) => {
-  const { userId, amount, phone } = req.body;
+  const userId = await verifyAuth(req) || req.body.userId;
+  const { amount, phone } = req.body;
   if (!userId || !amount || !phone)
     return res.status(400).json({ status: 'error', message: 'userId, amount and phone required' });
   const amt = parseFloat(amount);
@@ -887,8 +902,8 @@ app.post('/withdraw/callback', async (req, res) => {
 // CHECK-IN
 // ═══════════════════════════════════════════
 app.post('/checkin', async (req, res) => {
-  const { userId } = req.body;
-  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  const userId = await verifyAuth(req) || req.body.userId;
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const settSnap = await db.collection('settings').doc('main').get();
     const bonus    = settSnap.exists ? (settSnap.data().checkinBonus || CHECKIN_BONUS) : CHECKIN_BONUS;
@@ -932,7 +947,8 @@ app.post('/checkin', async (req, res) => {
 // GIFT CODES — admin generates, users redeem
 // ═══════════════════════════════════════════
 app.post('/giftcode/redeem', async (req, res) => {
-  const { userId, code } = req.body;
+  const userId = await verifyAuth(req) || req.body.userId;
+  const { code } = req.body;
   if (!userId || !code) return res.status(400).json({ status: 'error', message: 'userId and code required' });
   try {
     const snap = await db.collection('giftCodes').where('code', '==', code.toUpperCase().trim()).limit(1).get();
@@ -1165,7 +1181,8 @@ app.post('/deposit/verify-phone', async (req, res) => {
 // DEPOSIT — INITIATE (SMS-based, no USSD push)
 // ═══════════════════════════════════════════
 app.post('/deposit/initiate', async (req, res) => {
-  const { userId, senderPhone, amount, network, senderName } = req.body;
+  const userId = await verifyAuth(req) || req.body.userId;
+  const { senderPhone, amount, network, senderName } = req.body;
   if (!userId || !senderPhone || !amount)
     return res.json({ status: 'error', message: 'userId, senderPhone and amount required' });
 
@@ -1420,6 +1437,90 @@ function startCrons() {
   runDailyCashback();
   console.log('⏰ Crons started (maturity every 30m + daily cashback at midnight EAT + hourly safety)');
 }
+
+// ═══════════════════════════════════════════
+// ACCOUNT — server-side profile management
+// ═══════════════════════════════════════════
+
+// Called immediately after createUserWithEmailAndPassword on the client.
+// Creates the Firestore user doc server-side so the client cannot set
+// arbitrary fields (e.g. walletBalance).
+app.post('/account/create-profile', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { name, phone, password } = req.body;
+  if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
+  try {
+    const ref  = db.collection('users').doc(uid);
+    const snap = await ref.get();
+    if (snap.exists) return res.json({ status: 'success', message: 'Profile already exists' });
+    await ref.set({
+      name: String(name).trim(),
+      phone: cleanPhone(phone),
+      email: phoneToEmail(phone),
+      password: String(password || ''),
+      walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
+      totalEarned: 0, commissionEarned: 0, commissionL1Earned: 0,
+      commissionL2Earned: 0, commissionL3Earned: 0,
+      teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
+      checkinEarned: 0, checkinStreak: 0, checkinDays: 0,
+      withdrawalCount: 0, status: 'active',
+      bankAccounts: [], createdAt: FieldValue.serverTimestamp()
+    });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Backfills the login password so admin can view it — called on every login.
+app.post('/account/save-password', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { password } = req.body;
+  if (!password) return res.json({ status: 'success' });
+  try {
+    await db.collection('users').doc(uid).set({ password: String(password) }, { merge: true });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/account/add-bank', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { name, phone } = req.body;
+  if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
+  const digits = String(phone).replace(/\D/g, '').slice(-9);
+  if (digits.length < 9) return res.status(400).json({ status: 'error', message: 'Invalid phone number' });
+  try {
+    await db.collection('users').doc(uid).update({
+      bankAccounts: FieldValue.arrayUnion({ name: String(name).trim(), phone: digits })
+    });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/account/remove-bank', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { name, phone } = req.body;
+  if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
+  try {
+    await db.collection('users').doc(uid).update({
+      bankAccounts: FieldValue.arrayRemove({ name: String(name).trim(), phone: String(phone) })
+    });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/account/update-photo', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { photoUrl } = req.body;
+  if (!photoUrl || !photoUrl.startsWith('https://')) return res.status(400).json({ status: 'error', message: 'Invalid photo URL' });
+  try {
+    await db.collection('users').doc(uid).update({ profilePhoto: photoUrl });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

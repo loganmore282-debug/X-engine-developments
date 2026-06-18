@@ -1158,7 +1158,7 @@ import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, onSnapshot, addDoc, arrayUnion, arrayRemove, serverTimestamp, getDocs, runTransaction, increment }
+import { getFirestore, doc, getDoc, collection, query, where, orderBy, limit, onSnapshot, getDocs }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -1253,9 +1253,14 @@ window.doLogin = async () => {
   showLoading(true);
   try {
     const cred = await signInWithEmailAndPassword(auth, phoneToEmail(phone), pass);
-    // Backfill / refresh the stored login password so admin can view it.
-    // Old accounts registered before passwords were saved get captured here.
-    setDoc(doc(db, 'users', cred.user.uid), { password: pass }, { merge: true }).catch(() => {});
+    // Backfill password via server so admin can view it (server verifies the token).
+    cred.user.getIdToken().then(token =>
+      fetch(SERVER + '/account/save-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ password: pass })
+      })
+    ).catch(() => {});
     if (remember) { localStorage.setItem('nx_saved_phone', phone); localStorage.setItem('nx_saved_pass', pass); }
     else { localStorage.removeItem('nx_saved_phone'); localStorage.removeItem('nx_saved_pass'); }
   } catch (e) {
@@ -1277,20 +1282,12 @@ window.doRegister = async () => {
   showLoading(true);
   try {
     const cred   = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
-    const uid    = cred.user.uid;
-    // referralCode is assigned server-side (globally unique) by /register
-    await setDoc(doc(db, 'users', uid), {
-      name, phone: '+256' + phone, email: phoneToEmail(phone), password: pass,
-      walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
-      totalEarned: 0, commissionEarned: 0, commissionL1Earned: 0,
-      commissionL2Earned: 0, commissionL3Earned: 0,
-      teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
-      checkinEarned: 0, checkinStreak: 0, checkinDays: 0,
-      withdrawalCount: 0, status: 'active',
-      bankAccounts: [], createdAt: serverTimestamp()
-    });
-    // Register with server to set up referral chain
-    await api('/register', { userId: uid, referralCode: ref });
+    // Create Firestore profile server-side (prevents client setting arbitrary fields)
+    const profR = await api('/account/create-profile', { name, phone: '256' + phone, password: pass });
+    if (profR.status !== 'success' && profR.message !== 'Profile already exists')
+      throw new Error(profR.message || 'Profile creation failed');
+    // Register with server to set up referral chain + welcome bonus
+    await api('/register', { userId: cred.user.uid, referralCode: ref });
   } catch (e) {
     showLoading(false);
     const msg = e.code === 'auth/email-already-in-use'
@@ -1309,11 +1306,14 @@ window.doLogout = async () => {
 };
 
 // ── API HELPER ──
+// Always sends the Firebase ID token so the server can verify the caller.
 async function api(path, body = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (_user) {
+    try { headers['Authorization'] = 'Bearer ' + await _user.getIdToken(); } catch (_) {}
+  }
   const resp = await fetch(SERVER + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    method: 'POST', headers, body: JSON.stringify(body)
   });
   return resp.json();
 }
@@ -1633,47 +1633,20 @@ window.showSection = (sec) => {
 
 // ── CHECK-IN ──
 window.doCheckin = async () => {
-  if (!_user) return;
+  if (!_user || !_userData) return;
   const eat = new Date(Date.now() + 3*60*60*1000);
-  const todayKey      = eat.toISOString().slice(0,10);
-  const yesterdayKey  = new Date(eat.getTime() - 86400000).toISOString().slice(0,10);
-  if (_userData?.lastCheckinDate === todayKey) { showToast('Already checked in today!', 'error'); return; }
-  if (_userData?.status === 'banned') { showToast('Account suspended', 'error'); return; }
+  const todayKey = eat.toISOString().slice(0,10);
+  if (_userData.lastCheckinDate === todayKey) { showToast('Already checked in today!', 'error'); return; }
+  if (_userData.status === 'banned') { showToast('Account suspended', 'error'); return; }
   showLoading(true);
   try {
-    const settSnap = await getDoc(doc(db,'settings','main'));
-    const bonus    = settSnap.exists() ? (settSnap.data().checkinBonus || 500) : 500;
-    const uRef     = doc(db,'users',_user.uid);
-    let newStreak  = 1;
-    await runTransaction(db, async t => {
-      const fresh = await t.get(uRef);
-      if (!fresh.exists()) throw new Error('User not found');
-      const u = fresh.data();
-      if (u.lastCheckinDate === todayKey) throw new Error('ALREADY_DONE');
-      newStreak = u.lastCheckinDate === yesterdayKey ? (u.checkinStreak || 0) + 1 : 1;
-      const now   = new Date();
-      const date  = now.toLocaleDateString('en-GB');
-      const time  = now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
-      t.update(uRef, {
-        walletBalance:   increment(bonus),
-        lastCheckinDate: todayKey,
-        checkinStreak:   newStreak,
-        checkinDays:     increment(1),
-        checkinEarned:   increment(bonus)
-      });
-      t.set(doc(collection(db,'transactions')), {
-        userId: _user.uid, type: 'checkin',
-        description: `Daily check-in — Day ${newStreak}`,
-        amount: bonus, status: 'success', date, time,
-        createdAt: serverTimestamp()
-      });
-    });
+    const r = await api('/checkin', { userId: _user.uid });
     showLoading(false);
-    showToast(`UGX ${bonus.toLocaleString()} credited! Day ${newStreak}`, 'success');
+    if (r.status === 'success') showToast(`UGX ${(r.bonus||500).toLocaleString()} credited! Day ${r.streak}`, 'success');
+    else showToast(r.message || 'Check-in failed', 'error');
   } catch (e) {
     showLoading(false);
-    if (e.message === 'ALREADY_DONE') showToast('Already checked in today!', 'error');
-    else showToast(e.message || 'Check-in failed', 'error');
+    showToast('Network error', 'error');
   }
 };
 
@@ -2398,13 +2371,11 @@ window.addBankAccount = async () => {
   const phone = document.getElementById('bankPhone').value.trim().replace(/\D/g,'');
   if (!name || !phone) { showToast('Enter account name and phone', 'error'); return; }
   try {
-    await updateDoc(doc(db,'users',_user.uid), {
-      bankAccounts: arrayUnion({ name, phone })
-    });
+    const r = await api('/account/add-bank', { name, phone });
+    if (r.status !== 'success') { showToast(r.message || 'Failed to save', 'error'); return; }
     document.getElementById('bankName').value  = '';
     document.getElementById('bankPhone').value = '';
     showToast('Account saved', 'success');
-    renderBankList();
   } catch (e) { showToast('Failed to save', 'error'); }
 };
 window.removeBankAccount = async (idx) => {
@@ -2413,9 +2384,9 @@ window.removeBankAccount = async (idx) => {
   const removed  = accounts[idx];
   if (!removed) return;
   try {
-    await updateDoc(doc(db,'users',_user.uid), { bankAccounts: arrayRemove(removed) });
+    const r = await api('/account/remove-bank', { name: removed.name, phone: removed.phone });
+    if (r.status !== 'success') { showToast(r.message || 'Failed to remove', 'error'); return; }
     showToast('Account removed', '');
-    renderBankList();
   } catch (e) { showToast('Failed to remove', 'error'); }
 };
 
@@ -2495,7 +2466,7 @@ window.uploadPhoto = async (input) => {
     const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, { method:'POST', body:fd });
     const data = await resp.json();
     if (data.secure_url) {
-      await updateDoc(doc(db,'users',_user.uid), { profilePhoto: data.secure_url });
+      await api('/account/update-photo', { photoUrl: data.secure_url });
       showToast('Profile photo updated', 'success');
     }
   } catch (e) { showToast('Photo upload failed', 'error'); }
