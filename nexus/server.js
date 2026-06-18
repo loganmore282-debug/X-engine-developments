@@ -1358,7 +1358,7 @@ async function runDailyCashback() {
             dailyCredited:  FieldValue.increment(d.amount)
           });
           t.set(db.collection('transactions').doc(), {
-            userId, type: 'checkin',
+            userId, type: 'cashback',
             description: `Daily cashback — ${d.daysDue} day(s)`,
             amount: d.amount, status: 'success', date, time,
             createdAt: FieldValue.serverTimestamp()

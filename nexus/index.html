@@ -1188,6 +1188,7 @@ const ICN = {
   withdrawal:        _svg('<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>'),
   commission:        _svg('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
   checkin:           _svg('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'),
+  cashback:          _svg('<circle cx="12" cy="12" r="10"/><polyline points="16 8 12 12 8 16"/><line x1="8" y1="8" x2="16" y2="16"/>'),
   investment:        _svg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>'),
   investment_return: _svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/>'),
   admin_credit:      _svg('<polygon points="12 2 2 8.5 12 15 22 8.5 12 2"/><polyline points="2 15.5 12 22 22 15.5"/>'),
@@ -1935,7 +1936,7 @@ async function loadRecords(tab) {
     if (myToken !== _recToken) return; // newer tab was selected while awaiting
     const all = snap.docs.map(d => ({ id:d.id, ...d.data() }))
       .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-    const REVENUE_TYPES = ['checkin','commission','gift_code','investment_return','admin_credit'];
+    const REVENUE_TYPES = ['checkin','cashback','commission','gift_code','investment_return','admin_credit'];
     const items = tab === 'deposits'  ? all.filter(t => t.type === 'deposit' || t.type === 'admin_credit')
                : tab === 'referrals' ? all.filter(t => t.type === 'commission')
                : tab === 'revenue'   ? all.filter(t => REVENUE_TYPES.includes(t.type))
@@ -1963,8 +1964,8 @@ async function loadRecords(tab) {
       }).join('');
     } else if (tab === 'revenue') {
       const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
-      const typeIcon = { checkin: '📅', commission: '👥', gift_code: '🎁', investment_return: '📈', admin_credit: '🏦' };
-      const typeLabel = { checkin: 'Daily Check-in', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit' };
+      const typeIcon = { checkin: '📅', cashback: '💰', commission: '👥', gift_code: '🎁', investment_return: '📈', admin_credit: '🏦' };
+      const typeLabel = { checkin: 'Daily Check-in', cashback: 'Daily Cashback', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit' };
       el.innerHTML = `
         <div class="rec-card" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);margin-bottom:8px">
           <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-bottom:4px">Total Revenue Earned</div>
