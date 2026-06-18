@@ -1298,7 +1298,8 @@ window.doRegister = async () => {
 
 window.doLogout = async () => {
   if (!confirm('Log out of Nexus?')) return;
-  if (_unsub) { _unsub(); _unsub = null; }
+  if (_unsub)      { _unsub(); _unsub = null; }
+  if (_maintUnsub) { _maintUnsub(); _maintUnsub = null; }
   await signOut(auth);
   _user = null; _userData = null;
   document.getElementById('appScreen').style.display = 'none';
@@ -1490,22 +1491,36 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-// ── MAINTENANCE CHECK ──
-async function checkMaintenance() {
-  try {
-    const snap = await getDoc(doc(db, 'settings', 'main'));
-    if (snap.exists() && snap.data().maintenanceMode) {
-      document.getElementById('maintenanceOverlay').style.display = 'flex';
-    }
-  } catch (_) {}
+// ── MAINTENANCE — real-time listener so overlay appears the moment admin toggles it ──
+let _maintUnsub = null;
+function startMaintenanceListener() {
+  if (_maintUnsub) return; // already listening
+  _maintUnsub = onSnapshot(doc(db, 'settings', 'main'), snap => {
+    const on = snap.exists() && !!snap.data().maintenanceMode;
+    document.getElementById('maintenanceOverlay').style.display = on ? 'flex' : 'none';
+  }, () => {});
 }
+// Keep legacy name so the onAuthStateChanged call still works
+function checkMaintenance() { startMaintenanceListener(); }
 
 // ── REAL-TIME LISTENER ──
 function startListener(uid) {
   if (_unsub) _unsub();
-  _unsub = onSnapshot(doc(db, 'users', uid), snap => {
+  _unsub = onSnapshot(doc(db, 'users', uid), async snap => {
     if (!snap.exists()) return;
     _userData = snap.data();
+
+    // Enforce ban in real-time — kick the user out immediately if admin bans them
+    if (_userData.status === 'banned') {
+      await signOut(auth);
+      _user = null; _userData = null;
+      document.getElementById('appScreen').style.display = 'none';
+      document.getElementById('authScreen').style.display = 'block';
+      showLoading(false);
+      showToast('Your account has been suspended. Contact support.', 'error');
+      return;
+    }
+
     renderHome(_userData);
     renderCommission(_userData);
     renderMore(_userData);
