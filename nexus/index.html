@@ -1060,7 +1060,7 @@ body{padding-bottom:106px}
       </div>
       <div class="menu-item" onclick="showSection('records')">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
-        <div class="mi-text"><span class="mi-label">Account Sessions</span><span class="mi-desc">View active devices and login history</span></div>
+        <div class="mi-text"><span class="mi-label">Records</span><span class="mi-desc">Deposits, withdrawals, plans and revenue</span></div>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openGiftModal()">
@@ -1819,22 +1819,21 @@ function renderMore(u) {
   const totalEarn = (u.commissionEarned || 0) + (u.agentPayoutTotal || 0) + (u.checkinEarned || 0);
   document.getElementById('moreTotalEarn').textContent  = ugx(totalEarn);
 
-  // Hero theme + agent status pill
+  // Hero theme + agent status pill (shown ONLY for actual agents)
   const TIER_LABELS = { regional_agent: '⭐⭐⭐ Regional Agent', senior_agent: '⭐⭐ Senior Agent', agent: '⭐ Nexus Agent' };
   const hero    = document.getElementById('moreHero');
   const pill    = document.getElementById('moreAgentPill');
   const pillTxt = document.getElementById('moreAgentPillText');
   if (u.isAgent && u.agentTier) {
     hero.classList.add('is-agent');
-    pill.classList.add('tier-agent');
+    pill.style.display = '';
     pillTxt.textContent = TIER_LABELS[u.agentTier] || 'Nexus Agent';
+    document.getElementById('moreVerify').style.display = '';
   } else {
     hero.classList.remove('is-agent');
-    pill.classList.remove('tier-agent');
-    pillTxt.textContent = 'Nexus Agent Candidate';
+    pill.style.display = 'none';
+    document.getElementById('moreVerify').style.display = 'none';
   }
-  // Verified badge only shows once you're an agent
-  document.getElementById('moreVerify').style.display = u.isAgent ? '' : 'none';
 
   renderAvatars(u);
 }
