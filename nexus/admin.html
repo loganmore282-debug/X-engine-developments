@@ -394,10 +394,9 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
       <div class="filter-tabs">
         <div class="filter-tab active" onclick="setDepFilter('all',this)">All</div>
-        <div class="filter-tab" onclick="setDepFilter('matched',this)">Matched</div>
-        <div class="filter-tab" onclick="setDepFilter('pending',this)">Pending</div>
-        <div class="filter-tab" onclick="setDepFilter('expired',this)">Expired</div>
-        <div class="filter-tab" onclick="setDepFilter('unmatched',this)">Unmatched SMS</div>
+        <div class="filter-tab" onclick="setDepFilter('matched',this)">Completed</div>
+        <div class="filter-tab" onclick="setDepFilter('processing',this)">Processing</div>
+        <div class="filter-tab" onclick="setDepFilter('failed',this)">Failed</div>
       </div>
       <div class="card" style="padding:0;overflow:hidden">
         <div id="depTable"><div class="loading-row"><div class="spinner"></div></div></div>
@@ -1151,19 +1150,11 @@ window.confirmReject = async () => {
 let _depFilter = 'all';
 let _allDeps   = [];
 
-let _unmatchedDeps = [];
-
 async function loadDeposits() {
   document.getElementById('depTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const [pdSnap, unmatchedSnap] = await Promise.all([
-      getDocs(query(collection(db,'pendingDeposits'), orderBy('createdAt','desc'), limit(200))),
-      getDocs(query(collection(db,'unmatchedDeposits'), orderBy('receivedAt','desc'), limit(100)))
-    ]);
-
-    _allDeps = pdSnap.docs.map(d => ({ id:d.id, _src:'pending', ...d.data() }));
-    _unmatchedDeps = unmatchedSnap.docs.map(d => ({ id:d.id, _src:'unmatched', ...d.data() }));
-
+    const snap = await getDocs(query(collection(db,'pendingDeposits'), orderBy('createdAt','desc'), limit(200)));
+    _allDeps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderDeposits();
   } catch(e) {
     console.error(e);
@@ -1172,55 +1163,28 @@ async function loadDeposits() {
 }
 
 function renderDeposits() {
-  if (_depFilter === 'unmatched') {
-    // Show unmatchedDeposits (SMS with no matching pending deposit)
-    if (!_unmatchedDeps.length) {
-      document.getElementById('depTable').innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">No unmatched SMS deposits</div></div>';
-      return;
-    }
-    const rows = _unmatchedDeps.map(d => {
-      const btn = d.status === 'unmatched'
-        ? `<button class="btn btn-primary btn-sm" onclick="openAssignDeposit('${d.id}','${(d.payerPhone||'').replace(/'/g,"\\'")}',${d.amount||0})">Assign</button>`
-        : statusBadge(d.status);
-      return `<tr>
-        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${(d.smsBody||'').replace(/"/g,'&quot;')}">${(d.smsBody||'—').slice(0,60)}…</td>
-        <td>${d.payerPhone||d.senderPhone||'—'}</td>
-        <td style="font-weight:600;color:var(--primary)">${ugx(d.amount)}</td>
-        <td class="text-muted">${fmtDate(d.receivedAt||d.createdAt)}</td>
-        <td>${statusBadge(d.status||'unmatched')}</td>
-        <td>${btn}</td>
-      </tr>`;
-    }).join('');
-    document.getElementById('depTable').innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>SMS Preview</th><th>From Phone</th><th>Amount</th><th>Received</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
-    return;
-  }
-
-  // Normal pendingDeposits view
   const list = _depFilter === 'all' ? _allDeps : _allDeps.filter(d => (d.status||'').toLowerCase() === _depFilter);
   if (!list.length) {
     document.getElementById('depTable').innerHTML = '<div class="empty"><div class="empty-icon">📥</div><div class="empty-text">No deposits found</div></div>';
     return;
   }
-  const rows = list.map(d => `<tr>
-    <td>${d.userId ? d.userId.slice(0,10)+'…' : '—'}</td>
-    <td>${d.senderPhone||d.phone||'—'}</td>
-    <td style="font-weight:600;color:var(--primary)">${ugx(d.amount)}</td>
-    <td>${d.network||'—'}</td>
-    <td>${d.receivingPhone||'—'}</td>
-    <td class="text-muted">${fmtDate(d.createdAt)}</td>
-    <td>${statusBadge(d.status||'pending')}</td>
-  </tr>`).join('');
+  const rows = list.map(d => {
+    const credited = d.creditedAmount || (d.status === 'matched' ? d.amount : null);
+    return `<tr>
+      <td style="font-size:11px;color:var(--muted)">${d.userId ? d.userId.slice(0,10)+'…' : '—'}</td>
+      <td>${d.phone||'—'}</td>
+      <td style="font-weight:700;color:var(--primary)">${ugx(d.amount)}</td>
+      <td style="color:${credited?'var(--green)':'var(--muted)'}">${credited ? ugx(credited) : '—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${d.providerTxId||d.marzTxUuid||'—'}</td>
+      <td class="text-muted">${fmtDate(d.createdAt)}</td>
+      <td>${statusBadge(d.status||'processing')}</td>
+    </tr>`;
+  }).join('');
 
   document.getElementById('depTable').innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>User</th><th>Sender Phone</th><th>Amount</th><th>Network</th><th>Receiving #</th><th>Date</th><th>Status</th></tr></thead>
+        <thead><tr><th>User</th><th>Phone</th><th>Amount</th><th>Credited</th><th>Provider Ref</th><th>Date</th><th>Status</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
