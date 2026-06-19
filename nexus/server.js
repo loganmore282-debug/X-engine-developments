@@ -1549,13 +1549,20 @@ async function runMaturityCheck() {
     snap.forEach(doc => {
       const inv = doc.data();
       const mat = inv.maturityDate?.toDate?.() || null;
-      if (mat && mat <= now) {
+      // A plan whose daily cashback has already paid out the full expected
+      // return is complete — the money is already in the wallet, so mark it
+      // 'claimed' (nothing left to claim) instead of leaving it stuck active.
+      const fullyPaid = (inv.expectedReturn || 0) > 0 && (inv.dailyCredited || 0) >= (inv.expectedReturn || 0);
+      if (fullyPaid) {
+        batch.update(doc.ref, { status: 'claimed', claimedAt: FieldValue.serverTimestamp() });
+        count++;
+      } else if (mat && mat <= now) {
         batch.update(doc.ref, { status: 'matured', maturedAt: FieldValue.serverTimestamp() });
         count++;
       }
     });
     if (count > 0) { await batch.commit(); }
-    if (count > 0) console.log(`⏰ Matured: ${count} plan(s)`);
+    if (count > 0) console.log(`⏰ Matured/completed: ${count} plan(s)`);
     return count;
   } catch (e) { console.error('Maturity error:', e.message); return 0; }
 }
@@ -1628,6 +1635,30 @@ async function runAgentPayouts() {
   } catch (e) { console.error('Agent payout error:', e.message); return 0; }
 }
 
+// One-time, idempotent migration: older builds wrote daily cashback
+// transactions with type 'checkin'. Correct their type to 'cashback' so the
+// client (which keys its labels off tx.type) shows them properly. Safe to run
+// on every startup — once corrected, the query returns nothing.
+async function migrateLegacyCashbackTxns() {
+  try {
+    const snap = await db.collection('transactions').where('type', '==', 'checkin').get();
+    if (snap.empty) return 0;
+    let fixed = 0;
+    let batch = db.batch();
+    let ops = 0;
+    for (const doc of snap.docs) {
+      const desc = doc.data().description || '';
+      if (!/cashback/i.test(desc)) continue; // genuine daily check-ins keep their type
+      batch.update(doc.ref, { type: 'cashback' });
+      fixed++; ops++;
+      if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
+    }
+    if (ops > 0) await batch.commit();
+    if (fixed > 0) console.log(`🔧 Migrated ${fixed} legacy cashback transaction(s) checkin→cashback`);
+    return fixed;
+  } catch (e) { console.error('Cashback txn migration error:', e.message); return 0; }
+}
+
 function startCrons() {
   // Maturity check every 30 min
   setInterval(runMaturityCheck, 30 * 60 * 1000);
@@ -1639,6 +1670,8 @@ function startCrons() {
   // Agent weekly payouts: check every 6 hours (dedup prevents double-pay)
   setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
   runAgentPayouts();
+  // One-time data correction for legacy cashback transactions
+  migrateLegacyCashbackTxns();
   console.log('⏰ Crons started (maturity + cashback + agent payouts)');
 }
 

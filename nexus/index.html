@@ -2016,10 +2016,11 @@ window.openInvDetail = async (invId) => {
     const daysLeft = Math.ceil(msLeft / 86400000);
     const msElapsed   = Math.max(0, totalMs - msLeft);
     const daysElapsed = Math.floor(msElapsed / 86400000);
-    const fullyPaid   = inv.expectedReturn > 0 && (inv.dailyCredited || 0) >= inv.expectedReturn;
-    const paidPct     = inv.expectedReturn > 0 ? Math.min(100, Math.round((inv.dailyCredited || 0) / inv.expectedReturn * 100)) : 0;
-    const timePct     = totalMs > 0 ? Math.min(100, Math.round(msElapsed / totalMs * 100)) : 0;
-    const progress    = matured || claimed || fullyPaid ? 100 : Math.max(paidPct, timePct);
+    // A plan whose cashback has fully paid out is complete even if the clock
+    // has a few hours left; the server marks these 'claimed', this is a guard
+    // for the brief window before the next maturity sweep runs.
+    const fullyPaid   = (inv.expectedReturn || 0) > 0 && (inv.dailyCredited || 0) >= inv.expectedReturn;
+    const progress    = matured || claimed || fullyPaid ? 100 : Math.min(100, Math.max(0, Math.round(msElapsed / totalMs * 100)));
     const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
     const stateBadge = claimed ? '<span class="inv-badge claimed">Claimed</span>'
                      : matured ? '<span class="inv-badge matured">Matured</span>'
@@ -2189,7 +2190,7 @@ async function loadRecords(tab) {
         </div>` +
         items.map(tx => `<div class="rec-card">
           <div class="rec-card-hd">
-            <div class="rec-card-hd-title">${(tx.type==='checkin'&&tx.description&&/cashback/i.test(tx.description)?typeIcon.cashback+' '+typeLabel.cashback:(typeIcon[tx.type]||'💰')+' '+(typeLabel[tx.type]||tx.type))}</div>
+            <div class="rec-card-hd-title">${typeIcon[tx.type] || '💰'} ${typeLabel[tx.type] || tx.type}</div>
             <div class="rec-card-hd-amt s-green">+${ugx(tx.amount)}</div>
           </div>
           <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${tx.date || '—'}</span></div>
