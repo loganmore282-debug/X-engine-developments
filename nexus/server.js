@@ -689,6 +689,41 @@ app.post('/account/ensure-refcode', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// TEAM MEMBERS — list of people referred by this user
+// ═══════════════════════════════════════════
+app.post('/team/members', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('users').where('referredBy', '==', userId).get();
+    const members = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      // Mask name: show first name only, truncated
+      const displayName = (d.name || '').split(' ')[0] || 'User';
+      // Mask phone: keep country code + first 3 digits, hide rest  e.g. +256 77X XXX XXX
+      const rawPhone = d.phone || '';
+      let maskedPhone = rawPhone;
+      if (rawPhone.length >= 10) {
+        maskedPhone = rawPhone.slice(0, rawPhone.length - 5) + '*****';
+      }
+      members.push({
+        id: doc.id,
+        name: displayName,
+        phone: maskedPhone,
+        joinedAt: d.createdAt ? d.createdAt.toDate().toISOString() : null,
+        hasInvested: (d.totalInvested || 0) > 0,
+        totalInvested: d.totalInvested || 0,
+        referralCode: d.referralCode || null,
+      });
+    });
+    // Sort by join date newest first
+    members.sort((a, b) => (b.joinedAt || '') > (a.joinedAt || '') ? 1 : -1);
+    return res.json({ status: 'success', members });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════
 // INVESTMENTS
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {

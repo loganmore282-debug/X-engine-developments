@@ -842,9 +842,9 @@ body{padding-bottom:106px}
 
     <!-- Team stat tiles -->
     <div class="team-tiles">
-      <div class="team-tile">
+      <div class="team-tile" onclick="openTeamMembersModal()" style="cursor:pointer;position:relative">
         <div class="tt-val" id="teamTotalSize">0</div>
-        <div class="tt-lbl">Team Size</div>
+        <div class="tt-lbl">Team Size <span style="font-size:9px;opacity:.55">›</span></div>
       </div>
       <div class="team-tile">
         <div class="tt-val" id="commTotal">UGX 0</div>
@@ -1242,6 +1242,18 @@ body{padding-bottom:106px}
       <button class="modal-close" onclick="closeModal('invDetailModal')">×</button>
     </div>
     <div id="invDetailBody"></div>
+  </div>
+</div>
+
+<!-- ══ TEAM MEMBERS MODAL ══ -->
+<div id="teamMembersModal" class="modal-overlay" onclick="if(event.target===this)closeModal('teamMembersModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="modal-title">My Team</div>
+      <button class="modal-close" onclick="closeModal('teamMembersModal')">×</button>
+    </div>
+    <div id="teamMembersBody"></div>
   </div>
 </div>
 
@@ -2237,6 +2249,40 @@ window.shareRefLink = () => {
     navigator.share({ title: 'Nexus', text, url: link }).catch(() => {});
   } else {
     navigator.clipboard?.writeText(text).then(() => showToast('Share link copied!', 'success'));
+  }
+};
+
+// ── TEAM MEMBERS MODAL ──
+window.openTeamMembersModal = async () => {
+  const body = document.getElementById('teamMembersBody');
+  body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">Loading…</div>';
+  openModal('teamMembersModal');
+  try {
+    const r = await api('/team/members', { userId: _user.uid });
+    const members = r.members || [];
+    if (!members.length) {
+      body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">No team members yet.<br><span style="font-size:11px;opacity:.7">Share your referral code to grow your team.</span></div>';
+      return;
+    }
+    body.innerHTML = `
+      <div style="font-size:11px;color:var(--text2);margin-bottom:12px">${members.length} member${members.length!==1?'s':''} — direct referrals only</div>
+      ${members.map(m => {
+        const initials = (m.name||'U').slice(0,2).toUpperCase();
+        const joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+        const badge = m.hasInvested
+          ? `<span style="font-size:10px;font-weight:700;color:#22c55e;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:5px;padding:2px 7px">Invested</span>`
+          : `<span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--card2);border:1px solid var(--border2);border-radius:5px;padding:2px 7px">Not invested</span>`;
+        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border2)">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0">${initials}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">${m.name}</div>
+            <div style="font-size:11px;color:var(--text2)">${m.phone} · Joined ${joined}</div>
+          </div>
+          <div>${badge}</div>
+        </div>`;
+      }).join('')}`;
+  } catch(e) {
+    body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--red);font-size:13px">Failed to load team</div>';
   }
 };
 
