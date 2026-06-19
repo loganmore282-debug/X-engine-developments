@@ -378,98 +378,51 @@ body{padding-bottom:106px}
 .menu-item .mi-arrow{color:var(--muted);font-size:12px}
 .menu-item.danger .mi-label{color:var(--red)}
 .menu-item.danger .mi-icon{background:rgba(239,68,68,0.1);color:var(--red)}
-.menu-item .mi-text{flex:1;display:flex;flex-direction:column;gap:2px}
-.menu-item .mi-desc{font-size:11px;color:var(--text2);font-weight:400}
-
-/* ── PREMIUM MORE HEADER ── */
-.more-hero{position:relative;border-radius:18px;padding:18px;margin-bottom:14px;overflow:hidden;background:linear-gradient(125deg,#0f1f3d 0%,#16305c 55%,#1d3a6e 100%);box-shadow:0 10px 28px rgba(15,31,61,0.28)}
-.more-hero.is-agent{background:linear-gradient(125deg,#1a1205 0%,#3a2a08 55%,#5a4012 100%)}
-.more-hero-bg{position:absolute;top:-40px;right:-30px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(96,165,250,0.25),transparent 70%);pointer-events:none}
-.more-hero.is-agent .more-hero-bg{background:radial-gradient(circle,rgba(251,191,36,0.25),transparent 70%)}
-.more-hero-top{display:flex;align-items:flex-start;gap:13px;position:relative;z-index:2}
-.more-avatar{width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#fff;overflow:hidden;flex-shrink:0;cursor:pointer;position:relative}
-.more-avatar img{width:100%;height:100%;object-fit:cover}
-.more-avatar-ring{display:none}
-.more-avatar.agent-ring{border-color:#fbbf24;box-shadow:0 0 0 2px rgba(251,191,36,0.4),0 0 14px rgba(251,191,36,0.3)}
-.more-hero-id{flex:1;min-width:0;padding-top:2px}
-.more-name-row{display:flex;align-items:center;gap:5px}
-.more-name-row .pi-name{font-size:18px;font-weight:900;color:#fff}
-.more-verify{width:16px;height:16px;flex-shrink:0}
-.more-agent-pill{display:inline-flex;align-items:center;gap:4px;margin-top:5px;background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.4);color:#fcd34d;font-size:10px;font-weight:800;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px}
-.more-agent-pill svg{width:11px;height:11px}
-.more-agent-pill.tier-agent{background:rgba(245,158,11,0.2);border-color:rgba(245,158,11,0.5);color:#fcd34d}
-.more-phone{font-size:12px;color:rgba(255,255,255,0.65);margin-top:6px;font-family:'Outfit',sans-serif}
-.more-hero-wallet{width:54px;height:54px;flex-shrink:0;border-radius:14px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;color:#fff}
-.more-hero-wallet svg{width:26px;height:26px}
-.more-hero.is-agent .more-hero-wallet{background:rgba(251,191,36,0.15);border-color:rgba(251,191,36,0.3);color:#fcd34d}
-.more-balance-block{position:relative;z-index:2;margin-top:16px}
-.more-balance-lbl{font-size:11px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px}
-.more-balance-val{font-size:26px;font-weight:900;color:#fff;font-family:'Outfit',sans-serif;letter-spacing:.3px}
-.more-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
-.more-stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:13px;display:flex;align-items:center;gap:11px;cursor:pointer}
-.more-stat-icon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.more-stat-icon svg{width:19px;height:19px}
-.more-stat-icon.blue{background:var(--bluefade);color:var(--blue)}
-.more-stat-icon.green{background:rgba(34,197,94,0.1);color:#16a34a}
-.more-stat-info{min-width:0}
-.more-stat-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.3px}
-.more-stat-val{font-size:16px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;line-height:1.2}
-.more-stat-sub{font-size:10px;color:var(--text2)}
-.more-section-lbl{font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;padding-left:2px}
 
 /* ── AGENT / PRO — ring + name badge in More section ── */
 .profile-avatar.agent-ring{border:2.5px solid #f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,0.22),0 0 16px rgba(245,158,11,0.18)}
 .agent-badge{display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:9px;font-weight:900;letter-spacing:.8px;padding:2px 7px;border-radius:5px;text-transform:uppercase;vertical-align:middle;margin-left:7px;box-shadow:0 2px 6px rgba(245,158,11,0.35)}
 
 /* ── AGENT CENTRE SECTION ── */
-.ac-hero{border-radius:18px;padding:20px;margin-bottom:14px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(120deg,#0f1f3d 0%,#16305c 55%,#1d3a6e 100%);box-shadow:0 8px 24px rgba(15,31,61,0.25)}
-.ac-hero.is-agent{background:linear-gradient(120deg,#1a1205 0%,#3a2a08 55%,#4a3510 100%)}
-.ac-hero-left{flex:1;min-width:0;position:relative;z-index:2}
-.ac-hero-name{font-size:22px;font-weight:900;color:#fff;margin-bottom:6px;line-height:1.1}
-.ac-hero-meta{font-size:12px;color:rgba(255,255,255,0.7);line-height:1.45}
-.ac-hero-meta .accent{color:#7eb0ff;font-weight:700}
-.is-agent .ac-hero-meta .accent{color:#fbbf24}
-.ac-hero-payout{margin-top:10px;display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);border-radius:20px;padding:4px 11px;font-size:11px;font-weight:700;color:#fff}
-.ac-hero-badge{position:relative;width:88px;height:96px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-.ac-hex{width:78px;height:88px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:linear-gradient(145deg,#3b6fd4,#1e4fa3 55%,#143a7d);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 2px 8px rgba(255,255,255,0.25),inset 0 -4px 10px rgba(0,0,0,0.3)}
-.is-agent .ac-hex{background:linear-gradient(145deg,#fbbf24,#d97706 55%,#a85d06)}
-.ac-hex-inner{font-size:30px;color:#fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))}
-.ac-spark{position:absolute;color:#fff;opacity:.85;font-size:11px;animation:acTwinkle 2.4s ease-in-out infinite}
-.ac-spark.s1{top:4px;right:6px;font-size:13px}
-.ac-spark.s2{bottom:10px;left:2px;font-size:9px;animation-delay:.8s}
-.ac-spark.s3{top:30px;right:0;font-size:8px;animation-delay:1.4s}
-@keyframes acTwinkle{0%,100%{opacity:.3;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
-.ac-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
-.ac-stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
-.ac-stat-icon{width:32px;height:32px;border-radius:9px;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;margin-bottom:10px}
-.ac-stat-icon svg{width:17px;height:17px}
-.ac-stat-val{font-size:22px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;line-height:1}
-.ac-stat-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
-.ac-section-lbl{font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;padding-left:2px}
-.ac-tier-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px}
-.ac-tier-card.inprogress{border-color:rgba(37,99,235,0.3);box-shadow:0 4px 16px rgba(37,99,235,0.08)}
-.ac-tier-card.locked{opacity:.72}
-.ac-tier-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
-.ac-tier-info{display:flex;align-items:center;gap:12px;min-width:0}
-.ac-tier-badge{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;letter-spacing:-2px}
-.ac-tier-badge.t-gold{background:linear-gradient(135deg,rgba(251,191,36,0.22),rgba(217,119,6,0.15));border:1px solid rgba(245,158,11,0.3)}
-.ac-tier-badge.t-locked{background:var(--card2);border:1px solid var(--border);filter:grayscale(.6);opacity:.8}
-.ac-tier-name{font-size:14px;font-weight:800;color:var(--text)}
+.ac-hero{border-radius:var(--radius);padding:20px 16px;margin-bottom:14px;text-align:center;position:relative;overflow:hidden}
+.ac-hero.is-agent{background:linear-gradient(135deg,#1a1105,#2d1f00);border:1px solid rgba(245,158,11,0.3)}
+.ac-hero.no-agent{background:var(--card2);border:1px solid var(--border2)}
+.ac-hero-star{font-size:34px;margin-bottom:6px;display:block}
+.ac-hero-tier{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+.is-agent .ac-hero-tier{color:#f59e0b}
+.no-agent .ac-hero-tier{color:var(--text2)}
+.ac-hero-name{font-size:20px;font-weight:900;color:var(--text);margin-bottom:6px}
+.is-agent .ac-hero-name{color:#fff}
+.ac-hero-meta{font-size:11px;color:var(--text2)}
+.is-agent .ac-hero-meta{color:rgba(245,158,11,0.6)}
+.ac-hero-payout{margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:#fbbf24}
+.ac-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.ac-stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.ac-stat-val{font-size:17px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif}
+.ac-stat-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.ac-section-lbl{font-size:10px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;padding-left:2px}
+.ac-tier-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
+.ac-tier-card.achieved{border-color:rgba(34,197,94,0.35)}
+.ac-tier-card.inprogress{border-color:rgba(37,99,235,0.35)}
+.ac-tier-card.locked{opacity:.55}
+.ac-tier-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ac-tier-info{display:flex;align-items:center;gap:10px}
+.ac-tier-stars{font-size:18px;line-height:1}
+.ac-tier-name{font-size:13px;font-weight:800;color:var(--text)}
 .ac-tier-refs{font-size:11px;color:var(--text2);margin-top:1px}
-.ac-status-pill{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap}
-.ac-status-pill svg{width:11px;height:11px}
-.ac-status-pill.achieved{background:rgba(34,197,94,0.13);color:#16a34a}
-.ac-status-pill.inprogress{background:rgba(37,99,235,0.12);color:#2563eb}
-.ac-status-pill.locked{background:var(--card2);color:var(--text2)}
-.ac-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.ac-bar{flex:1;height:8px;background:var(--card2);border-radius:5px;overflow:hidden}
-.ac-bar-fill{height:100%;border-radius:5px;transition:width .5s ease}
+.ac-status-pill{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.ac-status-pill.achieved{background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
+.ac-status-pill.inprogress{background:rgba(37,99,235,0.12);color:#60a5fa;border:1px solid rgba(37,99,235,0.25)}
+.ac-status-pill.locked{background:var(--card2);color:var(--muted);border:1px solid var(--border)}
+.ac-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ac-bar{flex:1;height:7px;background:var(--border2);border-radius:4px;overflow:hidden}
+.ac-bar-fill{height:100%;border-radius:4px;transition:width .5s ease}
 .ac-bar-fill.gold{background:linear-gradient(90deg,#d97706,#fbbf24)}
 .ac-bar-fill.blue{background:linear-gradient(90deg,#2563eb,#60a5fa)}
 .ac-bar-fill.gray{background:var(--muted)}
 .ac-bar-val{font-size:11px;font-weight:800;color:var(--text2);white-space:nowrap}
-.ac-tier-pay{font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:11px}
-.ac-tier-pay b{color:#f59e0b;font-family:'Outfit',sans-serif;font-size:13px}
+.ac-tier-pay{font-size:12px;color:var(--text2)}
+.ac-tier-pay b{color:#f59e0b;font-family:'Outfit',sans-serif}
 
 /* ── AGENT PROGRAM BREAKDOWN (Team tab, informational) ── */
 .apg-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
@@ -1000,97 +953,57 @@ body{padding-bottom:106px}
 
   <!-- ── MORE SECTION ── -->
   <div class="section" id="moreSection">
-    <!-- Premium profile header -->
-    <div class="more-hero" id="moreHero">
-      <div class="more-hero-bg"></div>
-      <div class="more-hero-top">
-        <div class="more-avatar" id="moreAvatarWrap" onclick="triggerPhotoUpload()">
-          <span id="moreAvatarInitial">?</span>
-          <span class="more-avatar-ring" id="moreAvatarRing"></span>
-        </div>
-        <div class="more-hero-id">
-          <div class="more-name-row">
-            <span class="pi-name" id="moreName">—</span>
-            <svg class="more-verify" id="moreVerify" viewBox="0 0 24 24" fill="#3b82f6"><path d="M12 2l2.4 1.8 3-.3 1 2.8 2.6 1.5-.8 2.9.8 2.9-2.6 1.5-1 2.8-3-.3L12 22l-2.4-1.8-3 .3-1-2.8L3 16.4l.8-2.9L3 10.6l2.6-1.5 1-2.8 3 .3z"/><path d="M9.5 12.5l1.8 1.8 3.4-3.6" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <div class="more-agent-pill" id="moreAgentPill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l7 3v6c0 4.5-3 8.5-7 9.5C8 19.5 5 15.5 5 11V5l7-3z"/></svg>
-            <span id="moreAgentPillText">Nexus Agent Candidate</span>
-          </div>
-          <div class="more-phone" id="morePhone">—</div>
-        </div>
-        <div class="more-hero-wallet">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/><path d="M21 12a2 2 0 0 0-2-2h-4a2 2 0 0 0 0 4h4a2 2 0 0 0 2-2z"/></svg>
-        </div>
+    <div class="profile-row">
+      <div class="profile-avatar" id="moreAvatarWrap" onclick="triggerPhotoUpload()">
+        <span id="moreAvatarInitial">?</span>
       </div>
-      <div class="more-balance-block">
-        <div class="more-balance-lbl">Available Balance</div>
-        <div class="more-balance-val" id="moreBalance">UGX 0</div>
+      <div class="profile-info">
+        <div class="pi-name" id="moreName">—</div>
+        <div class="pi-phone" id="morePhone">—</div>
+        <div class="pi-balance" id="moreBalance">Balance: UGX 0</div>
       </div>
     </div>
     <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="uploadPhoto(this)">
 
-    <!-- Two stat cards -->
-    <div class="more-stats">
-      <div class="more-stat" onclick="showSection('agentCentre')">
-        <div class="more-stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-        <div class="more-stat-info">
-          <div class="more-stat-lbl">My Team</div>
-          <div class="more-stat-val" id="moreActiveRefs">0</div>
-          <div class="more-stat-sub">Active Referrals</div>
-        </div>
-      </div>
-      <div class="more-stat" onclick="showSection('agentCentre')">
-        <div class="more-stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
-        <div class="more-stat-info">
-          <div class="more-stat-lbl">Total Earnings</div>
-          <div class="more-stat-val" id="moreTotalEarn">UGX 0</div>
-          <div class="more-stat-sub">All Time</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="more-section-lbl">Account &amp; Settings</div>
-
     <div class="menu-list">
       <div class="menu-item" onclick="showSection('agentCentre')">
         <span class="mi-icon" style="background:rgba(245,158,11,0.12);color:#f59e0b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6.5" r="4"/><path d="M2.5 21v-1.2c0-3.2 2.9-5.3 6.5-5.3 1 0 1.95.16 2.8.46"/><path d="M18 12.2c-1.4.95-2.9 1.3-2.9 1.3s0 4.3 2.9 6.3c2.9-2 2.9-6.3 2.9-6.3s-1.5-.35-2.9-1.3z"/><polyline points="16.7 16.4 17.7 17.4 19.5 15.4"/></svg></span>
-        <div class="mi-text"><span class="mi-label">Agent Centre</span><span class="mi-desc">Manage referrals, tiers and weekly salaries</span></div>
+        <span class="mi-label">Agent Centre</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="showSection('records')">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
-        <div class="mi-text"><span class="mi-label">Records</span><span class="mi-desc">Deposits, withdrawals, plans and revenue</span></div>
+        <span class="mi-label">Records</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openGiftModal()">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></span>
-        <div class="mi-text"><span class="mi-label">Gift Code</span><span class="mi-desc">Redeem promotional rewards and bonuses</span></div>
+        <span class="mi-label">Gift Code</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openBankModal()">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg></span>
-        <div class="mi-text"><span class="mi-label">Bank Account Management</span><span class="mi-desc">Manage withdrawal and bank accounts</span></div>
+        <span class="mi-label">Bank Account Management</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openContentModal('about')">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
-        <div class="mi-text"><span class="mi-label">About Nexus</span><span class="mi-desc">Learn more about Nexus platform</span></div>
+        <span class="mi-label">About Nexus</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openContentModal('rules')">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v0a2 2 0 0 1 2-2z"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span>
-        <div class="mi-text"><span class="mi-label">Platform Rules</span><span class="mi-desc">Terms, conditions and platform policies</span></div>
+        <span class="mi-label">Platform Rules</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openContentModal('support')">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
-        <div class="mi-text"><span class="mi-label">Customer Service</span><span class="mi-desc">Get help and support 24/7</span></div>
+        <span class="mi-label">Customer Service</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item danger" onclick="doLogout()">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
-        <div class="mi-text"><span class="mi-label">Exit / Logout</span></div>
+        <span class="mi-label">Exit / Logout</span>
         <span class="mi-arrow">›</span>
       </div>
     </div>
@@ -1809,145 +1722,111 @@ function renderCommission(u) {
 
 // ── RENDER MORE ──
 function renderMore(u) {
-  document.getElementById('moreName').textContent    = u.name  || '—';
-  document.getElementById('morePhone').textContent   = u.phone || '—';
-  document.getElementById('moreBalance').textContent = ugx(u.walletBalance);
-
-  // Stat cards
-  const refs = u.activeReferralCount || 0;
-  document.getElementById('moreActiveRefs').textContent = refs;
-  const totalEarn = (u.commissionEarned || 0) + (u.agentPayoutTotal || 0) + (u.checkinEarned || 0);
-  document.getElementById('moreTotalEarn').textContent  = ugx(totalEarn);
-
-  // Hero theme + agent status pill (shown ONLY for actual agents)
-  const TIER_LABELS = { regional_agent: '⭐⭐⭐ Regional Agent', senior_agent: '⭐⭐ Senior Agent', agent: '⭐ Nexus Agent' };
-  const hero    = document.getElementById('moreHero');
-  const pill    = document.getElementById('moreAgentPill');
-  const pillTxt = document.getElementById('moreAgentPillText');
+  const nameEl = document.getElementById('moreName');
+  const TIER_BADGES = { regional_agent: '★★★ Regional Agent', senior_agent: '★★ Senior Agent', agent: '★ Agent' };
   if (u.isAgent && u.agentTier) {
-    hero.classList.add('is-agent');
-    pill.style.display = '';
-    pillTxt.textContent = TIER_LABELS[u.agentTier] || 'Nexus Agent';
-    document.getElementById('moreVerify').style.display = '';
+    nameEl.innerHTML = (u.name || '—') + ` <span class="agent-badge">${TIER_BADGES[u.agentTier] || '★ Agent'}</span>`;
   } else {
-    hero.classList.remove('is-agent');
-    pill.style.display = 'none';
-    document.getElementById('moreVerify').style.display = 'none';
+    nameEl.textContent = u.name || '—';
   }
-
+  document.getElementById('morePhone').textContent   = u.phone   || '—';
+  document.getElementById('moreBalance').textContent = 'Balance: ' + ugx(u.walletBalance);
   renderAvatars(u);
 }
 
 // ── RENDER AGENT CENTRE ──
 function renderAgentCentre(u) {
   const TIERS = [
-    { key: 'agent',          label: 'Agent',           stars: '⭐',    threshold: 10, weeklyPay:  75000 },
-    { key: 'senior_agent',   label: 'Senior Agent',    stars: '⭐⭐',   threshold: 15, weeklyPay: 125000 },
-    { key: 'regional_agent', label: 'Regional Agent',  stars: '⭐⭐⭐',  threshold: 20, weeklyPay: 200000 },
+    { key: 'agent',          label: 'Agent',          stars: '⭐',    threshold: 10, weeklyPay:  75000 },
+    { key: 'senior_agent',   label: 'Senior Agent',   stars: '⭐⭐',   threshold: 15, weeklyPay: 125000 },
+    { key: 'regional_agent', label: 'Regional Agent', stars: '⭐⭐⭐',  threshold: 20, weeklyPay: 200000 },
   ];
-  const refs          = u.activeReferralCount || 0;
-  const currentTier   = TIERS.find(t => t.key === u.agentTier) || null;
-  const currentTierIdx = currentTier ? TIERS.indexOf(currentTier) : -1; // -1 = not yet agent
+  const refs           = u.activeReferralCount || 0;
+  const currentTier    = TIERS.find(t => t.key === u.agentTier) || null;
+  const currentTierIdx = currentTier ? TIERS.indexOf(currentTier) : -1;
 
-  // ── Hero ──
-  const hexBadge = `
-    <div class="ac-hero-badge">
-      <span class="ac-spark s1">✦</span>
-      <span class="ac-spark s2">✦</span>
-      <span class="ac-spark s3">✦</span>
-      <div class="ac-hex"><span class="ac-hex-inner">◈</span></div>
-    </div>`;
-
-  let heroHtml, stat1, stat2;
+  // Hero
+  let heroHtml;
   if (u.isAgent && currentTier) {
     const agentSinceDate = u.agentSince
       ? (u.agentSince.toDate ? u.agentSince.toDate() : new Date(u.agentSince.seconds * 1000)).toLocaleDateString('en-UG', { day:'numeric', month:'short', year:'numeric' })
       : '—';
     const lastPay = u.lastAgentPayoutDate;
-    let payoutLine = 'Next payout: available now';
+    let payoutLine = 'Next payout: Available now!';
     if (lastPay) {
       const nextMs = new Date(lastPay).getTime() + 7 * 86400000;
       if (nextMs > Date.now()) {
         const d = Math.ceil((nextMs - Date.now()) / 86400000);
-        payoutLine = 'Next payout in ' + d + ' day' + (d === 1 ? '' : 's');
+        payoutLine = 'Next payout: in ' + d + ' day' + (d === 1 ? '' : 's');
       }
     }
     heroHtml = `
       <div class="ac-hero is-agent">
-        <div class="ac-hero-left">
-          <div class="ac-hero-name">${u.name || '—'}</div>
-          <div class="ac-hero-meta">You are a <span class="accent">${currentTier.stars} ${currentTier.label}</span><br>Agent since ${agentSinceDate}</div>
-          <div class="ac-hero-payout">⏰ ${payoutLine}</div>
+        <span class="ac-hero-star">${currentTier.stars}</span>
+        <div class="ac-hero-tier">${currentTier.label}</div>
+        <div class="ac-hero-name">${u.name || '—'}</div>
+        <div class="ac-hero-meta">Agent since ${agentSinceDate}</div>
+        <div class="ac-hero-payout">⏰ ${payoutLine}</div>
+      </div>
+      <div class="ac-stats">
+        <div class="ac-stat">
+          <div class="ac-stat-val">${ugx(u.agentPayoutTotal || 0)}</div>
+          <div class="ac-stat-lbl">Total Earned</div>
         </div>
-        ${hexBadge}
+        <div class="ac-stat">
+          <div class="ac-stat-val">${ugx(currentTier.weeklyPay)}</div>
+          <div class="ac-stat-lbl">Weekly Salary</div>
+        </div>
       </div>`;
-    stat1 = { icon: ICN_MONEY, val: ugx(u.agentPayoutTotal || 0), lbl: 'Total Earned' };
-    stat2 = { icon: ICN_TROPHY, val: ugx(currentTier.weeklyPay), lbl: 'Weekly Salary' };
   } else {
-    const need = Math.max(10 - refs, 0);
     heroHtml = `
-      <div class="ac-hero">
-        <div class="ac-hero-left">
-          <div class="ac-hero-name">${u.name || '—'}</div>
-          <div class="ac-hero-meta">Get ${need} more active referral${need === 1 ? '' : 's'}<br>to become a <span class="accent">Nexus Agent</span></div>
+      <div class="ac-hero no-agent">
+        <span class="ac-hero-star">◈</span>
+        <div class="ac-hero-tier">Not Yet an Agent</div>
+        <div class="ac-hero-name">${u.name || '—'}</div>
+        <div class="ac-hero-meta">Get ${Math.max(10 - refs, 0)} more active referrals to become a Nexus Agent</div>
+      </div>
+      <div class="ac-stats">
+        <div class="ac-stat">
+          <div class="ac-stat-val">${refs}</div>
+          <div class="ac-stat-lbl">Active Referrals</div>
         </div>
-        ${hexBadge}
+        <div class="ac-stat">
+          <div class="ac-stat-val">${Math.max(10 - refs, 0)}</div>
+          <div class="ac-stat-lbl">Needed for Agent</div>
+        </div>
       </div>`;
-    stat1 = { icon: ICN_USERS, val: refs, lbl: 'Active Referrals' };
-    stat2 = { icon: ICN_TARGET, val: need, lbl: 'Needed for Agent' };
   }
 
-  const statsHtml = `
-    <div class="ac-stats">
-      <div class="ac-stat">
-        <div class="ac-stat-icon">${stat1.icon}</div>
-        <div class="ac-stat-val">${stat1.val}</div>
-        <div class="ac-stat-lbl">${stat1.lbl}</div>
-      </div>
-      <div class="ac-stat">
-        <div class="ac-stat-icon">${stat2.icon}</div>
-        <div class="ac-stat-val">${stat2.val}</div>
-        <div class="ac-stat-lbl">${stat2.lbl}</div>
-      </div>
-    </div>`;
-
-  // ── Tier cards ──
+  // Tier cards
   const tierCards = TIERS.map((tier, idx) => {
-    let state, barClass, barPct, barLabel, badgeCls;
-
+    let state, barClass, barPct, barLabel;
     if (idx <= currentTierIdx) {
-      state = 'achieved'; barClass = 'gold'; barPct = 100;
-      barLabel = tier.threshold + ' / ' + tier.threshold; badgeCls = 't-gold';
+      state = 'achieved'; barClass = 'gold'; barPct = 100; barLabel = tier.threshold + ' / ' + tier.threshold;
     } else if (idx === currentTierIdx + 1) {
-      const prevThreshold = currentTierIdx >= 0 ? TIERS[currentTierIdx].threshold : 0;
+      const prev = currentTierIdx >= 0 ? TIERS[currentTierIdx].threshold : 0;
       state = 'inprogress'; barClass = 'blue';
-      barPct = Math.min(Math.max((refs - prevThreshold) / (tier.threshold - prevThreshold) * 100, 0), 100);
-      barLabel = refs + ' / ' + tier.threshold; badgeCls = 't-gold';
+      barPct = Math.min(Math.max((refs - prev) / (tier.threshold - prev) * 100, 0), 100);
+      barLabel = refs + ' / ' + tier.threshold;
     } else {
       state = 'locked'; barClass = 'gray';
       barPct = Math.min(refs / tier.threshold * 100, 100);
-      barLabel = refs + ' / ' + tier.threshold; badgeCls = 't-locked';
+      barLabel = refs + ' / ' + tier.threshold;
     }
-
-    const pill = state === 'achieved'
-      ? `<span class="ac-status-pill achieved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Achieved</span>`
-      : state === 'inprogress'
-        ? `<span class="ac-status-pill inprogress">In Progress</span>`
-        : `<span class="ac-status-pill locked"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locked</span>`;
-
+    const pillLabel = state === 'achieved' ? '✓ Achieved' : state === 'inprogress' ? 'In Progress' : 'Locked';
     return `<div class="ac-tier-card ${state}">
       <div class="ac-tier-top">
         <div class="ac-tier-info">
-          <div class="ac-tier-badge ${badgeCls}">${tier.stars}</div>
+          <span class="ac-tier-stars">${tier.stars}</span>
           <div>
             <div class="ac-tier-name">${tier.label}</div>
             <div class="ac-tier-refs">${tier.threshold} active referrals</div>
           </div>
         </div>
-        ${pill}
+        <span class="ac-status-pill ${state}">${pillLabel}</span>
       </div>
       <div class="ac-bar-row">
-        <div class="ac-bar"><div class="ac-bar-fill ${barClass}" style="width:${barPct > 0 ? Math.max(barPct, 3) : 0}%"></div></div>
+        <div class="ac-bar"><div class="ac-bar-fill ${barClass}" style="width:${Math.max(barPct, barPct > 0 ? 3 : 0)}%"></div></div>
         <span class="ac-bar-val">${barLabel}</span>
       </div>
       <div class="ac-tier-pay">Weekly salary: <b>${ugx(tier.weeklyPay)}</b></div>
@@ -1955,20 +1834,14 @@ function renderAgentCentre(u) {
   }).join('');
 
   document.getElementById('agentCentreContent').innerHTML =
-    heroHtml + statsHtml +
+    heroHtml +
     '<div class="ac-section-lbl">Agent Tier Journey</div>' +
     tierCards;
 }
 
-// Inline SVG icons for Agent Centre stat tiles
-const ICN_USERS  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
-const ICN_TARGET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>';
-const ICN_MONEY  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
-const ICN_TROPHY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>';
-
 function renderAvatars(u) {
   const initial = (u.name || '?')[0].toUpperCase();
-  [['moreAvatarInitial',58],['avatarInitial',34],['avatarInitialTop',34]].forEach(([id,size]) => {
+  [['moreAvatarInitial',52],['avatarInitial',34],['avatarInitialTop',34]].forEach(([id,size]) => {
     const el = document.getElementById(id);
     if (!el) return;
     if (u.profilePhoto) {
