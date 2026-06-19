@@ -973,7 +973,7 @@ body{padding-bottom:106px}
       </div>
       <div class="menu-item" onclick="showSection('records')">
         <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
-        <span class="mi-label">Records</span>
+        <span class="mi-label">Account Statement</span>
         <span class="mi-arrow">›</span>
       </div>
       <div class="menu-item" onclick="openGiftModal()">
@@ -2016,7 +2016,10 @@ window.openInvDetail = async (invId) => {
     const daysLeft = Math.ceil(msLeft / 86400000);
     const msElapsed   = Math.max(0, totalMs - msLeft);
     const daysElapsed = Math.floor(msElapsed / 86400000);
-    const progress    = matured || claimed ? 100 : Math.min(100, Math.max(0, Math.round(msElapsed / totalMs * 100)));
+    const fullyPaid   = inv.expectedReturn > 0 && (inv.dailyCredited || 0) >= inv.expectedReturn;
+    const paidPct     = inv.expectedReturn > 0 ? Math.min(100, Math.round((inv.dailyCredited || 0) / inv.expectedReturn * 100)) : 0;
+    const timePct     = totalMs > 0 ? Math.min(100, Math.round(msElapsed / totalMs * 100)) : 0;
+    const progress    = matured || claimed || fullyPaid ? 100 : Math.max(paidPct, timePct);
     const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
     const stateBadge = claimed ? '<span class="inv-badge claimed">Claimed</span>'
                      : matured ? '<span class="inv-badge matured">Matured</span>'
@@ -2037,14 +2040,14 @@ window.openInvDetail = async (invId) => {
       <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Investment Duration</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
       <div class="rec-row"><span class="rec-row-lbl">Matures On</span><span class="rec-row-val">${inv.maturityDate ? inv.maturityDate.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured?'#22c55e':'var(--blue)'}">${claimed ? 'Completed ✓' : matured ? '✅ Matured — Claim now!' : daysLeft + ' day' + (daysLeft!==1?'s':'') + ' remaining'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed ✓' : matured ? '✅ Matured — Claim now!' : fullyPaid ? 'Fully paid out ✓' : daysLeft + ' day' + (daysLeft!==1?'s':'') + ' remaining'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
       <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:12px;color:var(--text2)">Progress</span>
-        <span style="font-size:12px;font-weight:700;color:${matured||claimed?'#22c55e':'#2563eb'}">${progress}%</span>
+        <span style="font-size:12px;font-weight:700;color:${matured||claimed||fullyPaid?'#22c55e':'#2563eb'}">${progress}%</span>
       </div>
       <div style="background:var(--border);border-radius:99px;height:10px;overflow:hidden">
-        <div style="background:${matured||claimed?'#22c55e':'#2563eb'};height:100%;width:${progress}%;border-radius:99px;transition:width .4s"></div>
+        <div style="background:${matured||claimed||fullyPaid?'#22c55e':'#2563eb'};height:100%;width:${progress}%;border-radius:99px;transition:width .4s"></div>
       </div>
       ${claimBtn}`;
   } catch(e) { body.innerHTML = '<p style="color:var(--red);text-align:center">Failed to load details</p>'; }
@@ -2186,7 +2189,7 @@ async function loadRecords(tab) {
         </div>` +
         items.map(tx => `<div class="rec-card">
           <div class="rec-card-hd">
-            <div class="rec-card-hd-title">${typeIcon[tx.type] || '💰'} ${typeLabel[tx.type] || tx.type}</div>
+            <div class="rec-card-hd-title">${(tx.type==='checkin'&&tx.description&&/cashback/i.test(tx.description)?typeIcon.cashback+' '+typeLabel.cashback:(typeIcon[tx.type]||'💰')+' '+(typeLabel[tx.type]||tx.type))}</div>
             <div class="rec-card-hd-amt s-green">+${ugx(tx.amount)}</div>
           </div>
           <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${tx.date || '—'}</span></div>
