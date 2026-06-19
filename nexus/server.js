@@ -1363,7 +1363,76 @@ app.post('/deposit/verify-phone', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// DEPOSIT — INITIATE (SMS-based, no USSD push)
+// DEPOSIT — MARZPAY (USSD push-to-pay)
+// ═══════════════════════════════════════════
+app.post('/deposit/marzpay', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  const { amount } = req.body;
+  if (!userId || !amount) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  const amt = parseInt(amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  try {
+    const [uSnap, sett] = await Promise.all([
+      db.collection('users').doc(userId).get(),
+      getSettings()
+    ]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    const minDep = sett.minDeposit || 30000;
+    if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
+    const phone = cleanPhone(user.phone || '');
+    if (!phone || phone.length < 10)
+      return res.status(400).json({ status: 'error', message: 'No valid phone on your account. Update your profile first.' });
+
+    const reference   = uuidv4();
+    const callbackUrl = (RAILWAY_URL || '') + '/deposit/callback';
+
+    const fd = marzForm({
+      phone_number: phone,
+      amount:       String(amt),
+      country:      'UG',
+      reference,
+      description:  `Nexus deposit — ${user.name || userId}`,
+      callback_url: callbackUrl
+    });
+
+    const mpRes  = await fetch(`${MARZPAY_BASE}/collect-money`, {
+      method: 'POST', headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }, body: fd
+    });
+    const mpData = await mpRes.json();
+    console.log('MarzPay collect-money:', JSON.stringify(mpData));
+
+    if (mpData.status !== 'success')
+      return res.status(400).json({ status: 'error', message: mpData.message || 'Could not initiate payment. Try again.' });
+
+    const marzTxUuid = mpData.data?.transaction?.uuid || null;
+    const { date, time } = nowStr();
+
+    // Cancel any existing processing deposits for this user so listener is unambiguous
+    const oldSnap = await db.collection('pendingDeposits')
+      .where('userId', '==', userId).where('status', 'in', ['processing', 'pending']).limit(10).get();
+    if (!oldSnap.empty) {
+      const b = db.batch();
+      oldSnap.forEach(d => b.update(d.ref, { status: 'cancelled' }));
+      await b.commit();
+    }
+
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId, phone, amount: amt, marzReference: reference, marzTxUuid,
+      status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    console.log(`💳 MarzPay deposit: ${depRef.id} — ${fmtUGX(amt)} from ${phone}`);
+    return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone });
+  } catch (e) {
+    console.error('MarzPay deposit error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// DEPOSIT — INITIATE (SMS-based, kept as fallback)
 // ═══════════════════════════════════════════
 app.post('/deposit/initiate', async (req, res) => {
   const userId = await verifyAuth(req) || req.body.userId;
@@ -1460,19 +1529,67 @@ app.get('/deposit/status/:id', async (req, res) => {
       status: 'success',
       deposit: {
         id: snap.id,
-        depositStatus: dep.status,
-        amount: dep.amount,
-        network: dep.network,
-        expiresAt: dep.expiresAt?.toDate?.()?.toISOString?.() || null
+        depositStatus:  dep.status,
+        amount:         dep.amount,
+        creditedAmount: dep.creditedAmount || dep.amount,
+        network:        dep.network || null,
+        expiresAt:      dep.expiresAt?.toDate?.()?.toISOString?.() || null
       }
     });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// Legacy MarzPay deposit callback — no longer used for deposits (SMS-based now)
-app.post('/deposit/callback', (req, res) => {
+// MarzPay deposit webhook — fires when collection is completed or failed
+app.post('/deposit/callback', async (req, res) => {
   res.json({ received: true });
-  console.log('Deposit callback received (ignored — SMS-based deposits only):', req.body?.event_type);
+  const body      = req.body;
+  const eventType = body.event_type || '';
+  const reference = body.transaction?.reference || body.reference || '';
+  console.log('Deposit callback:', eventType, reference);
+  try {
+    if (!reference) return;
+    const depSnap = await db.collection('pendingDeposits')
+      .where('marzReference', '==', reference).limit(1).get();
+    if (depSnap.empty) { console.log('No pendingDeposit for ref:', reference); return; }
+    const depDoc = depSnap.docs[0];
+    const dep    = depDoc.data();
+    if (dep.status === 'matched' || dep.status === 'failed') return; // idempotent
+    const { date, time } = nowStr();
+
+    if (eventType === 'collection.completed') {
+      const amount   = body.transaction?.amount?.raw || body.collection?.amount?.raw || dep.amount;
+      const provTxId = body.collection?.provider_transaction_id || null;
+      await db.runTransaction(async t => {
+        const uRef  = db.collection('users').doc(dep.userId);
+        const uSnap = await t.get(uRef);
+        if (!uSnap.exists) throw new Error('User not found');
+        const bal       = uSnap.data().walletBalance || 0;
+        const holdUntil = new Date(Date.now() + 60 * 60 * 1000);
+        t.update(uRef, {
+          walletBalance:    bal + amount,
+          totalDeposited:   FieldValue.increment(amount),
+          withdrawableFrom: admin.firestore.Timestamp.fromDate(holdUntil)
+        });
+        t.update(depDoc.ref, {
+          status: 'matched', creditedAmount: amount,
+          providerTxId: provTxId, matchedAt: FieldValue.serverTimestamp()
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId: dep.userId, type: 'deposit',
+          description: 'MoMo deposit via MarzPay',
+          amount, status: 'success', date, time, marzReference: reference,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      });
+      console.log(`✅ Deposit complete: ${depDoc.id} → ${dep.userId} ${fmtUGX(dep.amount)}`);
+    } else if (eventType === 'collection.failed') {
+      await depDoc.ref.update({
+        status: 'failed', failedAt: FieldValue.serverTimestamp(),
+        failureReason: body.transaction?.failure_reason || 'Payment failed or declined'
+      });
+      console.log(`❌ Deposit failed: ${depDoc.id}`);
+    }
+  } catch (e) { console.error('Deposit callback error:', e.message); }
 });
 
 // ── TICKER (anonymized global activity) ──

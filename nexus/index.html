@@ -574,8 +574,15 @@ body{padding-bottom:106px}
 .content-cta-btn{display:flex;align-items:center;gap:12px;border-radius:12px;padding:15px 16px;text-decoration:none;font-weight:700;font-size:15px;margin-bottom:10px;color:#fff;letter-spacing:.1px}
 .content-cta-btn.tg-btn{background:#229ED9;box-shadow:0 4px 16px rgba(34,158,217,0.3)}
 .content-cta-btn.wa-btn{background:#25D366;box-shadow:0 4px 16px rgba(37,211,102,0.3)}
-/* ── DEPOSIT PROCEED BUTTON — green when verified ── */
-#depProceedBtn.ready{background:linear-gradient(135deg,#16a34a,#15803d);box-shadow:0 4px 16px rgba(22,163,74,0.42);transition:background .3s,box-shadow .3s}
+/* ── DEPOSIT PULSE + CONFETTI ANIMATIONS ── */
+.dep-pulse-wrap{position:relative;width:100px;height:100px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center}
+.dep-pulse-ring{position:absolute;border-radius:50%;background:rgba(37,99,235,.15);animation:depPulse 2s ease-out infinite}
+.dep-pulse-ring1{width:100px;height:100px;animation-delay:0s}
+.dep-pulse-ring2{width:70px;height:70px;animation-delay:.7s}
+.dep-pulse-icon{font-size:36px;z-index:1;position:relative;animation:depBounce .9s ease-in-out infinite alternate}
+@keyframes depPulse{0%{transform:scale(.8);opacity:1}100%{transform:scale(1.6);opacity:0}}
+@keyframes depBounce{0%{transform:scale(1)}100%{transform:scale(1.12)}}
+@keyframes confettiFall{to{top:130px;opacity:0;transform:rotate(720deg)}}
 
 /* ── PRODUCTS BANNER ── */
 .products-banner-wrap{display:none;border-radius:12px;overflow:hidden;margin-bottom:16px;position:relative;height:160px;background:#0a0a1a}
@@ -1048,33 +1055,18 @@ body{padding-bottom:106px}
   <div class="page-body" style="padding-top:0">
     <img id="depPromoImg" class="dep-promo-img" src="" alt="">
 
-    <!-- ── STEP 1: Enter sender phone + amount ── -->
+    <!-- Step 1: Amount input -->
     <div id="depStep1" style="padding:16px 0 0">
       <div class="page-bal-badge">Wallet: <span id="depWalBadge">UGX 0</span> &nbsp;·&nbsp; Min UGX 30,000</div>
 
-      <label class="form-label">Your MoMo Number (no leading zero)</label>
-      <div class="phone-form-wrap" style="margin-bottom:6px">
-        <span class="phone-form-prefix">+256</span>
-        <input type="tel" id="depSenderPhone" placeholder="771 234 567" maxlength="9" inputmode="numeric">
+      <label class="form-label">MoMo Number</label>
+      <div style="display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:12px 16px;margin-bottom:4px">
+        <span id="depPhoneDisplay" style="font-size:15px;font-weight:700;color:var(--text);flex:1">—</span>
+        <span id="depNetBadge" style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:6px;background:rgba(255,203,5,0.15);color:#b45309">MTN</span>
       </div>
-      <!-- Verification status row -->
-      <div id="depVerifyRow" style="height:32px;display:flex;align-items:center;gap:8px;margin-bottom:10px;min-height:32px">
-        <span id="depVerifyMsg" style="font-size:12px;color:var(--text2)">Enter 9 digits — auto-verified</span>
-      </div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:20px;padding-left:2px">A USSD prompt will be sent to this number. Update your profile to change it.</div>
 
-      <label class="form-label">Network</label>
-      <div class="net-pills" style="margin-bottom:16px;pointer-events:none;opacity:0.85" id="depNetPills">
-        <button class="net-pill active" id="netMTN">
-          <svg class="net-logo" viewBox="0 0 48 24" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="24" rx="3" fill="#FFCB05"/><ellipse cx="24" cy="12" rx="15" ry="9.5" stroke="#000" stroke-width="1.9" fill="none"/><text x="24" y="16.5" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="8" text-anchor="middle" fill="#000">MTN</text></svg>
-          MTN MoMo
-        </button>
-        <button class="net-pill" id="netAirtel">
-          <svg class="net-logo" viewBox="0 0 56 24" xmlns="http://www.w3.org/2000/svg"><rect width="56" height="24" rx="3" fill="#fff" stroke="rgba(0,0,0,0.1)" stroke-width="0.5"/><circle cx="12" cy="12" r="8" fill="#E30613"/><path d="M9 16.5 Q12 5.5 15 16.5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/><line x1="8.5" y1="16.5" x2="15.5" y2="16.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><text x="37" y="16.5" font-family="Arial,sans-serif" font-weight="bold" font-size="10.5" text-anchor="middle" fill="#E30613">airtel</text></svg>
-          Airtel Money
-        </button>
-      </div>
-
-      <label class="form-label">Quick Select Amount</label>
+      <label class="form-label">Quick Select</label>
       <div class="quick-amounts">
         <button class="qa-btn" onclick="selectDepAmt(30000,this)">30K</button>
         <button class="qa-btn" onclick="selectDepAmt(50000,this)">50K</button>
@@ -1083,56 +1075,52 @@ body{padding-bottom:106px}
         <button class="qa-btn" onclick="selectDepAmt(200000,this)">200K</button>
       </div>
       <label class="form-label">Amount (UGX)</label>
-      <input class="form-input" id="depAmount" type="number" placeholder="500" min="500" inputmode="numeric" style="margin-bottom:14px">
-
-      <div class="form-info" style="background:rgba(234,179,8,0.08);border-color:rgba(234,179,8,0.3);color:#92400e;margin-bottom:20px">
-        <strong style="color:#78350f">Important:</strong> Use the exact number above to send money. Funds sent from a different number cannot be automatically credited.
-      </div>
-
-      <button class="btn-submit" id="depProceedBtn" onclick="proceedDeposit()">Proceed</button>
+      <input class="form-input" id="depAmount" type="number" placeholder="30000" min="500" inputmode="numeric" style="margin-bottom:20px">
+      <button class="btn-submit" id="depProceedBtn" onclick="proceedDeposit()">Pay via MoMo</button>
     </div>
 
-    <!-- ── STEP 2: Send money instructions ── -->
+    <!-- Step 2: Waiting for USSD approval -->
     <div id="depStep2" style="display:none;padding:16px 0 0">
-      <div style="text-align:center;margin-bottom:20px">
-        <div style="font-size:13px;color:var(--text2);margin-bottom:8px">Transfer exactly</div>
-        <div style="font-size:28px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif" id="depStep2Amount">UGX 0</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:4px">to the account below</div>
+      <div style="text-align:center;padding:32px 0 24px">
+        <div class="dep-pulse-wrap">
+          <div class="dep-pulse-ring dep-pulse-ring1"></div>
+          <div class="dep-pulse-ring dep-pulse-ring2"></div>
+          <div class="dep-pulse-icon">📱</div>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:8px">Check your phone!</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px">A payment prompt was sent to</div>
+        <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:20px" id="depWaitPhone">—</div>
+        <div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px 24px;display:inline-block;margin-bottom:20px">
+          <div style="font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Amount</div>
+          <div style="font-size:26px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif" id="depWaitAmount">UGX 0</div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8">Approve the USSD prompt on your phone.<br>This page updates automatically once paid.</div>
       </div>
+      <button class="btn-outline" onclick="cancelDepWait()">Cancel</button>
+    </div>
 
-      <!-- Receiving account box -->
-      <div class="dep-momo-box" style="margin-bottom:16px">
-        <div class="dep-momo-label" id="depStep2Network">MTN MoMo Account</div>
-        <div class="dep-momo-num" id="depStep2Phone">+256 771 234 567</div>
-        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px" id="depStep2Name">NEXUS INVESTMENTS</div>
-        <button class="dep-copy-btn" onclick="copyReceivingPhone()">Copy Number</button>
+    <!-- Step 3a: Success -->
+    <div id="depStep3Success" style="display:none;padding:16px 0 0">
+      <div style="text-align:center;padding:32px 0">
+        <div id="depConfetti" style="position:relative;height:100px;overflow:hidden;margin-bottom:8px"></div>
+        <div style="font-size:52px;margin-bottom:12px">🎊</div>
+        <div style="font-size:24px;font-weight:900;color:#22c55e;margin-bottom:8px">Congratulations!</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px">Your deposit was received</div>
+        <div style="font-size:30px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;margin:12px 0" id="depSuccessAmt">UGX 0</div>
+        <div style="font-size:12px;color:#22c55e;margin-bottom:32px">✓ Credited to your wallet</div>
+        <button class="btn-submit" onclick="closePage('depositPage')">Back to Home</button>
       </div>
+    </div>
 
-      <!-- Countdown -->
-      <div style="background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.2);border-radius:12px;padding:14px 16px;text-align:center;margin-bottom:16px">
-        <div style="font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Time remaining to send</div>
-        <div style="font-size:26px;font-weight:900;color:#2563eb;font-family:'Outfit',sans-serif;letter-spacing:2px" id="depCountdown">12:00:00</div>
-        <div style="font-size:11px;color:var(--text2);margin-top:4px">Deposit auto-expires after 12 hours</div>
+    <!-- Step 3b: Failed -->
+    <div id="depStep3Failed" style="display:none;padding:16px 0 0">
+      <div style="text-align:center;padding:40px 0">
+        <div style="font-size:56px;margin-bottom:16px">❌</div>
+        <div style="font-size:20px;font-weight:800;color:var(--red);margin-bottom:8px">Payment Failed</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:32px">The payment was declined or cancelled.<br>Please try again.</div>
+        <button class="btn-submit" onclick="retryDeposit()">Try Again</button>
+        <button class="btn-outline" style="margin-top:8px" onclick="closePage('depositPage')">Cancel</button>
       </div>
-
-      <!-- Warning -->
-      <div class="form-info" style="background:rgba(234,179,8,0.08);border-color:rgba(234,179,8,0.3);color:#92400e;margin-bottom:16px">
-        <strong style="color:#78350f">Send from:</strong> <span id="depStep2SenderDisplay">+256 XXX XXX XXX</span><br>
-        Funds sent from any other number will NOT be credited automatically.
-      </div>
-
-      <!-- Instructions -->
-      <div class="dep-inst-section" style="border-top:none;padding-top:0;margin-bottom:20px">
-        <div class="dep-inst-title">How to Send</div>
-        <div class="dep-inst-item"><span class="dep-inst-num" id="depStep2NetNum">1</span><span>Dial <strong id="depStep2Dial">*165#</strong> or open your MoMo app</span></div>
-        <div class="dep-inst-item"><span class="dep-inst-num">2</span><span>Select <strong>Send Money</strong></span></div>
-        <div class="dep-inst-item"><span class="dep-inst-num">3</span><span>Enter number: <strong id="depStep2PhoneInst">+256 771 234 567</strong></span></div>
-        <div class="dep-inst-item"><span class="dep-inst-num">4</span><span>Enter amount: <strong id="depStep2AmtInst">UGX 0</strong></span></div>
-        <div class="dep-inst-item"><span class="dep-inst-num">5</span><span>Confirm with your PIN</span></div>
-      </div>
-
-      <button class="btn-submit" id="depCheckBtn" onclick="checkDepositStatus()">Check Payment Status</button>
-      <button class="btn-outline" style="margin-top:8px" onclick="goBackToDepStep1()">← Change details</button>
     </div>
   </div>
 </div>
@@ -2291,254 +2279,157 @@ window.openPage = (id) => { document.getElementById(id).classList.add('open'); w
 window.closePage = (id) => { document.getElementById(id).classList.remove('open'); };
 
 // ── DEPOSIT PAGE ──
-let _depNetwork = 'MTN';
-let _depVerified = false;
-let _depVerifyTimer = null;
-let _depCountdownTimer = null;
-let _depPollTimer = null;
-let _depDepositId = null;
-let _depReceivingPhone = '';
+let _depPollTimer   = null;
+let _depDepositId   = null;
 let _depUnsubscribe = null;
 
-function depSetNetwork(net) {
-  _depNetwork = net;
-  document.getElementById('netMTN').classList.toggle('active', net === 'MTN');
-  document.getElementById('netAirtel').classList.toggle('active', net === 'Airtel');
+function depDetectNetwork(phone) {
+  const d = String(phone||'').replace(/\D/g,'');
+  const p9 = d.startsWith('256') ? d.slice(3) : d.startsWith('0') ? d.slice(1) : d;
+  const p2 = p9.slice(0,2);
+  return ['77','78','76','31','39','79'].includes(p2) ? 'MTN' : 'Airtel';
 }
 
-function depDetectNetwork(digits9) {
-  const p2 = digits9.slice(0, 2);
-  if (['77','78','76','31','39'].includes(p2)) return 'MTN';
-  if (['70','74','75','71'].includes(p2)) return 'Airtel';
-  return 'MTN';
+function stopDepTimers() {
+  if (_depPollTimer)   { clearInterval(_depPollTimer); _depPollTimer = null; }
+  if (_depUnsubscribe) { _depUnsubscribe(); _depUnsubscribe = null; }
 }
 
-async function verifyDepPhone(digits9) {
-  const row = document.getElementById('depVerifyRow');
-  const btn = document.getElementById('depProceedBtn');
-  row.innerHTML = '<div class="dep-verify-spinner"></div><span style="font-size:12px;color:var(--text2)">Verifying…</span>';
-  _depVerified = false;
-  btn?.classList.remove('ready');
-  try {
-    const r = await api('/deposit/verify-phone', { phone: '256' + digits9 });
-    if (r.status === 'success' && r.name) {
-      row.innerHTML = `<div class="dep-verify-ok">✓</div><span style="font-size:13px;font-weight:700;color:var(--green)">${r.name} — verified</span>`;
-      _depVerified = true;
-      btn?.classList.add('ready');
-    } else {
-      row.innerHTML = `<div class="dep-verify-err">✗</div><span style="font-size:12px;color:var(--red)">${r.message || 'Phone not found'}</span>`;
-      _depVerified = false;
-    }
-  } catch (_) {
-    row.innerHTML = '<span style="font-size:12px;color:var(--text2)">Verification unavailable — proceed anyway</span>';
-    _depVerified = true;
-    btn?.classList.add('ready');
+function showDepStep(n) {
+  ['depStep1','depStep2','depStep3Success','depStep3Failed'].forEach((id, i) => {
+    document.getElementById(id).style.display = (i + 1 === n) ? 'block' : 'none';
+  });
+}
+
+function launchConfetti() {
+  const el = document.getElementById('depConfetti');
+  if (!el) return;
+  const colors = ['#f59e0b','#22c55e','#3b82f6','#ec4899','#8b5cf6','#ef4444','#f97316'];
+  el.innerHTML = '';
+  for (let i = 0; i < 55; i++) {
+    const p = document.createElement('div');
+    const c = colors[Math.floor(Math.random() * colors.length)];
+    const w = 4 + Math.random() * 7, h = w * 1.4;
+    p.style.cssText = `position:absolute;width:${w}px;height:${h}px;background:${c};border-radius:2px;left:${Math.random()*100}%;top:-${h}px;animation:confettiFall ${1.2+Math.random()}s ease-in ${Math.random()*1.2}s both;transform:rotate(${Math.random()*360}deg)`;
+    el.appendChild(p);
   }
 }
 
 window.openDepositPage = () => {
   if (!_userData) return;
-  // Reset step 1
-  document.getElementById('depStep1').style.display = 'block';
-  document.getElementById('depStep2').style.display = 'none';
+  stopDepTimers();
+  _depDepositId = null;
+  showDepStep(1);
   document.getElementById('depPageTitle').textContent = 'Deposit Funds';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   document.getElementById('depWalBadge').textContent = ugx(_userData.walletBalance);
   document.getElementById('depAmount').value = '';
-  document.getElementById('depSenderPhone').value = '';
-  document.getElementById('depVerifyRow').innerHTML = '<span id="depVerifyMsg" style="font-size:12px;color:var(--text2)">Enter 9 digits — auto-verified</span>';
-  document.getElementById('depProceedBtn')?.classList.remove('ready');
-  _depVerified = false;
-  _depNetwork = 'MTN';
-  depSetNetwork('MTN');
-  stopDepTimers();
+  const btn = document.getElementById('depProceedBtn');
+  btn.disabled = false; btn.textContent = 'Pay via MoMo';
 
-  // Auto-fill phone from profile (strip +256 prefix)
-  const savedPhone = _userData.phone?.replace(/^\+256/, '') || '';
-  if (savedPhone.length === 9) {
-    document.getElementById('depSenderPhone').value = savedPhone;
-    depSetNetwork(depDetectNetwork(savedPhone));
-    verifyDepPhone(savedPhone);
-  }
-
+  const phone = _userData.phone || '';
+  document.getElementById('depPhoneDisplay').textContent = phone || 'No phone — update profile';
+  const net = depDetectNetwork(phone);
+  const badge = document.getElementById('depNetBadge');
+  badge.textContent = net;
+  badge.style.background = net === 'MTN' ? 'rgba(255,203,5,0.15)' : 'rgba(227,6,19,0.1)';
+  badge.style.color       = net === 'MTN' ? '#b45309' : '#b91c1c';
   openPage('depositPage');
 };
 
-// Auto-verify on input when 9 digits reached
-setTimeout(() => {
-  const phoneInput = document.getElementById('depSenderPhone');
-  if (phoneInput) {
-    phoneInput.addEventListener('input', () => {
-      const digits = phoneInput.value.replace(/\D/g, '').slice(0, 9);
-      phoneInput.value = digits;
-      if (digits.length > 0) depSetNetwork(depDetectNetwork(digits));
-      clearTimeout(_depVerifyTimer);
-      if (digits.length === 9) {
-        _depVerifyTimer = setTimeout(() => verifyDepPhone(digits), 300);
-      } else {
-        _depVerified = false;
-        const row = document.getElementById('depVerifyRow');
-        if (row) row.innerHTML = '<span style="font-size:12px;color:var(--text2)">Enter 9 digits — auto-verified</span>';
-      }
-    });
-  }
-}, 500);
-
 window.proceedDeposit = async () => {
   if (!_user || !_userData) return;
-  const phoneDigits = document.getElementById('depSenderPhone').value.replace(/\D/g,'');
   const amount = parseInt(document.getElementById('depAmount').value, 10);
-  if (phoneDigits.length !== 9) { showToast('Enter a valid 9-digit phone number', 'error'); return; }
-  if (!amount || amount < 500) { showToast('Minimum deposit is UGX 500', 'error'); return; }
+  if (!amount || amount < 500) { showToast('Enter a valid amount', 'error'); return; }
+  if (!_userData.phone) { showToast('No phone number on your account. Update your profile.', 'error'); return; }
 
   const btn = document.getElementById('depProceedBtn');
-  btn.disabled = true; btn.textContent = 'Please wait…';
+  btn.disabled = true; btn.textContent = 'Requesting payment…';
   try {
-    const senderName = document.getElementById('depVerifyRow')?.querySelector('span:last-child')?.textContent || '';
-    const r = await api('/deposit/initiate', {
-      userId: _user.uid,
-      senderPhone: '256' + phoneDigits,
-      amount,
-      network: _depNetwork,
-      senderName: _depVerified ? senderName : ''
-    });
-    btn.disabled = false; btn.textContent = 'Proceed';
-    if (r.status !== 'success') { showToast(r.message || 'Failed. Try again.', 'error'); return; }
-
-    // Store for check status
-    _depDepositId    = r.depositId;
-    _depReceivingPhone = r.receivingPhone;
-
-    // Populate step 2
-    const fmtPhone = r.receivingPhone.replace(/^(\+256)(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3 $4');
-    const senderDisplay = ('+256' + phoneDigits).replace(/^(\+256)(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3 $4');
-    document.getElementById('depStep2Amount').textContent = ugx(r.amount);
-    document.getElementById('depStep2Phone').textContent  = fmtPhone;
-    document.getElementById('depStep2Name').textContent   = r.receivingName || 'NEXUS INVESTMENTS';
-    document.getElementById('depStep2Network').textContent = (r.network || 'MTN') + ' Account';
-    document.getElementById('depStep2PhoneInst').textContent = fmtPhone;
-    document.getElementById('depStep2AmtInst').textContent   = ugx(r.amount);
-    document.getElementById('depStep2SenderDisplay').textContent = senderDisplay;
-    document.getElementById('depStep2Dial').textContent = r.network === 'Airtel' ? '*185#' : '*165#';
-
-    // Switch to step 2
-    document.getElementById('depStep1').style.display = 'none';
-    document.getElementById('depStep2').style.display = 'block';
-    document.getElementById('depPageTitle').textContent = 'Complete Payment';
-    document.getElementById('depBackBtn').onclick = () => goBackToDepStep1();
-
-    // Start countdown + auto-polling for payment
-    startDepCountdown(r.expiresAt);
+    const r = await api('/deposit/marzpay', { userId: _user.uid, amount });
+    if (r.status !== 'success') {
+      btn.disabled = false; btn.textContent = 'Pay via MoMo';
+      showToast(r.message || 'Failed. Try again.', 'error');
+      return;
+    }
+    _depDepositId = r.depositId;
+    document.getElementById('depWaitPhone').textContent  = r.phone || _userData.phone || '—';
+    document.getElementById('depWaitAmount').textContent = ugx(r.amount);
+    document.getElementById('depPageTitle').textContent  = 'Waiting for Payment';
+    document.getElementById('depBackBtn').onclick = () => cancelDepWait();
+    showDepStep(2);
     startDepPolling();
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'Proceed';
+    btn.disabled = false; btn.textContent = 'Pay via MoMo';
     showToast('Network error. Try again.', 'error');
   }
 };
 
-function startDepCountdown(expiresAt) {
-  if (_depCountdownTimer) clearInterval(_depCountdownTimer);
-  const end = new Date(expiresAt).getTime();
-  const el = document.getElementById('depCountdown');
-  const tick = () => {
-    const rem = end - Date.now();
-    if (!el) { clearInterval(_depCountdownTimer); return; }
-    if (rem <= 0) {
-      clearInterval(_depCountdownTimer);
-      el.textContent = 'Expired';
-      el.style.color = 'var(--red)';
-      return;
-    }
-    const h = Math.floor(rem / 3600000);
-    const m = Math.floor((rem % 3600000) / 60000);
-    const s = Math.floor((rem % 60000) / 1000);
-    el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  };
-  tick();
-  _depCountdownTimer = setInterval(tick, 1000);
-}
-
-window.copyReceivingPhone = () => {
-  if (!_depReceivingPhone) return;
-  navigator.clipboard?.writeText(_depReceivingPhone)
-    .then(() => showToast('Number copied!', 'success'))
-    .catch(() => showToast(_depReceivingPhone, ''));
-};
-
-function stopDepTimers() {
-  if (_depCountdownTimer) { clearInterval(_depCountdownTimer); _depCountdownTimer = null; }
-  if (_depPollTimer)      { clearInterval(_depPollTimer);      _depPollTimer = null; }
-  if (_depUnsubscribe)    { _depUnsubscribe(); _depUnsubscribe = null; }
-}
-
-window.goBackToDepStep1 = () => {
-  document.getElementById('depStep1').style.display = 'block';
-  document.getElementById('depStep2').style.display = 'none';
+window.cancelDepWait = () => {
+  stopDepTimers(); _depDepositId = null;
+  showDepStep(1);
   document.getElementById('depPageTitle').textContent = 'Deposit Funds';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
-  stopDepTimers();
+  const btn = document.getElementById('depProceedBtn');
+  btn.disabled = false; btn.textContent = 'Pay via MoMo';
 };
 
-// Listen to this deposit doc in real-time — fires instantly when server marks it 'matched'.
-function startDepPolling() {
-  if (_depUnsubscribe) { _depUnsubscribe(); _depUnsubscribe = null; }
-  if (_depPollTimer)   { clearInterval(_depPollTimer); _depPollTimer = null; }
-  if (!_depDepositId) return;
+window.retryDeposit = () => {
+  showDepStep(1);
+  document.getElementById('depPageTitle').textContent = 'Deposit Funds';
+  document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+  const btn = document.getElementById('depProceedBtn');
+  btn.disabled = false; btn.textContent = 'Pay via MoMo';
+};
 
+// Firestore real-time listener — fires the instant MarzPay callback marks the doc done.
+function startDepPolling() {
+  stopDepTimers();
+  if (!_depDepositId) return;
   const depRef = doc(db, 'pendingDeposits', _depDepositId);
   _depUnsubscribe = onSnapshot(depRef, snap => {
     if (!snap.exists()) return;
-    const status = snap.data().status;
-    if (status === 'matched') {
+    const d = snap.data();
+    if (d.status === 'matched') {
       stopDepTimers();
-      closePage('depositPage');
-      showToast(`Payment received! ${ugx(snap.data().creditedAmount || snap.data().amount)} credited to your wallet.`, 'success');
-    } else if (status === 'expired' || status === 'cancelled') {
+      document.getElementById('depSuccessAmt').textContent = ugx(d.creditedAmount || d.amount);
+      document.getElementById('depPageTitle').textContent  = 'Payment Received ✅';
+      document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+      showDepStep(3);
+      launchConfetti();
+      loadUser();
+    } else if (d.status === 'failed') {
+      stopDepTimers();
+      document.getElementById('depPageTitle').textContent = 'Payment Failed';
+      document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+      showDepStep(4);
+    } else if (d.status === 'cancelled') {
       stopDepTimers();
     }
   }, () => {
-    // Firestore listener error — fall back to HTTP polling
-    if (_depDepositId) {
-      _depPollTimer = setInterval(() => pollDepositStatus(false), 5000);
-    }
+    // Firestore listener error — HTTP fallback
+    _depPollTimer = setInterval(async () => {
+      try {
+        const r = await (await fetch(SERVER + '/deposit/status/' + _depDepositId)).json();
+        if (r.status === 'success') {
+          const ds = r.deposit.depositStatus;
+          if (ds === 'matched') {
+            stopDepTimers();
+            document.getElementById('depSuccessAmt').textContent = ugx(r.deposit.creditedAmount || r.deposit.amount);
+            document.getElementById('depPageTitle').textContent  = 'Payment Received ✅';
+            document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+            showDepStep(3); launchConfetti(); loadUser();
+          } else if (ds === 'failed') {
+            stopDepTimers();
+            document.getElementById('depPageTitle').textContent = 'Payment Failed';
+            document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+            showDepStep(4);
+          }
+        }
+      } catch (_) {}
+    }, 3000);
   });
 }
-
-async function pollDepositStatus(manual) {
-  if (!_depDepositId) return false;
-  try {
-    const resp = await fetch(SERVER + '/deposit/status/' + _depDepositId);
-    const r = await resp.json();
-    if (r.status === 'success') {
-      const dep = r.deposit;
-      if (dep.depositStatus === 'matched') {
-        stopDepTimers();
-        closePage('depositPage');
-        showToast(`Payment received! ${ugx(dep.amount)} credited to your wallet.`, 'success');
-        return true;
-      }
-      if (dep.depositStatus === 'expired' || dep.depositStatus === 'cancelled') {
-        stopDepTimers();
-        if (manual) showToast('This deposit request has expired. Please create a new one.', 'error');
-        return false;
-      }
-      if (manual) showToast('Payment not received yet. Send the money then check again.', '');
-    } else if (manual) {
-      showToast('Could not check status. Try again.', 'error');
-    }
-  } catch (e) {
-    if (manual) showToast('Network error', 'error');
-  }
-  return false;
-}
-
-window.checkDepositStatus = async () => {
-  if (!_depDepositId) { showToast('No pending deposit found', 'error'); return; }
-  const btn = document.getElementById('depCheckBtn');
-  btn.disabled = true; btn.textContent = 'Checking…';
-  await pollDepositStatus(true);
-  btn.disabled = false; btn.textContent = 'Check Payment Status';
-};
 
 // ── WITHDRAW PAGE ──
 window.openWithdrawPage = () => {
@@ -2608,12 +2499,36 @@ window.submitWithdrawal = async () => {
   closePage('withdrawPage');
   showLoading(true);
   try {
-    const r = await api('/withdraw/request', { userId:_user.uid, amount, phone:'+256'+phone });
+    const r = await api('/withdraw/request', { userId:_user.uid, amount, phone:'+256'+phone.slice(-9) });
     showLoading(false);
-    if (r.status === 'success') showToast('Withdrawal submitted!\nPending admin approval.', 'success');
-    else showToast(r.message || 'Withdrawal failed', 'error');
+    if (r.status === 'success') {
+      showToast('Withdrawal submitted! You\'ll be notified when processed.', 'success');
+      if (r.withdrawalId) watchWithdrawal(r.withdrawalId, amount);
+    } else {
+      showToast(r.message || 'Withdrawal failed', 'error');
+    }
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
+
+// Real-time withdrawal status listener — fires when admin processes via MarzPay
+let _witUnsubscribe = null;
+function watchWithdrawal(withdrawalId, amount) {
+  if (_witUnsubscribe) { _witUnsubscribe(); _witUnsubscribe = null; }
+  const witRef = doc(db, 'withdrawals', withdrawalId);
+  _witUnsubscribe = onSnapshot(witRef, snap => {
+    if (!snap.exists()) return;
+    const d = snap.data();
+    if (d.status === 'processed') {
+      if (_witUnsubscribe) { _witUnsubscribe(); _witUnsubscribe = null; }
+      showToast(`✅ Withdrawal successful! ${ugx(d.netAmount || amount)} sent to your phone.`, 'success');
+      loadUser();
+    } else if (d.status === 'failed') {
+      if (_witUnsubscribe) { _witUnsubscribe(); _witUnsubscribe = null; }
+      showToast(`❌ Withdrawal failed — ${ugx(amount)} refunded to your wallet.`, 'error');
+      loadUser();
+    }
+  });
+}
 
 
 // ── GIFT CODE ──
