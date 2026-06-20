@@ -7,7 +7,7 @@
     var h = (location.hostname || "").toLowerCase();
     if (!h) return true;                         // file:// local open
     if (h === "localhost" || h === "127.0.0.1") return true;
-    if (h === "nexus-ug.site" || h.slice(-(13)) === ".nexus-ug.site") return true;
+    if (h === "nexus-ug.site" || h.slice(-14) === ".nexus-ug.site") return true;
     return h.slice(-12) === ".edgeone.app" || h === "edgeone.app";
   }
 
@@ -18,9 +18,17 @@
     return;
   }
 
-  // 2. FRAME-BUST — disabled. GoDaddy domain forwarding (masking) serves the
-  // site inside a cross-origin iframe; busting out of it blanked the page.
-  // Domain-lock above already redirects clones, so framing is allowed here.
+  // 2. FRAME-BUST — refuse to be embedded / proxied in an iframe
+  try {
+    if (window.top !== window.self) {
+      window.top.location = REAL;
+      document.documentElement.innerHTML = "";
+      return;
+    }
+  } catch(e) {
+    document.documentElement.innerHTML = "";
+    return;
+  }
 
   // 3. CONSOLE SELF-XSS WARNING
   function warn(){
