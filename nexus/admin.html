@@ -1007,18 +1007,20 @@ async function loadDashboard() {
       const amtStr = (amt >= 0 ? '+' : '') + ugx(amt);
       const amtColor = amt >= 0 ? 'color:var(--green)' : 'color:var(--red)';
       return `<tr>
+        <td style="font-size:10px;color:var(--text2);font-family:monospace">${d.id.slice(0,10)}…</td>
         <td>${t.userId ? t.userId.slice(0,8)+'…' : '—'}</td>
         <td><span class="badge-status bs-pending" style="text-transform:none">${t.type||'—'}</span></td>
+        <td style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.description||''}">${t.description||'—'}</td>
         <td style="${amtColor};font-weight:600">${amtStr}</td>
         <td>${statusBadge(t.status||'unknown')}</td>
         <td class="text-muted">${fmtDate(t.createdAt)}</td>
       </tr>`;
-    }).join('') || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:24px">No transactions yet</td></tr>';
+    }).join('') || '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:24px">No transactions yet</td></tr>';
 
     document.getElementById('recentTxTable').innerHTML = `
       <div class="table-wrap">
         <table>
-          <thead><tr><th>User</th><th>Type</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+          <thead><tr><th>Tx ID</th><th>User</th><th>Type</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;

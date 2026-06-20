@@ -35,7 +35,7 @@ const RAILWAY_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 
-const MIN_WITHDRAWAL   = 1000;  // testing — raise to 15000 in Firestore settings for production
+const MIN_WITHDRAWAL   = 15000;
 const CHECKIN_BONUS    = 500;
 const WELCOME_BONUS    = 7000;
 const COMM_L1          = 0.10;
@@ -44,9 +44,12 @@ const COMM_L3          = 0.02;
 const LIQUIDITY_FEE    = 0.17;
 // Agent tier ladder — ordered highest → lowest (array order matters for findIndex)
 const AGENT_TIERS = [
-  { key: 'regional_agent', label: 'Regional Agent', threshold: 20, weeklyPay: 200000 },
-  { key: 'senior_agent',   label: 'Senior Agent',   threshold: 15, weeklyPay: 125000 },
-  { key: 'agent',          label: 'Agent',           threshold: 10, weeklyPay:  75000 },
+  { key: 'executive_agent', label: 'Executive Agent', icon: '🚀', threshold: 50, weeklyPay: 500000 },
+  { key: 'national_agent',  label: 'National Agent',  icon: '👑', threshold: 30, weeklyPay: 300000 },
+  { key: 'regional_agent',  label: 'Regional Agent',  icon: '💎', threshold: 20, weeklyPay: 180000 },
+  { key: 'super_agent',     label: 'Super Agent',     icon: '🥇', threshold: 15, weeklyPay: 120000 },
+  { key: 'agent',           label: 'Agent',           icon: '🥈', threshold: 10, weeklyPay:  75000 },
+  { key: 'junior_agent',    label: 'Junior Agent',    icon: '🥉', threshold:  5, weeklyPay:  30000 },
 ];
 function getTierForCount(count) {
   return AGENT_TIERS.find(t => count >= t.threshold) || null;
@@ -293,7 +296,7 @@ async function checkAgentPromotion(investorId) {
     if (!refSnap.exists) return;
 
     // Already at highest tier — nothing to check
-    if (refSnap.data().agentTier === 'regional_agent') return;
+    if (refSnap.data().agentTier === 'executive_agent') return;
 
     // Count direct referrals who have actually invested
     const teamSnap = await db.collection('users')
@@ -536,8 +539,7 @@ app.post('/sms/incoming', async (req, res) => {
 
       const now = new Date();
       const { date, time } = nowStr();
-      // Deposit hold: credits are withdrawable after 5 min during testing (set to 60min in prod)
-      const withdrawableAt = new Date(now.getTime() + 5 * 60 * 1000);
+      const withdrawableAt = new Date(now.getTime() + 60 * 60 * 1000); // 60-min hold
 
       // Find matching pending deposit: senderPhone + pending + not expired
       let matchedDep = null, matchedRef = null;
@@ -863,6 +865,11 @@ app.post('/withdraw/request', async (req, res) => {
     const minWit  = sett.minWithdrawal ?? MIN_WITHDRAWAL;
     if (amt < minWit)
       return res.status(400).json({ status: 'error', message: `Minimum withdrawal is ${fmtUGX(minWit)}` });
+    if (amt % 5000 !== 0) {
+      const lo = Math.floor(amt / 5000) * 5000;
+      const hi = lo + 5000;
+      return res.status(400).json({ status: 'error', message: `Amount must be a multiple of UGX 5,000. Try ${fmtUGX(lo >= minWit ? lo : hi)} or ${fmtUGX(hi)}` });
+    }
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
@@ -1435,7 +1442,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
-    const minDep = sett.minDeposit || 500;
+    const minDep = sett.minDeposit || 30000;
     if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
 
     // Use phone from request if provided, otherwise fall back to profile phone
@@ -1530,7 +1537,7 @@ app.post('/deposit/initiate', async (req, res) => {
     // Get settings
     const settSnap = await db.collection('settings').doc('main').get();
     const settings = settSnap.exists ? settSnap.data() : {};
-    const minDep = settings.minDeposit || 500;
+    const minDep = settings.minDeposit || 30000;
     if (amt < minDep)
       return res.json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
 
@@ -1605,7 +1612,7 @@ app.post('/deposit/initiate', async (req, res) => {
 app.get('/deposit/config', async (_req, res) => {
   try {
     const sett = await getSettings();
-    return res.json({ status: 'success', minDeposit: sett.minDeposit || 500 });
+    return res.json({ status: 'success', minDeposit: sett.minDeposit || 30000 });
   } catch (e) { return res.json({ status: 'success', minDeposit: 500 }); }
 });
 
