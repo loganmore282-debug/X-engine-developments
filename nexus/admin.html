@@ -559,33 +559,6 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
 
-      <!-- Receiving Numbers for SMS Deposits -->
-      <div class="card" style="margin-top:12px">
-        <div class="card-title">📱 Deposit Receiving Numbers</div>
-        <p class="text-muted" style="font-size:13px;margin-bottom:16px">Users send MoMo to these numbers. The SMS Forwarder on that phone forwards the SMS to the server to auto-credit wallets.</p>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">MTN Receiving Number (+256...)</label>
-            <input class="form-input" id="settMtnPhone" placeholder="+256771234567">
-          </div>
-          <div class="form-group">
-            <label class="form-label">MTN Account Name</label>
-            <input class="form-input" id="settMtnName" placeholder="NEXUS INVESTMENTS">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Airtel Receiving Number (+256...)</label>
-            <input class="form-input" id="settAirtelPhone" placeholder="+256751234567">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Airtel Account Name</label>
-            <input class="form-input" id="settAirtelName" placeholder="NEXUS INVESTMENTS">
-          </div>
-        </div>
-        <button class="btn btn-primary" onclick="saveReceivingNumbers()">Save Receiving Numbers</button>
-      </div>
-
       <!-- Customer Service Links -->
       <div class="card" style="margin-top:12px">
         <div class="card-title">📞 Customer Service</div>
@@ -1835,11 +1808,6 @@ async function loadSettings() {
     document.getElementById('depositInstructions').value = depInst;
     if (prodBanner) { const p=document.getElementById('productsBannerPreview'); p.src=prodBanner; p.style.display='block'; }
     if (depImg)     { const p=document.getElementById('depositImagePreview');   p.src=depImg;     p.style.display='block'; }
-    // Receiving numbers
-    document.getElementById('settMtnPhone').value    = s.mtnReceivingPhone    || '';
-    document.getElementById('settMtnName').value     = s.mtnReceivingName     || '';
-    document.getElementById('settAirtelPhone').value = s.airtelReceivingPhone || '';
-    document.getElementById('settAirtelName').value  = s.airtelReceivingName  || '';
     // Customer service
     document.getElementById('settSupportTg').value    = s.supportTelegram || '';
     document.getElementById('settSupportWa').value    = s.supportWhatsapp || '';
@@ -1927,19 +1895,6 @@ window.saveContentImages = async () => {
   try {
     await setDoc(doc(db,'settings','main'), data, { merge:true });
     showToast('Content images saved!', 'success');
-  } catch(e) { showToast('Error saving', 'error'); }
-};
-
-window.saveReceivingNumbers = async () => {
-  const data = {
-    mtnReceivingPhone:    document.getElementById('settMtnPhone').value.trim(),
-    mtnReceivingName:     document.getElementById('settMtnName').value.trim(),
-    airtelReceivingPhone: document.getElementById('settAirtelPhone').value.trim(),
-    airtelReceivingName:  document.getElementById('settAirtelName').value.trim()
-  };
-  try {
-    await setDoc(doc(db,'settings','main'), data, { merge:true });
-    showToast('Receiving numbers saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
 

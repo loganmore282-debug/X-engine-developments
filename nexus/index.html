@@ -2384,7 +2384,7 @@ window.proceedDeposit = async () => {
 };
 
 window.cancelDepWait = () => {
-  stopDepTimers(); _depDepositId = null;
+  stopDepTimers(); _depDepositId = null; _depResolved = false;
   showDepStep(1);
   document.getElementById('depPageTitle').textContent = 'Deposit Funds';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
@@ -2393,6 +2393,7 @@ window.cancelDepWait = () => {
 };
 
 window.retryDeposit = () => {
+  _depResolved = false;
   showDepStep(1);
   document.getElementById('depPageTitle').textContent = 'Deposit Funds';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
@@ -2400,53 +2401,58 @@ window.retryDeposit = () => {
   btn.disabled = false; btn.textContent = 'Pay via MoMo';
 };
 
-// Firestore real-time listener — fires the instant MarzPay callback marks the doc done.
+// Deposit result handler — called by either Firestore listener or HTTP poll.
+let _depResolved = false;
+function handleDepResult(status, creditedAmount, amount) {
+  if (_depResolved) return;
+  if (status === 'matched') {
+    _depResolved = true;
+    stopDepTimers();
+    document.getElementById('depSuccessAmt').textContent = ugx(creditedAmount || amount);
+    document.getElementById('depPageTitle').textContent  = 'Payment Received ✅';
+    document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+    showDepStep(3); launchConfetti(); loadUser();
+  } else if (status === 'failed') {
+    _depResolved = true;
+    stopDepTimers();
+    document.getElementById('depPageTitle').textContent = 'Payment Failed';
+    document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+    showDepStep(4);
+  } else if (status === 'cancelled') {
+    _depResolved = true;
+    stopDepTimers();
+  }
+}
+
+// Dual-track: Firestore listener (instant when webhook fires) +
+// HTTP server poll (fallback that actively checks MarzPay on the server).
+// Both run in parallel — whichever resolves first wins.
 function startDepPolling() {
   stopDepTimers();
+  _depResolved = false;
   if (!_depDepositId) return;
-  const depRef = doc(db, 'pendingDeposits', _depDepositId);
-  _depUnsubscribe = onSnapshot(depRef, snap => {
-    if (!snap.exists()) return;
-    const d = snap.data();
-    if (d.status === 'matched') {
-      stopDepTimers();
-      document.getElementById('depSuccessAmt').textContent = ugx(d.creditedAmount || d.amount);
-      document.getElementById('depPageTitle').textContent  = 'Payment Received ✅';
-      document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
-      showDepStep(3);
-      launchConfetti();
-      loadUser();
-    } else if (d.status === 'failed') {
-      stopDepTimers();
-      document.getElementById('depPageTitle').textContent = 'Payment Failed';
-      document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
-      showDepStep(4);
-    } else if (d.status === 'cancelled') {
-      stopDepTimers();
-    }
-  }, () => {
-    // Firestore listener error — HTTP fallback
-    _depPollTimer = setInterval(async () => {
-      try {
-        const r = await (await fetch(SERVER + '/deposit/status/' + _depDepositId)).json();
-        if (r.status === 'success') {
-          const ds = r.deposit.depositStatus;
-          if (ds === 'matched') {
-            stopDepTimers();
-            document.getElementById('depSuccessAmt').textContent = ugx(r.deposit.creditedAmount || r.deposit.amount);
-            document.getElementById('depPageTitle').textContent  = 'Payment Received ✅';
-            document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
-            showDepStep(3); launchConfetti(); loadUser();
-          } else if (ds === 'failed') {
-            stopDepTimers();
-            document.getElementById('depPageTitle').textContent = 'Payment Failed';
-            document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
-            showDepStep(4);
-          }
-        }
-      } catch (_) {}
-    }, 3000);
-  });
+
+  // Track 1 — Firestore real-time (instant when server credits via webhook)
+  try {
+    const depRef = doc(db, 'pendingDeposits', _depDepositId);
+    _depUnsubscribe = onSnapshot(depRef, snap => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      handleDepResult(d.status, d.creditedAmount, d.amount);
+    }, () => {});
+  } catch (_) {}
+
+  // Track 2 — HTTP poll every 5 s; server calls MarzPay status API if still processing
+  _depPollTimer = setInterval(async () => {
+    if (_depResolved) return;
+    try {
+      const r = await (await fetch(SERVER + '/deposit/status/' + _depDepositId)).json();
+      if (r.status === 'success') {
+        const d = r.deposit;
+        handleDepResult(d.depositStatus, d.creditedAmount, d.amount);
+      }
+    } catch (_) {}
+  }, 5000);
 }
 
 // ── WITHDRAW PAGE ──

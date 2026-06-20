@@ -1577,26 +1577,100 @@ app.get('/deposit/config', async (_req, res) => {
   } catch (e) { return res.json({ status: 'success', minDeposit: 500 }); }
 });
 
+// Shared: credit a completed MarzPay deposit and update Firestore atomically.
+// Used by both the webhook and the active-polling fallback.
+async function creditMarzDeposit(depDoc, amount, provTxId) {
+  const dep = depDoc.data();
+  if (dep.status === 'matched' || dep.status === 'failed') return false;
+  const { date, time } = nowStr();
+  await db.runTransaction(async t => {
+    const fresh = await t.get(depDoc.ref);
+    if (!fresh.exists) throw new Error('Deposit not found');
+    if (fresh.data().status === 'matched' || fresh.data().status === 'failed') return;
+    const uRef  = db.collection('users').doc(dep.userId);
+    const uSnap = await t.get(uRef);
+    if (!uSnap.exists) throw new Error('User not found');
+    const bal = uSnap.data().walletBalance || 0;
+    const holdUntil = new Date(Date.now() + 60 * 60 * 1000);
+    t.update(uRef, {
+      walletBalance:    bal + amount,
+      totalDeposited:   FieldValue.increment(amount),
+      withdrawableFrom: admin.firestore.Timestamp.fromDate(holdUntil)
+    });
+    t.update(depDoc.ref, {
+      status: 'matched', creditedAmount: amount,
+      providerTxId: provTxId || null, matchedAt: FieldValue.serverTimestamp()
+    });
+    t.set(db.collection('transactions').doc(), {
+      userId: dep.userId, type: 'deposit',
+      description: 'MoMo deposit via MarzPay',
+      amount, status: 'success', date, time, marzReference: dep.marzReference,
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+  return true;
+}
+
+// Active MarzPay status check — polls MarzPay API for a processing deposit.
+// Returns { credited, failed } or throws.
+async function pollMarzDepositStatus(depDoc) {
+  const dep = depDoc.data();
+  const id  = dep.marzTxUuid || dep.marzReference;
+  if (!id || !MARZPAY_KEY) return { credited: false, failed: false };
+  const mpRes  = await fetch(`${MARZPAY_BASE}/transactions/${id}`, {
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+  });
+  const mpData = await mpRes.json();
+  console.log(`MarzPay poll [${dep.marzReference}]:`, JSON.stringify(mpData));
+  const txStatus  = mpData.transaction?.status  || '';
+  const evtType   = mpData.event_type           || '';
+  const isSuccess = txStatus === 'completed' || evtType === 'collection.completed';
+  const isFail    = txStatus === 'failed'    || evtType === 'collection.failed';
+  if (isSuccess) {
+    const amount   = mpData.transaction?.amount?.raw || mpData.collection?.amount?.raw || dep.amount;
+    const provTxId = mpData.collection?.provider_transaction_id || null;
+    await creditMarzDeposit(depDoc, amount, provTxId);
+    return { credited: true, failed: false, amount, provTxId };
+  }
+  if (isFail) {
+    await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(),
+      failureReason: mpData.transaction?.failure_reason || 'Payment failed' });
+    return { credited: false, failed: true };
+  }
+  return { credited: false, failed: false };
+}
+
 app.get('/deposit/status/:id', async (req, res) => {
   try {
     const snap = await db.collection('pendingDeposits').doc(req.params.id).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Not found' });
-    const dep = snap.data();
+    let dep = snap.data();
+
+    // If still processing, actively check MarzPay — this is the webhook fallback
+    if (dep.status === 'processing') {
+      try {
+        const result = await pollMarzDepositStatus(snap);
+        if (result.credited || result.failed) {
+          const fresh = await db.collection('pendingDeposits').doc(snap.id).get();
+          dep = fresh.data();
+        }
+      } catch (pollErr) { console.warn('MarzPay poll error:', pollErr.message); }
+    }
+
     return res.json({
       status: 'success',
       deposit: {
-        id: snap.id,
+        id:             snap.id,
         depositStatus:  dep.status,
         amount:         dep.amount,
         creditedAmount: dep.creditedAmount || dep.amount,
-        network:        dep.network || null,
-        expiresAt:      dep.expiresAt?.toDate?.()?.toISOString?.() || null
+        network:        dep.network || null
       }
     });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// MarzPay deposit webhook — fires when collection is completed or failed
+// MarzPay deposit webhook — fires when collection completes or fails
 app.post('/deposit/callback', async (req, res) => {
   res.json({ received: true });
   const body      = req.body;
@@ -1608,37 +1682,12 @@ app.post('/deposit/callback', async (req, res) => {
     const depSnap = await db.collection('pendingDeposits')
       .where('marzReference', '==', reference).limit(1).get();
     if (depSnap.empty) { console.log('No pendingDeposit for ref:', reference); return; }
-    const depDoc = depSnap.docs[0];
-    const dep    = depDoc.data();
-    if (dep.status === 'matched' || dep.status === 'failed') return; // idempotent
-    const { date, time } = nowStr();
-
+    const depDoc  = depSnap.docs[0];
     if (eventType === 'collection.completed') {
-      const amount   = body.transaction?.amount?.raw || body.collection?.amount?.raw || dep.amount;
+      const amount   = body.transaction?.amount?.raw || body.collection?.amount?.raw || depDoc.data().amount;
       const provTxId = body.collection?.provider_transaction_id || null;
-      await db.runTransaction(async t => {
-        const uRef  = db.collection('users').doc(dep.userId);
-        const uSnap = await t.get(uRef);
-        if (!uSnap.exists) throw new Error('User not found');
-        const bal       = uSnap.data().walletBalance || 0;
-        const holdUntil = new Date(Date.now() + 60 * 60 * 1000);
-        t.update(uRef, {
-          walletBalance:    bal + amount,
-          totalDeposited:   FieldValue.increment(amount),
-          withdrawableFrom: admin.firestore.Timestamp.fromDate(holdUntil)
-        });
-        t.update(depDoc.ref, {
-          status: 'matched', creditedAmount: amount,
-          providerTxId: provTxId, matchedAt: FieldValue.serverTimestamp()
-        });
-        t.set(db.collection('transactions').doc(), {
-          userId: dep.userId, type: 'deposit',
-          description: 'MoMo deposit via MarzPay',
-          amount, status: 'success', date, time, marzReference: reference,
-          createdAt: FieldValue.serverTimestamp()
-        });
-      });
-      console.log(`✅ Deposit complete: ${depDoc.id} → ${dep.userId} ${fmtUGX(dep.amount)}`);
+      const credited = await creditMarzDeposit(depDoc, amount, provTxId);
+      if (credited) console.log(`✅ Webhook credited: ${depDoc.id} → ${depDoc.data().userId} ${fmtUGX(amount)}`);
     } else if (eventType === 'collection.failed') {
       await depDoc.ref.update({
         status: 'failed', failedAt: FieldValue.serverTimestamp(),
