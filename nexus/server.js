@@ -548,11 +548,11 @@ app.post('/sms/incoming', async (req, res) => {
       if (payerPhone && payerPhone.length >= 9) {
         const pendSnap = await db.collection('pendingDeposits')
           .where('senderPhone', '==', payerPhone)
-          .where('status', '==', 'pending')
-          .limit(5)
+          .limit(10)
           .get();
         for (const d of pendSnap.docs) {
           const dep = d.data();
+          if (dep.status !== 'pending') continue;
           const exp = dep.expiresAt?.toDate?.() || new Date(0);
           if (exp > now) {
             matchedDep = dep;
@@ -940,13 +940,19 @@ app.post('/withdraw/reject', async (req, res) => {
 async function completeWithdrawal(witDoc) {
   const wit = witDoc.data();
   if (wit.status === 'processed' || wit.status === 'failed') return false;
-  const { date, time } = nowStr();
-  const batch = db.batch();
-  batch.update(witDoc.ref, { status: 'processed', completedAt: FieldValue.serverTimestamp() });
-  batch.update(db.collection('users').doc(wit.userId), {
-    totalWithdrawn: FieldValue.increment(wit.netAmount || wit.amount)
+  // Re-read status inside a transaction so the dual-track HTTP poll and the
+  // webhook can't BOTH apply this (double totalWithdrawn). First writer wins.
+  const applied = await db.runTransaction(async t => {
+    const fresh = await t.get(witDoc.ref);
+    const fs = fresh.data();
+    if (!fs || fs.status === 'processed' || fs.status === 'failed') return false;
+    t.update(witDoc.ref, { status: 'processed', completedAt: FieldValue.serverTimestamp() });
+    t.update(db.collection('users').doc(wit.userId), {
+      totalWithdrawn: FieldValue.increment(wit.netAmount || wit.amount)
+    });
+    return true;
   });
-  await batch.commit();
+  if (!applied) return false;
   // Update tx record — lookup by withdrawalId (single-field index, no composite needed)
   try {
     const txSnap = await db.collection('transactions')
@@ -1473,12 +1479,14 @@ app.post('/deposit/marzpay', async (req, res) => {
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
     const { date, time } = nowStr();
 
-    // Cancel any existing processing deposits for this user so listener is unambiguous
+    // Cancel any existing processing deposits for this user so listener is unambiguous.
+    // Single-field query + client-side status filter (avoids composite index).
     const oldSnap = await db.collection('pendingDeposits')
-      .where('userId', '==', userId).where('status', 'in', ['processing', 'pending']).limit(10).get();
-    if (!oldSnap.empty) {
+      .where('userId', '==', userId).limit(20).get();
+    const stale = oldSnap.docs.filter(d => ['processing', 'pending'].includes(d.data().status));
+    if (stale.length) {
       const b = db.batch();
-      oldSnap.forEach(d => b.update(d.ref, { status: 'cancelled' }));
+      stale.forEach(d => b.update(d.ref, { status: 'cancelled' }));
       await b.commit();
     }
 
@@ -1568,16 +1576,17 @@ app.post('/deposit/initiate', async (req, res) => {
       return res.json({ status: 'error', message: `${net} receiving number not configured. Contact admin.` });
 
     // Cancel ALL existing pending deposits — only one must exist at a time
-    // so the SMS matcher always finds the right one.
+    // so the SMS matcher always finds the right one. Single-field query +
+    // client-side status filter (avoids composite index).
     const oldSnap = await db.collection('pendingDeposits')
       .where('userId', '==', userId)
-      .where('status', '==', 'pending')
-      .limit(10)
+      .limit(20)
       .get();
     const now = new Date();
-    if (!oldSnap.empty) {
+    const stalePending = oldSnap.docs.filter(d => d.data().status === 'pending');
+    if (stalePending.length) {
       const batch = db.batch();
-      oldSnap.forEach(d => batch.update(d.ref, { status: 'cancelled' }));
+      stalePending.forEach(d => batch.update(d.ref, { status: 'cancelled' }));
       await batch.commit();
     }
 
@@ -1833,7 +1842,11 @@ async function runDailyCashback() {
       const daysDue   = Math.min(Math.floor(diffMs / 86400000), inv.cycle || 1);
       if (daysDue <= 0) return;
 
-      const amount = Math.round(inv.dailyReturn * daysDue);
+      let amount = Math.round(inv.dailyReturn * daysDue);
+      // Never pay past the plan's expected total return, even if the cron missed days.
+      const expected = inv.expectedReturn || 0;
+      if (expected > 0) amount = Math.min(amount, Math.max(0, expected - (inv.dailyCredited || 0)));
+      if (amount <= 0) return;
       if (!byUser[inv.userId]) byUser[inv.userId] = { total: 0, docs: [] };
       byUser[inv.userId].total += amount;
       byUser[inv.userId].docs.push({ ref: docSnap.ref, amount, daysDue });

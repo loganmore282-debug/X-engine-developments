@@ -392,6 +392,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <h3>Deposits</h3>
         <button class="btn btn-ghost btn-sm" onclick="loadDeposits()">↻ Refresh</button>
       </div>
+      <!-- Unmatched SMS deposits — money received but auto-matcher couldn't link a user. Assign manually. -->
+      <div id="unmatchedCard" class="card" style="margin-bottom:12px;border:1px solid rgba(234,179,8,0.35);display:none">
+        <div class="card-title">⚠️ Unmatched Deposits — needs manual assignment</div>
+        <div id="unmatchedTable"></div>
+      </div>
       <div class="filter-tabs">
         <div class="filter-tab active" onclick="setDepFilter('all',this)">All</div>
         <div class="filter-tab" onclick="setDepFilter('matched',this)">Completed</div>
@@ -1145,6 +1150,7 @@ let _allDeps   = [];
 
 async function loadDeposits() {
   document.getElementById('depTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
+  loadUnmatchedDeposits();
   try {
     const snap = await getDocs(query(collection(db,'pendingDeposits'), orderBy('createdAt','desc'), limit(200)));
     _allDeps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1153,6 +1159,32 @@ async function loadDeposits() {
     console.error(e);
     document.getElementById('depTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading deposits</div></div>';
   }
+}
+
+// Unmatched SMS deposits live in their own collection; surface them with an Assign button.
+async function loadUnmatchedDeposits() {
+  const card = document.getElementById('unmatchedCard');
+  const tbl  = document.getElementById('unmatchedTable');
+  try {
+    const snap = await getDocs(query(collection(db,'unmatchedDeposits'), orderBy('receivedAt','desc'), limit(100)));
+    const list = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(d => d.status === 'unmatched');
+    if (!list.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    const rows = list.map(d => {
+      const phone = d.payerPhone || '';
+      const amt   = Number(d.amount) || 0;
+      return `<tr>
+        <td>${phone||'—'}</td>
+        <td style="font-size:11px;color:var(--muted)">${d.senderName||'—'}</td>
+        <td style="font-weight:700;color:var(--primary)">${ugx(amt)}</td>
+        <td class="text-muted">${d.receivedAt ? fmtDate(d.receivedAt) : '—'}</td>
+        <td><button class="btn btn-primary btn-sm" onclick="openAssignDeposit('${d.id}','${phone}',${amt})">Assign</button></td>
+      </tr>`;
+    }).join('');
+    tbl.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Sender Phone</th><th>Name</th><th>Amount</th><th>Received</th><th>Action</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  } catch(e) { card.style.display = 'none'; }
 }
 
 function renderDeposits() {
@@ -1852,8 +1884,8 @@ async function loadSettings() {
       mEl.style.color = maintOn ? '#ef4444' : '#22c55e';
     }
     document.getElementById('settCheckin').value  = s.checkinBonus   || 500;
-    document.getElementById('settWelcome').value  = s.welcomeBonus   || 7000;
-    document.getElementById('settMinDep').value   = s.minDeposit     || 500;
+    document.getElementById('settWelcome').value  = s.welcomeBonus   || 10000;
+    document.getElementById('settMinDep').value   = s.minDeposit     || 30000;
     document.getElementById('settMinWit').value   = s.minWithdrawal  || 15000;
     document.getElementById('settLiqFee').value   = s.liquidityFee  != null ? (s.liquidityFee  * 100).toFixed(1) : 17;
     document.getElementById('settCommL1').value   = s.commL1        != null ? (s.commL1        * 100).toFixed(1) : 10;
@@ -1905,7 +1937,7 @@ window.saveSettings = async () => {
     maintenanceMode: document.getElementById('settMaintenance').checked,
     checkinBonus:    parseInt(document.getElementById('settCheckin').value) || 500,
     welcomeBonus:    parseInt(document.getElementById('settWelcome').value) || 10000,
-    minDeposit:      parseInt(document.getElementById('settMinDep').value)  || 500,
+    minDeposit:      parseInt(document.getElementById('settMinDep').value)  || 30000,
     minWithdrawal:   parseInt(document.getElementById('settMinWit').value)  || 15000,
     liquidityFee:    (parseFloat(document.getElementById('settLiqFee').value) || 17) / 100,
     commL1:          (parseFloat(document.getElementById('settCommL1').value) || 10) / 100,

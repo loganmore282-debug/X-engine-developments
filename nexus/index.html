@@ -1298,7 +1298,7 @@ const auth = getAuth(app);
 const db   = getFirestore(app);
 
 // ── STATE ──
-let _user = null, _userData = null, _unsub = null;
+let _user = null, _userData = null, _unsub = null, _invUnsub = null;
 let _currentProduct = null;
 
 // ── SVG ICONS ──
@@ -1419,7 +1419,9 @@ window.doRegister = async () => {
 window.doLogout = async () => {
   if (!confirm('Log out of Nexus?')) return;
   if (_unsub)      { _unsub(); _unsub = null; }
+  if (_invUnsub)   { _invUnsub(); _invUnsub = null; }
   if (_maintUnsub) { _maintUnsub(); _maintUnsub = null; }
+  stopWitTimers();
   await signOut(auth);
   _user = null; _userData = null;
   document.body.classList.add('on-auth');
@@ -1607,6 +1609,8 @@ onAuthStateChanged(auth, async user => {
     api('/account/ensure-refcode', { userId: user.uid }).catch(() => {});
   } else {
     if (_unsub) { _unsub(); _unsub = null; }
+    if (_invUnsub) { _invUnsub(); _invUnsub = null; }
+    stopWitTimers();
     document.body.classList.add('on-auth');
     document.getElementById('appScreen').style.display  = 'none';
     document.getElementById('authScreen').style.display = 'block';
@@ -1629,6 +1633,7 @@ function checkMaintenance() { startMaintenanceListener(); }
 // ── REAL-TIME LISTENER ──
 function startListener(uid) {
   if (_unsub) _unsub();
+  if (_invUnsub) { _invUnsub(); _invUnsub = null; }
   _unsub = onSnapshot(doc(db, 'users', uid), async snap => {
     if (!snap.exists()) return;
     _userData = snap.data();
@@ -1651,7 +1656,7 @@ function startListener(uid) {
     renderAgentCentre(_userData);
   });
   // Active investments — no orderBy, filter client-side to avoid composite index
-  onSnapshot(
+  _invUnsub = onSnapshot(
     query(collection(db, 'investments'), where('userId','==',uid), limit(30)),
     snap => {
       const all = snap.docs.map(d => ({ id:d.id, ...d.data() }));
@@ -2003,7 +2008,7 @@ window.openProductModal = async (productId) => {
 window.confirmBuy = async () => {
   if (!_currentProduct || !_user) return;
   const p = _currentProduct;
-  if (!p.isInStock) { showToast('This plan is sold out', 'error'); return; }
+  if (p.isInStock === false) { showToast('This plan is sold out', 'error'); return; }
   if ((_userData?.walletBalance || 0) < p.price) {
     showToast(`Insufficient balance. Need ${ugx(p.price)}, have ${ugx(_userData?.walletBalance||0)}`, 'error'); return;
   }
