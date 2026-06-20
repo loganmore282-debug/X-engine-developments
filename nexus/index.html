@@ -16,6 +16,7 @@
   --blue:#2563eb; --bluefade:rgba(37,99,235,0.08);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;overflow-x:hidden}
 body{padding-bottom:106px}
 /* While the login / register screen is showing, the dark gradient takes over the
@@ -178,7 +179,7 @@ html:has(body.on-auth){background:#060e2a}
 .ha-label{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px}
 
 /* ── SLIDESHOW ── */
-.slideshow-wrap{position:relative;height:200px;overflow:hidden;background:#0a0a0a;border-radius:20px;margin:0 16px 4px}
+.slideshow-wrap{position:relative;height:200px;overflow:hidden;background:#0a0a0a;border-radius:20px;margin:0 16px 4px;transform:translateZ(0);contain:layout style paint}
 .slide{position:absolute;inset:0;opacity:0;transition:opacity 0.9s ease-in-out;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .slide.active{opacity:1}
 .slide img{width:100%;height:100%;object-fit:cover}
@@ -193,8 +194,8 @@ html:has(body.on-auth){background:#060e2a}
 .sdot.active{background:#2563eb;width:14px;border-radius:3px}
 
 /* ── TICKER ── */
-.ticker-wrap{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:7px 0;overflow:hidden;white-space:nowrap}
-.ticker-inner{display:inline-block;animation:ticker-move 28s linear infinite}
+.ticker-wrap{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:7px 0;overflow:hidden;white-space:nowrap;contain:layout style paint;transform:translateZ(0)}
+.ticker-inner{display:inline-block;animation:ticker-move 28s linear infinite;-webkit-backface-visibility:hidden;backface-visibility:hidden}
 @keyframes ticker-move{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 .ticker-inner:hover{animation-play-state:paused}
 .ticker-item{display:inline;font-size:12px;color:var(--text2);padding:0 24px;font-family:'Outfit',sans-serif}
@@ -289,7 +290,7 @@ html:has(body.on-auth){background:#060e2a}
 
 /* ── PRODUCTS LIST ── */
 .products-grid{display:flex;flex-direction:column;gap:10px}
-.product-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;align-items:center;gap:12px;position:relative;cursor:pointer;transition:border-color .2s}
+.product-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;align-items:center;gap:12px;position:relative;cursor:pointer;transition:border-color .2s;contain:layout style paint;transform:translateZ(0)}
 .product-card:hover{border-color:var(--border2)}
 .product-img-wrap{width:84px;height:84px;border-radius:10px;flex-shrink:0;background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center;transform:translateZ(0);backface-visibility:hidden}
 .product-img-wrap img{width:100%;height:100%;object-fit:cover}
@@ -531,12 +532,11 @@ html:has(body.on-auth){background:#060e2a}
 .load-spin{width:36px;height:36px;border:3px solid var(--border);border-top-color:#2563eb;border-radius:50%;animation:spin 0.9s linear infinite}
 
 /* ── FULL-SCREEN PAGE OVERLAY ── */
-/* Closed page-overlays are kept off-screen but made invisible so the GPU frees their
-   full-screen backing texture (Android WebView runs out of layer memory → black/blue
-   corruption tiles otherwise). visibility flips instantly on open, after a delay on close
-   so the slide-out still animates. */
-.page-overlay{position:fixed;inset:0;z-index:600;background:var(--bg);transform:translateX(100%);visibility:hidden;transition:transform .28s cubic-bezier(.4,0,.2,1),visibility 0s linear .28s;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
-.page-overlay.open{transform:translateX(0);visibility:visible;transition:transform .28s cubic-bezier(.4,0,.2,1),visibility 0s}
+/* Use display:none when closed — zero GPU layers, no layer-memory cost.
+   JS drives: display:block → rAF adds .open (slide in), on close removes .open,
+   transitionend sets display:none. Same pattern as X-engine. */
+.page-overlay{position:fixed;inset:0;z-index:600;background:var(--bg);display:none;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.page-overlay.open{transform:translateX(0)}
 .page-hdr{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 6px rgba(0,0,0,0.06)}
 .page-back{width:38px;height:38px;border:none;background:var(--card2);border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text)}
 .page-back svg{width:20px;height:20px}
@@ -2312,8 +2312,16 @@ window.openTeamMembersModal = async () => {
 };
 
 // ── PAGE NAVIGATION ──
-window.openPage = (id) => { document.getElementById(id).classList.add('open'); window.scrollTo(0,0); };
-window.closePage = (id) => { document.getElementById(id).classList.remove('open'); };
+window.openPage = (id) => {
+  const el = document.getElementById(id);
+  el.style.display = 'block';
+  requestAnimationFrame(() => requestAnimationFrame(() => { el.classList.add('open'); el.scrollTop = 0; }));
+};
+window.closePage = (id) => {
+  const el = document.getElementById(id);
+  el.classList.remove('open');
+  el.addEventListener('transitionend', () => { el.style.display = 'none'; }, { once: true });
+};
 
 // ── DEPOSIT PAGE ──
 let _depPollTimer   = null;
