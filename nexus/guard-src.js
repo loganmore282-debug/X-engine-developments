@@ -1,13 +1,13 @@
 (function(){
   "use strict";
   // Canonical site cloned copies get bounced to.
-  var REAL = "https://nexusug.edgeone.app/";
-  // Allowed hosts: any *.edgeone.app subdomain (the app is re-deployed under
-  // several edgeone subdomains), plus localhost. Everything else = a clone.
+  var REAL = "https://www.nexus-ug.site/";
+  // Allowed hosts: custom domain, any *.edgeone.app subdomain, localhost.
   function hostOk(){
     var h = (location.hostname || "").toLowerCase();
     if (!h) return true;                         // file:// local open
     if (h === "localhost" || h === "127.0.0.1") return true;
+    if (h === "nexus-ug.site" || h === "www.nexus-ug.site") return true;
     return h.slice(-12) === ".edgeone.app" || h === "edgeone.app";
   }
 
