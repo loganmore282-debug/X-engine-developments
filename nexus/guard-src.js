@@ -18,17 +18,9 @@
     return;
   }
 
-  // 2. FRAME-BUST — refuse to be embedded / proxied in an iframe
-  try {
-    if (window.top !== window.self) {
-      window.top.location = REAL;
-      document.documentElement.innerHTML = "";
-      return;
-    }
-  } catch(e) {
-    document.documentElement.innerHTML = "";
-    return;
-  }
+  // 2. FRAME-BUST — disabled. GoDaddy domain forwarding (masking) serves the
+  // site inside a cross-origin iframe; busting out of it blanked the page.
+  // Domain-lock above already redirects clones, so framing is allowed here.
 
   // 3. CONSOLE SELF-XSS WARNING
   function warn(){
