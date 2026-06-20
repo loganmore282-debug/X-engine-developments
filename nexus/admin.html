@@ -462,6 +462,23 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <button class="btn btn-primary" onclick="generateCodes()">Generate</button>
         </div>
       </div>
+
+      <div class="card" style="margin-top:8px">
+        <div class="card-title">💰 Gift Payout Amount</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Each redeemed gift code pays a <strong>random</strong> amount between these two values. The server reads this the moment a user redeems.</p>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0;flex:1;min-width:140px">
+            <label class="form-label">Minimum (UGX)</label>
+            <input class="form-input" type="number" id="giftMin" value="200" min="0" step="100">
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:140px">
+            <label class="form-label">Maximum (UGX)</label>
+            <input class="form-input" type="number" id="giftMax" value="2000" min="0" step="100">
+          </div>
+          <button class="btn btn-primary" onclick="saveGiftRange()">Save Amount</button>
+        </div>
+        <div id="giftRangeStatus" style="font-size:12px;margin-top:8px"></div>
+      </div>
       <div class="section-head" style="margin-top:8px">
         <h3>All Gift Codes</h3>
         <button class="btn btn-ghost btn-sm" onclick="loadGiftCodes()">↻ Refresh</button>
@@ -555,16 +572,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
             <label class="form-label">L3 Commission % (default 2)</label>
             <input class="form-input" type="number" id="settCommL3" value="2" min="0" max="100" step="0.1">
           </div>
-          <div class="form-group">
-            <label class="form-label">Min Gift Code Amount (UGX)</label>
-            <input class="form-input" type="number" id="settMinGift" value="200" min="0" step="100">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Max Gift Code Amount (UGX)</label>
-            <input class="form-input" type="number" id="settMaxGift" value="2000" min="0" step="100">
-          </div>
         </div>
-        <p style="font-size:11px;color:var(--text2);margin:-4px 0 12px">🎁 Each redeemed gift code pays a random amount between the min and max above. The server reads these the moment a code is redeemed.</p>
+        <p style="font-size:11px;color:var(--text2);margin:-4px 0 12px">🎁 Gift code payout amount is set on the <strong>Gift Codes</strong> tab.</p>
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
 
@@ -1596,6 +1605,7 @@ let _allCodes   = [];
 
 async function loadGiftCodes() {
   document.getElementById('codesTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
+  loadGiftRange();
   try {
     const snap = await getDocs(query(collection(db,'giftCodes'), orderBy('createdAt','desc'), limit(200)));
     _allCodes  = snap.docs.map(d => ({ id:d.id, ...d.data() }));
@@ -1604,6 +1614,32 @@ async function loadGiftCodes() {
     document.getElementById('codesTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
   }
 }
+
+// Gift payout range (minGift/maxGift in settings/main) — server reads it on redeem
+async function loadGiftRange() {
+  try {
+    const snap = await getDoc(doc(db,'settings','main'));
+    const s = snap.exists() ? snap.data() : {};
+    document.getElementById('giftMin').value = s.minGift || 200;
+    document.getElementById('giftMax').value = s.maxGift || 2000;
+  } catch(e) {}
+}
+
+window.saveGiftRange = async () => {
+  const el  = document.getElementById('giftRangeStatus');
+  let lo = parseInt(document.getElementById('giftMin').value) || 0;
+  let hi = parseInt(document.getElementById('giftMax').value) || 0;
+  if (lo < 0) lo = 0;
+  if (hi < lo) { el.textContent = '⚠️ Maximum must be greater than minimum'; el.style.color = '#ef4444'; return; }
+  el.textContent = 'Saving…'; el.style.color = 'var(--text2)';
+  try {
+    await setDoc(doc(db,'settings','main'), { minGift: lo, maxGift: hi }, { merge:true });
+    el.textContent = `✅ Saved — gift codes now pay UGX ${lo.toLocaleString()} – ${hi.toLocaleString()}`;
+    el.style.color = '#22c55e';
+  } catch(e) {
+    el.textContent = 'Failed to save — ' + e.message; el.style.color = '#ef4444';
+  }
+};
 
 function renderCodes() {
   let list = _allCodes;
@@ -1802,8 +1838,6 @@ async function loadSettings() {
     document.getElementById('settCommL1').value   = s.commL1        != null ? (s.commL1        * 100).toFixed(1) : 10;
     document.getElementById('settCommL2').value   = s.commL2        != null ? (s.commL2        * 100).toFixed(1) : 5;
     document.getElementById('settCommL3').value   = s.commL3        != null ? (s.commL3        * 100).toFixed(1) : 2;
-    document.getElementById('settMinGift').value  = s.minGift        || 200;
-    document.getElementById('settMaxGift').value  = s.maxGift        || 2000;
     // Announcement
     const ann = s.announcement || {};
     document.getElementById('annActive').checked    = !!ann.active;
@@ -1856,8 +1890,6 @@ window.saveSettings = async () => {
     commL1:          (parseFloat(document.getElementById('settCommL1').value) || 10) / 100,
     commL2:          (parseFloat(document.getElementById('settCommL2').value) || 5)  / 100,
     commL3:          (parseFloat(document.getElementById('settCommL3').value) || 2)  / 100,
-    minGift:         parseInt(document.getElementById('settMinGift').value) || 200,
-    maxGift:         parseInt(document.getElementById('settMaxGift').value) || 2000,
   };
   try {
     await setDoc(doc(db,'settings','main'), s, { merge:true });
