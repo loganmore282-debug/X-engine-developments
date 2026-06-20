@@ -324,7 +324,10 @@ select.form-input{appearance:none}
     <div class="card">
       <div class="card-title">👥 User Management</div>
       <input class="search-input" type="text" id="userSearch" placeholder="🔍 Search by name or phone..." oninput="searchUsers()">
-      <button class="btn btn-sm btn-primary" onclick="loadUsers()" style="margin-bottom:8px">🔄 Refresh</button>
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-primary" onclick="loadUsers()">🔄 Refresh</button>
+        <button class="btn btn-sm btn-gold" onclick="copyAllPhones()" id="copyPhonesBtn">📋 Copy All Phones</button>
+      </div>
       <div id="usersList"><div class="empty-state">Loading...</div></div>
     </div>
   </div>
@@ -1390,6 +1393,21 @@ window.searchUsers=async function(){
     const phone=(u.phone||'').replace('+256','');
     return (u.name||'').toLowerCase().includes(q)||phone.includes(phoneQ)||(u.phone||'').includes(q)||(u.referralCode||'').toLowerCase().includes(q)||(u.id||'').includes(q);
   }));
+};
+
+window.copyAllPhones=async function(){
+  if(!_allUsers.length) await loadUsers();
+  const phones=_allUsers.map(u=>u.phone).filter(Boolean);
+  if(!phones.length){ alert('No phone numbers found'); return; }
+  const text=phones.join('\n');
+  try{
+    await navigator.clipboard.writeText(text);
+    const btn=document.getElementById('copyPhonesBtn');
+    const orig=btn.textContent;
+    btn.textContent=`✅ Copied ${phones.length} numbers!`;
+    btn.style.background='linear-gradient(135deg,#03A66D,#15803d)';
+    setTimeout(()=>{ btn.textContent=orig; btn.style.background=''; },3000);
+  }catch(e){ alert('Copy failed: '+e.message); }
 };
 
 window.banUser=async function(uid,action){
