@@ -2777,8 +2777,16 @@ window.uploadPhoto = async (input) => {
 };
 
 // ── REFERRAL CODE FROM URL ──
+// A ?ref= link means the visitor was invited → drop them straight on the
+// registration screen with the code pre-filled (not the login screen).
 const urlRef = new URLSearchParams(window.location.search).get('ref');
-if (urlRef) document.getElementById('regRef').value = urlRef.toUpperCase();
+if (urlRef) {
+  const refInput = document.getElementById('regRef');
+  if (refInput) refInput.value = urlRef.toUpperCase();
+  const loginF = document.getElementById('loginForm');
+  const regF   = document.getElementById('registerForm');
+  if (loginF && regF) { loginF.style.display = 'none'; regF.style.display = 'block'; }
+}
 
 </script>
 </body>

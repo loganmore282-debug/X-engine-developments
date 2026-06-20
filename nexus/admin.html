@@ -1602,10 +1602,11 @@ window.removeBanner = async (url) => {
 // ═══════════════════════════════════════════
 let _codeFilter = 'all';
 let _allCodes   = [];
+let _giftRange  = { min: 200, max: 2000 };
 
 async function loadGiftCodes() {
   document.getElementById('codesTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-  loadGiftRange();
+  await loadGiftRange();
   try {
     const snap = await getDocs(query(collection(db,'giftCodes'), orderBy('createdAt','desc'), limit(200)));
     _allCodes  = snap.docs.map(d => ({ id:d.id, ...d.data() }));
@@ -1620,8 +1621,9 @@ async function loadGiftRange() {
   try {
     const snap = await getDoc(doc(db,'settings','main'));
     const s = snap.exists() ? snap.data() : {};
-    document.getElementById('giftMin').value = s.minGift || 200;
-    document.getElementById('giftMax').value = s.maxGift || 2000;
+    _giftRange = { min: s.minGift || 200, max: s.maxGift || 2000 };
+    document.getElementById('giftMin').value = _giftRange.min;
+    document.getElementById('giftMax').value = _giftRange.max;
   } catch(e) {}
 }
 
@@ -1634,12 +1636,28 @@ window.saveGiftRange = async () => {
   el.textContent = 'Saving…'; el.style.color = 'var(--text2)';
   try {
     await setDoc(doc(db,'settings','main'), { minGift: lo, maxGift: hi }, { merge:true });
+    _giftRange = { min: lo, max: hi };
     el.textContent = `✅ Saved — gift codes now pay UGX ${lo.toLocaleString()} – ${hi.toLocaleString()}`;
     el.style.color = '#22c55e';
+    renderCodes(); // refresh the Amount column to show the new range
   } catch(e) {
     el.textContent = 'Failed to save — ' + e.message; el.style.color = '#ef4444';
   }
 };
+
+window.copyGiftCode = (code) => {
+  const done = () => showToast(`Copied ${code}`, 'success');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(done).catch(() => fallbackCopy(code, done));
+  } else { fallbackCopy(code, done); }
+};
+function fallbackCopy(text, cb) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); cb && cb(); } catch(e) { showToast('Copy failed', 'error'); }
+  document.body.removeChild(ta);
+}
 
 function renderCodes() {
   let list = _allCodes;
@@ -1660,8 +1678,11 @@ function renderCodes() {
     const usedLabel = maxU ? `${usedCount}/${maxU}` : String(usedCount);
     const canUse    = c.active && !exhausted;
     return `<tr>
-      <td><span class="monospace">${c.code||'—'}</span></td>
-      <td class="text-muted" style="font-size:12px">200–2000</td>
+      <td>
+        <span class="monospace">${c.code||'—'}</span>
+        ${c.code ? `<button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="copyGiftCode('${c.code}')">📋 Copy</button>` : ''}
+      </td>
+      <td class="text-muted" style="font-size:12px">${_giftRange.min.toLocaleString()}–${_giftRange.max.toLocaleString()}</td>
       <td class="text-muted">${maxU || 'Unlimited'}</td>
       <td>${usedLabel}</td>
       <td class="text-muted">${c.expiresAt ? fmtDate(c.expiresAt) : '—'}</td>
