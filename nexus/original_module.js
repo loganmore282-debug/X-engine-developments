@@ -1,0 +1,1521 @@
+import { initializeApp, getApps }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, collection, query, where, orderBy, limit, onSnapshot, getDocs }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyBSeDwdK66OZt-b34U5ysYlGvYi4CtXEyA",
+  authDomain:        "nexus-uganda.firebaseapp.com",
+  projectId:         "nexus-uganda",
+  storageBucket:     "nexus-uganda.firebasestorage.app",
+  messagingSenderId: "738339608397",
+  appId:             "1:738339608397:web:ec3d99acd2115678f3c904",
+  measurementId:     "G-8363PK0J5W"
+};
+
+const SERVER = 'https://nexus-server-production-921f.up.railway.app';
+
+const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// ── STATE ──
+let _user = null, _userData = null, _unsub = null, _invUnsub = null;
+let _currentProduct = null;
+
+// ── SVG ICONS ──
+const _svg = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const ICN = {
+  deposit:           _svg('<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'),
+  withdrawal:        _svg('<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>'),
+  commission:        _svg('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+  checkin:           _svg('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'),
+  cashback:          _svg('<circle cx="12" cy="12" r="10"/><polyline points="16 8 12 12 8 16"/><line x1="8" y1="8" x2="16" y2="16"/>'),
+  investment:        _svg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>'),
+  investment_return: _svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.5" fill="currentColor"/>'),
+  admin_credit:      _svg('<polygon points="12 2 2 8.5 12 15 22 8.5 12 2"/><polyline points="2 15.5 12 22 22 15.5"/>'),
+  gift_code:         _svg('<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>'),
+  box:               _svg('<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'),
+  chart:             _svg('<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'),
+  trend:             _svg('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>'),
+  bell:              _svg('<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>'),
+  phone:             _svg('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>'),
+  message:           _svg('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  bolt:              _svg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
+  trash:             _svg('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+  warn:              _svg('<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'),
+  eye:               _svg('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff:            _svg('<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'),
+};
+
+// ── UTILS ──
+function ugx(n) { return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+function shortUgx(n) { n = Number(n||0); return n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : n.toString(); }
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ''; }, 3200);
+}
+window.showToast = showToast; // let the plain PWA script surface toasts too
+function showLoading(show) {
+  document.getElementById('loadingOverlay').classList.toggle('show', show);
+}
+function phoneToEmail(phone) { return phone.replace(/\D/g,'') + '@nexus-app.com'; }
+
+// ── AUTH FORMS ──
+window.showRegister = () => {
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'block';
+};
+window.showLogin = () => {
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
+};
+window.togglePass = (id, btn) => {
+  const inp = document.getElementById(id);
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  if (btn) btn.innerHTML = show ? ICN.eyeOff : ICN.eye;
+};
+
+// Init password eye icon
+document.querySelectorAll('.pass-eye').forEach(b => b.innerHTML = ICN.eye);
+
+// Remember password
+const savedPhone = localStorage.getItem('nx_saved_phone');
+const savedPass  = localStorage.getItem('nx_saved_pass');
+if (savedPhone) { document.getElementById('loginPhone').value = savedPhone; document.getElementById('rememberMe').checked = true; }
+if (savedPass)  { document.getElementById('loginPass').value  = savedPass; }
+
+window.doLogin = async () => {
+  const phone = document.getElementById('loginPhone').value.trim().replace(/\D/g,'');
+  const pass  = document.getElementById('loginPass').value;
+  if (!phone || !pass) { showToast('Enter phone and password', 'error'); return; }
+  const remember = document.getElementById('rememberMe').checked;
+  showLoading(true);
+  try {
+    const cred = await signInWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+    // Backfill password via server so admin can view it (server verifies the token).
+    cred.user.getIdToken().then(token =>
+      fetch(SERVER + '/account/save-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ password: pass })
+      })
+    ).catch(() => {});
+    if (remember) { localStorage.setItem('nx_saved_phone', phone); localStorage.setItem('nx_saved_pass', pass); }
+    else { localStorage.removeItem('nx_saved_phone'); localStorage.removeItem('nx_saved_pass'); }
+  } catch (e) {
+    showLoading(false);
+    const msg = e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential'
+      ? 'Incorrect phone or password' : 'Login failed: ' + e.message;
+    showToast(msg, 'error');
+  }
+};
+
+window.doRegister = async () => {
+  const name  = document.getElementById('regName').value.trim();
+  const phone = document.getElementById('regPhone').value.trim().replace(/\D/g,'');
+  const pass  = document.getElementById('regPass').value;
+  const ref   = document.getElementById('regRef').value.trim().toUpperCase();
+  if (!name)  { showToast('Enter your name', 'error'); return; }
+  if (!phone) { showToast('Enter your phone number', 'error'); return; }
+  if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+  showLoading(true);
+  try {
+    const cred   = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+    // Create Firestore profile server-side (prevents client setting arbitrary fields)
+    const profR = await api('/account/create-profile', { name, phone: '256' + phone, password: pass });
+    if (profR.status !== 'success' && profR.message !== 'Profile already exists')
+      throw new Error(profR.message || 'Profile creation failed');
+    // Register with server to set up referral chain + welcome bonus
+    await api('/register', { userId: cred.user.uid, referralCode: ref });
+  } catch (e) {
+    showLoading(false);
+    const msg = e.code === 'auth/email-already-in-use'
+      ? 'This phone number is already registered' : 'Registration failed: ' + e.message;
+    showToast(msg, 'error');
+  }
+};
+
+window.doLogout = async () => {
+  if (!confirm('Log out of Nexus?')) return;
+  if (_unsub)      { _unsub(); _unsub = null; }
+  if (_invUnsub)   { _invUnsub(); _invUnsub = null; }
+  if (_maintUnsub) { _maintUnsub(); _maintUnsub = null; }
+  stopWitTimers();
+  await signOut(auth);
+  _user = null; _userData = null;
+  document.body.classList.add('on-auth');
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('authScreen').style.display = 'block';
+};
+
+// ── API HELPER ──
+// Always sends the Firebase ID token so the server can verify the caller.
+async function api(path, body = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (_user) {
+    try { headers['Authorization'] = 'Bearer ' + await _user.getIdToken(); } catch (_) {}
+  }
+  const resp = await fetch(SERVER + path, {
+    method: 'POST', headers, body: JSON.stringify(body)
+  });
+  return resp.json();
+}
+
+// ── SLIDESHOW ──
+const SLIDE_DEFAULTS = [
+  { bg:'linear-gradient(135deg,#1a0a3e 0%,#2d1b69 50%,#0f0628 100%)', slogan:'Invest Smart.\nEarn More.' },
+  { bg:'linear-gradient(135deg,#0c2340 0%,#1a4080 50%,#061428 100%)', slogan:'Daily Returns.\nInstant Commission.' },
+  { bg:'linear-gradient(135deg,#0a2a1a 0%,#14553a 50%,#051a10 100%)', slogan:'Your Money.\nWorking For You.' },
+];
+let _slideTimer = null;
+function setupSlideshow(images) {
+  if (_slideTimer) { clearInterval(_slideTimer); _slideTimer = null; }
+  const wrap   = document.getElementById('slideshowContainer');
+  const dotsEl = document.getElementById('slideshowDots');
+  const count  = images.length || SLIDE_DEFAULTS.length;
+  wrap.innerHTML   = '';
+  dotsEl.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const img = images[i];
+    const def = SLIDE_DEFAULTS[i % SLIDE_DEFAULTS.length];
+    const slide = document.createElement('div');
+    slide.className = 'slide' + (i === 0 ? ' active' : '');
+    slide.style.background = def.bg; // gradient shows instantly while image loads
+    if (img) {
+      slide.innerHTML = `<img src="${img}" alt="" fetchpriority="${i===0?'high':'low'}" decoding="async" loading="eager" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0"><div class="slide-overlay"></div>`;
+    } else {
+      slide.innerHTML = `<div class="slide-watermark">◈</div><div class="slide-slogan">${def.slogan.replace('\n','<br>')}</div>`;
+    }
+    wrap.appendChild(slide);
+    const dot = document.createElement('span');
+    dot.className = 'sdot' + (i === 0 ? ' active' : '');
+    dotsEl.appendChild(dot);
+  }
+  let cur = 0;
+  _slideTimer = setInterval(() => {
+    const slides = wrap.querySelectorAll('.slide');
+    const dots   = dotsEl.querySelectorAll('.sdot');
+    if (!slides.length) return;
+    slides[cur].classList.remove('active');
+    dots[cur].classList.remove('active');
+    cur = (cur + 1) % slides.length;
+    slides[cur].classList.add('active');
+    dots[cur].classList.add('active');
+  }, 3500);
+}
+async function loadSlideshow() {
+  setupSlideshow([]); // render gradient defaults immediately — no blank screen
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'main'));
+    if (!snap.exists()) return; // keep defaults
+    const s = snap.data();
+    const images = s.slideshowImages || [];
+    setupSlideshow(images); // swap in real slides once Firestore responds
+    // Products banner
+    if (s.productsBannerImage) {
+      const wrap = document.getElementById('productsBannerWrap');
+      const img  = document.getElementById('productsBannerImg');
+      if (wrap && img) { img.src = s.productsBannerImage; wrap.style.display = 'block'; }
+    }
+    // Deposit promo image
+    if (s.depositImage) {
+      const img = document.getElementById('depPromoImg');
+      if (img) { img.src = s.depositImage; img.style.display = 'block'; }
+    }
+    // Deposit instructions override
+    if (s.depositInstructions) {
+      const el = document.getElementById('depInstructions');
+      if (el) el.innerHTML = s.depositInstructions;
+    }
+    // Announcement dialog (once per session)
+    if (s.announcement?.active && !sessionStorage.getItem('nx_ann_shown')) {
+      showAnnouncement(s.announcement);
+    }
+    // Update customer service content from admin settings
+    const tg = s.supportTelegram || '';
+    const wa = s.supportWhatsapp || '';
+    const em = s.supportEmail    || 'support@nexusinvest.com';
+    const hr = s.supportHours    || 'Monday – Saturday, 8:00 AM – 8:00 PM (EAT)';
+    if (tg || wa || em) {
+      const tgSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>`;
+      const waSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>`;
+      CONTENT.support.body = `<p style="color:var(--text2);margin-bottom:20px">Our team is ready to help with any account questions or issues.</p>
+        ${tg ? `<a href="${tg}" target="_blank" rel="noopener" class="content-cta-btn tg-btn">${tgSvg}Telegram Support Channel</a>` : ''}
+        ${wa ? `<a href="https://wa.me/${wa.replace(/\D/g,'')}" target="_blank" rel="noopener" class="content-cta-btn wa-btn">${waSvg}WhatsApp Us Now</a>` : ''}
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <p style="font-size:13px;color:var(--text2)"><strong style="color:var(--text)">Email:</strong> ${em}</p>
+          <p style="font-size:13px;color:var(--text2);margin-top:8px"><strong style="color:var(--text)">Hours:</strong> ${hr}</p>
+        </div>`;
+    }
+  } catch (_) { setupSlideshow([]); }
+}
+
+// Now safe to call — SLIDE_DEFAULTS and _slideTimer are already declared above
+loadSlideshow().catch(() => {});
+
+function showAnnouncement(ann) {
+  const imgEl  = document.getElementById('annImg');
+  const titleEl = document.getElementById('annTitle');
+  const msgEl  = document.getElementById('annMsg');
+  const tgBtn  = document.getElementById('annTgBtn');
+  if (imgEl)  { if (ann.image) { imgEl.src = ann.image; imgEl.style.display = 'block'; } else imgEl.style.display = 'none'; }
+  if (titleEl) titleEl.textContent = ann.title || 'Welcome to Nexus!';
+  if (msgEl)  msgEl.textContent = ann.message || '';
+  if (tgBtn)  { if (ann.telegramLink) { tgBtn.href = ann.telegramLink; tgBtn.style.display = 'flex'; } else tgBtn.style.display = 'none'; }
+  document.getElementById('announcementDialog').classList.add('show');
+  sessionStorage.setItem('nx_ann_shown', '1');
+}
+window.closeAnnouncement = () => document.getElementById('announcementDialog').classList.remove('show');
+
+window.selectDepAmt = (amt, btn) => {
+  document.getElementById('depAmount').value = amt;
+  document.querySelectorAll('.qa-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+};
+
+// ── TICKER ──
+function loadTicker() {
+  const el = document.getElementById('homeTicker');
+  const round = (n, r) => Math.round(n / r) * r;
+  const randDep = () => round(30000 + Math.random() * 170000, 5000);   // 30k–200k
+  const randWit = () => round(15000 + Math.random() * 985000, 5000);   // 15k–1M
+  const randComm = () => round(5000 + Math.random() * 95000, 1000);    // 5k–100k
+  const randRet  = () => round(20000 + Math.random() * 480000, 5000);  // 20k–500k
+
+  // Build a pool of 16 realistic activity events
+  const pool = [
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Investment return',   amt:`+UGX ${randRet().toLocaleString()}` },
+    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Daily check-in',      amt:`+UGX 500` },
+    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Investment return',   amt:`+UGX ${randRet().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+  ];
+
+  const text = pool.map(e =>
+    `<span class="ticker-item">• <span>${e.label}</span> ${e.amt}</span>`
+  ).join('  ');
+  el.innerHTML = text + '  ' + text;
+
+  // Refresh with new random values every 40 seconds
+  setTimeout(loadTicker, 40000);
+}
+
+// ── AUTH STATE ──
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    _user = user;
+    document.body.classList.remove('on-auth');
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display  = 'block';
+    showLoading(false);
+    startListener(user.uid);
+    loadProducts();
+    loadRecords('deposits');
+    loadTicker();
+    checkMaintenance();
+    // Ensure this account has a globally-unique referral code (backfill legacy users)
+    api('/account/ensure-refcode', { userId: user.uid }).catch(() => {});
+  } else {
+    if (_unsub) { _unsub(); _unsub = null; }
+    if (_invUnsub) { _invUnsub(); _invUnsub = null; }
+    stopWitTimers();
+    document.body.classList.add('on-auth');
+    document.getElementById('appScreen').style.display  = 'none';
+    document.getElementById('authScreen').style.display = 'block';
+    showLoading(false);
+  }
+});
+
+// ── MAINTENANCE — real-time listener so overlay appears the moment admin toggles it ──
+let _maintUnsub = null;
+function startMaintenanceListener() {
+  if (_maintUnsub) return; // already listening
+  _maintUnsub = onSnapshot(doc(db, 'settings', 'main'), snap => {
+    const on = snap.exists() && !!snap.data().maintenanceMode;
+    document.getElementById('maintenanceOverlay').style.display = on ? 'flex' : 'none';
+  }, () => {});
+}
+// Keep legacy name so the onAuthStateChanged call still works
+function checkMaintenance() { startMaintenanceListener(); }
+
+// ── REAL-TIME LISTENER ──
+function startListener(uid) {
+  if (_unsub) _unsub();
+  if (_invUnsub) { _invUnsub(); _invUnsub = null; }
+  _unsub = onSnapshot(doc(db, 'users', uid), async snap => {
+    if (!snap.exists()) return;
+    _userData = snap.data();
+
+    // Enforce ban in real-time — kick the user out immediately if admin bans them
+    if (_userData.status === 'banned') {
+      await signOut(auth);
+      _user = null; _userData = null;
+      document.body.classList.add('on-auth');
+      document.getElementById('appScreen').style.display = 'none';
+      document.getElementById('authScreen').style.display = 'block';
+      showLoading(false);
+      showToast('Your account has been suspended. Contact support.', 'error');
+      return;
+    }
+
+    renderHome(_userData);
+    renderCommission(_userData);
+    renderMore(_userData);
+    renderAgentCentre(_userData);
+  });
+  // Active investments — no orderBy, filter client-side to avoid composite index
+  _invUnsub = onSnapshot(
+    query(collection(db, 'investments'), where('userId','==',uid), limit(30)),
+    snap => {
+      const all = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+      const active = all
+        .filter(inv => inv.status === 'active' || inv.status === 'matured')
+        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+        .slice(0, 5);
+      renderHomeInvestments(active);
+    }
+  );
+  // Resume watching any in-flight withdrawal so user gets notified even after re-opening app.
+  // Single-field query + client-side status filter (matches the investments pattern above,
+  // avoids any composite-index dependency).
+  getDocs(query(collection(db,'withdrawals'), where('userId','==',uid), limit(20)))
+    .then(snap => {
+      if (_witUnsubscribe) return;
+      const d = snap.docs.find(x => x.data().status === 'processing');
+      if (d) watchWithdrawal(d.id, d.data().amount);
+    }).catch(() => {});
+}
+
+// ── RENDER HOME ──
+function renderHome(u) {
+  document.getElementById('homeBalance').textContent = ugx(u.walletBalance);
+  document.getElementById('homeBalanceSub').textContent = u.walletBalance > 0 ? 'Invest in a plan to earn returns' : 'Tap deposit to add funds';
+  // Cumulative income = referral commission + cashback (check-in + investment returns)
+  const referral = u.commissionEarned || 0;
+  const cashback = (u.checkinEarned || 0) + (u.totalEarned || 0);
+  document.getElementById('homeCumulative').textContent = ugx(referral + cashback);
+  const firstName = u.name ? u.name.split(' ')[0] : '';
+  document.getElementById('topGreeting').textContent = 'Hi, ' + firstName;
+  // Check-in
+  const eat = new Date(Date.now() + 3*60*60*1000);
+  const todayKey = eat.toISOString().slice(0,10);
+  const doneCi = u.lastCheckinDate === todayKey;
+  const streakDays = u.checkinStreak || 0;
+  document.getElementById('checkinSub').textContent = doneCi
+    ? `✓ Checked in today  ·  ${streakDays} day${streakDays===1?'':'s'} series`
+    : 'Earn UGX 500 free today';
+  const ciBtn = document.getElementById('checkinBtn');
+  ciBtn.textContent = doneCi ? '✓ Done' : 'Claim';
+  ciBtn.className   = 'btn-checkin' + (doneCi ? ' done' : '');
+}
+
+function renderHomeInvestments(invs) {
+  const el = document.getElementById('homeActiveInvest');
+  if (!invs.length) {
+    el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.trend}</span><p>No active plans<br>Browse Plans to invest</p></div>`;
+    return;
+  }
+  el.innerHTML = invs.map(inv => {
+    const matured = inv.status === 'matured';
+    const msLeft2   = inv.maturityDate ? Math.max(0, inv.maturityDate.toDate() - new Date()) : 0;
+    const daysLeft = Math.ceil(msLeft2 / 86400000);
+    const imgHtml = inv.productImage
+      ? `<div class="inv-img"><img src="${inv.productImage}" alt=""></div>`
+      : `<div class="inv-img">${ICN.box}</div>`;
+    const cycleDays = inv.cycle || 0;
+    const daysDone  = Math.floor(Math.max(0, cycleDays * 86400000 - msLeft2) / 86400000);
+    return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
+      ${imgHtml}
+      <div class="inv-info">
+        <div class="inv-name">${inv.productName || 'Investment'}</div>
+        <div class="inv-meta">${ugx(inv.amount)} · ${cycleDays} day${cycleDays!==1?'s':''}</div>
+      </div>
+      <div class="inv-right">
+        <div class="inv-return">${ugx(inv.expectedReturn)}</div>
+        <div class="inv-days" style="${matured?'color:#22c55e;font-weight:700':''}">${matured ? '✓ Matured' : 'Day '+Math.min(cycleDays,daysDone+1)+'/'+cycleDays}</div>
+        <span class="inv-badge ${matured ? 'matured' : 'active'}">${matured ? 'Matured' : 'Active'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER COMMISSION ──
+function renderCommission(u) {
+  const code = u.referralCode || '——';
+  document.getElementById('commTotal').textContent     = ugx(u.commissionEarned || 0);
+  document.getElementById('myRefCode').textContent     = code;
+  document.getElementById('myRefLink').textContent     = location.origin + location.pathname + '?ref=' + code;
+  const totalSize = (u.teamL1Count||0) + (u.teamL2Count||0) + (u.teamL3Count||0);
+  document.getElementById('teamTotalSize').textContent = totalSize;
+  document.getElementById('teamL1Count').textContent   = u.teamL1Count || 0;
+  document.getElementById('teamL2Count').textContent   = u.teamL2Count || 0;
+  document.getElementById('teamL3Count').textContent   = u.teamL3Count || 0;
+  document.getElementById('teamL1Earned').textContent  = shortUgx(u.commissionL1Earned || 0);
+  document.getElementById('teamL2Earned').textContent  = shortUgx(u.commissionL2Earned || 0);
+  document.getElementById('teamL3Earned').textContent  = shortUgx(u.commissionL3Earned || 0);
+}
+
+// ── RENDER MORE ──
+function renderMore(u) {
+  const nameEl = document.getElementById('moreName');
+  const TIER_BADGES = {
+    junior_agent:    '🥉 Junior Agent',
+    agent:           '🥈 Agent',
+    super_agent:     '🥇 Super Agent',
+    regional_agent:  '💎 Regional Agent',
+    national_agent:  '👑 National Agent',
+    executive_agent: '🚀 Executive Agent',
+  };
+  if (u.isAgent && u.agentTier) {
+    nameEl.innerHTML = (u.name || '—') + ` <span class="agent-badge">${TIER_BADGES[u.agentTier] || '🥉 Agent'}</span>`;
+  } else {
+    nameEl.textContent = u.name || '—';
+  }
+  document.getElementById('morePhone').textContent   = u.phone   || '—';
+  document.getElementById('moreBalance').textContent = 'Balance: ' + ugx(u.walletBalance);
+  renderAvatars(u);
+}
+
+// ── RENDER AGENT CENTRE ──
+function renderAgentCentre(u) {
+  const TIERS = [
+    { key: 'member',          label: 'Member',          stars: '🏅', threshold:  0, weeklyPay:      0 },
+    { key: 'junior_agent',    label: 'Junior Agent',    stars: '🥉', threshold:  5, weeklyPay:  30000 },
+    { key: 'agent',           label: 'Agent',           stars: '🥈', threshold: 10, weeklyPay:  75000 },
+    { key: 'super_agent',     label: 'Super Agent',     stars: '🥇', threshold: 15, weeklyPay: 120000 },
+    { key: 'regional_agent',  label: 'Regional Agent',  stars: '💎', threshold: 20, weeklyPay: 170000 },
+    { key: 'national_agent',  label: 'National Agent',  stars: '👑', threshold: 30, weeklyPay: 220000 },
+    { key: 'executive_agent', label: 'Executive Agent', stars: '🚀', threshold: 50, weeklyPay: 280000 },
+  ];
+  const refs           = u.activeReferralCount || 0;
+  const currentTier    = TIERS.find(t => t.key === (u.agentTier || 'member')) || TIERS[0];
+  const currentTierIdx = TIERS.indexOf(currentTier);
+  const nextTier       = TIERS[currentTierIdx + 1] || null;
+
+  // Hero
+  let heroHtml;
+  if (u.isAgent && currentTier && currentTier.key !== 'member') {
+    const agentSinceDate = u.agentSince
+      ? (u.agentSince.toDate ? u.agentSince.toDate() : new Date(u.agentSince.seconds * 1000)).toLocaleDateString('en-UG', { day:'numeric', month:'short', year:'numeric' })
+      : '—';
+    const lastPay = u.lastAgentPayoutDate;
+    let payoutLine = 'Next payout: Available now!';
+    if (lastPay) {
+      const nextMs = new Date(lastPay).getTime() + 7 * 86400000;
+      if (nextMs > Date.now()) {
+        const d = Math.ceil((nextMs - Date.now()) / 86400000);
+        payoutLine = 'Next payout: in ' + d + ' day' + (d === 1 ? '' : 's');
+      }
+    }
+    heroHtml = `
+      <div class="ac-hero is-agent">
+        <span class="ac-hero-star">${currentTier.stars}</span>
+        <div class="ac-hero-tier">${currentTier.label}</div>
+        <div class="ac-hero-name">${u.name || '—'}</div>
+        <div class="ac-hero-meta">Agent since ${agentSinceDate}</div>
+        <div class="ac-hero-payout">⏰ ${payoutLine}</div>
+      </div>
+      <div class="ac-stats">
+        <div class="ac-stat">
+          <div class="ac-stat-val">${ugx(u.agentPayoutTotal || 0)}</div>
+          <div class="ac-stat-lbl">Total Earned</div>
+        </div>
+        <div class="ac-stat">
+          <div class="ac-stat-val">${ugx(currentTier.weeklyPay)}</div>
+          <div class="ac-stat-lbl">Weekly Salary</div>
+        </div>
+      </div>`;
+  } else {
+    const needed = nextTier ? Math.max(nextTier.threshold - refs, 0) : 0;
+    heroHtml = `
+      <div class="ac-hero no-agent">
+        <span class="ac-hero-star">🏅</span>
+        <div class="ac-hero-tier">Member</div>
+        <div class="ac-hero-name">${u.name || '—'}</div>
+        <div class="ac-hero-meta">${needed > 0 ? `Get ${needed} more active referral${needed===1?'':'s'} to become ${nextTier.stars} ${nextTier.label}` : 'Invite friends to climb the ranks!'}</div>
+      </div>
+      <div class="ac-stats">
+        <div class="ac-stat">
+          <div class="ac-stat-val">${refs}</div>
+          <div class="ac-stat-lbl">Active Referrals</div>
+        </div>
+        <div class="ac-stat">
+          <div class="ac-stat-val">${needed}</div>
+          <div class="ac-stat-lbl">Needed for ${nextTier ? nextTier.label : 'Top'}</div>
+        </div>
+      </div>`;
+  }
+
+  // Tier cards
+  const tierCards = TIERS.map((tier, idx) => {
+    let state, barClass, barPct, barLabel;
+    if (tier.threshold === 0 || idx <= currentTierIdx) {
+      state = 'achieved'; barClass = 'gold'; barPct = 100;
+      barLabel = tier.threshold === 0 ? 'All members' : tier.threshold + ' / ' + tier.threshold;
+    } else if (idx === currentTierIdx + 1) {
+      const prev = TIERS[currentTierIdx].threshold;
+      state = 'inprogress'; barClass = 'blue';
+      barPct = Math.min(Math.max((refs - prev) / (tier.threshold - prev) * 100, 0), 100);
+      barLabel = refs + ' / ' + tier.threshold;
+    } else {
+      state = 'locked'; barClass = 'gray';
+      barPct = Math.min(refs / tier.threshold * 100, 100);
+      barLabel = refs + ' / ' + tier.threshold;
+    }
+    const pillLabel = state === 'achieved' ? '✓ Achieved' : state === 'inprogress' ? 'In Progress' : 'Locked';
+    const refsLine = tier.threshold === 0 ? 'Default rank' : tier.threshold + ' active referrals';
+    return `<div class="ac-tier-card ${state}">
+      <div class="ac-tier-top">
+        <div class="ac-tier-info">
+          <span class="ac-tier-stars">${tier.stars}</span>
+          <div>
+            <div class="ac-tier-name">${tier.label}</div>
+            <div class="ac-tier-refs">${refsLine}</div>
+          </div>
+        </div>
+        <span class="ac-status-pill ${state}">${pillLabel}</span>
+      </div>
+      <div class="ac-bar-row">
+        <div class="ac-bar"><div class="ac-bar-fill ${barClass}" style="width:${Math.max(barPct, barPct > 0 ? 3 : 0)}%"></div></div>
+        <span class="ac-bar-val">${barLabel}</span>
+      </div>
+      <div class="ac-tier-pay">Weekly salary: <b>${tier.weeklyPay > 0 ? ugx(tier.weeklyPay) : '—'}</b></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('agentCentreContent').innerHTML =
+    heroHtml +
+    '<div class="ac-section-lbl">Agent Tier Journey</div>' +
+    tierCards;
+}
+
+function renderAvatars(u) {
+  const initial = (u.name || '?')[0].toUpperCase();
+  [['moreAvatarInitial',52],['avatarInitial',34],['avatarInitialTop',34]].forEach(([id,size]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (u.profilePhoto) {
+      el.innerHTML = `<img src="${u.profilePhoto}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
+    } else {
+      el.textContent = initial;
+    }
+  });
+  const avatarWrap = document.getElementById('moreAvatarWrap');
+  if (avatarWrap) avatarWrap.classList.toggle('agent-ring', !!u.isAgent);
+}
+
+// ── NAVIGATION ──
+window.showSection = (sec) => {
+  const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection', agentCentre:'agentCentreSection' };
+  const navMap = { home:'home', products:'products', invest:'more', records:'more', commission:'commission', more:'more', agentCentre:'more' };
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(secMap[sec] || sec + 'Section')?.classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.sec === (navMap[sec] || sec));
+  });
+  // topbar only visible on non-home sections
+  const tb = document.getElementById('mainTopbar');
+  if (tb) tb.style.display = (sec === 'home') ? 'none' : 'flex';
+  if (sec === 'records' || sec === 'invest') loadRecords('deposits');
+  window.scrollTo(0, 0);
+};
+
+// ── CHECK-IN ──
+window.doCheckin = async () => {
+  if (!_user || !_userData) return;
+  const eat = new Date(Date.now() + 3*60*60*1000);
+  const todayKey = eat.toISOString().slice(0,10);
+  if (_userData.lastCheckinDate === todayKey) { showToast('Already checked in today!', 'error'); return; }
+  if (_userData.status === 'banned') { showToast('Account suspended', 'error'); return; }
+  showLoading(true);
+  try {
+    const r = await api('/checkin', { userId: _user.uid });
+    showLoading(false);
+    if (r.status === 'success') showToast(`UGX ${(r.bonus||500).toLocaleString()} credited! Day ${r.streak}`, 'success');
+    else showToast(r.message || 'Check-in failed', 'error');
+  } catch (e) {
+    showLoading(false);
+    showToast('Network error', 'error');
+  }
+};
+
+// ── PRODUCTS ──
+async function loadProducts() {
+  try {
+    const snap = await getDocs(query(collection(db,'products'), where('active','==',true)));
+    const products = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderProducts(products);
+  } catch (e) { console.error('Load products:', e); }
+}
+
+function renderProducts(products) {
+  const grid = document.getElementById('productsGrid');
+  // Update banner stats
+  const countEl   = document.getElementById('prodBannerCount');
+  const benefitEl = document.getElementById('prodBannerBenefit');
+  if (countEl)   countEl.textContent   = products.length;
+  if (benefitEl) {
+    const maxReturn = products.reduce((m,p) => Math.max(m, p.expectedReturn||0), 0);
+    benefitEl.textContent = maxReturn ? ugx(maxReturn) : '—';
+  }
+  if (!products.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No plans available yet</p></div>`;
+    return;
+  }
+  products.sort((a,b) => (a.displayOrder||999) - (b.displayOrder||999));
+  grid.innerHTML = products.map(p => {
+    const inStock  = p.isInStock !== false;
+    const stars    = p.stars || 0;
+    const starStr  = stars ? '★'.repeat(Math.round(stars)) : '';
+    const imgHtml  = p.image
+      ? `<img src="${p.image}" alt="${p.name}" decoding="async" loading="lazy">`
+      : `<span class="no-img">${ICN.box}</span>`;
+    return `<div class="product-card" onclick="openProductModal('${p.id}')">
+      <div class="product-img-wrap">${imgHtml}</div>
+      <div class="product-body">
+        <div class="product-name">${p.name}</div>
+        <div class="product-meta-row">Cycle: ${p.cycle||0} Days</div>
+        <div class="product-meta-row">Daily income: <span class="pv">${ugx(p.dailyReturn)}</span></div>
+        <div class="product-meta-row">Total revenue: <span class="pv">${ugx(p.expectedReturn)}</span></div>
+        <div class="product-price-row">${starStr ? `<span class="product-stars">${starStr}</span> <span style="font-size:11px;color:var(--text2)">${stars}</span>` : ''} Price: ${ugx(p.price)}</div>
+      </div>
+      <span class="product-stock ${inStock?'in':'out'}">${inStock?'On Sale':'Sold Out'}</span>
+      <button class="product-cart" ${inStock?'':'disabled'} onclick="event.stopPropagation();openProductModal('${p.id}')">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+window.openProductModal = async (productId) => {
+  try {
+    const snap = await getDoc(doc(db,'products',productId));
+    if (!snap.exists()) return;
+    _currentProduct = { id: snap.id, ...snap.data() };
+    const p = _currentProduct;
+    const inStock = p.isInStock !== false;
+    document.getElementById('productModalName').textContent = p.name;
+    const imgWrap = document.getElementById('productModalImgWrap');
+    if (p.image) {
+      imgWrap.innerHTML = `<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`;
+    } else {
+      imgWrap.innerHTML = ICN.box;
+    }
+    document.getElementById('pmPrice').textContent  = ugx(p.price);
+    document.getElementById('pmDaily').textContent  = ugx(p.dailyReturn);
+    document.getElementById('pmCycle').textContent  = p.cycle + ' days';
+    document.getElementById('pmReturn').textContent = ugx(p.expectedReturn);
+    document.getElementById('pmWalletNote').textContent = `Your wallet: ${ugx(_userData?.walletBalance || 0)}` + (!inStock ? ' — This plan is currently sold out' : '');
+    const btn = document.getElementById('pmBuyBtn');
+    btn.textContent = inStock ? 'Confirm Investment' : 'Sold Out';
+    btn.disabled    = !inStock;
+    openModal('productModal');
+  } catch (e) { showToast('Failed to load plan', 'error'); }
+};
+
+window.confirmBuy = async () => {
+  if (!_currentProduct || !_user) return;
+  const p = _currentProduct;
+  if (p.isInStock === false) { showToast('This plan is sold out', 'error'); return; }
+  if ((_userData?.walletBalance || 0) < p.price) {
+    showToast(`Insufficient balance. Need ${ugx(p.price)}, have ${ugx(_userData?.walletBalance||0)}`, 'error'); return;
+  }
+  if (!confirm(`Invest ${ugx(p.price)} in ${p.name}?`)) return;
+  closeModal('productModal');
+  showLoading(true);
+  try {
+    const r = await api('/invest/create', { userId: _user.uid, productId: p.id });
+    showLoading(false);
+    if (r.status === 'success') showToast(r.message, 'success');
+    else showToast(r.message || 'Investment failed', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── CLAIM INVESTMENT ──
+window.claimInvestment = async (invId) => {
+  if (!_user) return;
+  if (!confirm('Claim your returns now?')) return;
+  showLoading(true);
+  try {
+    const r = await api('/invest/claim', { userId: _user.uid, investmentId: invId });
+    showLoading(false);
+    if (r.status === 'success') showToast(r.message, 'success');
+    else showToast(r.message || 'Claim failed', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── INVESTMENT DETAIL MODAL ──
+let _invCache = {};
+window.openInvDetail = async (invId) => {
+  openModal('invDetailModal');
+  const body = document.getElementById('invDetailBody');
+  body.innerHTML = '<div class="load-spin" style="margin:24px auto"></div>';
+  try {
+    let inv = _invCache[invId];
+    if (!inv) {
+      const snap = await getDoc(doc(db, 'investments', invId));
+      if (!snap.exists()) { body.innerHTML = '<p style="color:var(--text2);text-align:center">Plan not found</p>'; return; }
+      inv = { id: snap.id, ...snap.data() };
+      _invCache[invId] = inv;
+    }
+    const matured  = inv.status === 'matured';
+    const claimed  = inv.status === 'claimed';
+    const cycle    = inv.cycle || inv.durationDays || 1;
+    const totalMs  = cycle * 86400000;
+    const msLeft   = inv.maturityDate ? Math.max(0, inv.maturityDate.toDate() - new Date()) : 0;
+    const daysLeft = Math.ceil(msLeft / 86400000);
+    const msElapsed   = Math.max(0, totalMs - msLeft);
+    const daysElapsed = Math.floor(msElapsed / 86400000);
+    // A plan whose cashback has fully paid out is complete even if the clock
+    // has a few hours left; the server marks these 'claimed', this is a guard
+    // for the brief window before the next maturity sweep runs.
+    const fullyPaid   = (inv.expectedReturn || 0) > 0 && (inv.dailyCredited || 0) >= inv.expectedReturn;
+    const progress    = matured || claimed || fullyPaid ? 100 : Math.min(100, Math.max(0, Math.round(msElapsed / totalMs * 100)));
+    const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
+    const stateBadge = claimed ? '<span class="inv-badge claimed">Claimed</span>'
+                     : matured ? '<span class="inv-badge matured">Matured</span>'
+                     : '<span class="inv-badge active">Active</span>';
+    const claimBtn = matured ? `<button class="btn-submit" style="margin-top:16px" onclick="closeModal('invDetailModal');claimInvestment('${inv.id}')">🎉 Claim Return — ${ugx(inv.expectedReturn)}</button>` : '';
+    body.innerHTML = `
+      <div style="text-align:center">${imgHtml}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:17px;font-weight:800;color:var(--text)">${inv.productName||'Plan'}</div>
+        ${stateBadge}
+      </div>
+      <div class="rec-row"><span class="rec-row-lbl">Amount Invested</span><span class="rec-row-val">${ugx(inv.amount)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Expected Return</span><span class="rec-row-val s-green">+${ugx(inv.expectedReturn)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Profit</span><span class="rec-row-val s-green">+${ugx((inv.expectedReturn||0)-(inv.amount||0))}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Daily Cashback</span><span class="rec-row-val s-green">+${ugx(inv.dailyReturn||0)}/day</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Paid to wallet</span><span class="rec-row-val s-green">+${ugx(inv.dailyCredited||0)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Remaining at maturity</span><span class="rec-row-val">${ugx(Math.max(0,(inv.expectedReturn||0)-(inv.dailyCredited||0)))}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Investment Duration</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Matures On</span><span class="rec-row-val">${inv.maturityDate ? inv.maturityDate.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed ✓' : matured ? '✅ Matured — Claim now!' : fullyPaid ? 'Fully paid out ✓' : daysLeft + ' day' + (daysLeft!==1?'s':'') + ' remaining'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
+      <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;color:var(--text2)">Progress</span>
+        <span style="font-size:12px;font-weight:700;color:${matured||claimed||fullyPaid?'#22c55e':'#2563eb'}">${progress}%</span>
+      </div>
+      <div style="background:var(--border);border-radius:99px;height:10px;overflow:hidden">
+        <div style="background:${matured||claimed||fullyPaid?'#22c55e':'#2563eb'};height:100%;width:${progress}%;border-radius:99px;transition:width .4s"></div>
+      </div>
+      ${claimBtn}`;
+  } catch(e) { body.innerHTML = '<p style="color:var(--red);text-align:center">Failed to load details</p>'; }
+};
+
+// ── RECORDS ──
+let _recordTab = 'income', _recToken = 0;
+window.switchRecord = (tab, btn) => {
+  _recordTab = tab;
+  document.querySelectorAll('.pill-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadRecords(tab);
+};
+
+function orderRef(tx) {
+  if (tx.createdAt?.toDate) {
+    const d = tx.createdAt.toDate();
+    const p = n => String(n).padStart(2,'0');
+    return 'T'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+String(d.getMilliseconds()).padStart(3,'0');
+  }
+  return tx.id ? tx.id.slice(0,20) : 'T——';
+}
+
+function fmtDT(tx) {
+  if (tx.createdAt?.toDate) {
+    const d = tx.createdAt.toDate();
+    const p = n => String(n).padStart(2,'0');
+    return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+  return ((tx.date||'') + (tx.time ? ' '+tx.time : '')).trim() || '—';
+}
+
+function statusCls(s) {
+  if (!s) return 's-orange';
+  const v = s.toLowerCase();
+  if (v==='success'||v==='approved') return 's-green';
+  if (v==='failed'||v==='rejected') return 's-red';
+  return 's-orange';
+}
+
+function statusLabel(s) {
+  const m={success:'Success',approved:'Approved',pending:'Payment in progress',failed:'Failed',rejected:'Rejected'};
+  return m[s?.toLowerCase()] || (s||'Pending');
+}
+
+async function loadRecords(tab) {
+  if (!_user) return;
+  _recordTab = tab;
+  const myToken = ++_recToken;
+  const el = document.getElementById('recordsContent');
+  el.innerHTML = '<div class="empty-state"><div class="load-spin" style="margin:0 auto 12px"></div><p>Loading…</p></div>';
+  try {
+    // ── PLANS ──
+    if (tab === 'investments') {
+      const snap = await getDocs(query(collection(db,'investments'), where('userId','==',_user.uid), limit(50)));
+      if (myToken !== _recToken) return;
+      const items = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No investment plans yet</p></div>`; return; }
+      el.innerHTML = items.map(inv => {
+        const matured=inv.status==='matured', claimed=inv.status==='claimed';
+        const badge = matured?'<span class="inv-badge matured">Matured</span>':claimed?'<span class="inv-badge claimed">Claimed</span>':'<span class="inv-badge active">Active</span>';
+        const invCycle = inv.cycle || inv.durationDays || '?';
+        const invDL = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
+        const invTimeStr = claimed ? 'Completed' : matured ? '✓ Ready' : invDL + 'd left';
+        return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
+          <div class="inv-img">${inv.productImage?`<img src="${inv.productImage}" alt="">`:ICN.box}</div>
+          <div class="inv-info"><div class="inv-name">${inv.productName||'Plan'}</div><div class="inv-meta">${inv.date||''} · ${invCycle} days</div></div>
+          <div class="inv-right"><div class="inv-return">${ugx(inv.expectedReturn)}</div>${badge}<div class="inv-days" style="${matured?'color:#22c55e;font-weight:700':'color:var(--text2)'};font-size:10px">${invTimeStr}</div></div>
+        </div>`;
+      }).join('');
+      return;
+    }
+    // ── WITHDRAWALS — read directly from withdrawals collection for live status ──
+    if (tab === 'withdrawals') {
+      const wSnap = await getDocs(query(collection(db,'withdrawals'), where('userId','==',_user.uid), limit(100)));
+      if (myToken !== _recToken) return;
+      const witems = wSnap.docs.map(d => ({ id:d.id, ...d.data() }))
+        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      if (!witems.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No withdrawals yet</p></div>`; return; }
+      el.innerHTML = witems.map(w => {
+        const net   = w.netAmount != null ? w.netAmount : Math.round((w.amount||0) * 0.83);
+        const phone = w.withdrawalPhone || w.phone || '—';
+        const rejNote = w.rejectionReason ? `<div class="rec-row"><span class="rec-row-lbl">Reason</span><span class="rec-row-val s-red">${w.rejectionReason}</span></div>` : '';
+        return `<div class="rec-card">
+          <div class="rec-card-hd"><div class="rec-card-hd-title">Withdrawal order</div><div class="rec-card-hd-amt">${ugx(w.amount)}</div></div>
+          <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(w)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Send to</span><span class="rec-row-val">${phone}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Amount received</span><span class="rec-row-val">${ugx(net)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(w.status)}">${statusLabel(w.status)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${w.date||'—'}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${w.time||fmtDT(w)}</span></div>
+          ${rejNote}
+        </div>`;
+      }).join('');
+      return;
+    }
+
+    // ── OTHER TRANSACTION RECORDS ──
+    const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',_user.uid), limit(200)));
+    if (myToken !== _recToken) return; // newer tab was selected while awaiting
+    const all = snap.docs.map(d => ({ id:d.id, ...d.data() }))
+      .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    const REVENUE_TYPES = ['checkin','cashback','commission','gift_code','investment_return','admin_credit'];
+    const items = tab === 'deposits'  ? all.filter(t => t.type === 'deposit' || t.type === 'admin_credit')
+               : tab === 'referrals' ? all.filter(t => t.type === 'commission')
+               : tab === 'revenue'   ? all.filter(t => REVENUE_TYPES.includes(t.type))
+               : all;
+    if (!items.length) {
+      const emptyMsg = tab === 'referrals'
+        ? 'No referral earnings yet.<br>Share your invite code to earn commissions!'
+        : 'No records yet';
+      el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>${emptyMsg}</p></div>`;
+      return;
+    }
+
+    if (tab === 'deposits') {
+      el.innerHTML = items.map(tx => {
+        const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'MoMo Deposit';
+        return `<div class="rec-card">
+          <div class="rec-card-hd"><div class="rec-card-hd-title">${typeLabel}</div><div class="rec-card-hd-amt">${ugx(tx.amount)}</div></div>
+          <div class="rec-row"><span class="rec-row-lbl">Order ID</span><span class="rec-row-val" style="font-size:11px;word-break:break-all">${tx.id}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Type</span><span class="rec-row-val">${typeLabel}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${tx.date || '—'}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${tx.time || fmtDT(tx)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status||'success')}">${statusLabel(tx.status||'success')}</span></div>
+          ${tx.description ? `<div class="rec-row"><span class="rec-row-lbl">Note</span><span class="rec-row-val">${tx.description}</span></div>` : ''}
+        </div>`;
+      }).join('');
+    } else if (tab === 'revenue') {
+      const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
+      const typeIcon = { checkin: '📅', cashback: '💰', commission: '👥', gift_code: '🎁', investment_return: '📈', admin_credit: '🏦', reversal: '↩️' };
+      const typeLabel = { checkin: 'Daily Check-in', cashback: 'Daily Cashback', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit', reversal: 'Deposit Reversed' };
+      el.innerHTML = `
+        <div class="rec-card" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);margin-bottom:8px">
+          <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-bottom:4px">Total Revenue Earned</div>
+          <div style="color:#fff;font-size:26px;font-weight:900">${ugx(totalCashback)}</div>
+          <div style="color:rgba(255,255,255,0.6);font-size:11px;margin-top:4px">${items.length} transaction${items.length !== 1 ? 's' : ''}</div>
+        </div>` +
+        items.map(tx => `<div class="rec-card">
+          <div class="rec-card-hd">
+            <div class="rec-card-hd-title">${typeIcon[tx.type] || '💰'} ${typeLabel[tx.type] || tx.type}</div>
+            <div class="rec-card-hd-amt s-green">+${ugx(tx.amount)}</div>
+          </div>
+          <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${tx.date || '—'}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${tx.time || fmtDT(tx)}</span></div>
+          ${tx.description ? `<div class="rec-row"><span class="rec-row-lbl">Detail</span><span class="rec-row-val">${tx.description}</span></div>` : ''}
+        </div>`).join('');
+    } else if (tab === 'referrals') {
+      el.innerHTML = items.map(tx => `<div class="rec-card">
+        <div class="rec-card-hd"><div class="rec-card-hd-title">Commission</div><div class="rec-card-hd-amt s-green">+${ugx(tx.amount)}</div></div>
+        <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
+        <div class="rec-row"><span class="rec-row-lbl">From</span><span class="rec-row-val">${tx.description||'Referral'}</span></div>
+        <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val s-green">Success</span></div>
+        <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
+      </div>`).join('');
+    } else {
+      el.innerHTML = items.map(tx => {
+        const pos = tx.amount > 0;
+        return `<div class="rec-card">
+          <div class="rec-card-hd"><div class="rec-card-hd-title">${tx.description||tx.type||'Transaction'}</div><div class="rec-card-hd-amt ${pos?'s-green':'s-red'}">${pos?'+':''}${ugx(tx.amount)}</div></div>
+          <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status)}">${statusLabel(tx.status)}</span></div>
+          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
+        </div>`;
+      }).join('');
+    }
+  } catch (e) {
+    if (myToken !== _recToken) return;
+    el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.warn}</span><p>Failed to load. Tap a tab to retry.</p></div>`;
+    console.error('loadRecords error:', e);
+  }
+}
+
+// ── REFERRAL ──
+window.copyRefCode = () => {
+  const code = _userData?.referralCode || '';
+  if (!code) return;
+  navigator.clipboard?.writeText(code).then(() => showToast('Referral code copied!', 'success')).catch(() => showToast(code, ''));
+};
+window.shareRefLink = () => {
+  const code = _userData?.referralCode || '';
+  const link = window.location.origin + window.location.pathname + '?ref=' + code;
+  const text = `Join Nexus and earn returns!\n\nUse my referral code: ${code}\nSign up here: ${link}`;
+  if (navigator.share) {
+    navigator.share({ title: 'Nexus', text, url: link }).catch(() => {});
+  } else {
+    navigator.clipboard?.writeText(text).then(() => showToast('Share link copied!', 'success'));
+  }
+};
+
+// ── TEAM MEMBERS MODAL ──
+window.openTeamMembersModal = async () => {
+  const body = document.getElementById('teamMembersBody');
+  body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">Loading…</div>';
+  openModal('teamMembersModal');
+  try {
+    const r = await api('/team/members', { userId: _user.uid });
+    const members = r.members || [];
+    if (!members.length) {
+      body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">No team members yet.<br><span style="font-size:11px;opacity:.7">Share your referral code to grow your team.</span></div>';
+      return;
+    }
+    body.innerHTML = `
+      <div style="font-size:11px;color:var(--text2);margin-bottom:12px">${members.length} member${members.length!==1?'s':''} — direct referrals only</div>
+      ${members.map(m => {
+        const initials = (m.name||'U').slice(0,2).toUpperCase();
+        const joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+        const badge = m.hasInvested
+          ? `<span style="font-size:10px;font-weight:700;color:#22c55e;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:5px;padding:2px 7px">Invested</span>`
+          : `<span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--card2);border:1px solid var(--border2);border-radius:5px;padding:2px 7px">Not invested</span>`;
+        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border2)">
+          <div style="width:40px;height:40px;border-radius:50%;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0">${initials}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">${m.name}</div>
+            <div style="font-size:11px;color:var(--text2)">${m.phone} · Joined ${joined}</div>
+          </div>
+          <div>${badge}</div>
+        </div>`;
+      }).join('')}`;
+  } catch(e) {
+    body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--red);font-size:13px">Failed to load team</div>';
+  }
+};
+
+// ── PAGE NAVIGATION ──
+window.openPage = (id) => {
+  const el = document.getElementById(id);
+  el.style.display = 'block';
+  requestAnimationFrame(() => requestAnimationFrame(() => { el.classList.add('open'); el.scrollTop = 0; }));
+};
+window.closePage = (id) => {
+  const el = document.getElementById(id);
+  el.classList.remove('open');
+  el.addEventListener('transitionend', () => { el.style.display = 'none'; }, { once: true });
+};
+
+// ── DEPOSIT PAGE ──
+let _depPollTimer   = null;
+let _depDepositId   = null;
+let _depUnsubscribe = null;
+
+function depDetectNetwork(phone) {
+  const d = String(phone||'').replace(/\D/g,'');
+  const p9 = d.startsWith('256') ? d.slice(3) : d.startsWith('0') ? d.slice(1) : d;
+  const p2 = p9.slice(0,2);
+  return ['77','78','76','31','39','79'].includes(p2) ? 'MTN' : 'Airtel';
+}
+
+let _depMinDeposit = 500;
+async function loadDepConfig() {
+  try {
+    const r = await (await fetch(SERVER + '/deposit/config')).json();
+    if (r.status === 'success') _depMinDeposit = r.minDeposit || 500;
+  } catch (_) {}
+  const badge = document.getElementById('depWalBadge');
+  if (badge) {
+    const wrap = badge.closest('.page-bal-badge');
+    if (wrap) wrap.innerHTML = `Wallet: <span id="depWalBadge">${ugx(_userData?.walletBalance||0)}</span> &nbsp;·&nbsp; Min ${ugx(_depMinDeposit)}`;
+  }
+}
+
+function stopDepTimers() {
+  if (_depPollTimer)   { clearInterval(_depPollTimer); _depPollTimer = null; }
+  if (_depUnsubscribe) { _depUnsubscribe(); _depUnsubscribe = null; }
+}
+
+function showDepStep(n) {
+  ['depStep1','depStep2','depStep3Success','depStep3Failed'].forEach((id, i) => {
+    document.getElementById(id).style.display = (i + 1 === n) ? 'block' : 'none';
+  });
+}
+
+function launchConfetti() {
+  const el = document.getElementById('depConfetti');
+  if (!el) return;
+  const colors = ['#f59e0b','#22c55e','#3b82f6','#ec4899','#8b5cf6','#ef4444','#f97316'];
+  el.innerHTML = '';
+  for (let i = 0; i < 55; i++) {
+    const p = document.createElement('div');
+    const c = colors[Math.floor(Math.random() * colors.length)];
+    const w = 4 + Math.random() * 7, h = w * 1.4;
+    p.style.cssText = `position:absolute;width:${w}px;height:${h}px;background:${c};border-radius:2px;left:${Math.random()*100}%;top:-${h}px;animation:confettiFall ${1.2+Math.random()}s ease-in ${Math.random()*1.2}s both;transform:rotate(${Math.random()*360}deg)`;
+    el.appendChild(p);
+  }
+}
+
+window.openDepositPage = () => {
+  if (!_userData) return;
+  stopDepTimers();
+  _depDepositId = null;
+  showDepStep(1);
+  document.getElementById('depPageTitle').textContent = 'Deposit Funds';
+  document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+  document.getElementById('depAmount').value = '';
+  const btn = document.getElementById('depProceedBtn');
+  btn.disabled = false; btn.textContent = 'Pay via MoMo';
+
+  // Pre-fill with profile phone (9 digits)
+  const savedDigits = (_userData.phone || '').replace(/^\+256/, '').replace(/^0/, '').replace(/\D/g,'').slice(0,9);
+  const phoneInput = document.getElementById('depSenderPhone');
+  if (phoneInput) phoneInput.value = savedDigits;
+
+  loadDepConfig(); // refresh min deposit + wallet balance badge
+  openPage('depositPage');
+};
+
+// Strip non-digits as user types
+setTimeout(() => {
+  const inp = document.getElementById('depSenderPhone');
+  if (inp) inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g,'').slice(0,9); });
+}, 500);
+
+window.proceedDeposit = async () => {
+  if (!_user || !_userData) return;
+  const amount   = parseInt(document.getElementById('depAmount').value, 10);
+  const digits9  = (document.getElementById('depSenderPhone').value || '').replace(/\D/g,'').slice(0,9);
+  if (!amount || amount < _depMinDeposit) { showToast(`Minimum deposit is ${ugx(_depMinDeposit)}`, 'error'); return; }
+  if (digits9.length !== 9)   { showToast('Enter a valid 9-digit MoMo number', 'error'); return; }
+
+  const btn = document.getElementById('depProceedBtn');
+  btn.disabled = true; btn.textContent = 'Requesting payment…';
+  try {
+    const r = await api('/deposit/marzpay', { userId: _user.uid, amount, phone: '256' + digits9 });
+    if (r.status !== 'success') {
+      btn.disabled = false; btn.textContent = 'Pay via MoMo';
+      showToast(r.message || 'Failed. Try again.', 'error');
+      return;
+    }
+    _depDepositId = r.depositId;
+    document.getElementById('depWaitPhone').textContent  = r.phone || ('+256' + digits9) || '—';
+    document.getElementById('depWaitAmount').textContent = ugx(r.amount);
+    document.getElementById('depPageTitle').textContent  = 'Waiting for Payment';
+    document.getElementById('depBackBtn').onclick = () => cancelDepWait();
+    showDepStep(2);
+    startDepPolling();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Pay via MoMo';
+    showToast('Network error. Try again.', 'error');
+  }
+};
+
+window.cancelDepWait = () => {
+  stopDepTimers(); _depDepositId = null; _depResolved = false;
+  showDepStep(1);
+  document.getElementById('depPageTitle').textContent = 'Deposit Funds';
+  document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+  const btn = document.getElementById('depProceedBtn');
+  btn.disabled = false; btn.textContent = 'Pay via MoMo';
+};
+
+window.retryDeposit = () => {
+  _depResolved = false;
+  showDepStep(1);
+  document.getElementById('depPageTitle').textContent = 'Deposit Funds';
+  document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+  const btn = document.getElementById('depProceedBtn');
+  btn.disabled = false; btn.textContent = 'Pay via MoMo';
+};
+
+// Deposit result handler — called by either Firestore listener or HTTP poll.
+let _depResolved = false;
+function handleDepResult(status, creditedAmount, amount) {
+  if (_depResolved) return;
+  if (status === 'matched') {
+    _depResolved = true;
+    stopDepTimers();
+    document.getElementById('depSuccessAmt').textContent = ugx(creditedAmount || amount);
+    document.getElementById('depPageTitle').textContent  = 'Payment Received ✅';
+    document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+    showDepStep(3); launchConfetti(); loadUser();
+  } else if (status === 'failed') {
+    _depResolved = true;
+    stopDepTimers();
+    document.getElementById('depPageTitle').textContent = 'Payment Failed';
+    document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
+    showDepStep(4);
+  } else if (status === 'cancelled') {
+    _depResolved = true;
+    stopDepTimers();
+  }
+}
+
+// Dual-track: Firestore listener (instant when webhook fires) +
+// HTTP server poll (fallback that actively checks MarzPay on the server).
+// Both run in parallel — whichever resolves first wins.
+function startDepPolling() {
+  stopDepTimers();
+  _depResolved = false;
+  if (!_depDepositId) return;
+
+  // Track 1 — Firestore real-time (instant when server credits via webhook)
+  try {
+    const depRef = doc(db, 'pendingDeposits', _depDepositId);
+    _depUnsubscribe = onSnapshot(depRef, snap => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      handleDepResult(d.status, d.creditedAmount, d.amount);
+    }, () => {});
+  } catch (_) {}
+
+  // Track 2 — HTTP poll every 2 s; server calls MarzPay status API if still processing
+  _depPollTimer = setInterval(async () => {
+    if (_depResolved) return;
+    try {
+      const r = await (await fetch(SERVER + '/deposit/status/' + _depDepositId)).json();
+      if (r.status === 'success') {
+        const d = r.deposit;
+        handleDepResult(d.depositStatus, d.creditedAmount, d.amount);
+      }
+    } catch (_) {}
+  }, 2000);
+}
+
+// ── WITHDRAW PAGE ──
+window.openWithdrawPage = () => {
+  if (!_userData) return;
+  document.getElementById('witBalBadge').textContent = ugx(_userData.walletBalance);
+  document.getElementById('witAmount').value = '';
+  document.getElementById('witPhone').value  = '';
+  document.getElementById('witFeeRow').style.display = 'none';
+
+  // Render saved bank accounts as tappable cards
+  const accounts = _userData.bankAccounts || [];
+  const wrap = document.getElementById('witAccountsWrap');
+  const list = document.getElementById('witAccList');
+  const lbl  = document.getElementById('witPhoneLbl');
+  if (accounts.length) {
+    wrap.style.display = 'block';
+    lbl.textContent = 'Or enter phone manually';
+    list.innerHTML = accounts.map((a, i) => `
+      <div class="wit-acc-card" id="witAcc${i}" onclick="pickWitAccount(${i},'${String(a.phone).replace(/'/g,'')}')">
+        <div class="wit-acc-ico"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.63 4.4 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.13 1 .36 1.98.71 2.93a2 2 0 0 1-.45 2.11L7.91 9.91A16 16 0 0 0 14.09 16l.91-.91a2 2 0 0 1 2.11-.45c.95.35 1.93.58 2.93.71A2 2 0 0 1 22 16.92z"/></svg></div>
+        <div class="wit-acc-info">
+          <div class="wit-acc-name">${a.name}</div>
+          <div class="wit-acc-num">+256 ${a.phone}</div>
+        </div>
+        <div class="wit-acc-chk" id="witChk${i}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      </div>`).join('');
+  } else {
+    wrap.style.display = 'none';
+    lbl.textContent = 'Receive on Phone';
+  }
+  openPage('withdrawPage');
+};
+
+window.pickWitAccount = (idx, phone) => {
+  const accounts = _userData?.bankAccounts || [];
+  accounts.forEach((_, i) => {
+    const c = document.getElementById('witAcc' + i);
+    const k = document.getElementById('witChk' + i);
+    if (c) c.classList.remove('sel');
+    if (k) k.style.display = 'none';
+  });
+  const card = document.getElementById('witAcc' + idx);
+  const chk  = document.getElementById('witChk' + idx);
+  if (card) card.classList.add('sel');
+  if (chk)  chk.style.display = 'block';
+  const num = String(phone).replace(/\D/g,'').replace(/^256/,'').replace(/^0/,'');
+  document.getElementById('witPhone').value = num;
+};
+
+window.updateWitFee = () => {
+  const raw = parseInt(document.getElementById('witAmount').value, 10);
+  const row = document.getElementById('witFeeRow');
+  if (!raw || raw <= 0) { row.style.display = 'none'; return; }
+  const fee = Math.round(raw * 0.17);
+  const net = raw - fee;
+  const snapHint = raw % 5000 !== 0
+    ? ` · Must be multiple of 5,000 (try ${ugx(Math.ceil(raw/5000)*5000)})`
+    : '';
+  row.style.display = 'block';
+  row.textContent = `Fee: ${ugx(fee)} (17%)  →  You receive: ${ugx(net)}${snapHint}`;
+};
+
+window.submitWithdrawal = async () => {
+  if (!_user || !_userData) return;
+  const amount = parseInt(document.getElementById('witAmount').value, 10);
+  const phone  = document.getElementById('witPhone').value.trim().replace(/\D/g,'');
+  if (!amount || amount <= 0) { showToast('Enter withdrawal amount', 'error'); return; }
+  if (amount < 15000) { showToast('Minimum withdrawal is UGX 15,000', 'error'); return; }
+  if (amount % 5000 !== 0) {
+    const snap = Math.ceil(amount / 5000) * 5000;
+    showToast(`Amount must be a multiple of 5,000. Try ${ugx(snap)}`, 'error'); return;
+  }
+  if (amount > (_userData.walletBalance || 0)) { showToast('Insufficient balance', 'error'); return; }
+  if (!phone || phone.length < 9) { showToast('Enter a valid phone number', 'error'); return; }
+  closePage('withdrawPage');
+  showLoading(true);
+  try {
+    const r = await api('/withdraw/request', { userId:_user.uid, amount, phone:'+256'+phone.slice(-9) });
+    showLoading(false);
+    if (r.status === 'success') {
+      showToast('Withdrawal submitted! You\'ll be notified when processed.', 'success');
+      if (r.withdrawalId) watchWithdrawal(r.withdrawalId, amount);
+    } else {
+      showToast(r.message || 'Withdrawal failed', 'error');
+    }
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// Real-time withdrawal status listener + HTTP poll fallback
+let _witUnsubscribe = null;
+let _witPollTimer   = null;
+let _witResolved    = false;
+
+function stopWitTimers() {
+  if (_witUnsubscribe) { _witUnsubscribe(); _witUnsubscribe = null; }
+  if (_witPollTimer)   { clearInterval(_witPollTimer); _witPollTimer = null; }
+}
+
+function handleWitResult(status, d, amount) {
+  if (_witResolved) return;
+  if (status === 'processed') {
+    _witResolved = true; stopWitTimers();
+    showToast(`✅ Withdrawal of ${ugx(d.netAmount || amount)} sent to your phone!`, 'success');
+  } else if (status === 'failed') {
+    _witResolved = true; stopWitTimers();
+    showToast(`❌ Withdrawal failed — ${ugx(amount)} refunded to your wallet.`, 'error');
+  }
+}
+
+function watchWithdrawal(withdrawalId, amount) {
+  stopWitTimers();
+  _witResolved = false;
+  // Track 1: Firestore real-time (instant when webhook fires)
+  _witUnsubscribe = onSnapshot(doc(db, 'withdrawals', withdrawalId), snap => {
+    if (!snap.exists()) return;
+    handleWitResult(snap.data().status, snap.data(), amount);
+  });
+  // Track 2: HTTP poll every 2 s — server actively checks MarzPay as fallback
+  _witPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(SERVER + '/withdraw/status/' + withdrawalId);
+      const j = await r.json();
+      if (j.status === 'success' && j.data) handleWitResult(j.data.status, j.data, amount);
+    } catch (_) {}
+  }, 2000);
+}
+
+// No-op: startListener onSnapshot already auto-refreshes the UI on Firestore changes
+function loadUser() {}
+
+
+// ── GIFT CODE ──
+window.openGiftModal = () => {
+  document.getElementById('giftCodeInput').value = '';
+  openModal('giftModal');
+};
+window.redeemGiftCode = async () => {
+  const code = document.getElementById('giftCodeInput').value.trim().toUpperCase();
+  if (!code) { showToast('Enter a gift code', 'error'); return; }
+  closeModal('giftModal');
+  showLoading(true);
+  try {
+    const r = await api('/giftcode/redeem', { userId: _user.uid, code });
+    showLoading(false);
+    if (r.status === 'success') showToast(r.message, 'success');
+    else showToast(r.message || 'Invalid code', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── BANK ACCOUNTS ──
+window.openBankModal = () => {
+  renderBankList();
+  document.getElementById('bankName').value  = '';
+  document.getElementById('bankPhone').value = '';
+  openModal('bankModal');
+};
+function renderBankList() {
+  const accounts = _userData?.bankAccounts || [];
+  const el = document.getElementById('bankList');
+  if (!accounts.length) { el.innerHTML = '<div class="empty-state" style="padding:16px 0"><p style="font-size:12px">No saved accounts yet</p></div>'; return; }
+  el.innerHTML = accounts.map((a,i) => `
+    <div class="bank-item">
+      <div class="bank-icon">${ICN.phone}</div>
+      <div class="bank-info">
+        <div class="bank-name">${a.name || 'Account'}</div>
+        <div class="bank-phone">+256${a.phone}</div>
+      </div>
+      <button class="bank-del" onclick="removeBankAccount(${i})">${ICN.trash}</button>
+    </div>`).join('');
+}
+window.addBankAccount = async () => {
+  const name  = document.getElementById('bankName').value.trim();
+  const phone = document.getElementById('bankPhone').value.trim().replace(/\D/g,'');
+  if (!name || !phone) { showToast('Enter account name and phone', 'error'); return; }
+  try {
+    const r = await api('/account/add-bank', { name, phone });
+    if (r.status !== 'success') { showToast(r.message || 'Failed to save', 'error'); return; }
+    document.getElementById('bankName').value  = '';
+    document.getElementById('bankPhone').value = '';
+    showToast('Account saved', 'success');
+  } catch (e) { showToast('Failed to save', 'error'); }
+};
+window.removeBankAccount = async (idx) => {
+  if (!confirm('Remove this account?')) return;
+  const accounts = [...(_userData?.bankAccounts || [])];
+  const removed  = accounts[idx];
+  if (!removed) return;
+  try {
+    const r = await api('/account/remove-bank', { name: removed.name, phone: removed.phone });
+    if (r.status !== 'success') { showToast(r.message || 'Failed to remove', 'error'); return; }
+    showToast('Account removed', '');
+  } catch (e) { showToast('Failed to remove', 'error'); }
+};
+
+// ── CONTENT PAGES ──
+const CONTENT = {
+  about: {
+    title: 'About Nexus',
+    body: `<h3>◈ About Nexus</h3>
+      <p>Nexus is a modern platform designed to help you grow your money through structured investment plans and a powerful commission referral system.</p>
+      <p>Our platform is built on transparency, security, and consistent returns for all our investors.</p>
+      <h3 style="margin-top:16px">Our Mission</h3>
+      <p>To make structured investment accessible to everyone, with clear returns and instant commission rewards for building your network.</p>`
+  },
+  rules: {
+    title: 'Platform Rules',
+    body: `<h3>Investment Rules</h3>
+      <ul>
+        <li>Minimum deposit is UGX 30,000</li>
+        <li>Minimum withdrawal is UGX 15,000 (multiples of 5,000 only)</li>
+        <li>A 17% liquidity fee applies on all withdrawals</li>
+        <li>Investment plans run for a fixed cycle and mature automatically</li>
+        <li>Daily check-in bonus is UGX 500 per day</li>
+      </ul>
+      <h3 style="margin-top:16px">Commission Rules</h3>
+      <ul>
+        <li>Level 1: 10% of every investment your direct referral makes</li>
+        <li>Level 2: 5% of every investment by your L2 team</li>
+        <li>Level 3: 2% of every investment by your L3 team</li>
+        <li>Commission is credited instantly and can be withdrawn immediately</li>
+      </ul>
+      <h3 style="margin-top:16px">Account Rules</h3>
+      <ul>
+        <li>One account per person only</li>
+        <li>Fraudulent activity will result in permanent suspension</li>
+        <li>All transactions are final and subject to review</li>
+      </ul>`
+  },
+  support: {
+    title: 'Customer Service',
+    body: `<h3>Contact Us</h3>
+      <p>Our support team is available to help you with any issues or questions about your Nexus account.</p>
+      <p><strong>Telegram:</strong> Contact via our Telegram support channel</p>
+      <p><strong>WhatsApp:</strong> Send us a message on WhatsApp</p>
+      <p><strong>Email:</strong> support@nexusinvest.com</p>
+      <p style="margin-top:16px">Support hours: Monday – Saturday, 8:00 AM – 8:00 PM (EAT)</p>
+      <p>For urgent withdrawal issues, please contact us directly via Telegram for fastest response.</p>`
+  }
+};
+window.openContentModal = (type) => {
+  const c = CONTENT[type];
+  if (!c) return;
+  document.getElementById('contentModalTitle').textContent = c.title;
+  document.getElementById('contentModalBody').innerHTML    = c.body;
+  openModal('contentModal');
+};
+
+// ── MODAL HELPERS ──
+function openModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+window.openModal  = openModal;
+window.closeModal = closeModal;
+
+// ── PHOTO UPLOAD ──
+const CLOUD  = 'dcmfxgofa';
+const PRESET = 'x-engineuploads';
+
+window.triggerPhotoUpload = () => document.getElementById('photoInput').click();
+
+window.uploadPhoto = async (input) => {
+  const file = input.files[0];
+  if (!file || !_user) return;
+  showLoading(true);
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', PRESET);
+    const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, { method:'POST', body:fd });
+    const data = await resp.json();
+    if (data.secure_url) {
+      await api('/account/update-photo', { photoUrl: data.secure_url });
+      showToast('Profile photo updated', 'success');
+    }
+  } catch (e) { showToast('Photo upload failed', 'error'); }
+  finally { showLoading(false); input.value = ''; }
+};
+
+// ── REFERRAL CODE FROM URL ──
+// A ?ref= link means the visitor was invited → drop them straight on the
+// registration screen with the code pre-filled (not the login screen).
+const urlRef = new URLSearchParams(window.location.search).get('ref');
+if (urlRef) {
+  const refInput = document.getElementById('regRef');
+  if (refInput) refInput.value = urlRef.toUpperCase();
+  const loginF = document.getElementById('loginForm');
+  const regF   = document.getElementById('registerForm');
+  if (loginF && regF) { loginF.style.display = 'none'; regF.style.display = 'block'; }
+}
+
+

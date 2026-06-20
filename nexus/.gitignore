@@ -1,14 +1,1 @@
-node_modules/
-.env
-.env.local
-*.log
-npm-debug.log*
-
-# NEVER commit Firebase credentials — set FIREBASE_SERVICE_ACCOUNT as Railway env var
-firebase-service-account.json
-serviceAccountKey.json
-*-service-account*.json
-
-# OS
-.DS_Store
-Thumbs.db
+nexus-deploy.zip
