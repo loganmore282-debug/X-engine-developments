@@ -867,14 +867,6 @@ app.post('/withdraw/request', async (req, res) => {
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
 
-    // Deposit hold: block withdrawal if a recent deposit hasn't cleared its 1-hour hold yet.
-    // Protects against send-and-reverse fraud (MoMo reversals typically happen within minutes).
-    const withdrawableFrom = user.withdrawableFrom?.toDate?.() || null;
-    if (withdrawableFrom && withdrawableFrom > new Date()) {
-      const minsLeft = Math.ceil((withdrawableFrom - Date.now()) / 60000);
-      return res.status(400).json({ status: 'error', message: `Recent deposit is still clearing. Withdrawals available in ${minsLeft} minute${minsLeft===1?'':'s'}.` });
-    }
-
     if ((user.walletBalance || 0) < amt)
       return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });
 
