@@ -18,6 +18,10 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;overflow-x:hidden}
 body{padding-bottom:106px}
+/* While the login / register screen is showing, the dark gradient takes over the
+   whole page — kill the light app background + bottom-nav padding so no white strip shows below the fold */
+body.on-auth{background:#060e2a;padding-bottom:0}
+html:has(body.on-auth){background:#060e2a}
 
 /* ── AUTH SCREEN ── */
 .auth-screen{
@@ -70,7 +74,7 @@ body{padding-bottom:106px}
 #maintenanceOverlay{display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:32px}
 
 /* ── TOPBAR ── */
-.topbar{position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.98);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);box-shadow:0 1px 8px rgba(0,0,0,0.06);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+.topbar{position:sticky;top:0;z-index:100;background:#fff;border-bottom:1px solid var(--border);box-shadow:0 1px 8px rgba(0,0,0,0.06);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
 .topbar-left{display:flex;align-items:center;gap:10px}
 .topbar-logo{font-size:20px;font-weight:900;color:var(--text);letter-spacing:-1px}
 .topbar-logo span{color:var(--text2)}
@@ -89,8 +93,7 @@ body{padding-bottom:106px}
 /* ── BOTTOM NAV — gold pill ── */
 .bottom-nav{
   position:fixed;bottom:14px;left:12px;right:12px;z-index:200;
-  background:rgba(255,255,255,0.97);
-  backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  background:#fff;
   border:1px solid rgba(0,0,0,0.07);
   border-radius:22px;
   display:none;
@@ -529,7 +532,7 @@ body{padding-bottom:106px}
 /* ── FULL-SCREEN PAGE OVERLAY ── */
 .page-overlay{position:fixed;inset:0;z-index:600;background:var(--bg);transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 .page-overlay.open{transform:translateX(0)}
-.page-hdr{position:sticky;top:0;z-index:10;background:rgba(255,255,255,0.98);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 6px rgba(0,0,0,0.06)}
+.page-hdr{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 6px rgba(0,0,0,0.06)}
 .page-back{width:38px;height:38px;border:none;background:var(--card2);border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text)}
 .page-back svg{width:20px;height:20px}
 .page-hdr-title{font-size:17px;font-weight:800;color:var(--text);flex:1}
@@ -1413,6 +1416,7 @@ window.doLogout = async () => {
   if (_maintUnsub) { _maintUnsub(); _maintUnsub = null; }
   await signOut(auth);
   _user = null; _userData = null;
+  document.body.classList.add('on-auth');
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('authScreen').style.display = 'block';
 };
@@ -1584,6 +1588,7 @@ function loadTicker() {
 onAuthStateChanged(auth, async user => {
   if (user) {
     _user = user;
+    document.body.classList.remove('on-auth');
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('appScreen').style.display  = 'block';
     showLoading(false);
@@ -1596,6 +1601,7 @@ onAuthStateChanged(auth, async user => {
     api('/account/ensure-refcode', { userId: user.uid }).catch(() => {});
   } else {
     if (_unsub) { _unsub(); _unsub = null; }
+    document.body.classList.add('on-auth');
     document.getElementById('appScreen').style.display  = 'none';
     document.getElementById('authScreen').style.display = 'block';
     showLoading(false);
@@ -1625,6 +1631,7 @@ function startListener(uid) {
     if (_userData.status === 'banned') {
       await signOut(auth);
       _user = null; _userData = null;
+      document.body.classList.add('on-auth');
       document.getElementById('appScreen').style.display = 'none';
       document.getElementById('authScreen').style.display = 'block';
       showLoading(false);
@@ -1757,9 +1764,9 @@ function renderAgentCentre(u) {
     { key: 'junior_agent',    label: 'Junior Agent',    stars: '🥉', threshold:  5, weeklyPay:  30000 },
     { key: 'agent',           label: 'Agent',           stars: '🥈', threshold: 10, weeklyPay:  75000 },
     { key: 'super_agent',     label: 'Super Agent',     stars: '🥇', threshold: 15, weeklyPay: 120000 },
-    { key: 'regional_agent',  label: 'Regional Agent',  stars: '💎', threshold: 20, weeklyPay: 180000 },
-    { key: 'national_agent',  label: 'National Agent',  stars: '👑', threshold: 30, weeklyPay: 300000 },
-    { key: 'executive_agent', label: 'Executive Agent', stars: '🚀', threshold: 50, weeklyPay: 500000 },
+    { key: 'regional_agent',  label: 'Regional Agent',  stars: '💎', threshold: 20, weeklyPay: 170000 },
+    { key: 'national_agent',  label: 'National Agent',  stars: '👑', threshold: 30, weeklyPay: 220000 },
+    { key: 'executive_agent', label: 'Executive Agent', stars: '🚀', threshold: 50, weeklyPay: 280000 },
   ];
   const refs           = u.activeReferralCount || 0;
   const currentTier    = TIERS.find(t => t.key === (u.agentTier || 'member')) || TIERS[0];

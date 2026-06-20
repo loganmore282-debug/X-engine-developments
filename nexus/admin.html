@@ -555,7 +555,16 @@ tr:hover td{background:rgba(255,255,255,.02)}
             <label class="form-label">L3 Commission % (default 2)</label>
             <input class="form-input" type="number" id="settCommL3" value="2" min="0" max="100" step="0.1">
           </div>
+          <div class="form-group">
+            <label class="form-label">Min Gift Code Amount (UGX)</label>
+            <input class="form-input" type="number" id="settMinGift" value="200" min="0" step="100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Max Gift Code Amount (UGX)</label>
+            <input class="form-input" type="number" id="settMaxGift" value="2000" min="0" step="100">
+          </div>
         </div>
+        <p style="font-size:11px;color:var(--text2);margin:-4px 0 12px">🎁 Each redeemed gift code pays a random amount between the min and max above. The server reads these the moment a code is redeemed.</p>
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
 
@@ -1793,6 +1802,8 @@ async function loadSettings() {
     document.getElementById('settCommL1').value   = s.commL1        != null ? (s.commL1        * 100).toFixed(1) : 10;
     document.getElementById('settCommL2').value   = s.commL2        != null ? (s.commL2        * 100).toFixed(1) : 5;
     document.getElementById('settCommL3').value   = s.commL3        != null ? (s.commL3        * 100).toFixed(1) : 2;
+    document.getElementById('settMinGift').value  = s.minGift        || 200;
+    document.getElementById('settMaxGift').value  = s.maxGift        || 2000;
     // Announcement
     const ann = s.announcement || {};
     document.getElementById('annActive').checked    = !!ann.active;
@@ -1845,6 +1856,8 @@ window.saveSettings = async () => {
     commL1:          (parseFloat(document.getElementById('settCommL1').value) || 10) / 100,
     commL2:          (parseFloat(document.getElementById('settCommL2').value) || 5)  / 100,
     commL3:          (parseFloat(document.getElementById('settCommL3').value) || 2)  / 100,
+    minGift:         parseInt(document.getElementById('settMinGift').value) || 200,
+    maxGift:         parseInt(document.getElementById('settMaxGift').value) || 2000,
   };
   try {
     await setDoc(doc(db,'settings','main'), s, { merge:true });

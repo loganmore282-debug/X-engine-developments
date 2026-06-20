@@ -44,9 +44,9 @@ const COMM_L3          = 0.02;
 const LIQUIDITY_FEE    = 0.17;
 // Agent tier ladder — ordered highest → lowest (array order matters for findIndex)
 const AGENT_TIERS = [
-  { key: 'executive_agent', label: 'Executive Agent', icon: '🚀', threshold: 50, weeklyPay: 500000 },
-  { key: 'national_agent',  label: 'National Agent',  icon: '👑', threshold: 30, weeklyPay: 300000 },
-  { key: 'regional_agent',  label: 'Regional Agent',  icon: '💎', threshold: 20, weeklyPay: 180000 },
+  { key: 'executive_agent', label: 'Executive Agent', icon: '🚀', threshold: 50, weeklyPay: 280000 },
+  { key: 'national_agent',  label: 'National Agent',  icon: '👑', threshold: 30, weeklyPay: 220000 },
+  { key: 'regional_agent',  label: 'Regional Agent',  icon: '💎', threshold: 20, weeklyPay: 170000 },
   { key: 'super_agent',     label: 'Super Agent',     icon: '🥇', threshold: 15, weeklyPay: 120000 },
   { key: 'agent',           label: 'Agent',           icon: '🥈', threshold: 10, weeklyPay:  75000 },
   { key: 'junior_agent',    label: 'Junior Agent',    icon: '🥉', threshold:  5, weeklyPay:  30000 },
@@ -1210,7 +1210,11 @@ app.post('/giftcode/redeem', async (req, res) => {
     if ((gcd.usedBy || []).includes(userId)) return res.status(400).json({ status: 'error', message: 'You have already redeemed this code' });
     if (gcd.maxUsers && (gcd.usedBy || []).length >= gcd.maxUsers) return res.status(400).json({ status: 'error', message: 'Usage limit reached — this code has expired' });
     if (gcd.expiresAt && gcd.expiresAt.toDate() < new Date()) return res.status(400).json({ status: 'error', message: 'This gift code has expired' });
-    const amount = Math.floor(Math.random() * 1801) + 200;
+    // Admin-controlled payout band (settings/main → minGift / maxGift). Falls back to 200–2000.
+    const sett    = await getSettings();
+    const giftLo  = Math.max(0, Math.round(sett.minGift ?? 200));
+    const giftHi  = Math.max(giftLo, Math.round(sett.maxGift ?? 2000));
+    const amount  = Math.floor(Math.random() * (giftHi - giftLo + 1)) + giftLo;
     const { date, time } = nowStr();
     await db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
