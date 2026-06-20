@@ -991,19 +991,50 @@ async function loadRecords(tab) {
 }
 
 // ── REFERRAL ──
+// Canonical public site — invite links must point here, NOT at whatever
+// origin we happen to be running under (EdgeOne URL / GoDaddy iframe).
+const NEXUS_SITE = 'https://www.nexus-ug.site/';
+
+// Clipboard copy that ALSO works inside iframes (GoDaddy domain masking),
+// where navigator.clipboard is blocked. Falls back to a hidden textarea
+// + execCommand('copy'), which iframes still allow.
+function copyText(text) {
+  return new Promise((resolve) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => resolve(true)).catch(() => resolve(legacyCopy(text)));
+    } else {
+      resolve(legacyCopy(text));
+    }
+  });
+}
+function legacyCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+
 window.copyRefCode = () => {
   const code = _userData?.referralCode || '';
   if (!code) return;
-  navigator.clipboard?.writeText(code).then(() => showToast('Referral code copied!', 'success')).catch(() => showToast(code, ''));
+  copyText(code).then(ok => showToast(ok ? 'Referral code copied!' : code, ok ? 'success' : ''));
 };
 window.shareRefLink = () => {
   const code = _userData?.referralCode || '';
-  const link = window.location.origin + window.location.pathname + '?ref=' + code;
+  const link = NEXUS_SITE + '?ref=' + code;
   const text = `Join Nexus and earn returns!\n\nUse my referral code: ${code}\nSign up here: ${link}`;
   if (navigator.share) {
     navigator.share({ title: 'Nexus', text, url: link }).catch(() => {});
   } else {
-    navigator.clipboard?.writeText(text).then(() => showToast('Share link copied!', 'success'));
+    copyText(text).then(ok => showToast(ok ? 'Share link copied!' : link, ok ? 'success' : ''));
   }
 };
 
