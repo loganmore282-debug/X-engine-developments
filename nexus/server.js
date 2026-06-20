@@ -35,7 +35,7 @@ const RAILWAY_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 
-const MIN_WITHDRAWAL   = 15000;
+const MIN_WITHDRAWAL   = 1000;  // testing — raise to 15000 in Firestore settings for production
 const CHECKIN_BONUS    = 500;
 const WELCOME_BONUS    = 7000;
 const COMM_L1          = 0.10;
@@ -536,8 +536,8 @@ app.post('/sms/incoming', async (req, res) => {
 
       const now = new Date();
       const { date, time } = nowStr();
-      // Deposit hold: credits are withdrawable after 1 hour (reversal window protection)
-      const withdrawableAt = new Date(now.getTime() + 60 * 60 * 1000);
+      // Deposit hold: credits are withdrawable after 5 min during testing (set to 60min in prod)
+      const withdrawableAt = new Date(now.getTime() + 5 * 60 * 1000);
 
       // Find matching pending deposit: senderPhone + pending + not expired
       let matchedDep = null, matchedRef = null;
@@ -1455,7 +1455,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         const uSnap = await t.get(uRef);
         if (!uSnap.exists) throw new Error('User not found');
         const bal       = uSnap.data().walletBalance || 0;
-        const holdUntil = new Date(Date.now() + 60 * 60 * 1000);
+        const holdUntil = new Date(Date.now() + 5 * 60 * 1000); // 5 min for testing
         t.update(uRef, {
           walletBalance:    bal + amt,
           totalDeposited:   FieldValue.increment(amt),
