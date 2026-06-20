@@ -1063,7 +1063,6 @@ body{padding-bottom:106px}
       <div class="phone-form-wrap" style="margin-bottom:4px">
         <span class="phone-form-prefix">+256</span>
         <input type="tel" id="depSenderPhone" placeholder="771 234 567" maxlength="9" inputmode="numeric">
-        <span id="depNetBadge" style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:6px;background:rgba(255,203,5,0.15);color:#b45309;flex-shrink:0">MTN</span>
       </div>
       <div style="font-size:11px;color:var(--text2);margin-bottom:20px;padding-left:2px">USSD prompt goes to this number — use yours, a friend's or family's. Payment credits your Nexus wallet.</div>
 
@@ -2291,13 +2290,17 @@ function depDetectNetwork(phone) {
   return ['77','78','76','31','39','79'].includes(p2) ? 'MTN' : 'Airtel';
 }
 
-function depUpdateNetBadge(digits9) {
-  const net = depDetectNetwork(digits9);
-  const badge = document.getElementById('depNetBadge');
-  if (!badge) return;
-  badge.textContent = net;
-  badge.style.background = net === 'MTN' ? 'rgba(255,203,5,0.15)' : 'rgba(227,6,19,0.1)';
-  badge.style.color       = net === 'MTN' ? '#b45309' : '#b91c1c';
+let _depMinDeposit = 500;
+async function loadDepConfig() {
+  try {
+    const r = await (await fetch(SERVER + '/deposit/config')).json();
+    if (r.status === 'success') _depMinDeposit = r.minDeposit || 500;
+  } catch (_) {}
+  const badge = document.getElementById('depWalBadge');
+  if (badge) {
+    const wrap = badge.closest('.page-bal-badge');
+    if (wrap) wrap.innerHTML = `Wallet: <span id="depWalBadge">${ugx(_userData?.walletBalance||0)}</span> &nbsp;·&nbsp; Min ${ugx(_depMinDeposit)}`;
+  }
 }
 
 function stopDepTimers() {
@@ -2332,33 +2335,30 @@ window.openDepositPage = () => {
   showDepStep(1);
   document.getElementById('depPageTitle').textContent = 'Deposit Funds';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
-  document.getElementById('depWalBadge').textContent = ugx(_userData.walletBalance);
   document.getElementById('depAmount').value = '';
   const btn = document.getElementById('depProceedBtn');
   btn.disabled = false; btn.textContent = 'Pay via MoMo';
 
-  // Pre-fill with profile phone (9 digits, no leading 0 or +256)
+  // Pre-fill with profile phone (9 digits)
   const savedDigits = (_userData.phone || '').replace(/^\+256/, '').replace(/^0/, '').replace(/\D/g,'').slice(0,9);
   const phoneInput = document.getElementById('depSenderPhone');
-  if (phoneInput) { phoneInput.value = savedDigits; depUpdateNetBadge(savedDigits); }
+  if (phoneInput) phoneInput.value = savedDigits;
+
+  loadDepConfig(); // refresh min deposit + wallet balance badge
   openPage('depositPage');
 };
 
-// Live network badge update as user types
+// Strip non-digits as user types
 setTimeout(() => {
   const inp = document.getElementById('depSenderPhone');
-  if (inp) inp.addEventListener('input', () => {
-    const d = inp.value.replace(/\D/g,'').slice(0,9);
-    inp.value = d;
-    depUpdateNetBadge(d);
-  });
+  if (inp) inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g,'').slice(0,9); });
 }, 500);
 
 window.proceedDeposit = async () => {
   if (!_user || !_userData) return;
   const amount   = parseInt(document.getElementById('depAmount').value, 10);
   const digits9  = (document.getElementById('depSenderPhone').value || '').replace(/\D/g,'').slice(0,9);
-  if (!amount || amount < 500) { showToast('Enter a valid amount', 'error'); return; }
+  if (!amount || amount < _depMinDeposit) { showToast(`Minimum deposit is ${ugx(_depMinDeposit)}`, 'error'); return; }
   if (digits9.length !== 9)   { showToast('Enter a valid 9-digit MoMo number', 'error'); return; }
 
   const btn = document.getElementById('depProceedBtn');

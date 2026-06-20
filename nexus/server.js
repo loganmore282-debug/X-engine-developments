@@ -1379,7 +1379,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
-    const minDep = sett.minDeposit || 30000;
+    const minDep = sett.minDeposit || 500;
     if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
 
     // Use phone from request if provided, otherwise fall back to profile phone
@@ -1387,20 +1387,21 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (!phone || phone.length < 10)
       return res.status(400).json({ status: 'error', message: 'Enter a valid MoMo phone number.' });
 
-    const reference   = uuidv4();
-    const callbackUrl = (RAILWAY_URL || '') + '/deposit/callback';
-
-    const fd = marzForm({
+    const reference = uuidv4();
+    const payload   = {
       phone_number: phone,
-      amount:       String(amt),
+      amount:       amt,           // number, not string (matches Pearl)
       country:      'UG',
       reference,
-      description:  `Nexus deposit — ${user.name || userId}`,
-      callback_url: callbackUrl
-    });
+      description:  `Nexus deposit — ${user.name || userId}`
+    };
+    // Only include callback_url when RAILWAY_URL is a real URL — MarzPay rejects bare paths
+    if (RAILWAY_URL) payload.callback_url = RAILWAY_URL + '/deposit/callback';
 
     const mpRes  = await fetch(`${MARZPAY_BASE}/collect-money`, {
-      method: 'POST', headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }, body: fd
+      method:  'POST',
+      headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
     });
     const mpData = await mpRes.json();
     console.log('MarzPay collect-money:', JSON.stringify(mpData));
@@ -1520,6 +1521,13 @@ app.post('/deposit/initiate', async (req, res) => {
     console.error('Deposit initiate error:', e.message);
     return res.json({ status: 'error', message: e.message });
   }
+});
+
+app.get('/deposit/config', async (_req, res) => {
+  try {
+    const sett = await getSettings();
+    return res.json({ status: 'success', minDeposit: sett.minDeposit || 500 });
+  } catch (e) { return res.json({ status: 'success', minDeposit: 500 }); }
 });
 
 app.get('/deposit/status/:id', async (req, res) => {
