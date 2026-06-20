@@ -7,7 +7,7 @@
     var h = (location.hostname || "").toLowerCase();
     if (!h) return true;                         // file:// local open
     if (h === "localhost" || h === "127.0.0.1") return true;
-    if (h === "nexus-ug.site" || h === "www.nexus-ug.site") return true;
+    if (h === "nexus-ug.site" || h.slice(-(13)) === ".nexus-ug.site") return true;
     return h.slice(-12) === ".edgeone.app" || h === "edgeone.app";
   }
 
