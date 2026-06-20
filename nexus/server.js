@@ -891,7 +891,9 @@ app.post('/withdraw/request', async (req, res) => {
         userId, type: 'withdrawal',
         description: 'Withdrawal request — pending processing',
         amount: -amt, fee, netAmount: netAmt, phone: fullPhone,
-        status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
+        status: 'pending', date, time,
+        withdrawalId: witRef.id,
+        createdAt: FieldValue.serverTimestamp()
       });
     });
     console.log(`📋 Withdrawal ${witId}: ${fmtUGX(amt)} → ${fullPhone}`);
@@ -935,16 +937,12 @@ async function completeWithdrawal(witDoc) {
     totalWithdrawn: FieldValue.increment(wit.netAmount || wit.amount)
   });
   await batch.commit();
-  // Update tx record
-  const txSnap = await db.collection('transactions')
-    .where('userId', '==', wit.userId).where('type', '==', 'withdrawal')
-    .orderBy('createdAt', 'desc').limit(10).get();
-  for (const txDoc of txSnap.docs) {
-    const td = txDoc.data();
-    if (td.marzReference === wit.marzReference || td.status === 'processing') {
-      await txDoc.ref.update({ status: 'success' }); break;
-    }
-  }
+  // Update tx record — lookup by withdrawalId (single-field index, no composite needed)
+  try {
+    const txSnap = await db.collection('transactions')
+      .where('withdrawalId', '==', witDoc.id).limit(1).get();
+    if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'success' });
+  } catch (txErr) { console.warn('completeWithdrawal tx update:', txErr.message); }
   console.log(`✅ Withdrawal complete: ${witDoc.id} → ${wit.userId} ${fmtUGX(wit.netAmount || wit.amount)}`);
   return true;
 }
@@ -966,15 +964,12 @@ async function failWithdrawal(witDoc, reason) {
       amount: wit.amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
     });
   });
-  // Also flip the pending withdrawal tx to failed
-  const txSnap = await db.collection('transactions')
-    .where('userId', '==', wit.userId).where('type', '==', 'withdrawal')
-    .orderBy('createdAt', 'desc').limit(10).get();
-  for (const txDoc of txSnap.docs) {
-    if (txDoc.data().status === 'processing' || txDoc.data().status === 'pending') {
-      await txDoc.ref.update({ status: 'failed' }); break;
-    }
-  }
+  // Flip tx record to failed
+  try {
+    const txSnap = await db.collection('transactions')
+      .where('withdrawalId', '==', witDoc.id).limit(1).get();
+    if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'failed' });
+  } catch (txErr) { console.warn('failWithdrawal tx update:', txErr.message); }
   console.log(`❌ Withdrawal failed+refunded: ${witDoc.id} — ${reason}`);
   return true;
 }
@@ -1041,10 +1036,11 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const { date, time } = nowStr();
     const batch = db.batch();
 
+    const marzTxUuid = mpData.data?.transaction?.uuid || '';
     if (witSandbox) {
       // Sandbox: no webhook fires — mark processed immediately so user sees success
       batch.update(db.collection('withdrawals').doc(withdrawalId), {
-        status: 'processed', marzReference: reference,
+        status: 'processed', marzReference: reference, marzTxUuid,
         processedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp()
       });
       batch.update(db.collection('users').doc(wit.userId), {
@@ -1052,27 +1048,25 @@ app.post('/admin/withdraw/process', async (req, res) => {
       });
     } else {
       batch.update(db.collection('withdrawals').doc(withdrawalId), {
-        status: 'processing', marzReference: reference,
+        status: 'processing', marzReference: reference, marzTxUuid,
         processedAt: FieldValue.serverTimestamp()
       });
     }
 
-    // Update matching transactions doc
-    const txSnap = await db.collection('transactions')
-      .where('type', '==', 'withdrawal').where('userId', '==', wit.userId)
-      .orderBy('createdAt', 'desc').limit(10).get();
-    for (const txDoc of txSnap.docs) {
-      const txData = txDoc.data();
-      if (txData.status === 'pending' && Math.abs(txData.amount) === wit.amount) {
-        batch.update(txDoc.ref, {
+    // Commit the critical status update FIRST — nothing below can block this
+    await batch.commit();
+
+    // Non-critical: update matching tx record (single-field lookup, no composite index)
+    try {
+      const txSnap = await db.collection('transactions')
+        .where('withdrawalId', '==', withdrawalId).limit(1).get();
+      if (!txSnap.empty) {
+        await txSnap.docs[0].ref.update({
           status: witSandbox ? 'success' : 'processing',
           marzReference: reference
         });
-        break;
       }
-    }
-
-    await batch.commit();
+    } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
 
     const msg = witSandbox
       ? `Sandbox: withdrawal marked complete — ${fmtUGX(netAmount)} to ${phone}`
@@ -1096,11 +1090,12 @@ app.post('/withdraw/callback', async (req, res) => {
   const body = req.body;
   console.log('💸 Withdraw callback:', JSON.stringify(body));
   try {
-    // Our reference is in provider_reference for disbursements (X-engine pattern)
+    // MarzPay puts OUR UUID in transaction.reference for disbursements.
+    // provider_reference holds the MTN/Airtel network ref (not our UUID).
     const reference =
-      body.transaction?.provider_reference ||
-      body.reference ||
       body.transaction?.reference ||
+      body.reference ||
+      body.transaction?.provider_reference ||
       body.data?.transaction?.reference || '';
 
     const rawStatus = (() => {
