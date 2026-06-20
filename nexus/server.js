@@ -929,57 +929,71 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const phone     = wit.withdrawalPhone || wit.userPhone || '';
     const netAmount = wit.netAmount || wit.amount;
     const reference = uuidv4();
-    const callbackUrl = RAILWAY_URL + '/withdraw/callback';
-
-    // Call MarzPay send-money (multipart form)
+    // MarzPay docs use multipart form for send-money
     const fd = marzForm({
       phone_number: phone,
       amount:       String(netAmount),
       country:      'UG',
       reference,
-      description:  `Nexus withdrawal - ${wit.userName || wit.userId}`,
-      callback_url: callbackUrl
+      description:  `Nexus withdrawal - ${wit.userName || wit.userId}`
     });
+    // Only include callback_url when RAILWAY_URL is a real URL
+    if (RAILWAY_URL) fd.append('callback_url', RAILWAY_URL + '/withdraw/callback');
 
     const mpRes = await fetch(`${MARZPAY_BASE}/send-money`, {
-      method: 'POST',
-      headers: { 'Authorization': `Basic ${MARZPAY_KEY}` },
-      body: fd
+      method: 'POST', headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }, body: fd
     });
     const mpData = await mpRes.json();
     console.log('MarzPay send-money response:', JSON.stringify(mpData));
 
-    if (mpData.status !== 'success' && mpData.status !== 'pending') {
+    // Accept success, pending, and sandbox (test mode)
+    const witSandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
+    if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox) {
       return res.status(400).json({ status: 'error', message: mpData.message || 'MarzPay disbursement failed' });
     }
 
     // Update withdrawal to processing
+    const { date, time } = nowStr();
     const batch = db.batch();
-    batch.update(db.collection('withdrawals').doc(withdrawalId), {
-      status: 'processing',
-      marzReference: reference,
-      processedAt: FieldValue.serverTimestamp()
-    });
+
+    if (witSandbox) {
+      // Sandbox: no webhook fires — mark processed immediately so user sees success
+      batch.update(db.collection('withdrawals').doc(withdrawalId), {
+        status: 'processed', marzReference: reference,
+        processedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp()
+      });
+      batch.update(db.collection('users').doc(wit.userId), {
+        totalWithdrawn: FieldValue.increment(wit.netAmount || wit.amount)
+      });
+    } else {
+      batch.update(db.collection('withdrawals').doc(withdrawalId), {
+        status: 'processing', marzReference: reference,
+        processedAt: FieldValue.serverTimestamp()
+      });
+    }
 
     // Update matching transactions doc
     const txSnap = await db.collection('transactions')
-      .where('type', '==', 'withdrawal')
-      .where('userId', '==', wit.userId)
-      .orderBy('createdAt', 'desc')
-      .limit(10)
-      .get();
+      .where('type', '==', 'withdrawal').where('userId', '==', wit.userId)
+      .orderBy('createdAt', 'desc').limit(10).get();
     for (const txDoc of txSnap.docs) {
       const txData = txDoc.data();
       if (txData.status === 'pending' && Math.abs(txData.amount) === wit.amount) {
-        batch.update(txDoc.ref, { status: 'processing', marzReference: reference });
+        batch.update(txDoc.ref, {
+          status: witSandbox ? 'success' : 'processing',
+          marzReference: reference
+        });
         break;
       }
     }
 
     await batch.commit();
 
-    console.log(`💸 Withdrawal processing: ${withdrawalId} → ${phone} ${fmtUGX(netAmount)}`);
-    return res.json({ status: 'success', message: `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}` });
+    const msg = witSandbox
+      ? `Sandbox: withdrawal marked complete — ${fmtUGX(netAmount)} to ${phone}`
+      : `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}`;
+    console.log(`💸 ${msg}`);
+    return res.json({ status: 'success', message: msg, sandbox: witSandbox });
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
@@ -1388,25 +1402,26 @@ app.post('/deposit/marzpay', async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Enter a valid MoMo phone number.' });
 
     const reference = uuidv4();
-    const payload   = {
+    // MarzPay docs use multipart form for mobile money collections
+    const fd = marzForm({
       phone_number: phone,
-      amount:       amt,           // number, not string (matches Pearl)
+      amount:       String(amt),
       country:      'UG',
       reference,
       description:  `Nexus deposit — ${user.name || userId}`
-    };
+    });
     // Only include callback_url when RAILWAY_URL is a real URL — MarzPay rejects bare paths
-    if (RAILWAY_URL) payload.callback_url = RAILWAY_URL + '/deposit/callback';
+    if (RAILWAY_URL) fd.append('callback_url', RAILWAY_URL + '/deposit/callback');
 
     const mpRes  = await fetch(`${MARZPAY_BASE}/collect-money`, {
-      method:  'POST',
-      headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload)
+      method: 'POST', headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }, body: fd
     });
     const mpData = await mpRes.json();
     console.log('MarzPay collect-money:', JSON.stringify(mpData));
 
-    if (mpData.status !== 'success')
+    // Sandbox mode returns status:'sandbox' — treat as valid initiation
+    const isSandbox = mpData.status === 'sandbox' || mpData.data?.collection?.mode === 'sandbox';
+    if (mpData.status !== 'success' && !isSandbox)
       return res.status(400).json({ status: 'error', message: mpData.message || 'Could not initiate payment. Try again.' });
 
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
@@ -1422,12 +1437,44 @@ app.post('/deposit/marzpay', async (req, res) => {
     }
 
     const depRef = db.collection('pendingDeposits').doc();
-    await depRef.set({
-      userId, phone, amount: amt, marzReference: reference, marzTxUuid,
-      status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
-    });
-    console.log(`💳 MarzPay deposit: ${depRef.id} — ${fmtUGX(amt)} from ${phone}`);
-    return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone });
+
+    if (isSandbox) {
+      // Sandbox: no webhook will fire — credit immediately so the full flow can be tested
+      await db.runTransaction(async t => {
+        const uRef  = db.collection('users').doc(userId);
+        const uSnap = await t.get(uRef);
+        if (!uSnap.exists) throw new Error('User not found');
+        const bal       = uSnap.data().walletBalance || 0;
+        const holdUntil = new Date(Date.now() + 60 * 60 * 1000);
+        t.update(uRef, {
+          walletBalance:    bal + amt,
+          totalDeposited:   FieldValue.increment(amt),
+          withdrawableFrom: admin.firestore.Timestamp.fromDate(holdUntil)
+        });
+        t.set(depRef, {
+          userId, phone, amount: amt, creditedAmount: amt,
+          marzReference: reference, marzTxUuid,
+          status: 'matched', date, time,
+          matchedAt: FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp()
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId, type: 'deposit',
+          description: 'MoMo deposit via MarzPay (sandbox)',
+          amount: amt, status: 'success', date, time, marzReference: reference,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      });
+      console.log(`🏖️ Sandbox deposit matched: ${depRef.id} — ${fmtUGX(amt)} → ${userId}`);
+    } else {
+      await depRef.set({
+        userId, phone, amount: amt, marzReference: reference, marzTxUuid,
+        status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      console.log(`💳 MarzPay deposit: ${depRef.id} — ${fmtUGX(amt)} from ${phone}`);
+    }
+
+    return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone, sandbox: isSandbox });
   } catch (e) {
     console.error('MarzPay deposit error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
