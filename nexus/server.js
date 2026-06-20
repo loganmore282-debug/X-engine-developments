@@ -1367,7 +1367,7 @@ app.post('/deposit/verify-phone', async (req, res) => {
 // ═══════════════════════════════════════════
 app.post('/deposit/marzpay', async (req, res) => {
   const userId = await verifyAuth(req) || req.body.userId;
-  const { amount } = req.body;
+  const { amount, phone: rawPhone } = req.body;
   if (!userId || !amount) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
   const amt = parseInt(amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
@@ -1381,9 +1381,11 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
     const minDep = sett.minDeposit || 30000;
     if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
-    const phone = cleanPhone(user.phone || '');
+
+    // Use phone from request if provided, otherwise fall back to profile phone
+    const phone = cleanPhone(rawPhone || user.phone || '');
     if (!phone || phone.length < 10)
-      return res.status(400).json({ status: 'error', message: 'No valid phone on your account. Update your profile first.' });
+      return res.status(400).json({ status: 'error', message: 'Enter a valid MoMo phone number.' });
 
     const reference   = uuidv4();
     const callbackUrl = (RAILWAY_URL || '') + '/deposit/callback';

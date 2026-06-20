@@ -1059,12 +1059,13 @@ body{padding-bottom:106px}
     <div id="depStep1" style="padding:16px 0 0">
       <div class="page-bal-badge">Wallet: <span id="depWalBadge">UGX 0</span> &nbsp;·&nbsp; Min UGX 30,000</div>
 
-      <label class="form-label">MoMo Number</label>
-      <div style="display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:12px 16px;margin-bottom:4px">
-        <span id="depPhoneDisplay" style="font-size:15px;font-weight:700;color:var(--text);flex:1">—</span>
-        <span id="depNetBadge" style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:6px;background:rgba(255,203,5,0.15);color:#b45309">MTN</span>
+      <label class="form-label">MoMo Number to Pay From</label>
+      <div class="phone-form-wrap" style="margin-bottom:4px">
+        <span class="phone-form-prefix">+256</span>
+        <input type="tel" id="depSenderPhone" placeholder="771 234 567" maxlength="9" inputmode="numeric">
+        <span id="depNetBadge" style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:6px;background:rgba(255,203,5,0.15);color:#b45309;flex-shrink:0">MTN</span>
       </div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:20px;padding-left:2px">A USSD prompt will be sent to this number. Update your profile to change it.</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:20px;padding-left:2px">USSD prompt goes to this number — use yours, a friend's or family's. Payment credits your Nexus wallet.</div>
 
       <label class="form-label">Quick Select</label>
       <div class="quick-amounts">
@@ -2290,6 +2291,15 @@ function depDetectNetwork(phone) {
   return ['77','78','76','31','39','79'].includes(p2) ? 'MTN' : 'Airtel';
 }
 
+function depUpdateNetBadge(digits9) {
+  const net = depDetectNetwork(digits9);
+  const badge = document.getElementById('depNetBadge');
+  if (!badge) return;
+  badge.textContent = net;
+  badge.style.background = net === 'MTN' ? 'rgba(255,203,5,0.15)' : 'rgba(227,6,19,0.1)';
+  badge.style.color       = net === 'MTN' ? '#b45309' : '#b91c1c';
+}
+
 function stopDepTimers() {
   if (_depPollTimer)   { clearInterval(_depPollTimer); _depPollTimer = null; }
   if (_depUnsubscribe) { _depUnsubscribe(); _depUnsubscribe = null; }
@@ -2327,33 +2337,41 @@ window.openDepositPage = () => {
   const btn = document.getElementById('depProceedBtn');
   btn.disabled = false; btn.textContent = 'Pay via MoMo';
 
-  const phone = _userData.phone || '';
-  document.getElementById('depPhoneDisplay').textContent = phone || 'No phone — update profile';
-  const net = depDetectNetwork(phone);
-  const badge = document.getElementById('depNetBadge');
-  badge.textContent = net;
-  badge.style.background = net === 'MTN' ? 'rgba(255,203,5,0.15)' : 'rgba(227,6,19,0.1)';
-  badge.style.color       = net === 'MTN' ? '#b45309' : '#b91c1c';
+  // Pre-fill with profile phone (9 digits, no leading 0 or +256)
+  const savedDigits = (_userData.phone || '').replace(/^\+256/, '').replace(/^0/, '').replace(/\D/g,'').slice(0,9);
+  const phoneInput = document.getElementById('depSenderPhone');
+  if (phoneInput) { phoneInput.value = savedDigits; depUpdateNetBadge(savedDigits); }
   openPage('depositPage');
 };
 
+// Live network badge update as user types
+setTimeout(() => {
+  const inp = document.getElementById('depSenderPhone');
+  if (inp) inp.addEventListener('input', () => {
+    const d = inp.value.replace(/\D/g,'').slice(0,9);
+    inp.value = d;
+    depUpdateNetBadge(d);
+  });
+}, 500);
+
 window.proceedDeposit = async () => {
   if (!_user || !_userData) return;
-  const amount = parseInt(document.getElementById('depAmount').value, 10);
+  const amount   = parseInt(document.getElementById('depAmount').value, 10);
+  const digits9  = (document.getElementById('depSenderPhone').value || '').replace(/\D/g,'').slice(0,9);
   if (!amount || amount < 500) { showToast('Enter a valid amount', 'error'); return; }
-  if (!_userData.phone) { showToast('No phone number on your account. Update your profile.', 'error'); return; }
+  if (digits9.length !== 9)   { showToast('Enter a valid 9-digit MoMo number', 'error'); return; }
 
   const btn = document.getElementById('depProceedBtn');
   btn.disabled = true; btn.textContent = 'Requesting payment…';
   try {
-    const r = await api('/deposit/marzpay', { userId: _user.uid, amount });
+    const r = await api('/deposit/marzpay', { userId: _user.uid, amount, phone: '256' + digits9 });
     if (r.status !== 'success') {
       btn.disabled = false; btn.textContent = 'Pay via MoMo';
       showToast(r.message || 'Failed. Try again.', 'error');
       return;
     }
     _depDepositId = r.depositId;
-    document.getElementById('depWaitPhone').textContent  = r.phone || _userData.phone || '—';
+    document.getElementById('depWaitPhone').textContent  = r.phone || ('+256' + digits9) || '—';
     document.getElementById('depWaitAmount').textContent = ugx(r.amount);
     document.getElementById('depPageTitle').textContent  = 'Waiting for Payment';
     document.getElementById('depBackBtn').onclick = () => cancelDepWait();
