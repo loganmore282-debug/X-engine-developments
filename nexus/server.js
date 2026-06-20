@@ -75,11 +75,37 @@ function uuidv4() {
   });
 }
 
-// ── FormData helper for MarzPay ──
-function marzForm(fields) {
-  const fd = new FormData();
-  for (const [k, v] of Object.entries(fields)) fd.append(k, String(v));
-  return fd;
+// ── MarzPay API helpers (JSON body — matches X-engine proven implementation) ──
+async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
+  const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
+    description: description || 'Nexus Deposit' };
+  if (callbackUrl) payload.callback_url = callbackUrl;
+  const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return resp.json();
+}
+async function marzSendMoney({ amount, phone, reference, description, callbackUrl }) {
+  const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
+    description: description || 'Nexus Withdrawal' };
+  if (callbackUrl) payload.callback_url = callbackUrl;
+  const resp = await fetch(`${MARZPAY_BASE}/send-money`, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return resp.json();
+}
+async function marzGetStatus(idOrRef) {
+  try {
+    const resp = await fetch(`${MARZPAY_BASE}/transactions/${idOrRef}`, {
+      headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+    });
+    const d = await resp.json();
+    return String(d?.transaction?.status || d?.data?.transaction?.status || d?.status || '').toLowerCase();
+  } catch (_) { return ''; }
 }
 
 // ── MAINTENANCE — cached 60 s ──
@@ -94,7 +120,7 @@ async function isMaintenanceOn() {
   return _maint;
 }
 // Webhooks and admin routes must never be blocked by maintenance
-const BYPASS = ['/', '/sms/incoming', '/admin', '/deposit/callback', '/withdraw/callback'];
+const BYPASS = ['/', '/sms/incoming', '/admin', '/callback', '/deposit/callback', '/withdraw/callback'];
 app.use(async (req, res, next) => {
   const p = req.path;
   if (BYPASS.some(b => p === b || p.startsWith(b + '/'))) return next();
@@ -933,21 +959,11 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const phone     = wit.withdrawalPhone || wit.userPhone || '';
     const netAmount = wit.netAmount || wit.amount;
     const reference = uuidv4();
-    // MarzPay docs use multipart form for send-money
-    const fd = marzForm({
-      phone_number: phone,
-      amount:       String(netAmount),
-      country:      'UG',
-      reference,
-      description:  `Nexus withdrawal - ${wit.userName || wit.userId}`
+    const mpData = await marzSendMoney({
+      amount: netAmount, phone, reference,
+      description: `Nexus withdrawal — ${wit.userName || wit.userId}`,
+      callbackUrl: RAILWAY_URL ? RAILWAY_URL + '/withdraw/callback' : undefined
     });
-    // Only include callback_url when RAILWAY_URL is a real URL
-    if (RAILWAY_URL) fd.append('callback_url', RAILWAY_URL + '/withdraw/callback');
-
-    const mpRes = await fetch(`${MARZPAY_BASE}/send-money`, {
-      method: 'POST', headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }, body: fd
-    });
-    const mpData = await mpRes.json();
     console.log('MarzPay send-money response:', JSON.stringify(mpData));
 
     // Accept success, pending, and sandbox (test mode)
@@ -1406,21 +1422,11 @@ app.post('/deposit/marzpay', async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Enter a valid MoMo phone number.' });
 
     const reference = uuidv4();
-    // MarzPay docs use multipart form for mobile money collections
-    const fd = marzForm({
-      phone_number: phone,
-      amount:       String(amt),
-      country:      'UG',
-      reference,
-      description:  `Nexus deposit — ${user.name || userId}`
+    const mpData = await marzCollect({
+      amount: amt, phone, reference,
+      description: `Nexus deposit — ${user.name || userId}`,
+      callbackUrl: RAILWAY_URL ? RAILWAY_URL + '/deposit/callback' : undefined
     });
-    // Only include callback_url when RAILWAY_URL is a real URL — MarzPay rejects bare paths
-    if (RAILWAY_URL) fd.append('callback_url', RAILWAY_URL + '/deposit/callback');
-
-    const mpRes  = await fetch(`${MARZPAY_BASE}/collect-money`, {
-      method: 'POST', headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }, body: fd
-    });
-    const mpData = await mpRes.json();
     console.log('MarzPay collect-money:', JSON.stringify(mpData));
 
     // Sandbox mode returns status:'sandbox' — treat as valid initiation
@@ -1621,24 +1627,18 @@ async function pollMarzDepositStatus(depDoc) {
   const dep = depDoc.data();
   const id  = dep.marzTxUuid || dep.marzReference;
   if (!id || !MARZPAY_KEY) return { credited: false, failed: false };
-  const mpRes  = await fetch(`${MARZPAY_BASE}/transactions/${id}`, {
-    headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
-  });
-  const mpData = await mpRes.json();
-  console.log(`MarzPay poll [${dep.marzReference}]:`, JSON.stringify(mpData));
-  const txStatus  = mpData.transaction?.status  || '';
-  const evtType   = mpData.event_type           || '';
-  const isSuccess = txStatus === 'completed' || evtType === 'collection.completed';
-  const isFail    = txStatus === 'failed'    || evtType === 'collection.failed';
+  const rawStatus = await marzGetStatus(id);
+  console.log(`MarzPay poll [${dep.marzReference}]: status=${rawStatus}`);
+  const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
+  const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
   if (isSuccess) {
-    const amount   = mpData.transaction?.amount?.raw || mpData.collection?.amount?.raw || dep.amount;
-    const provTxId = mpData.collection?.provider_transaction_id || null;
-    await creditMarzDeposit(depDoc, amount, provTxId);
-    return { credited: true, failed: false, amount, provTxId };
+    const creditAmount = dep.amount;
+    await creditMarzDeposit(depDoc, creditAmount, null);
+    return { credited: true, failed: false, amount: creditAmount };
   }
-  if (isFail) {
-    await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(),
-      failureReason: mpData.transaction?.failure_reason || 'Payment failed' });
+  if (isFailed) {
+    if (dep.status !== 'failed') await depDoc.ref.update({ status: 'failed',
+      failedAt: FieldValue.serverTimestamp(), failureReason: 'Payment failed or cancelled' });
     return { credited: false, failed: true };
   }
   return { credited: false, failed: false };
@@ -1674,33 +1674,65 @@ app.get('/deposit/status/:id', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// MarzPay deposit webhook — fires when collection completes or fails
-app.post('/deposit/callback', async (req, res) => {
-  res.json({ received: true });
-  const body      = req.body;
-  const eventType = body.event_type || '';
-  const reference = body.transaction?.reference || body.reference || '';
-  console.log('Deposit callback:', eventType, reference);
-  try {
-    if (!reference) return;
-    const depSnap = await db.collection('pendingDeposits')
-      .where('marzReference', '==', reference).limit(1).get();
-    if (depSnap.empty) { console.log('No pendingDeposit for ref:', reference); return; }
-    const depDoc  = depSnap.docs[0];
-    if (eventType === 'collection.completed') {
-      const amount   = body.transaction?.amount?.raw || body.collection?.amount?.raw || depDoc.data().amount;
-      const provTxId = body.collection?.provider_transaction_id || null;
-      const credited = await creditMarzDeposit(depDoc, amount, provTxId);
-      if (credited) console.log(`✅ Webhook credited: ${depDoc.id} → ${depDoc.data().userId} ${fmtUGX(amount)}`);
-    } else if (eventType === 'collection.failed') {
-      await depDoc.ref.update({
-        status: 'failed', failedAt: FieldValue.serverTimestamp(),
-        failureReason: body.transaction?.failure_reason || 'Payment failed or declined'
-      });
-      console.log(`❌ Deposit failed: ${depDoc.id}`);
-    }
-  } catch (e) { console.error('Deposit callback error:', e.message); }
-});
+// MarzPay deposit webhook handler — shared by /callback and /deposit/callback
+async function handleDepositCallback(req, res) {
+  res.status(200).json({ received: true }); // ack MarzPay immediately
+  setImmediate(async () => {
+    const body = req.body;
+    console.log('📩 Deposit callback:', JSON.stringify(body));
+    try {
+      // Extract reference — MarzPay puts it on transaction.reference
+      const reference = body.transaction?.reference || body.reference || body.merchant_reference || '';
+      if (!reference) { console.log('❌ No reference in callback'); return; }
+
+      // Resolve status — check transaction.status first, then event_type
+      const rawStatus = (() => {
+        const s = String(body.transaction?.status || body.status || '').toLowerCase();
+        if (s) return s;
+        if (body.event_type === 'collection.completed') return 'completed';
+        if (body.event_type === 'collection.successful') return 'successful';
+        if (body.event_type === 'collection.failed')    return 'failed';
+        if (body.event_type === 'collection.cancelled') return 'cancelled';
+        if (body.event_type === 'collection.pending')   return 'pending';
+        return '';
+      })();
+      const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
+      const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+      console.log(`Deposit callback ref=${reference} status=${rawStatus}`);
+
+      // Only act on final states
+      if (!isSuccess && !isFailed) return;
+
+      const depSnap = await db.collection('pendingDeposits')
+        .where('marzReference', '==', reference).limit(1).get();
+      if (depSnap.empty) { console.log('No pendingDeposit for ref:', reference); return; }
+      const depDoc = depSnap.docs[0];
+
+      if (isSuccess) {
+        // Anti-fraud: verify status with MarzPay before crediting
+        if (depDoc.data().marzTxUuid) {
+          const realStatus = await marzGetStatus(depDoc.data().marzTxUuid);
+          if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) {
+            console.warn(`🚨 FRAUD BLOCK: callback says success but MarzPay says '${realStatus}' — NOT crediting`);
+            return;
+          }
+        }
+        const amount   = body.transaction?.amount?.raw || body.collection?.amount?.raw || depDoc.data().amount;
+        const provTxId = body.collection?.provider_transaction_id || null;
+        const credited = await creditMarzDeposit(depDoc, amount, provTxId);
+        if (credited) console.log(`✅ Webhook credited: ${depDoc.id} → ${depDoc.data().userId} ${fmtUGX(amount)}`);
+      } else if (isFailed) {
+        const failReason = body.transaction?.description || body.description || rawStatus || 'Payment declined';
+        if (depDoc.data().status !== 'failed') {
+          await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(), failureReason: failReason });
+          console.log(`❌ Deposit failed [${reference}]: ${failReason}`);
+        }
+      }
+    } catch (e) { console.error('Deposit callback error:', e.message); }
+  });
+}
+app.post('/callback', handleDepositCallback);
+app.post('/deposit/callback', handleDepositCallback);
 
 // ── TICKER (anonymized global activity) ──
 app.get('/ticker', async (req, res) => {
