@@ -924,11 +924,84 @@ app.post('/withdraw/reject', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// Shared: mark a withdrawal as processed + update user + tx record
+async function completeWithdrawal(witDoc) {
+  const wit = witDoc.data();
+  if (wit.status === 'processed' || wit.status === 'failed') return false;
+  const { date, time } = nowStr();
+  const batch = db.batch();
+  batch.update(witDoc.ref, { status: 'processed', completedAt: FieldValue.serverTimestamp() });
+  batch.update(db.collection('users').doc(wit.userId), {
+    totalWithdrawn: FieldValue.increment(wit.netAmount || wit.amount)
+  });
+  await batch.commit();
+  // Update tx record
+  const txSnap = await db.collection('transactions')
+    .where('userId', '==', wit.userId).where('type', '==', 'withdrawal')
+    .orderBy('createdAt', 'desc').limit(10).get();
+  for (const txDoc of txSnap.docs) {
+    const td = txDoc.data();
+    if (td.marzReference === wit.marzReference || td.status === 'processing') {
+      await txDoc.ref.update({ status: 'success' }); break;
+    }
+  }
+  console.log(`✅ Withdrawal complete: ${witDoc.id} → ${wit.userId} ${fmtUGX(wit.netAmount || wit.amount)}`);
+  return true;
+}
+
+// Shared: refund a failed withdrawal
+async function failWithdrawal(witDoc, reason) {
+  const wit = witDoc.data();
+  if (wit.status === 'processed' || wit.status === 'failed') return false;
+  const { date, time } = nowStr();
+  await db.runTransaction(async t => {
+    const uRef  = db.collection('users').doc(wit.userId);
+    const uSnap = await t.get(uRef);
+    if (!uSnap.exists) throw new Error('User not found');
+    t.update(uRef, { walletBalance: (uSnap.data().walletBalance || 0) + wit.amount,
+      withdrawalCount: FieldValue.increment(-1) });
+    t.update(witDoc.ref, { status: 'failed', failureReason: reason, failedAt: FieldValue.serverTimestamp() });
+    t.set(db.collection('transactions').doc(), {
+      userId: wit.userId, type: 'refund', description: 'Withdrawal refund — disbursement failed',
+      amount: wit.amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+    });
+  });
+  // Also flip the pending withdrawal tx to failed
+  const txSnap = await db.collection('transactions')
+    .where('userId', '==', wit.userId).where('type', '==', 'withdrawal')
+    .orderBy('createdAt', 'desc').limit(10).get();
+  for (const txDoc of txSnap.docs) {
+    if (txDoc.data().status === 'processing' || txDoc.data().status === 'pending') {
+      await txDoc.ref.update({ status: 'failed' }); break;
+    }
+  }
+  console.log(`❌ Withdrawal failed+refunded: ${witDoc.id} — ${reason}`);
+  return true;
+}
+
 app.get('/withdraw/status/:id', async (req, res) => {
   try {
     const snap = await db.collection('withdrawals').doc(req.params.id).get();
     if (!snap.exists) return res.status(404).json({ status: 'error' });
-    return res.json({ status: 'success', data: { id: snap.id, ...snap.data() } });
+    let wit = snap.data();
+
+    // If still processing, actively check MarzPay — fallback for missing webhook
+    if (wit.status === 'processing' && (wit.marzTxUuid || wit.marzReference)) {
+      try {
+        const rawStatus = await marzGetStatus(wit.marzTxUuid || wit.marzReference);
+        console.log(`Withdraw poll [${snap.id}]: status=${rawStatus}`);
+        const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
+        const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+        if (isSuccess) await completeWithdrawal(snap);
+        else if (isFailed) await failWithdrawal(snap, rawStatus);
+        if (isSuccess || isFailed) {
+          const fresh = await db.collection('withdrawals').doc(snap.id).get();
+          wit = fresh.data();
+        }
+      } catch (pollErr) { console.warn('Withdraw poll error:', pollErr.message); }
+    }
+
+    return res.json({ status: 'success', data: { id: snap.id, ...wit } });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -1015,98 +1088,60 @@ app.post('/admin/withdraw/process', async (req, res) => {
 // ═══════════════════════════════════════════
 // MARZPAY WITHDRAWAL CALLBACK (disbursement webhook)
 // ═══════════════════════════════════════════
+// IMPORTANT: For disbursements, MarzPay puts OUR UUID in transaction.provider_reference
+// (not transaction.reference which is MarzPay's internal ID).
 app.post('/withdraw/callback', async (req, res) => {
-  res.json({ received: true });
-
-  const body      = req.body;
-  const eventType = body.event_type || '';
-  const reference = body.transaction?.reference || body.reference || '';
-
-  console.log('Withdraw callback:', eventType, reference);
-
+  res.status(200).json({ received: true });
+  setImmediate(async () => {
+  const body = req.body;
+  console.log('💸 Withdraw callback:', JSON.stringify(body));
   try {
-    if (!reference) return;
+    // Our reference is in provider_reference for disbursements (X-engine pattern)
+    const reference =
+      body.transaction?.provider_reference ||
+      body.reference ||
+      body.transaction?.reference ||
+      body.data?.transaction?.reference || '';
+
+    const rawStatus = (() => {
+      const s = String(body.transaction?.status || body.status || '').toLowerCase();
+      if (s) return s;
+      if (body.event_type === 'disbursement.completed') return 'completed';
+      if (body.event_type === 'disbursement.failed')    return 'failed';
+      if (body.event_type === 'disbursement.cancelled') return 'cancelled';
+      if (body.event_type === 'disbursement.pending')   return 'pending';
+      return '';
+    })();
+    const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
+    const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+    console.log(`Withdraw callback ref=${reference} status=${rawStatus}`);
+
+    if (!reference || (!isSuccess && !isFailed)) return;
 
     const witSnap = await db.collection('withdrawals')
-      .where('marzReference', '==', reference)
-      .limit(1).get();
+      .where('marzReference', '==', reference).limit(1).get();
     if (witSnap.empty) {
-      console.log('No withdrawal found for marzReference:', reference);
+      console.log('No withdrawal for marzReference:', reference);
       return;
     }
-
     const witDoc = witSnap.docs[0];
-    const wit    = witDoc.data();
-    const { date, time } = nowStr();
 
-    if (eventType === 'disbursement.completed') {
-      const batch = db.batch();
-      batch.update(witDoc.ref, {
-        status: 'processed',
-        completedAt: FieldValue.serverTimestamp()
-      });
-      batch.update(db.collection('users').doc(wit.userId), {
-        totalWithdrawn: FieldValue.increment(wit.netAmount || wit.amount)
-      });
-      await batch.commit();
-
-      // Update matching transaction status
-      const txSnap = await db.collection('transactions')
-        .where('userId', '==', wit.userId)
-        .where('type', '==', 'withdrawal')
-        .orderBy('createdAt', 'desc')
-        .limit(10).get();
-      for (const txDoc of txSnap.docs) {
-        const txData = txDoc.data();
-        if (txData.marzReference === reference || txData.status === 'processing') {
-          await txDoc.ref.update({ status: 'success' });
-          break;
+    if (isSuccess) {
+      // Anti-fraud: verify with MarzPay before marking processed
+      if (witDoc.data().marzTxUuid) {
+        const realStatus = await marzGetStatus(witDoc.data().marzTxUuid);
+        if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) {
+          console.warn(`🚨 FRAUD BLOCK: callback says success but MarzPay says '${realStatus}' — NOT processing`);
+          return;
         }
       }
-
-      console.log(`✅ Withdrawal complete: ${witDoc.id} → ${wit.userId}`);
-
-    } else if (eventType === 'disbursement.failed') {
-      const refundAmount = wit.amount;
-      await db.runTransaction(async t => {
-        const uRef  = db.collection('users').doc(wit.userId);
-        const uSnap = await t.get(uRef);
-        if (!uSnap.exists) throw new Error('User not found');
-        t.update(uRef, {
-          walletBalance:   (uSnap.data().walletBalance || 0) + refundAmount,
-          withdrawalCount: FieldValue.increment(-1)
-        });
-        t.update(witDoc.ref, {
-          status: 'failed',
-          failedAt: FieldValue.serverTimestamp(),
-          failureReason: body.transaction?.failure_reason || 'Disbursement failed'
-        });
-        t.set(db.collection('transactions').doc(), {
-          userId: wit.userId, type: 'refund',
-          description: 'Withdrawal refund — disbursement failed',
-          amount: refundAmount, status: 'success', date, time,
-          createdAt: FieldValue.serverTimestamp()
-        });
-      });
-
-      const txSnap = await db.collection('transactions')
-        .where('userId', '==', wit.userId)
-        .where('type', '==', 'withdrawal')
-        .orderBy('createdAt', 'desc')
-        .limit(10).get();
-      for (const txDoc of txSnap.docs) {
-        const txData = txDoc.data();
-        if (txData.marzReference === reference || txData.status === 'processing') {
-          await txDoc.ref.update({ status: 'failed' });
-          break;
-        }
-      }
-
-      console.log(`❌ Withdrawal failed & refunded: ${witDoc.id} → ${wit.userId}`);
+      await completeWithdrawal(witDoc);
+    } else if (isFailed) {
+      const reason = body.transaction?.description || body.description || rawStatus || 'Disbursement failed';
+      await failWithdrawal(witDoc, reason);
     }
-  } catch (e) {
-    console.error('Withdraw callback error:', e.message);
-  }
+  } catch (e) { console.error('Withdraw callback error:', e.message); }
+  });
 });
 
 // ═══════════════════════════════════════════

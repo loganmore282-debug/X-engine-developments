@@ -1649,6 +1649,15 @@ function startListener(uid) {
       renderHomeInvestments(active);
     }
   );
+  // Resume watching any in-flight withdrawal so user gets notified even after re-opening app
+  getDocs(query(collection(db,'withdrawals'),
+    where('userId','==',uid), where('status','==','processing'), limit(1)))
+    .then(snap => {
+      if (!snap.empty && !_witUnsubscribe) {
+        const d = snap.docs[0];
+        watchWithdrawal(d.id, d.data().amount);
+      }
+    }).catch(() => {});
 }
 
 // ── RENDER HOME ──
@@ -2534,25 +2543,47 @@ window.submitWithdrawal = async () => {
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
 
-// Real-time withdrawal status listener — fires when admin processes via MarzPay
+// Real-time withdrawal status listener + HTTP poll fallback
 let _witUnsubscribe = null;
-function watchWithdrawal(withdrawalId, amount) {
+let _witPollTimer   = null;
+let _witResolved    = false;
+
+function stopWitTimers() {
   if (_witUnsubscribe) { _witUnsubscribe(); _witUnsubscribe = null; }
-  const witRef = doc(db, 'withdrawals', withdrawalId);
-  _witUnsubscribe = onSnapshot(witRef, snap => {
-    if (!snap.exists()) return;
-    const d = snap.data();
-    if (d.status === 'processed') {
-      if (_witUnsubscribe) { _witUnsubscribe(); _witUnsubscribe = null; }
-      showToast(`✅ Withdrawal successful! ${ugx(d.netAmount || amount)} sent to your phone.`, 'success');
-      loadUser();
-    } else if (d.status === 'failed') {
-      if (_witUnsubscribe) { _witUnsubscribe(); _witUnsubscribe = null; }
-      showToast(`❌ Withdrawal failed — ${ugx(amount)} refunded to your wallet.`, 'error');
-      loadUser();
-    }
-  });
+  if (_witPollTimer)   { clearInterval(_witPollTimer); _witPollTimer = null; }
 }
+
+function handleWitResult(status, d, amount) {
+  if (_witResolved) return;
+  if (status === 'processed') {
+    _witResolved = true; stopWitTimers();
+    showToast(`✅ Withdrawal of ${ugx(d.netAmount || amount)} sent to your phone!`, 'success');
+  } else if (status === 'failed') {
+    _witResolved = true; stopWitTimers();
+    showToast(`❌ Withdrawal failed — ${ugx(amount)} refunded to your wallet.`, 'error');
+  }
+}
+
+function watchWithdrawal(withdrawalId, amount) {
+  stopWitTimers();
+  _witResolved = false;
+  // Track 1: Firestore real-time (instant when webhook fires)
+  _witUnsubscribe = onSnapshot(doc(db, 'withdrawals', withdrawalId), snap => {
+    if (!snap.exists()) return;
+    handleWitResult(snap.data().status, snap.data(), amount);
+  });
+  // Track 2: HTTP poll every 5 s — server actively checks MarzPay as fallback
+  _witPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(SERVER + '/withdraw/status/' + withdrawalId);
+      const j = await r.json();
+      if (j.status === 'success' && j.data) handleWitResult(j.data.status, j.data, amount);
+    } catch (_) {}
+  }, 5000);
+}
+
+// No-op: startListener onSnapshot already auto-refreshes the UI on Firestore changes
+function loadUser() {}
 
 
 // ── GIFT CODE ──
