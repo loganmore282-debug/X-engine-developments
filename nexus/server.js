@@ -26,7 +26,11 @@ const FieldValue = admin.firestore.FieldValue;
 // ── CONFIG ──
 const ADMIN_KEY    = process.env.ADMIN_KEY    || '';
 const SMS_SECRET   = process.env.SMS_SECRET   || '';
-const RAILWAY_URL  = (process.env.RAILWAY_URL || '').replace(/\/$/, '');
+const RAILWAY_URL  = (() => {
+  let u = (process.env.RAILWAY_URL || '').trim().replace(/\/$/, '');
+  if (u && !u.startsWith('http')) u = 'https://' + u;
+  return u;
+})();
 
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
