@@ -2,24 +2,22 @@
 /*
  * build-core.js — secure the Nexus user app (index.html).
  *
- * Pipeline (matches X-engine):
+ * Pipeline:
  *   - FIRST RUN: extract the inline <script type="module"> app code into
- *     original_module.js and replace it in index.html with a hashed loader tag.
+ *     original_module.js and replace it with a placeholder tag.
  *   - guard-src.js  -> obfuscate -> inline <script data-nx-guard> in <head>
  *   - original_module.js -> obfuscate -> deflate -> base64
  *                        -> DecompressionStream loader IIFE
- *                        -> core.<contenthash>.js  (immutable, CDN-cacheable)
- *   - point index.html's loader <script src> at the new hashed file.
+ *                        -> inlined as <script data-nx-core> in index.html
  *
- * Re-runnable: after the first run the module lives in original_module.js and
- * index.html holds only the loader tag, so every later run just rebuilds.
+ * Everything ends up in a single index.html — no separate core.*.js file.
+ * Deploy: index.html + manifest.json + sw.js + icon-192.png + icon-512.png
  *
  * Usage:  node build-core.js
  */
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const crypto = require('crypto');
 const { execSync } = require('child_process');
 const JavaScriptObfuscator = require('javascript-obfuscator');
 
@@ -40,7 +38,7 @@ if (!fs.existsSync(SRC)) {
   if (close === -1) { console.error('Unterminated module script'); process.exit(1); }
   const moduleCode = html.slice(codeStart, close);
   fs.writeFileSync(SRC, moduleCode.replace(/^\n/, '') + '\n');
-  html = html.slice(0, open) + '<script src="core.__HASH__.js" defer></script>' + html.slice(close + '</script>'.length);
+  html = html.slice(0, open) + '<script data-nx-core></script>' + html.slice(close + '</script>'.length);
   log('extracted module ->', 'original_module.js', moduleCode.length, 'bytes');
 }
 
@@ -110,22 +108,24 @@ const check = zlib.inflateSync(Buffer.from(b64, 'base64')).toString('utf8');
 if (check !== obf) { console.error('ROUND-TRIP MISMATCH'); process.exit(1); }
 log('round-trip    : OK');
 
-// ── 7. Content-hashed filename ───────────────────────────────────────────
-const hash  = crypto.createHash('sha256').update(iife).digest('hex').slice(0, 12);
-const fname = `core.${hash}.js`;
+// ── 7. Inline IIFE into index.html (no separate core.*.js file) ──────────
+// Remove any stale core.*.js files from the old approach
 for (const f of fs.readdirSync(ROOT)) {
-  if (/^core\.[0-9a-f]{12}\.js$/.test(f) && f !== fname) { fs.unlinkSync(path.join(ROOT, f)); log('removed stale :', f); }
+  if (/^core\.[0-9a-f]{12}\.js$/.test(f)) { fs.unlinkSync(path.join(ROOT, f)); log('removed stale :', f); }
 }
-fs.writeFileSync(path.join(ROOT, fname), iife + '\n');
-log('wrote         :', fname, fs.statSync(path.join(ROOT, fname)).size, 'bytes');
 
-// ── 8. Point index.html's loader tag at the new file ─────────────────────
-const tag = `<script src="${fname}" defer></script>`;
-if (/<script src="core\.(?:__HASH__|[0-9a-f]{12})\.js" defer><\/script>/.test(html)) {
-  html = html.replace(/<script src="core\.(?:__HASH__|[0-9a-f]{12})\.js" defer><\/script>/, tag);
+const coreTag = `<script data-nx-core>${iife}</script>`;
+
+// Replace existing inline core tag OR old <script src="core.*.js"> loader tag
+if (/<script data-nx-core>[\s\S]*?<\/script>/.test(html)) {
+  html = html.replace(/<script data-nx-core>[\s\S]*?<\/script>/, coreTag);
+} else if (/<script src="core\.(?:__HASH__|[0-9a-f]{12})\.js"[^>]*><\/script>/.test(html)) {
+  html = html.replace(/<script src="core\.(?:__HASH__|[0-9a-f]{12})\.js"[^>]*><\/script>/, coreTag);
 } else {
-  console.error('Could not find loader tag in index.html'); process.exit(1);
+  console.error('Could not find loader placeholder in index.html'); process.exit(1);
 }
+
 fs.writeFileSync(HTML, html);
-log('index.html    :', fs.statSync(HTML).size, 'bytes ->', tag);
-log('\nDone. Deploy index.html +', fname, '+ guard(inline) + manifest/sw/icons to EdgeOne.');
+log('index.html    :', fs.statSync(HTML).size, 'bytes — IIFE inlined');
+log('\nDone. Deploy index.html + manifest.json + sw.js + icon-192.png + icon-512.png to EdgeOne.');
+log('No separate core.*.js file needed — everything is inside index.html.');
