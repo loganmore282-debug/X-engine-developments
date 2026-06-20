@@ -1004,7 +1004,7 @@ async function loadDashboard() {
     const rows = snap.docs.map(d => {
       const t = d.data();
       const amt = Number(t.amount||0);
-      const amtStr = (amt >= 0 ? '+' : '') + ugx(amt);
+      const amtStr = (amt >= 0 ? '+' : '-') + ugx(Math.abs(amt));
       const amtColor = amt >= 0 ? 'color:var(--green)' : 'color:var(--red)';
       return `<tr>
         <td style="font-size:10px;color:var(--text2);font-family:monospace">${d.id.slice(0,10)}…</td>

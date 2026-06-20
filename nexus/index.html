@@ -1649,14 +1649,14 @@ function startListener(uid) {
       renderHomeInvestments(active);
     }
   );
-  // Resume watching any in-flight withdrawal so user gets notified even after re-opening app
-  getDocs(query(collection(db,'withdrawals'),
-    where('userId','==',uid), where('status','==','processing'), limit(1)))
+  // Resume watching any in-flight withdrawal so user gets notified even after re-opening app.
+  // Single-field query + client-side status filter (matches the investments pattern above,
+  // avoids any composite-index dependency).
+  getDocs(query(collection(db,'withdrawals'), where('userId','==',uid), limit(20)))
     .then(snap => {
-      if (!snap.empty && !_witUnsubscribe) {
-        const d = snap.docs[0];
-        watchWithdrawal(d.id, d.data().amount);
-      }
+      if (_witUnsubscribe) return;
+      const d = snap.docs.find(x => x.data().status === 'processing');
+      if (d) watchWithdrawal(d.id, d.data().amount);
     }).catch(() => {});
 }
 
@@ -2466,7 +2466,7 @@ function startDepPolling() {
     }, () => {});
   } catch (_) {}
 
-  // Track 2 — HTTP poll every 5 s; server calls MarzPay status API if still processing
+  // Track 2 — HTTP poll every 2 s; server calls MarzPay status API if still processing
   _depPollTimer = setInterval(async () => {
     if (_depResolved) return;
     try {
@@ -2595,7 +2595,7 @@ function watchWithdrawal(withdrawalId, amount) {
     if (!snap.exists()) return;
     handleWitResult(snap.data().status, snap.data(), amount);
   });
-  // Track 2: HTTP poll every 5 s — server actively checks MarzPay as fallback
+  // Track 2: HTTP poll every 2 s — server actively checks MarzPay as fallback
   _witPollTimer = setInterval(async () => {
     try {
       const r = await fetch(SERVER + '/withdraw/status/' + withdrawalId);

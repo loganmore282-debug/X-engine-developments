@@ -298,12 +298,14 @@ async function checkAgentPromotion(investorId) {
     // Already at highest tier — nothing to check
     if (refSnap.data().agentTier === 'executive_agent') return;
 
-    // Count direct referrals who have actually invested
+    // Count direct referrals who have actually invested.
+    // Single-field query + client-side filter avoids a composite index
+    // (equality + inequality on different fields would otherwise require one,
+    //  and the thrown error would silently disable all agent promotions).
     const teamSnap = await db.collection('users')
       .where('referredBy', '==', referrerId)
-      .where('totalInvested', '>', 0)
       .get();
-    const count = teamSnap.size;
+    const count = teamSnap.docs.filter(d => (d.data().totalInvested || 0) > 0).length;
     await db.collection('users').doc(referrerId).update({ activeReferralCount: count });
 
     const targetTier = getTierForCount(count);
@@ -868,7 +870,8 @@ app.post('/withdraw/request', async (req, res) => {
     if (amt % 5000 !== 0) {
       const lo = Math.floor(amt / 5000) * 5000;
       const hi = lo + 5000;
-      return res.status(400).json({ status: 'error', message: `Amount must be a multiple of UGX 5,000. Try ${fmtUGX(lo >= minWit ? lo : hi)} or ${fmtUGX(hi)}` });
+      const suggestion = lo >= minWit ? `${fmtUGX(lo)} or ${fmtUGX(hi)}` : `${fmtUGX(hi)}`;
+      return res.status(400).json({ status: 'error', message: `Amount must be a multiple of UGX 5,000. Try ${suggestion}` });
     }
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
@@ -1766,14 +1769,15 @@ app.post('/deposit/callback', handleDepositCallback);
 // ── TICKER (anonymized global activity) ──
 app.get('/ticker', async (req, res) => {
   try {
+    // orderBy alone (single field) — filter status client-side to avoid a composite index
     const snap = await db.collection('transactions')
-      .where('status', '==', 'success')
       .orderBy('createdAt', 'desc')
-      .limit(20).get();
-    const items = snap.docs.map(d => {
-      const t = d.data();
-      return { type: t.type, amount: t.amount };
-    });
+      .limit(60).get();
+    const items = snap.docs
+      .map(d => d.data())
+      .filter(t => t.status === 'success')
+      .slice(0, 20)
+      .map(t => ({ type: t.type, amount: t.amount }));
     res.json({ status: 'success', items });
   } catch (e) {
     res.json({ status: 'success', items: [] });
@@ -1933,8 +1937,9 @@ async function runAgentPayouts() {
           const lastMsFresh = fresh.data().lastAgentPayoutDate
             ? new Date(fresh.data().lastAgentPayoutDate).getTime() : 0;
           if (nowMs - lastMsFresh < 7 * 86400000) return;
-          // Use the freshest tier for payout amount
-          const tierCfg    = AGENT_TIERS.find(tt => tt.key === (fresh.data().agentTier || 'agent')) || AGENT_TIERS[2];
+          // Use the freshest tier for payout amount; fall back to base 'agent' tier
+          const tierCfg    = AGENT_TIERS.find(tt => tt.key === (fresh.data().agentTier || 'agent'))
+                             || AGENT_TIERS.find(tt => tt.key === 'agent');
           const weeklyPay  = tierCfg.weeklyPay;
           t.update(uRef, {
             walletBalance:       FieldValue.increment(weeklyPay),
@@ -1949,7 +1954,8 @@ async function runAgentPayouts() {
           });
         });
         paid++;
-        const tierCfg = AGENT_TIERS.find(tt => tt.key === (agent.agentTier || 'agent')) || AGENT_TIERS[2];
+        const tierCfg = AGENT_TIERS.find(tt => tt.key === (agent.agentTier || 'agent'))
+                        || AGENT_TIERS.find(tt => tt.key === 'agent');
         console.log(`⭐ Agent payout: ${agentDoc.id} — ${fmtUGX(tierCfg.weeklyPay)} (${tierCfg.label})`);
       } catch (e) { console.error('Agent payout tx error:', agentDoc.id, e.message); }
     }
