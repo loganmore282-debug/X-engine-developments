@@ -1499,7 +1499,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         const uSnap = await t.get(uRef);
         if (!uSnap.exists) throw new Error('User not found');
         const bal       = uSnap.data().walletBalance || 0;
-        const holdUntil = new Date(Date.now() + 5 * 60 * 1000); // 5 min for testing
+        const holdUntil = new Date(Date.now() + 60 * 60 * 1000);
         t.update(uRef, {
           walletBalance:    bal + amt,
           totalDeposited:   FieldValue.increment(amt),
@@ -1629,7 +1629,7 @@ app.get('/deposit/config', async (_req, res) => {
   try {
     const sett = await getSettings();
     return res.json({ status: 'success', minDeposit: sett.minDeposit || 30000 });
-  } catch (e) { return res.json({ status: 'success', minDeposit: 500 }); }
+  } catch (e) { return res.json({ status: 'success', minDeposit: 30000 }); }
 });
 
 // Shared: credit a completed MarzPay deposit and update Firestore atomically.
