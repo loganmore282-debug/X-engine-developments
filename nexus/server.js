@@ -101,6 +101,17 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
   });
   return resp.json();
 }
+// Get collection status — uses /collect-money/{uuid} per MarzPay docs
+async function marzGetCollectStatus(uuid) {
+  try {
+    const resp = await fetch(`${MARZPAY_BASE}/collect-money/${uuid}`, {
+      headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+    });
+    const d = await resp.json();
+    return String(d?.data?.transaction?.status || d?.transaction?.status || d?.status || '').toLowerCase();
+  } catch (_) { return ''; }
+}
+// Get disbursement status — uses /transactions/{uuid} per MarzPay docs
 async function marzGetStatus(idOrRef) {
   try {
     const resp = await fetch(`${MARZPAY_BASE}/transactions/${idOrRef}`, {
@@ -1689,9 +1700,9 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
 // Returns { credited, failed } or throws.
 async function pollMarzDepositStatus(depDoc) {
   const dep = depDoc.data();
-  const id  = dep.marzTxUuid || dep.marzReference;
-  if (!id || !MARZPAY_KEY) return { credited: false, failed: false };
-  const rawStatus = await marzGetStatus(id);
+  const uuid = dep.marzTxUuid; // MarzPay's own transaction UUID — required for /collect-money/{uuid}
+  if (!uuid || !MARZPAY_KEY) return { credited: false, failed: false };
+  const rawStatus = await marzGetCollectStatus(uuid);
   console.log(`MarzPay poll [${dep.marzReference}]: status=${rawStatus}`);
   const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
   const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
@@ -1745,14 +1756,9 @@ async function handleDepositCallback(req, res) {
     const body = req.body;
     console.log('📩 Deposit callback:', JSON.stringify(body));
     try {
-      // For collections, MarzPay puts OUR UUID in transaction.provider_reference.
-      // transaction.reference holds MarzPay's own internal ID — not our UUID.
-      const reference =
-        body.transaction?.provider_reference ||
-        body.transaction?.merchant_reference ||
-        body.merchant_reference ||
-        body.transaction?.reference ||
-        body.reference || '';
+      // Per MarzPay docs: transaction.reference = OUR UUID from the create request.
+      // provider_reference is for disbursement flows only — not present in collection callbacks.
+      const reference = body.transaction?.reference || body.reference || body.merchant_reference || '';
       if (!reference) { console.log('❌ No reference in callback'); return; }
 
       // Resolve status — check transaction.status first, then event_type
@@ -1779,9 +1785,9 @@ async function handleDepositCallback(req, res) {
       const depDoc = depSnap.docs[0];
 
       if (isSuccess) {
-        // Anti-fraud: verify status with MarzPay before crediting
+        // Anti-fraud: verify status with MarzPay before crediting (uses /collect-money/{uuid})
         if (depDoc.data().marzTxUuid) {
-          const realStatus = await marzGetStatus(depDoc.data().marzTxUuid);
+          const realStatus = await marzGetCollectStatus(depDoc.data().marzTxUuid);
           if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) {
             console.warn(`🚨 FRAUD BLOCK: callback says success but MarzPay says '${realStatus}' — NOT crediting`);
             return;
