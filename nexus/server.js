@@ -1246,6 +1246,25 @@ app.post('/giftcode/redeem', async (req, res) => {
 // ═══════════════════════════════════════════
 // ADMIN — misc
 // ═══════════════════════════════════════════
+// Force-complete a stuck MarzPay deposit (polls MarzPay then credits if confirmed)
+app.post('/admin/deposit/complete', async (req, res) => {
+  const { depositId, adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+  try {
+    const snap = await db.collection('pendingDeposits').doc(depositId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    const dep = snap.data();
+    if (dep.status === 'matched') return res.json({ status: 'success', message: 'Already credited' });
+    const result = await pollMarzDepositStatus(snap);
+    if (result.credited)
+      return res.json({ status: 'success', message: `Credited ${fmtUGX(result.amount)} to user` });
+    if (result.failed)
+      return res.status(400).json({ status: 'error', message: 'MarzPay confirms payment failed' });
+    return res.status(400).json({ status: 'error', message: 'MarzPay status still pending — try again in a moment' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 app.post('/admin/deposit', async (req, res) => {
   const { userId, amount, note, adminKey } = req.body;
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -1726,8 +1745,14 @@ async function handleDepositCallback(req, res) {
     const body = req.body;
     console.log('📩 Deposit callback:', JSON.stringify(body));
     try {
-      // Extract reference — MarzPay puts it on transaction.reference
-      const reference = body.transaction?.reference || body.reference || body.merchant_reference || '';
+      // For collections, MarzPay puts OUR UUID in transaction.provider_reference.
+      // transaction.reference holds MarzPay's own internal ID — not our UUID.
+      const reference =
+        body.transaction?.provider_reference ||
+        body.transaction?.merchant_reference ||
+        body.merchant_reference ||
+        body.transaction?.reference ||
+        body.reference || '';
       if (!reference) { console.log('❌ No reference in callback'); return; }
 
       // Resolve status — check transaction.status first, then event_type
