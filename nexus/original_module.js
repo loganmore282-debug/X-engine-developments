@@ -174,6 +174,7 @@ const SLIDE_DEFAULTS = [
   { bg:'linear-gradient(135deg,#0a2a1a 0%,#14553a 50%,#051a10 100%)', slogan:'Your Money.\nWorking For You.' },
 ];
 let _slideTimer = null;
+let _pendingAnnouncement = null; // stored here if settings load before login
 function setupSlideshow(images) {
   if (_slideTimer) { clearInterval(_slideTimer); _slideTimer = null; }
   const wrap   = document.getElementById('slideshowContainer');
@@ -233,9 +234,14 @@ async function loadSlideshow() {
       const el = document.getElementById('depInstructions');
       if (el) el.innerHTML = s.depositInstructions;
     }
-    // Announcement dialog (once per session)
+    // Announcement dialog (once per session) — show immediately if already
+    // logged in, otherwise store and fire the moment onAuthStateChanged confirms login.
     if (s.announcement?.active && !sessionStorage.getItem('nx_ann_shown')) {
-      showAnnouncement(s.announcement);
+      if (_user) {
+        showAnnouncement(s.announcement);
+      } else {
+        _pendingAnnouncement = s.announcement;
+      }
     }
     // Update customer service content from admin settings
     const tg = s.supportTelegram || '';
@@ -330,8 +336,12 @@ onAuthStateChanged(auth, async user => {
     loadRecords('deposits');
     loadTicker();
     checkMaintenance();
-    // Ensure this account has a globally-unique referral code (backfill legacy users)
     api('/account/ensure-refcode', { userId: user.uid }).catch(() => {});
+    // Show announcement immediately if settings already loaded before login
+    if (_pendingAnnouncement && !sessionStorage.getItem('nx_ann_shown')) {
+      showAnnouncement(_pendingAnnouncement);
+      _pendingAnnouncement = null;
+    }
   } else {
     if (_unsub) { _unsub(); _unsub = null; }
     if (_invUnsub) { _invUnsub(); _invUnsub = null; }
