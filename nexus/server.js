@@ -1514,7 +1514,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'deposit',
-          description: 'Online deposit via MarzPay (sandbox)',
+          description: 'Online deposit',
           amount: amt, status: 'success', date, time, marzReference: reference,
           createdAt: FieldValue.serverTimestamp()
         });
@@ -1658,7 +1658,7 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
     });
     t.set(db.collection('transactions').doc(), {
       userId: dep.userId, type: 'deposit',
-      description: 'Online deposit via MarzPay',
+      description: 'Online deposit',
       amount, status: 'success', date, time, marzReference: dep.marzReference,
       createdAt: FieldValue.serverTimestamp()
     });
