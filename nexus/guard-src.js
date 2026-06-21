@@ -65,20 +65,24 @@
   });
 
   // 7. DEVTOOLS-OPEN DETECTION (dimension heuristic) → cover screen
-  var shield = null;
-  function showShield(){
-    if (shield) return;
-    shield = document.createElement("div");
-    shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#060e2a;color:#2563eb;display:flex;align-items:center;justify-content:center;text-align:center;font-family:sans-serif;font-size:18px;padding:24px;";
-    shield.textContent = "Developer tools detected. Close them to continue using Nexus.";
-    (document.body || document.documentElement).appendChild(shield);
+  // Skip on touch/mobile — keyboard open triggers false positives there.
+  var isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (!isMobile) {
+    var shield = null;
+    function showShield(){
+      if (shield) return;
+      shield = document.createElement("div");
+      shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#060e2a;color:#2563eb;display:flex;align-items:center;justify-content:center;text-align:center;font-family:sans-serif;font-size:18px;padding:24px;";
+      shield.textContent = "Developer tools detected. Close them to continue using Nexus.";
+      (document.body || document.documentElement).appendChild(shield);
+    }
+    function hideShield(){ if (shield){ shield.remove(); shield = null; } }
+    function check(){
+      var t = 180;
+      var open = (window.outerWidth - window.innerWidth > t) ||
+                 (window.outerHeight - window.innerHeight > t);
+      if (open) showShield(); else hideShield();
+    }
+    setInterval(check, 1000);
   }
-  function hideShield(){ if (shield){ shield.remove(); shield = null; } }
-  function check(){
-    var t = 180;
-    var open = (window.outerWidth - window.innerWidth > t) ||
-               (window.outerHeight - window.innerHeight > t);
-    if (open) showShield(); else hideShield();
-  }
-  setInterval(check, 1000);
 })();
