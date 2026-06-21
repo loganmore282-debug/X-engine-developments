@@ -1096,11 +1096,11 @@ function depDetectNetwork(phone) {
   return ['77','78','76','31','39','79'].includes(p2) ? 'MTN' : 'Airtel';
 }
 
-let _depMinDeposit = 500;
+let _depMinDeposit = 30000;
 async function loadDepConfig() {
   try {
     const r = await (await fetch(SERVER + '/deposit/config')).json();
-    if (r.status === 'success') _depMinDeposit = r.minDeposit || 500;
+    if (r.status === 'success') _depMinDeposit = r.minDeposit || 30000;
   } catch (_) {}
   const badge = document.getElementById('depWalBadge');
   if (badge) {
