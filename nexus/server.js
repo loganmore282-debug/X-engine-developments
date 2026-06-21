@@ -1818,11 +1818,8 @@ async function runDailyCashback() {
     if (!docs.length) return 0;
 
     const now = new Date();
-    // Use EAT (UTC+3) date — the midnight EAT cron fires at 21:00 UTC where UTC date
-    // is still "yesterday", so using UTC would always skip. EAT date is correct.
-    const EAT = 3 * 3600000;
-    const eatMs    = now.getTime() + EAT;
-    const todayKey = new Date(eatMs).toISOString().slice(0, 10);
+    const EAT      = 3 * 3600000;
+    const todayKey = new Date(now.getTime() + EAT).toISOString().slice(0, 10);
     let credited   = 0;
 
     // Group by userId so we do one wallet update per user
@@ -1831,25 +1828,32 @@ async function runDailyCashback() {
       const inv = docSnap.data();
       if (!inv.dailyReturn || inv.dailyReturn <= 0) return;
 
-      // Last credit date — use EAT date of createdAt as fallback
-      const createdEatMs = (inv.createdAt?.toDate?.()?.getTime() || now.getTime()) + EAT;
-      const lastKey = inv.lastCreditDate || new Date(createdEatMs).toISOString().slice(0, 10);
-      if (!lastKey || lastKey >= todayKey) return; // already credited today
+      // Timestamp-based credit gate: require a FULL 24 h per credited day so that
+      // someone who invests at 11 pm doesn't get paid at midnight (1 h later).
+      // lastCreditTs = Unix ms of the last credit issue (or investment creation).
+      // Migration: old docs have lastCreditDate (string) but no lastCreditTs —
+      // treat that as midnight EAT of that date (conservative, prevents double-pay).
+      const createdAtMs = inv.createdAt?.toDate?.()?.getTime() || now.getTime();
+      let lastCreditTs;
+      if (inv.lastCreditTs != null) {
+        lastCreditTs = inv.lastCreditTs;
+      } else if (inv.lastCreditDate) {
+        lastCreditTs = new Date(inv.lastCreditDate + 'T00:00:00+03:00').getTime();
+      } else {
+        lastCreditTs = createdAtMs;
+      }
 
-      // Count full days owed since last credit (cap at remaining cycle days)
-      const startDate = new Date(lastKey + 'T00:00:00Z');
-      const diffMs    = eatMs - startDate.getTime();
-      const daysDue   = Math.min(Math.floor(diffMs / 86400000), inv.cycle || 1);
+      const elapsedMs = now.getTime() - lastCreditTs;
+      const daysDue   = Math.min(Math.floor(elapsedMs / 86400000), inv.cycle || 1);
       if (daysDue <= 0) return;
 
       let amount = Math.round(inv.dailyReturn * daysDue);
-      // Never pay past the plan's expected total return, even if the cron missed days.
       const expected = inv.expectedReturn || 0;
       if (expected > 0) amount = Math.min(amount, Math.max(0, expected - (inv.dailyCredited || 0)));
       if (amount <= 0) return;
       if (!byUser[inv.userId]) byUser[inv.userId] = { total: 0, docs: [] };
       byUser[inv.userId].total += amount;
-      byUser[inv.userId].docs.push({ ref: docSnap.ref, amount, daysDue });
+      byUser[inv.userId].docs.push({ ref: docSnap.ref, amount, daysDue, lastCreditTs });
       credited++;
     });
 
@@ -1866,6 +1870,7 @@ async function runDailyCashback() {
         for (const d of data.docs) {
           t.update(d.ref, {
             lastCreditDate: todayKey,
+            lastCreditTs:   d.lastCreditTs + d.daysDue * 86400000,
             dailyCredited:  FieldValue.increment(d.amount)
           });
           t.set(db.collection('transactions').doc(), {
