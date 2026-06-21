@@ -81,7 +81,7 @@ function uuidv4() {
 // ── MarzPay API helpers (JSON body — matches X-engine proven implementation) ──
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
-    description: description || 'Nexus Deposit' };
+    description: description || 'Online Deposit' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
     method: 'POST',
@@ -92,7 +92,7 @@ async function marzCollect({ amount, phone, reference, description, callbackUrl 
 }
 async function marzSendMoney({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
-    description: description || 'Nexus Withdrawal' };
+    description: description || 'Withdrawal' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/send-money`, {
     method: 'POST',
@@ -508,7 +508,7 @@ app.post('/sms/incoming', async (req, res) => {
               t.update(origSnap.ref, { reversed: true, reversedAt: FieldValue.serverTimestamp() });
               t.set(db.collection('transactions').doc(), {
                 userId: orig.userId, type: 'reversal',
-                description: `MoMo deposit reversed — ${reversal.txnId}`,
+                description: `Online deposit reversed — ${reversal.txnId}`,
                 amount: -debit, status: 'reversed', date, time,
                 createdAt: FieldValue.serverTimestamp()
               });
@@ -587,7 +587,7 @@ app.post('/sms/incoming', async (req, res) => {
           });
           t.set(db.collection('transactions').doc(), {
             userId, type: 'deposit',
-            description: `${matchedDep.network || 'MoMo'} deposit — received`,
+            description: `Online deposit — received`,
             amount, phone: payerPhone, txnId,
             network: matchedDep.network || 'MoMo',
             status: 'success', date, time,
@@ -638,7 +638,7 @@ app.post('/admin/assign-deposit', async (req, res) => {
       });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'deposit',
-        description: `MoMo deposit (admin assigned) — ${dep.txnId || depositId}`,
+        description: `Online deposit (admin assigned) — ${dep.txnId || depositId}`,
         amount: dep.amount, phone: dep.senderPhone || '', status: 'success', date, time,
         createdAt: FieldValue.serverTimestamp()
       });
@@ -1037,7 +1037,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const reference = uuidv4();
     const mpData = await marzSendMoney({
       amount: netAmount, phone, reference,
-      description: `Nexus withdrawal — ${wit.userName || wit.userId}`,
+      description: `${wit.userName || wit.userId}`,
       callbackUrl: RAILWAY_URL ? RAILWAY_URL + '/withdraw/callback' : undefined
     });
     console.log('MarzPay send-money response:', JSON.stringify(mpData));
@@ -1466,7 +1466,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     const reference = uuidv4();
     const mpData = await marzCollect({
       amount: amt, phone, reference,
-      description: `Nexus deposit — ${user.name || userId}`,
+      description: `${user.name || userId}`,
       callbackUrl: RAILWAY_URL ? RAILWAY_URL + '/deposit/callback' : undefined
     });
     console.log('MarzPay collect-money:', JSON.stringify(mpData));
@@ -1514,7 +1514,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'deposit',
-          description: 'MoMo deposit via MarzPay (sandbox)',
+          description: 'Online deposit via MarzPay (sandbox)',
           amount: amt, status: 'success', date, time, marzReference: reference,
           createdAt: FieldValue.serverTimestamp()
         });
@@ -1658,7 +1658,7 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
     });
     t.set(db.collection('transactions').doc(), {
       userId: dep.userId, type: 'deposit',
-      description: 'MoMo deposit via MarzPay',
+      description: 'Online deposit via MarzPay',
       amount, status: 'success', date, time, marzReference: dep.marzReference,
       createdAt: FieldValue.serverTimestamp()
     });

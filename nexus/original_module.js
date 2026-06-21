@@ -698,7 +698,7 @@ function renderProducts(products) {
       </div>
       <span class="product-stock ${inStock?'in':'out'}">${inStock?'On Sale':'Sold Out'}</span>
       <button class="product-cart" ${inStock?'':'disabled'} onclick="event.stopPropagation();openProductModal('${p.id}')">
-        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="28" height="17" rx="4"/><text x="16" y="15" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="11" fill="currentColor" stroke="none">BUY</text><path d="M16 20v5"/><path d="M11 28c1-3 10-3 10 0"/></svg>
       </button>
     </div>`;
   }).join('');
@@ -934,7 +934,7 @@ async function loadRecords(tab) {
 
     if (tab === 'deposits') {
       el.innerHTML = items.map(tx => {
-        const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'MoMo Deposit';
+        const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'Online Deposit';
         return `<div class="rec-card">
           <div class="rec-card-hd"><div class="rec-card-hd-title">${typeLabel}</div><div class="rec-card-hd-amt">${ugx(tx.amount)}</div></div>
           <div class="rec-row"><span class="rec-row-lbl">Order ID</span><span class="rec-row-val" style="font-size:11px;word-break:break-all">${tx.id}</span></div>
