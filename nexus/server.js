@@ -2240,6 +2240,52 @@ app.post('/account/update-photo', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// ONE-TIME MIGRATION: Firestore → MongoDB
+// Visit from phone browser (after Firebase quota resets at 8 AM EAT):
+//   GET /admin/migrate-firestore-to-mongo?key=<ADMIN_KEY>
+// Idempotent — safe to run multiple times. Streams progress live.
+// ═══════════════════════════════════════════════════════════════════
+function convertTimestamps(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (typeof obj.toDate === 'function') return obj.toDate();
+  if (Array.isArray(obj)) return obj.map(convertTimestamps);
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) out[k] = convertTimestamps(v);
+  return out;
+}
+
+app.get('/admin/migrate-firestore-to-mongo', async (req, res) => {
+  if (req.query.key !== ADMIN_KEY) return res.status(403).send('Forbidden');
+  const COLS = [
+    'users','investments','transactions','withdrawals',
+    'pendingDeposits','processedSMS','unmatchedDeposits',
+    'referrals','giftCodes','products','settings'
+  ];
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Transfer-Encoding', 'chunked');
+  res.flushHeaders();
+  res.write('Firestore → MongoDB migration started...\n\n');
+  const fsdb = admin.firestore();
+  let total = 0;
+  for (const col of COLS) {
+    try {
+      res.write(`Collection: ${col} ... `);
+      const snap = await fsdb.collection(col).get();
+      if (snap.empty) { res.write('(empty)\n'); continue; }
+      for (let i = 0; i < snap.docs.length; i += 50) {
+        await Promise.all(snap.docs.slice(i, i + 50).map(doc =>
+          db.collection(col).doc(doc.id).set(convertTimestamps(doc.data()))
+        ));
+      }
+      total += snap.docs.length;
+      res.write(`done (${snap.docs.length} docs)\n`);
+    } catch (e) { res.write(`ERROR: ${e.message}\n`); }
+  }
+  res.write(`\nDone. ${total} documents copied to MongoDB.\n`);
+  res.end();
+});
+
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
 
