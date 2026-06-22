@@ -1109,20 +1109,17 @@ app.post('/admin/withdraw/process', async (req, res) => {
 // ═══════════════════════════════════════════
 // MARZPAY WITHDRAWAL CALLBACK (disbursement webhook)
 // ═══════════════════════════════════════════
-// IMPORTANT: For disbursements, MarzPay puts OUR UUID in transaction.provider_reference
-// (not transaction.reference which is MarzPay's internal ID).
+// Per MarzPay docs: transaction.reference = OUR UUID. transaction.provider_reference = null always.
 app.post('/withdraw/callback', async (req, res) => {
   res.status(200).json({ received: true });
   setImmediate(async () => {
   const body = req.body;
   console.log('💸 Withdraw callback:', JSON.stringify(body));
   try {
-    // MarzPay puts OUR UUID in transaction.reference for disbursements.
-    // provider_reference holds the MTN/Airtel network ref (not our UUID).
+    // transaction.reference = our UUID per MarzPay docs (provider_reference is always null)
     const reference =
       body.transaction?.reference ||
       body.reference ||
-      body.transaction?.provider_reference ||
       body.data?.transaction?.reference || '';
 
     const rawStatus = (() => {
