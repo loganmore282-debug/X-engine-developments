@@ -1076,12 +1076,12 @@ function renderWithdrawals() {
     return;
   }
   const rows = list.map(w => {
-    let actions = '';
+    let actions = `<button class="btn btn-ghost btn-sm" onclick="openWithdrawUser('${w.userId||''}')">👁 View</button>`;
     if (w.status === 'pending') {
-      actions = `<button class="btn btn-success btn-sm" onclick="processWithdrawal('${w.id}')">Process</button>
+      actions += ` <button class="btn btn-success btn-sm" style="margin-left:4px" onclick="processWithdrawal('${w.id}')">Process</button>
                  <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="rejectWithdrawal('${w.id}','${(w.userName||'').replace(/'/g,"\\'")}')">Reject</button>`;
     }
-    return `<tr>
+    return `<tr style="cursor:pointer" onclick="openWithdrawUser('${w.userId||''}')">
       <td><div style="font-weight:600;color:var(--text)">${w.userName || '—'}</div></td>
       <td>${w.userPhone || '—'}</td>
       <td style="color:var(--text);font-weight:600">${ugx(w.amount)}</td>
@@ -1090,7 +1090,7 @@ function renderWithdrawals() {
       <td>${w.withdrawalPhone || '—'}</td>
       <td class="text-muted">${fmtDate(w.createdAt)}</td>
       <td>${statusBadge(w.status)}</td>
-      <td>${actions || statusBadge(w.status)}</td>
+      <td onclick="event.stopPropagation()">${actions}</td>
     </tr>`;
   }).join('');
 
@@ -1404,8 +1404,54 @@ window.openUserModal = (userId) => {
       </div>
       <button class="btn btn-primary btn-full" onclick="submitCredit()">Credit Wallet</button>
     </div>
+
+    <!-- How did they earn it? — recent transaction history -->
+    <div style="margin-top:14px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">📋 How They Earned It — Recent Transactions</div>
+      <div id="userTxHistory"><div class="spinner"></div></div>
+    </div>
   `;
   openModal('userOverlay');
+
+  // Load last 20 transactions for this user
+  getDocs(query(collection(db,'transactions'), where('userId','==',userId), orderBy('createdAt','desc'), limit(20)))
+    .then(snap => {
+      const rows = snap.docs.map(d => {
+        const t = d.data();
+        const amt = Number(t.amount||0);
+        const color = amt >= 0 ? 'var(--green)' : 'var(--red)';
+        const sign  = amt >= 0 ? '+' : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">${t.type||'—'}</div>
+            <div style="font-size:11px;color:var(--muted)">${t.description||''}</div>
+            <div style="font-size:10px;color:var(--muted)">${fmtDate(t.createdAt)}</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:${color};white-space:nowrap;margin-left:12px">${sign}${ugx(Math.abs(amt))}</div>
+        </div>`;
+      }).join('') || '<div style="text-align:center;color:var(--muted);padding:16px;font-size:13px">No transactions yet</div>';
+      const el = document.getElementById('userTxHistory');
+      if (el) el.innerHTML = rows;
+    })
+    .catch(() => {
+      const el = document.getElementById('userTxHistory');
+      if (el) el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:12px;font-size:12px">Failed to load transactions</div>';
+    });
+};
+
+// Open user modal from a withdrawal row — fetches user from Firestore if not cached
+window.openWithdrawUser = async (userId) => {
+  if (!userId) { showToast('No user linked to this withdrawal', 'error'); return; }
+  let u = _allUsers.find(x => x.id === userId);
+  if (!u) {
+    try {
+      const snap = await getDoc(doc(db, 'users', userId));
+      if (!snap.exists()) { showToast('User not found', 'error'); return; }
+      u = { id: snap.id, ...snap.data() };
+      _allUsers.push(u);
+    } catch(e) { showToast('Error loading user', 'error'); return; }
+  }
+  openUserModal(userId);
 };
 
 window.banUser = async (userId, currentStatus) => {
