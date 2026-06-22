@@ -1214,10 +1214,16 @@ app.post('/checkin', async (req, res) => {
 // ═══════════════════════════════════════════
 // GIFT CODES — admin generates, users redeem
 // ═══════════════════════════════════════════
+const _giftRateMap = new Map(); // userId → last attempt timestamp
 app.post('/giftcode/redeem', async (req, res) => {
   const userId = await verifyAuth(req) || req.body.userId;
   const { code } = req.body;
   if (!userId || !code) return res.status(400).json({ status: 'error', message: 'userId and code required' });
+  // Rate limit: max 1 attempt per 10 seconds per user
+  const lastTry = _giftRateMap.get(userId) || 0;
+  if (Date.now() - lastTry < 10000)
+    return res.status(429).json({ status: 'error', message: 'Too many attempts. Wait a moment.' });
+  _giftRateMap.set(userId, Date.now());
   try {
     const snap = await db.collection('giftCodes').where('code', '==', code.toUpperCase().trim()).limit(1).get();
     if (snap.empty) return res.status(404).json({ status: 'error', message: 'Invalid gift code' });
@@ -2042,16 +2048,16 @@ async function migrateLegacyCashbackTxns() {
 }
 
 function startCrons() {
-  // Maturity check every 30 min
-  setInterval(runMaturityCheck, 30 * 60 * 1000);
-  runMaturityCheck();
-  // Daily cashback: fires at 00:00 EAT via scheduler + hourly safety net + once on startup
+  // Maturity check every 2 hours (was 30 min — 4× fewer reads)
+  setInterval(runMaturityCheck, 2 * 60 * 60 * 1000);
+  setTimeout(runMaturityCheck, 2 * 60 * 1000);
+  // Daily cashback: midnight EAT scheduler + 6-hour safety net (was hourly — 6× fewer reads)
   scheduleMidnightEAT();
-  setInterval(runDailyCashback, 60 * 60 * 1000);
-  runDailyCashback();
-  // Agent weekly payouts: check every 6 hours (dedup prevents double-pay)
+  setInterval(runDailyCashback, 6 * 60 * 60 * 1000);
+  setTimeout(runDailyCashback, 3 * 60 * 1000);
+  // Agent weekly payouts: every 6 hours
   setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
-  runAgentPayouts();
+  setTimeout(runAgentPayouts, 5 * 60 * 1000);
   // One-time data correction for legacy cashback transactions
   migrateLegacyCashbackTxns();
   console.log('⏰ Crons started (maturity + cashback + agent payouts)');
