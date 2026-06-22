@@ -1810,7 +1810,7 @@ async function handleDepositCallback(req, res) {
             return;
           }
         }
-        const amount   = body.transaction?.amount?.raw || body.collection?.amount?.raw || depDoc.data().amount;
+        const amount   = parseInt(body.transaction?.amount?.raw || body.collection?.amount?.raw, 10) || depDoc.data().amount;
         const provTxId = body.collection?.provider_transaction_id || null;
         const credited = await creditMarzDeposit(depDoc, amount, provTxId);
         if (credited) console.log(`✅ Webhook credited: ${depDoc.id} → ${depDoc.data().userId} ${fmtUGX(amount)}`);
