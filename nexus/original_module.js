@@ -791,6 +791,10 @@ window.openInvDetail = async (invId) => {
     const totalMs  = cycle * 86400000;
     const msLeft   = inv.maturityDate ? Math.max(0, inv.maturityDate.toDate() - new Date()) : 0;
     const daysLeft = Math.ceil(msLeft / 86400000);
+    const hoursLeft = Math.ceil(msLeft / 3600000);
+    const timeLeftStr = msLeft <= 0 ? '0 hrs remaining'
+      : msLeft < 86400000 ? hoursLeft + ' hr' + (hoursLeft !== 1 ? 's' : '') + ' remaining'
+      : daysLeft + ' day' + (daysLeft !== 1 ? 's' : '') + ' remaining';
     const msElapsed   = Math.max(0, totalMs - msLeft);
     const daysElapsed = Math.floor(msElapsed / 86400000);
     // A plan whose cashback has fully paid out is complete even if the clock
@@ -818,7 +822,7 @@ window.openInvDetail = async (invId) => {
       <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Investment Duration</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
       <div class="rec-row"><span class="rec-row-lbl">Matures On</span><span class="rec-row-val">${inv.maturityDate ? inv.maturityDate.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed ✓' : matured ? '✅ Matured — Claim now!' : fullyPaid ? 'Fully paid out ✓' : daysLeft + ' day' + (daysLeft!==1?'s':'') + ' remaining'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed ✓' : matured ? '✅ Matured — Claim now!' : fullyPaid ? 'Fully paid out ✓' : timeLeftStr}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
       <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:12px;color:var(--text2)">Progress</span>
