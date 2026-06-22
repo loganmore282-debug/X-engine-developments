@@ -10,7 +10,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({ origin: '*' }));
 
-// ── FIREBASE ──
+// ── FIREBASE AUTH (Auth only — Firestore replaced by MongoDB) ──
 let serviceAccount;
 try {
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
@@ -20,8 +20,9 @@ try {
   process.exit(1);
 }
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-const db         = admin.firestore();
-const FieldValue = admin.firestore.FieldValue;
+
+// ── MONGODB (replaces Firestore) ──
+const { connectMongo, db, FieldValue } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY    = process.env.ADMIN_KEY    || '';
@@ -55,9 +56,9 @@ function getTierForCount(count) {
   return AGENT_TIERS.find(t => count >= t.threshold) || null;
 }
 
-// ── SETTINGS CACHE — reads Firestore `settings/main`, TTL 5 min ──
+// ── SETTINGS CACHE — reads MongoDB `settings/main`, TTL 5 min ──
 // Admin-editable rates (commL1/L2/L3, liquidityFee, minWithdrawal) live here;
-// hardcoded constants above are fallbacks only so a bad Firestore value never breaks the server.
+// hardcoded constants above are fallbacks only so a bad DB value never breaks the server.
 let _settingsCache = null, _settingsCacheTs = 0;
 async function getSettings() {
   if (Date.now() - _settingsCacheTs < 5 * 60 * 1000) return _settingsCache || {};
@@ -583,7 +584,7 @@ app.post('/sms/incoming', async (req, res) => {
             walletBalance:    (uSnap.data().walletBalance || 0) + amount,
             totalDeposited:   FieldValue.increment(amount),
             lastDepositAt:    FieldValue.serverTimestamp(),
-            withdrawableFrom: admin.firestore.Timestamp.fromDate(withdrawableAt)
+            withdrawableFrom: withdrawableAt
           });
           t.set(db.collection('processedSMS').doc(txnId), {
             userId, amount, payerPhone, txnId,
@@ -805,7 +806,7 @@ app.post('/invest/create', async (req, res) => {
         userId, productId, productName: product.name, productImage: product.image || '',
         amount: price, dailyReturn: product.dailyReturn || 0, cycle: product.cycle || 1,
         expectedReturn: product.expectedReturn || price, status: 'active',
-        maturityDate: admin.firestore.Timestamp.fromDate(matDate),
+        maturityDate: matDate,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
@@ -1420,7 +1421,7 @@ app.post('/admin/gift-codes/generate', async (req, res) => {
         maxUsers:  maxUsers ? Math.max(1, parseInt(maxUsers)) : null,
         createdAt: FieldValue.serverTimestamp()
       };
-      if (expiresAt) docData.expiresAt = admin.firestore.Timestamp.fromDate(expiresAt);
+      if (expiresAt) docData.expiresAt = expiresAt;
       batch.set(docRef, docData);
     }
 
@@ -1553,7 +1554,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         t.update(uRef, {
           walletBalance:    bal + amt,
           totalDeposited:   FieldValue.increment(amt),
-          withdrawableFrom: admin.firestore.Timestamp.fromDate(holdUntil)
+          withdrawableFrom: holdUntil
         });
         t.set(depRef, {
           userId, phone, amount: amt, creditedAmount: amt,
@@ -1654,7 +1655,7 @@ app.post('/deposit/initiate', async (req, res) => {
       receivingName,
       status: 'pending',
       date, time,
-      expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+      expiresAt: expiresAt,
       createdAt: FieldValue.serverTimestamp()
     });
 
@@ -1702,7 +1703,7 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
     t.update(uRef, {
       walletBalance:    bal + amount,
       totalDeposited:   FieldValue.increment(amount),
-      withdrawableFrom: admin.firestore.Timestamp.fromDate(holdUntil)
+      withdrawableFrom: holdUntil
     });
     t.update(depDoc.ref, {
       status: 'matched', creditedAmount: amount,
@@ -2085,7 +2086,7 @@ async function runReconciliation() {
           const credited = await creditMarzDeposit(doc, dep.amount, null);
           if (credited) { console.log(`🔄 Reconciled deposit: ${doc.id} → ${dep.userId}`); resolved++; }
         } else if (['failed', 'cancelled', 'error', 'declined'].includes(status)) {
-          await doc.ref.update({ status: 'failed', failedAt: admin.firestore.FieldValue.serverTimestamp(), failureReason: status });
+          await doc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(), failureReason: status });
           console.log(`🔄 Reconciled deposit failed: ${doc.id}`); resolved++;
         }
       } catch (e) { console.warn(`Reconcile deposit ${doc.id}:`, e.message); }
@@ -2240,8 +2241,15 @@ app.post('/account/update-photo', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`◈ Nexus Investment Server on port ${PORT}`);
-  console.log(`  URL: ${RAILWAY_URL || '(set RAILWAY_URL)'}`);
-  startCrons();
-});
+const MONGODB_URI = process.env.MONGODB_URI || '';
+
+async function startServer() {
+  if (!MONGODB_URI) { console.error('❌ MONGODB_URI env var not set'); process.exit(1); }
+  await connectMongo(MONGODB_URI);
+  app.listen(PORT, () => {
+    console.log(`◈ Nexus Investment Server on port ${PORT}`);
+    console.log(`  URL: ${RAILWAY_URL || '(set RAILWAY_URL)'}`);
+    startCrons();
+  });
+}
+startServer().catch(e => { console.error('Startup error:', e.message); process.exit(1); });
