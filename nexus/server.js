@@ -2112,6 +2112,36 @@ async function runReconciliation() {
     }
 
     if (resolved > 0) console.log(`✅ Reconciliation: ${resolved} record(s) resolved`);
+
+    // ── Overdue maturities (active investments past their maturity date) ──
+    // Runs here every 5 min as a safety net — actual cron runs every 2 h.
+    try {
+      const matCount = await runMaturityCheck();
+      if (matCount > 0) {
+        console.log(`🔄 Reconciliation triggered maturity check: ${matCount} plan(s) matured`);
+        // Immediately pay any remaining cashback for newly matured plans
+        await runDailyCashback();
+      }
+    } catch (e) { console.warn('Reconcile maturity check:', e.message); }
+
+    // ── Missed cashback (matured investments with uncredited daily returns) ──
+    // If server restarted and missed midnight, daysDue ≥ 1 triggers a catch-up credit.
+    try {
+      const maturedSnap = await db.collection('investments')
+        .where('status', '==', 'matured').limit(20).get();
+      let needsCashback = false;
+      for (const doc of maturedSnap.docs) {
+        const inv = doc.data();
+        if ((inv.dailyCredited || 0) >= (inv.expectedReturn || 0)) continue; // fully paid
+        const lastTs = inv.lastCreditTs || inv.createdAt?.toDate?.()?.getTime() || 0;
+        if (Math.floor((Date.now() - lastTs) / 86400000) >= 1) { needsCashback = true; break; }
+      }
+      if (needsCashback) {
+        console.log('🔄 Reconciliation found uncredited matured cashback — running cashback now');
+        await runDailyCashback();
+      }
+    } catch (e) { console.warn('Reconcile matured cashback:', e.message); }
+
   } catch (e) { console.error('Reconciliation error:', e.message); }
 }
 
