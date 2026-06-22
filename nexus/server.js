@@ -1515,11 +1515,20 @@ app.post('/deposit/marzpay', async (req, res) => {
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
     const { date, time } = nowStr();
 
-    // Cancel any existing processing deposits for this user so listener is unambiguous.
-    // Single-field query + client-side status filter (avoids composite index).
+    // Cancel stale deposits — but NEVER cancel a 'processing' deposit younger than 5 min
+    // because the USSD prompt may still be pending approval and money may have left the user's account.
     const oldSnap = await db.collection('pendingDeposits')
       .where('userId', '==', userId).limit(20).get();
-    const stale = oldSnap.docs.filter(d => ['processing', 'pending'].includes(d.data().status));
+    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    const stale = oldSnap.docs.filter(d => {
+      const dep = d.data();
+      if (dep.status === 'pending') return true; // always cancel old pending (SMS-based)
+      if (dep.status === 'processing') {
+        const createdMs = dep.createdAt?.toDate?.()?.getTime() || 0;
+        return createdMs < fiveMinAgo; // only cancel processing if older than 5 min
+      }
+      return false;
+    });
     if (stale.length) {
       const b = db.batch();
       stale.forEach(d => b.update(d.ref, { status: 'cancelled' }));
@@ -1672,6 +1681,8 @@ app.get('/deposit/config', async (_req, res) => {
 // Used by both the webhook and the active-polling fallback.
 async function creditMarzDeposit(depDoc, amount, provTxId) {
   const dep = depDoc.data();
+  // Already credited or truly failed — skip. Allow 'cancelled' through: money may have
+  // left the user's account if they paid before the cancel happened.
   if (dep.status === 'matched' || dep.status === 'failed') return false;
   const { date, time } = nowStr();
   await db.runTransaction(async t => {
