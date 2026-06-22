@@ -1109,18 +1109,18 @@ app.post('/admin/withdraw/process', async (req, res) => {
 // ═══════════════════════════════════════════
 // MARZPAY WITHDRAWAL CALLBACK (disbursement webhook)
 // ═══════════════════════════════════════════
-// Per MarzPay docs: transaction.reference = OUR UUID. transaction.provider_reference = null always.
+// Actual observed webhook shape:
+//   transaction.uuid      = MarzPay's UUID  (stored as marzTxUuid in our Firestore)
+//   transaction.reference = MarzPay's own reference number (NOT our UUID)
+// We match on marzTxUuid first; fall back to marzReference for legacy records.
 app.post('/withdraw/callback', async (req, res) => {
   res.status(200).json({ received: true });
   setImmediate(async () => {
   const body = req.body;
   console.log('💸 Withdraw callback:', JSON.stringify(body));
   try {
-    // transaction.reference = our UUID per MarzPay docs (provider_reference is always null)
-    const reference =
-      body.transaction?.reference ||
-      body.reference ||
-      body.data?.transaction?.reference || '';
+    const marzUuid  = body.transaction?.uuid  || body.data?.transaction?.uuid  || '';
+    const reference = body.transaction?.reference || body.reference || body.data?.transaction?.reference || '';
 
     const rawStatus = (() => {
       const s = String(body.transaction?.status || body.status || '').toLowerCase();
@@ -1133,14 +1133,22 @@ app.post('/withdraw/callback', async (req, res) => {
     })();
     const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
     const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
-    console.log(`Withdraw callback ref=${reference} status=${rawStatus}`);
+    console.log(`Withdraw callback uuid=${marzUuid} ref=${reference} status=${rawStatus}`);
 
-    if (!reference || (!isSuccess && !isFailed)) return;
+    if ((!marzUuid && !reference) || (!isSuccess && !isFailed)) return;
 
-    const witSnap = await db.collection('withdrawals')
-      .where('marzReference', '==', reference).limit(1).get();
+    // Primary: match by MarzPay's transaction UUID (most reliable)
+    let witSnap = marzUuid
+      ? await db.collection('withdrawals').where('marzTxUuid', '==', marzUuid).limit(1).get()
+      : { empty: true };
+
+    // Fallback: match by the reference we passed to MarzPay at create time
+    if (witSnap.empty && reference) {
+      witSnap = await db.collection('withdrawals').where('marzReference', '==', reference).limit(1).get();
+    }
+
     if (witSnap.empty) {
-      console.log('No withdrawal for marzReference:', reference);
+      console.log('No withdrawal for uuid:', marzUuid, 'or ref:', reference);
       return;
     }
     const witDoc = witSnap.docs[0];
