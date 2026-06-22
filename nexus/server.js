@@ -111,14 +111,14 @@ async function marzGetCollectStatus(uuid) {
     return String(d?.data?.transaction?.status || d?.transaction?.status || d?.status || '').toLowerCase();
   } catch (_) { return ''; }
 }
-// Get disbursement status — uses /transactions/{uuid} per MarzPay docs
-async function marzGetStatus(idOrRef) {
+// Get disbursement status — uses /send-money/{uuid} per MarzPay docs
+async function marzGetStatus(uuid) {
   try {
-    const resp = await fetch(`${MARZPAY_BASE}/transactions/${idOrRef}`, {
+    const resp = await fetch(`${MARZPAY_BASE}/send-money/${uuid}`, {
       headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
     });
     const d = await resp.json();
-    return String(d?.transaction?.status || d?.data?.transaction?.status || d?.status || '').toLowerCase();
+    return String(d?.data?.transaction?.status || d?.transaction?.status || d?.status || '').toLowerCase();
   } catch (_) { return ''; }
 }
 
