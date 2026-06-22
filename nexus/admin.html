@@ -1413,10 +1413,15 @@ window.openUserModal = (userId) => {
   `;
   openModal('userOverlay');
 
-  // Load last 20 transactions for this user
-  getDocs(query(collection(db,'transactions'), where('userId','==',userId), orderBy('createdAt','desc'), limit(20)))
+  // Load last 20 transactions for this user — no orderBy to avoid composite index requirement
+  getDocs(query(collection(db,'transactions'), where('userId','==',userId), limit(50)))
     .then(snap => {
-      const rows = snap.docs.map(d => {
+      const sorted = snap.docs.slice().sort((a,b) => {
+        const ta = a.data().createdAt?.seconds || 0;
+        const tb = b.data().createdAt?.seconds || 0;
+        return tb - ta;
+      }).slice(0,20);
+      const rows = sorted.map(d => {
         const t = d.data();
         const amt = Number(t.amount||0);
         const color = amt >= 0 ? 'var(--green)' : 'var(--red)';
