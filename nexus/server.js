@@ -2055,6 +2055,58 @@ async function migrateLegacyCashbackTxns() {
   } catch (e) { console.error('Cashback txn migration error:', e.message); return 0; }
 }
 
+// ═══════════════════════════════════════════
+// RECONCILIATION — auto-resolve stuck deposits & withdrawals
+// Runs every 5 min, only touches records older than 3 min (gives webhook time to fire first)
+// ═══════════════════════════════════════════
+async function runReconciliation() {
+  const cutoff = new Date(Date.now() - 3 * 60 * 1000); // 3 min ago
+  let resolved = 0;
+  try {
+    // ── Stuck deposits (processing) ──
+    const depSnap = await db.collection('pendingDeposits')
+      .where('status', '==', 'processing').limit(20).get();
+    for (const doc of depSnap.docs) {
+      const dep = doc.data();
+      if (!dep.marzTxUuid) continue;
+      const createdMs = dep.createdAt?.toDate?.()?.getTime() || 0;
+      if (createdMs > cutoff.getTime()) continue; // too fresh — let webhook fire first
+      try {
+        const status = await marzGetCollectStatus(dep.marzTxUuid);
+        if (['completed', 'successful', 'success', 'paid'].includes(status)) {
+          const credited = await creditMarzDeposit(doc, dep.amount, null);
+          if (credited) { console.log(`🔄 Reconciled deposit: ${doc.id} → ${dep.userId}`); resolved++; }
+        } else if (['failed', 'cancelled', 'error', 'declined'].includes(status)) {
+          await doc.ref.update({ status: 'failed', failedAt: admin.firestore.FieldValue.serverTimestamp(), failureReason: status });
+          console.log(`🔄 Reconciled deposit failed: ${doc.id}`); resolved++;
+        }
+      } catch (e) { console.warn(`Reconcile deposit ${doc.id}:`, e.message); }
+    }
+
+    // ── Stuck withdrawals (processing) ──
+    const witSnap = await db.collection('withdrawals')
+      .where('status', '==', 'processing').limit(20).get();
+    for (const doc of witSnap.docs) {
+      const wit = doc.data();
+      if (!wit.marzTxUuid) continue;
+      const processedMs = wit.processedAt?.toDate?.()?.getTime() || 0;
+      if (processedMs > cutoff.getTime()) continue;
+      try {
+        const status = await marzGetStatus(wit.marzTxUuid);
+        if (['completed', 'successful', 'success', 'paid'].includes(status)) {
+          const done = await completeWithdrawal(doc);
+          if (done) { console.log(`🔄 Reconciled withdrawal: ${doc.id}`); resolved++; }
+        } else if (['failed', 'cancelled', 'error', 'declined'].includes(status)) {
+          await failWithdrawal(doc, status);
+          console.log(`🔄 Reconciled withdrawal failed: ${doc.id}`); resolved++;
+        }
+      } catch (e) { console.warn(`Reconcile withdrawal ${doc.id}:`, e.message); }
+    }
+
+    if (resolved > 0) console.log(`✅ Reconciliation: ${resolved} record(s) resolved`);
+  } catch (e) { console.error('Reconciliation error:', e.message); }
+}
+
 function startCrons() {
   // Maturity check every 2 hours (was 30 min — 4× fewer reads)
   setInterval(runMaturityCheck, 2 * 60 * 60 * 1000);
@@ -2066,9 +2118,12 @@ function startCrons() {
   // Agent weekly payouts: every 6 hours
   setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
   setTimeout(runAgentPayouts, 5 * 60 * 1000);
+  // Reconciliation: auto-resolve stuck deposits/withdrawals every 5 min
+  setInterval(runReconciliation, 5 * 60 * 1000);
+  setTimeout(runReconciliation, 4 * 60 * 1000); // first run 4 min after boot
   // One-time data correction for legacy cashback transactions
   migrateLegacyCashbackTxns();
-  console.log('⏰ Crons started (maturity + cashback + agent payouts)');
+  console.log('⏰ Crons started (maturity + cashback + agent payouts + reconciliation)');
 }
 
 // ═══════════════════════════════════════════
