@@ -2065,7 +2065,7 @@ async function migrateLegacyCashbackTxns() {
 
 // ═══════════════════════════════════════════
 // RECONCILIATION — auto-resolve stuck deposits & withdrawals
-// Runs every 5 min, only touches records older than 3 min (gives webhook time to fire first)
+// Runs every 30 min, only touches records older than 3 min (gives webhook time to fire first)
 // ═══════════════════════════════════════════
 async function runReconciliation() {
   const cutoff = new Date(Date.now() - 3 * 60 * 1000); // 3 min ago
@@ -2113,26 +2113,15 @@ async function runReconciliation() {
 
     if (resolved > 0) console.log(`✅ Reconciliation: ${resolved} record(s) resolved`);
 
-    // ── Overdue maturities (active investments past their maturity date) ──
-    // Runs here every 5 min as a safety net — actual cron runs every 2 h.
-    try {
-      const matCount = await runMaturityCheck();
-      if (matCount > 0) {
-        console.log(`🔄 Reconciliation triggered maturity check: ${matCount} plan(s) matured`);
-        // Immediately pay any remaining cashback for newly matured plans
-        await runDailyCashback();
-      }
-    } catch (e) { console.warn('Reconcile maturity check:', e.message); }
-
     // ── Missed cashback (matured investments with uncredited daily returns) ──
-    // If server restarted and missed midnight, daysDue ≥ 1 triggers a catch-up credit.
+    // Only check once per 30-min cycle; maturity cron covers the rest.
     try {
       const maturedSnap = await db.collection('investments')
         .where('status', '==', 'matured').limit(20).get();
       let needsCashback = false;
       for (const doc of maturedSnap.docs) {
         const inv = doc.data();
-        if ((inv.dailyCredited || 0) >= (inv.expectedReturn || 0)) continue; // fully paid
+        if ((inv.dailyCredited || 0) >= (inv.expectedReturn || 0)) continue;
         const lastTs = inv.lastCreditTs || inv.createdAt?.toDate?.()?.getTime() || 0;
         if (Math.floor((Date.now() - lastTs) / 86400000) >= 1) { needsCashback = true; break; }
       }
@@ -2156,8 +2145,8 @@ function startCrons() {
   // Agent weekly payouts: every 6 hours
   setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
   setTimeout(runAgentPayouts, 5 * 60 * 1000);
-  // Reconciliation: auto-resolve stuck deposits/withdrawals every 5 min
-  setInterval(runReconciliation, 5 * 60 * 1000);
+  // Reconciliation: auto-resolve stuck deposits/withdrawals every 30 min
+  setInterval(runReconciliation, 30 * 60 * 1000);
   setTimeout(runReconciliation, 4 * 60 * 1000); // first run 4 min after boot
   // One-time data correction for legacy cashback transactions
   migrateLegacyCashbackTxns();
