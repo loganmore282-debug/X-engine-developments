@@ -2,7 +2,7 @@ import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, collection, query, where, orderBy, limit, onSnapshot, getDocs }
+import { getFirestore }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -22,7 +22,7 @@ const auth = getAuth(app);
 const db   = getFirestore(app);
 
 // ── STATE ──
-let _user = null, _userData = null, _unsub = null, _invUnsub = null;
+let _user = null, _userData = null, _unsub = null;
 let _currentProduct = null;
 
 // ── SVG ICONS ──
@@ -52,6 +52,17 @@ const ICN = {
 
 // ── UTILS ──
 function ugx(n) { return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+// Timestamps now arrive from the server as ISO strings (MongoDB) but may still be
+// Firestore Timestamps or {seconds} objects in cached data — normalise all shapes.
+function tsMs(v) {
+  if (!v) return 0;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v.toDate === 'function')   return v.toDate().getTime();
+  if (typeof v === 'object' && v.seconds != null) return v.seconds * 1000;
+  const t = new Date(v).getTime();
+  return isNaN(t) ? 0 : t;
+}
+function tsDate(v) { const m = tsMs(v); return m ? new Date(m) : null; }
 function shortUgx(n) { n = Number(n||0); return n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : n.toString(); }
 function showToast(msg, type='') {
   const t = document.getElementById('toast');
@@ -144,8 +155,7 @@ window.doRegister = async () => {
 window.doLogout = async () => {
   if (!confirm('Log out of Nexus?')) return;
   if (_unsub)      { _unsub(); _unsub = null; }
-  if (_invUnsub)   { _invUnsub(); _invUnsub = null; }
-  if (_maintUnsub) { _maintUnsub(); _maintUnsub = null; }
+  if (_maintTimer) { clearInterval(_maintTimer); _maintTimer = null; }
   stopWitTimers();
   await signOut(auth);
   _user = null; _userData = null;
@@ -213,9 +223,9 @@ function setupSlideshow(images) {
 async function loadSlideshow() {
   setupSlideshow([]); // render gradient defaults immediately — no blank screen
   try {
-    const snap = await getDoc(doc(db, 'settings', 'main'));
-    if (!snap.exists()) return; // keep defaults
-    const s = snap.data();
+    const r = await (await fetch(SERVER + '/settings/public')).json();
+    if (r.status !== 'success') return; // keep defaults
+    const s = r.settings;
     const images = s.slideshowImages || [];
     setupSlideshow(images); // swap in real slides once Firestore responds
     // Products banner
@@ -344,7 +354,6 @@ onAuthStateChanged(auth, async user => {
     }
   } else {
     if (_unsub) { _unsub(); _unsub = null; }
-    if (_invUnsub) { _invUnsub(); _invUnsub = null; }
     stopWitTimers();
     document.body.classList.add('on-auth');
     document.getElementById('appScreen').style.display  = 'none';
@@ -353,63 +362,73 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-// ── MAINTENANCE — real-time listener so overlay appears the moment admin toggles it ──
-let _maintUnsub = null;
-function startMaintenanceListener() {
-  if (_maintUnsub) return; // already listening
-  _maintUnsub = onSnapshot(doc(db, 'settings', 'main'), snap => {
-    const on = snap.exists() && !!snap.data().maintenanceMode;
+// ── MAINTENANCE — poll the server so overlay appears shortly after admin toggles it ──
+let _maintTimer = null;
+async function pollMaintenance() {
+  try {
+    const r = await (await fetch(SERVER + '/settings/public')).json();
+    const on = r.status === 'success' && !!r.settings.maintenanceMode;
     document.getElementById('maintenanceOverlay').style.display = on ? 'flex' : 'none';
-  }, () => {});
+  } catch (_) {}
+}
+function startMaintenanceListener() {
+  if (_maintTimer) return; // already polling
+  pollMaintenance();
+  _maintTimer = setInterval(pollMaintenance, 20000); // every 20 s
 }
 // Keep legacy name so the onAuthStateChanged call still works
 function checkMaintenance() { startMaintenanceListener(); }
 
-// ── REAL-TIME LISTENER ──
-function startListener(uid) {
-  if (_unsub) _unsub();
-  if (_invUnsub) { _invUnsub(); _invUnsub = null; }
-  _unsub = onSnapshot(doc(db, 'users', uid), async snap => {
-    if (!snap.exists()) return;
-    _userData = snap.data();
-
-    // Enforce ban in real-time — kick the user out immediately if admin bans them
-    if (_userData.status === 'banned') {
-      await signOut(auth);
-      _user = null; _userData = null;
-      document.body.classList.add('on-auth');
-      document.getElementById('appScreen').style.display = 'none';
-      document.getElementById('authScreen').style.display = 'block';
-      showLoading(false);
-      showToast('Your account has been suspended. Contact support.', 'error');
-      return;
+// ── DATA POLLING (replaces Firestore real-time listeners; server reads MongoDB) ──
+let _pollTimer = null;
+async function pollAccount(uid) {
+  // Account balance/profile
+  try {
+    const r = await api('/account/data', { userId: uid });
+    if (r.status === 'success' && r.user) {
+      _userData = r.user;
+      // Enforce ban — kick the user out immediately if admin bans them
+      if (_userData.status === 'banned') {
+        await signOut(auth);
+        _user = null; _userData = null;
+        document.body.classList.add('on-auth');
+        document.getElementById('appScreen').style.display = 'none';
+        document.getElementById('authScreen').style.display = 'block';
+        showLoading(false);
+        showToast('Your account has been suspended. Contact support.', 'error');
+        return;
+      }
+      renderHome(_userData);
+      renderCommission(_userData);
+      renderMore(_userData);
+      renderAgentCentre(_userData);
     }
-
-    renderHome(_userData);
-    renderCommission(_userData);
-    renderMore(_userData);
-    renderAgentCentre(_userData);
-  });
-  // Active investments — no orderBy, filter client-side to avoid composite index
-  _invUnsub = onSnapshot(
-    query(collection(db, 'investments'), where('userId','==',uid), limit(30)),
-    snap => {
-      const all = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-      const active = all
+  } catch (_) {}
+  // Active investments (home preview)
+  try {
+    const r = await api('/account/investments', { userId: uid });
+    if (r.status === 'success') {
+      const active = (r.investments || [])
         .filter(inv => inv.status === 'active' || inv.status === 'matured')
-        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
         .slice(0, 5);
       renderHomeInvestments(active);
     }
-  );
+  } catch (_) {}
+}
+
+function startListener(uid) {
+  if (_unsub) _unsub();
+  // Immediate first load, then poll every 6 s so balance/check-in/deposits reflect quickly.
+  pollAccount(uid);
+  _pollTimer = setInterval(() => pollAccount(uid), 6000);
+  _unsub = () => { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } };
+
   // Resume watching any in-flight withdrawal so user gets notified even after re-opening app.
-  // Single-field query + client-side status filter (matches the investments pattern above,
-  // avoids any composite-index dependency).
-  getDocs(query(collection(db,'withdrawals'), where('userId','==',uid), limit(20)))
-    .then(snap => {
-      if (_witUnsubscribe) return;
-      const d = snap.docs.find(x => x.data().status === 'processing');
-      if (d) watchWithdrawal(d.id, d.data().amount);
+  api('/account/withdrawals', { userId: uid })
+    .then(r => {
+      if (_witUnsubscribe || r.status !== 'success') return;
+      const d = (r.withdrawals || []).find(x => x.status === 'processing');
+      if (d) watchWithdrawal(d.id, d.amount);
     }).catch(() => {});
 }
 
@@ -444,7 +463,7 @@ function renderHomeInvestments(invs) {
   }
   el.innerHTML = invs.map(inv => {
     const matured = inv.status === 'matured';
-    const msLeft2   = inv.maturityDate ? Math.max(0, inv.maturityDate.toDate() - new Date()) : 0;
+    const msLeft2   = inv.maturityDate ? Math.max(0, tsMs(inv.maturityDate) - Date.now()) : 0;
     const daysLeft = Math.ceil(msLeft2 / 86400000);
     const imgHtml = inv.productImage
       ? `<div class="inv-img"><img src="${inv.productImage}" alt=""></div>`
@@ -523,7 +542,7 @@ function renderAgentCentre(u) {
   let heroHtml;
   if (u.isAgent && currentTier && currentTier.key !== 'member') {
     const agentSinceDate = u.agentSince
-      ? (u.agentSince.toDate ? u.agentSince.toDate() : new Date(u.agentSince.seconds * 1000)).toLocaleDateString('en-UG', { day:'numeric', month:'short', year:'numeric' })
+      ? (tsDate(u.agentSince) || new Date()).toLocaleDateString('en-UG', { day:'numeric', month:'short', year:'numeric' })
       : '—';
     const lastPay = u.lastAgentPayoutDate;
     let payoutLine = 'Next payout: Available now!';
@@ -669,9 +688,8 @@ window.doCheckin = async () => {
 // ── PRODUCTS ──
 async function loadProducts() {
   try {
-    const snap = await getDocs(query(collection(db,'products'), where('active','==',true)));
-    const products = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-    renderProducts(products);
+    const r = await (await fetch(SERVER + '/products')).json();
+    renderProducts(r.status === 'success' ? r.products : []);
   } catch (e) { console.error('Load products:', e); }
 }
 
@@ -716,9 +734,9 @@ function renderProducts(products) {
 
 window.openProductModal = async (productId) => {
   try {
-    const snap = await getDoc(doc(db,'products',productId));
-    if (!snap.exists()) return;
-    _currentProduct = { id: snap.id, ...snap.data() };
+    const r = await (await fetch(SERVER + '/products/' + productId)).json();
+    if (r.status !== 'success') return;
+    _currentProduct = r.product;
     const p = _currentProduct;
     const inStock = p.isInStock !== false;
     document.getElementById('productModalName').textContent = p.name;
@@ -780,16 +798,16 @@ window.openInvDetail = async (invId) => {
   try {
     let inv = _invCache[invId];
     if (!inv) {
-      const snap = await getDoc(doc(db, 'investments', invId));
-      if (!snap.exists()) { body.innerHTML = '<p style="color:var(--text2);text-align:center">Plan not found</p>'; return; }
-      inv = { id: snap.id, ...snap.data() };
+      const r = await (await fetch(SERVER + '/investment/' + invId)).json();
+      if (r.status !== 'success') { body.innerHTML = '<p style="color:var(--text2);text-align:center">Plan not found</p>'; return; }
+      inv = r.investment;
       _invCache[invId] = inv;
     }
     const matured  = inv.status === 'matured';
     const claimed  = inv.status === 'claimed';
     const cycle    = inv.cycle || inv.durationDays || 1;
     const totalMs  = cycle * 86400000;
-    const msLeft   = inv.maturityDate ? Math.max(0, inv.maturityDate.toDate() - new Date()) : 0;
+    const msLeft   = inv.maturityDate ? Math.max(0, tsMs(inv.maturityDate) - Date.now()) : 0;
     const daysLeft = Math.ceil(msLeft / 86400000);
     const hoursLeft = Math.ceil(msLeft / 3600000);
     const timeLeftStr = msLeft <= 0 ? '0 hrs remaining'
@@ -821,7 +839,7 @@ window.openInvDetail = async (invId) => {
       <div class="rec-row"><span class="rec-row-lbl">Remaining at maturity</span><span class="rec-row-val">${ugx(Math.max(0,(inv.expectedReturn||0)-(inv.dailyCredited||0)))}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Investment Duration</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Matures On</span><span class="rec-row-val">${inv.maturityDate ? inv.maturityDate.toDate().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Matures On</span><span class="rec-row-val">${inv.maturityDate ? (tsDate(inv.maturityDate)||new Date()).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed ✓' : matured ? '✅ Matured — Claim now!' : fullyPaid ? 'Fully paid out ✓' : timeLeftStr}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
       <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
@@ -845,8 +863,8 @@ window.switchRecord = (tab, btn) => {
 };
 
 function orderRef(tx) {
-  if (tx.createdAt?.toDate) {
-    const d = tx.createdAt.toDate();
+  const d = tsDate(tx.createdAt);
+  if (d) {
     const p = n => String(n).padStart(2,'0');
     return 'T'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+String(d.getMilliseconds()).padStart(3,'0');
   }
@@ -854,8 +872,8 @@ function orderRef(tx) {
 }
 
 function fmtDT(tx) {
-  if (tx.createdAt?.toDate) {
-    const d = tx.createdAt.toDate();
+  const d = tsDate(tx.createdAt);
+  if (d) {
     const p = n => String(n).padStart(2,'0');
     return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   }
@@ -884,16 +902,15 @@ async function loadRecords(tab) {
   try {
     // ── PLANS ──
     if (tab === 'investments') {
-      const snap = await getDocs(query(collection(db,'investments'), where('userId','==',_user.uid), limit(50)));
+      const rr = await api('/account/investments', { userId: _user.uid });
       if (myToken !== _recToken) return;
-      const items = snap.docs.map(d => ({ id:d.id, ...d.data() }))
-        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      const items = rr.status === 'success' ? rr.investments : [];
       if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No investment plans yet</p></div>`; return; }
       el.innerHTML = items.map(inv => {
         const matured=inv.status==='matured', claimed=inv.status==='claimed';
         const badge = matured?'<span class="inv-badge matured">Matured</span>':claimed?'<span class="inv-badge claimed">Claimed</span>':'<span class="inv-badge active">Active</span>';
         const invCycle = inv.cycle || inv.durationDays || '?';
-        const invDL = inv.maturityDate ? Math.max(0, Math.ceil((inv.maturityDate.toDate() - new Date()) / 86400000)) : 0;
+        const invDL = inv.maturityDate ? Math.max(0, Math.ceil((tsMs(inv.maturityDate) - Date.now()) / 86400000)) : 0;
         const invTimeStr = claimed ? 'Completed' : matured ? '✓ Ready' : invDL + 'd left';
         return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
           <div class="inv-img">${inv.productImage?`<img src="${inv.productImage}" alt="">`:ICN.box}</div>
@@ -905,10 +922,9 @@ async function loadRecords(tab) {
     }
     // ── WITHDRAWALS — read directly from withdrawals collection for live status ──
     if (tab === 'withdrawals') {
-      const wSnap = await getDocs(query(collection(db,'withdrawals'), where('userId','==',_user.uid), limit(100)));
+      const wr = await api('/account/withdrawals', { userId: _user.uid });
       if (myToken !== _recToken) return;
-      const witems = wSnap.docs.map(d => ({ id:d.id, ...d.data() }))
-        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      const witems = wr.status === 'success' ? wr.withdrawals : [];
       if (!witems.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No withdrawals yet</p></div>`; return; }
       el.innerHTML = witems.map(w => {
         const net   = w.netAmount != null ? w.netAmount : Math.round((w.amount||0) * 0.83);
@@ -929,10 +945,9 @@ async function loadRecords(tab) {
     }
 
     // ── OTHER TRANSACTION RECORDS ──
-    const snap = await getDocs(query(collection(db,'transactions'), where('userId','==',_user.uid), limit(200)));
+    const tr = await api('/account/transactions', { userId: _user.uid });
     if (myToken !== _recToken) return; // newer tab was selected while awaiting
-    const all = snap.docs.map(d => ({ id:d.id, ...d.data() }))
-      .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    const all = tr.status === 'success' ? tr.transactions : [];
     const REVENUE_TYPES = ['checkin','cashback','commission','gift_code','investment_return','admin_credit'];
     const items = tab === 'deposits'  ? all.filter(t => t.type === 'deposit' || t.type === 'admin_credit')
                : tab === 'referrals' ? all.filter(t => t.type === 'commission')
@@ -1244,25 +1259,12 @@ function handleDepResult(status, creditedAmount, amount) {
   }
 }
 
-// Dual-track: Firestore listener (instant when webhook fires) +
-// HTTP server poll (fallback that actively checks MarzPay on the server).
-// Both run in parallel — whichever resolves first wins.
+// HTTP poll every 2 s; server checks MarzPay status and reads MongoDB.
 function startDepPolling() {
   stopDepTimers();
   _depResolved = false;
   if (!_depDepositId) return;
 
-  // Track 1 — Firestore real-time (instant when server credits via webhook)
-  try {
-    const depRef = doc(db, 'pendingDeposits', _depDepositId);
-    _depUnsubscribe = onSnapshot(depRef, snap => {
-      if (!snap.exists()) return;
-      const d = snap.data();
-      handleDepResult(d.status, d.creditedAmount, d.amount);
-    }, () => {});
-  } catch (_) {}
-
-  // Track 2 — HTTP poll every 2 s; server calls MarzPay status API if still processing
   _depPollTimer = setInterval(async () => {
     if (_depResolved) return;
     try {
@@ -1386,12 +1388,7 @@ function handleWitResult(status, d, amount) {
 function watchWithdrawal(withdrawalId, amount) {
   stopWitTimers();
   _witResolved = false;
-  // Track 1: Firestore real-time (instant when webhook fires)
-  _witUnsubscribe = onSnapshot(doc(db, 'withdrawals', withdrawalId), snap => {
-    if (!snap.exists()) return;
-    handleWitResult(snap.data().status, snap.data(), amount);
-  });
-  // Track 2: HTTP poll every 2 s — server actively checks MarzPay as fallback
+  // HTTP poll every 2 s — server actively checks MarzPay and reads MongoDB.
   _witPollTimer = setInterval(async () => {
     try {
       const r = await fetch(SERVER + '/withdraw/status/' + withdrawalId);
@@ -1401,8 +1398,8 @@ function watchWithdrawal(withdrawalId, amount) {
   }, 2000);
 }
 
-// No-op: startListener onSnapshot already auto-refreshes the UI on Firestore changes
-function loadUser() {}
+// Trigger an immediate balance refresh (used after deposit success, etc.)
+function loadUser() { if (_user) pollAccount(_user.uid); }
 
 
 // ── GIFT CODE ──

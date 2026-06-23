@@ -148,6 +148,15 @@ app.use(async (req, res, next) => {
 // ── HELPERS ──
 function fmtUGX(n)   { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
 function hashPin(p)  { return crypto.createHash('sha256').update(String(p) + 'nexus_salt_2026').digest('hex'); }
+// Milliseconds from any timestamp shape (Firestore Timestamp, Date, ISO string, {seconds}).
+function tsMillis(v) {
+  if (!v) return 0;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v.toDate === 'function')   return v.toDate().getTime();
+  if (typeof v === 'object' && v.seconds != null) return v.seconds * 1000;
+  const t = new Date(v).getTime();
+  return isNaN(t) ? 0 : t;
+}
 function eatNow()    { return new Date(Date.now() + 3 * 3600000); }
 function phoneToEmail(phone) { return String(phone).replace(/\D/g,'') + '@nexus-app.com'; }
 
@@ -2237,6 +2246,105 @@ app.post('/account/update-photo', async (req, res) => {
   try {
     await db.collection('users').doc(uid).update({ profilePhoto: photoUrl });
     return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// USER READ ENDPOINTS (all read from MongoDB — replaces client Firestore)
+// ═══════════════════════════════════════════════════════════════════
+
+// Live account data — the user app polls this for balance/profile.
+app.post('/account/data', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const snap = await db.collection('users').doc(userId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    return res.json({ status: 'success', user: { id: snap.id, ...snap.data() } });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Active products — public (browsed before login on some screens).
+app.get('/products', async (_req, res) => {
+  try {
+    const snap = await db.collection('products').where('active', '==', true).get();
+    return res.json({ status: 'success', products: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.get('/products/:id', async (req, res) => {
+  try {
+    const snap = await db.collection('products').doc(req.params.id).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Plan not found' });
+    return res.json({ status: 'success', product: { id: snap.id, ...snap.data() } });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// User's investments.
+app.post('/account/investments', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const snap = await db.collection('investments').where('userId', '==', userId).limit(50).get();
+    const investments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    investments.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', investments });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Single investment detail.
+app.get('/investment/:id', async (req, res) => {
+  try {
+    const snap = await db.collection('investments').doc(req.params.id).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Plan not found' });
+    return res.json({ status: 'success', investment: { id: snap.id, ...snap.data() } });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// User's withdrawals.
+app.post('/account/withdrawals', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const snap = await db.collection('withdrawals').where('userId', '==', userId).limit(100).get();
+    const withdrawals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    withdrawals.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', withdrawals });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// User's transactions.
+app.post('/account/transactions', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const snap = await db.collection('transactions').where('userId', '==', userId).limit(200).get();
+    const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    transactions.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', transactions });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Public settings (slideshow, banners, announcement, support, maintenance).
+app.get('/settings/public', async (_req, res) => {
+  try {
+    const snap = await db.collection('settings').doc('main').get();
+    const s = snap.exists ? snap.data() : {};
+    return res.json({
+      status: 'success',
+      settings: {
+        slideshowImages:     s.slideshowImages     || [],
+        productsBannerImage: s.productsBannerImage  || '',
+        depositImage:        s.depositImage         || '',
+        depositInstructions: s.depositInstructions  || '',
+        announcement:        s.announcement         || null,
+        supportTelegram:     s.supportTelegram      || '',
+        supportWhatsapp:     s.supportWhatsapp      || '',
+        supportEmail:        s.supportEmail         || '',
+        supportHours:        s.supportHours         || '',
+        maintenanceMode:     !!s.maintenanceMode
+      }
+    });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
