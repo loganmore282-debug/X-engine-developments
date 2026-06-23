@@ -1864,8 +1864,10 @@ app.get('/ticker', async (req, res) => {
 app.post('/admin/check-maturities', async (req, res) => {
   const { adminKey } = req.body;
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error' });
-  const count = await runMaturityCheck();
-  return res.json({ status: 'success', matured: count });
+  const matured = await runMaturityCheck();
+  const cashback = await runDailyCashback();
+  const reconciled = await runReconciliation();
+  return res.json({ status: 'success', matured, cashback, reconciled });
 });
 
 // ═══════════════════════════════════════════
@@ -1974,8 +1976,12 @@ async function runMaturityCheck() {
         count++;
       }
     });
-    if (count > 0) { await batch.commit(); }
-    if (count > 0) console.log(`⏰ Matured/completed: ${count} plan(s)`);
+    if (count > 0) {
+      await batch.commit();
+      console.log(`⏰ Matured/completed: ${count} plan(s)`);
+      // Immediately credit any remaining cashback on newly matured plans
+      await runDailyCashback();
+    }
     return count;
   } catch (e) { console.error('Maturity error:', e.message); return 0; }
 }
@@ -2146,12 +2152,12 @@ async function runReconciliation() {
 }
 
 function startCrons() {
-  // Maturity check every 2 hours (was 30 min — 4× fewer reads)
-  setInterval(runMaturityCheck, 2 * 60 * 60 * 1000);
-  setTimeout(runMaturityCheck, 2 * 60 * 1000);
-  // Daily cashback: midnight EAT scheduler + 6-hour safety net (was hourly — 6× fewer reads)
+  // Maturity check every 15 min — MongoDB has no daily read quota so this is fine
+  setInterval(runMaturityCheck, 15 * 60 * 1000);
+  setTimeout(runMaturityCheck, 60 * 1000); // first run 1 min after boot
+  // Daily cashback: midnight EAT scheduler + 2-hour safety net
   scheduleMidnightEAT();
-  setInterval(runDailyCashback, 6 * 60 * 60 * 1000);
+  setInterval(runDailyCashback, 2 * 60 * 60 * 1000);
   setTimeout(runDailyCashback, 3 * 60 * 1000);
   // Agent weekly payouts: every 6 hours
   setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
