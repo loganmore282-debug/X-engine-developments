@@ -978,8 +978,9 @@ window.showTab = (tab, btn) => {
 // ── WITHDRAWAL COUNT BADGE ──
 async function loadWithdrawalsCount() {
   try {
-    const snap = await getDocs(query(collection(db,'withdrawals'), where('status','==','pending')));
-    const n = snap.size;
+    const r = await api('/admin/stats', { adminKey: ADMIN_PASS });
+    if (r.status !== 'success') return;
+    const n = r.stats.pendingWithdrawals || 0;
     const badge = document.getElementById('pendingBadge');
     if (n > 0) { badge.textContent = n; badge.style.display = 'inline-block'; }
     else badge.style.display = 'none';
@@ -991,46 +992,33 @@ async function loadWithdrawalsCount() {
 // ═══════════════════════════════════════════
 async function loadDashboard() {
   try {
-    const [usersSnap, witSnap, invSnap] = await Promise.all([
-      getDocs(collection(db, 'users')),
-      getDocs(query(collection(db, 'withdrawals'), where('status', '==', 'pending'))),
-      getDocs(query(collection(db, 'investments'), where('status', '==', 'active'))),
-    ]);
-    let totalUsers = 0, activeUsers = 0;
-    let totalWallet = 0, totalDeposited = 0, totalWithdrawn = 0, totalInvested = 0;
-    usersSnap.forEach(d => {
-      const u = d.data();
-      totalUsers++;
-      if (u.status !== 'banned') activeUsers++;
-      totalWallet    += u.walletBalance  || 0;
-      totalDeposited += u.totalDeposited || 0;
-      totalWithdrawn += u.totalWithdrawn || 0;
-      totalInvested  += u.totalInvested  || 0;
-    });
-    const pendingWit = witSnap.size;
-    document.getElementById('sTotalUsers').textContent    = totalUsers;
-    document.getElementById('sActiveUsers').textContent   = activeUsers;
-    document.getElementById('sTotalDeposited').textContent= ugx(totalDeposited);
-    document.getElementById('sPendingWit').textContent    = pendingWit;
-    document.getElementById('sActiveInv').textContent     = invSnap.size;
-    document.getElementById('sTotalWallet').textContent   = ugx(totalWallet);
-    document.getElementById('sTotalWithdrawn').textContent= ugx(totalWithdrawn);
-    document.getElementById('sTotalInvested').textContent = ugx(totalInvested);
-    const badge = document.getElementById('pendingBadge');
-    if (pendingWit > 0) { badge.textContent = pendingWit; badge.style.display = 'inline-block'; }
-    else badge.style.display = 'none';
+    const r = await api('/admin/stats', { adminKey: ADMIN_PASS });
+    if (r.status === 'success') {
+      const s = r.stats;
+      document.getElementById('sTotalUsers').textContent     = s.totalUsers;
+      document.getElementById('sActiveUsers').textContent    = s.activeUsers;
+      document.getElementById('sTotalDeposited').textContent = ugx(s.totalDeposited);
+      document.getElementById('sPendingWit').textContent     = s.pendingWithdrawals;
+      document.getElementById('sActiveInv').textContent      = s.activeInvestments;
+      document.getElementById('sTotalWallet').textContent    = ugx(s.totalWalletBalance);
+      document.getElementById('sTotalWithdrawn').textContent = ugx(s.totalWithdrawn);
+      document.getElementById('sTotalInvested').textContent  = ugx(s.totalInvested);
+      const badge = document.getElementById('pendingBadge');
+      if (s.pendingWithdrawals > 0) { badge.textContent = s.pendingWithdrawals; badge.style.display = 'inline-block'; }
+      else badge.style.display = 'none';
+    }
   } catch(e) { console.error('Stats error:', e); }
 
   // Recent transactions
   try {
-    const snap = await getDocs(query(collection(db,'transactions'), orderBy('createdAt','desc'), limit(15)));
-    const rows = snap.docs.map(d => {
-      const t = d.data();
+    const r = await api('/admin/transactions/list', { adminKey: ADMIN_PASS, limit: 15 });
+    const txs = r.status === 'success' ? r.transactions : [];
+    const rows = txs.map(t => {
       const amt = Number(t.amount||0);
       const amtStr = (amt >= 0 ? '+' : '-') + ugx(Math.abs(amt));
       const amtColor = amt >= 0 ? 'color:var(--green)' : 'color:var(--red)';
       return `<tr>
-        <td style="font-size:10px;color:var(--text2);font-family:monospace">${d.id.slice(0,10)}…</td>
+        <td style="font-size:10px;color:var(--text2);font-family:monospace">${(t.id||'').slice(0,10)}…</td>
         <td>${t.userId ? t.userId.slice(0,8)+'…' : '—'}</td>
         <td><span class="badge-status bs-pending" style="text-transform:none">${t.type||'—'}</span></td>
         <td style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.description||''}">${t.description||'—'}</td>
@@ -1061,8 +1049,8 @@ let _allWits   = [];
 async function loadWithdrawals() {
   document.getElementById('witTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const snap = await getDocs(query(collection(db,'withdrawals'), orderBy('createdAt','desc'), limit(200)));
-    _allWits = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const r = await api('/admin/withdrawals/list', { adminKey: ADMIN_PASS });
+    _allWits = r.status === 'success' ? r.withdrawals : [];
     renderWithdrawals();
   } catch(e) {
     document.getElementById('witTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
@@ -1152,8 +1140,8 @@ async function loadDeposits() {
   document.getElementById('depTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   loadUnmatchedDeposits();
   try {
-    const snap = await getDocs(query(collection(db,'pendingDeposits'), orderBy('createdAt','desc'), limit(200)));
-    _allDeps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const r = await api('/admin/deposits/list', { adminKey: ADMIN_PASS });
+    _allDeps = r.status === 'success' ? r.deposits : [];
     renderDeposits();
   } catch(e) {
     console.error(e);
@@ -1166,8 +1154,8 @@ async function loadUnmatchedDeposits() {
   const card = document.getElementById('unmatchedCard');
   const tbl  = document.getElementById('unmatchedTable');
   try {
-    const snap = await getDocs(query(collection(db,'unmatchedDeposits'), orderBy('receivedAt','desc'), limit(100)));
-    const list = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(d => d.status === 'unmatched');
+    const r = await api('/admin/unmatched-deposits', { adminKey: ADMIN_PASS });
+    const list = (r.status === 'success' ? r.deposits : []).filter(d => d.status === 'unmatched');
     if (!list.length) { card.style.display = 'none'; return; }
     card.style.display = 'block';
     const rows = list.map(d => {
@@ -1230,8 +1218,8 @@ let _userSearch = '', _userFilter = 'all', _allUsers = [];
 async function loadUsers() {
   document.getElementById('usersTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const snap = await getDocs(query(collection(db,'users'), orderBy('createdAt','desc'), limit(200)));
-    _allUsers = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const r = await api('/admin/users', { adminKey: ADMIN_PASS });
+    _allUsers = r.status === 'success' ? r.users : [];
     renderUsers();
   } catch(e) {
     document.getElementById('usersTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
@@ -1413,16 +1401,11 @@ window.openUserModal = (userId) => {
   `;
   openModal('userOverlay');
 
-  // Load last 20 transactions for this user — no orderBy to avoid composite index requirement
-  getDocs(query(collection(db,'transactions'), where('userId','==',userId), limit(50)))
-    .then(snap => {
-      const sorted = snap.docs.slice().sort((a,b) => {
-        const ta = a.data().createdAt?.seconds || 0;
-        const tb = b.data().createdAt?.seconds || 0;
-        return tb - ta;
-      }).slice(0,20);
-      const rows = sorted.map(d => {
-        const t = d.data();
+  // Load last 20 transactions for this user
+  api('/admin/transactions/list', { adminKey: ADMIN_PASS, userId })
+    .then(r => {
+      const sorted = (r.status === 'success' ? r.transactions : []).slice(0, 20);
+      const rows = sorted.map(t => {
         const amt = Number(t.amount||0);
         const color = amt >= 0 ? 'var(--green)' : 'var(--red)';
         const sign  = amt >= 0 ? '+' : '';
@@ -1450,9 +1433,9 @@ window.openWithdrawUser = async (userId) => {
   let u = _allUsers.find(x => x.id === userId);
   if (!u) {
     try {
-      const snap = await getDoc(doc(db, 'users', userId));
-      if (!snap.exists()) { showToast('User not found', 'error'); return; }
-      u = { id: snap.id, ...snap.data() };
+      const r = await api('/admin/user/detail', { adminKey: ADMIN_PASS, userId });
+      if (r.status !== 'success') { showToast('User not found', 'error'); return; }
+      u = r.user;
       _allUsers.push(u);
     } catch(e) { showToast('Error loading user', 'error'); return; }
   }
@@ -1489,8 +1472,8 @@ let _products = [];
 async function loadProducts() {
   document.getElementById('productsList').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const snap = await getDocs(collection(db,'products'));
-    _products  = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const r = await api('/admin/products/list', { adminKey: ADMIN_PASS });
+    _products = r.status === 'success' ? r.products : [];
     renderProductsList();
   } catch(e) {
     document.getElementById('productsList').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
@@ -1595,17 +1578,12 @@ window.saveProduct = async () => {
     const data = {
       name, price, dailyReturn: daily, cycle,
       expectedReturn: total, active, isInStock: stock,
-      displayOrder: order, stars,
-      updatedAt: serverTimestamp()
+      displayOrder: order, stars
     };
     if (imageUrl) data.image = imageUrl;
 
-    if (id) {
-      await updateDoc(doc(db,'products',id), data);
-    } else {
-      data.createdAt = serverTimestamp();
-      await addDoc(collection(db,'products'), data);
-    }
+    const r = await api('/admin/products/save', { adminKey: ADMIN_PASS, id: id || undefined, ...data });
+    if (r.status !== 'success') throw new Error(r.message || 'Save failed');
     showToast(id ? 'Product updated!' : 'Product added!', 'success');
     closeModal('productOverlay');
     loadProducts();
@@ -1619,9 +1597,9 @@ window.saveProduct = async () => {
 window.deleteProduct = async (id) => {
   if (!confirm('Delete this plan? This cannot be undone.')) return;
   try {
-    await deleteDoc(doc(db,'products',id));
-    showToast('Deleted', 'success');
-    loadProducts();
+    const r = await api('/admin/products/delete', { adminKey: ADMIN_PASS, id });
+    showToast(r.status === 'success' ? 'Deleted' : (r.message || 'Error'), r.status === 'success' ? 'success' : 'error');
+    if (r.status === 'success') loadProducts();
   } catch(e) { showToast('Error', 'error'); }
 };
 
@@ -1637,8 +1615,8 @@ window.calcTotalReturn = () => {
 async function loadSlideshow() {
   document.getElementById('slideshowGrid').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const snap = await getDoc(doc(db,'settings','main'));
-    const imgs = snap.exists() ? (snap.data().slideshowImages || []) : [];
+    const r = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const imgs = (r.status === 'success' && r.settings.slideshowImages) ? r.settings.slideshowImages : [];
     renderSlideshow(imgs);
   } catch(e) {
     document.getElementById('slideshowGrid').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
@@ -1664,7 +1642,10 @@ window.uploadBanner = async (input) => {
   showToast('Uploading…');
   try {
     const url = await uploadImage(input.files[0]);
-    await setDoc(doc(db,'settings','main'), { slideshowImages: arrayUnion(url) }, { merge:true });
+    const rs = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const imgs = (rs.status === 'success' && rs.settings.slideshowImages) ? rs.settings.slideshowImages : [];
+    if (!imgs.includes(url)) imgs.push(url);
+    await api('/admin/settings/update', { adminKey: ADMIN_PASS, slideshowImages: imgs });
     showToast('Banner added!', 'success');
     loadSlideshow();
   } catch(e) { showToast('Upload failed: ' + e.message, 'error'); }
@@ -1674,7 +1655,9 @@ window.uploadBanner = async (input) => {
 window.removeBanner = async (url) => {
   if (!confirm('Remove this banner image?')) return;
   try {
-    await setDoc(doc(db,'settings','main'), { slideshowImages: arrayRemove(url) }, { merge:true });
+    const rs = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const imgs = ((rs.status === 'success' && rs.settings.slideshowImages) ? rs.settings.slideshowImages : []).filter(u => u !== url);
+    await api('/admin/settings/update', { adminKey: ADMIN_PASS, slideshowImages: imgs });
     showToast('Removed', 'success');
     loadSlideshow();
   } catch(e) { showToast('Error', 'error'); }
@@ -1691,8 +1674,8 @@ async function loadGiftCodes() {
   document.getElementById('codesTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   await loadGiftRange();
   try {
-    const snap = await getDocs(query(collection(db,'giftCodes'), orderBy('createdAt','desc'), limit(200)));
-    _allCodes  = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const r = await api('/admin/gift-codes/list', { adminKey: ADMIN_PASS });
+    _allCodes = r.status === 'success' ? r.codes : [];
     renderCodes();
   } catch(e) {
     document.getElementById('codesTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
@@ -1827,8 +1810,8 @@ let _allTxs   = [];
 async function loadTransactions() {
   document.getElementById('txTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const snap = await getDocs(query(collection(db,'transactions'), orderBy('createdAt','desc'), limit(200)));
-    _allTxs    = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const r = await api('/admin/transactions/list', { adminKey: ADMIN_PASS });
+    _allTxs = r.status === 'success' ? r.transactions : [];
     renderTransactions();
   } catch(e) {
     document.getElementById('txTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
@@ -1877,8 +1860,8 @@ window.setTxFilter = (f, el) => {
 async function loadReferrals() {
   document.getElementById('referralsTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const snap = await getDocs(query(collection(db,'referrals'), orderBy('createdAt','desc'), limit(200)));
-    const list = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    const r = await api('/admin/referrals/list', { adminKey: ADMIN_PASS });
+    const list = r.status === 'success' ? r.referrals : [];
     renderReferrals(list);
   } catch(e) {
     document.getElementById('referralsTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';

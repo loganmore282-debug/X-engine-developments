@@ -2262,6 +2262,115 @@ app.post('/admin/settings/update', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ── ADMIN LIST ENDPOINTS (all read from MongoDB) ──────────────────
+
+app.post('/admin/withdrawals/list', async (req, res) => {
+  const { adminKey, limit: lim = 200 } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('withdrawals').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get();
+    return res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/gift-codes/list', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('giftCodes').orderBy('createdAt', 'desc').limit(200).get();
+    return res.json({ status: 'success', codes: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/transactions/list', async (req, res) => {
+  const { adminKey, userId, limit: lim = 200 } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    if (userId) {
+      const snap = await db.collection('transactions').where('userId', '==', userId).limit(50).get();
+      const txs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      txs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      return res.json({ status: 'success', transactions: txs });
+    }
+    const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get();
+    return res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/deposits/list', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(200).get();
+    return res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/unmatched-deposits', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('unmatchedDeposits').orderBy('receivedAt', 'desc').limit(100).get();
+    return res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/user/detail', async (req, res) => {
+  const { adminKey, userId } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const snap = await db.collection('users').doc(userId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    return res.json({ status: 'success', user: { id: snap.id, ...snap.data() } });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/products/list', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('products').get();
+    return res.json({ status: 'success', products: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/products/save', async (req, res) => {
+  const { adminKey, id, ...data } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    data.updatedAt = FieldValue.serverTimestamp();
+    if (id) {
+      await db.collection('products').doc(id).update(data);
+      return res.json({ status: 'success', id, action: 'updated' });
+    } else {
+      data.createdAt = FieldValue.serverTimestamp();
+      const ref = db.collection('products').doc();
+      await ref.set(data);
+      return res.json({ status: 'success', id: ref.id, action: 'created' });
+    }
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/products/delete', async (req, res) => {
+  const { adminKey, id } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+  try {
+    await db.collection('products').doc(id).delete();
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/admin/referrals/list', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('referrals').orderBy('createdAt', 'desc').limit(200).get();
+    return res.json({ status: 'success', referrals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // ONE-TIME MIGRATION: Firestore → MongoDB
 // Visit from phone browser (after Firebase quota resets at 8 AM EAT):
