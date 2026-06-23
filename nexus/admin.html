@@ -630,6 +630,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <input class="form-input" type="url" id="annTelegram" placeholder="https://t.me/yourchannel">
         </div>
         <div class="form-group">
+          <label class="form-label">WhatsApp Group Link (optional)</label>
+          <input class="form-input" type="url" id="annWhatsapp" placeholder="https://chat.whatsapp.com/...">
+        </div>
+        <div class="form-group">
           <label class="form-label">Dialog Image (optional)</label>
           <div style="display:flex;gap:8px;align-items:center">
             <input class="form-input" type="url" id="annImageUrl" placeholder="Image URL or upload below" style="flex:1">
@@ -1933,8 +1937,9 @@ async function loadSettings() {
     document.getElementById('annActive').checked    = !!ann.active;
     document.getElementById('annTitle').value       = ann.title   || '';
     document.getElementById('annMessage').value     = ann.message || '';
-    document.getElementById('annTelegram').value    = ann.telegramLink || '';
-    document.getElementById('annImageUrl').value    = ann.image   || '';
+    document.getElementById('annTelegram').value    = ann.telegramLink  || '';
+    document.getElementById('annWhatsapp').value    = ann.whatsappLink  || '';
+    document.getElementById('annImageUrl').value    = ann.image         || '';
     if (ann.image) { const p=document.getElementById('annImagePreview'); p.src=ann.image; p.style.display='block'; }
     // Content images
     const prodBanner = s.productsBannerImage || '';
@@ -1992,8 +1997,9 @@ window.saveAnnouncement = async () => {
     active:       document.getElementById('annActive').checked,
     title:        document.getElementById('annTitle').value.trim(),
     message:      document.getElementById('annMessage').value.trim(),
-    telegramLink: document.getElementById('annTelegram').value.trim(),
-    image:        document.getElementById('annImageUrl').value.trim()
+    telegramLink:  document.getElementById('annTelegram').value.trim(),
+    whatsappLink:  document.getElementById('annWhatsapp').value.trim(),
+    image:         document.getElementById('annImageUrl').value.trim()
   };
   try {
     await api('/admin/settings/update', { adminKey: ADMIN_PASS, announcement: ann });

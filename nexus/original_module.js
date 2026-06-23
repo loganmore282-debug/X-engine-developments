@@ -309,6 +309,8 @@ function showAnnouncement(ann) {
   if (titleEl) titleEl.textContent = ann.title || 'Welcome to Nexus!';
   if (msgEl)  msgEl.textContent = ann.message || '';
   if (tgBtn)  { if (ann.telegramLink) { tgBtn.href = ann.telegramLink; tgBtn.style.display = 'flex'; } else tgBtn.style.display = 'none'; }
+  const waBtn = document.getElementById('annWaBtn');
+  if (waBtn)  { if (ann.whatsappLink) { waBtn.href = ann.whatsappLink; waBtn.style.display = 'flex'; } else waBtn.style.display = 'none'; }
   document.getElementById('announcementDialog').classList.add('show');
   sessionStorage.setItem('nx_ann_shown', '1');
 }
