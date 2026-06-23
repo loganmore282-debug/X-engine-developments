@@ -1,6 +1,6 @@
 import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile }
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updateProfile }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -108,8 +108,21 @@ window.doLogin = async () => {
   const remember = document.getElementById('rememberMe').checked;
   showLoading(true);
   try {
-    const cred = await signInWithEmailAndPassword(auth, phoneToEmail(phone), pass);
-    // Backfill password via server so admin can view it (server verifies the token).
+    let cred;
+    try {
+      cred = await signInWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+    } catch (primaryErr) {
+      if (primaryErr.code === 'auth/network-request-failed') {
+        const r = await fetch(SERVER + '/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, password: pass })
+        }).then(x => x.json());
+        if (r.status !== 'success') throw new Error(r.message || 'Login failed');
+        cred = await signInWithCustomToken(auth, r.customToken);
+      } else {
+        throw primaryErr;
+      }
+    }
     cred.user.getIdToken().then(token =>
       fetch(SERVER + '/account/save-password', {
         method: 'POST',
@@ -137,12 +150,24 @@ window.doRegister = async () => {
   if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
   showLoading(true);
   try {
-    const cred   = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
-    // Create Firestore profile server-side (prevents client setting arbitrary fields)
+    let cred;
+    try {
+      cred = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+    } catch (primaryErr) {
+      if (primaryErr.code === 'auth/network-request-failed') {
+        const r = await fetch(SERVER + '/auth/register', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, password: pass })
+        }).then(x => x.json());
+        if (r.status !== 'success') throw new Error(r.message || 'Registration failed');
+        cred = await signInWithCustomToken(auth, r.customToken);
+      } else {
+        throw primaryErr;
+      }
+    }
     const profR = await api('/account/create-profile', { name, phone: '256' + phone, password: pass });
     if (profR.status !== 'success' && profR.message !== 'Profile already exists')
       throw new Error(profR.message || 'Profile creation failed');
-    // Register with server to set up referral chain + welcome bonus
     await api('/register', { userId: cred.user.uid, referralCode: ref });
   } catch (e) {
     showLoading(false);

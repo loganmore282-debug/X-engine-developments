@@ -25,8 +25,9 @@ admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const { connectMongo, db, FieldValue } = require('./db');
 
 // ── CONFIG ──
-const ADMIN_KEY    = process.env.ADMIN_KEY    || '';
-const SMS_SECRET   = process.env.SMS_SECRET   || '';
+const ADMIN_KEY        = process.env.ADMIN_KEY        || '';
+const SMS_SECRET       = process.env.SMS_SECRET       || '';
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyBSeDwdK66OZt-b34U5ysYlGvYi4CtXEyA';
 const RAILWAY_URL  = (() => {
   let u = (process.env.RAILWAY_URL || '').trim().replace(/\/$/, '');
   if (u && !u.startsWith('http')) u = 'https://' + u;
@@ -2162,6 +2163,60 @@ function startCrons() {
   migrateLegacyCashbackTxns();
   console.log('⏰ Crons started (maturity + cashback + agent payouts + reconciliation)');
 }
+
+// ═══════════════════════════════════════════
+// AUTH PROXY — fallback when client can't reach Firebase directly
+// ═══════════════════════════════════════════
+
+// Server-side login: proxies to Firebase REST API and returns a custom token.
+// Client uses this when signInWithEmailAndPassword throws auth/network-request-failed.
+app.post('/auth/login', async (req, res) => {
+  const { phone, password } = req.body;
+  if (!phone || !password) return res.status(400).json({ status: 'error', message: 'phone and password required' });
+  const email = phone.replace(/\D/g, '') + '@nexus-app.com';
+  try {
+    const fbRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, returnSecureToken: true }) }
+    );
+    const fbData = await fbRes.json();
+    if (fbData.error) {
+      const code = fbData.error.message || 'UNKNOWN';
+      const msg  = (code === 'EMAIL_NOT_FOUND' || code === 'INVALID_PASSWORD' || code === 'INVALID_LOGIN_CREDENTIALS')
+        ? 'Incorrect phone or password' : 'Login failed: ' + code;
+      return res.json({ status: 'error', message: msg });
+    }
+    const customToken = await admin.auth().createCustomToken(fbData.localId);
+    return res.json({ status: 'success', customToken, uid: fbData.localId });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// Server-side register: creates Firebase Auth user and returns a custom token.
+app.post('/auth/register', async (req, res) => {
+  const { phone, password } = req.body;
+  if (!phone || !password) return res.status(400).json({ status: 'error', message: 'phone and password required' });
+  const email = phone.replace(/\D/g, '') + '@nexus-app.com';
+  try {
+    const fbRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, returnSecureToken: true }) }
+    );
+    const fbData = await fbRes.json();
+    if (fbData.error) {
+      const code = fbData.error.message || 'UNKNOWN';
+      const msg  = code === 'EMAIL_EXISTS' ? 'This phone number is already registered' : 'Registration failed: ' + code;
+      return res.json({ status: 'error', message: msg });
+    }
+    const customToken = await admin.auth().createCustomToken(fbData.localId);
+    return res.json({ status: 'success', customToken, uid: fbData.localId });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
 
 // ═══════════════════════════════════════════
 // ACCOUNT — server-side profile management
