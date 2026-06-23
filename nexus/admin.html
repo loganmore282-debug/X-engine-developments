@@ -1702,8 +1702,8 @@ async function loadGiftCodes() {
 // Gift payout range (minGift/maxGift in settings/main) — server reads it on redeem
 async function loadGiftRange() {
   try {
-    const snap = await getDoc(doc(db,'settings','main'));
-    const s = snap.exists() ? snap.data() : {};
+    const r = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const s = (r && r.settings) ? r.settings : {};
     _giftRange = { min: s.minGift || 200, max: s.maxGift || 2000 };
     document.getElementById('giftMin').value = _giftRange.min;
     document.getElementById('giftMax').value = _giftRange.max;
@@ -1718,7 +1718,7 @@ window.saveGiftRange = async () => {
   if (hi < lo) { el.textContent = '⚠️ Maximum must be greater than minimum'; el.style.color = '#ef4444'; return; }
   el.textContent = 'Saving…'; el.style.color = 'var(--text2)';
   try {
-    await setDoc(doc(db,'settings','main'), { minGift: lo, maxGift: hi }, { merge:true });
+    await api('/admin/settings/update', { adminKey: ADMIN_PASS, minGift: lo, maxGift: hi });
     _giftRange = { min: lo, max: hi };
     el.textContent = `✅ Saved — gift codes now pay UGX ${lo.toLocaleString()} – ${hi.toLocaleString()}`;
     el.style.color = '#22c55e';
@@ -1925,8 +1925,8 @@ function renderReferrals(list) {
 // ═══════════════════════════════════════════
 async function loadSettings() {
   try {
-    const snap = await getDoc(doc(db,'settings','main'));
-    const s = snap.exists() ? snap.data() : {};
+    const r = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const s = (r && r.settings) ? r.settings : {};
     const maintOn = !!s.maintenanceMode;
     document.getElementById('settMaintenance').checked = maintOn;
     const mEl = document.getElementById('maintStatus');
@@ -1973,7 +1973,7 @@ window.toggleMaintenance = async (on) => {
   el.textContent = 'Saving…';
   el.style.color = 'var(--text-muted)';
   try {
-    await setDoc(doc(db,'settings','main'), { maintenanceMode: on }, { merge:true });
+    await api('/admin/settings/update', { adminKey: ADMIN_PASS, maintenanceMode: on });
     el.textContent = on ? '🔴 Maintenance is ON — users see the maintenance screen' : '🟢 Maintenance is OFF — app is live';
     el.style.color = on ? '#ef4444' : '#22c55e';
   } catch(e) {
@@ -1996,7 +1996,7 @@ window.saveSettings = async () => {
     commL3:          (parseFloat(document.getElementById('settCommL3').value) || 2)  / 100,
   };
   try {
-    await setDoc(doc(db,'settings','main'), s, { merge:true });
+    await api('/admin/settings/update', { adminKey: ADMIN_PASS, ...s });
     showToast('Settings saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
@@ -2010,7 +2010,7 @@ window.saveAnnouncement = async () => {
     image:        document.getElementById('annImageUrl').value.trim()
   };
   try {
-    await setDoc(doc(db,'settings','main'), { announcement: ann }, { merge:true });
+    await api('/admin/settings/update', { adminKey: ADMIN_PASS, announcement: ann });
     showToast('Announcement saved!', 'success');
   } catch(e) { showToast('Error saving announcement', 'error'); }
 };
@@ -2044,7 +2044,7 @@ window.saveContentImages = async () => {
     depositInstructions:  document.getElementById('depositInstructions').value.trim()
   };
   try {
-    await setDoc(doc(db,'settings','main'), data, { merge:true });
+    await api('/admin/settings/update', { adminKey: ADMIN_PASS, ...data });
     showToast('Content images saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
@@ -2057,7 +2057,7 @@ window.saveSupportContent = async () => {
     supportHours:    document.getElementById('settSupportHours').value.trim(),
   };
   try {
-    await setDoc(doc(db,'settings','main'), data, { merge:true });
+    await api('/admin/settings/update', { adminKey: ADMIN_PASS, ...data });
     showToast('Support content saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
