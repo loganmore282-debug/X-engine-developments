@@ -885,9 +885,12 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 window.closeModal = closeModal;
 
 const ADMIN_TIER_CFG = {
-  regional_agent: { label: 'Regional Agent', stars: '⭐⭐⭐', color: '#a78bfa', bg: 'rgba(139,92,246,0.15)', border: 'rgba(139,92,246,0.3)' },
-  senior_agent:   { label: 'Senior Agent',   stars: '⭐⭐',   color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.3)' },
-  agent:          { label: 'Agent',           stars: '⭐',    color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' },
+  junior_agent:    { label: 'Junior Agent',    stars: '🥉', color: '#cd7f32', bg: 'rgba(205,127,50,0.12)',  border: 'rgba(205,127,50,0.3)'  },
+  agent:           { label: 'Agent',           stars: '🥈', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)'  },
+  super_agent:     { label: 'Super Agent',     stars: '🥇', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.35)' },
+  regional_agent:  { label: 'Regional Agent',  stars: '💎', color: '#a78bfa', bg: 'rgba(139,92,246,0.15)', border: 'rgba(139,92,246,0.3)'  },
+  national_agent:  { label: 'National Agent',  stars: '👑', color: '#facc15', bg: 'rgba(250,204,21,0.12)', border: 'rgba(250,204,21,0.3)'  },
+  executive_agent: { label: 'Executive Agent', stars: '🚀', color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.3)'  },
 };
 function agentTierBadge(u) {
   if (!u.isAgent && !u.agentTier) return '';
@@ -1333,13 +1336,13 @@ window.openUserModal = (userId) => {
     </div>
 
     ${(u.isAgent || u.agentTier) ? (() => {
-      const cfg = ADMIN_TIER_CFG[u.agentTier || 'agent'] || ADMIN_TIER_CFG.agent;
-      const tierPay = { regional_agent: 200000, senior_agent: 125000, agent: 75000 };
-      const pay = tierPay[u.agentTier || 'agent'] || 150000;
-      const nextTiers = { agent: { label: 'Senior Agent', threshold: 15 }, senior_agent: { label: 'Regional Agent', threshold: 20 } };
-      const next = nextTiers[u.agentTier || 'agent'];
+      const cfg = ADMIN_TIER_CFG[u.agentTier] || ADMIN_TIER_CFG.junior_agent;
+      const TIER_PAY = { junior_agent: 30000, agent: 75000, super_agent: 120000, regional_agent: 170000, national_agent: 220000, executive_agent: 280000 };
+      const TIER_NEXT = { junior_agent: { label: 'Agent', threshold: 10, prev: 5 }, agent: { label: 'Super Agent', threshold: 15, prev: 10 }, super_agent: { label: 'Regional Agent', threshold: 20, prev: 15 }, regional_agent: { label: 'National Agent', threshold: 30, prev: 20 }, national_agent: { label: 'Executive Agent', threshold: 50, prev: 30 } };
+      const pay = TIER_PAY[u.agentTier] || 30000;
+      const next = TIER_NEXT[u.agentTier];
       const refs = u.activeReferralCount || 0;
-      const progressPct = next ? Math.min(Math.max((refs - (u.agentTier === 'senior_agent' ? 15 : 10)) / (next.threshold - (u.agentTier === 'senior_agent' ? 15 : 10)) * 100, 0), 100) : 100;
+      const progressPct = next ? Math.min(Math.max((refs - next.prev) / (next.threshold - next.prev) * 100, 0), 100) : 100;
       return `<!-- Agent stats card -->
     <div style="background:linear-gradient(135deg,#1c1200,#2d1f00);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -1364,7 +1367,7 @@ window.openUserModal = (userId) => {
         </div>
       </div>
       ${next ? `<div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:4px">${next.label}: ${refs}/${next.threshold} referrals</div>
-      <div style="height:5px;background:rgba(245,158,11,0.1);border-radius:3px;overflow:hidden"><div style="height:100%;width:${progressPct}%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:3px"></div></div>` : '<div style="font-size:10px;color:rgba(245,158,11,0.5);text-align:center">Maximum tier — Regional Agent</div>'}
+      <div style="height:5px;background:rgba(245,158,11,0.1);border-radius:3px;overflow:hidden"><div style="height:100%;width:${progressPct}%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:3px"></div></div>` : '<div style="font-size:10px;color:rgba(245,158,11,0.5);text-align:center">Maximum tier — Executive Agent</div>'}
     </div>`;
     })() : ''}
 
