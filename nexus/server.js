@@ -2240,6 +2240,19 @@ app.post('/account/update-photo', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ── ADMIN SETTINGS UPDATE (writes to MongoDB) ──────────────────────
+app.post('/admin/settings/update', async (req, res) => {
+  const { adminKey, ...updates } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!Object.keys(updates).length) return res.status(400).json({ status: 'error', message: 'No fields to update' });
+  try {
+    await db.collection('settings').doc('main').set(updates, { merge: true });
+    _settingsCache = null; _settingsCacheTs = 0; // clear cache
+    _maint = false; _maintTs = 0; // clear maintenance cache
+    return res.json({ status: 'success', updated: updates });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // ONE-TIME MIGRATION: Firestore → MongoDB
 // Visit from phone browser (after Firebase quota resets at 8 AM EAT):
