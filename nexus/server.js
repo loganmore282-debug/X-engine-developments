@@ -767,7 +767,7 @@ app.post('/team/members', async (req, res) => {
         id: doc.id,
         name: displayName,
         phone: maskedPhone,
-        joinedAt: d.createdAt ? d.createdAt.toDate().toISOString() : null,
+        joinedAt: d.createdAt ? new Date(tsMillis(d.createdAt)).toISOString() : null,
         hasInvested: (d.totalInvested || 0) > 0,
         totalInvested: d.totalInvested || 0,
         referralCode: d.referralCode || null,
@@ -1248,7 +1248,7 @@ app.post('/giftcode/redeem', async (req, res) => {
     if (!gcd.active) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
     if ((gcd.usedBy || []).includes(userId)) return res.status(400).json({ status: 'error', message: 'You have already redeemed this code' });
     if (gcd.maxUsers && (gcd.usedBy || []).length >= gcd.maxUsers) return res.status(400).json({ status: 'error', message: 'Usage limit reached — this code has expired' });
-    if (gcd.expiresAt && gcd.expiresAt.toDate() < new Date()) return res.status(400).json({ status: 'error', message: 'This gift code has expired' });
+    if (gcd.expiresAt && new Date(tsMillis(gcd.expiresAt)) < new Date()) return res.status(400).json({ status: 'error', message: 'This gift code has expired' });
     // Admin-controlled payout band (settings/main → minGift / maxGift). Falls back to 200–2000.
     const sett    = await getSettings();
     const giftLo  = Math.max(0, Math.round(sett.minGift ?? 200));
@@ -1897,7 +1897,7 @@ async function runDailyCashback() {
       // lastCreditTs = Unix ms of the last credit issue (or investment creation).
       // Migration: old docs have lastCreditDate (string) but no lastCreditTs —
       // treat that as midnight EAT of that date (conservative, prevents double-pay).
-      const createdAtMs = inv.createdAt?.toDate?.()?.getTime() || now.getTime();
+      const createdAtMs = tsMillis(inv.createdAt) || now.getTime();
       let lastCreditTs;
       if (inv.lastCreditTs != null) {
         lastCreditTs = inv.lastCreditTs;
@@ -1961,7 +1961,7 @@ async function runMaturityCheck() {
     const batch = db.batch();
     snap.forEach(doc => {
       const inv = doc.data();
-      const mat = inv.maturityDate?.toDate?.() || null;
+      const matMs = tsMillis(inv.maturityDate); const mat = matMs ? new Date(matMs) : null;
       // A plan whose daily cashback has already paid out the full expected
       // return is complete — the money is already in the wallet, so mark it
       // 'claimed' (nothing left to claim) instead of leaving it stuck active.
@@ -2088,7 +2088,7 @@ async function runReconciliation() {
     for (const doc of depSnap.docs) {
       const dep = doc.data();
       if (!dep.marzTxUuid) continue;
-      const createdMs = dep.createdAt?.toDate?.()?.getTime() || 0;
+      const createdMs = tsMillis(dep.createdAt);
       if (createdMs > cutoff.getTime()) continue; // too fresh — let webhook fire first
       try {
         const status = await marzGetCollectStatus(dep.marzTxUuid);
@@ -2108,7 +2108,7 @@ async function runReconciliation() {
     for (const doc of witSnap.docs) {
       const wit = doc.data();
       if (!wit.marzTxUuid) continue;
-      const processedMs = wit.processedAt?.toDate?.()?.getTime() || 0;
+      const processedMs = tsMillis(wit.processedAt);
       if (processedMs > cutoff.getTime()) continue;
       try {
         const status = await marzGetStatus(wit.marzTxUuid);
@@ -2133,7 +2133,7 @@ async function runReconciliation() {
       for (const doc of maturedSnap.docs) {
         const inv = doc.data();
         if ((inv.dailyCredited || 0) >= (inv.expectedReturn || 0)) continue;
-        const lastTs = inv.lastCreditTs || inv.createdAt?.toDate?.()?.getTime() || 0;
+        const lastTs = tsMillis(inv.lastCreditTs) || tsMillis(inv.createdAt);
         if (Math.floor((Date.now() - lastTs) / 86400000) >= 1) { needsCashback = true; break; }
       }
       if (needsCashback) {
