@@ -1939,40 +1939,42 @@ async function runDailyCashback() {
     const now = new Date();
     const EAT      = 3 * 3600000;
     const todayKey = new Date(now.getTime() + EAT).toISOString().slice(0, 10);
+    // Calendar EAT day number for "today" — used to count midnight boundaries crossed.
+    const nowDayNum = Math.floor((now.getTime() + EAT) / 86400000);
     let credited   = 0;
 
     // Group by userId so we do one wallet update per user
     const byUser = {};
     docs.forEach(docSnap => {
       const inv = docSnap.data();
-      if (!inv.dailyReturn || inv.dailyReturn <= 0) return;
+      const cycle = inv.cycle || 1;
 
-      // Timestamp-based credit gate: require a FULL 24 h per credited day so that
-      // someone who invests at 11 pm doesn't get paid at midnight (1 h later).
-      // lastCreditTs = Unix ms of the last credit issue (or investment creation).
-      // Migration: old docs have lastCreditDate (string) but no lastCreditTs —
-      // treat that as midnight EAT of that date (conservative, prevents double-pay).
-      const createdAtMs = tsMillis(inv.createdAt) || now.getTime();
-      let lastCreditTs;
-      if (inv.lastCreditTs != null) {
-        lastCreditTs = inv.lastCreditTs;
-      } else if (inv.lastCreditDate) {
-        lastCreditTs = new Date(inv.lastCreditDate + 'T00:00:00+03:00').getTime();
-      } else {
-        lastCreditTs = createdAtMs;
-      }
+      // Daily payout: stored dailyReturn, or derived from expectedReturn / cycle
+      // (protects investments saved before dailyReturn existed, so they never pay 0).
+      let dailyReturn = inv.dailyReturn || 0;
+      if (dailyReturn <= 0 && (inv.expectedReturn || 0) > 0 && cycle > 0)
+        dailyReturn = inv.expectedReturn / cycle;
+      if (dailyReturn <= 0) return;
 
-      const elapsedMs = now.getTime() - lastCreditTs;
-      const daysDue   = Math.min(Math.floor(elapsedMs / 86400000), inv.cycle || 1);
+      // CALENDAR-DAY model (matches the "Day X of Y" display the user sees):
+      // pay one day for every midnight-EAT boundary crossed since the start date,
+      // capped at the plan's cycle. Self-healing — based on absolute calendar
+      // position, not on incrementing a timestamp, so a missed run is auto-caught.
+      const createdAtMs  = tsMillis(inv.createdAt) || now.getTime();
+      const startDayNum  = Math.floor((createdAtMs + EAT) / 86400000);
+      const daysPassed   = Math.min(Math.max(0, nowDayNum - startDayNum), cycle);
+      // How many full days have already been paid (by amount already credited).
+      const creditedDays = Math.round((inv.dailyCredited || 0) / dailyReturn);
+      const daysDue      = daysPassed - creditedDays;
       if (daysDue <= 0) return;
 
-      let amount = Math.round(inv.dailyReturn * daysDue);
+      let amount = Math.round(dailyReturn * daysDue);
       const expected = inv.expectedReturn || 0;
       if (expected > 0) amount = Math.min(amount, Math.max(0, expected - (inv.dailyCredited || 0)));
       if (amount <= 0) return;
       if (!byUser[inv.userId]) byUser[inv.userId] = { total: 0, docs: [] };
       byUser[inv.userId].total += amount;
-      byUser[inv.userId].docs.push({ ref: docSnap.ref, amount, daysDue, lastCreditTs });
+      byUser[inv.userId].docs.push({ ref: docSnap.ref, amount, daysDue });
       credited++;
     });
 
@@ -1987,11 +1989,9 @@ async function runDailyCashback() {
           totalEarned:   FieldValue.increment(data.total)
         });
         for (const d of data.docs) {
-          // Cap lastCreditTs at now so a delayed run never compounds and double-credits
-          const nextTs = Math.min(d.lastCreditTs + d.daysDue * 86400000, now.getTime());
           t.update(d.ref, {
             lastCreditDate: todayKey,
-            lastCreditTs:   nextTs,
+            lastCreditTs:   now.getTime(),
             dailyCredited:  FieldValue.increment(d.amount)
           });
           t.set(db.collection('transactions').doc(), {
@@ -2214,33 +2214,54 @@ async function runReconciliation() {
 
     if (resolved > 0) console.log(`✅ Reconciliation: ${resolved} record(s) resolved`);
 
-    // ── Missed cashback — check both active AND matured investments ──
-    // Catches cashback that was skipped while the server was down/restarting.
-    try {
-      let needsCashback = false;
-      const now = Date.now();
-      for (const status of ['active', 'matured']) {
-        if (needsCashback) break;
-        const snap = await db.collection('investments')
-          .where('status', '==', status).limit(50).get();
-        for (const doc of snap.docs) {
-          const inv = doc.data();
-          if ((inv.dailyCredited || 0) >= (inv.expectedReturn || 0)) continue;
-          const lastTs = inv.lastCreditTs != null
-            ? inv.lastCreditTs
-            : inv.lastCreditDate
-              ? new Date(inv.lastCreditDate + 'T00:00:00+03:00').getTime()
-              : (tsMillis(inv.createdAt) || now);
-          if (Math.floor((now - lastTs) / 86400000) >= 1) { needsCashback = true; break; }
-        }
-      }
-      if (needsCashback) {
-        console.log('🔄 Reconciliation: overdue cashback found — crediting now');
-        await runDailyCashback();
-      }
-    } catch (e) { console.warn('Reconcile cashback:', e.message); }
+    // ── Backfill any owed cashback ──
+    // runDailyCashback is calendar-based and idempotent (it only ever tops up
+    // to the correct number of days), so running it every cycle safely catches
+    // anything missed while the server was down. No-op when nothing is owed.
+    try { await runDailyCashback(); }
+    catch (e) { console.warn('Reconcile cashback:', e.message); }
+
+    // ── Backfill referral team counts ──
+    // teamL1/L2/L3Count are only incremented at registration, so a missed or
+    // half-failed /register leaves them wrong forever. Recompute from the live
+    // referredBy graph so a referrer always sees the right number.
+    try { await runReferralBackfill(); }
+    catch (e) { console.warn('Reconcile referrals:', e.message); }
 
   } catch (e) { console.error('Reconciliation error:', e.message); }
+}
+
+// Recompute teamL1/L2/L3 counts for every user from the current referredBy graph.
+// Only writes when a count is actually wrong, so it's cheap on steady state.
+let _referralBackfillRunning = false;
+async function runReferralBackfill() {
+  if (_referralBackfillRunning) return 0;
+  _referralBackfillRunning = true;
+  try {
+    const snap  = await db.collection('users').select('referredBy', 'teamL1Count', 'teamL2Count', 'teamL3Count').limit(10000).get();
+    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // referrer id → array of direct referral ids
+    const byReferrer = {};
+    for (const u of users) {
+      if (u.referredBy) (byReferrer[u.referredBy] = byReferrer[u.referredBy] || []).push(u.id);
+    }
+    let fixed = 0;
+    for (const u of users) {
+      const l1 = byReferrer[u.id] || [];
+      const l2 = l1.flatMap(id => byReferrer[id] || []);
+      const l3 = l2.flatMap(id => byReferrer[id] || []);
+      if ((u.teamL1Count || 0) !== l1.length ||
+          (u.teamL2Count || 0) !== l2.length ||
+          (u.teamL3Count || 0) !== l3.length) {
+        await db.collection('users').doc(u.id).update({
+          teamL1Count: l1.length, teamL2Count: l2.length, teamL3Count: l3.length
+        }).catch(() => {});
+        fixed++;
+      }
+    }
+    if (fixed > 0) console.log(`🔄 Referral backfill: fixed team counts for ${fixed} user(s)`);
+    return fixed;
+  } finally { _referralBackfillRunning = false; }
 }
 
 function startCrons() {
@@ -2254,9 +2275,10 @@ function startCrons() {
   // Agent weekly payouts: every 6 hours
   setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
   setTimeout(runAgentPayouts, 5 * 60 * 1000);
-  // Reconciliation: auto-resolve stuck deposits/withdrawals every 30 min
-  setInterval(runReconciliation, 30 * 60 * 1000);
-  setTimeout(runReconciliation, 4 * 60 * 1000); // first run 4 min after boot
+  // Reconciliation every 15 min: stuck deposits/withdrawals + cashback +
+  // commissions + referral counts — pulls live MongoDB state and self-heals.
+  setInterval(runReconciliation, 15 * 60 * 1000);
+  setTimeout(runReconciliation, 2 * 60 * 1000); // first run 2 min after boot
   // One-time data correction for legacy cashback transactions
   migrateLegacyCashbackTxns();
   console.log('⏰ Crons started (maturity + cashback + agent payouts + reconciliation)');
