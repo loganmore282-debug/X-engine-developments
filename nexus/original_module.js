@@ -689,7 +689,10 @@ window.showSection = (sec) => {
   // topbar only visible on non-home sections
   const tb = document.getElementById('mainTopbar');
   if (tb) tb.style.display = (sec === 'home') ? 'none' : 'flex';
-  if (sec === 'records' || sec === 'invest') loadRecords('deposits');
+  if (sec === 'records' || sec === 'invest') {
+    document.querySelectorAll('.pill-tab').forEach((b, i) => b.classList.toggle('active', i === 0));
+    loadRecords('deposits');
+  }
   window.scrollTo(0, 0);
 };
 
