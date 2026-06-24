@@ -12,6 +12,10 @@ process.on('unhandledRejection', (reason) => console.error('⚠️ Unhandled rej
 process.on('uncaughtException',  (err)    => { console.error('💥 Uncaught exception:', err); process.exit(1); });
 
 const app = express();
+// Railway/Render/Heroku run behind a reverse proxy that sets X-Forwarded-For.
+// Trust the first proxy hop so express-rate-limit reads the real client IP
+// (otherwise it throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
+app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
