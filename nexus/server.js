@@ -2231,18 +2231,25 @@ async function runReconciliation() {
   } catch (e) { console.error('Reconciliation error:', e.message); }
 }
 
-// Recompute teamL1/L2/L3 counts for every user from the current referredBy graph.
-// Only writes when a count is actually wrong, so it's cheap on steady state.
+// Recompute teamL1/L2/L3 counts AND activeReferralCount for every user from
+// the live referredBy graph. activeReferralCount = direct referrals who have
+// invested (drives agent tiers) — normally only updated when someone invests,
+// so this self-heals it if checkAgentPromotion was ever skipped (e.g. downtime).
+// Only writes when a value is actually wrong, so it's cheap on steady state.
 let _referralBackfillRunning = false;
 async function runReferralBackfill() {
   if (_referralBackfillRunning) return 0;
   _referralBackfillRunning = true;
   try {
-    const snap  = await db.collection('users').select('referredBy', 'teamL1Count', 'teamL2Count', 'teamL3Count').limit(10000).get();
+    const snap  = await db.collection('users')
+      .select('referredBy', 'teamL1Count', 'teamL2Count', 'teamL3Count', 'activeReferralCount', 'totalInvested')
+      .limit(10000).get();
     const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // referrer id → array of direct referral ids
+    // referrer id → array of direct referral ids, and quick invested lookup
     const byReferrer = {};
+    const invested   = {};
     for (const u of users) {
+      invested[u.id] = (u.totalInvested || 0) > 0;
       if (u.referredBy) (byReferrer[u.referredBy] = byReferrer[u.referredBy] || []).push(u.id);
     }
     let fixed = 0;
@@ -2250,16 +2257,19 @@ async function runReferralBackfill() {
       const l1 = byReferrer[u.id] || [];
       const l2 = l1.flatMap(id => byReferrer[id] || []);
       const l3 = l2.flatMap(id => byReferrer[id] || []);
+      const activeCount = l1.filter(id => invested[id]).length; // invested direct referrals
       if ((u.teamL1Count || 0) !== l1.length ||
           (u.teamL2Count || 0) !== l2.length ||
-          (u.teamL3Count || 0) !== l3.length) {
+          (u.teamL3Count || 0) !== l3.length ||
+          (u.activeReferralCount || 0) !== activeCount) {
         await db.collection('users').doc(u.id).update({
-          teamL1Count: l1.length, teamL2Count: l2.length, teamL3Count: l3.length
+          teamL1Count: l1.length, teamL2Count: l2.length, teamL3Count: l3.length,
+          activeReferralCount: activeCount
         }).catch(() => {});
         fixed++;
       }
     }
-    if (fixed > 0) console.log(`🔄 Referral backfill: fixed team counts for ${fixed} user(s)`);
+    if (fixed > 0) console.log(`🔄 Referral backfill: fixed counts for ${fixed} user(s)`);
     return fixed;
   } finally { _referralBackfillRunning = false; }
 }
