@@ -123,13 +123,6 @@ window.doLogin = async () => {
         throw primaryErr;
       }
     }
-    cred.user.getIdToken().then(token =>
-      fetch(SERVER + '/account/save-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ password: pass })
-      })
-    ).catch(() => {});
     if (remember) { localStorage.setItem('nx_saved_phone', phone); localStorage.setItem('nx_saved_pass', pass); }
     else { localStorage.removeItem('nx_saved_phone'); localStorage.removeItem('nx_saved_pass'); }
   } catch (e) {

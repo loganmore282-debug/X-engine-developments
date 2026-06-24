@@ -2,13 +2,30 @@ const express    = require('express');
 const admin      = require('firebase-admin');
 const cors       = require('cors');
 const crypto     = require('crypto');
+const helmet     = require('helmet');
+const rateLimit  = require('express-rate-limit');
 // Node 18+ has built-in fetch; for older Node fallback
 if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
+// ── GLOBAL ERROR SAFETY NET ──
+process.on('unhandledRejection', (reason) => console.error('⚠️ Unhandled rejection:', reason));
+process.on('uncaughtException',  (err)    => { console.error('💥 Uncaught exception:', err); process.exit(1); });
+
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(express.json({ limit: '64kb' }));
+app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
+
+// ── RATE LIMITERS ──
+const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
+const apiLimiter  = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+app.use('/auth/', authLimiter);
+app.use('/checkin', apiLimiter);
+app.use('/withdraw/request', apiLimiter);
+app.use('/invest/create', apiLimiter);
 
 // ── FIREBASE AUTH (Auth only — Firestore replaced by MongoDB) ──
 let serviceAccount;
@@ -27,7 +44,9 @@ const { connectMongo, db, FieldValue } = require('./db');
 // ── CONFIG ──
 const ADMIN_KEY        = process.env.ADMIN_KEY        || '';
 const SMS_SECRET       = process.env.SMS_SECRET       || '';
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyBSeDwdK66OZt-b34U5ysYlGvYi4CtXEyA';
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
+if (!FIREBASE_API_KEY) { console.error('❌ FIREBASE_API_KEY env var is required'); process.exit(1); }
+if (!SMS_SECRET)       { console.warn('⚠️  SMS_SECRET not set — SMS deposit endpoint is disabled'); }
 const RAILWAY_URL  = (() => {
   let u = (process.env.RAILWAY_URL || '').trim().replace(/\/$/, '');
   if (u && !u.startsWith('http')) u = 'https://' + u;
@@ -81,12 +100,13 @@ function uuidv4() {
 }
 
 // ── MarzPay API helpers (JSON body — matches X-engine proven implementation) ──
+const MARZ_TIMEOUT = 20000; // 20 s — abort any hung MarzPay call
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
     description: description || 'Online Deposit' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
-    method: 'POST',
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
     headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
@@ -97,7 +117,7 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
     description: description || 'Withdrawal' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/send-money`, {
-    method: 'POST',
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
     headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
@@ -107,6 +127,7 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
 async function marzGetCollectStatus(uuid) {
   try {
     const resp = await fetch(`${MARZPAY_BASE}/collect-money/${uuid}`, {
+      signal: AbortSignal.timeout(MARZ_TIMEOUT),
       headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
     });
     const d = await resp.json();
@@ -117,6 +138,7 @@ async function marzGetCollectStatus(uuid) {
 async function marzGetStatus(uuid) {
   try {
     const resp = await fetch(`${MARZPAY_BASE}/send-money/${uuid}`, {
+      signal: AbortSignal.timeout(MARZ_TIMEOUT),
       headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
     });
     const d = await resp.json();
@@ -380,7 +402,9 @@ async function payCommissions(investorId, amount, investmentId) {
     if (!invSnap.exists) return;
     const investor = invSnap.data();
     const l1Id = investor.referredBy;
-    if (!l1Id || l1Id === investorId) return;
+    const seen = new Set([investorId]); // cycle guard
+    if (!l1Id || seen.has(l1Id)) return;
+    seen.add(l1Id);
 
     // Rates from Firestore settings; hardcoded constants are fallbacks
     const commL1 = sett.commL1 ?? COMM_L1;
@@ -414,7 +438,8 @@ async function payCommissions(investorId, amount, investmentId) {
 
     // ── L2 ──
     const l2Id = l1Snap.data().referredBy;
-    if (!l2Id || l2Id === l1Id || l2Id === investorId) return;
+    if (!l2Id || seen.has(l2Id)) return;
+    seen.add(l2Id);
     const l2Snap = await db.collection('users').doc(l2Id).get();
     if (!l2Snap.exists) return;
     const l2Amt = Math.round(amount * commL2);
@@ -440,7 +465,7 @@ async function payCommissions(investorId, amount, investmentId) {
 
     // ── L3 ──
     const l3Id = l2Snap.data().referredBy;
-    if (!l3Id || l3Id === l2Id || l3Id === l1Id || l3Id === investorId) return;
+    if (!l3Id || seen.has(l3Id)) return;
     const l3Snap = await db.collection('users').doc(l3Id).get();
     if (!l3Snap.exists) return;
     const l3Amt = Math.round(amount * commL3);
@@ -476,13 +501,22 @@ function genGiftCode() {
   return 'NEXUS-' + Array.from(crypto.randomBytes(6)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
 
+// ── ADMIN AUTH HELPER ──
+// Accepts key in Authorization header ("Bearer <key>") OR req.body.adminKey for
+// backwards-compatibility with the existing admin panel.
+function verifyAdmin(req) {
+  if (!ADMIN_KEY) return false;
+  const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (header && header === ADMIN_KEY) return true;
+  return req.body?.adminKey === ADMIN_KEY;
+}
+
 // ═══════════════════════════════════════════
 // ADMIN KEY CHECK
 // ═══════════════════════════════════════════
 app.post('/admin/check-key', (req, res) => {
-  const { key } = req.body;
   if (!ADMIN_KEY) return res.status(500).json({ valid: false, message: 'ADMIN_KEY not set' });
-  return res.json({ valid: key === ADMIN_KEY });
+  return res.json({ valid: verifyAdmin(req) });
 });
 
 // ═══════════════════════════════════════════
@@ -495,8 +529,8 @@ app.post('/sms/incoming', async (req, res) => {
   const body       = message || smsBody || raw || '';
   const fromPhone  = sender  || senderPhone || '';
 
-  if (SMS_SECRET && secret !== SMS_SECRET)
-    return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!SMS_SECRET) return res.status(503).json({ status: 'error', message: 'SMS endpoint disabled — SMS_SECRET not configured' });
+  if (secret !== SMS_SECRET) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
 
   res.status(200).json({ status: 'received' });
 
@@ -525,8 +559,7 @@ app.post('/sms/incoming', async (req, res) => {
               const uSnap = await t.get(uRef);
               if (!uSnap.exists) return;
               const debit = reversal.amount || orig.amount || 0;
-              const newBal = Math.max(0, (uSnap.data().walletBalance || 0) - debit);
-              t.update(uRef, { walletBalance: newBal, totalDeposited: FieldValue.increment(-debit) });
+              t.update(uRef, { walletBalance: FieldValue.increment(-debit), totalDeposited: FieldValue.increment(-debit) });
               t.update(origSnap.ref, { reversed: true, reversedAt: FieldValue.serverTimestamp() });
               t.set(db.collection('transactions').doc(), {
                 userId: orig.userId, type: 'reversal',
@@ -591,7 +624,7 @@ app.post('/sms/incoming', async (req, res) => {
           const uSnap = await t.get(uRef);
           if (!uSnap.exists) throw new Error('User not found');
           t.update(uRef, {
-            walletBalance:    (uSnap.data().walletBalance || 0) + amount,
+            walletBalance:    FieldValue.increment(amount),
             totalDeposited:   FieldValue.increment(amount),
             lastDepositAt:    FieldValue.serverTimestamp(),
             withdrawableFrom: withdrawableAt
@@ -673,8 +706,12 @@ app.post('/admin/assign-deposit', async (req, res) => {
 // REGISTRATION
 // ═══════════════════════════════════════════
 app.post('/register', async (req, res) => {
-  const { userId, referralCode } = req.body;
-  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  const authedUid = await verifyAuth(req);
+  const userId = authedUid || req.body.userId;
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (authedUid && req.body.userId && authedUid !== req.body.userId)
+    return res.status(403).json({ status: 'error', message: 'Forbidden' });
+  const { referralCode } = req.body;
   try {
     const userRef  = db.collection('users').doc(userId);
     const userSnap = await userRef.get();
@@ -853,7 +890,7 @@ app.post('/invest/claim', async (req, res) => {
       const uRef  = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
-      t.update(uRef, { walletBalance: (uSnap.data().walletBalance || 0) + payout, totalEarned: FieldValue.increment(payout) });
+      t.update(uRef, { walletBalance: FieldValue.increment(payout), totalEarned: FieldValue.increment(payout) });
       t.update(invRef, { status: 'claimed', claimedAt: FieldValue.serverTimestamp() });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'investment_return',
@@ -877,7 +914,7 @@ app.post('/withdraw/request', async (req, res) => {
   if (!userId || !amount || !phone)
     return res.status(400).json({ status: 'error', message: 'userId, amount and phone required' });
   const amt = parseFloat(amount);
-  if (isNaN(amt) || amt <= 0)
+  if (!isFinite(amt) || amt <= 0)
     return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   const fullPhone = cleanPhone(phone);
   try {
@@ -991,10 +1028,14 @@ async function failWithdrawal(witDoc, reason) {
   if (wit.status === 'processed' || wit.status === 'failed') return false;
   const { date, time } = nowStr();
   await db.runTransaction(async t => {
+    // Re-read inside transaction to prevent TOCTOU double-refund race
+    const freshWit = await t.get(witDoc.ref);
+    if (!freshWit.exists) return;
+    if (freshWit.data().status === 'processed' || freshWit.data().status === 'failed') return;
     const uRef  = db.collection('users').doc(wit.userId);
     const uSnap = await t.get(uRef);
     if (!uSnap.exists) throw new Error('User not found');
-    t.update(uRef, { walletBalance: (uSnap.data().walletBalance || 0) + wit.amount,
+    t.update(uRef, { walletBalance: FieldValue.increment(wit.amount),
       withdrawalCount: FieldValue.increment(-1) });
     t.update(witDoc.ref, { status: 'failed', failureReason: reason, failedAt: FieldValue.serverTimestamp() });
     t.set(db.collection('transactions').doc(), {
@@ -1259,7 +1300,7 @@ app.post('/giftcode/redeem', async (req, res) => {
       const uRef  = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
-      t.update(uRef, { walletBalance: (uSnap.data().walletBalance || 0) + amount });
+      t.update(uRef, { walletBalance: FieldValue.increment(amount) });
       t.update(gc.ref, { usedBy: FieldValue.arrayUnion(userId) });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'gift_code',
@@ -1337,11 +1378,10 @@ app.post('/admin/ban', async (req, res) => {
 // ADMIN — STATS
 // ═══════════════════════════════════════════
 app.post('/admin/stats', async (req, res) => {
-  const { adminKey } = req.body;
-  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const [usersSnap, withdrawalsSnap, investmentsSnap] = await Promise.all([
-      db.collection('users').get(),
+      db.collection('users').limit(10000).get(),
       db.collection('withdrawals').where('status', '==', 'pending').get(),
       db.collection('investments').where('status', '==', 'active').get()
     ]);
@@ -1873,7 +1913,10 @@ app.post('/admin/check-maturities', async (req, res) => {
 // ═══════════════════════════════════════════
 // CRONS — maturity + daily cashback
 // ═══════════════════════════════════════════
+let _cashbackRunning = false;
 async function runDailyCashback() {
+  if (_cashbackRunning) { console.log('⏭️ Cashback already running — skipped'); return 0; }
+  _cashbackRunning = true;
   try {
     // Query both active AND matured-but-unclaimed investments so late cashback still pays
     const [activeSnap, maturedSnap] = await Promise.all([
@@ -1934,9 +1977,11 @@ async function runDailyCashback() {
           totalEarned:   FieldValue.increment(data.total)
         });
         for (const d of data.docs) {
+          // Cap lastCreditTs at now so a delayed run never compounds and double-credits
+          const nextTs = Math.min(d.lastCreditTs + d.daysDue * 86400000, now.getTime());
           t.update(d.ref, {
             lastCreditDate: todayKey,
-            lastCreditTs:   d.lastCreditTs + d.daysDue * 86400000,
+            lastCreditTs:   nextTs,
             dailyCredited:  FieldValue.increment(d.amount)
           });
           t.set(db.collection('transactions').doc(), {
@@ -1952,9 +1997,13 @@ async function runDailyCashback() {
     if (credited > 0) console.log(`💰 Daily cashback: ${credited} investment(s) credited`);
     return credited;
   } catch (e) { console.error('Daily cashback error:', e.message); return 0; }
+  finally { _cashbackRunning = false; }
 }
 
+let _maturityRunning = false;
 async function runMaturityCheck() {
+  if (_maturityRunning) { console.log('⏭️ Maturity check already running — skipped'); return 0; }
+  _maturityRunning = true;
   try {
     const snap = await db.collection('investments').where('status', '==', 'active').get();
     if (snap.empty) return 0;
@@ -1984,6 +2033,7 @@ async function runMaturityCheck() {
     }
     return count;
   } catch (e) { console.error('Maturity error:', e.message); return 0; }
+  finally { _maturityRunning = false; }
 }
 
 // Schedule runDailyCashback to fire at exactly 00:00 EAT (UTC+3) each night,
@@ -2234,7 +2284,7 @@ app.post('/auth/register', async (req, res) => {
 app.post('/account/create-profile', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { name, phone, password } = req.body;
+  const { name, phone } = req.body;
   if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
   try {
     const ref  = db.collection('users').doc(uid);
@@ -2244,7 +2294,6 @@ app.post('/account/create-profile', async (req, res) => {
       name: String(name).trim(),
       phone: cleanPhone(phone),
       email: phoneToEmail(phone),
-      password: String(password || ''),
       walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
       totalEarned: 0, commissionEarned: 0, commissionL1Earned: 0,
       commissionL2Earned: 0, commissionL3Earned: 0,
@@ -2259,17 +2308,7 @@ app.post('/account/create-profile', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// Backfills the login password so admin can view it — called on every login.
-app.post('/account/save-password', async (req, res) => {
-  const uid = await verifyAuth(req);
-  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { password } = req.body;
-  if (!password) return res.json({ status: 'success' });
-  try {
-    await db.collection('users').doc(uid).set({ password: String(password) }, { merge: true });
-    return res.json({ status: 'success' });
-  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
-});
+// /account/save-password removed — passwords must not be stored server-side
 
 app.post('/account/add-bank', async (req, res) => {
   const uid = await verifyAuth(req);
@@ -2321,7 +2360,9 @@ app.post('/account/data', async (req, res) => {
   try {
     const snap = await db.collection('users').doc(userId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    return res.json({ status: 'success', user: { id: snap.id, ...snap.data() } });
+    const data = snap.data();
+    delete data.password; // never expose stored credentials
+    return res.json({ status: 'success', user: { id: snap.id, ...data } });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -2555,36 +2596,7 @@ function convertTimestamps(obj) {
   return out;
 }
 
-app.get('/admin/migrate-firestore-to-mongo', async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(403).send('Forbidden');
-  const COLS = [
-    'users','investments','transactions','withdrawals',
-    'pendingDeposits','processedSMS','unmatchedDeposits',
-    'referrals','giftCodes','products','settings'
-  ];
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-  res.flushHeaders();
-  res.write('Firestore → MongoDB migration started...\n\n');
-  const fsdb = admin.firestore();
-  let total = 0;
-  for (const col of COLS) {
-    try {
-      res.write(`Collection: ${col} ... `);
-      const snap = await fsdb.collection(col).get();
-      if (snap.empty) { res.write('(empty)\n'); continue; }
-      for (let i = 0; i < snap.docs.length; i += 50) {
-        await Promise.all(snap.docs.slice(i, i + 50).map(doc =>
-          db.collection(col).doc(doc.id).set(convertTimestamps(doc.data()))
-        ));
-      }
-      total += snap.docs.length;
-      res.write(`done (${snap.docs.length} docs)\n`);
-    } catch (e) { res.write(`ERROR: ${e.message}\n`); }
-  }
-  res.write(`\nDone. ${total} documents copied to MongoDB.\n`);
-  res.end();
-});
+// Migration endpoint removed — no longer needed post-migration
 
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
