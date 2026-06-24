@@ -492,6 +492,12 @@ async function payCommissions(investorId, amount, investmentId) {
         });
       });
     }
+    // Mark the investment so reconciliation knows commissions were attempted.
+    // Only for real investment IDs (not 'dep_...' deposit commissions).
+    if (!investmentId.startsWith('dep_')) {
+      await db.collection('investments').doc(investmentId)
+        .update({ commissionsPaid: true }).catch(() => {});
+    }
   } catch (e) { console.error('Commission error:', e.message); }
 }
 
@@ -2181,6 +2187,30 @@ async function runReconciliation() {
         }
       } catch (e) { console.warn(`Reconcile withdrawal ${doc.id}:`, e.message); }
     }
+
+    // ── Missed commissions — investments where payCommissions never completed ──
+    // Scans investments from last 48h without commissionsPaid flag and retries.
+    try {
+      const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const invSnap = await db.collection('investments')
+        .where('commissionsPaid', '!=', true)
+        .where('createdAt', '>=', cutoff48h)
+        .limit(30).get();
+      for (const doc of invSnap.docs) {
+        const inv = doc.data();
+        if (!inv.userId || !inv.amount) continue;
+        // Check if investor actually has a referrer — skip if not
+        const userSnap = await db.collection('users').doc(inv.userId).get();
+        if (!userSnap.exists || !userSnap.data().referredBy) {
+          // No referrer — just mark so we don't check again
+          await doc.ref.update({ commissionsPaid: true }).catch(() => {});
+          continue;
+        }
+        console.log(`🔄 Reconcile commission: investment ${doc.id} → user ${inv.userId}`);
+        await payCommissions(inv.userId, inv.amount, doc.id);
+        resolved++;
+      }
+    } catch (e) { console.warn('Reconcile commissions:', e.message); }
 
     if (resolved > 0) console.log(`✅ Reconciliation: ${resolved} record(s) resolved`);
 
