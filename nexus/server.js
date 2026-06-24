@@ -2184,23 +2184,31 @@ async function runReconciliation() {
 
     if (resolved > 0) console.log(`✅ Reconciliation: ${resolved} record(s) resolved`);
 
-    // ── Missed cashback (matured investments with uncredited daily returns) ──
-    // Only check once per 30-min cycle; maturity cron covers the rest.
+    // ── Missed cashback — check both active AND matured investments ──
+    // Catches cashback that was skipped while the server was down/restarting.
     try {
-      const maturedSnap = await db.collection('investments')
-        .where('status', '==', 'matured').limit(20).get();
       let needsCashback = false;
-      for (const doc of maturedSnap.docs) {
-        const inv = doc.data();
-        if ((inv.dailyCredited || 0) >= (inv.expectedReturn || 0)) continue;
-        const lastTs = tsMillis(inv.lastCreditTs) || tsMillis(inv.createdAt);
-        if (Math.floor((Date.now() - lastTs) / 86400000) >= 1) { needsCashback = true; break; }
+      const now = Date.now();
+      for (const status of ['active', 'matured']) {
+        if (needsCashback) break;
+        const snap = await db.collection('investments')
+          .where('status', '==', status).limit(50).get();
+        for (const doc of snap.docs) {
+          const inv = doc.data();
+          if ((inv.dailyCredited || 0) >= (inv.expectedReturn || 0)) continue;
+          const lastTs = inv.lastCreditTs != null
+            ? inv.lastCreditTs
+            : inv.lastCreditDate
+              ? new Date(inv.lastCreditDate + 'T00:00:00+03:00').getTime()
+              : (tsMillis(inv.createdAt) || now);
+          if (Math.floor((now - lastTs) / 86400000) >= 1) { needsCashback = true; break; }
+        }
       }
       if (needsCashback) {
-        console.log('🔄 Reconciliation found uncredited matured cashback — running cashback now');
+        console.log('🔄 Reconciliation: overdue cashback found — crediting now');
         await runDailyCashback();
       }
-    } catch (e) { console.warn('Reconcile matured cashback:', e.message); }
+    } catch (e) { console.warn('Reconcile cashback:', e.message); }
 
   } catch (e) { console.error('Reconciliation error:', e.message); }
 }
