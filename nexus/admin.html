@@ -820,7 +820,7 @@ import {
 const SERVER     = 'https://nexus-server-production-921f.up.railway.app';
 const CLOUD      = 'dcmfxgofa';
 const PRESET     = 'x-engineuploads';
-const ADMIN_PASS = 'FAHAD8800';
+let _adminKey = sessionStorage.getItem('nx_admin_key') || '';
 
 const firebaseConfig = {
   apiKey:            "AIzaSyBSeDwdK66OZt-b34U5ysYlGvYi4CtXEyA",
@@ -922,28 +922,51 @@ function _showAdminApp() {
   initAdmin();
 }
 
-window.doAdminLogin = () => {
+window.doAdminLogin = async () => {
   const input = document.getElementById('adminKeyInput');
   const err   = document.getElementById('loginErr');
-  if (input.value.trim() !== ADMIN_PASS) {
-    err.style.display = 'block';
-    input.value = '';
-    return;
-  }
-  localStorage.setItem('nx_admin_auth', '1');
+  const key   = input.value.trim();
+  if (!key) { err.style.display = 'block'; return; }
   err.style.display = 'none';
-  _showAdminApp();
+  try {
+    const r = await fetch(SERVER + '/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminKey: key })
+    });
+    const data = await r.json();
+    if (data.status !== 'success') {
+      err.style.display = 'block';
+      input.value = '';
+      return;
+    }
+    _adminKey = key;
+    sessionStorage.setItem('nx_admin_key', key);
+    localStorage.setItem('nx_admin_auth', '1');
+    _showAdminApp();
+  } catch(e) {
+    err.textContent = 'Network error — check connection.';
+    err.style.display = 'block';
+  }
 };
 
 window.doLogout = () => {
+  _adminKey = '';
+  sessionStorage.removeItem('nx_admin_key');
   localStorage.removeItem('nx_admin_auth');
   document.getElementById('adminApp').classList.remove('show');
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('adminKeyInput').value = '';
 };
 
-// Defer auto-login until after all window.* functions are assigned
-setTimeout(() => { if (localStorage.getItem('nx_admin_auth') === '1') _showAdminApp(); }, 0);
+// Defer auto-login: restore session if key is still in sessionStorage
+setTimeout(() => {
+  if (localStorage.getItem('nx_admin_auth') === '1' && _adminKey) {
+    _showAdminApp();
+  } else {
+    localStorage.removeItem('nx_admin_auth');
+  }
+}, 0);
 
 // ── INIT ──
 let _activeTab = 'dashboard';
@@ -985,7 +1008,7 @@ window.showTab = (tab, btn) => {
 // ── WITHDRAWAL COUNT BADGE ──
 async function loadWithdrawalsCount() {
   try {
-    const r = await api('/admin/stats', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/stats', { adminKey: _adminKey });
     if (r.status !== 'success') return;
     const n = r.stats.pendingWithdrawals || 0;
     const badge = document.getElementById('pendingBadge');
@@ -999,7 +1022,7 @@ async function loadWithdrawalsCount() {
 // ═══════════════════════════════════════════
 async function loadDashboard() {
   try {
-    const r = await api('/admin/stats', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/stats', { adminKey: _adminKey });
     if (r.status === 'success') {
       const s = r.stats;
       document.getElementById('sTotalUsers').textContent     = s.totalUsers;
@@ -1018,7 +1041,7 @@ async function loadDashboard() {
 
   // Recent transactions
   try {
-    const r = await api('/admin/transactions/list', { adminKey: ADMIN_PASS, limit: 15 });
+    const r = await api('/admin/transactions/list', { adminKey: _adminKey, limit: 15 });
     const txs = r.status === 'success' ? r.transactions : [];
     const rows = txs.map(t => {
       const amt = Number(t.amount||0);
@@ -1056,7 +1079,7 @@ let _allWits   = [];
 async function loadWithdrawals() {
   document.getElementById('witTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const r = await api('/admin/withdrawals/list', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/withdrawals/list', { adminKey: _adminKey });
     _allWits = r.status === 'success' ? r.withdrawals : [];
     renderWithdrawals();
   } catch(e) {
@@ -1109,7 +1132,7 @@ window.processWithdrawal = async (id) => {
   if (!confirm('Process this withdrawal via MarzPay? Money will be sent to the user.')) return;
   showToast('Processing…');
   try {
-    const r = await api('/admin/withdraw/process', { withdrawalId: id, adminKey: ADMIN_PASS });
+    const r = await api('/admin/withdraw/process', { withdrawalId: id, adminKey: _adminKey });
     showToast(r.message || (r.status === 'success' ? 'Processing started!' : 'Failed'), r.status === 'success' ? 'success' : 'error');
     if (r.status === 'success') loadWithdrawals();
   } catch(e) {
@@ -1128,7 +1151,7 @@ window.confirmReject = async () => {
   const reason = document.getElementById('rejectReason').value.trim();
   if (!reason) { showToast('Enter a reason', 'error'); return; }
   try {
-    const r = await api('/withdraw/reject', { withdrawalId: id, reason, adminKey: ADMIN_PASS });
+    const r = await api('/withdraw/reject', { withdrawalId: id, reason, adminKey: _adminKey });
     showToast(r.message || (r.status === 'success' ? 'Rejected' : 'Failed'), r.status === 'success' ? 'success' : 'error');
     closeModal('rejectOverlay');
     loadWithdrawals();
@@ -1147,7 +1170,7 @@ async function loadDeposits() {
   document.getElementById('depTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   loadUnmatchedDeposits();
   try {
-    const r = await api('/admin/deposits/list', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/deposits/list', { adminKey: _adminKey });
     _allDeps = r.status === 'success' ? r.deposits : [];
     renderDeposits();
   } catch(e) {
@@ -1161,7 +1184,7 @@ async function loadUnmatchedDeposits() {
   const card = document.getElementById('unmatchedCard');
   const tbl  = document.getElementById('unmatchedTable');
   try {
-    const r = await api('/admin/unmatched-deposits', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/unmatched-deposits', { adminKey: _adminKey });
     const list = (r.status === 'success' ? r.deposits : []).filter(d => d.status === 'unmatched');
     if (!list.length) { card.style.display = 'none'; return; }
     card.style.display = 'block';
@@ -1225,7 +1248,7 @@ let _userSearch = '', _userFilter = 'all', _allUsers = [];
 async function loadUsers() {
   document.getElementById('usersTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const r = await api('/admin/users', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/users', { adminKey: _adminKey });
     _allUsers = r.status === 'success' ? r.users : [];
     renderUsers();
   } catch(e) {
@@ -1409,7 +1432,7 @@ window.openUserModal = (userId) => {
   openModal('userOverlay');
 
   // Load last 20 transactions for this user
-  api('/admin/transactions/list', { adminKey: ADMIN_PASS, userId })
+  api('/admin/transactions/list', { adminKey: _adminKey, userId })
     .then(r => {
       const sorted = (r.status === 'success' ? r.transactions : []).slice(0, 20);
       const rows = sorted.map(t => {
@@ -1440,7 +1463,7 @@ window.openWithdrawUser = async (userId) => {
   let u = _allUsers.find(x => x.id === userId);
   if (!u) {
     try {
-      const r = await api('/admin/user/detail', { adminKey: ADMIN_PASS, userId });
+      const r = await api('/admin/user/detail', { adminKey: _adminKey, userId });
       if (r.status !== 'success') { showToast('User not found', 'error'); return; }
       u = r.user;
       _allUsers.push(u);
@@ -1453,7 +1476,7 @@ window.banUser = async (userId, currentStatus) => {
   const action = currentStatus === 'banned' ? 'unban' : 'ban';
   if (!confirm(`${action === 'ban' ? 'Ban' : 'Unban'} this user?`)) return;
   try {
-    const r = await api('/admin/ban', { userId, action, adminKey: ADMIN_PASS });
+    const r = await api('/admin/ban', { userId, action, adminKey: _adminKey });
     showToast(r.status === 'success' ? `User ${action}ned` : r.message, r.status === 'success' ? 'success' : 'error');
     loadUsers();
   } catch(e) { showToast('Error', 'error'); }
@@ -1465,7 +1488,7 @@ window.submitCredit = async () => {
   const note   = document.getElementById('creditNote').value.trim();
   if (!userId || !amount || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
   try {
-    const r = await api('/admin/deposit', { userId, amount, note, adminKey: ADMIN_PASS });
+    const r = await api('/admin/deposit', { userId, amount, note, adminKey: _adminKey });
     showToast(r.message || (r.status === 'success' ? 'Credited!' : 'Failed'), r.status === 'success' ? 'success' : 'error');
     if (r.status === 'success') { closeModal('userOverlay'); loadUsers(); }
   } catch(e) { showToast('Error', 'error'); }
@@ -1479,7 +1502,7 @@ let _products = [];
 async function loadProducts() {
   document.getElementById('productsList').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const r = await api('/admin/products/list', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/products/list', { adminKey: _adminKey });
     _products = r.status === 'success' ? r.products : [];
     renderProductsList();
   } catch(e) {
@@ -1589,7 +1612,7 @@ window.saveProduct = async () => {
     };
     if (imageUrl) data.image = imageUrl;
 
-    const r = await api('/admin/products/save', { adminKey: ADMIN_PASS, id: id || undefined, ...data });
+    const r = await api('/admin/products/save', { adminKey: _adminKey, id: id || undefined, ...data });
     if (r.status !== 'success') throw new Error(r.message || 'Save failed');
     showToast(id ? 'Product updated!' : 'Product added!', 'success');
     closeModal('productOverlay');
@@ -1604,7 +1627,7 @@ window.saveProduct = async () => {
 window.deleteProduct = async (id) => {
   if (!confirm('Delete this plan? This cannot be undone.')) return;
   try {
-    const r = await api('/admin/products/delete', { adminKey: ADMIN_PASS, id });
+    const r = await api('/admin/products/delete', { adminKey: _adminKey, id });
     showToast(r.status === 'success' ? 'Deleted' : (r.message || 'Error'), r.status === 'success' ? 'success' : 'error');
     if (r.status === 'success') loadProducts();
   } catch(e) { showToast('Error', 'error'); }
@@ -1622,7 +1645,7 @@ window.calcTotalReturn = () => {
 async function loadSlideshow() {
   document.getElementById('slideshowGrid').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const r = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/settings', { adminKey: _adminKey });
     const imgs = (r.status === 'success' && r.settings.slideshowImages) ? r.settings.slideshowImages : [];
     renderSlideshow(imgs);
   } catch(e) {
@@ -1649,10 +1672,10 @@ window.uploadBanner = async (input) => {
   showToast('Uploading…');
   try {
     const url = await uploadImage(input.files[0]);
-    const rs = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const rs = await api('/admin/settings', { adminKey: _adminKey });
     const imgs = (rs.status === 'success' && rs.settings.slideshowImages) ? rs.settings.slideshowImages : [];
     if (!imgs.includes(url)) imgs.push(url);
-    await api('/admin/settings/update', { adminKey: ADMIN_PASS, slideshowImages: imgs });
+    await api('/admin/settings/update', { adminKey: _adminKey, slideshowImages: imgs });
     showToast('Banner added!', 'success');
     loadSlideshow();
   } catch(e) { showToast('Upload failed: ' + e.message, 'error'); }
@@ -1662,9 +1685,9 @@ window.uploadBanner = async (input) => {
 window.removeBanner = async (url) => {
   if (!confirm('Remove this banner image?')) return;
   try {
-    const rs = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const rs = await api('/admin/settings', { adminKey: _adminKey });
     const imgs = ((rs.status === 'success' && rs.settings.slideshowImages) ? rs.settings.slideshowImages : []).filter(u => u !== url);
-    await api('/admin/settings/update', { adminKey: ADMIN_PASS, slideshowImages: imgs });
+    await api('/admin/settings/update', { adminKey: _adminKey, slideshowImages: imgs });
     showToast('Removed', 'success');
     loadSlideshow();
   } catch(e) { showToast('Error', 'error'); }
@@ -1681,7 +1704,7 @@ async function loadGiftCodes() {
   document.getElementById('codesTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   await loadGiftRange();
   try {
-    const r = await api('/admin/gift-codes/list', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/gift-codes/list', { adminKey: _adminKey });
     _allCodes = r.status === 'success' ? r.codes : [];
     renderCodes();
   } catch(e) {
@@ -1692,7 +1715,7 @@ async function loadGiftCodes() {
 // Gift payout range (minGift/maxGift in settings/main) — server reads it on redeem
 async function loadGiftRange() {
   try {
-    const r = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/settings', { adminKey: _adminKey });
     const s = (r && r.settings) ? r.settings : {};
     _giftRange = { min: s.minGift || 200, max: s.maxGift || 2000 };
     document.getElementById('giftMin').value = _giftRange.min;
@@ -1708,7 +1731,7 @@ window.saveGiftRange = async () => {
   if (hi < lo) { el.textContent = '⚠️ Maximum must be greater than minimum'; el.style.color = '#ef4444'; return; }
   el.textContent = 'Saving…'; el.style.color = 'var(--text2)';
   try {
-    await api('/admin/settings/update', { adminKey: ADMIN_PASS, minGift: lo, maxGift: hi });
+    await api('/admin/settings/update', { adminKey: _adminKey, minGift: lo, maxGift: hi });
     _giftRange = { min: lo, max: hi };
     el.textContent = `✅ Saved — gift codes now pay UGX ${lo.toLocaleString()} – ${hi.toLocaleString()}`;
     el.style.color = '#22c55e';
@@ -1787,7 +1810,7 @@ window.generateCodes = async () => {
   showToast('Generating…');
   try {
     const maxUsers = parseInt(document.getElementById('codeMaxUsers').value) || 1;
-  const body = { count, adminKey: ADMIN_PASS, maxUsers };
+  const body = { count, adminKey: _adminKey, maxUsers };
     if (expiry) body.expiresInDays = expiry;
     const r = await api('/admin/gift-codes/generate', body);
     if (r.status === 'success') {
@@ -1802,7 +1825,7 @@ window.generateCodes = async () => {
 window.deactivateCode = async (id) => {
   if (!confirm('Deactivate this gift code?')) return;
   try {
-    const r = await api('/admin/gift-codes/deactivate', { codeId: id, adminKey: ADMIN_PASS });
+    const r = await api('/admin/gift-codes/deactivate', { codeId: id, adminKey: _adminKey });
     showToast(r.status === 'success' ? 'Deactivated' : r.message, r.status === 'success' ? 'success' : 'error');
     loadGiftCodes();
   } catch(e) { showToast('Error', 'error'); }
@@ -1817,7 +1840,7 @@ let _allTxs   = [];
 async function loadTransactions() {
   document.getElementById('txTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const r = await api('/admin/transactions/list', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/transactions/list', { adminKey: _adminKey });
     _allTxs = r.status === 'success' ? r.transactions : [];
     renderTransactions();
   } catch(e) {
@@ -1867,7 +1890,7 @@ window.setTxFilter = (f, el) => {
 async function loadReferrals() {
   document.getElementById('referralsTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
-    const r = await api('/admin/referrals/list', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/referrals/list', { adminKey: _adminKey });
     const list = r.status === 'success' ? r.referrals : [];
     renderReferrals(list);
   } catch(e) {
@@ -1915,7 +1938,7 @@ function renderReferrals(list) {
 // ═══════════════════════════════════════════
 async function loadSettings() {
   try {
-    const r = await api('/admin/settings', { adminKey: ADMIN_PASS });
+    const r = await api('/admin/settings', { adminKey: _adminKey });
     const s = (r && r.settings) ? r.settings : {};
     const maintOn = !!s.maintenanceMode;
     document.getElementById('settMaintenance').checked = maintOn;
@@ -1964,7 +1987,7 @@ window.toggleMaintenance = async (on) => {
   el.textContent = 'Saving…';
   el.style.color = 'var(--text-muted)';
   try {
-    await api('/admin/settings/update', { adminKey: ADMIN_PASS, maintenanceMode: on });
+    await api('/admin/settings/update', { adminKey: _adminKey, maintenanceMode: on });
     el.textContent = on ? '🔴 Maintenance is ON — users see the maintenance screen' : '🟢 Maintenance is OFF — app is live';
     el.style.color = on ? '#ef4444' : '#22c55e';
   } catch(e) {
@@ -1987,7 +2010,7 @@ window.saveSettings = async () => {
     commL3:          (parseFloat(document.getElementById('settCommL3').value) || 2)  / 100,
   };
   try {
-    await api('/admin/settings/update', { adminKey: ADMIN_PASS, ...s });
+    await api('/admin/settings/update', { adminKey: _adminKey, ...s });
     showToast('Settings saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
@@ -2002,7 +2025,7 @@ window.saveAnnouncement = async () => {
     image:         document.getElementById('annImageUrl').value.trim()
   };
   try {
-    await api('/admin/settings/update', { adminKey: ADMIN_PASS, announcement: ann });
+    await api('/admin/settings/update', { adminKey: _adminKey, announcement: ann });
     showToast('Announcement saved!', 'success');
   } catch(e) { showToast('Error saving announcement', 'error'); }
 };
@@ -2036,7 +2059,7 @@ window.saveContentImages = async () => {
     depositInstructions:  document.getElementById('depositInstructions').value.trim()
   };
   try {
-    await api('/admin/settings/update', { adminKey: ADMIN_PASS, ...data });
+    await api('/admin/settings/update', { adminKey: _adminKey, ...data });
     showToast('Content images saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
@@ -2049,7 +2072,7 @@ window.saveSupportContent = async () => {
     supportHours:    document.getElementById('settSupportHours').value.trim(),
   };
   try {
-    await api('/admin/settings/update', { adminKey: ADMIN_PASS, ...data });
+    await api('/admin/settings/update', { adminKey: _adminKey, ...data });
     showToast('Support content saved!', 'success');
   } catch(e) { showToast('Error saving', 'error'); }
 };
@@ -2096,7 +2119,7 @@ window.confirmAssignDeposit = async () => {
   const userId = document.getElementById('assignTargetUserId').value;
   if (!depId || !userId) { showToast('Select a user', 'error'); return; }
   try {
-    const r = await api('/admin/assign-deposit', { depositId: depId, userId, adminKey: ADMIN_PASS });
+    const r = await api('/admin/assign-deposit', { depositId: depId, userId, adminKey: _adminKey });
     showToast(r.message || (r.status==='success' ? 'Assigned!' : 'Failed'), r.status==='success' ? 'success' : 'error');
     if (r.status === 'success') { closeModal('assignDepOverlay'); loadDeposits(); }
   } catch(e) { showToast('Error', 'error'); }
