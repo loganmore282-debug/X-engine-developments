@@ -1,5 +1,9 @@
 {
   "devDependencies": {
     "javascript-obfuscator": "^5.4.3"
+  },
+  "dependencies": {
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0"
   }
 }
