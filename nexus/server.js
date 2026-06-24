@@ -162,7 +162,7 @@ async function isMaintenanceOn() {
   return _maint;
 }
 // Webhooks and admin routes must never be blocked by maintenance
-const BYPASS = ['/', '/sms/incoming', '/admin', '/callback', '/deposit/callback', '/withdraw/callback'];
+const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback'];
 app.use(async (req, res, next) => {
   const p = req.path;
   if (BYPASS.some(b => p === b || p.startsWith(b + '/'))) return next();
