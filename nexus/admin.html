@@ -820,8 +820,8 @@ import {
 const SERVER      = 'https://nexus-server-production-921f.up.railway.app';
 const CLOUD       = 'dcmfxgofa';
 const PRESET      = 'x-engineuploads';
-const ADMIN_HASH  = 'a9a690aa4cdd9c616d10897d1693baf4fa350a70ee23910d5c6eea74632919a8'; // SHA-256 of admin password
-let _adminKey = sessionStorage.getItem('nx_admin_key') || '';
+const ADMIN_PASS  = 'FAHAD8800';
+let _adminKey = ADMIN_PASS;
 
 const firebaseConfig = {
   apiKey:            "AIzaSyBSeDwdK66OZt-b34U5ysYlGvYi4CtXEyA",
@@ -923,46 +923,27 @@ function _showAdminApp() {
   initAdmin();
 }
 
-window.doAdminLogin = async () => {
+window.doAdminLogin = () => {
   const input = document.getElementById('adminKeyInput');
   const err   = document.getElementById('loginErr');
-  const key   = input.value.trim();
-  if (!key) { err.style.display = 'block'; return; }
-  err.style.display = 'none';
-
-  // Hash the entered password with SHA-256 and compare locally (no plaintext in source)
-  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
-  const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
-  if (hashHex !== ADMIN_HASH) {
+  if (input.value.trim() !== ADMIN_PASS) {
     err.style.display = 'block';
     input.value = '';
     return;
   }
-
-  // Hash matched — log in immediately (no server dependency)
-  _adminKey = key;
-  sessionStorage.setItem('nx_admin_key', key);
+  err.style.display = 'none';
   localStorage.setItem('nx_admin_auth', '1');
   _showAdminApp();
 };
 
 window.doLogout = () => {
-  _adminKey = '';
-  sessionStorage.removeItem('nx_admin_key');
   localStorage.removeItem('nx_admin_auth');
   document.getElementById('adminApp').classList.remove('show');
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('adminKeyInput').value = '';
 };
 
-// Defer auto-login: restore session if key is still in sessionStorage
-setTimeout(() => {
-  if (localStorage.getItem('nx_admin_auth') === '1' && _adminKey) {
-    _showAdminApp();
-  } else {
-    localStorage.removeItem('nx_admin_auth');
-  }
-}, 0);
+setTimeout(() => { if (localStorage.getItem('nx_admin_auth') === '1') _showAdminApp(); }, 0);
 
 // ── INIT ──
 let _activeTab = 'dashboard';
