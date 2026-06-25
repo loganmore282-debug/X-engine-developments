@@ -817,9 +817,10 @@ import {
   serverTimestamp, arrayUnion, arrayRemove, increment
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-const SERVER     = 'https://nexus-server-production-921f.up.railway.app';
-const CLOUD      = 'dcmfxgofa';
-const PRESET     = 'x-engineuploads';
+const SERVER      = 'https://nexus-server-production-921f.up.railway.app';
+const CLOUD       = 'dcmfxgofa';
+const PRESET      = 'x-engineuploads';
+const ADMIN_HASH  = 'a9a690aa4cdd9c616d10897d1693baf4fa350a70ee23910d5c6eea74632919a8'; // SHA-256 of admin password
 let _adminKey = sessionStorage.getItem('nx_admin_key') || '';
 
 const firebaseConfig = {
@@ -928,26 +929,21 @@ window.doAdminLogin = async () => {
   const key   = input.value.trim();
   if (!key) { err.style.display = 'block'; return; }
   err.style.display = 'none';
-  try {
-    const r = await fetch(SERVER + '/auth/admin-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminKey: key })
-    });
-    const data = await r.json();
-    if (data.status !== 'success') {
-      err.style.display = 'block';
-      input.value = '';
-      return;
-    }
-    _adminKey = key;
-    sessionStorage.setItem('nx_admin_key', key);
-    localStorage.setItem('nx_admin_auth', '1');
-    _showAdminApp();
-  } catch(e) {
-    err.textContent = 'Network error — check connection.';
+
+  // Hash the entered password with SHA-256 and compare locally (no plaintext in source)
+  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+  const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  if (hashHex !== ADMIN_HASH) {
     err.style.display = 'block';
+    input.value = '';
+    return;
   }
+
+  // Hash matched — log in immediately (no server dependency)
+  _adminKey = key;
+  sessionStorage.setItem('nx_admin_key', key);
+  localStorage.setItem('nx_admin_auth', '1');
+  _showAdminApp();
 };
 
 window.doLogout = () => {
