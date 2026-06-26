@@ -33,7 +33,7 @@
   // 3. CONSOLE SELF-XSS WARNING
   function warn(){
     try {
-      console.log("%cSTOP", "color:#2563eb;font-size:48px;font-weight:900;");
+      console.log("%cSTOP", "color:#ff9d00;font-size:48px;font-weight:900;");
       console.log("%cThis is a browser feature for developers. Do not paste or type anything here — it could give an attacker access to your Voltra account and funds.",
         "color:#ef4444;font-size:14px;");
     } catch(e){}
@@ -72,7 +72,7 @@
     function showShield(){
       if (shield) return;
       shield = document.createElement("div");
-      shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#060e2a;color:#2563eb;display:flex;align-items:center;justify-content:center;text-align:center;font-family:sans-serif;font-size:18px;padding:24px;";
+      shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#0a0e17;color:#ff9d00;display:flex;align-items:center;justify-content:center;text-align:center;font-family:sans-serif;font-size:18px;padding:24px;";
       shield.textContent = "Developer tools detected. Close them to continue using Voltra.";
       (document.body || document.documentElement).appendChild(shield);
     }

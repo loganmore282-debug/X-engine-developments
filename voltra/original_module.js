@@ -870,10 +870,10 @@ window.openInvDetail = async (invId) => {
       <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
       <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:12px;color:var(--text2)">Progress</span>
-        <span style="font-size:12px;font-weight:700;color:${matured||claimed||fullyPaid?'#22c55e':'#2563eb'}">${progress}%</span>
+        <span style="font-size:12px;font-weight:700;color:${matured||claimed||fullyPaid?'#22c55e':'#ff9d00'}">${progress}%</span>
       </div>
       <div style="background:var(--border);border-radius:99px;height:10px;overflow:hidden">
-        <div style="background:${matured||claimed||fullyPaid?'#22c55e':'#2563eb'};height:100%;width:${progress}%;border-radius:99px;transition:width .4s"></div>
+        <div style="background:${matured||claimed||fullyPaid?'#22c55e':'#ff9d00'};height:100%;width:${progress}%;border-radius:99px;transition:width .4s"></div>
       </div>
       ${claimBtn}`;
   } catch(e) { body.innerHTML = '<p style="color:var(--red);text-align:center">Failed to load details</p>'; }
@@ -1005,7 +1005,7 @@ async function loadRecords(tab) {
       const typeIcon = { checkin: '📅', cashback: '💰', commission: '👥', gift_code: '🎁', investment_return: '📈', admin_credit: '🏦', reversal: '↩️' };
       const typeLabel = { checkin: 'Daily Check-in', cashback: 'Daily Cashback', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit', reversal: 'Deposit Reversed' };
       el.innerHTML = `
-        <div class="rec-card" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);margin-bottom:8px">
+        <div class="rec-card" style="background:linear-gradient(135deg,#cc7e00,#ff9d00);margin-bottom:8px">
           <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-bottom:4px">Total Revenue Earned</div>
           <div style="color:#fff;font-size:26px;font-weight:900">${ugx(totalCashback)}</div>
           <div style="color:rgba(255,255,255,0.6);font-size:11px;margin-top:4px">${items.length} transaction${items.length !== 1 ? 's' : ''}</div>
@@ -1178,7 +1178,7 @@ function showDepStep(n) {
 function launchConfetti() {
   const el = document.getElementById('depConfetti');
   if (!el) return;
-  const colors = ['#f59e0b','#22c55e','#3b82f6','#ec4899','#8b5cf6','#ef4444','#f97316'];
+  const colors = ['#f59e0b','#22c55e','#ffb84d','#ec4899','#8b5cf6','#ef4444','#f97316'];
   el.innerHTML = '';
   for (let i = 0; i < 55; i++) {
     const p = document.createElement('div');
