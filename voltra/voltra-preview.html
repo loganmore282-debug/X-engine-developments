@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Voltra</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7a4d00">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Voltra">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* VOLTRA — dark electric-power theme (distinct from Nexus light/blue) */
+  --bg:#0a0e17; --bg2:#0f1420; --bg3:#151c2c;
+  --card:#131a29; --card2:#1a2335;
+  --border:rgba(255,255,255,0.08); --border2:rgba(255,255,255,0.14);
+  --text:#f2f6fc; --text2:#8c98af; --muted:#39425a;
+  --white:#fff; --red:#ff5a76; --green:#2bd4a4;
+  --radius:14px; --shadow:0 6px 28px rgba(0,0,0,0.45);
+  /* primary accent kept under --blue so every component recolors at once */
+  --blue:#ff9d00; --bluefade:rgba(255,157,0,0.12);
+  --amber:#ff9d00; --amber2:#ffc24d;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;overflow-x:hidden}
+body{padding-bottom:106px}
+/* While the login / register screen is showing, the dark gradient takes over the
+   whole page — kill the light app background + bottom-nav padding so no white strip shows below the fold */
+body.on-auth{background:#0a0e17;padding-bottom:0}
+html:has(body.on-auth){background:#0a0e17}
+
+/* ── AUTH SCREEN ── */
+.auth-screen{
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:0 24px 52px;
+  background:linear-gradient(165deg,#2a1e05 0%,#15100a 45%,#0a0e17 100%);
+  position:relative;
+}
+.auth-brand{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:42vh;text-align:center;position:relative;z-index:1;width:100%
+}
+.auth-mark{font-size:64px;font-weight:900;line-height:1;margin-bottom:14px;letter-spacing:-2px;
+  color:var(--amber);
+  text-shadow:0 0 50px rgba(255,157,0,0.5);
+}
+.auth-mark span{color:#fff;font-size:40px;letter-spacing:2px;margin-left:4px;vertical-align:middle}
+.auth-tagline{font-size:12px;color:rgba(255,255,255,0.55);letter-spacing:5px;font-weight:600;text-transform:uppercase}
+.auth-card{
+  background:transparent;border:none;box-shadow:none;
+  width:100%;max-width:420px;position:relative;z-index:1;
+}
+.auth-head{font-size:24px;font-weight:900;color:#fff;text-align:left;margin-bottom:4px;letter-spacing:-.4px}
+.auth-sub{font-size:13px;color:rgba(255,255,255,0.5);text-align:left;margin-bottom:22px}
+.auth-card h2{display:none}
+.auth-field{margin-bottom:15px}
+.auth-label{display:block;font-size:12px;font-weight:700;color:rgba(255,255,255,0.78);margin:0 0 7px 4px;letter-spacing:.2px}
+.auth-field input{width:100%;height:54px;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:0 18px;font-size:15px;font-family:'Outfit',sans-serif;color:#fff;background:rgba(255,255,255,0.06);outline:none;transition:border-color .2s,box-shadow .2s}
+.auth-field input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,157,0,0.18)}
+.phone-wrap{display:flex;align-items:center;border:1px solid rgba(255,255,255,0.12);border-radius:14px;background:rgba(255,255,255,0.06);overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.phone-wrap:focus-within{border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,157,0,0.18)}
+.phone-prefix{padding:0 14px 0 18px;font-size:15px;font-weight:800;color:var(--amber);border-right:1px solid rgba(255,255,255,0.12);height:54px;display:flex;align-items:center;flex-shrink:0}
+.phone-wrap input{border:none;background:transparent;height:54px;flex:1;padding:0 14px;font-size:15px;font-family:'Outfit',sans-serif;outline:none;color:#fff}
+.phone-wrap input::placeholder{color:rgba(255,255,255,0.32)}
+.auth-field input::placeholder{color:rgba(255,255,255,0.32)}
+.pass-wrap{position:relative}
+.pass-wrap input{padding-right:52px}
+.pass-eye{position:absolute;right:16px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.4);padding:4px;display:flex}
+.pass-eye svg{width:19px;height:19px}
+.remember-row{display:flex;align-items:center;gap:9px;margin-bottom:20px;margin-top:2px;padding-left:6px}
+.remember-row input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#ff9d00;flex-shrink:0}
+.remember-row label{font-size:14px;color:rgba(255,255,255,0.7);cursor:pointer;user-select:none}
+.btn-auth{width:100%;height:54px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--amber),var(--amber2));color:#1a1000;font-size:16px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;letter-spacing:.3px;transition:opacity .2s,transform .1s;box-shadow:0 6px 22px rgba(255,157,0,0.32);margin-bottom:12px;margin-top:4px}
+.btn-auth:active{opacity:.9;transform:translateY(1px)}
+.btn-auth-sec{width:100%;height:50px;border:1px solid rgba(255,255,255,0.18);border-radius:14px;background:transparent;color:rgba(255,255,255,0.85);font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:background .2s}
+.btn-auth-sec:active{background:rgba(255,255,255,0.08)}
+.auth-switch{display:none}
+.optional{color:rgba(255,255,255,0.35);font-weight:400;font-size:10px}
+
+/* ── MAINTENANCE ── */
+#maintenanceOverlay{display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:32px}
+
+/* ── TOPBAR ── */
+.topbar{position:sticky;top:0;z-index:100;background:#fff;border-bottom:1px solid var(--border);box-shadow:0 1px 8px rgba(0,0,0,0.06);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;transform:translateZ(0)}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-logo{font-size:20px;font-weight:900;color:var(--text);letter-spacing:-1px}
+.topbar-logo span{color:var(--text2)}
+.topbar-greeting{font-size:12px;color:var(--text2);font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.topbar-avatar{width:34px;height:34px;border-radius:50%;background:var(--card2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;overflow:hidden}
+.topbar-avatar img{width:100%;height:100%;object-fit:cover}
+
+/* ── SECTIONS ── */
+.section{display:none;min-height:calc(100vh - 100px)}
+.section.active{display:block}
+/* home has no padding — its own header bleeds edge-to-edge */
+#homeSection{padding:0}
+#productsSection,#recordsSection,#commissionSection,#moreSection{padding:16px}
+
+/* ── BOTTOM NAV — gold pill ── */
+.bottom-nav{
+  position:fixed;bottom:14px;left:12px;right:12px;z-index:200;
+  background:#fff;
+  border:1px solid rgba(0,0,0,0.07);
+  border-radius:22px;
+  display:none;
+  grid-template-columns:repeat(4,1fr);
+  padding:6px 0;
+  box-shadow:0 4px 24px rgba(0,0,0,0.1),0 1px 4px rgba(0,0,0,0.06);
+  transform:translateZ(0);
+}
+.bottom-nav.show{display:grid}
+.bnav-item{
+  position:relative;background:transparent;border:none;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:8px 4px 10px;cursor:pointer;
+  color:rgba(13,27,46,0.35);
+  transition:color .2s;font-family:'Outfit',sans-serif;
+  border-right:1px solid rgba(0,0,0,0.05);
+}
+.bnav-item:last-child{border-right:none}
+.bnav-item.active{color:#ff9d00}
+/* gold underline dot on active */
+.bnav-item.active::after{
+  content:'';position:absolute;bottom:4px;
+  width:18px;height:2.5px;border-radius:2px;
+  background:#ff9d00;
+  box-shadow:0 0 6px rgba(37,99,235,0.6);
+}
+.bnav-icon{line-height:1;display:flex;align-items:center;justify-content:center}
+.bnav-icon svg{width:22px;height:22px}
+.bnav-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}
+
+/* ── CARDS ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.card2{background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:16px}
+.sec-title{font-size:16px;font-weight:800;color:var(--text);margin-bottom:14px}
+
+/* ── BALANCE CARD ── */
+.balance-card{background:linear-gradient(135deg,#1a48d4 0%,#0d2fa8 60%,#091f80 100%);color:#fff;border-radius:16px;padding:24px;margin-bottom:16px;position:relative;overflow:hidden;border:none}
+.balance-card::before{content:'⚡';position:absolute;right:-10px;top:-10px;font-size:120px;color:rgba(255,255,255,0.06);font-weight:900;line-height:1;pointer-events:none}
+.balance-label{font-size:12px;font-weight:700;color:rgba(255,255,255,0.65);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.balance-amount{font-size:32px;font-weight:900;color:#fff;font-family:'Outfit',sans-serif;line-height:1.1;margin-bottom:4px}
+.balance-sub{font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:20px}
+.balance-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.balance-btn{height:44px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s}
+.balance-btn:active{opacity:.8}
+.balance-btn.deposit{background:rgba(255,255,255,0.18);color:#fff;border:1.5px solid rgba(255,255,255,0.3)}
+.balance-btn.withdraw{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.85);border:1.5px solid rgba(255,255,255,0.18)}
+.balance-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:rgba(255,255,255,0.12);border-radius:10px;overflow:hidden;margin-top:14px}
+.balance-stat{background:rgba(255,255,255,0.08);padding:10px;text-align:center}
+.balance-stat .st-val{font-size:12px;font-weight:800;color:#fff;font-family:'Outfit',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.balance-stat .st-lbl{font-size:9px;color:rgba(255,255,255,0.5);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+
+/* ── CUMULATIVE CARD ── */
+.cumulative-card{background:var(--card2);border:1px solid var(--border2);border-radius:16px;padding:18px 20px;margin-bottom:16px}
+.cum-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.cum-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.cum-amount{font-size:26px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;line-height:1.1}
+.cum-icon{font-size:28px;color:var(--border2)}
+.cum-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:10px;overflow:hidden}
+.cum-item{background:var(--bg2);padding:12px;text-align:center}
+.cum-item-val{font-size:14px;font-weight:800;color:var(--text);font-family:'Outfit',sans-serif}
+.cum-item-lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+
+/* ── HOME — brand header ── */
+.home-header{
+  background:linear-gradient(135deg,#1040c0 0%,#0d30a0 100%);
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  padding:14px 16px 12px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.home-logo-text{font-size:22px;font-weight:900;letter-spacing:-1px;
+  color:#fff;text-shadow:0 0 20px rgba(255,255,255,0.2)}
+.home-logo-text span{color:rgba(255,255,255,0.38)}
+.home-tagline-text{font-size:10px;color:rgba(255,255,255,0.5);font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:1px}
+.home-header-right{display:flex;align-items:center;gap:10px}
+
+/* ── HOME — quick action buttons ── */
+.home-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.ha-btn{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 16px;background:var(--card);border:1px solid var(--border);border-radius:16px;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .18s}
+.ha-btn:active{opacity:.85}
+.ha-icon{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bluefade);color:var(--blue)}
+.ha-icon svg{width:27px;height:27px}
+.ha-label{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px}
+
+/* ── SLIDESHOW ── */
+.slideshow-wrap{position:relative;height:200px;overflow:hidden;background:#0a0a0a;border-radius:20px;margin:0 16px 4px;transform:translateZ(0);contain:layout style paint}
+.slide{position:absolute;inset:0;opacity:0;transition:opacity 0.9s ease-in-out;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.slide.active{opacity:1}
+.slide img{width:100%;height:100%;object-fit:cover}
+.slide-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,0.7) 100%)}
+.slide-caption{position:absolute;bottom:14px;left:16px;right:16px}
+.slide-caption-text{font-size:14px;font-weight:800;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.8)}
+.slide-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
+.slide-watermark{font-size:72px;color:rgba(37,99,235,0.08);font-weight:900;position:absolute}
+.slide-slogan{font-size:15px;font-weight:800;color:rgba(255,255,255,0.7);text-align:center;padding:0 20px;z-index:1;line-height:1.4}
+.sdots{position:absolute;bottom:10px;right:14px;display:flex;gap:5px;z-index:2}
+.sdot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.3);transition:all .3s}
+.sdot.active{background:#ff9d00;width:14px;border-radius:3px}
+
+/* ── TICKER ── */
+.ticker-wrap{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:7px 0;overflow:hidden;white-space:nowrap;contain:layout style paint;transform:translateZ(0)}
+.ticker-inner{display:inline-block;animation:ticker-move 28s linear infinite;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+@keyframes ticker-move{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.ticker-inner:hover{animation-play-state:paused}
+.ticker-item{display:inline;font-size:12px;color:var(--text2);padding:0 24px;font-family:'Outfit',sans-serif}
+.ticker-item span{color:var(--text);font-weight:600}
+
+/* ── HOME — 2-col balance grid ── */
+.home-balance-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px;background:var(--bg)}
+.hbg-card{background:linear-gradient(135deg,#1540bf 0%,#0e2e9a 100%);padding:16px 14px;position:relative;overflow:hidden;border-radius:14px}
+.hbg-card::after{content:'⚡';position:absolute;right:-6px;bottom:-8px;font-size:58px;color:rgba(255,255,255,0.07);font-weight:900;pointer-events:none}
+.hbg-icon{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:#fff}
+.hbg-icon svg{width:18px;height:18px}
+.hbg-label{font-size:10px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.hbg-val{font-size:15px;font-weight:900;color:#fff;font-family:'Outfit',sans-serif;line-height:1.2}
+.hbg-sub{font-size:9px;color:rgba(255,255,255,0.4);margin-top:3px}
+
+/* ── HOME — inner padding wrapper ── */
+.home-inner{padding:14px 16px}
+
+/* ── TEAM HEADER BAND ── */
+.team-header-band{
+  background:linear-gradient(135deg,#1040c0 0%,#0d30a0 100%);
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  padding:16px;margin:-16px -16px 16px;
+  display:flex;align-items:center;gap:10px;
+}
+.team-header-logo{font-size:28px;color:#fff;font-weight:900;text-shadow:0 0 16px rgba(255,255,255,0.2)}
+.team-header-info{}
+.team-header-title{font-size:14px;font-weight:800;color:#fff}
+.team-header-sub{font-size:11px;color:rgba(255,255,255,0.55);margin-top:1px}
+
+/* ── TEAM — invitation rows ── */
+.inv-row{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;gap:12px}
+.inv-row-left{flex:1;min-width:0}
+.inv-row-val{font-size:14px;font-weight:800;color:var(--text);font-family:'Outfit',sans-serif;letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inv-row-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.inv-row-btn{height:34px;padding:0 16px;border:none;border-radius:8px;background:#ff9d00;color:#fff;font-size:12px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;flex-shrink:0}
+
+/* ── TEAM — stat tiles ── */
+.team-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.team-tile{background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px;position:relative;overflow:hidden;cursor:pointer}
+.team-tile::before{content:'>>'; position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted)}
+.team-tile .tt-val{font-size:18px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;margin-bottom:4px}
+.team-tile .tt-lbl{font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+
+/* ── TEAM — level rows ── */
+.level-row{display:flex;align-items:center;gap:0;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px}
+.lrow-badge{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#1040c0,#0d2fa8);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:14px}
+.lrow-badge-text{font-size:12px;font-weight:900;color:#fff}
+.lrow-rate{flex:1}
+.lrow-pct{font-size:20px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;line-height:1}
+.lrow-rate-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600}
+.lrow-stat{text-align:center;min-width:52px;padding:0 8px;border-left:1px solid var(--border)}
+.lrow-stat-val{font-size:15px;font-weight:800;color:var(--text);font-family:'Outfit',sans-serif}
+.lrow-stat-lbl{font-size:9px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+
+/* ── TEAM — how it works ── */
+.team-howit{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:4px}
+.team-howit p{font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:8px}
+.team-howit p:last-child{margin-bottom:0}
+.team-howit strong{color:var(--text)}
+
+/* ── QUICK CHECKIN ── */
+.checkin-card{display:flex;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;cursor:pointer;gap:12px}
+.checkin-left{display:flex;align-items:center;gap:12px;flex:1}
+.checkin-icon{width:40px;height:40px;border-radius:10px;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.checkin-icon svg{width:20px;height:20px}
+.checkin-left .ck-title{font-size:13px;font-weight:700;color:var(--text)}
+.checkin-left .ck-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.btn-checkin{height:34px;padding:0 16px;border:1px solid var(--border2);border-radius:8px;background:transparent;color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap}
+.btn-checkin.done{color:var(--text2);cursor:default}
+
+/* ── SECTION DIVIDER ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.section-header .sh-title{font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px}
+.link-btn{background:none;border:none;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;padding:0}
+
+/* ── INVESTMENT CARD (HOME) ── */
+.inv-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.inv-img{width:42px;height:42px;border-radius:8px;object-fit:cover;background:var(--bluefade);color:var(--blue);flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.inv-img svg{width:20px;height:20px}
+.inv-img img{width:100%;height:100%;object-fit:cover}
+.inv-info{flex:1;min-width:0}
+.inv-name{font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inv-meta{font-size:11px;color:var(--text2);margin-top:2px}
+.inv-right{text-align:right;flex-shrink:0}
+.inv-return{font-size:13px;font-weight:800;color:var(--green);font-family:'Outfit',sans-serif}
+.inv-days{font-size:10px;color:var(--text2)}
+.inv-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
+.inv-badge.active{background:rgba(34,197,94,0.12);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
+.inv-badge.matured{background:rgba(234,179,8,0.12);color:#eab308;border:1px solid rgba(234,179,8,0.25)}
+.inv-badge.claimed{background:var(--card2);color:var(--text2);border:1px solid var(--border)}
+
+/* ── PRODUCTS LIST ── */
+.products-grid{display:flex;flex-direction:column;gap:10px}
+.prod-group-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:18px 2px 4px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.prod-group-head:first-child{margin-top:2px}
+.pgh-title{font-size:15px;font-weight:900;color:var(--text);letter-spacing:-.2px}
+.pgh-desc{font-size:11px;color:var(--text2);font-weight:600;text-align:right}
+.prod-group{display:flex;flex-direction:column;gap:10px}
+.product-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;align-items:center;gap:12px;position:relative;cursor:pointer;transition:border-color .2s;contain:layout style paint;transform:translateZ(0)}
+.product-card:hover{border-color:var(--border2)}
+.product-img-wrap{width:84px;height:84px;border-radius:10px;flex-shrink:0;background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center;transform:translateZ(0);backface-visibility:hidden}
+.product-img-wrap img{width:100%;height:100%;object-fit:cover}
+.product-img-wrap .no-img{color:var(--muted);display:flex}
+.product-img-wrap .no-img svg{width:36px;height:36px}
+.product-stock{position:absolute;top:8px;right:56px;font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
+.product-stock.in{background:rgba(34,197,94,0.88);color:#fff}
+.product-stock.out{background:rgba(239,68,68,0.88);color:#fff}
+.product-body{flex:1;min-width:0}
+.product-name{font-size:14px;font-weight:800;color:var(--text);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.product-meta-row{font-size:11px;color:var(--text2);margin-bottom:2px;line-height:1.4}
+.product-meta-row .pv{color:#22c55e;font-weight:700}
+.product-price-row{font-size:12px;font-weight:700;color:var(--text);margin-top:5px;display:flex;align-items:center;gap:6px}
+.product-stars{color:#eab308;font-size:11px;letter-spacing:1px}
+.product-cart{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#ff9d00,#cc7e00);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .18s;align-self:center}
+.product-cart:disabled{background:var(--bg3);color:var(--muted);cursor:not-allowed}
+.product-cart svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── RECORDS (TABS + LIST) ── */
+.pill-tabs{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+.pill-tabs::-webkit-scrollbar{display:none}
+.pill-tab{height:34px;padding:0 16px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s}
+.pill-tab.active{background:#ff9d00;color:#fff;border-color:#ff9d00}
+.tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.tx-item:last-child{border-bottom:none}
+.tx-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--bluefade);color:var(--blue)}
+.tx-icon svg{width:17px;height:17px}
+.tx-icon.pos{background:rgba(22,163,74,0.1);color:var(--green)}
+.tx-icon.neg{background:rgba(239,68,68,0.1);color:var(--red)}
+.tx-info{flex:1;min-width:0}
+.tx-desc{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx-date{font-size:10px;color:var(--text2);margin-top:2px}
+.tx-amount{text-align:right;font-family:'Outfit',sans-serif;font-size:13px;font-weight:700;flex-shrink:0}
+.tx-amount.pos{color:var(--green)}
+.tx-amount.neg{color:var(--red)}
+.tx-status{font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px;text-align:right}
+.tx-status.ok{color:var(--green)}
+.tx-status.pend{color:#eab308}
+
+/* ── RECORD CARDS ── */
+.rec-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:12px}
+.rec-card-hd{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1.5px solid var(--border)}
+.rec-card-hd-title{font-size:14px;font-weight:800;color:var(--text)}
+.rec-card-hd-amt{font-size:14px;font-weight:900;color:var(--text)}
+.rec-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px dotted rgba(0,0,0,0.07)}
+.rec-row:last-child{border-bottom:none}
+.rec-row-lbl{font-size:13px;color:var(--text2)}
+.rec-row-val{font-size:13px;font-weight:500;color:var(--text);text-align:right;max-width:60%;word-break:break-all}
+.s-green{color:var(--green)!important;font-weight:700!important}
+.s-orange{color:#f59e0b!important;font-weight:700!important}
+.s-red{color:var(--red)!important;font-weight:700!important}
+
+/* ── COMMISSION SECTION ── */
+.ref-card{background:linear-gradient(135deg,#1a48d4 0%,#0d2fa8 60%,#091f80 100%);color:#fff;border-radius:16px;padding:20px;margin-bottom:16px;border:none}
+.ref-code-label{font-size:11px;font-weight:700;color:rgba(255,255,255,0.65);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.ref-code{font-size:22px;font-weight:900;font-family:'Outfit',sans-serif;color:#fff;letter-spacing:2px;margin-bottom:12px}
+.ref-actions{display:flex;gap:8px}
+.ref-btn{flex:1;height:38px;border:1.5px solid rgba(255,255,255,0.25);border-radius:8px;background:transparent;font-size:12px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;color:#fff;transition:background .2s}
+.ref-btn:hover{background:rgba(255,255,255,0.08)}
+.level-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
+.level-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.level-card .lv-pct{font-size:20px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif}
+.level-card .lv-label{font-size:9px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.level-card .lv-count{font-size:16px;font-weight:800;color:var(--text);margin-top:6px}
+.level-card .lv-earned{font-size:10px;color:var(--text2);margin-top:1px;font-family:'Outfit',sans-serif}
+.comm-how{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.comm-how h4{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px}
+.comm-row{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.comm-row:last-child{margin-bottom:0}
+.comm-dot{width:6px;height:6px;border-radius:50%;background:var(--text2);flex-shrink:0;margin-top:5px}
+.comm-row p{font-size:12px;color:var(--text2);line-height:1.5}
+.comm-total-card{background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.comm-total-label{font-size:12px;color:var(--text2);font-weight:600}
+.comm-total-val{font-size:18px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif}
+
+/* ── MORE SECTION ── */
+.profile-row{display:flex;align-items:center;gap:14px;padding:16px;background:var(--card2);border:1px solid var(--border2);border-radius:var(--radius);margin-bottom:16px}
+.profile-avatar{width:52px;height:52px;border-radius:50%;background:var(--card);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex-shrink:0;cursor:pointer}
+.profile-avatar img{width:100%;height:100%;object-fit:cover}
+.profile-info .pi-name{font-size:15px;font-weight:800;color:var(--text)}
+.profile-info .pi-phone{font-size:12px;color:var(--text2);font-family:'Outfit',sans-serif;margin-top:2px}
+.profile-info .pi-balance{font-size:11px;color:var(--text2);margin-top:2px}
+.menu-list{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.menu-item{display:flex;align-items:center;gap:14px;padding:15px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.menu-item:last-child{border-bottom:none}
+.menu-item:active{background:var(--card2)}
+.menu-item .mi-icon{width:36px;height:36px;border-radius:10px;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.menu-item .mi-icon svg{width:19px;height:19px}
+.menu-item .mi-label{font-size:14px;font-weight:600;color:var(--text);flex:1}
+.menu-item .mi-arrow{color:var(--muted);font-size:12px}
+.menu-item.danger .mi-label{color:var(--red)}
+.menu-item.danger .mi-icon{background:rgba(239,68,68,0.1);color:var(--red)}
+
+/* ── AGENT / PRO — ring + name badge in More section ── */
+.profile-avatar.agent-ring{border:2.5px solid #f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,0.22),0 0 16px rgba(245,158,11,0.18)}
+.agent-badge{display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:9px;font-weight:900;letter-spacing:.8px;padding:2px 7px;border-radius:5px;text-transform:uppercase;vertical-align:middle;margin-left:7px;box-shadow:0 2px 6px rgba(245,158,11,0.35)}
+
+/* ── AGENT CENTRE SECTION ── */
+.ac-hero{border-radius:var(--radius);padding:20px 16px;margin-bottom:14px;text-align:center;position:relative;overflow:hidden}
+.ac-hero.is-agent{background:linear-gradient(135deg,#1a1105,#2d1f00);border:1px solid rgba(245,158,11,0.3)}
+.ac-hero.no-agent{background:var(--card2);border:1px solid var(--border2)}
+.ac-hero-star{font-size:34px;margin-bottom:6px;display:block}
+.ac-hero-tier{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+.is-agent .ac-hero-tier{color:#f59e0b}
+.no-agent .ac-hero-tier{color:var(--text2)}
+.ac-hero-name{font-size:20px;font-weight:900;color:var(--text);margin-bottom:6px}
+.is-agent .ac-hero-name{color:#fff}
+.ac-hero-meta{font-size:11px;color:var(--text2)}
+.is-agent .ac-hero-meta{color:rgba(245,158,11,0.6)}
+.ac-hero-payout{margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;color:#fbbf24}
+.ac-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.ac-stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.ac-stat-val{font-size:17px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif}
+.ac-stat-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.ac-section-lbl{font-size:10px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;padding-left:2px}
+.ac-tier-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
+.ac-tier-card.achieved{border-color:rgba(34,197,94,0.35)}
+.ac-tier-card.inprogress{border-color:rgba(37,99,235,0.35)}
+.ac-tier-card.locked{opacity:.55}
+.ac-tier-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ac-tier-info{display:flex;align-items:center;gap:10px}
+.ac-tier-stars{font-size:18px;line-height:1}
+.ac-tier-name{font-size:13px;font-weight:800;color:var(--text)}
+.ac-tier-refs{font-size:11px;color:var(--text2);margin-top:1px}
+.ac-status-pill{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.ac-status-pill.achieved{background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
+.ac-status-pill.inprogress{background:rgba(37,99,235,0.12);color:#60a5fa;border:1px solid rgba(37,99,235,0.25)}
+.ac-status-pill.locked{background:var(--card2);color:var(--muted);border:1px solid var(--border)}
+.ac-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ac-bar{flex:1;height:7px;background:var(--border2);border-radius:4px;overflow:hidden}
+.ac-bar-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.ac-bar-fill.gold{background:linear-gradient(90deg,#d97706,#fbbf24)}
+.ac-bar-fill.blue{background:linear-gradient(90deg,#ff9d00,#60a5fa)}
+.ac-bar-fill.gray{background:var(--muted)}
+.ac-bar-val{font-size:11px;font-weight:800;color:var(--text2);white-space:nowrap}
+.ac-tier-pay{font-size:12px;color:var(--text2)}
+.ac-tier-pay b{color:#f59e0b;font-family:'Outfit',sans-serif}
+
+/* ── AGENT PROGRAM BREAKDOWN (Team tab, informational) ── */
+.apg-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+.apg-head{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.apg-head-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 10px rgba(245,158,11,0.3)}
+.apg-head-icon svg{width:20px;height:20px;color:#fff}
+.apg-head-title{font-size:14px;font-weight:800;color:var(--text)}
+.apg-head-sub{font-size:11px;color:var(--text2);margin-top:1px}
+.apg-rows{padding:6px 0}
+.apg-rank-row{display:flex;align-items:center;gap:12px;padding:11px 16px}
+.apg-rank-row+.apg-rank-row{border-top:1px solid var(--border)}
+.apg-rank-stars{font-size:15px;line-height:1;width:54px;flex-shrink:0}
+.apg-rank-mid{flex:1;min-width:0}
+.apg-rank-name{font-size:13px;font-weight:700;color:var(--text)}
+.apg-rank-req{font-size:11px;color:var(--text2);margin-top:1px}
+.apg-rank-pay{font-size:13px;font-weight:900;color:#f59e0b;font-family:'Outfit',sans-serif;white-space:nowrap}
+.apg-foot{padding:11px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.5}
+
+/* ── MODALS — centered pop, not bottom-sheet ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal-sheet{background:#fff;border:1px solid var(--border);border-radius:20px;width:100%;max-width:480px;padding:24px;max-height:88vh;overflow-y:auto;box-shadow:0 16px 56px rgba(0,0,0,0.28);animation:modalPop .22s cubic-bezier(.34,1.32,.64,1)}
+@keyframes modalPop{from{opacity:0;transform:scale(.87)}to{opacity:1;transform:scale(1)}}
+.modal-handle{display:none}
+.modal-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--text2);margin-bottom:20px}
+.modal-close{float:right;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1;margin-top:-2px}
+.form-label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
+.form-input{width:100%;height:46px;border:1.5px solid rgba(0,0,0,0.1);border-radius:10px;padding:0 14px;font-size:15px;font-family:'Outfit',sans-serif;color:var(--text);background:#fff;outline:none;margin-bottom:14px;transition:border-color .2s}
+.form-input:focus{border-color:rgba(37,99,235,0.5)}
+.form-input::placeholder{color:#b0bec5;font-family:'Outfit',sans-serif}
+.phone-form-wrap{display:flex;align-items:center;border:1.5px solid rgba(0,0,0,0.1);border-radius:10px;background:#fff;margin-bottom:14px;overflow:hidden;transition:border-color .2s}
+.phone-form-wrap:focus-within{border-color:rgba(37,99,235,0.5)}
+.phone-form-prefix{padding:0 12px;font-size:13px;font-weight:700;color:var(--text2);border-right:1px solid var(--border);height:44px;display:flex;align-items:center;background:var(--bg3);flex-shrink:0}
+.phone-form-wrap input{border:none;background:transparent;height:44px;flex:1;padding:0 12px;font-size:15px;font-family:'Outfit',sans-serif;outline:none;color:var(--text)}
+.form-info{font-size:12px;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.5}
+.btn-submit{width:100%;height:48px;border:none;border-radius:12px;background:linear-gradient(135deg,#ff9d00,#cc7e00);color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .2s;margin-top:4px;box-shadow:0 4px 16px rgba(37,99,235,0.3)}
+.btn-submit:active{opacity:.85}
+.btn-submit:disabled{opacity:.45;cursor:not-allowed}
+.btn-outline{width:100%;height:44px;border:1px solid var(--border2);border-radius:10px;background:transparent;color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;margin-top:8px}
+.dep-momo-box{background:var(--bg3);border:1px solid rgba(37,99,235,0.3);border-radius:14px;padding:22px;text-align:center;margin-bottom:18px}
+.dep-momo-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;font-weight:700}
+.dep-momo-num{font-size:22px;font-weight:900;color:#ff9d00;letter-spacing:2px;margin-bottom:14px;font-family:'Outfit',sans-serif}
+.dep-copy-btn{background:none;border:1.5px solid rgba(37,99,235,0.35);color:#ff9d00;border-radius:8px;padding:7px 18px;font-size:12px;font-weight:700;cursor:pointer}
+.dep-copy-btn:active{opacity:.7}
+.dep-inst-list{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.dep-inst-row{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--text2);line-height:1.45}
+.dep-inst-row strong{color:var(--text)}
+.dep-inst-icon{flex-shrink:0;margin-top:1px;color:var(--blue);display:flex}
+.dep-inst-icon svg{width:17px;height:17px}
+
+/* ── PRODUCT MODAL ── */
+.product-modal-img{width:100%;height:180px;border-radius:12px;object-fit:cover;background:var(--card2);color:var(--muted);margin-bottom:16px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.product-modal-img svg{width:52px;height:52px}
+.product-modal-img img{width:100%;height:100%;object-fit:cover}
+.product-stat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.pstat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.pstat .pst-val{font-size:15px;font-weight:800;color:var(--text);font-family:'Outfit',sans-serif}
+.pstat .pst-lbl{font-size:10px;color:var(--text2);margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+
+/* ── BANK ACCOUNT ── */
+.bank-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.bank-icon{width:36px;height:36px;border-radius:8px;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center}
+.bank-icon svg{width:18px;height:18px}
+.bank-info{flex:1}
+.bank-name{font-size:13px;font-weight:700;color:var(--text)}
+.bank-phone{font-size:11px;color:var(--text2);font-family:'Outfit',sans-serif}
+.bank-del{background:none;border:none;color:var(--red);cursor:pointer;padding:4px;display:flex}
+.bank-del svg{width:18px;height:18px}
+
+/* ── ABOUT / RULES ── */
+.content-page{padding:4px 0}
+.content-page h3{font-size:15px;font-weight:800;color:var(--text);margin-bottom:12px}
+.content-page p,.content-page li{font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:8px}
+.content-page ul{padding-left:18px}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:40px 20px;color:var(--text2)}
+.empty-state .es-icon{margin-bottom:12px;display:flex;align-items:center;justify-content:center}
+.empty-state .es-icon svg{width:42px;height:42px;color:var(--muted)}
+.empty-state p{font-size:13px}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(13,27,46,0.95);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 18px;font-size:13px;color:#fff;font-weight:600;z-index:9000;opacity:0;transition:all .25s;pointer-events:none;text-align:center;max-width:300px;white-space:pre-line}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.success{border-color:rgba(34,197,94,.4)}
+#toast.error{border-color:rgba(239,68,68,.4)}
+
+/* ── LOADING ── */
+.loading-overlay{display:none;position:fixed;inset:0;background:radial-gradient(circle at 50% 38%,#1a1407 0%,#0a0e17 60%);z-index:2000;align-items:center;justify-content:center;flex-direction:column}
+.loading-overlay.show{display:flex}
+.voltra-loader{display:flex;flex-direction:column;align-items:center;gap:6px}
+.nl-mark{font-size:70px;line-height:1;color:var(--amber);animation:nl-charge 1.4s ease-in-out infinite;filter:drop-shadow(0 0 26px rgba(255,157,0,0.85))}
+.nl-brand{font-size:15px;font-weight:900;color:#fff;letter-spacing:7px;margin:14px 0 22px;text-shadow:0 0 18px rgba(255,157,0,0.5)}
+.nl-bar{width:140px;height:5px;border-radius:4px;background:rgba(255,255,255,0.08);overflow:hidden;position:relative}
+.nl-bar::after{content:"";position:absolute;inset:0;width:40%;border-radius:4px;background:linear-gradient(90deg,var(--amber),var(--amber2));box-shadow:0 0 14px rgba(255,157,0,0.8);animation:nl-fill 1.2s ease-in-out infinite}
+@keyframes nl-charge{0%,100%{opacity:.55;transform:scale(.9) rotate(-3deg)}50%{opacity:1;transform:scale(1.08) rotate(3deg)}}
+@keyframes nl-fill{0%{left:-40%}100%{left:100%}}
+/* small inline spinner still used in records/products */
+.load-spin{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--amber);border-radius:50%;animation:spin 0.9s linear infinite}
+
+/* ── FULL-SCREEN PAGE OVERLAY ── */
+/* Use display:none when closed — zero GPU layers, no layer-memory cost.
+   JS drives: display:block → rAF adds .open (slide in), on close removes .open,
+   transitionend sets display:none. Same pattern as X-engine. */
+.page-overlay{position:fixed;inset:0;z-index:600;background:var(--bg);display:none;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.page-overlay.open{transform:translateX(0)}
+.page-hdr{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 6px rgba(0,0,0,0.06)}
+.page-back{width:38px;height:38px;border:none;background:var(--card2);border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text)}
+.page-back svg{width:20px;height:20px}
+.page-hdr-title{font-size:17px;font-weight:800;color:var(--text);flex:1}
+.page-body{padding:20px 16px 100px}
+/* deposit network pills */
+.net-pills{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.net-pill{height:52px;border:1.5px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:9px}
+.net-pill.active{border-color:#ff9d00;background:var(--bluefade);color:#ff9d00}
+.net-logo{height:22px;width:auto;border-radius:3px;flex-shrink:0}
+/* withdraw info badge */
+.page-bal-badge{background:var(--bluefade);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#ff9d00;font-weight:700}
+/* ── WITHDRAWAL SAVED ACCOUNTS ── */
+.wit-acc-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--border2);border-radius:12px;padding:13px 14px;cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;user-select:none}
+.wit-acc-card.sel{border-color:var(--blue);background:var(--bluefade)}
+.wit-acc-card:active{opacity:.75}
+.wit-acc-ico{width:38px;height:38px;border-radius:50%;background:var(--bluefade);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--blue)}
+.wit-acc-ico svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wit-acc-info{flex:1;min-width:0}
+.wit-acc-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wit-acc-num{font-size:12px;color:var(--text2);margin-top:2px}
+.wit-acc-chk{flex-shrink:0;color:var(--blue);display:none}
+.wit-acc-chk svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.wit-acc-card.sel .wit-acc-chk{display:block}
+.wit-fee-row{background:var(--bluefade);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#ff9d00;font-weight:600;display:none}
+
+@media(max-width:400px){
+  .level-cards{grid-template-columns:1fr 1fr 1fr}
+}
+
+/* ── ANNOUNCEMENT DIALOG — centered pop ── */
+#announcementDialog{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.9);z-index:3000;align-items:center;justify-content:center;padding:16px}
+#announcementDialog.show{display:flex}
+.ann-sheet{background:#fff;border-radius:20px;width:100%;max-width:420px;overflow:hidden;max-height:88vh;overflow-y:auto;animation:modalPop .22s cubic-bezier(.34,1.32,.64,1)}
+.ann-img{width:100%;height:180px;object-fit:cover;display:block;background:linear-gradient(135deg,#1040c0,#0d2fa8)}
+.ann-body{padding:20px 20px 28px}
+.ann-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:10px}
+.ann-msg{font-size:13px;color:var(--text2);line-height:1.75;margin-bottom:18px;white-space:pre-line}
+.btn-tg{width:100%;height:58px;border:none;border-radius:14px;background:#229ED9;color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px;text-decoration:none;box-shadow:0 4px 20px rgba(34,158,217,0.35);letter-spacing:.2px}
+.btn-tg svg{width:26px;height:26px;flex-shrink:0}
+.btn-okay{width:100%;height:50px;border:none;border-radius:12px;background:linear-gradient(135deg,#1a48d4,#0d2fa8);color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif}
+.btn-wa{width:100%;height:58px;border:none;border-radius:14px;background:#25D366;color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px;text-decoration:none;box-shadow:0 4px 20px rgba(37,211,102,0.35);letter-spacing:.2px}
+.btn-wa svg{width:26px;height:26px;flex-shrink:0}
+/* ── CUSTOMER SERVICE BUTTONS (support content modal) ── */
+.content-cta-btn{display:flex;align-items:center;gap:12px;border-radius:12px;padding:15px 16px;text-decoration:none;font-weight:700;font-size:15px;margin-bottom:10px;color:#fff;letter-spacing:.1px}
+.content-cta-btn.tg-btn{background:#229ED9;box-shadow:0 4px 16px rgba(34,158,217,0.3)}
+.content-cta-btn.wa-btn{background:#25D366;box-shadow:0 4px 16px rgba(37,211,102,0.3)}
+/* ── DEPOSIT PULSE + CONFETTI ANIMATIONS ── */
+.dep-pulse-wrap{position:relative;width:100px;height:100px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center}
+.dep-pulse-ring{position:absolute;border-radius:50%;background:rgba(37,99,235,.15);animation:depPulse 2s ease-out infinite}
+.dep-pulse-ring1{width:100px;height:100px;animation-delay:0s}
+.dep-pulse-ring2{width:70px;height:70px;animation-delay:.7s}
+.dep-pulse-icon{font-size:36px;z-index:1;position:relative;animation:depBounce .9s ease-in-out infinite alternate}
+@keyframes depPulse{0%{transform:scale(.8);opacity:1}100%{transform:scale(1.6);opacity:0}}
+@keyframes depBounce{0%{transform:scale(1)}100%{transform:scale(1.12)}}
+@keyframes confettiFall{to{top:130px;opacity:0;transform:rotate(720deg)}}
+
+/* ── PRODUCTS BANNER ── */
+.products-banner-wrap{display:none;border-radius:12px;overflow:hidden;margin-bottom:16px;position:relative;height:160px;background:#0a0a1a}
+.products-banner-img{width:100%;height:100%;object-fit:cover}
+.products-banner-stats{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:12px 14px;display:flex;gap:20px}
+.pbs-item .pbs-val{font-size:15px;font-weight:900;color:#fff;font-family:'Outfit',sans-serif}
+.pbs-item .pbs-lbl{font-size:9px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-top:1px}
+
+/* ── QUICK AMOUNTS ── */
+.quick-amounts{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
+.qa-btn{height:36px;border:1.5px solid rgba(37,99,235,0.25);border-radius:8px;background:var(--card2);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s}
+.qa-btn:active,.qa-btn.sel{background:#ff9d00;color:#fff;border-color:#ff9d00}
+
+/* ── DEPOSIT PROMO IMAGE ── */
+.dep-promo-img{width:100%;height:auto;max-height:240px;object-fit:contain;border-radius:12px;margin-bottom:16px;display:none;background:#fff;padding:12px;box-sizing:border-box}
+
+/* ── DEPOSIT INSTRUCTIONS ── */
+.dep-inst-section{margin-top:24px;border-top:1px solid var(--border);padding-top:16px}
+.dep-inst-title{font-size:13px;font-weight:800;color:var(--text);margin-bottom:12px}
+.dep-inst-item{display:flex;gap:10px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.5}
+.dep-inst-num{width:20px;height:20px;border-radius:50%;background:var(--bluefade);color:var(--blue);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+/* ── DEPOSIT VERIFY STATE ── */
+.dep-verify-spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:#ff9d00;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+.dep-verify-ok{width:18px;height:18px;border-radius:50%;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px}
+.dep-verify-err{width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px}
+</style>
+</head>
+<body>
+
+<!-- ── LOADING OVERLAY ── -->
+<div id="loadingOverlay" class="loading-overlay show">
+  <div class="voltra-loader">
+    <div class="nl-mark">⚡</div>
+    <div class="nl-brand">VOLTRA</div>
+    <div class="nl-bar"></div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+<!-- ── MAINTENANCE OVERLAY ── -->
+<div id="maintenanceOverlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:32px">
+  <div style="color:var(--blue);margin-bottom:20px"><svg viewBox="0 0 24 24" width="60" height="60" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+  <h2 style="color:var(--text);font-size:24px;font-weight:900;margin-bottom:12px">Under Maintenance</h2>
+  <p style="color:var(--text2);font-size:14px;line-height:1.7;max-width:300px">Voltra is undergoing scheduled maintenance. We'll be back shortly — thank you for your patience!</p>
+  <div style="margin-top:28px;color:var(--blue);font-size:12px;font-weight:700;letter-spacing:2px">⚡ VOLTRA</div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     AUTH SCREEN
+══════════════════════════════════════════ -->
+<div id="authScreen" style="display:none">
+  <div class="auth-screen">
+    <div class="auth-brand">
+      <div class="auth-mark">⚡<span>VOLTRA</span></div>
+      <div class="auth-tagline">Power Your Wealth.</div>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="loginForm" class="auth-card">
+      <div class="auth-head">Welcome back</div>
+      <div class="auth-sub">Sign in to charge up your account</div>
+      <div class="auth-field">
+        <label class="auth-label">Phone number</label>
+        <div class="phone-wrap">
+          <span class="phone-prefix">+256</span>
+          <input type="tel" id="loginPhone" placeholder="7XX XXX XXX" maxlength="10" inputmode="numeric">
+        </div>
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">Password</label>
+        <div class="pass-wrap">
+          <input type="password" id="loginPass" placeholder="Your password" maxlength="40">
+          <button class="pass-eye" type="button" onclick="togglePass('loginPass',this)"></button>
+        </div>
+      </div>
+      <div class="remember-row">
+        <input type="checkbox" id="rememberMe">
+        <label for="rememberMe">Keep me signed in</label>
+      </div>
+      <button class="btn-auth" id="loginBtn" onclick="doLogin()">⚡ Power In</button>
+      <button class="btn-auth-sec" onclick="showRegister()">New here? Create your account</button>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="registerForm" class="auth-card" style="display:none">
+      <div class="auth-head">Create your account</div>
+      <div class="auth-sub">Join Voltra and start earning every day</div>
+      <div class="auth-field">
+        <label class="auth-label">Full name</label>
+        <input type="text" id="regName" placeholder="Your full name">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">Phone number</label>
+        <div class="phone-wrap">
+          <span class="phone-prefix">+256</span>
+          <input type="tel" id="regPhone" placeholder="7XX XXX XXX" maxlength="10" inputmode="numeric">
+        </div>
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">Create password</label>
+        <input type="password" id="regPass" placeholder="Choose a strong password" maxlength="40">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">Invite code <span style="color:var(--text2);font-weight:500">(optional)</span></label>
+        <input type="text" id="regRef" placeholder="Enter invite code" style="text-transform:uppercase">
+      </div>
+      <button class="btn-auth" id="registerBtn" onclick="doRegister()">⚡ Activate Account</button>
+      <button class="btn-auth-sec" onclick="showLogin()">Already have an account? Sign in</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════ -->
+<div id="appScreen" style="display:none">
+
+  <!-- TOP BAR — shown on non-home sections -->
+  <div class="topbar" id="mainTopbar" style="display:none">
+    <div class="topbar-left">
+      <div class="topbar-logo">⚡<span>VOLTRA</span></div>
+      <div class="topbar-greeting" id="topGreeting">Hello…</div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-avatar" onclick="showSection('more')">
+        <span id="avatarInitialTop">?</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HOME SECTION ── -->
+  <div class="section active" id="homeSection">
+    <!-- Brand header -->
+    <div class="home-header">
+      <div>
+        <div class="home-logo-text">⚡<span>VOLTRA</span></div>
+      </div>
+      <div class="home-header-right">
+        <div class="topbar-avatar" onclick="showSection('more')">
+          <span id="avatarInitial">?</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="home-actions">
+      <button class="ha-btn" onclick="openDepositPage()">
+        <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="12" height="22" rx="3"/><rect x="3" y="3" width="5.5" height="1.5" rx="0.8"/><circle cx="17" cy="14" r="6"/><line x1="17" y1="10" x2="17" y2="18"/><path d="M19.5 11.8c0-1.3-1.1-2.3-2.5-2.3s-2.5 1-2.5 2.3.9 1.7 2.5 1.7 2.5.8 2.5 2.2-1.1 2.3-2.5 2.3-2.5-1-2.5-2.3"/><line x1="23" y1="5" x2="18.5" y2="5"/><polyline points="20.5 3 18.5 5 20.5 7"/></svg></div>
+        <div class="ha-label">Recharge</div>
+      </button>
+      <button class="ha-btn" onclick="openWithdrawPage()">
+        <div class="ha-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1.5" width="22" height="21" rx="4"/><rect x="3.5" y="3.5" width="17" height="5" rx="2"/><line x1="12" y1="12" x2="12" y2="18.5"/><polyline points="8 15.5 12 19.5 16 15.5"/></svg></div>
+        <div class="ha-label">Withdraw</div>
+      </button>
+    </div>
+
+    <!-- Slideshow -->
+    <div class="slideshow-wrap">
+      <div id="slideshowContainer"></div>
+      <div class="sdots" id="slideshowDots"></div>
+    </div>
+
+    <!-- Activity ticker -->
+    <div class="ticker-wrap">
+      <div class="ticker-inner" id="homeTicker">
+        <span class="ticker-item">Loading activity…</span>
+      </div>
+    </div>
+
+    <!-- 2-col balance grid -->
+    <div class="home-balance-grid">
+      <div class="hbg-card">
+        <div class="hbg-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg></div>
+        <div class="hbg-label">Wallet Balance</div>
+        <div class="hbg-val" id="homeBalance">UGX 0</div>
+        <div class="hbg-sub" id="homeBalanceSub">Activate a machine to start earning</div>
+      </div>
+      <div class="hbg-card">
+        <div class="hbg-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
+        <div class="hbg-label">Total Earnings</div>
+        <div class="hbg-val" id="homeCumulative">UGX 0</div>
+        <div class="hbg-sub">Referral + Cashback</div>
+      </div>
+    </div>
+
+    <!-- Inner padded area -->
+    <div class="home-inner">
+      <!-- Check-in -->
+      <div class="checkin-card" onclick="doCheckin()" style="margin-bottom:16px">
+        <div class="checkin-left">
+          <div class="checkin-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+          <div>
+            <div class="ck-title">Daily Check-in</div>
+            <div class="ck-sub" id="checkinSub">Earn UGX 500 free today</div>
+          </div>
+        </div>
+        <button class="btn-checkin" id="checkinBtn">Claim</button>
+      </div>
+
+      <!-- Active Investments -->
+      <div class="section-header">
+        <div class="sh-title">Active Plans</div>
+        <button class="link-btn" onclick="showSection('products')">Browse →</button>
+      </div>
+      <div id="homeActiveInvest">
+        <div class="empty-state"><span class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span><p>No active plans yet<br>Browse Products to invest</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PRODUCTS SECTION ── -->
+  <div class="section" id="productsSection">
+    <div id="productsBannerWrap" class="products-banner-wrap">
+      <img id="productsBannerImg" class="products-banner-img" src="" alt="">
+      <div class="products-banner-stats">
+        <div class="pbs-item"><div class="pbs-val" id="prodBannerCount">0</div><div class="pbs-lbl">Active Machines</div></div>
+        <div class="pbs-item"><div class="pbs-val" id="prodBannerBenefit">—</div><div class="pbs-lbl">Best Return</div></div>
+      </div>
+    </div>
+    <div class="sec-title">Power Machines</div>
+    <div class="products-grid" id="productsGrid">
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="load-spin" style="margin:0 auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RECORDS SECTION ── -->
+  <div class="section" id="recordsSection">
+    <div class="sec-title">My Activity</div>
+    <div class="pill-tabs">
+      <button class="pill-tab active" onclick="switchRecord('deposits',this)">Recharges</button>
+      <button class="pill-tab" onclick="switchRecord('withdrawals',this)">Withdrawals</button>
+      <button class="pill-tab" onclick="switchRecord('referrals',this)">Referrals</button>
+      <button class="pill-tab" onclick="switchRecord('investments',this)">Plans</button>
+      <button class="pill-tab" onclick="switchRecord('revenue',this)">Revenue</button>
+    </div>
+    <div id="recordsContent">
+      <div class="empty-state"><span class="es-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><p>Loading records…</p></div>
+    </div>
+  </div>
+
+  <!-- ── TEAM / COMMISSION SECTION ── -->
+  <div class="section" id="commissionSection">
+
+    <!-- Header band -->
+    <div class="team-header-band">
+      <div class="team-header-logo">⚡</div>
+      <div class="team-header-info">
+        <div class="team-header-title">VOLTRA Team</div>
+        <div class="team-header-sub">Build your network. Earn instantly.</div>
+      </div>
+    </div>
+
+    <!-- Invitation code row -->
+    <div class="inv-row">
+      <div class="inv-row-left">
+        <div class="inv-row-val" id="myRefCode">——————</div>
+        <div class="inv-row-lbl">Invitation Code</div>
+      </div>
+      <button class="inv-row-btn" onclick="copyRefCode()">Copy</button>
+    </div>
+
+    <!-- Invitation link row -->
+    <div class="inv-row">
+      <div class="inv-row-left">
+        <div class="inv-row-val" id="myRefLink" style="font-size:11px;letter-spacing:0">voltra.app?ref=——</div>
+        <div class="inv-row-lbl">Invitation Link</div>
+      </div>
+      <button class="inv-row-btn" onclick="shareRefLink()">Copy</button>
+    </div>
+
+    <!-- Team stat tiles -->
+    <div class="team-tiles">
+      <div class="team-tile" onclick="openTeamMembersModal()" style="cursor:pointer;position:relative">
+        <div class="tt-val" id="teamTotalSize">0</div>
+        <div class="tt-lbl">Team Size <span style="font-size:9px;opacity:.55">›</span></div>
+      </div>
+      <div class="team-tile">
+        <div class="tt-val" id="commTotal">UGX 0</div>
+        <div class="tt-lbl">Total Earned</div>
+      </div>
+    </div>
+
+    <!-- Level 1 row -->
+    <div class="level-row">
+      <div class="lrow-badge"><span class="lrow-badge-text">L1</span></div>
+      <div class="lrow-rate">
+        <div class="lrow-pct">10%</div>
+        <div class="lrow-rate-lbl">Commission rate</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL1Count">0</div>
+        <div class="lrow-stat-lbl">Active user</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL1Earned">0</div>
+        <div class="lrow-stat-lbl">Income</div>
+      </div>
+    </div>
+
+    <!-- Level 2 row -->
+    <div class="level-row">
+      <div class="lrow-badge"><span class="lrow-badge-text">L2</span></div>
+      <div class="lrow-rate">
+        <div class="lrow-pct">5%</div>
+        <div class="lrow-rate-lbl">Commission rate</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL2Count">0</div>
+        <div class="lrow-stat-lbl">Active user</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL2Earned">0</div>
+        <div class="lrow-stat-lbl">Income</div>
+      </div>
+    </div>
+
+    <!-- Level 3 row -->
+    <div class="level-row">
+      <div class="lrow-badge"><span class="lrow-badge-text">L3</span></div>
+      <div class="lrow-rate">
+        <div class="lrow-pct">2%</div>
+        <div class="lrow-rate-lbl">Commission rate</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL3Count">0</div>
+        <div class="lrow-stat-lbl">Active user</div>
+      </div>
+      <div class="lrow-stat">
+        <div class="lrow-stat-val" id="teamL3Earned">0</div>
+        <div class="lrow-stat-lbl">Income</div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="team-howit">
+      <p>When a friend you invite signs up and invests, you immediately receive a cash reward of <strong>10%</strong> of their investment amount.</p>
+      <p>When members of your Level 2 team invest, you receive a <strong>5%</strong> cash bonus.</p>
+      <p>When members of your Level 3 team invest, you receive a <strong>2%</strong> cash bonus.</p>
+      <p>Once a team member invests, the cash bonus is <strong>instantly credited</strong> to your account and you can withdraw it immediately.</p>
+    </div>
+
+    <!-- Agent Program breakdown -->
+    <div class="apg-card" onclick="showSection('agentCentre')" style="cursor:pointer">
+      <div class="apg-head">
+        <div class="apg-head-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6.5" r="4"/><path d="M2.5 21v-1.2c0-3.2 2.9-5.3 6.5-5.3 1 0 1.95.16 2.8.46"/><path d="M18 12.2c-1.4.95-2.9 1.3-2.9 1.3s0 4.3 2.9 6.3c2.9-2 2.9-6.3 2.9-6.3s-1.5-.35-2.9-1.3z"/><polyline points="16.7 16.4 17.7 17.4 19.5 15.4"/></svg></div>
+        <div style="flex:1">
+          <div class="apg-head-title">Agent Program</div>
+          <div class="apg-head-sub">Build your team, earn a weekly salary</div>
+        </div>
+        <span class="mi-arrow" style="color:var(--muted);font-size:13px">›</span>
+      </div>
+      <div class="apg-rows">
+        <div class="apg-rank-row">
+          <span class="apg-rank-stars">⭐</span>
+          <div class="apg-rank-mid">
+            <div class="apg-rank-name">Agent</div>
+            <div class="apg-rank-req">10 active referrals</div>
+          </div>
+          <span class="apg-rank-pay">UGX 75,000</span>
+        </div>
+        <div class="apg-rank-row">
+          <span class="apg-rank-stars">⭐⭐</span>
+          <div class="apg-rank-mid">
+            <div class="apg-rank-name">Senior Agent</div>
+            <div class="apg-rank-req">15 active referrals</div>
+          </div>
+          <span class="apg-rank-pay">UGX 125,000</span>
+        </div>
+        <div class="apg-rank-row">
+          <span class="apg-rank-stars">⭐⭐⭐</span>
+          <div class="apg-rank-mid">
+            <div class="apg-rank-name">Regional Agent</div>
+            <div class="apg-rank-req">20 active referrals</div>
+          </div>
+          <span class="apg-rank-pay">UGX 200,000</span>
+        </div>
+      </div>
+      <div class="apg-foot">Active referrals are friends who used your code <strong>and invested</strong>. Salary is paid to your wallet every 7 days. Tap to open your Agent Centre.</div>
+    </div>
+  </div>
+
+  <!-- ── MORE SECTION ── -->
+  <div class="section" id="moreSection">
+    <div class="profile-row">
+      <div class="profile-avatar" id="moreAvatarWrap" onclick="triggerPhotoUpload()">
+        <span id="moreAvatarInitial">?</span>
+      </div>
+      <div class="profile-info">
+        <div class="pi-name" id="moreName">—</div>
+        <div class="pi-phone" id="morePhone">—</div>
+        <div class="pi-balance" id="moreBalance">Balance: UGX 0</div>
+      </div>
+    </div>
+    <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="uploadPhoto(this)">
+
+    <div class="menu-list">
+      <div class="menu-item" onclick="showSection('agentCentre')">
+        <span class="mi-icon" style="background:rgba(245,158,11,0.12);color:#f59e0b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6.5" r="4"/><path d="M2.5 21v-1.2c0-3.2 2.9-5.3 6.5-5.3 1 0 1.95.16 2.8.46"/><path d="M18 12.2c-1.4.95-2.9 1.3-2.9 1.3s0 4.3 2.9 6.3c2.9-2 2.9-6.3 2.9-6.3s-1.5-.35-2.9-1.3z"/><polyline points="16.7 16.4 17.7 17.4 19.5 15.4"/></svg></span>
+        <span class="mi-label">Agent Centre</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="showSection('records')">
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+        <span class="mi-label">Account Statement</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openGiftModal()">
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></span>
+        <span class="mi-label">Gift Code</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openBankModal()">
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg></span>
+        <span class="mi-label">Bank Account Management</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openContentModal('about')">
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+        <span class="mi-label">About Voltra</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openContentModal('rules')">
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v0a2 2 0 0 1 2-2z"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg></span>
+        <span class="mi-label">Platform Rules</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" onclick="openContentModal('support')">
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
+        <span class="mi-label">Customer Service</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item" id="downloadAppItem" onclick="installApp()">
+        <span class="mi-icon" style="background:rgba(22,163,74,0.1);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+        <span class="mi-label">Download App</span>
+        <span class="mi-arrow">›</span>
+      </div>
+      <div class="menu-item danger" onclick="doLogout()">
+        <span class="mi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+        <span class="mi-label">Exit / Logout</span>
+        <span class="mi-arrow">›</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── AGENT CENTRE SECTION ── -->
+  <div class="section" id="agentCentreSection">
+    <div id="agentCentreContent"><div class="empty-state"><p>Loading…</p></div></div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav show">
+    <button class="bnav-item active" data-sec="home" onclick="showSection('home')">
+      <span class="bnav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg></span>
+      <span class="bnav-label">Home</span>
+    </button>
+    <button class="bnav-item" data-sec="products" onclick="showSection('products')">
+      <span class="bnav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+      <span class="bnav-label">Power</span>
+    </button>
+    <button class="bnav-item" data-sec="commission" onclick="showSection('commission')">
+      <span class="bnav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+      <span class="bnav-label">Team</span>
+    </button>
+    <button class="bnav-item" data-sec="more" onclick="showSection('more')">
+      <span class="bnav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span>
+      <span class="bnav-label">More</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODALS
+══════════════════════════════════════════ -->
+
+<!-- ══ DEPOSIT PAGE ══ -->
+<div id="depositPage" class="page-overlay">
+  <div class="page-hdr">
+    <button class="page-back" id="depBackBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <div class="page-hdr-title" id="depPageTitle">Recharge Account</div>
+  </div>
+  <div class="page-body" style="padding-top:0">
+    <img id="depPromoImg" class="dep-promo-img" src="" alt="">
+
+    <!-- Step 1: Amount input -->
+    <div id="depStep1" style="padding:16px 0 0">
+      <div class="page-bal-badge">Wallet: <span id="depWalBadge">UGX 0</span> &nbsp;·&nbsp; Min UGX 30,000</div>
+
+      <label class="form-label">MoMo Number to Pay From</label>
+      <div class="phone-form-wrap" style="margin-bottom:4px">
+        <span class="phone-form-prefix">+256</span>
+        <input type="tel" id="depSenderPhone" placeholder="771 234 567" maxlength="9" inputmode="numeric">
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:20px;padding-left:2px">USSD prompt goes to this number — use yours, a friend's or family's. Payment credits your Voltra wallet.</div>
+
+      <label class="form-label">Quick Select</label>
+      <div class="quick-amounts">
+        <button class="qa-btn" onclick="selectDepAmt(30000,this)">30K</button>
+        <button class="qa-btn" onclick="selectDepAmt(50000,this)">50K</button>
+        <button class="qa-btn" onclick="selectDepAmt(100000,this)">100K</button>
+        <button class="qa-btn" onclick="selectDepAmt(150000,this)">150K</button>
+        <button class="qa-btn" onclick="selectDepAmt(200000,this)">200K</button>
+      </div>
+      <label class="form-label">Amount (UGX)</label>
+      <input class="form-input" id="depAmount" type="number" placeholder="30000" min="500" inputmode="numeric" style="margin-bottom:20px">
+      <button class="btn-submit" id="depProceedBtn" onclick="proceedDeposit()">Pay via MoMo</button>
+    </div>
+
+    <!-- Step 2: Waiting for USSD approval -->
+    <div id="depStep2" style="display:none;padding:16px 0 0">
+      <div style="text-align:center;padding:32px 0 24px">
+        <div class="dep-pulse-wrap">
+          <div class="dep-pulse-ring dep-pulse-ring1"></div>
+          <div class="dep-pulse-ring dep-pulse-ring2"></div>
+          <div class="dep-pulse-icon">📱</div>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:8px">Check your phone!</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px">A payment prompt was sent to</div>
+        <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:20px" id="depWaitPhone">—</div>
+        <div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px 24px;display:inline-block;margin-bottom:20px">
+          <div style="font-size:11px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Amount</div>
+          <div style="font-size:26px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif" id="depWaitAmount">UGX 0</div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8">Approve the USSD prompt on your phone.<br>This page updates automatically once paid.</div>
+      </div>
+      <button class="btn-outline" onclick="cancelDepWait()">Cancel</button>
+    </div>
+
+    <!-- Step 3a: Success -->
+    <div id="depStep3Success" style="display:none;padding:16px 0 0">
+      <div style="text-align:center;padding:32px 0">
+        <div id="depConfetti" style="position:relative;height:100px;overflow:hidden;margin-bottom:8px"></div>
+        <div style="font-size:52px;margin-bottom:12px">🎊</div>
+        <div style="font-size:24px;font-weight:900;color:#22c55e;margin-bottom:8px">Congratulations!</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px">Your deposit was received</div>
+        <div style="font-size:30px;font-weight:900;color:var(--text);font-family:'Outfit',sans-serif;margin:12px 0" id="depSuccessAmt">UGX 0</div>
+        <div style="font-size:12px;color:#22c55e;margin-bottom:32px">✓ Credited to your wallet</div>
+        <button class="btn-submit" onclick="closePage('depositPage')">Back to Home</button>
+      </div>
+    </div>
+
+    <!-- Step 3b: Failed -->
+    <div id="depStep3Failed" style="display:none;padding:16px 0 0">
+      <div style="text-align:center;padding:40px 0">
+        <div style="font-size:56px;margin-bottom:16px">❌</div>
+        <div style="font-size:20px;font-weight:800;color:var(--red);margin-bottom:8px">Payment Failed</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:32px">The payment was declined or cancelled.<br>Please try again.</div>
+        <button class="btn-submit" onclick="retryDeposit()">Try Again</button>
+        <button class="btn-outline" style="margin-top:8px" onclick="closePage('depositPage')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ WITHDRAW PAGE ══ -->
+<div id="withdrawPage" class="page-overlay">
+  <div class="page-hdr">
+    <button class="page-back" onclick="closePage('withdrawPage')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <div class="page-hdr-title">Request Withdrawal</div>
+  </div>
+  <div class="page-body">
+    <div class="page-bal-badge">Available: <span id="witBalBadge">UGX 0</span></div>
+    <label class="form-label">Amount (UGX)</label>
+    <input class="form-input" id="witAmount" type="number" placeholder="15000" step="5000" inputmode="numeric" oninput="updateWitFee()">
+    <div class="wit-fee-row" id="witFeeRow"></div>
+    <!-- Saved accounts — tap to auto-fill -->
+    <div id="witAccountsWrap" style="display:none">
+      <label class="form-label">Saved Accounts</label>
+      <div id="witAccList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+    </div>
+    <label class="form-label" id="witPhoneLbl">Receive on Phone</label>
+    <div class="phone-form-wrap">
+      <span class="phone-form-prefix">+256</span>
+      <input type="tel" id="witPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
+    </div>
+    <div class="form-info">17% liquidity fee applies on all withdrawals. Processing within 24 hours.</div>
+    <button class="btn-submit" onclick="submitWithdrawal()">Request Withdrawal</button>
+  </div>
+</div>
+
+<!-- PRODUCT MODAL -->
+<div id="productModal" class="modal-overlay" onclick="if(event.target===this)closeModal('productModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="modal-title" id="productModalName">Plan</div>
+      <button class="modal-close" onclick="closeModal('productModal')">×</button>
+    </div>
+    <div class="product-modal-img" id="productModalImgWrap">
+      <span id="productModalImgEmpty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+    </div>
+    <div class="product-stat-row">
+      <div class="pstat"><div class="pst-val" id="pmPrice">—</div><div class="pst-lbl">Investment</div></div>
+      <div class="pstat"><div class="pst-val" id="pmDaily">—</div><div class="pst-lbl">Daily Return</div></div>
+      <div class="pstat"><div class="pst-val" id="pmCycle">—</div><div class="pst-lbl">Duration</div></div>
+      <div class="pstat"><div class="pst-val" id="pmReturn">—</div><div class="pst-lbl">Total Return</div></div>
+    </div>
+    <div class="form-info" id="pmWalletNote">Your wallet: UGX 0</div>
+    <button class="btn-submit" id="pmBuyBtn" onclick="confirmBuy()">Confirm Investment</button>
+  </div>
+</div>
+
+<!-- GIFT CODE MODAL -->
+<div id="giftModal" class="modal-overlay" onclick="if(event.target===this)closeModal('giftModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title">Redeem Gift Code</div>
+      <button class="modal-close" onclick="closeModal('giftModal')">×</button>
+    </div>
+    <div class="modal-sub">Enter a gift code to receive bonus funds</div>
+    <label class="form-label">Gift Code</label>
+    <input class="form-input" id="giftCodeInput" placeholder="VOLTRA-XXXXXX" style="text-transform:uppercase;letter-spacing:2px">
+    <button class="btn-submit" onclick="redeemGiftCode()">Redeem Code</button>
+  </div>
+</div>
+
+<!-- BANK ACCOUNT MODAL -->
+<div id="bankModal" class="modal-overlay" onclick="if(event.target===this)closeModal('bankModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title">Bank Accounts</div>
+      <button class="modal-close" onclick="closeModal('bankModal')">×</button>
+    </div>
+    <div class="modal-sub">Manage your withdrawal accounts</div>
+    <div id="bankList"></div>
+    <label class="form-label" style="margin-top:8px">Add Account Name</label>
+    <input class="form-input" id="bankName" placeholder="e.g. MTN Mobile Money">
+    <label class="form-label">Phone / Account Number</label>
+    <div class="phone-form-wrap" style="margin-bottom:14px">
+      <span class="phone-form-prefix">+256</span>
+      <input type="tel" id="bankPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
+    </div>
+    <button class="btn-submit" onclick="addBankAccount()">Add Account</button>
+  </div>
+</div>
+
+<!-- CONTENT MODAL (About / Rules / Support) -->
+<div id="contentModal" class="modal-overlay" onclick="if(event.target===this)closeModal('contentModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="modal-title" id="contentModalTitle">About</div>
+      <button class="modal-close" onclick="closeModal('contentModal')">×</button>
+    </div>
+    <div id="contentModalBody" class="content-page"></div>
+  </div>
+</div>
+
+<!-- ══ INVESTMENT DETAIL MODAL ══ -->
+<div id="invDetailModal" class="modal-overlay" onclick="if(event.target===this)closeModal('invDetailModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="modal-title">Plan Details</div>
+      <button class="modal-close" onclick="closeModal('invDetailModal')">×</button>
+    </div>
+    <div id="invDetailBody"></div>
+  </div>
+</div>
+
+<!-- ══ TEAM MEMBERS MODAL ══ -->
+<div id="teamMembersModal" class="modal-overlay" onclick="if(event.target===this)closeModal('teamMembersModal')">
+  <div class="modal-sheet">
+    <span class="modal-handle"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="modal-title">My Team</div>
+      <button class="modal-close" onclick="closeModal('teamMembersModal')">×</button>
+    </div>
+    <div id="teamMembersBody"></div>
+  </div>
+</div>
+
+<!-- ══ ANNOUNCEMENT DIALOG ══ -->
+<div id="announcementDialog">
+  <div class="ann-sheet">
+    <img id="annImg" class="ann-img" src="" alt="" style="display:none">
+    <div class="ann-body">
+      <div class="ann-title" id="annTitle">Welcome to Voltra!</div>
+      <div class="ann-msg" id="annMsg"></div>
+      <a id="annTgBtn" class="btn-tg" href="#" target="_blank" rel="noopener" style="display:none">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>
+        Join our Telegram Channel
+      </a>
+      <a id="annWaBtn" class="btn-wa" href="#" target="_blank" rel="noopener" style="display:none">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.38 1.26 4.8L2.05 22l5.39-1.41c1.37.74 2.92 1.16 4.6 1.16 5.46 0 9.91-4.45 9.91-9.91 0-5.46-4.45-9.84-9.91-9.84zm5.52 14.04c-.23.65-1.34 1.24-1.86 1.32-.47.07-1.07.1-1.72-.11-.4-.12-.91-.29-1.56-.57-2.72-1.18-4.5-3.92-4.63-4.1-.13-.18-1.06-1.4-1.06-2.67 0-1.27.66-1.9.9-2.15.23-.25.5-.31.67-.31s.33 0 .48.01c.15.01.36-.06.56.43.2.49.69 1.69.75 1.81.06.12.1.27.02.43-.08.16-.12.25-.23.38-.11.13-.23.3-.34.4-.11.1-.22.21-.1.41.13.2.57.94 1.22 1.52.84.75 1.54 1 1.75 1.1.21.1.33.09.46-.05.13-.14.54-.63.68-.85.14-.22.28-.18.47-.11.19.07 1.21.57 1.42.67.21.1.35.15.4.23.05.08.05.46-.18 1.11z"/></svg>
+        Join our WhatsApp Group
+      </a>
+      <button class="btn-okay" onclick="closeAnnouncement()">OKAY</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PWA — install on demand (NO auto banner)
+     The "Download App" menu item calls installApp().
+══════════════════════════════════════════ -->
+<script>
+(function(){
+  // Register the service worker (enables installability + offline shell)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    });
+  }
+  // Capture the install prompt but DO NOT show any banner — we fire it only
+  // when the user taps "Download App".
+  var _deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    _deferredPrompt = e;
+  });
+  window.addEventListener('appinstalled', function(){
+    _deferredPrompt = null;
+    if (window.showToast) showToast('App installed! Open Voltra from your home screen.', 'success');
+  });
+  function isStandalone(){
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+  // Called by the "Download App" menu row
+  window.installApp = function(){
+    if (isStandalone()) {
+      if (window.showToast) showToast('Voltra is already installed ✓', 'success');
+      return;
+    }
+    if (_deferredPrompt) {
+      _deferredPrompt.prompt();
+      _deferredPrompt.userChoice.then(function(){ _deferredPrompt = null; });
+      return;
+    }
+    // iOS / Safari (no beforeinstallprompt) — show manual steps
+    var iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var msg = iOS
+      ? 'To install: tap the Share button, then "Add to Home Screen".'
+      : 'To install: open your browser menu (⋮) and tap "Install app" / "Add to Home screen".';
+    if (window.showToast) showToast(msg, 'info'); else alert(msg);
+  };
+})();
+</script>
+
+<!-- ══════════════════════════════════════════
+     FIREBASE + APP LOGIC
+══════════════════════════════════════════ -->
+<script data-nx-core>(function(){
+const _d=atob("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");
+const _b=new Uint8Array(_d.length);
+for(let i=0;i<_d.length;i++)_b[i]=_d.charCodeAt(i);
+const _ds=new DecompressionStream('deflate');
+const _w=_ds.writable.getWriter();
+_w.write(_b);_w.close();
+new Response(_ds.readable).text().then(code=>{
+const s=document.createElement('script');
+s.type='module';s.textContent=code;
+document.head.appendChild(s);
+});
+})();</script>
+</body>
+</html>
