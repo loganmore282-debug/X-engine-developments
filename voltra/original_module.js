@@ -222,7 +222,7 @@ function setupSlideshow(images) {
     if (img) {
       slide.innerHTML = `<img src="${img}" alt="" fetchpriority="${i===0?'high':'low'}" decoding="async" loading="eager" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0"><div class="slide-overlay"></div>`;
     } else {
-      slide.innerHTML = `<div class="slide-watermark">◈</div><div class="slide-slogan">${def.slogan.replace('\n','<br>')}</div>`;
+      slide.innerHTML = `<div class="slide-watermark">⚡</div><div class="slide-slogan">${def.slogan.replace('\n','<br>')}</div>`;
     }
     wrap.appendChild(slide);
     const dot = document.createElement('span');
@@ -1495,15 +1495,15 @@ window.removeBankAccount = async (idx) => {
 const CONTENT = {
   about: {
     title: 'About Voltra',
-    body: `<h3>◈ About Voltra</h3>
-      <p>Voltra is a modern platform designed to help you grow your money through structured investment plans and a powerful commission referral system.</p>
-      <p>Our platform is built on transparency, security, and consistent returns for all our investors.</p>
-      <h3 style="margin-top:16px">Our Mission</h3>
-      <p>To make structured investment accessible to everyone, with clear returns and instant commission rewards for building your network.</p>`
+    body: `<h3>⚡ Powering Everyday Earners</h3>
+      <p>Voltra turns your capital into daily energy. You activate a power machine, and it generates returns for you every single day of its cycle — automatically.</p>
+      <p>From the entry-level Spark to the high-output Thunder, every machine is built to keep your earnings charged. No guesswork, no waiting — just steady daily payouts you can withdraw.</p>
+      <h3 style="margin-top:16px">Why Voltra</h3>
+      <p>Simple to start, transparent by design, and powered by a 3-level team reward system that pays you instantly when your network grows. Plug in, power up, and watch your wallet charge.</p>`
   },
   rules: {
     title: 'Platform Rules',
-    body: `<h3>Investment Rules</h3>
+    body: `<h3>How Voltra Works</h3>
       <ul>
         <li>Minimum deposit is UGX 30,000</li>
         <li>Minimum withdrawal is UGX 15,000 (multiples of 5,000 only)</li>
