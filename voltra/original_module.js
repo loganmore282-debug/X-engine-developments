@@ -329,22 +329,22 @@ function loadTicker() {
 
   // Build a pool of 16 realistic activity events
   const pool = [
-    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
     { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
     { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
-    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
     { label:'Investment return',   amt:`+UGX ${randRet().toLocaleString()}` },
     { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
-    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
     { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
-    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
     { label:'Daily check-in',      amt:`+UGX 500` },
     { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
     { label:'Investment return',   amt:`+UGX ${randRet().toLocaleString()}` },
-    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
     { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
     { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
-    { label:'Deposit received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
   ];
 
   const text = pool.map(e =>
@@ -730,11 +730,12 @@ function renderProducts(products) {
     benefitEl.textContent = maxReturn ? ugx(maxReturn) : '—';
   }
   if (!products.length) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No plans available yet</p></div>`;
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No machines available yet</p></div>`;
     return;
   }
   products.sort((a,b) => (a.displayOrder||999) - (b.displayOrder||999));
-  grid.innerHTML = products.map(p => {
+
+  const cardHtml = (p) => {
     const inStock  = p.isInStock !== false;
     const stars    = p.stars || 0;
     const starStr  = stars ? '★'.repeat(Math.round(stars)) : '';
@@ -745,17 +746,33 @@ function renderProducts(products) {
       <div class="product-img-wrap">${imgHtml}</div>
       <div class="product-body">
         <div class="product-name">${p.name}</div>
-        <div class="product-meta-row">Cycle: ${p.cycle||0} Days</div>
-        <div class="product-meta-row">Daily income: <span class="pv">${ugx(p.dailyReturn)}</span></div>
-        <div class="product-meta-row">Total revenue: <span class="pv">${ugx(p.expectedReturn)}</span></div>
-        <div class="product-price-row">${starStr ? `<span class="product-stars">${starStr}</span> <span style="font-size:11px;color:var(--text2)">${stars}</span>` : ''} Price: ${ugx(p.price)}</div>
+        <div class="product-meta-row">Runs for ${p.cycle||0} days</div>
+        <div class="product-meta-row">Daily output: <span class="pv">${ugx(p.dailyReturn)}</span></div>
+        <div class="product-meta-row">Total return: <span class="pv">${ugx(p.expectedReturn)}</span></div>
+        <div class="product-price-row">${starStr ? `<span class="product-stars">${starStr}</span> <span style="font-size:11px;color:var(--text2)">${stars}</span>` : ''} Cost: ${ugx(p.price)}</div>
       </div>
-      <span class="product-stock ${inStock?'in':'out'}">${inStock?'On Sale':'Sold Out'}</span>
+      <span class="product-stock ${inStock?'in':'out'}">${inStock?'Available':'Sold Out'}</span>
       <button class="product-cart" ${inStock?'':'disabled'} onclick="event.stopPropagation();openProductModal('${p.id}')">
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="28" height="17" rx="4"/><text x="16" y="15" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="11" fill="currentColor" stroke="none">BUY</text><path d="M16 20v5"/><path d="M11 28c1-3 10-3 10 0"/></svg>
       </button>
     </div>`;
-  }).join('');
+  };
+
+  // Voltra organises machines into power tiers instead of one flat list
+  const tiers = [
+    { icon:'⚡', name:'Starter Machines', desc:'Low entry · quick cycles',        test:p => (p.price||0) <  100000 },
+    { icon:'🔋', name:'Power Machines',   desc:'Mid-range · bigger daily output', test:p => (p.price||0) >= 100000 && (p.price||0) < 700000 },
+    { icon:'🏭', name:'Elite Machines',   desc:'High capital · maximum return',   test:p => (p.price||0) >= 700000 },
+  ];
+
+  let html = '';
+  tiers.forEach(t => {
+    const items = products.filter(t.test);
+    if (!items.length) return;
+    html += `<div class="prod-group-head"><div class="pgh-title">${t.icon} ${t.name}</div><div class="pgh-desc">${t.desc}</div></div>`;
+    html += `<div class="prod-group">${items.map(cardHtml).join('')}</div>`;
+  });
+  grid.innerHTML = html;
 }
 
 window.openProductModal = async (productId) => {
@@ -989,7 +1006,7 @@ async function loadRecords(tab) {
 
     if (tab === 'deposits') {
       el.innerHTML = items.map(tx => {
-        const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'Online Deposit';
+        const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'Online Recharge';
         return `<div class="rec-card">
           <div class="rec-card-hd"><div class="rec-card-hd-title">${typeLabel}</div><div class="rec-card-hd-amt">${ugx(tx.amount)}</div></div>
           <div class="rec-row"><span class="rec-row-lbl">Order ID</span><span class="rec-row-val" style="font-size:11px;word-break:break-all">${tx.id}</span></div>
@@ -1003,7 +1020,7 @@ async function loadRecords(tab) {
     } else if (tab === 'revenue') {
       const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
       const typeIcon = { checkin: '📅', cashback: '💰', commission: '👥', gift_code: '🎁', investment_return: '📈', admin_credit: '🏦', reversal: '↩️' };
-      const typeLabel = { checkin: 'Daily Check-in', cashback: 'Daily Cashback', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit', reversal: 'Deposit Reversed' };
+      const typeLabel = { checkin: 'Daily Check-in', cashback: 'Daily Cashback', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit', reversal: 'Recharge Reversed' };
       el.innerHTML = `
         <div class="rec-card" style="background:linear-gradient(135deg,#cc7e00,#ff9d00);margin-bottom:8px">
           <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-bottom:4px">Total Revenue Earned</div>
@@ -1194,7 +1211,7 @@ window.openDepositPage = () => {
   stopDepTimers();
   _depDepositId = null;
   showDepStep(1);
-  document.getElementById('depPageTitle').textContent = 'Deposit Funds';
+  document.getElementById('depPageTitle').textContent = 'Recharge Account';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   document.getElementById('depAmount').value = '';
   const btn = document.getElementById('depProceedBtn');
@@ -1219,7 +1236,7 @@ window.proceedDeposit = async () => {
   if (!_user || !_userData) return;
   const amount   = parseInt(document.getElementById('depAmount').value, 10);
   const digits9  = (document.getElementById('depSenderPhone').value || '').replace(/\D/g,'').slice(0,9);
-  if (!amount || amount < _depMinDeposit) { showToast(`Minimum deposit is ${ugx(_depMinDeposit)}`, 'error'); return; }
+  if (!amount || amount < _depMinDeposit) { showToast(`Minimum recharge is ${ugx(_depMinDeposit)}`, 'error'); return; }
   if (digits9.length !== 9)   { showToast('Enter a valid 9-digit MoMo number', 'error'); return; }
 
   const btn = document.getElementById('depProceedBtn');
@@ -1247,7 +1264,7 @@ window.proceedDeposit = async () => {
 window.cancelDepWait = () => {
   stopDepTimers(); _depDepositId = null; _depResolved = false;
   showDepStep(1);
-  document.getElementById('depPageTitle').textContent = 'Deposit Funds';
+  document.getElementById('depPageTitle').textContent = 'Recharge Account';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   const btn = document.getElementById('depProceedBtn');
   btn.disabled = false; btn.textContent = 'Pay via MoMo';
@@ -1256,7 +1273,7 @@ window.cancelDepWait = () => {
 window.retryDeposit = () => {
   _depResolved = false;
   showDepStep(1);
-  document.getElementById('depPageTitle').textContent = 'Deposit Funds';
+  document.getElementById('depPageTitle').textContent = 'Recharge Account';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   const btn = document.getElementById('depProceedBtn');
   btn.disabled = false; btn.textContent = 'Pay via MoMo';
@@ -1505,7 +1522,7 @@ const CONTENT = {
     title: 'Platform Rules',
     body: `<h3>How Voltra Works</h3>
       <ul>
-        <li>Minimum deposit is UGX 30,000</li>
+        <li>Minimum recharge is UGX 30,000</li>
         <li>Minimum withdrawal is UGX 15,000 (multiples of 5,000 only)</li>
         <li>A 17% liquidity fee applies on all withdrawals</li>
         <li>Investment plans run for a fixed cycle and mature automatically</li>
