@@ -553,7 +553,7 @@ html:has(body.on-auth){background:#0a0e17}
 .ac-section-lbl{font-size:10px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;padding-left:2px}
 .ac-tier-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
 .ac-tier-card.achieved{border-color:rgba(34,197,94,0.35)}
-.ac-tier-card.inprogress{border-color:rgba(37,99,235,0.35)}
+.ac-tier-card.inprogress{border-color:rgba(255,157,0,0.35)}
 .ac-tier-card.locked{opacity:.55}
 .ac-tier-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .ac-tier-info{display:flex;align-items:center;gap:10px}
@@ -562,7 +562,7 @@ html:has(body.on-auth){background:#0a0e17}
 .ac-tier-refs{font-size:11px;color:var(--text2);margin-top:1px}
 .ac-status-pill{font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
 .ac-status-pill.achieved{background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
-.ac-status-pill.inprogress{background:rgba(37,99,235,0.12);color:#60a5fa;border:1px solid rgba(37,99,235,0.25)}
+.ac-status-pill.inprogress{background:rgba(255,157,0,0.12);color:#60a5fa;border:1px solid rgba(255,157,0,0.25)}
 .ac-status-pill.locked{background:var(--card2);color:var(--muted);border:1px solid var(--border)}
 .ac-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .ac-bar{flex:1;height:7px;background:var(--border2);border-radius:4px;overflow:hidden}
@@ -609,14 +609,14 @@ html:has(body.on-auth){background:#0a0e17}
 .phone-form-prefix{padding:0 12px;font-size:13px;font-weight:700;color:var(--text2);border-right:1px solid var(--border);height:44px;display:flex;align-items:center;background:var(--bg3);flex-shrink:0}
 .phone-form-wrap input{border:none;background:transparent;height:44px;flex:1;padding:0 12px;font-size:15px;font-family:'Outfit',sans-serif;outline:none;color:var(--text)}
 .form-info{font-size:12px;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.5}
-.btn-submit{width:100%;height:48px;border:none;border-radius:12px;background:linear-gradient(135deg,#ff9d00,#cc7e00);color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .2s;margin-top:4px;box-shadow:0 4px 16px rgba(37,99,235,0.3)}
+.btn-submit{width:100%;height:48px;border:none;border-radius:12px;background:linear-gradient(135deg,#ffb84d,#ff9d00);color:#1a1000;font-size:15px;font-weight:800;cursor:pointer;font-family:'Outfit',sans-serif;transition:opacity .2s;margin-top:4px;box-shadow:0 4px 16px rgba(255,157,0,0.3)}
 .btn-submit:active{opacity:.85}
 .btn-submit:disabled{opacity:.45;cursor:not-allowed}
 .btn-outline{width:100%;height:44px;border:1px solid var(--border2);border-radius:10px;background:transparent;color:var(--text);font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;margin-top:8px}
-.dep-momo-box{background:var(--bg3);border:1px solid rgba(37,99,235,0.3);border-radius:14px;padding:22px;text-align:center;margin-bottom:18px}
+.dep-momo-box{background:var(--bg3);border:1px solid rgba(255,157,0,0.3);border-radius:14px;padding:22px;text-align:center;margin-bottom:18px}
 .dep-momo-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;font-weight:700}
 .dep-momo-num{font-size:22px;font-weight:900;color:#ff9d00;letter-spacing:2px;margin-bottom:14px;font-family:'Outfit',sans-serif}
-.dep-copy-btn{background:none;border:1.5px solid rgba(37,99,235,0.35);color:#ff9d00;border-radius:8px;padding:7px 18px;font-size:12px;font-weight:700;cursor:pointer}
+.dep-copy-btn{background:none;border:1.5px solid rgba(255,157,0,0.35);color:#ff9d00;border-radius:8px;padding:7px 18px;font-size:12px;font-weight:700;cursor:pointer}
 .dep-copy-btn:active{opacity:.7}
 .dep-inst-list{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
 .dep-inst-row{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--text2);line-height:1.45}
@@ -677,7 +677,7 @@ html:has(body.on-auth){background:#0a0e17}
 /* ── FULL-SCREEN PAGE OVERLAY ── */
 /* Use display:none when closed — zero GPU layers, no layer-memory cost.
    JS drives: display:block → rAF adds .open (slide in), on close removes .open,
-   transitionend sets display:none. Same pattern as X-engine. */
+   transitionend sets display:none. Voltra pattern. */
 .page-overlay{position:fixed;inset:0;z-index:600;background:var(--bg);display:none;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 .page-overlay.open{transform:translateX(0)}
 .page-hdr{position:sticky;top:0;z-index:10;background:linear-gradient(135deg,#1a1407 0%,#0a0e17 70%);border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 6px rgba(0,0,0,0.06)}
@@ -691,7 +691,7 @@ html:has(body.on-auth){background:#0a0e17}
 .net-pill.active{border-color:#ff9d00;background:var(--bluefade);color:#ff9d00}
 .net-logo{height:22px;width:auto;border-radius:3px;flex-shrink:0}
 /* withdraw info badge */
-.page-bal-badge{background:var(--bluefade);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#ff9d00;font-weight:700}
+.page-bal-badge{background:var(--bluefade);border:1px solid rgba(255,157,0,0.2);border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#ff9d00;font-weight:700}
 /* ── WITHDRAWAL SAVED ACCOUNTS ── */
 .wit-acc-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--border2);border-radius:12px;padding:13px 14px;cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;user-select:none}
 .wit-acc-card.sel{border-color:var(--blue);background:var(--bluefade)}
@@ -704,7 +704,7 @@ html:has(body.on-auth){background:#0a0e17}
 .wit-acc-chk{flex-shrink:0;color:var(--blue);display:none}
 .wit-acc-chk svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 .wit-acc-card.sel .wit-acc-chk{display:block}
-.wit-fee-row{background:var(--bluefade);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#ff9d00;font-weight:600;display:none}
+.wit-fee-row{background:var(--bluefade);border:1px solid rgba(255,157,0,0.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#ff9d00;font-weight:600;display:none}
 
 @media(max-width:400px){
   .level-cards{grid-template-columns:1fr 1fr 1fr}
@@ -729,7 +729,7 @@ html:has(body.on-auth){background:#0a0e17}
 .content-cta-btn.wa-btn{background:#25D366;box-shadow:0 4px 16px rgba(37,211,102,0.3)}
 /* ── DEPOSIT PULSE + CONFETTI ANIMATIONS ── */
 .dep-pulse-wrap{position:relative;width:100px;height:100px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center}
-.dep-pulse-ring{position:absolute;border-radius:50%;background:rgba(37,99,235,.15);animation:depPulse 2s ease-out infinite}
+.dep-pulse-ring{position:absolute;border-radius:50%;background:rgba(255,157,0,.15);animation:depPulse 2s ease-out infinite}
 .dep-pulse-ring1{width:100px;height:100px;animation-delay:0s}
 .dep-pulse-ring2{width:70px;height:70px;animation-delay:.7s}
 .dep-pulse-icon{font-size:36px;z-index:1;position:relative;animation:depBounce .9s ease-in-out infinite alternate}
@@ -746,8 +746,8 @@ html:has(body.on-auth){background:#0a0e17}
 
 /* ── QUICK AMOUNTS ── */
 .quick-amounts{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
-.qa-btn{height:36px;border:1.5px solid rgba(37,99,235,0.25);border-radius:8px;background:var(--card2);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s}
-.qa-btn:active,.qa-btn.sel{background:#ff9d00;color:#fff;border-color:#ff9d00}
+.qa-btn{height:36px;border:1.5px solid rgba(255,157,0,0.25);border-radius:8px;background:var(--card2);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .15s}
+.qa-btn:active,.qa-btn.sel{background:#ff9d00;color:#1a1000;border-color:#ff9d00}
 
 /* ── DEPOSIT PROMO IMAGE ── */
 .dep-promo-img{width:100%;height:auto;max-height:240px;object-fit:contain;border-radius:12px;margin-bottom:16px;display:none;background:#fff;padding:12px;box-sizing:border-box}
@@ -1136,7 +1136,7 @@ html:has(body.on-auth){background:#0a0e17}
       <label class="form-label">MoMo Number to Pay From</label>
       <div class="phone-form-wrap" style="margin-bottom:4px">
         <span class="phone-form-prefix">+256</span>
-        <input type="tel" id="depSenderPhone" placeholder="771 234 567" maxlength="9" inputmode="numeric">
+        <input type="tel" id="depSenderPhone" placeholder="7XX XXX XXX" maxlength="9" inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'').replace(/^0+/,'')">
       </div>
       <div style="font-size:11px;color:var(--text2);margin-bottom:20px;padding-left:2px">USSD prompt goes to this number — use yours, a friend's or family's. Payment credits your Voltra wallet.</div>
 
@@ -1203,12 +1203,12 @@ html:has(body.on-auth){background:#0a0e17}
 <div id="withdrawPage" class="page-overlay">
   <div class="page-hdr">
     <button class="page-back" onclick="closePage('withdrawPage')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-    <div class="page-hdr-title">Request Withdrawal</div>
+    <div class="page-hdr-title">Withdraw to MoMo</div>
   </div>
   <div class="page-body">
     <div class="page-bal-badge">Available: <span id="witBalBadge">UGX 0</span></div>
     <label class="form-label">Amount (UGX)</label>
-    <input class="form-input" id="witAmount" type="number" placeholder="15000" step="5000" inputmode="numeric" oninput="updateWitFee()">
+    <input class="form-input" id="witAmount" type="number" placeholder="20000" step="5000" inputmode="numeric" oninput="updateWitFee()">
     <div class="wit-fee-row" id="witFeeRow"></div>
     <!-- Saved accounts — tap to auto-fill -->
     <div id="witAccountsWrap" style="display:none">
@@ -1218,10 +1218,10 @@ html:has(body.on-auth){background:#0a0e17}
     <label class="form-label" id="witPhoneLbl">Receive on Phone</label>
     <div class="phone-form-wrap">
       <span class="phone-form-prefix">+256</span>
-      <input type="tel" id="witPhone" placeholder="700 000 000" maxlength="10" inputmode="numeric">
+      <input type="tel" id="witPhone" placeholder="7XX XXX XXX" maxlength="9" inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'').replace(/^0+/,'')">
     </div>
     <div class="form-info">17% liquidity fee applies on all withdrawals. Processing within 24 hours.</div>
-    <button class="btn-submit" onclick="submitWithdrawal()">Request Withdrawal</button>
+    <button class="btn-submit" onclick="submitWithdrawal()">Request Payout</button>
   </div>
 </div>
 

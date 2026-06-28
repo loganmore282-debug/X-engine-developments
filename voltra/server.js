@@ -103,7 +103,7 @@ function uuidv4() {
   });
 }
 
-// ── MarzPay API helpers (JSON body — matches X-engine proven implementation) ──
+// ── MarzPay API helpers (JSON body — Voltra proven implementation) ──
 const MARZ_TIMEOUT = 20000; // 20 s — abort any hung MarzPay call
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
