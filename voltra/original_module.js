@@ -82,10 +82,14 @@ function phoneToEmail(phone) { return phone.replace(/\D/g,'') + '@voltra-app.com
 window.showRegister = () => {
   document.getElementById('loginForm').style.display = 'none';
   document.getElementById('registerForm').style.display = 'block';
+  document.getElementById('tabLogin')?.classList.remove('active');
+  document.getElementById('tabRegister')?.classList.add('active');
 };
 window.showLogin = () => {
   document.getElementById('registerForm').style.display = 'none';
   document.getElementById('loginForm').style.display = 'block';
+  document.getElementById('tabRegister')?.classList.remove('active');
+  document.getElementById('tabLogin')?.classList.add('active');
 };
 window.togglePass = (id, btn) => {
   const inp = document.getElementById(id);
