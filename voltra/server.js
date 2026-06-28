@@ -504,7 +504,7 @@ async function payCommissions(investorId, amount, investmentId) {
 // ═══════════════════════════════════════════
 // HEALTH
 // ═══════════════════════════════════════════
-app.get('/', (req, res) => res.json({ status: '◈ Voltra Server', time: new Date().toISOString() }));
+app.get('/', (req, res) => res.json({ status: '◈ Business Server', time: new Date().toISOString() }));
 
 // ── GIFT CODE GENERATION HELPER ──
 function genGiftCode() {

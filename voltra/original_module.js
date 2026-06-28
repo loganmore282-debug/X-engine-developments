@@ -17,7 +17,7 @@ const firebaseConfig = {
 };
 
 // ⚠️ VOLTRA — replace with your own Railway server URL once deployed.
-const SERVER = 'https://YOUR-VOLTRA-SERVER.up.railway.app';
+const SERVER = 'https://business-production-f4c2.up.railway.app';
 
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
