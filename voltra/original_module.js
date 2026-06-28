@@ -5,16 +5,15 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 import { getFirestore }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-// ⚠️ VOLTRA — replace ALL of these with YOUR OWN new Firebase project's config.
-// Do NOT reuse Voltra's project, or Voltra would share Voltra's users & data.
+// VOLTRA — Firebase web config (voltra-platform project)
 const firebaseConfig = {
-  apiKey:            "YOUR_VOLTRA_FIREBASE_API_KEY",
-  authDomain:        "voltra-app.firebaseapp.com",
-  projectId:         "voltra-app",
-  storageBucket:     "voltra-app.firebasestorage.app",
-  messagingSenderId: "YOUR_VOLTRA_SENDER_ID",
-  appId:             "YOUR_VOLTRA_APP_ID",
-  measurementId:     "YOUR_VOLTRA_MEASUREMENT_ID"
+  apiKey:            "AIzaSyCpds3p2ciYoReARRVSkdb07e3gEfVc7CU",
+  authDomain:        "voltra-platform.firebaseapp.com",
+  projectId:         "voltra-platform",
+  storageBucket:     "voltra-platform.firebasestorage.app",
+  messagingSenderId: "493764461645",
+  appId:             "1:493764461645:web:f05e8a4a11f85ee18f4804",
+  measurementId:     "G-02YSFLS6DV"
 };
 
 // ⚠️ VOLTRA — replace with your own Railway server URL once deployed.
