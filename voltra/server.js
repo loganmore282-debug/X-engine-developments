@@ -63,8 +63,8 @@ const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credential
 const MIN_WITHDRAWAL   = 20000;
 const CHECKIN_BONUS    = 500;
 const WELCOME_BONUS    = 7000;
-const COMM_L1          = 0.10;
-const COMM_L2          = 0.05;
+const COMM_L1          = 0.12;
+const COMM_L2          = 0.04;
 const COMM_L3          = 0.02;
 const LIQUIDITY_FEE    = 0.17;
 // Agent tier ladder — ordered highest → lowest (array order matters for findIndex)

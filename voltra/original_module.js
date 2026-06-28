@@ -329,20 +329,20 @@ function loadTicker() {
   // Build a pool of 16 realistic activity events
   const pool = [
     { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
-    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Cashout sent',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Team bonus',   amt:`+UGX ${randComm().toLocaleString()}` },
     { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Investment return',   amt:`+UGX ${randRet().toLocaleString()}` },
-    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Machine payout',   amt:`+UGX ${randRet().toLocaleString()}` },
+    { label:'Cashout sent',amt:`UGX ${randWit().toLocaleString()}` },
     { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Team bonus',   amt:`+UGX ${randComm().toLocaleString()}` },
     { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Daily check-in',      amt:`+UGX 500` },
-    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
-    { label:'Investment return',   amt:`+UGX ${randRet().toLocaleString()}` },
+    { label:'Daily spark bonus',      amt:`+UGX 500` },
+    { label:'Cashout sent',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Machine payout',   amt:`+UGX ${randRet().toLocaleString()}` },
     { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Commission earned',   amt:`+UGX ${randComm().toLocaleString()}` },
-    { label:'Withdrawal processed',amt:`UGX ${randWit().toLocaleString()}` },
+    { label:'Team bonus',   amt:`+UGX ${randComm().toLocaleString()}` },
+    { label:'Cashout sent',amt:`UGX ${randWit().toLocaleString()}` },
     { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
   ];
 
@@ -1528,8 +1528,8 @@ const CONTENT = {
       </ul>
       <h3 style="margin-top:16px">Commission Rules</h3>
       <ul>
-        <li>Level 1: 10% of every investment your direct referral makes</li>
-        <li>Level 2: 5% of every investment by your L2 team</li>
+        <li>Level 1: 12% of every investment your direct referral makes</li>
+        <li>Level 2: 4% of every investment by your L2 team</li>
         <li>Level 3: 2% of every investment by your L3 team</li>
         <li>Commission is credited instantly and can be withdrawn immediately</li>
       </ul>
