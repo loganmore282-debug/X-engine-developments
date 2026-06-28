@@ -139,13 +139,14 @@ window.doLogin = async () => {
 };
 
 window.doRegister = async () => {
-  const name  = document.getElementById('regName').value.trim();
   const phone = document.getElementById('regPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
   const pass  = document.getElementById('regPass').value;
+  const pass2 = document.getElementById('regPass2').value;
   const ref   = document.getElementById('regRef').value.trim().toUpperCase();
-  if (!name)  { showToast('Enter your name', 'error'); return; }
+  const name  = '0' + phone;   // no name field — use the phone as the display name
   if (phone.length !== 9) { showToast('Enter a valid 9-digit number (no leading 0)', 'error'); return; }
   if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+  if (pass !== pass2) { showToast('Passwords do not match', 'error'); return; }
   showLoading(true);
   try {
     let cred;
