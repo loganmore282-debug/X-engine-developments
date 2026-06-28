@@ -320,6 +320,7 @@ window.selectDepAmt = (amt, btn) => {
 // ── TICKER ──
 function loadTicker() {
   const el = document.getElementById('homeTicker');
+  if (!el) return;   // ticker removed from home — no-op
   const round = (n, r) => Math.round(n / r) * r;
   const randDep = () => round(30000 + Math.random() * 170000, 5000);   // 30k–200k
   const randWit = () => round(15000 + Math.random() * 985000, 5000);   // 15k–1M
@@ -675,6 +676,9 @@ function renderAvatars(u) {
 window.showSection = (sec) => {
   const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection' };
   const navMap = { home:'home', products:'products', invest:'records', records:'records', commission:'commission', more:'more' };
+  const titleMap = { products:'Power Machines', commission:'My Team', records:'My Activity', more:'Account' };
+  const ptEl = document.getElementById('pageTitle');
+  if (ptEl && titleMap[sec]) ptEl.textContent = titleMap[sec];
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(secMap[sec] || sec + 'Section')?.classList.add('active');
   document.querySelectorAll('.bnav-item').forEach(b => {
