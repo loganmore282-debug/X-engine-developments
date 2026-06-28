@@ -676,7 +676,7 @@ function renderAvatars(u) {
 window.showSection = (sec) => {
   const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection' };
   const navMap = { home:'home', products:'products', invest:'records', records:'records', commission:'commission', more:'more' };
-  const titleMap = { products:'Power Machines', commission:'My Team', records:'My Activity', more:'Account' };
+  const titleMap = { products:'Power Assets', commission:'My Network', records:'My Activity', more:'Account' };
   const ptEl = document.getElementById('pageTitle');
   if (ptEl && titleMap[sec]) ptEl.textContent = titleMap[sec];
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -732,7 +732,7 @@ function renderProducts(products) {
     benefitEl.textContent = maxReturn ? ugx(maxReturn) : '—';
   }
   if (!products.length) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No machines available yet</p></div>`;
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No assets available yet</p></div>`;
     return;
   }
   products.sort((a,b) => (a.displayOrder||999) - (b.displayOrder||999));
@@ -762,9 +762,9 @@ function renderProducts(products) {
 
   // Voltra organises machines into power tiers instead of one flat list
   const tiers = [
-    { icon:'⚡', name:'Starter Machines', desc:'Low entry · quick cycles',        test:p => (p.price||0) <  100000 },
-    { icon:'🔋', name:'Power Machines',   desc:'Mid-range · bigger daily output', test:p => (p.price||0) >= 100000 && (p.price||0) < 700000 },
-    { icon:'🏭', name:'Elite Machines',   desc:'High capital · maximum return',   test:p => (p.price||0) >= 700000 },
+    { icon:'⚡', name:'Starter Assets', desc:'Low entry · quick cycles',        test:p => (p.price||0) <  100000 },
+    { icon:'🔋', name:'Power Assets',   desc:'Mid-range · bigger daily output', test:p => (p.price||0) >= 100000 && (p.price||0) < 700000 },
+    { icon:'🏭', name:'Elite Assets',   desc:'High capital · maximum return',   test:p => (p.price||0) >= 700000 },
   ];
 
   let html = '';
