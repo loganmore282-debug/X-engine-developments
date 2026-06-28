@@ -674,7 +674,7 @@ function renderAvatars(u) {
 // ── NAVIGATION ──
 window.showSection = (sec) => {
   const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection' };
-  const navMap = { home:'home', products:'products', invest:'more', records:'more', commission:'commission', more:'more' };
+  const navMap = { home:'home', products:'products', invest:'records', records:'records', commission:'commission', more:'more' };
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(secMap[sec] || sec + 'Section')?.classList.add('active');
   document.querySelectorAll('.bnav-item').forEach(b => {
