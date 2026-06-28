@@ -831,8 +831,7 @@ import {
 const SERVER      = 'https://business-production-f4c2.up.railway.app';
 const CLOUD       = 'dcmfxgofa';
 const PRESET      = 'x-engineuploads';
-const ADMIN_PASS  = 'FAHAD8800';
-let _adminKey = ADMIN_PASS;
+let _adminKey = localStorage.getItem('nx_admin_key') || '';
 
 const firebaseConfig = {
   apiKey:            "AIzaSyCpds3p2ciYoReARRVSkdb07e3gEfVc7CU",
@@ -934,21 +933,38 @@ function _showAdminApp() {
   initAdmin();
 }
 
-window.doAdminLogin = () => {
+window.doAdminLogin = async () => {
   const input = document.getElementById('adminKeyInput');
   const err   = document.getElementById('loginErr');
-  if (input.value.trim() !== ADMIN_PASS) {
+  const btn   = document.querySelector('.login-btn');
+  const val   = input.value.trim();
+  if (!val) { err.textContent = 'Enter the admin password.'; err.style.display = 'block'; return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  try {
+    const r = await api('/admin/check-key', { adminKey: val });
+    if (r && r.valid) {
+      _adminKey = val;
+      localStorage.setItem('nx_admin_key', val);
+      localStorage.setItem('nx_admin_auth', '1');
+      err.style.display = 'none';
+      _showAdminApp();
+    } else {
+      err.textContent = 'Incorrect password. Access denied.';
+      err.style.display = 'block';
+      input.value = '';
+    }
+  } catch (e) {
+    err.textContent = 'Network error — check connection.';
     err.style.display = 'block';
-    input.value = '';
-    return;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Access Panel'; }
   }
-  err.style.display = 'none';
-  localStorage.setItem('nx_admin_auth', '1');
-  _showAdminApp();
 };
 
 window.doLogout = () => {
   localStorage.removeItem('nx_admin_auth');
+  localStorage.removeItem('nx_admin_key');
+  _adminKey = '';
   document.getElementById('adminApp').classList.remove('show');
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('adminKeyInput').value = '';
