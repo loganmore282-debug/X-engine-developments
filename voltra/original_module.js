@@ -199,9 +199,9 @@ async function api(path, body = {}) {
 
 // ── SLIDESHOW ──
 const SLIDE_DEFAULTS = [
-  { bg:'linear-gradient(135deg,#1a0a3e 0%,#2d1b69 50%,#0f0628 100%)', slogan:'Invest Smart.\nEarn More.' },
-  { bg:'linear-gradient(135deg,#0c2340 0%,#1a4080 50%,#061428 100%)', slogan:'Daily Returns.\nInstant Commission.' },
-  { bg:'linear-gradient(135deg,#0a2a1a 0%,#14553a 50%,#051a10 100%)', slogan:'Your Money.\nWorking For You.' },
+  { bg:'linear-gradient(135deg,#3a2400 0%,#7a4d00 50%,#0a0e17 100%)', slogan:'Plug In.\nPower Up.' },
+  { bg:'linear-gradient(135deg,#1a1407 0%,#4a3000 50%,#0a0e17 100%)', slogan:'Charge Your Wallet\nEvery Day.' },
+  { bg:'linear-gradient(135deg,#15100a 0%,#5c3a00 50%,#0a0e17 100%)', slogan:'Your Power.\nYour Profit.' },
 ];
 let _slideTimer = null;
 let _pendingAnnouncement = null; // stored here if settings load before login
@@ -423,7 +423,6 @@ async function pollAccount(uid) {
       renderHome(_userData);
       renderCommission(_userData);
       renderMore(_userData);
-      renderAgentCentre(_userData);
     }
   } catch (_) {}
   // Active investments (home preview)
@@ -674,8 +673,8 @@ function renderAvatars(u) {
 
 // ── NAVIGATION ──
 window.showSection = (sec) => {
-  const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection', agentCentre:'agentCentreSection' };
-  const navMap = { home:'home', products:'products', invest:'more', records:'more', commission:'commission', more:'more', agentCentre:'more' };
+  const secMap = { home:'homeSection', products:'productsSection', invest:'recordsSection', records:'recordsSection', commission:'commissionSection', more:'moreSection' };
+  const navMap = { home:'home', products:'products', invest:'more', records:'more', commission:'commission', more:'more' };
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(secMap[sec] || sec + 'Section')?.classList.add('active');
   document.querySelectorAll('.bnav-item').forEach(b => {
@@ -1385,7 +1384,7 @@ window.submitWithdrawal = async () => {
   const amount = parseInt(document.getElementById('witAmount').value, 10);
   const phone  = document.getElementById('witPhone').value.trim().replace(/\D/g,'');
   if (!amount || amount <= 0) { showToast('Enter withdrawal amount', 'error'); return; }
-  if (amount < 15000) { showToast('Minimum withdrawal is UGX 15,000', 'error'); return; }
+  if (amount < 20000) { showToast('Minimum withdrawal is UGX 20,000', 'error'); return; }
   if (amount % 5000 !== 0) {
     const snap = Math.ceil(amount / 5000) * 5000;
     showToast(`Amount must be a multiple of 5,000. Try ${ugx(snap)}`, 'error'); return;
@@ -1522,7 +1521,7 @@ const CONTENT = {
     body: `<h3>How Voltra Works</h3>
       <ul>
         <li>Minimum recharge is UGX 30,000</li>
-        <li>Minimum withdrawal is UGX 15,000 (multiples of 5,000 only)</li>
+        <li>Minimum withdrawal is UGX 20,000 (multiples of 5,000 only)</li>
         <li>A 17% liquidity fee applies on all withdrawals</li>
         <li>Investment plans run for a fixed cycle and mature automatically</li>
         <li>Daily check-in bonus is UGX 500 per day</li>

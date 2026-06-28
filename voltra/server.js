@@ -60,7 +60,7 @@ const RAILWAY_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 
-const MIN_WITHDRAWAL   = 15000;
+const MIN_WITHDRAWAL   = 20000;
 const CHECKIN_BONUS    = 500;
 const WELCOME_BONUS    = 7000;
 const COMM_L1          = 0.10;
