@@ -1553,6 +1553,40 @@ const CONTENT = {
       <p><strong>Email:</strong> support@voltrainvest.com</p>
       <p style="margin-top:16px">Support hours: Monday – Saturday, 8:00 AM – 8:00 PM (EAT)</p>
       <p>For urgent withdrawal issues, please contact us directly via Telegram for fastest response.</p>`
+  },
+  terms: {
+    title: 'Terms & Conditions',
+    body: `<h3>1. Acceptance</h3>
+      <p>By creating a Voltra account and using the platform, you agree to these Terms & Conditions. If you do not agree, please do not use Voltra.</p>
+      <h3 style="margin-top:16px">2. Eligibility</h3>
+      <p>You must be at least 18 years old and the lawful owner of the mobile money account you use. One account is permitted per person.</p>
+      <h3 style="margin-top:16px">3. Deposits & Investments</h3>
+      <p>Recharges activate a power machine that pays a fixed daily return over its cycle. Returns are projections based on the selected plan and are credited daily to your wallet.</p>
+      <h3 style="margin-top:16px">4. Withdrawals</h3>
+      <p>Withdrawals are subject to the minimum amount, multiples rule and the liquidity fee shown on the withdrawal screen. Processing may take time during high demand.</p>
+      <h3 style="margin-top:16px">5. Risk</h3>
+      <p>All investments carry risk. Only commit funds you can afford to set aside. Voltra is not liable for losses arising from market conditions or events beyond our control.</p>
+      <h3 style="margin-top:16px">6. Prohibited Use</h3>
+      <p>Fraud, multiple accounts, automated abuse or any attempt to manipulate the platform will result in suspension and forfeiture of funds.</p>
+      <h3 style="margin-top:16px">7. Changes</h3>
+      <p>We may update these terms at any time. Continued use of Voltra after changes means you accept the updated terms.</p>`
+  },
+  privacy: {
+    title: 'Privacy Policy',
+    body: `<h3>1. Information We Collect</h3>
+      <p>We collect your name, phone number, transaction history and basic device information needed to operate your account and process payments.</p>
+      <h3 style="margin-top:16px">2. How We Use It</h3>
+      <p>Your information is used to run your account, process recharges and withdrawals, calculate earnings and commissions, and keep the platform secure.</p>
+      <h3 style="margin-top:16px">3. Sharing</h3>
+      <p>We do not sell your personal data. Information is shared only with payment providers as required to complete your transactions, or where required by law.</p>
+      <h3 style="margin-top:16px">4. Security</h3>
+      <p>Sensitive credentials are stored server-side and never exposed in the app. Access to your account is protected by your password — keep it private.</p>
+      <h3 style="margin-top:16px">5. Data Retention</h3>
+      <p>We keep account and transaction records for as long as your account is active and as required for legal and accounting purposes.</p>
+      <h3 style="margin-top:16px">6. Your Rights</h3>
+      <p>You may request a copy of your data or account deletion by contacting support. Some records may be retained where the law requires.</p>
+      <h3 style="margin-top:16px">7. Contact</h3>
+      <p>For any privacy question, reach us through the Support option in the app.</p>`
   }
 };
 let _aboutImage = null;
