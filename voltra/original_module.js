@@ -106,9 +106,10 @@ if (savedPhone) { document.getElementById('loginPhone').value = savedPhone; docu
 if (savedPass)  { document.getElementById('loginPass').value  = savedPass; }
 
 window.doLogin = async () => {
-  const phone = document.getElementById('loginPhone').value.trim().replace(/\D/g,'');
+  const phone = document.getElementById('loginPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
   const pass  = document.getElementById('loginPass').value;
   if (!phone || !pass) { showToast('Enter phone and password', 'error'); return; }
+  if (phone.length !== 9) { showToast('Enter a valid 9-digit number (no leading 0)', 'error'); return; }
   const remember = document.getElementById('rememberMe').checked;
   showLoading(true);
   try {
@@ -139,11 +140,11 @@ window.doLogin = async () => {
 
 window.doRegister = async () => {
   const name  = document.getElementById('regName').value.trim();
-  const phone = document.getElementById('regPhone').value.trim().replace(/\D/g,'');
+  const phone = document.getElementById('regPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
   const pass  = document.getElementById('regPass').value;
   const ref   = document.getElementById('regRef').value.trim().toUpperCase();
   if (!name)  { showToast('Enter your name', 'error'); return; }
-  if (!phone) { showToast('Enter your phone number', 'error'); return; }
+  if (phone.length !== 9) { showToast('Enter a valid 9-digit number (no leading 0)', 'error'); return; }
   if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
   showLoading(true);
   try {
