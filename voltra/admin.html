@@ -673,6 +673,17 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <img id="depositImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
         </div>
         <div class="form-group">
+          <label class="form-label">About Page Image</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" type="url" id="aboutImageUrl" placeholder="Image URL or upload" style="flex:1">
+            <label style="cursor:pointer">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'aboutImageUrl','aboutImagePreview','aboutImage')">
+              <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
+            </label>
+          </div>
+          <img id="aboutImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        </div>
+        <div class="form-group">
           <label class="form-label">Deposit Instructions (HTML allowed)</label>
           <textarea class="form-textarea" id="depositInstructions" rows="6" placeholder="Leave empty to use default instructions…"></textarea>
         </div>
@@ -1948,8 +1959,11 @@ async function loadSettings() {
     document.getElementById('productsBannerUrl').value  = prodBanner;
     document.getElementById('depositImageUrl').value    = depImg;
     document.getElementById('depositInstructions').value = depInst;
+    const aboutImg = s.aboutImage || '';
+    document.getElementById('aboutImageUrl').value = aboutImg;
     if (prodBanner) { const p=document.getElementById('productsBannerPreview'); p.src=prodBanner; p.style.display='block'; }
     if (depImg)     { const p=document.getElementById('depositImagePreview');   p.src=depImg;     p.style.display='block'; }
+    if (aboutImg)   { const p=document.getElementById('aboutImagePreview');     p.src=aboutImg;   p.style.display='block'; }
     // Customer service
     document.getElementById('settSupportTg').value    = s.supportTelegram || '';
     document.getElementById('settSupportWa').value    = s.supportWhatsapp || '';
@@ -2033,6 +2047,7 @@ window.saveContentImages = async () => {
   const data = {
     productsBannerImage:  document.getElementById('productsBannerUrl').value.trim(),
     depositImage:         document.getElementById('depositImageUrl').value.trim(),
+    aboutImage:           document.getElementById('aboutImageUrl').value.trim(),
     depositInstructions:  document.getElementById('depositInstructions').value.trim()
   };
   try {

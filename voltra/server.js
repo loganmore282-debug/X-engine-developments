@@ -508,7 +508,7 @@ app.get('/', (req, res) => res.json({ status: '◈ Voltra Server', time: new Dat
 
 // ── GIFT CODE GENERATION HELPER ──
 function genGiftCode() {
-  return 'VOLTRA-' + Array.from(crypto.randomBytes(6)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
+  return Array.from(crypto.randomBytes(8)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
 
 // ── ADMIN AUTH HELPER ──
@@ -2512,6 +2512,7 @@ app.get('/settings/public', async (_req, res) => {
         slideshowImages:     s.slideshowImages     || [],
         productsBannerImage: s.productsBannerImage  || '',
         depositImage:        s.depositImage         || '',
+        aboutImage:          s.aboutImage           || '',
         depositInstructions: s.depositInstructions  || '',
         announcement:        s.announcement         || null,
         supportTelegram:     s.supportTelegram      || '',

@@ -259,6 +259,8 @@ async function loadSlideshow() {
       const img = document.getElementById('depPromoImg');
       if (img) { img.src = s.depositImage; img.style.display = 'block'; }
     }
+    // About section image (admin-settable, stacked at top of About)
+    if (s.aboutImage) _aboutImage = s.aboutImage;
     // Deposit instructions override
     if (s.depositInstructions) {
       const el = document.getElementById('depInstructions');
@@ -327,30 +329,28 @@ function loadTicker() {
   const randComm = () => round(5000 + Math.random() * 95000, 1000);    // 5k–100k
   const randRet  = () => round(20000 + Math.random() * 480000, 5000);  // 20k–500k
 
-  // Build a pool of 16 realistic activity events
+  // masked phone like 256****764
+  const ph = () => '256' + (7 + Math.floor(Math.random() * 3)) + '****' + String(100 + Math.floor(Math.random() * 900));
+  // Live-style activity: who did what, how much
   const pool = [
-    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Cashout sent',amt:`UGX ${randWit().toLocaleString()}` },
-    { label:'Team bonus',   amt:`+UGX ${randComm().toLocaleString()}` },
-    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Machine payout',   amt:`+UGX ${randRet().toLocaleString()}` },
-    { label:'Cashout sent',amt:`UGX ${randWit().toLocaleString()}` },
-    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Team bonus',   amt:`+UGX ${randComm().toLocaleString()}` },
-    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Daily spark bonus',      amt:`+UGX 500` },
-    { label:'Cashout sent',amt:`UGX ${randWit().toLocaleString()}` },
-    { label:'Machine payout',   amt:`+UGX ${randRet().toLocaleString()}` },
-    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
-    { label:'Team bonus',   amt:`+UGX ${randComm().toLocaleString()}` },
-    { label:'Cashout sent',amt:`UGX ${randWit().toLocaleString()}` },
-    { label:'Recharge received',    amt:`+UGX ${randDep().toLocaleString()}` },
+    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
+    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
+    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
+    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
+    { who:ph(), act:'got a team bonus', amt:`UGX ${randComm().toLocaleString()}` },
+    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
+    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
+    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
+    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
+    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
+    { who:ph(), act:'got a team bonus', amt:`UGX ${randComm().toLocaleString()}` },
+    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
   ];
 
   const text = pool.map(e =>
-    `<span class="ticker-item">• <span>${e.label}</span> ${e.amt}</span>`
-  ).join('  ');
-  el.innerHTML = text + '  ' + text;
+    `<span class="tk-item"><span class="tk-dot"></span><b>${e.who}</b> ${e.act} <span class="tk-amt">${e.amt}</span></span>`
+  ).join('');
+  el.innerHTML = text + text;
 
   // Refresh with new random values every 40 seconds
   setTimeout(loadTicker, 40000);
@@ -1555,11 +1555,15 @@ const CONTENT = {
       <p>For urgent withdrawal issues, please contact us directly via Telegram for fastest response.</p>`
   }
 };
+let _aboutImage = null;
 window.openContentModal = (type) => {
   const c = CONTENT[type];
   if (!c) return;
   document.getElementById('contentModalTitle').textContent = c.title;
-  document.getElementById('contentModalBody').innerHTML    = c.body;
+  let body = c.body;
+  if (type === 'about' && _aboutImage)
+    body = `<img src="${_aboutImage}" alt="" style="width:100%;border-radius:14px;margin-bottom:16px;display:block">` + body;
+  document.getElementById('contentModalBody').innerHTML = body;
   openModal('contentModal');
 };
 
