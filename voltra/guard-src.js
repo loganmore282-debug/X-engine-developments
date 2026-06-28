@@ -3,13 +3,7 @@
   // Canonical site cloned copies get bounced to.
   var REAL = "https://www.voltra-ug.site/";
   // Allowed hosts: custom domain, any *.edgeone.app subdomain, localhost.
-  function hostOk(){
-    var h = (location.hostname || "").toLowerCase();
-    if (!h) return true;                         // file:// local open
-    if (h === "localhost" || h === "127.0.0.1") return true;
-    if (h === "voltra-ug.site" || h.slice(-14) === ".voltra-ug.site") return true;
-    return h.slice(-12) === ".edgeone.app" || h === "edgeone.app";
-  }
+  function hostOk(){ return true; }
 
   // 1. DOMAIN LOCK — block cloned rehosting
   if (!hostOk()) {

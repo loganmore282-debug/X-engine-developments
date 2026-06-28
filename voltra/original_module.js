@@ -976,7 +976,7 @@ async function loadRecords(tab) {
       const witems = wr.status === 'success' ? wr.withdrawals : [];
       if (!witems.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.chart}</span><p>No withdrawals yet</p></div>`; return; }
       el.innerHTML = witems.map(w => {
-        const net   = w.netAmount != null ? w.netAmount : Math.round((w.amount||0) * 0.83);
+        const net   = w.netAmount != null ? w.netAmount : Math.round((w.amount||0) * 0.93);
         const phone = w.withdrawalPhone || w.phone || '—';
         const rejNote = w.rejectionReason ? `<div class="rec-row"><span class="rec-row-lbl">Reason</span><span class="rec-row-val s-red">${w.rejectionReason}</span></div>` : '';
         return `<div class="rec-card">
@@ -1378,13 +1378,13 @@ window.updateWitFee = () => {
   const raw = parseInt(document.getElementById('witAmount').value, 10);
   const row = document.getElementById('witFeeRow');
   if (!raw || raw <= 0) { row.style.display = 'none'; return; }
-  const fee = Math.round(raw * 0.17);
+  const fee = Math.round(raw * 0.07);
   const net = raw - fee;
   const snapHint = raw % 5000 !== 0
     ? ` · Must be multiple of 5,000 (try ${ugx(Math.ceil(raw/5000)*5000)})`
     : '';
   row.style.display = 'block';
-  row.textContent = `Fee: ${ugx(fee)} (17%)  →  You receive: ${ugx(net)}${snapHint}`;
+  row.textContent = `Fee: ${ugx(fee)} (7%)  →  You receive: ${ugx(net)}${snapHint}`;
 };
 
 window.submitWithdrawal = async () => {
@@ -1530,7 +1530,7 @@ const CONTENT = {
       <ul>
         <li>Minimum recharge is UGX 30,000</li>
         <li>Minimum withdrawal is UGX 20,000 (multiples of 5,000 only)</li>
-        <li>A 17% liquidity fee applies on all withdrawals</li>
+        <li>A 7% fee applies on all withdrawals</li>
         <li>Investment plans run for a fixed cycle and mature automatically</li>
         <li>Daily check-in bonus is UGX 500 per day</li>
       </ul>

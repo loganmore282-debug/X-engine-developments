@@ -7,11 +7,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --primary:#2563eb;--primary2:#3b82f6;
+  --primary:#ff9d00;--primary2:#ffb84d;
   --bg:#0d1117;--bg2:#161b27;--bg3:#1e2436;
   --border:rgba(37,99,235,.13);--border2:rgba(37,99,235,.28);
   --text:#f1f5f9;--text2:#94a3b8;--muted:#64748b;
-  --green:#03A66D;--red:#ef4444;--blue:#2563eb;
+  --green:#03A66D;--red:#ef4444;--blue:#ff9d00;
   --gold:#eab308;--r:12px;--fam:'Outfit',sans-serif
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -31,7 +31,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
   border-radius:20px;padding:48px 36px;width:100%;max-width:380px;
   text-align:center
 }
-.login-logo{font-size:42px;font-weight:700;color:#60a5fa;letter-spacing:-1px;margin-bottom:6px}
+.login-logo{font-size:42px;font-weight:700;color:#ffb84d;letter-spacing:-1px;margin-bottom:6px}
 .login-sub{color:var(--muted);font-size:13px;margin-bottom:32px}
 .login-input{
   width:100%;background:var(--bg3);border:1px solid var(--border2);
@@ -57,7 +57,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
   position:sticky;top:0;z-index:100
 }
 .topbar-brand{display:flex;flex-direction:column}
-.topbar-logo{font-size:20px;font-weight:700;color:#60a5fa}
+.topbar-logo{font-size:20px;font-weight:700;color:#ffb84d}
 .topbar-subtitle{font-size:11px;color:var(--muted);margin-top:1px}
 .topbar-right{display:flex;gap:10px;align-items:center}
 .btn-logout{
@@ -116,7 +116,7 @@ input,textarea,select{font-family:var(--fam);outline:none}
   border-radius:var(--r);padding:16px;
 }
 .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-.stat-val{font-size:20px;font-weight:700;color:#60a5fa}
+.stat-val{font-size:20px;font-weight:700;color:#ffb84d}
 .stat-val.green{color:var(--green)}
 .stat-val.red{color:var(--red)}
 .stat-val.blue{color:var(--blue)}
@@ -311,7 +311,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <!-- ── LOGIN SCREEN ── -->
 <div id="loginScreen">
   <div class="login-box">
-    <div class="login-logo">◈ VOLTRA</div>
+    <div class="login-logo">⚡ VOLTRA</div>
     <div class="login-sub">Admin Access</div>
     <input type="password" class="login-input" id="adminKeyInput" placeholder="Enter admin password" onkeydown="if(event.key==='Enter')doAdminLogin()">
     <button class="login-btn" onclick="doAdminLogin()">Access Panel</button>
@@ -325,7 +325,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
   <!-- TOP BAR -->
   <div class="topbar">
     <div class="topbar-brand">
-      <div class="topbar-logo">◈ VOLTRA</div>
+      <div class="topbar-logo">⚡ VOLTRA</div>
       <div class="topbar-subtitle">Admin Panel</div>
     </div>
     <div class="topbar-right">
@@ -336,14 +336,14 @@ tr:hover td{background:rgba(255,255,255,.02)}
   <!-- TAB BAR -->
   <div class="tabbar" id="tabbar">
     <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard',this)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Dashboard</button>
-    <button class="tab-btn" data-tab="withdrawals" onclick="showTab('withdrawals',this)"><svg viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg> Withdrawals <span class="badge" id="pendingBadge" style="display:none">0</span></button>
-    <button class="tab-btn" data-tab="deposits" onclick="showTab('deposits',this)"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Deposits</button>
+    <button class="tab-btn" data-tab="withdrawals" onclick="showTab('withdrawals',this)"><svg viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg> Payouts <span class="badge" id="pendingBadge" style="display:none">0</span></button>
+    <button class="tab-btn" data-tab="deposits" onclick="showTab('deposits',this)"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Recharges</button>
     <button class="tab-btn" data-tab="users" onclick="showTab('users',this)"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Users</button>
     <button class="tab-btn" data-tab="products" onclick="showTab('products',this)"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Plans</button>
     <button class="tab-btn" data-tab="slideshow" onclick="showTab('slideshow',this)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Slideshow</button>
     <button class="tab-btn" data-tab="giftcodes" onclick="showTab('giftcodes',this)"><svg viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg> Gift Codes</button>
     <button class="tab-btn" data-tab="transactions" onclick="showTab('transactions',this)"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> Transactions</button>
-    <button class="tab-btn" data-tab="referrals" onclick="showTab('referrals',this)"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Referrals</button>
+    <button class="tab-btn" data-tab="referrals" onclick="showTab('referrals',this)"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Affiliates</button>
     <button class="tab-btn" data-tab="settings" onclick="showTab('settings',this)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
   </div>
 
@@ -356,7 +356,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <div class="stat-box"><div class="stat-label">Total Users</div><div class="stat-val" id="sTotalUsers"><span class="stat-loading">…</span></div></div>
         <div class="stat-box"><div class="stat-label">Active Users</div><div class="stat-val green" id="sActiveUsers"><span class="stat-loading">…</span></div></div>
         <div class="stat-box"><div class="stat-label">Total Deposited</div><div class="stat-val" id="sTotalDeposited"><span class="stat-loading">…</span></div></div>
-        <div class="stat-box"><div class="stat-label">Pending Withdrawals</div><div class="stat-val red" id="sPendingWit"><span class="stat-loading">…</span></div></div>
+        <div class="stat-box"><div class="stat-label">Pending Payouts</div><div class="stat-val red" id="sPendingWit"><span class="stat-loading">…</span></div></div>
         <div class="stat-box"><div class="stat-label">Active Investments</div><div class="stat-val blue" id="sActiveInv"><span class="stat-loading">…</span></div></div>
         <div class="stat-box"><div class="stat-label">Total Wallet Balance</div><div class="stat-val" id="sTotalWallet"><span class="stat-loading">…</span></div></div>
         <div class="stat-box"><div class="stat-label">Total Withdrawn</div><div class="stat-val" id="sTotalWithdrawn"><span class="stat-loading">…</span></div></div>
@@ -372,7 +372,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="panel" id="withdrawalsPanel">
       <div class="section-head">
         <h3>Withdrawal Requests</h3>
-        <button class="btn btn-ghost btn-sm" onclick="loadWithdrawals()">↻ Refresh</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadPayouts()">↻ Refresh</button>
       </div>
       <div class="filter-tabs">
         <div class="filter-tab active" onclick="setWitFilter('pending',this)">Pending</div>
@@ -389,12 +389,12 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <!-- ── DEPOSITS ── -->
     <div class="panel" id="depositsPanel">
       <div class="section-head">
-        <h3>Deposits</h3>
-        <button class="btn btn-ghost btn-sm" onclick="loadDeposits()">↻ Refresh</button>
+        <h3>Recharges</h3>
+        <button class="btn btn-ghost btn-sm" onclick="loadRecharges()">↻ Refresh</button>
       </div>
       <!-- Unmatched SMS deposits — money received but auto-matcher couldn't link a user. Assign manually. -->
       <div id="unmatchedCard" class="card" style="margin-bottom:12px;border:1px solid rgba(234,179,8,0.35);display:none">
-        <div class="card-title">⚠️ Unmatched Deposits — needs manual assignment</div>
+        <div class="card-title">⚠️ Unmatched Recharges — needs manual assignment</div>
         <div id="unmatchedTable"></div>
       </div>
       <div class="filter-tabs">
@@ -507,8 +507,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
       <div class="filter-tabs">
         <div class="filter-tab active" onclick="setTxFilter('all',this)">All</div>
-        <div class="filter-tab" onclick="setTxFilter('deposit',this)">Deposits</div>
-        <div class="filter-tab" onclick="setTxFilter('withdrawal',this)">Withdrawals</div>
+        <div class="filter-tab" onclick="setTxFilter('deposit',this)">Recharges</div>
+        <div class="filter-tab" onclick="setTxFilter('withdrawal',this)">Payouts</div>
         <div class="filter-tab" onclick="setTxFilter('investment',this)">Investments</div>
         <div class="filter-tab" onclick="setTxFilter('commission',this)">Commission</div>
         <div class="filter-tab" onclick="setTxFilter('checkin',this)">Check-in</div>
@@ -523,8 +523,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <!-- ── REFERRALS ── -->
     <div class="panel" id="referralsPanel">
       <div class="section-head">
-        <h3>Referrals</h3>
-        <button class="btn btn-ghost btn-sm" onclick="loadReferrals()">↻ Refresh</button>
+        <h3>Affiliates</h3>
+        <button class="btn btn-ghost btn-sm" onclick="loadAffiliates()">↻ Refresh</button>
       </div>
       <div class="card" style="padding:0;overflow:hidden">
         <div id="referralsTable"><div class="loading-row"><div class="spinner"></div></div></div>
@@ -651,7 +651,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <div class="card" style="margin-top:12px">
         <div class="card-title">🖼️ Content Images</div>
         <div class="form-group">
-          <label class="form-label">Plans Page Banner</label>
+          <label class="form-label">Assets Page Banner</label>
           <div style="display:flex;gap:8px;align-items:center">
             <input class="form-input" type="url" id="productsBannerUrl" placeholder="Image URL or upload" style="flex:1">
             <label style="cursor:pointer">
@@ -977,14 +977,14 @@ let _activeTab = 'dashboard';
 let _adminPollTimer = null;
 window.initAdmin = async () => {
   loadDashboard();
-  loadWithdrawalsCount();
+  loadPayoutsCount();
   // Auto-poll: keep the live tab fresh + refresh the pending-withdrawal badge.
   if (_adminPollTimer) clearInterval(_adminPollTimer);
   _adminPollTimer = setInterval(() => {
     if (document.hidden) return;            // pause when tab not visible
-    loadWithdrawalsCount();
-    if (_activeTab === 'deposits')    loadDeposits();
-    if (_activeTab === 'withdrawals') loadWithdrawals();
+    loadPayoutsCount();
+    if (_activeTab === 'deposits')    loadRecharges();
+    if (_activeTab === 'withdrawals') loadPayouts();
     if (_activeTab === 'dashboard')   loadDashboard();
   }, 30000);
 };
@@ -1000,21 +1000,21 @@ window.showTab = (tab, btn) => {
 
   // Lazy load
   const loaders = {
-    dashboard: loadDashboard, withdrawals: loadWithdrawals,
-    deposits: loadDeposits, users: loadUsers, products: loadProducts,
+    dashboard: loadDashboard, withdrawals: loadPayouts,
+    deposits: loadRecharges, users: loadUsers, products: loadProducts,
     slideshow: loadSlideshow, giftcodes: loadGiftCodes,
     transactions: loadTransactions,
-    referrals: loadReferrals, settings: loadSettings
+    referrals: loadAffiliates, settings: loadSettings
   };
   if (loaders[tab]) loaders[tab]();
 };
 
 // ── WITHDRAWAL COUNT BADGE ──
-async function loadWithdrawalsCount() {
+async function loadPayoutsCount() {
   try {
     const r = await api('/admin/stats', { adminKey: _adminKey });
     if (r.status !== 'success') return;
-    const n = r.stats.pendingWithdrawals || 0;
+    const n = r.stats.pendingPayouts || 0;
     const badge = document.getElementById('pendingBadge');
     if (n > 0) { badge.textContent = n; badge.style.display = 'inline-block'; }
     else badge.style.display = 'none';
@@ -1032,13 +1032,13 @@ async function loadDashboard() {
       document.getElementById('sTotalUsers').textContent     = s.totalUsers;
       document.getElementById('sActiveUsers').textContent    = s.activeUsers;
       document.getElementById('sTotalDeposited').textContent = ugx(s.totalDeposited);
-      document.getElementById('sPendingWit').textContent     = s.pendingWithdrawals;
+      document.getElementById('sPendingWit').textContent     = s.pendingPayouts;
       document.getElementById('sActiveInv').textContent      = s.activeInvestments;
       document.getElementById('sTotalWallet').textContent    = ugx(s.totalWalletBalance);
       document.getElementById('sTotalWithdrawn').textContent = ugx(s.totalWithdrawn);
       document.getElementById('sTotalInvested').textContent  = ugx(s.totalInvested);
       const badge = document.getElementById('pendingBadge');
-      if (s.pendingWithdrawals > 0) { badge.textContent = s.pendingWithdrawals; badge.style.display = 'inline-block'; }
+      if (s.pendingPayouts > 0) { badge.textContent = s.pendingPayouts; badge.style.display = 'inline-block'; }
       else badge.style.display = 'none';
     }
   } catch(e) { console.error('Stats error:', e); }
@@ -1080,18 +1080,18 @@ async function loadDashboard() {
 let _witFilter = 'pending';
 let _allWits   = [];
 
-async function loadWithdrawals() {
+async function loadPayouts() {
   document.getElementById('witTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
     const r = await api('/admin/withdrawals/list', { adminKey: _adminKey });
     _allWits = r.status === 'success' ? r.withdrawals : [];
-    renderWithdrawals();
+    renderPayouts();
   } catch(e) {
     document.getElementById('witTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
   }
 }
 
-function renderWithdrawals() {
+function renderPayouts() {
   const list = _witFilter === 'all' ? _allWits : _allWits.filter(w => w.status === _witFilter);
   if (!list.length) {
     document.getElementById('witTable').innerHTML = '<div class="empty"><div class="empty-icon">💸</div><div class="empty-text">No withdrawals found</div></div>';
@@ -1129,7 +1129,7 @@ window.setWitFilter = (f, el) => {
   _witFilter = f;
   document.querySelectorAll('#withdrawalsPanel .filter-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  renderWithdrawals();
+  renderPayouts();
 };
 
 window.processWithdrawal = async (id) => {
@@ -1138,7 +1138,7 @@ window.processWithdrawal = async (id) => {
   try {
     const r = await api('/admin/withdraw/process', { withdrawalId: id, adminKey: _adminKey });
     showToast(r.message || (r.status === 'success' ? 'Processing started!' : 'Failed'), r.status === 'success' ? 'success' : 'error');
-    if (r.status === 'success') loadWithdrawals();
+    if (r.status === 'success') loadPayouts();
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
   }
@@ -1158,7 +1158,7 @@ window.confirmReject = async () => {
     const r = await api('/withdraw/reject', { withdrawalId: id, reason, adminKey: _adminKey });
     showToast(r.message || (r.status === 'success' ? 'Rejected' : 'Failed'), r.status === 'success' ? 'success' : 'error');
     closeModal('rejectOverlay');
-    loadWithdrawals();
+    loadPayouts();
   } catch(e) {
     showToast('Error', 'error');
   }
@@ -1170,13 +1170,13 @@ window.confirmReject = async () => {
 let _depFilter = 'all';
 let _allDeps   = [];
 
-async function loadDeposits() {
+async function loadRecharges() {
   document.getElementById('depTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-  loadUnmatchedDeposits();
+  loadUnmatchedRecharges();
   try {
     const r = await api('/admin/deposits/list', { adminKey: _adminKey });
     _allDeps = r.status === 'success' ? r.deposits : [];
-    renderDeposits();
+    renderRecharges();
   } catch(e) {
     console.error(e);
     document.getElementById('depTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading deposits</div></div>';
@@ -1184,7 +1184,7 @@ async function loadDeposits() {
 }
 
 // Unmatched SMS deposits live in their own collection; surface them with an Assign button.
-async function loadUnmatchedDeposits() {
+async function loadUnmatchedRecharges() {
   const card = document.getElementById('unmatchedCard');
   const tbl  = document.getElementById('unmatchedTable');
   try {
@@ -1209,7 +1209,7 @@ async function loadUnmatchedDeposits() {
   } catch(e) { card.style.display = 'none'; }
 }
 
-function renderDeposits() {
+function renderRecharges() {
   const list = _depFilter === 'all' ? _allDeps : _allDeps.filter(d => (d.status||'').toLowerCase() === _depFilter);
   if (!list.length) {
     document.getElementById('depTable').innerHTML = '<div class="empty"><div class="empty-icon">📥</div><div class="empty-text">No deposits found</div></div>';
@@ -1241,7 +1241,7 @@ window.setDepFilter = (f, el) => {
   _depFilter = f;
   document.querySelectorAll('#depositsPanel .filter-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  renderDeposits();
+  renderRecharges();
 };
 
 // ═══════════════════════════════════════════
@@ -1318,11 +1318,11 @@ window.openUserModal = (userId) => {
   document.getElementById('userModalContent').innerHTML = `
     <!-- Profile header -->
     <div style="display:flex;align-items:center;gap:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:16px;margin-bottom:14px">
-      <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
+      <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#ff9d00,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:2px">${u.name||'Unknown'}${agentTierBadge(u)}</div>
         <div style="font-size:12px;color:var(--text2)">${u.phone||'—'}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Joined ${fmtDate(u.createdAt)} · Code: <span style="font-family:monospace;color:#60a5fa">${u.referralCode||'—'}</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Joined ${fmtDate(u.createdAt)} · Code: <span style="font-family:monospace;color:#ffb84d">${u.referralCode||'—'}</span></div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
         ${statusBadge(u.status||'active')}
@@ -1332,9 +1332,9 @@ window.openUserModal = (userId) => {
 
     <!-- Financial stat cards -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-      <div style="background:linear-gradient(135deg,#1e3a5f,#1e2d4a);border:1px solid rgba(37,99,235,.3);border-radius:12px;padding:14px">
-        <div style="font-size:10px;color:#60a5fa;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">💰 Wallet Balance</div>
-        <div style="font-size:18px;font-weight:700;color:#60a5fa">${ugx(u.walletBalance)}</div>
+      <div style="background:linear-gradient(135deg,#3a2e0a,#1e2d4a);border:1px solid rgba(37,99,235,.3);border-radius:12px;padding:14px">
+        <div style="font-size:10px;color:#ffb84d;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">💰 Wallet Balance</div>
+        <div style="font-size:18px;font-weight:700;color:#ffb84d">${ugx(u.walletBalance)}</div>
       </div>
       <div style="background:linear-gradient(135deg,#1a3a2a,#142d20);border:1px solid rgba(3,166,109,.3);border-radius:12px;padding:14px">
         <div style="font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">📥 Total Deposited</div>
@@ -1891,18 +1891,18 @@ window.setTxFilter = (f, el) => {
 // ═══════════════════════════════════════════
 // REFERRALS
 // ═══════════════════════════════════════════
-async function loadReferrals() {
+async function loadAffiliates() {
   document.getElementById('referralsTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
     const r = await api('/admin/referrals/list', { adminKey: _adminKey });
     const list = r.status === 'success' ? r.referrals : [];
-    renderReferrals(list);
+    renderAffiliates(list);
   } catch(e) {
     document.getElementById('referralsTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
   }
 }
 
-function renderReferrals(list) {
+function renderAffiliates(list) {
   if (!list.length) {
     document.getElementById('referralsTable').innerHTML = '<div class="empty"><div class="empty-icon">🔗</div><div class="empty-text">No referrals yet</div></div>';
     return;
@@ -2129,7 +2129,7 @@ window.confirmAssignDeposit = async () => {
   try {
     const r = await api('/admin/assign-deposit', { depositId: depId, userId, adminKey: _adminKey });
     showToast(r.message || (r.status==='success' ? 'Assigned!' : 'Failed'), r.status==='success' ? 'success' : 'error');
-    if (r.status === 'success') { closeModal('assignDepOverlay'); loadDeposits(); }
+    if (r.status === 'success') { closeModal('assignDepOverlay'); loadRecharges(); }
   } catch(e) { showToast('Error', 'error'); }
 };
 </script>
