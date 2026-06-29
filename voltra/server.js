@@ -107,7 +107,7 @@ function uuidv4() {
 const MARZ_TIMEOUT = 20000; // 20 s — abort any hung MarzPay call
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
-    description: description || 'Online Deposit' };
+    description: description || 'Recharge' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
     method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
@@ -118,7 +118,7 @@ async function marzCollect({ amount, phone, reference, description, callbackUrl 
 }
 async function marzSendMoney({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
-    description: description || 'Withdrawal' };
+    description: description || 'Payout' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/send-money`, {
     method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
@@ -433,7 +433,7 @@ async function payCommissions(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l1Id, type: 'commission',
-          description: `L1 commission (${Math.round(commL1*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
+          description: `Level 1 reward (${Math.round(commL1*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
           amount: l1Amt, level: 1, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -460,7 +460,7 @@ async function payCommissions(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l2Id, type: 'commission',
-          description: `L2 commission (${Math.round(commL2*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
+          description: `Level 2 reward (${Math.round(commL2*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
           amount: l2Amt, level: 2, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -486,7 +486,7 @@ async function payCommissions(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l3Id, type: 'commission',
-          description: `L3 commission (${Math.round(commL3*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
+          description: `Level 3 reward (${Math.round(commL3*100)}%) — ${investor.name || investor.phone} paid ${fmtUGX(amount)}`,
           amount: l3Amt, level: 3, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -744,7 +744,7 @@ app.post('/register', async (req, res) => {
     const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
 
     batch.set(db.collection('transactions').doc(), {
-      userId, type: 'admin_credit', description: 'Welcome bonus — new account',
+      userId, type: 'admin_credit', description: 'Sign-up reward',
       amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
     });
 
@@ -868,7 +868,7 @@ app.post('/invest/create', async (req, res) => {
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'investment', description: `Invested in ${product.name}`,
+        userId, type: 'investment', description: `Activated ${product.name}`,
         amount: -price, status: 'success', date, time,
         investmentId: invRef.id, productId, createdAt: FieldValue.serverTimestamp()
       });
@@ -905,7 +905,7 @@ app.post('/invest/claim', async (req, res) => {
       t.update(invRef, { status: 'claimed', claimedAt: FieldValue.serverTimestamp() });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'investment_return',
-        description: `Returns claimed — ${inv.productName || 'Plan'}`,
+        description: `Asset payout — ${inv.productName || 'Asset'}`,
         amount: payout, status: 'success', date, time, investmentId,
         createdAt: FieldValue.serverTimestamp()
       });
@@ -969,7 +969,7 @@ app.post('/withdraw/request', async (req, res) => {
       });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'withdrawal',
-        description: 'Withdrawal request — pending processing',
+        description: 'Payout request — awaiting processing',
         amount: -amt, fee, netAmount: netAmt, phone: fullPhone,
         status: 'pending', date, time,
         withdrawalId: witRef.id,

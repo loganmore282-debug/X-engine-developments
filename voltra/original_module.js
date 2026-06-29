@@ -867,7 +867,7 @@ window.openInvDetail = async (invId) => {
       <div class="rec-row"><span class="rec-row-lbl">Amount Invested</span><span class="rec-row-val">${ugx(inv.amount)}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Expected Return</span><span class="rec-row-val s-green">+${ugx(inv.expectedReturn)}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Profit</span><span class="rec-row-val s-green">+${ugx((inv.expectedReturn||0)-(inv.amount||0))}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Daily Cashback</span><span class="rec-row-val s-green">+${ugx(inv.dailyReturn||0)}/day</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Daily Yield</span><span class="rec-row-val s-green">+${ugx(inv.dailyReturn||0)}/day</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Paid to wallet</span><span class="rec-row-val s-green">+${ugx(inv.dailyCredited||0)}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Remaining at maturity</span><span class="rec-row-val">${ugx(Math.max(0,(inv.expectedReturn||0)-(inv.dailyCredited||0)))}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
@@ -1017,7 +1017,7 @@ async function loadRecords(tab) {
 
     if (tab === 'deposits') {
       el.innerHTML = items.map(tx => {
-        const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'Recharge';
+        const typeLabel = tx.type === 'admin_credit' ? 'Account Credit' : 'Recharge';
         return recRow({
           icon: '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>', title: typeLabel, sub: `${tx.date||''} · ${tx.time||fmtDT(tx)}`,
           amt: '+' + ugx(tx.amount), amtClass: 's-green',
@@ -1032,7 +1032,7 @@ async function loadRecords(tab) {
     } else if (tab === 'revenue') {
       const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
       const typeIcon  = { checkin:_ICN_CHECKIN, cashback:_ICN_COINS, commission:_ICN_PEOPLE, gift_code:_ICN_GIFT, investment_return:_ICN_TREND, admin_credit:_ICN_BANK, reversal:_ICN_UNDO };
-      const typeLabel = { checkin:'Daily Spark', cashback:'Daily Cashback', commission:'Team Bonus', gift_code:'Gift Code', investment_return:'Asset Payout', admin_credit:'Admin Credit', reversal:'Recharge Reversed' };
+      const typeLabel = { checkin:'Daily Spark', cashback:'Daily Yield', commission:'Team Bonus', gift_code:'Gift Reward', investment_return:'Asset Payout', admin_credit:'Account Credit', reversal:'Reversal' };
       el.innerHTML = `
         <div class="rev-hero">
           <div class="rev-hero-lbl">Total Inbound Balance</div>
