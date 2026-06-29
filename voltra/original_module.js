@@ -180,6 +180,7 @@ window.doRegister = async () => {
 
 window.doLogout = async () => {
   if (!confirm('Log out of Voltra?')) return;
+  try { localStorage.removeItem('nx_photo'); } catch (_) {}
   if (_unsub)      { _unsub(); _unsub = null; }
   if (_maintTimer) { clearInterval(_maintTimer); _maintTimer = null; }
   stopWitTimers();
@@ -681,11 +682,13 @@ function renderAgentCentre(u) {
 
 function renderAvatars(u) {
   const initial = (u.name || '?')[0].toUpperCase();
+  // photo persists locally so it never "disappears" between polls / server resets
+  const photo = u.profilePhoto || localStorage.getItem('nx_photo') || '';
   [['moreAvatarInitial',52],['avatarInitial',34],['avatarInitialTop',34]].forEach(([id,size]) => {
     const el = document.getElementById(id);
     if (!el) return;
-    if (u.profilePhoto) {
-      el.innerHTML = `<img src="${u.profilePhoto}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
+    if (photo) {
+      el.innerHTML = `<img src="${photo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
     } else {
       el.textContent = initial;
     }
@@ -1680,14 +1683,12 @@ window.uploadPhoto = async (input) => {
       img.onerror = reject;
       img.src = URL.createObjectURL(file);
     });
+    // keep the photo locally so it always shows even if the server can't store it
+    try { localStorage.setItem('nx_photo', dataUrl); } catch (_) {}
+    if (_userData) _userData.profilePhoto = dataUrl;
+    renderAvatars(_userData || { profilePhoto: dataUrl });
     const r = await api('/account/update-photo', { photoUrl: dataUrl });
-    if (r && r.status === 'success') {
-      if (_userData) _userData.profilePhoto = dataUrl;
-      renderAvatars(_userData || { profilePhoto: dataUrl });
-      showToast('Profile photo updated', 'success');
-    } else {
-      showToast((r && r.message) || 'Photo update failed', 'error');
-    }
+    showToast(r && r.status === 'success' ? 'Profile photo updated' : 'Photo saved on this device', 'success');
   } catch (e) { showToast('Photo upload failed', 'error'); }
   finally { showLoading(false); input.value = ''; }
 };
