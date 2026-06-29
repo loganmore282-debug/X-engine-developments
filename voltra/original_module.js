@@ -942,6 +942,20 @@ function statusLabel(s) {
   return m[s?.toLowerCase()] || (s||'Pending');
 }
 
+// compact expandable record row (tap to reveal details)
+function recRow({ icon, title, sub, amt, amtClass = '', status = '', statusCls = '', details = [] }) {
+  const det = details.filter(d => d.v != null && d.v !== '')
+    .map(d => `<div class="rd-line"><span>${d.k}</span><span>${d.v}</span></div>`).join('');
+  return `<div class="rrow" onclick="this.classList.toggle('open')">
+    <div class="rrow-top">
+      <div class="rrow-ico">${icon}</div>
+      <div class="rrow-main"><div class="rrow-title">${title}</div><div class="rrow-sub">${sub || ''}</div></div>
+      <div class="rrow-end"><div class="rrow-amt ${amtClass}">${amt}</div>${status ? `<div class="rrow-pill ${statusCls}">${status}</div>` : ''}</div>
+    </div>
+    ${det ? `<div class="rrow-details">${det}</div>` : ''}
+  </div>`;
+}
+
 async function loadRecords(tab) {
   if (!_user) return;
   _recordTab = tab;
@@ -957,14 +971,21 @@ async function loadRecords(tab) {
       if (!items.length) { el.innerHTML = `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No investment plans yet</p></div>`; return; }
       el.innerHTML = items.map(inv => {
         const matured=inv.status==='matured', claimed=inv.status==='claimed';
-        const badge = matured?'<span class="inv-badge matured">Matured</span>':claimed?'<span class="inv-badge claimed">Claimed</span>':'<span class="inv-badge active">Active</span>';
-        const invCycle = inv.cycle || inv.durationDays || '?';
-        const invDL = inv.maturityDate ? Math.max(0, Math.ceil((tsMs(inv.maturityDate) - Date.now()) / 86400000)) : 0;
-        const invTimeStr = claimed ? 'Completed' : matured ? '✓ Ready' : invDL + 'd left';
-        return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
-          <div class="inv-img">${inv.productImage?`<img src="${inv.productImage}" alt="">`:ICN.box}</div>
-          <div class="inv-info"><div class="inv-name">${inv.productName||'Plan'}</div><div class="inv-meta">${inv.date||''} · ${invCycle} days</div></div>
-          <div class="inv-right"><div class="inv-return">${ugx(inv.expectedReturn)}</div>${badge}<div class="inv-days" style="${matured?'color:#22c55e;font-weight:700':'color:var(--text2)'};font-size:10px">${invTimeStr}</div></div>
+        const badge = matured?'<span class="ast-badge ok">Matured</span>':claimed?'<span class="ast-badge done">Claimed</span>':'<span class="ast-badge live">Running</span>';
+        const cyc = inv.cycle || inv.durationDays || 0;
+        const dl  = inv.maturityDate ? Math.max(0, Math.ceil((tsMs(inv.maturityDate) - Date.now()) / 86400000)) : 0;
+        const elapsed = Math.max(0, Math.min(cyc, cyc - dl));
+        const pct = cyc ? Math.round(elapsed / cyc * 100) : (claimed||matured?100:0);
+        const tStr = claimed ? 'Completed' : matured ? 'Ready to claim' : `${dl} day${dl!==1?'s':''} left`;
+        return `<div class="ast-card" onclick="openInvDetail('${inv.id}')">
+          <div class="ast-hd"><div class="ast-name">⚡ ${inv.productName||'Asset'}</div>${badge}</div>
+          <div class="ast-figs">
+            <div class="ast-fig"><b>${ugx(inv.dailyReturn||Math.round((inv.expectedReturn||0)/(cyc||1)))}</b><span>Daily output</span></div>
+            <div class="ast-fig"><b>${ugx(inv.expectedReturn)}</b><span>Total return</span></div>
+            <div class="ast-fig"><b>${cyc}d</b><span>Cycle</span></div>
+          </div>
+          <div class="ast-bar"><div class="ast-bar-fill" style="width:${pct}%"></div></div>
+          <div class="ast-foot"><span>Day ${elapsed} of ${cyc}</span><span class="${matured?'s-green':''}">${tStr}</span></div>
         </div>`;
       }).join('');
       return;
@@ -978,17 +999,17 @@ async function loadRecords(tab) {
       el.innerHTML = witems.map(w => {
         const net   = w.netAmount != null ? w.netAmount : Math.round((w.amount||0) * 0.93);
         const phone = w.withdrawalPhone || w.phone || '—';
-        const rejNote = w.rejectionReason ? `<div class="rec-row"><span class="rec-row-lbl">Reason</span><span class="rec-row-val s-red">${w.rejectionReason}</span></div>` : '';
-        return `<div class="rec-card">
-          <div class="rec-card-hd"><div class="rec-card-hd-title">Withdrawal order</div><div class="rec-card-hd-amt">${ugx(w.amount)}</div></div>
-          <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(w)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Send to</span><span class="rec-row-val">${phone}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Amount received</span><span class="rec-row-val">${ugx(net)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(w.status)}">${statusLabel(w.status)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${w.date||'—'}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${w.time||fmtDT(w)}</span></div>
-          ${rejNote}
-        </div>`;
+        return recRow({
+          icon: '↑', title: 'Payout', sub: `${w.date||''} · ${w.time||fmtDT(w)}`,
+          amt: '−' + ugx(w.amount), amtClass: 's-red',
+          status: statusLabel(w.status), statusCls: statusCls(w.status),
+          details: [
+            { k:'Order Ref', v: orderRef(w) },
+            { k:'Send to', v: phone },
+            { k:'You receive', v: ugx(net) },
+            { k:'Reason', v: w.rejectionReason }
+          ]
+        });
       }).join('');
       return;
     }
@@ -1012,53 +1033,50 @@ async function loadRecords(tab) {
 
     if (tab === 'deposits') {
       el.innerHTML = items.map(tx => {
-        const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'Online Recharge';
-        return `<div class="rec-card">
-          <div class="rec-card-hd"><div class="rec-card-hd-title">${typeLabel}</div><div class="rec-card-hd-amt">${ugx(tx.amount)}</div></div>
-          <div class="rec-row"><span class="rec-row-lbl">Order ID</span><span class="rec-row-val" style="font-size:11px;word-break:break-all">${tx.id}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Type</span><span class="rec-row-val">${typeLabel}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${tx.date || '—'}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${tx.time || fmtDT(tx)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status||'success')}">${statusLabel(tx.status||'success')}</span></div>
-          ${tx.description ? `<div class="rec-row"><span class="rec-row-lbl">Note</span><span class="rec-row-val">${tx.description}</span></div>` : ''}
-        </div>`;
+        const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'Recharge';
+        return recRow({
+          icon: '↓', title: typeLabel, sub: `${tx.date||''} · ${tx.time||fmtDT(tx)}`,
+          amt: '+' + ugx(tx.amount), amtClass: 's-green',
+          status: statusLabel(tx.status||'success'), statusCls: statusCls(tx.status||'success'),
+          details: [
+            { k:'Order ID', v: tx.id },
+            { k:'Type', v: typeLabel },
+            { k:'Note', v: tx.description }
+          ]
+        });
       }).join('');
     } else if (tab === 'revenue') {
       const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
-      const typeIcon = { checkin: '📅', cashback: '💰', commission: '👥', gift_code: '🎁', investment_return: '📈', admin_credit: '🏦', reversal: '↩️' };
-      const typeLabel = { checkin: 'Daily Check-in', cashback: 'Daily Cashback', commission: 'Referral Bonus', gift_code: 'Gift Code', investment_return: 'Investment Return', admin_credit: 'Admin Credit', reversal: 'Recharge Reversed' };
+      const typeIcon  = { checkin:'⚡', cashback:'💰', commission:'👥', gift_code:'🎁', investment_return:'📈', admin_credit:'🏦', reversal:'↩️' };
+      const typeLabel = { checkin:'Daily Spark', cashback:'Daily Cashback', commission:'Team Bonus', gift_code:'Gift Code', investment_return:'Asset Payout', admin_credit:'Admin Credit', reversal:'Recharge Reversed' };
       el.innerHTML = `
-        <div class="rec-card" style="background:linear-gradient(135deg,#cc7e00,#ff9d00);margin-bottom:8px">
-          <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-bottom:4px">Total Revenue Earned</div>
-          <div style="color:#fff;font-size:26px;font-weight:900">${ugx(totalCashback)}</div>
-          <div style="color:rgba(255,255,255,0.6);font-size:11px;margin-top:4px">${items.length} transaction${items.length !== 1 ? 's' : ''}</div>
+        <div class="rev-hero">
+          <div class="rev-hero-lbl">Total Inbound Balance</div>
+          <div class="rev-hero-amt">${ugx(totalCashback)}</div>
+          <div class="rev-hero-sub">${items.length} payout${items.length !== 1 ? 's' : ''}</div>
         </div>` +
-        items.map(tx => `<div class="rec-card">
-          <div class="rec-card-hd">
-            <div class="rec-card-hd-title">${typeIcon[tx.type] || '💰'} ${typeLabel[tx.type] || tx.type}</div>
-            <div class="rec-card-hd-amt s-green">+${ugx(tx.amount)}</div>
-          </div>
-          <div class="rec-row"><span class="rec-row-lbl">Date</span><span class="rec-row-val">${tx.date || '—'}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${tx.time || fmtDT(tx)}</span></div>
-          ${tx.description ? `<div class="rec-row"><span class="rec-row-lbl">Detail</span><span class="rec-row-val">${tx.description}</span></div>` : ''}
-        </div>`).join('');
+        items.map(tx => recRow({
+          icon: typeIcon[tx.type] || '💰', title: typeLabel[tx.type] || tx.type,
+          sub: `${tx.date||''} · ${tx.time||fmtDT(tx)}`,
+          amt: '+' + ugx(tx.amount), amtClass: 's-green',
+          details: [ { k:'Detail', v: tx.description } ]
+        })).join('');
     } else if (tab === 'referrals') {
-      el.innerHTML = items.map(tx => `<div class="rec-card">
-        <div class="rec-card-hd"><div class="rec-card-hd-title">Commission</div><div class="rec-card-hd-amt s-green">+${ugx(tx.amount)}</div></div>
-        <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
-        <div class="rec-row"><span class="rec-row-lbl">From</span><span class="rec-row-val">${tx.description||'Referral'}</span></div>
-        <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val s-green">Success</span></div>
-        <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
-      </div>`).join('');
+      el.innerHTML = items.map(tx => recRow({
+        icon: '👥', title: 'Team Bonus', sub: fmtDT(tx),
+        amt: '+' + ugx(tx.amount), amtClass: 's-green',
+        status: 'Success', statusCls: 's-green',
+        details: [ { k:'Order Ref', v: orderRef(tx) }, { k:'From', v: tx.description||'Affiliate' } ]
+      })).join('');
     } else {
       el.innerHTML = items.map(tx => {
         const pos = tx.amount > 0;
-        return `<div class="rec-card">
-          <div class="rec-card-hd"><div class="rec-card-hd-title">${tx.description||tx.type||'Transaction'}</div><div class="rec-card-hd-amt ${pos?'s-green':'s-red'}">${pos?'+':''}${ugx(tx.amount)}</div></div>
-          <div class="rec-row"><span class="rec-row-lbl">Order Ref</span><span class="rec-row-val">${orderRef(tx)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">State</span><span class="rec-row-val ${statusCls(tx.status)}">${statusLabel(tx.status)}</span></div>
-          <div class="rec-row"><span class="rec-row-lbl">Time</span><span class="rec-row-val">${fmtDT(tx)}</span></div>
-        </div>`;
+        return recRow({
+          icon: pos ? '↓' : '↑', title: tx.description||tx.type||'Transaction', sub: fmtDT(tx),
+          amt: (pos?'+':'') + ugx(tx.amount), amtClass: pos?'s-green':'s-red',
+          status: statusLabel(tx.status), statusCls: statusCls(tx.status),
+          details: [ { k:'Order Ref', v: orderRef(tx) } ]
+        });
       }).join('');
     }
   } catch (e) {
