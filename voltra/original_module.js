@@ -1239,7 +1239,7 @@ window.openDepositPage = () => {
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   document.getElementById('depAmount').value = '';
   const btn = document.getElementById('depProceedBtn');
-  btn.disabled = false; btn.textContent = 'Pay via MoMo';
+  btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
 
   // Pre-fill with profile phone (9 digits)
   const savedDigits = (_userData.phone || '').replace(/^\+256/, '').replace(/^0/, '').replace(/\D/g,'').slice(0,9);
@@ -1268,7 +1268,7 @@ window.proceedDeposit = async () => {
   try {
     const r = await api('/deposit/marzpay', { userId: _user.uid, amount, phone: '256' + digits9 });
     if (r.status !== 'success') {
-      btn.disabled = false; btn.textContent = 'Pay via MoMo';
+      btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
       showToast(r.message || 'Failed. Try again.', 'error');
       return;
     }
@@ -1280,7 +1280,7 @@ window.proceedDeposit = async () => {
     showDepStep(2);
     startDepPolling();
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'Pay via MoMo';
+    btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
     showToast('Network error. Try again.', 'error');
   }
 };
@@ -1291,7 +1291,7 @@ window.cancelDepWait = () => {
   document.getElementById('depPageTitle').textContent = 'Recharge Account';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   const btn = document.getElementById('depProceedBtn');
-  btn.disabled = false; btn.textContent = 'Pay via MoMo';
+  btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
 };
 
 window.retryDeposit = () => {
@@ -1300,7 +1300,7 @@ window.retryDeposit = () => {
   document.getElementById('depPageTitle').textContent = 'Recharge Account';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   const btn = document.getElementById('depProceedBtn');
-  btn.disabled = false; btn.textContent = 'Pay via MoMo';
+  btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
 };
 
 // Deposit result handler — called by either Firestore listener or HTTP poll.
