@@ -705,6 +705,27 @@ tr:hover td{background:rgba(255,255,255,.02)}
           </div>
           <img id="aboutImage3Preview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
         </div>
+        <div style="border-top:1px solid var(--border,#2a2f3a);margin:6px 0 14px;padding-top:10px">
+          <div style="font-size:13px;font-weight:700;color:#ff9d00;margin-bottom:10px">About Page — Section Text (HTML allowed · leave blank for defaults)</div>
+          <div class="form-group">
+            <label class="form-label">Section 1 — Heading</label>
+            <textarea class="form-textarea" id="aboutTitle1" rows="2" placeholder="Leave empty for default heading…"></textarea>
+            <label class="form-label" style="margin-top:8px">Section 1 — Body</label>
+            <textarea class="form-textarea" id="aboutBody1" rows="6" placeholder="Leave empty for default text…"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Section 2 — Heading</label>
+            <textarea class="form-textarea" id="aboutTitle2" rows="2" placeholder="Leave empty for default heading…"></textarea>
+            <label class="form-label" style="margin-top:8px">Section 2 — Body</label>
+            <textarea class="form-textarea" id="aboutBody2" rows="6" placeholder="Leave empty for default text…"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Section 3 — Heading</label>
+            <textarea class="form-textarea" id="aboutTitle3" rows="2" placeholder="Leave empty for default heading…"></textarea>
+            <label class="form-label" style="margin-top:8px">Section 3 — Body</label>
+            <textarea class="form-textarea" id="aboutBody3" rows="6" placeholder="Leave empty for default text…"></textarea>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label">Withdrawal Screen Image</label>
           <div style="display:flex;gap:8px;align-items:center">
@@ -2022,6 +2043,9 @@ async function loadSettings() {
       document.getElementById(k+'Url').value = v;
       if (v) { const p = document.getElementById(k+'Preview'); p.src = v; p.style.display = 'block'; }
     });
+    ['aboutTitle1','aboutBody1','aboutTitle2','aboutBody2','aboutTitle3','aboutBody3'].forEach(k => {
+      const el = document.getElementById(k); if (el) el.value = s[k] || '';
+    });
     const witImg = s.withdrawImage || '';
     document.getElementById('withdrawImageUrl').value = witImg;
     if (witImg) { const p=document.getElementById('withdrawImagePreview'); p.src=witImg; p.style.display='block'; }
@@ -2115,6 +2139,12 @@ window.saveContentImages = async () => {
     aboutImage1:          document.getElementById('aboutImage1Url').value.trim(),
     aboutImage2:          document.getElementById('aboutImage2Url').value.trim(),
     aboutImage3:          document.getElementById('aboutImage3Url').value.trim(),
+    aboutTitle1:          document.getElementById('aboutTitle1').value.trim(),
+    aboutBody1:           document.getElementById('aboutBody1').value.trim(),
+    aboutTitle2:          document.getElementById('aboutTitle2').value.trim(),
+    aboutBody2:           document.getElementById('aboutBody2').value.trim(),
+    aboutTitle3:          document.getElementById('aboutTitle3').value.trim(),
+    aboutBody3:           document.getElementById('aboutBody3').value.trim(),
     depositInstructions:  document.getElementById('depositInstructions').value.trim()
   };
   try {

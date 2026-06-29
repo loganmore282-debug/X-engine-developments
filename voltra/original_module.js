@@ -280,6 +280,13 @@ async function loadSlideshow() {
       s.aboutImage2 || DEFAULT_SLIDE_IMAGES[1],
       s.aboutImage3 || DEFAULT_SLIDE_IMAGES[2]
     ];
+    // admin-editable About section text (falls back to the built-in copy)
+    const D = CONTENT.about.blocks;
+    _aboutTxt = [
+      { h: s.aboutTitle1 || D[0].h, body: s.aboutBody1 || D[0].body },
+      { h: s.aboutTitle2 || D[1].h, body: s.aboutBody2 || D[1].body },
+      { h: s.aboutTitle3 || D[2].h, body: s.aboutBody3 || D[2].body }
+    ];
     // Deposit instructions override
     if (s.depositInstructions) {
       const el = document.getElementById('depInstructions');
@@ -302,13 +309,26 @@ async function loadSlideshow() {
     if (tg || wa || em) {
       const tgSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>`;
       const waSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>`;
-      CONTENT.support.body = `<p style="color:var(--text2);margin-bottom:20px">Our team is ready to help with any account questions or issues.</p>
-        ${tg ? `<a href="${tg}" target="_blank" rel="noopener" class="content-cta-btn tg-btn">${tgSvg}Telegram Support Channel</a>` : ''}
-        ${wa ? `<a href="https://wa.me/${wa.replace(/\D/g,'')}" target="_blank" rel="noopener" class="content-cta-btn wa-btn">${waSvg}WhatsApp Us Now</a>` : ''}
-        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-          <p style="font-size:13px;color:var(--text2)"><strong style="color:var(--text)">Email:</strong> ${em}</p>
-          <p style="font-size:13px;color:var(--text2);margin-top:8px"><strong style="color:var(--text)">Hours:</strong> ${hr}</p>
-        </div>`;
+      const mailSvg  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>`;
+      const clockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+      const card = (cls, icon, h, s, href) => {
+        const tag = href ? 'a' : 'div';
+        const attr = href ? ` href="${href}" target="_blank" rel="noopener"` : '';
+        return `<${tag} class="contact-card"${attr}>
+          <span class="cc-ico ${cls}">${icon}</span>
+          <span class="cc-txt"><span class="cc-h">${h}</span><span class="cc-s">${s}</span></span>
+          ${href ? '<span class="cc-go">&rsaquo;</span>' : ''}
+        </${tag}>`;
+      };
+      CONTENT.support.body = `
+        <div class="contact-hero">
+          <span class="contact-hero-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
+          <div><div class="ch-title">We're here to help</div><div class="ch-sub">Reach our team any time</div></div>
+        </div>
+        ${tg ? card('tg', tgSvg, 'Telegram', 'Join our support channel', tg) : ''}
+        ${wa ? card('wa', waSvg, 'WhatsApp', 'Chat with an agent now', 'https://wa.me/' + wa.replace(/\D/g,'')) : ''}
+        ${card('em', mailSvg, 'Email', em, 'mailto:' + em)}
+        ${card('hr', clockSvg, 'Support hours', hr, '')}`;
     }
   } catch (_) { setupSlideshow([]); }
 }
@@ -1652,19 +1672,42 @@ const CONTENT = {
   }
 };
 let _aboutImgs = [];
+let _aboutTxt = null;
+let _aboutStats = null;
 window.openContentModal = (type) => {
   const c = CONTENT[type];
   if (!c) return;
   document.getElementById('contentModalTitle').textContent = c.title;
   let body;
   if (type === 'about' && c.blocks) {
+    const txt = _aboutTxt || c.blocks;
+    const stats = (_aboutStats && _aboutStats.length ? _aboutStats : [
+      { v:'10 GWh', l:'Storage capacity' },
+      { v:'99.9%',  l:'Platform uptime' },
+      { v:'24/7',   l:'Support' },
+      { v:'3-Level',l:'Team rewards' }
+    ]);
+    const statsHtml = `<div class="about-stats">${stats.map(s =>
+      `<div class="ab-stat"><b>${s.v}</b><span>${s.l}</span></div>`).join('')}</div>`;
     // newspaper layout: image, text, image, text, image, text
-    body = c.blocks.map((b, i) => {
+    const sections = txt.map((b, i) => {
       const img = _aboutImgs[i] || DEFAULT_SLIDE_IMAGES[i % DEFAULT_SLIDE_IMAGES.length];
       return `<img class="about-pic" src="${img}" alt="">
         <h3${i ? ' style="margin-top:4px"' : ''}>${b.h}</h3>
         ${b.body || ('<p>' + (b.p || '') + '</p>')}`;
     }).join('');
+    const values = [
+      ['Transparency','Every return, fee and transaction is visible in your history — no hidden moves.'],
+      ['Reliability','Daily payouts settle automatically through our reconciliation engine, on time.'],
+      ['Accessibility','Anyone can start from a low entry and grow at their own pace.'],
+      ['Security','Your funds and data are protected with bank-grade, server-side safeguards.']
+    ];
+    const valuesHtml = `<h3 style="margin-top:18px">Our Values</h3><div class="about-values">${values.map(v =>
+      `<div class="ab-val"><div class="ab-val-h">${v[0]}</div><div class="ab-val-p">${v[1]}</div></div>`).join('')}</div>`;
+    const why = ['Fixed daily returns credited automatically','Withdraw your earnings any time','Class A / B / C assets for every budget','Earn from a 3-level referral network','Backed by real clean-energy infrastructure'];
+    const whyHtml = `<h3 style="margin-top:18px">Why choose Voltra</h3><div class="about-why">${why.map(w =>
+      `<div class="ab-why"><svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>${w}</span></div>`).join('')}</div>`;
+    body = statsHtml + sections + valuesHtml + whyHtml;
   } else {
     body = c.body;
   }
