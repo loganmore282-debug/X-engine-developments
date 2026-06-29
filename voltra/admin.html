@@ -673,15 +673,37 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <img id="depositImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
         </div>
         <div class="form-group">
-          <label class="form-label">About Page Image</label>
+          <label class="form-label">About Image 1 (top)</label>
           <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-input" type="url" id="aboutImageUrl" placeholder="Image URL or upload" style="flex:1">
+            <input class="form-input" type="url" id="aboutImage1Url" placeholder="Image URL or upload" style="flex:1">
             <label style="cursor:pointer">
-              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'aboutImageUrl','aboutImagePreview','aboutImage')">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'aboutImage1Url','aboutImage1Preview','aboutImage1')">
               <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
             </label>
           </div>
-          <img id="aboutImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+          <img id="aboutImage1Preview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">About Image 2 (middle)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" type="url" id="aboutImage2Url" placeholder="Image URL or upload" style="flex:1">
+            <label style="cursor:pointer">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'aboutImage2Url','aboutImage2Preview','aboutImage2')">
+              <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
+            </label>
+          </div>
+          <img id="aboutImage2Preview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">About Image 3 (bottom)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" type="url" id="aboutImage3Url" placeholder="Image URL or upload" style="flex:1">
+            <label style="cursor:pointer">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'aboutImage3Url','aboutImage3Preview','aboutImage3')">
+              <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
+            </label>
+          </div>
+          <img id="aboutImage3Preview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
         </div>
         <div class="form-group">
           <label class="form-label">Withdrawal Screen Image</label>
@@ -1996,8 +2018,10 @@ async function loadSettings() {
     document.getElementById('productsBannerUrl').value  = prodBanner;
     document.getElementById('depositImageUrl').value    = depImg;
     document.getElementById('depositInstructions').value = depInst;
-    const aboutImg = s.aboutImage || '';
-    document.getElementById('aboutImageUrl').value = aboutImg;
+    [['aboutImage1', s.aboutImage1 || s.aboutImage || ''], ['aboutImage2', s.aboutImage2 || ''], ['aboutImage3', s.aboutImage3 || '']].forEach(([k,v]) => {
+      document.getElementById(k+'Url').value = v;
+      if (v) { const p = document.getElementById(k+'Preview'); p.src = v; p.style.display = 'block'; }
+    });
     const witImg = s.withdrawImage || '';
     document.getElementById('withdrawImageUrl').value = witImg;
     if (witImg) { const p=document.getElementById('withdrawImagePreview'); p.src=witImg; p.style.display='block'; }
@@ -2088,7 +2112,9 @@ window.saveContentImages = async () => {
     productsBannerImage:  document.getElementById('productsBannerUrl').value.trim(),
     depositImage:         document.getElementById('depositImageUrl').value.trim(),
     withdrawImage:        document.getElementById('withdrawImageUrl').value.trim(),
-    aboutImage:           document.getElementById('aboutImageUrl').value.trim(),
+    aboutImage1:          document.getElementById('aboutImage1Url').value.trim(),
+    aboutImage2:          document.getElementById('aboutImage2Url').value.trim(),
+    aboutImage3:          document.getElementById('aboutImage3Url').value.trim(),
     depositInstructions:  document.getElementById('depositInstructions').value.trim()
   };
   try {

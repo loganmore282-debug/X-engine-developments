@@ -275,7 +275,11 @@ async function loadSlideshow() {
       if (h) h.style.backgroundImage = `linear-gradient(135deg,rgba(10,14,23,0.55),rgba(10,14,23,0.35) 50%,rgba(10,14,23,0.7)), url('${s.withdrawImage}')`;
     }
     // About section image (admin-settable, stacked at top of About)
-    if (s.aboutImage) _aboutImage = s.aboutImage;
+    _aboutImgs = [
+      s.aboutImage1 || s.aboutImage || DEFAULT_SLIDE_IMAGES[0],
+      s.aboutImage2 || DEFAULT_SLIDE_IMAGES[1],
+      s.aboutImage3 || DEFAULT_SLIDE_IMAGES[2]
+    ];
     // Deposit instructions override
     if (s.depositInstructions) {
       const el = document.getElementById('depInstructions');
@@ -1563,11 +1567,15 @@ window.removeBankAccount = async (idx) => {
 const CONTENT = {
   about: {
     title: 'About Voltra',
-    body: `<h3><svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg> Powering Everyday Earners</h3>
-      <p>Voltra turns your capital into daily energy. You activate a power machine, and it generates returns for you every single day of its cycle — automatically.</p>
-      <p>From the entry-level Spark to the high-output Thunder, every machine is built to keep your earnings charged. No guesswork, no waiting — just steady daily payouts you can withdraw.</p>
-      <h3 style="margin-top:16px">Why Voltra</h3>
-      <p>Simple to start, transparent by design, and powered by a 3-level team reward system that pays you instantly when your network grows. Plug in, power up, and watch your wallet charge.</p>`
+    // built at render time so admin-uploaded images interleave with the text
+    blocks: [
+      { h:'<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg> Powering Everyday Earners',
+        p:'Voltra turns your capital into clean-energy income. You activate an energy asset, and it pays you a return every single day of its cycle — automatically, no effort needed.' },
+      { h:'Built on real infrastructure',
+        p:'From the entry-level Spark to the high-output Thunder, every asset is modelled on solar, wind and battery-storage facilities. Your funds power output, and the output pays you back daily — steady payouts you can withdraw any time.' },
+      { h:'Grow with your network',
+        p:'Simple to start, transparent by design, and powered by a 3-level team reward system that pays you instantly when the people you invite activate assets. Plug in, power up, and watch your wallet charge.' }
+    ]
   },
   rules: {
     title: 'Platform Rules',
@@ -1638,14 +1646,23 @@ const CONTENT = {
       <p>For any privacy question, reach us through the Support option in the app.</p>`
   }
 };
-let _aboutImage = null;
+let _aboutImgs = [];
 window.openContentModal = (type) => {
   const c = CONTENT[type];
   if (!c) return;
   document.getElementById('contentModalTitle').textContent = c.title;
-  let body = c.body;
-  if (type === 'about' && _aboutImage)
-    body = `<img src="${_aboutImage}" alt="" style="width:100%;border-radius:14px;margin-bottom:16px;display:block">` + body;
+  let body;
+  if (type === 'about' && c.blocks) {
+    // newspaper layout: image, text, image, text, image, text
+    body = c.blocks.map((b, i) => {
+      const img = _aboutImgs[i] || DEFAULT_SLIDE_IMAGES[i % DEFAULT_SLIDE_IMAGES.length];
+      return `<img class="about-pic" src="${img}" alt="">
+        <h3${i ? ' style="margin-top:4px"' : ''}>${b.h}</h3>
+        <p>${b.p}</p>`;
+    }).join('');
+  } else {
+    body = c.body;
+  }
   document.getElementById('contentModalBody').innerHTML = body;
   openModal('contentModal');
 };
