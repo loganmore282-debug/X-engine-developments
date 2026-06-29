@@ -1394,6 +1394,12 @@ window.pickWitAccount = (idx, phone) => {
   document.getElementById('witPhone').value = num;
 };
 
+window.selectWitAmt = (amt, btn) => {
+  document.getElementById('witAmount').value = amt;
+  document.querySelectorAll('.wq-btn').forEach(b => b.classList.remove('sel'));
+  if (btn) btn.classList.add('sel');
+  updateWitFee();
+};
 window.updateWitFee = () => {
   const raw = parseInt(document.getElementById('witAmount').value, 10);
   const row = document.getElementById('witFeeRow');
