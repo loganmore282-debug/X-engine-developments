@@ -16,9 +16,11 @@ const firebaseConfig = {
   measurementId:     "G-02YSFLS6DV"
 };
 
-// ⚠️ VOLTRA — replace with your own Railway server URL once deployed.
+// NOTE: VOLTRA — replace with your own Railway server URL once deployed.
 const SERVER = 'https://business-production-f4c2.up.railway.app';
 
+const _BOLT = '<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
+const _ICN_CHECKIN='<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>',_ICN_COINS='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',_ICN_PEOPLE='<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="7" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2.5 19c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5v.5h-13z"/><path d="M16.5 13.2c2.7.2 5 2 5 4.8v1h-4v-1c0-1.9-.9-3.6-2.3-4.6.4-.1.9-.2 1.3-.2z"/></svg>',_ICN_GIFT='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',_ICN_TREND='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',_ICN_BANK='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>',_ICN_UNDO='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>';
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
@@ -225,7 +227,7 @@ function setupSlideshow(images) {
     if (img) {
       slide.innerHTML = `<img src="${img}" alt="" fetchpriority="${i===0?'high':'low'}" decoding="async" loading="eager" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0"><div class="slide-overlay"></div>`;
     } else {
-      slide.innerHTML = `<div class="slide-watermark">⚡</div><div class="slide-slogan">${def.slogan.replace('\n','<br>')}</div>`;
+      slide.innerHTML = `<div class="slide-watermark"><svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></div><div class="slide-slogan">${def.slogan.replace('\n','<br>')}</div>`;
     }
     wrap.appendChild(slide);
     const dot = document.createElement('span');
@@ -474,10 +476,10 @@ function renderHome(u) {
   const doneCi = u.lastCheckinDate === todayKey;
   const streakDays = u.checkinStreak || 0;
   document.getElementById('checkinSub').textContent = doneCi
-    ? `✓ Checked in today  ·  ${streakDays} day${streakDays===1?'':'s'} series`
+    ? `<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Checked in today  ·  ${streakDays} day${streakDays===1?'':'s'} series`
     : 'Earn UGX 500 free today';
   const ciBtn = document.getElementById('checkinBtn');
-  ciBtn.textContent = doneCi ? '✓ Done' : 'Claim';
+  ciBtn.textContent = doneCi ? 'Done' : 'Claim';
   ciBtn.className   = 'btn-checkin' + (doneCi ? ' done' : '');
 }
 
@@ -504,7 +506,7 @@ function renderHomeInvestments(invs) {
       </div>
       <div class="inv-right">
         <div class="inv-return">${ugx(inv.expectedReturn)}</div>
-        <div class="inv-days" style="${matured?'color:#22c55e;font-weight:700':''}">${matured ? '✓ Matured' : 'Day '+Math.min(cycleDays,daysDone+1)+'/'+cycleDays}</div>
+        <div class="inv-days" style="${matured?'color:#22c55e;font-weight:700':''}">${matured ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Matured' : 'Day '+Math.min(cycleDays,daysDone+1)+'/'+cycleDays}</div>
         <span class="inv-badge ${matured ? 'matured' : 'active'}">${matured ? 'Matured' : 'Active'}</span>
       </div>
     </div>`;
@@ -531,15 +533,15 @@ function renderCommission(u) {
 function renderMore(u) {
   const nameEl = document.getElementById('moreName');
   const TIER_BADGES = {
-    junior_agent:    '🥉 Junior Agent',
-    agent:           '🥈 Agent',
-    super_agent:     '🥇 Super Agent',
-    regional_agent:  '💎 Regional Agent',
-    national_agent:  '👑 National Agent',
-    executive_agent: '🚀 Executive Agent',
+    junior_agent:    'Junior Agent',
+    agent:           'Agent',
+    super_agent:     'Super Agent',
+    regional_agent:  'Regional Agent',
+    national_agent:  'National Agent',
+    executive_agent: 'Executive Agent',
   };
   if (u.isAgent && u.agentTier) {
-    nameEl.innerHTML = (u.name || '—') + ` <span class="agent-badge">${TIER_BADGES[u.agentTier] || '🥉 Agent'}</span>`;
+    nameEl.innerHTML = (u.name || '—') + ` <span class="agent-badge">${TIER_BADGES[u.agentTier] || 'Agent'}</span>`;
   } else {
     nameEl.textContent = u.name || '—';
   }
@@ -551,13 +553,13 @@ function renderMore(u) {
 // ── RENDER AGENT CENTRE ──
 function renderAgentCentre(u) {
   const TIERS = [
-    { key: 'member',          label: 'Member',          stars: '🏅', threshold:  0, weeklyPay:      0 },
-    { key: 'junior_agent',    label: 'Junior Agent',    stars: '🥉', threshold:  5, weeklyPay:  30000 },
-    { key: 'agent',           label: 'Agent',           stars: '🥈', threshold: 10, weeklyPay:  75000 },
-    { key: 'super_agent',     label: 'Super Agent',     stars: '🥇', threshold: 15, weeklyPay: 120000 },
-    { key: 'regional_agent',  label: 'Regional Agent',  stars: '💎', threshold: 20, weeklyPay: 170000 },
-    { key: 'national_agent',  label: 'National Agent',  stars: '👑', threshold: 30, weeklyPay: 220000 },
-    { key: 'executive_agent', label: 'Executive Agent', stars: '🚀', threshold: 50, weeklyPay: 280000 },
+    { key: 'member',          label: 'Member',          stars: '', threshold:  0, weeklyPay:      0 },
+    { key: 'junior_agent',    label: 'Junior Agent',    stars: '', threshold:  5, weeklyPay:  30000 },
+    { key: 'agent',           label: 'Agent',           stars: '', threshold: 10, weeklyPay:  75000 },
+    { key: 'super_agent',     label: 'Super Agent',     stars: '', threshold: 15, weeklyPay: 120000 },
+    { key: 'regional_agent',  label: 'Regional Agent',  stars: '', threshold: 20, weeklyPay: 170000 },
+    { key: 'national_agent',  label: 'National Agent',  stars: '', threshold: 30, weeklyPay: 220000 },
+    { key: 'executive_agent', label: 'Executive Agent', stars: '', threshold: 50, weeklyPay: 280000 },
   ];
   const refs           = u.activeReferralCount || 0;
   const currentTier    = TIERS.find(t => t.key === (u.agentTier || 'member')) || TIERS[0];
@@ -585,7 +587,7 @@ function renderAgentCentre(u) {
         <div class="ac-hero-tier">${currentTier.label}</div>
         <div class="ac-hero-name">${u.name || '—'}</div>
         <div class="ac-hero-meta">Agent since ${agentSinceDate}</div>
-        <div class="ac-hero-payout">⏰ ${payoutLine}</div>
+        <div class="ac-hero-payout">${payoutLine}</div>
       </div>
       <div class="ac-stats">
         <div class="ac-stat">
@@ -601,7 +603,7 @@ function renderAgentCentre(u) {
     const needed = nextTier ? Math.max(nextTier.threshold - refs, 0) : 0;
     heroHtml = `
       <div class="ac-hero no-agent">
-        <span class="ac-hero-star">🏅</span>
+        <span class="ac-hero-star"></span>
         <div class="ac-hero-tier">Member</div>
         <div class="ac-hero-name">${u.name || '—'}</div>
         <div class="ac-hero-meta">${needed > 0 ? `Get ${needed} more active referral${needed===1?'':'s'} to become ${nextTier.stars} ${nextTier.label}` : 'Invite friends to climb the ranks!'}</div>
@@ -634,7 +636,7 @@ function renderAgentCentre(u) {
       barPct = Math.min(refs / tier.threshold * 100, 100);
       barLabel = refs + ' / ' + tier.threshold;
     }
-    const pillLabel = state === 'achieved' ? '✓ Achieved' : state === 'inprogress' ? 'In Progress' : 'Locked';
+    const pillLabel = state === 'achieved' ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Achieved' : state === 'inprogress' ? 'In Progress' : 'Locked';
     const refsLine = tier.threshold === 0 ? 'Default rank' : tier.threshold + ' active referrals';
     return `<div class="ac-tier-card ${state}">
       <div class="ac-tier-top">
@@ -744,7 +746,7 @@ function renderProducts(products) {
   const cardHtml = (p) => {
     const inStock  = p.isInStock !== false;
     const stars    = p.stars || 0;
-    const starStr  = stars ? '★'.repeat(Math.round(stars)) : '';
+    const starStr  = stars ? '<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.3 3.2L7 14.2 2 9.4l7-.9z"/></svg>'.repeat(Math.round(stars)) : '';
     const imgHtml  = p.image
       ? `<img src="${p.image}" alt="${p.name}" decoding="async" loading="lazy">`
       : `<span class="no-img">${ICN.box}</span>`;
@@ -766,9 +768,9 @@ function renderProducts(products) {
 
   // Voltra organises machines into power tiers instead of one flat list
   const tiers = [
-    { icon:'⚡', name:'Starter Assets', desc:'Low entry · quick cycles',        test:p => (p.price||0) <  100000 },
-    { icon:'🔋', name:'Power Assets',   desc:'Mid-range · bigger daily output', test:p => (p.price||0) >= 100000 && (p.price||0) < 700000 },
-    { icon:'🏭', name:'Elite Assets',   desc:'High capital · maximum return',   test:p => (p.price||0) >= 700000 },
+    { icon:'<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>', name:'Starter Assets', desc:'Low entry · quick cycles',        test:p => (p.price||0) <  100000 },
+    { icon:'<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="16" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><line x1="6" y1="11" x2="6" y2="13"/><line x1="10" y1="11" x2="10" y2="13"/></svg>', name:'Power Assets',   desc:'Mid-range · bigger daily output', test:p => (p.price||0) >= 100000 && (p.price||0) < 700000 },
+    { icon:'<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20V9l-6 4V9l-6 4V4H4z"/><line x1="7" y1="20" x2="7" y2="16"/></svg>', name:'Elite Assets',   desc:'High capital · maximum return',   test:p => (p.price||0) >= 700000 },
   ];
 
   let html = '';
@@ -873,7 +875,7 @@ window.openInvDetail = async (invId) => {
     const stateBadge = claimed ? '<span class="inv-badge claimed">Claimed</span>'
                      : matured ? '<span class="inv-badge matured">Matured</span>'
                      : '<span class="inv-badge active">Active</span>';
-    const claimBtn = matured ? `<button class="btn-submit" style="margin-top:16px" onclick="closeModal('invDetailModal');claimInvestment('${inv.id}')">🎉 Claim Return — ${ugx(inv.expectedReturn)}</button>` : '';
+    const claimBtn = matured ? `<button class="btn-submit" style="margin-top:16px" onclick="closeModal('invDetailModal');claimInvestment('${inv.id}')"> Claim Return — ${ugx(inv.expectedReturn)}</button>` : '';
     body.innerHTML = `
       <div style="text-align:center">${imgHtml}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -889,7 +891,7 @@ window.openInvDetail = async (invId) => {
       <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Investment Duration</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
       <div class="rec-row"><span class="rec-row-lbl">Matures On</span><span class="rec-row-val">${inv.maturityDate ? (tsDate(inv.maturityDate)||new Date()).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed ✓' : matured ? '✅ Matured — Claim now!' : fullyPaid ? 'Fully paid out ✓' : timeLeftStr}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed' : matured ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Matured — Claim now!' : fullyPaid ? 'Fully paid out' : timeLeftStr}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
       <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:12px;color:var(--text2)">Progress</span>
@@ -978,7 +980,7 @@ async function loadRecords(tab) {
         const pct = cyc ? Math.round(elapsed / cyc * 100) : (claimed||matured?100:0);
         const tStr = claimed ? 'Completed' : matured ? 'Ready to claim' : `${dl} day${dl!==1?'s':''} left`;
         return `<div class="ast-card" onclick="openInvDetail('${inv.id}')">
-          <div class="ast-hd"><div class="ast-name">⚡ ${inv.productName||'Asset'}</div>${badge}</div>
+          <div class="ast-hd"><div class="ast-name"><svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg> ${inv.productName||'Asset'}</div>${badge}</div>
           <div class="ast-figs">
             <div class="ast-fig"><b>${ugx(inv.dailyReturn||Math.round((inv.expectedReturn||0)/(cyc||1)))}</b><span>Daily output</span></div>
             <div class="ast-fig"><b>${ugx(inv.expectedReturn)}</b><span>Total return</span></div>
@@ -1000,7 +1002,7 @@ async function loadRecords(tab) {
         const net   = w.netAmount != null ? w.netAmount : Math.round((w.amount||0) * 0.93);
         const phone = w.withdrawalPhone || w.phone || '—';
         return recRow({
-          icon: '↑', title: 'Payout', sub: `${w.date||''} · ${w.time||fmtDT(w)}`,
+          icon: '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg>', title: 'Payout', sub: `${w.date||''} · ${w.time||fmtDT(w)}`,
           amt: '−' + ugx(w.amount), amtClass: 's-red',
           status: statusLabel(w.status), statusCls: statusCls(w.status),
           details: [
@@ -1035,7 +1037,7 @@ async function loadRecords(tab) {
       el.innerHTML = items.map(tx => {
         const typeLabel = tx.type === 'admin_credit' ? 'Admin Credit' : 'Recharge';
         return recRow({
-          icon: '↓', title: typeLabel, sub: `${tx.date||''} · ${tx.time||fmtDT(tx)}`,
+          icon: '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>', title: typeLabel, sub: `${tx.date||''} · ${tx.time||fmtDT(tx)}`,
           amt: '+' + ugx(tx.amount), amtClass: 's-green',
           status: statusLabel(tx.status||'success'), statusCls: statusCls(tx.status||'success'),
           details: [
@@ -1047,7 +1049,7 @@ async function loadRecords(tab) {
       }).join('');
     } else if (tab === 'revenue') {
       const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
-      const typeIcon  = { checkin:'⚡', cashback:'💰', commission:'👥', gift_code:'🎁', investment_return:'📈', admin_credit:'🏦', reversal:'↩️' };
+      const typeIcon  = { checkin:_ICN_CHECKIN, cashback:_ICN_COINS, commission:_ICN_PEOPLE, gift_code:_ICN_GIFT, investment_return:_ICN_TREND, admin_credit:_ICN_BANK, reversal:_ICN_UNDO };
       const typeLabel = { checkin:'Daily Spark', cashback:'Daily Cashback', commission:'Team Bonus', gift_code:'Gift Code', investment_return:'Asset Payout', admin_credit:'Admin Credit', reversal:'Recharge Reversed' };
       el.innerHTML = `
         <div class="rev-hero">
@@ -1056,14 +1058,14 @@ async function loadRecords(tab) {
           <div class="rev-hero-sub">${items.length} payout${items.length !== 1 ? 's' : ''}</div>
         </div>` +
         items.map(tx => recRow({
-          icon: typeIcon[tx.type] || '💰', title: typeLabel[tx.type] || tx.type,
+          icon: typeIcon[tx.type] || _ICN_COINS, title: typeLabel[tx.type] || tx.type,
           sub: `${tx.date||''} · ${tx.time||fmtDT(tx)}`,
           amt: '+' + ugx(tx.amount), amtClass: 's-green',
           details: [ { k:'Detail', v: tx.description } ]
         })).join('');
     } else if (tab === 'referrals') {
       el.innerHTML = items.map(tx => recRow({
-        icon: '👥', title: 'Team Bonus', sub: fmtDT(tx),
+        icon: '<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="7" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2.5 19c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5v.5h-13z"/><path d="M16.5 13.2c2.7.2 5 2 5 4.8v1h-4v-1c0-1.9-.9-3.6-2.3-4.6.4-.1.9-.2 1.3-.2z"/></svg>', title: 'Team Bonus', sub: fmtDT(tx),
         amt: '+' + ugx(tx.amount), amtClass: 's-green',
         status: 'Success', statusCls: 's-green',
         details: [ { k:'Order Ref', v: orderRef(tx) }, { k:'From', v: tx.description||'Affiliate' } ]
@@ -1072,7 +1074,7 @@ async function loadRecords(tab) {
       el.innerHTML = items.map(tx => {
         const pos = tx.amount > 0;
         return recRow({
-          icon: pos ? '↓' : '↑', title: tx.description||tx.type||'Transaction', sub: fmtDT(tx),
+          icon: pos ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>' : '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg>', title: tx.description||tx.type||'Transaction', sub: fmtDT(tx),
           amt: (pos?'+':'') + ugx(tx.amount), amtClass: pos?'s-green':'s-red',
           status: statusLabel(tx.status), statusCls: statusCls(tx.status),
           details: [ { k:'Order Ref', v: orderRef(tx) } ]
@@ -1239,7 +1241,7 @@ window.openDepositPage = () => {
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   document.getElementById('depAmount').value = '';
   const btn = document.getElementById('depProceedBtn');
-  btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
+  btn.disabled = false; btn.innerHTML = _BOLT + ' Charge Wallet';
 
   // Pre-fill with profile phone (9 digits)
   const savedDigits = (_userData.phone || '').replace(/^\+256/, '').replace(/^0/, '').replace(/\D/g,'').slice(0,9);
@@ -1268,7 +1270,7 @@ window.proceedDeposit = async () => {
   try {
     const r = await api('/deposit/marzpay', { userId: _user.uid, amount, phone: '256' + digits9 });
     if (r.status !== 'success') {
-      btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
+      btn.disabled = false; btn.innerHTML = _BOLT + ' Charge Wallet';
       showToast(r.message || 'Failed. Try again.', 'error');
       return;
     }
@@ -1280,7 +1282,7 @@ window.proceedDeposit = async () => {
     showDepStep(2);
     startDepPolling();
   } catch (e) {
-    btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
+    btn.disabled = false; btn.innerHTML = _BOLT + ' Charge Wallet';
     showToast('Network error. Try again.', 'error');
   }
 };
@@ -1291,7 +1293,7 @@ window.cancelDepWait = () => {
   document.getElementById('depPageTitle').textContent = 'Recharge Account';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   const btn = document.getElementById('depProceedBtn');
-  btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
+  btn.disabled = false; btn.innerHTML = _BOLT + ' Charge Wallet';
 };
 
 window.retryDeposit = () => {
@@ -1300,7 +1302,7 @@ window.retryDeposit = () => {
   document.getElementById('depPageTitle').textContent = 'Recharge Account';
   document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
   const btn = document.getElementById('depProceedBtn');
-  btn.disabled = false; btn.textContent = '⚡ Charge Wallet';
+  btn.disabled = false; btn.innerHTML = _BOLT + ' Charge Wallet';
 };
 
 // Deposit result handler — called by either Firestore listener or HTTP poll.
@@ -1311,7 +1313,7 @@ function handleDepResult(status, creditedAmount, amount) {
     _depResolved = true;
     stopDepTimers();
     document.getElementById('depSuccessAmt').textContent = ugx(creditedAmount || amount);
-    document.getElementById('depPageTitle').textContent  = 'Payment Received ✅';
+    document.getElementById('depPageTitle').textContent  = 'Payment Received';
     document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
     showDepStep(3); launchConfetti(); loadUser();
   } else if (status === 'failed') {
@@ -1402,7 +1404,7 @@ window.updateWitFee = () => {
     ? ` · Must be multiple of 5,000 (try ${ugx(Math.ceil(raw/5000)*5000)})`
     : '';
   row.style.display = 'block';
-  row.textContent = `Fee: ${ugx(fee)} (7%)  →  You receive: ${ugx(net)}${snapHint}`;
+  row.textContent = `Fee: ${ugx(fee)} (7%)  ·  You receive: ${ugx(net)}${snapHint}`;
 };
 
 window.submitWithdrawal = async () => {
@@ -1445,10 +1447,10 @@ function handleWitResult(status, d, amount) {
   if (_witResolved) return;
   if (status === 'processed') {
     _witResolved = true; stopWitTimers();
-    showToast(`✅ Withdrawal of ${ugx(d.netAmount || amount)} sent to your phone!`, 'success');
+    showToast(`Withdrawal of ${ugx(d.netAmount || amount)} sent to your phone!`, 'success');
   } else if (status === 'failed') {
     _witResolved = true; stopWitTimers();
-    showToast(`❌ Withdrawal failed — ${ugx(amount)} refunded to your wallet.`, 'error');
+    showToast(`Withdrawal failed — ${ugx(amount)} refunded to your wallet.`, 'error');
   }
 }
 
@@ -1536,7 +1538,7 @@ window.removeBankAccount = async (idx) => {
 const CONTENT = {
   about: {
     title: 'About Voltra',
-    body: `<h3>⚡ Powering Everyday Earners</h3>
+    body: `<h3><svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg> Powering Everyday Earners</h3>
       <p>Voltra turns your capital into daily energy. You activate a power machine, and it generates returns for you every single day of its cycle — automatically.</p>
       <p>From the entry-level Spark to the high-output Thunder, every machine is built to keep your earnings charged. No guesswork, no waiting — just steady daily payouts you can withdraw.</p>
       <h3 style="margin-top:16px">Why Voltra</h3>
@@ -1654,7 +1656,7 @@ window.uploadPhoto = async (input) => {
 };
 
 // ── REFERRAL CODE FROM URL ──
-// A ?ref= link means the visitor was invited → drop them straight on the
+// A ?ref= link means the visitor was invited - drop them straight on the
 // registration screen with the code pre-filled (not the login screen).
 const urlRef = new URLSearchParams(window.location.search).get('ref');
 if (urlRef) {
