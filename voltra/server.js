@@ -231,14 +231,15 @@ function randChars(n) {
   return Array.from(crypto.randomBytes(n)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
 
-// Globally-unique referral code: N + 5 random + X (e.g. N4K7M2X)
+// Globally-unique referral code: 7 fully-random characters, no fixed
+// prefix/suffix (e.g. K7M2QP9). Drawn from an unambiguous charset.
 async function generateUniqueRefCode() {
   for (let attempt = 0; attempt < 15; attempt++) {
-    const code = 'N' + randChars(5) + 'X';
+    const code = randChars(7);
     const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
     if (exists.empty) return code;
   }
-  return 'N' + Date.now().toString(36).toUpperCase().slice(-5).padStart(5, '0') + 'X';
+  return randChars(9);
 }
 
 // ── SMS PARSING ──

@@ -1145,9 +1145,9 @@ async function loadRecords(tab) {
 }
 
 // ── REFERRAL ──
-// Canonical public site — invite links must point here, NOT at whatever
-// origin we happen to be running under (EdgeOne URL / GoDaddy iframe).
-const VOLTRA_SITE = 'https://www.nexus-ug.site/';
+// Invite links point at wherever the app is actually being served from, so
+// they always resolve for whoever opens them (EdgeOne URL or a custom domain).
+const VOLTRA_SITE = location.origin + location.pathname;
 
 // Clipboard copy that ALSO works inside iframes (GoDaddy domain masking),
 // where navigator.clipboard is blocked. Falls back to a hidden textarea
@@ -1184,7 +1184,7 @@ window.copyRefCode = () => {
 window.shareRefLink = () => {
   const code = _userData?.referralCode || '';
   const link = VOLTRA_SITE + '?ref=' + code;
-  const text = `Join Voltra and earn returns!\n\nUse my referral code: ${code}\nSign up here: ${link}`;
+  const text = `Power your wealth with Voltra — activate clean-energy assets and collect daily payouts.\n\nMy invite code: ${code}\nStart earning here: ${link}`;
   if (navigator.share) {
     navigator.share({ title: 'Voltra', text, url: link }).catch(() => {});
   } else {
