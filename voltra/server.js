@@ -2523,6 +2523,7 @@ app.get('/settings/public', async (_req, res) => {
         productsBannerImage: s.productsBannerImage  || '',
         depositImage:        s.depositImage         || '',
         aboutImage:          s.aboutImage           || '',
+        withdrawImage:       s.withdrawImage        || '',
         depositInstructions: s.depositInstructions  || '',
         announcement:        s.announcement         || null,
         supportTelegram:     s.supportTelegram      || '',

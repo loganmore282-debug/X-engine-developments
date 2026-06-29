@@ -263,9 +263,15 @@ async function loadSlideshow() {
       if (wrap && img) { img.src = s.productsBannerImage; wrap.style.display = 'block'; }
     }
     // Deposit promo image
+    // Deposit screen hero image (admin-settable)
     if (s.depositImage) {
-      const img = document.getElementById('depPromoImg');
-      if (img) { img.src = s.depositImage; img.style.display = 'block'; }
+      const h = document.getElementById('depHero');
+      if (h) h.style.backgroundImage = `linear-gradient(135deg,rgba(10,14,23,0.55),rgba(10,14,23,0.35) 50%,rgba(10,14,23,0.7)), url('${s.depositImage}')`;
+    }
+    // Withdraw screen hero image (admin-settable)
+    if (s.withdrawImage) {
+      const h = document.getElementById('witHero');
+      if (h) h.style.backgroundImage = `linear-gradient(135deg,rgba(10,14,23,0.55),rgba(10,14,23,0.35) 50%,rgba(10,14,23,0.7)), url('${s.withdrawImage}')`;
     }
     // About section image (admin-settable, stacked at top of About)
     if (s.aboutImage) _aboutImage = s.aboutImage;

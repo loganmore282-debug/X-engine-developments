@@ -684,6 +684,17 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <img id="aboutImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
         </div>
         <div class="form-group">
+          <label class="form-label">Withdrawal Screen Image</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" type="url" id="withdrawImageUrl" placeholder="Image URL or upload" style="flex:1">
+            <label style="cursor:pointer">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'withdrawImageUrl','withdrawImagePreview','withdrawImage')">
+              <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
+            </label>
+          </div>
+          <img id="withdrawImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        </div>
+        <div class="form-group">
           <label class="form-label">Deposit Instructions (HTML allowed)</label>
           <textarea class="form-textarea" id="depositInstructions" rows="6" placeholder="Leave empty to use default instructions…"></textarea>
         </div>
@@ -1987,6 +1998,9 @@ async function loadSettings() {
     document.getElementById('depositInstructions').value = depInst;
     const aboutImg = s.aboutImage || '';
     document.getElementById('aboutImageUrl').value = aboutImg;
+    const witImg = s.withdrawImage || '';
+    document.getElementById('withdrawImageUrl').value = witImg;
+    if (witImg) { const p=document.getElementById('withdrawImagePreview'); p.src=witImg; p.style.display='block'; }
     if (prodBanner) { const p=document.getElementById('productsBannerPreview'); p.src=prodBanner; p.style.display='block'; }
     if (depImg)     { const p=document.getElementById('depositImagePreview');   p.src=depImg;     p.style.display='block'; }
     if (aboutImg)   { const p=document.getElementById('aboutImagePreview');     p.src=aboutImg;   p.style.display='block'; }
@@ -2073,6 +2087,7 @@ window.saveContentImages = async () => {
   const data = {
     productsBannerImage:  document.getElementById('productsBannerUrl').value.trim(),
     depositImage:         document.getElementById('depositImageUrl').value.trim(),
+    withdrawImage:        document.getElementById('withdrawImageUrl').value.trim(),
     aboutImage:           document.getElementById('aboutImageUrl').value.trim(),
     depositInstructions:  document.getElementById('depositInstructions').value.trim()
   };
