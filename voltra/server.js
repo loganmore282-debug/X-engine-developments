@@ -739,9 +739,10 @@ app.post('/register', async (req, res) => {
     const WELCOME = WELCOME_BONUS;
     const { date, time } = nowStr();
     const batch = db.batch();
-    const update = { registrationDone: true, referralCode: myRefCode };
+    // single update on the user doc so the balance increment + flags apply together
+    // (two separate batch.update calls on the same doc could clobber each other)
+    const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
 
-    batch.update(userRef, { walletBalance: FieldValue.increment(WELCOME) });
     batch.set(db.collection('transactions').doc(), {
       userId, type: 'admin_credit', description: 'Welcome bonus — new account',
       amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
