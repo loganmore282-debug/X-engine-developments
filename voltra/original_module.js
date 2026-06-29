@@ -1569,12 +1569,17 @@ const CONTENT = {
     title: 'About Voltra',
     // built at render time so admin-uploaded images interleave with the text
     blocks: [
-      { h:'<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg> Powering Everyday Earners',
-        p:'Voltra turns your capital into clean-energy income. You activate an energy asset, and it pays you a return every single day of its cycle — automatically, no effort needed.' },
-      { h:'Built on real infrastructure',
-        p:'From the entry-level Spark to the high-output Thunder, every asset is modelled on solar, wind and battery-storage facilities. Your funds power output, and the output pays you back daily — steady payouts you can withdraw any time.' },
-      { h:'Grow with your network',
-        p:'Simple to start, transparent by design, and powered by a 3-level team reward system that pays you instantly when the people you invite activate assets. Plug in, power up, and watch your wallet charge.' }
+      { h:'<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg> Powering a clean-energy future',
+        body:`<p>Voltra BESS is a leader in the design and operation of Battery Energy Storage Systems (BESS) that drive the transition to a clean, sustainable energy era. With a strong team of industry experts and a clear vision for the future, we are focused on delivering efficient, reliable and scalable energy-storage solutions for the growing demands of the modern energy landscape.</p>
+        <p>Every Voltra asset is modelled on real infrastructure — solar arrays, wind turbines and grid-scale battery containers. When you activate an asset, your capital helps power that output, and the output pays you back a fixed return every single day of its cycle.</p>` },
+      { h:'Our mission &amp; what we do',
+        body:`<p>Our mission is simple: make participation in the clean-energy economy open to everyone, not just large institutions. We package energy-storage performance into accessible assets — from the entry-level Spark to the high-output Thunder — so anyone can put their money to work and earn daily.</p>
+        <p>We operate on transparency and consistency. Returns are credited automatically to your wallet each day, withdrawals are processed quickly, and every transaction is recorded in your history. No guesswork, no waiting — just steady, predictable payouts you control.</p>
+        <p>Behind the scenes, our reconciliation engine settles cashback, asset payouts and team rewards continuously, so what you see in the app always reflects your real balance.</p>` },
+      { h:'Our team, innovation &amp; the road ahead',
+        body:`<p>Voltra is built by a team of engineers, energy specialists and product designers committed to reliability and scale. We invest continuously in the technology that keeps the platform fast, secure and dependable as our community grows.</p>
+        <p>Growth is shared. Our 3-level reward system pays you the moment people you invite activate an asset — Level 1, 2 and 3 — turning your network into a second stream of income alongside your own assets.</p>
+        <p>As we expand across the region, our goal stays the same: a sustainable energy future where everyday earners share in the value they help create. Plug in, power up, and grow with Voltra.</p>` }
     ]
   },
   rules: {
@@ -1658,7 +1663,7 @@ window.openContentModal = (type) => {
       const img = _aboutImgs[i] || DEFAULT_SLIDE_IMAGES[i % DEFAULT_SLIDE_IMAGES.length];
       return `<img class="about-pic" src="${img}" alt="">
         <h3${i ? ' style="margin-top:4px"' : ''}>${b.h}</h3>
-        <p>${b.p}</p>`;
+        ${b.body || ('<p>' + (b.p || '') + '</p>')}`;
     }).join('');
   } else {
     body = c.body;
