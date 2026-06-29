@@ -743,44 +743,26 @@ function renderProducts(products) {
   }
   products.sort((a,b) => (a.displayOrder||999) - (b.displayOrder||999));
 
+  // Flat image-led list (reference layout): thumbnail + details + BUY
   const cardHtml = (p) => {
-    const inStock  = p.isInStock !== false;
-    const stars    = p.stars || 0;
-    const starStr  = stars ? '<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.3 3.2L7 14.2 2 9.4l7-.9z"/></svg>'.repeat(Math.round(stars)) : '';
-    const imgHtml  = p.image
+    const inStock = p.isInStock !== false;
+    const imgHtml = p.image
       ? `<img src="${p.image}" alt="${p.name}" decoding="async" loading="lazy">`
       : `<span class="no-img">${ICN.box}</span>`;
-    return `<div class="product-card" onclick="openProductModal('${p.id}')">
-      <div class="product-img-wrap">${imgHtml}</div>
-      <div class="product-body">
-        <div class="product-name">${p.name}</div>
-        <div class="product-meta-row">Runs for ${p.cycle||0} days</div>
-        <div class="product-meta-row">Daily output: <span class="pv">${ugx(p.dailyReturn)}</span></div>
-        <div class="product-meta-row">Total return: <span class="pv">${ugx(p.expectedReturn)}</span></div>
-        <div class="product-price-row">${starStr ? `<span class="product-stars">${starStr}</span> <span style="font-size:11px;color:var(--text2)">${stars}</span>` : ''} Cost: ${ugx(p.price)}</div>
+    return `<div class="prod-row" onclick="openProductModal('${p.id}')">
+      <div class="prod-thumb">${imgHtml}</div>
+      <div class="prod-info">
+        <div class="prod-name">${p.name}</div>
+        <div class="prod-line">Price: <b>${ugx(p.price)}</b></div>
+        <div class="prod-line">Revenue days: <b>${p.cycle||0}</b></div>
+        <div class="prod-line">Daily revenue: <b>${ugx(p.dailyReturn)}</b></div>
+        <div class="prod-line">Total revenue: <b>${ugx(p.expectedReturn)}</b></div>
       </div>
-      <span class="product-stock ${inStock?'in':'out'}">${inStock?'Available':'Sold Out'}</span>
-      <button class="product-cart" ${inStock?'':'disabled'} onclick="event.stopPropagation();openProductModal('${p.id}')">
-        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="28" height="17" rx="4"/><text x="16" y="15" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="11" fill="currentColor" stroke="none">BUY</text><path d="M16 20v5"/><path d="M11 28c1-3 10-3 10 0"/></svg>
-      </button>
+      <button class="prod-buy" ${inStock?'':'disabled'} onclick="event.stopPropagation();openProductModal('${p.id}')">${inStock?'BUY':'SOLD'}</button>
     </div>`;
   };
 
-  // Voltra organises machines into power tiers instead of one flat list
-  const tiers = [
-    { icon:'<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>', name:'Starter Assets', desc:'Low entry · quick cycles',        test:p => (p.price||0) <  100000 },
-    { icon:'<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="16" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><line x1="6" y1="11" x2="6" y2="13"/><line x1="10" y1="11" x2="10" y2="13"/></svg>', name:'Power Assets',   desc:'Mid-range · bigger daily output', test:p => (p.price||0) >= 100000 && (p.price||0) < 700000 },
-    { icon:'<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20V9l-6 4V9l-6 4V4H4z"/><line x1="7" y1="20" x2="7" y2="16"/></svg>', name:'Elite Assets',   desc:'High capital · maximum return',   test:p => (p.price||0) >= 700000 },
-  ];
-
-  let html = '';
-  tiers.forEach(t => {
-    const items = products.filter(t.test);
-    if (!items.length) return;
-    html += `<div class="prod-group-head"><div class="pgh-title">${t.icon} ${t.name}</div><div class="pgh-desc">${t.desc}</div></div>`;
-    html += `<div class="prod-group">${items.map(cardHtml).join('')}</div>`;
-  });
-  grid.innerHTML = html;
+  grid.innerHTML = `<div class="prod-list">${products.map(cardHtml).join('')}</div>`;
 }
 
 window.openProductModal = async (productId) => {
