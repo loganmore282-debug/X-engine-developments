@@ -2425,7 +2425,8 @@ app.post('/account/update-photo', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { photoUrl } = req.body;
-  if (!photoUrl || !photoUrl.startsWith('https://')) return res.status(400).json({ status: 'error', message: 'Invalid photo URL' });
+  const okUrl = photoUrl && (photoUrl.startsWith('https://') || photoUrl.startsWith('data:image/'));
+  if (!okUrl || photoUrl.length > 400000) return res.status(400).json({ status: 'error', message: 'Invalid photo' });
   try {
     await db.collection('users').doc(uid).update({ profilePhoto: photoUrl });
     return res.json({ status: 'success' });

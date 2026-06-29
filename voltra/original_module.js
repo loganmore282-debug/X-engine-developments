@@ -922,8 +922,8 @@ function statusCls(s) {
 }
 
 function statusLabel(s) {
-  const m={success:'Success',approved:'Approved',pending:'Payment in progress',failed:'Failed',rejected:'Rejected'};
-  return m[s?.toLowerCase()] || (s||'Pending');
+  const m={success:'Completed',approved:'Completed',paid:'Completed',processing:'Processing',pending:'Awaiting payment',failed:'Unsuccessful',rejected:'Declined',reversed:'Reversed',cancelled:'Cancelled'};
+  return m[s?.toLowerCase()] || (s||'Awaiting payment');
 }
 
 // compact expandable record row (tap to reveal details)
@@ -1630,14 +1630,29 @@ window.uploadPhoto = async (input) => {
   if (!file || !_user) return;
   showLoading(true);
   try {
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('upload_preset', PRESET);
-    const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, { method:'POST', body:fd });
-    const data = await resp.json();
-    if (data.secure_url) {
-      await api('/account/update-photo', { photoUrl: data.secure_url });
+    // compress in-browser to a small square JPEG data URI (no external upload service)
+    const dataUrl = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 256;
+        let w = img.width, h = img.height;
+        if (w > h) { if (w > max) { h = Math.round(h * max / w); w = max; } }
+        else       { if (h > max) { w = Math.round(w * max / h); h = max; } }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+    const r = await api('/account/update-photo', { photoUrl: dataUrl });
+    if (r && r.status === 'success') {
+      if (_userData) _userData.profilePhoto = dataUrl;
+      renderAvatars(_userData || { profilePhoto: dataUrl });
       showToast('Profile photo updated', 'success');
+    } else {
+      showToast((r && r.message) || 'Photo update failed', 'error');
     }
   } catch (e) { showToast('Photo upload failed', 'error'); }
   finally { showLoading(false); input.value = ''; }
