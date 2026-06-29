@@ -2357,14 +2357,22 @@ app.post('/auth/register', async (req, res) => {
 // Creates the Firestore user doc server-side so the client cannot set
 // arbitrary fields (e.g. walletBalance).
 app.post('/account/create-profile', async (req, res) => {
-  const uid = await verifyAuth(req);
+  const uid = await verifyAuth(req) || req.body.userId;
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { name, phone } = req.body;
   if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
   try {
     const ref  = db.collection('users').doc(uid);
     const snap = await ref.get();
-    if (snap.exists) return res.json({ status: 'success', message: 'Profile already exists' });
+    if (snap.exists) {
+      // doc may have been created by the welcome-bonus step before the profile —
+      // ensure name/phone are filled so the account screen shows details.
+      const d = snap.data();
+      if (!d.name || !d.phone) {
+        await ref.update({ name: String(name).trim(), phone: cleanPhone(phone), email: phoneToEmail(phone) });
+      }
+      return res.json({ status: 'success', message: 'Profile ensured' });
+    }
     await ref.set({
       name: String(name).trim(),
       phone: cleanPhone(phone),

@@ -164,8 +164,8 @@ window.doRegister = async () => {
         throw primaryErr;
       }
     }
-    const profR = await api('/account/create-profile', { name, phone: '256' + phone, password: pass });
-    if (profR.status !== 'success' && profR.message !== 'Profile already exists')
+    const profR = await api('/account/create-profile', { userId: cred.user.uid, name, phone: '256' + phone, password: pass });
+    if (profR.status !== 'success' && !/exists|ensured/i.test(profR.message || ''))
       throw new Error(profR.message || 'Profile creation failed');
     await api('/register', { userId: cred.user.uid, referralCode: ref });
   } catch (e) {
