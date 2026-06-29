@@ -384,6 +384,11 @@ onAuthStateChanged(auth, async user => {
     loadTicker();
     checkMaintenance();
     api('/account/ensure-refcode', { userId: user.uid }).catch(() => {});
+    // self-heal: make sure the profile (name/phone) exists even if signup's create-profile didn't run
+    try {
+      const digits = (user.email || '').split('@')[0].replace(/\D/g, '');
+      if (digits) api('/account/create-profile', { userId: user.uid, name: '0' + digits, phone: '256' + digits }).catch(() => {});
+    } catch (_) {}
     // Show announcement immediately if settings already loaded before login
     if (_pendingAnnouncement && !sessionStorage.getItem('nx_ann_shown')) {
       showAnnouncement(_pendingAnnouncement);
@@ -483,12 +488,15 @@ function renderHome(u) {
   const todayKey = eat.toISOString().slice(0,10);
   const doneCi = u.lastCheckinDate === todayKey;
   const streakDays = u.checkinStreak || 0;
-  document.getElementById('checkinSub').textContent = doneCi
-    ? `<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Checked in today  ·  ${streakDays} day${streakDays===1?'':'s'} series`
-    : 'Earn UGX 500 free today';
+  document.getElementById('checkinSub').innerHTML = doneCi
+    ? `<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Claimed today · ${streakDays} day${streakDays===1?'':'s'} streak`
+    : 'Tap to claim UGX 500 today';
   const ciBtn = document.getElementById('checkinBtn');
-  ciBtn.textContent = doneCi ? 'Done' : 'Claim';
-  ciBtn.className   = 'btn-checkin' + (doneCi ? ' done' : '');
+  if (ciBtn) {
+    ciBtn.textContent = doneCi ? 'Claimed' : 'Claim';
+    ciBtn.classList.toggle('done', doneCi);
+    ciBtn.disabled = doneCi;
+  }
 }
 
 function renderHomeInvestments(invs) {
@@ -713,17 +721,24 @@ window.doCheckin = async () => {
   if (!_user || !_userData) return;
   const eat = new Date(Date.now() + 3*60*60*1000);
   const todayKey = eat.toISOString().slice(0,10);
-  if (_userData.lastCheckinDate === todayKey) { showToast('Already checked in today!', 'error'); return; }
+  if (_userData.lastCheckinDate === todayKey) { showToast('Already claimed today', 'success'); return; }
   if (_userData.status === 'banned') { showToast('Account suspended', 'error'); return; }
-  showLoading(true);
+  const ciBtn = document.getElementById('checkinBtn');
+  if (ciBtn) { ciBtn.disabled = true; ciBtn.textContent = '…'; }
   try {
     const r = await api('/checkin', { userId: _user.uid });
-    showLoading(false);
-    if (r.status === 'success') showToast(`UGX ${(r.bonus||500).toLocaleString()} credited! Day ${r.streak}`, 'success');
-    else showToast(r.message || 'Check-in failed', 'error');
+    if (r.status === 'success') {
+      showToast(`UGX ${(r.bonus||500).toLocaleString()} credited! Day ${r.streak}`, 'success');
+      _userData.lastCheckinDate = todayKey;
+      if (r.streak) _userData.checkinStreak = r.streak;
+      renderHome(_userData);
+    } else {
+      showToast(r.message || 'Check-in failed', 'error');
+      if (ciBtn) { ciBtn.disabled = false; ciBtn.textContent = 'Claim'; }
+    }
   } catch (e) {
-    showLoading(false);
     showToast('Network error', 'error');
+    if (ciBtn) { ciBtn.disabled = false; ciBtn.textContent = 'Claim'; }
   }
 };
 
