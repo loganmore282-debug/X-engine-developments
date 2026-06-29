@@ -765,9 +765,9 @@ window.showSection = (sec) => {
       if (sec === 'home')                              renderHome(_userData);
     } catch (_) {}
   }
-  // topbar only visible on non-home sections
+  // header bar only on Account — every other tab runs full-bleed for space
   const tb = document.getElementById('mainTopbar');
-  if (tb) tb.style.display = (sec === 'home') ? 'none' : 'flex';
+  if (tb) tb.style.display = (sec === 'more') ? 'flex' : 'none';
   if (sec === 'records' || sec === 'invest') {
     document.querySelectorAll('.pill-tab').forEach((b, i) => b.classList.toggle('active', i === 0));
     loadRecords('deposits');
@@ -875,7 +875,7 @@ window.openProductModal = async (productId) => {
     document.getElementById('pmPct').textContent = pct + '% return in ' + (p.cycle || 0) + ' days';
     document.getElementById('pmWalletNote').textContent = `Your wallet: ${ugx(_userData?.walletBalance || 0)}` + (!inStock ? ' — This plan is currently sold out' : '');
     const btn = document.getElementById('pmBuyBtn');
-    btn.textContent = inStock ? 'Confirm Investment' : 'Sold Out';
+    btn.textContent = inStock ? 'Activate' : 'Sold Out';
     btn.disabled    = !inStock;
     openModal('productModal');
   } catch (e) { showToast('Failed to load plan', 'error'); }
@@ -888,7 +888,7 @@ window.confirmBuy = async () => {
   if ((_userData?.walletBalance || 0) < p.price) {
     showToast(`Insufficient balance. Need ${ugx(p.price)}, have ${ugx(_userData?.walletBalance||0)}`, 'error'); return;
   }
-  if (!confirm(`Invest ${ugx(p.price)} in ${p.name}?`)) return;
+  if (!confirm(`Activate ${p.name} for ${ugx(p.price)}?`)) return;
   closeModal('productModal');
   showLoading(true);
   try {
