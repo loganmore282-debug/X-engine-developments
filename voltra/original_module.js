@@ -1621,7 +1621,7 @@ window.closeModal = closeModal;
 
 // ── PHOTO UPLOAD ──
 const CLOUD  = 'dcmfxgofa';
-const PRESET = 'x-engineuploads';
+const PRESET = 'voltra';
 
 window.triggerPhotoUpload = () => document.getElementById('photoInput').click();
 
