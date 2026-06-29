@@ -727,23 +727,25 @@ async function loadProducts() {
   } catch (e) { console.error('Load products:', e); }
 }
 
+let _allAssets = [];
+let _assetCat  = 'all';
 function renderProducts(products) {
+  if (products) _allAssets = products;
+  const list = _allAssets;
   const grid = document.getElementById('productsGrid');
-  // Update banner stats
   const countEl   = document.getElementById('prodBannerCount');
   const benefitEl = document.getElementById('prodBannerBenefit');
-  if (countEl)   countEl.textContent   = products.length;
+  if (countEl)   countEl.textContent   = list.length;
   if (benefitEl) {
-    const maxReturn = products.reduce((m,p) => Math.max(m, p.expectedReturn||0), 0);
+    const maxReturn = list.reduce((m,p) => Math.max(m, p.expectedReturn||0), 0);
     benefitEl.textContent = maxReturn ? ugx(maxReturn) : '—';
   }
-  if (!products.length) {
+  if (!list.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No assets available yet</p></div>`;
     return;
   }
-  products.sort((a,b) => (a.displayOrder||999) - (b.displayOrder||999));
+  list.sort((a,b) => (a.displayOrder||999) - (b.displayOrder||999));
 
-  // Flat image-led list (reference layout): thumbnail + details + BUY
   const cardHtml = (p) => {
     const inStock = p.isInStock !== false;
     const imgHtml = p.image
@@ -753,17 +755,26 @@ function renderProducts(products) {
       <div class="prod-thumb">${imgHtml}</div>
       <div class="prod-info">
         <div class="prod-name">${p.name}</div>
-        <div class="prod-line">Price: <b>${ugx(p.price)}</b></div>
-        <div class="prod-line">Revenue days: <b>${p.cycle||0}</b></div>
-        <div class="prod-line">Daily revenue: <b>${ugx(p.dailyReturn)}</b></div>
-        <div class="prod-line">Total revenue: <b>${ugx(p.expectedReturn)}</b></div>
+        <div class="prod-line">Entry cost: <b>${ugx(p.price)}</b></div>
+        <div class="prod-line">Earning days: <b>${p.cycle||0}</b></div>
+        <div class="prod-line">Daily yield: <b>${ugx(p.dailyReturn)}</b></div>
+        <div class="prod-line">Total payout: <b>${ugx(p.expectedReturn)}</b></div>
       </div>
-      <button class="prod-buy" ${inStock?'':'disabled'} onclick="event.stopPropagation();openProductModal('${p.id}')">${inStock?'BUY':'SOLD'}</button>
+      <button class="prod-buy" ${inStock?'':'disabled'} onclick="event.stopPropagation();openProductModal('${p.id}')">${inStock?'ACTIVATE':'TAKEN'}</button>
     </div>`;
   };
 
-  grid.innerHTML = `<div class="prod-list">${products.map(cardHtml).join('')}</div>`;
+  // Class A / B / C category filter
+  const cats = [['all','All'],['A','Class A'],['B','Class B'],['C','Class C']];
+  const tabs = `<div class="cat-tabs">${cats.map(([k,l]) =>
+    `<button class="cat-tab ${_assetCat===k?'on':''}" onclick="setAssetCat('${k}')">${l}</button>`).join('')}</div>`;
+  const filtered = list.filter(p => _assetCat === 'all' || (p.category||'A') === _assetCat);
+  const body = filtered.length
+    ? `<div class="prod-list">${filtered.map(cardHtml).join('')}</div>`
+    : `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No assets in this class yet</p></div>`;
+  grid.innerHTML = tabs + body;
 }
+window.setAssetCat = (c) => { _assetCat = c; renderProducts(); };
 
 window.openProductModal = async (productId) => {
   try {
@@ -832,7 +843,7 @@ window.openInvDetail = async (invId) => {
     let inv = _invCache[invId];
     if (!inv) {
       const r = await (await fetch(SERVER + '/investment/' + invId)).json();
-      if (r.status !== 'success') { body.innerHTML = '<p style="color:var(--text2);text-align:center">Plan not found</p>'; return; }
+      if (r.status !== 'success') { body.innerHTML = '<p style="color:var(--text2);text-align:center">Asset not found</p>'; return; }
       inv = r.investment;
       _invCache[invId] = inv;
     }
@@ -854,27 +865,27 @@ window.openInvDetail = async (invId) => {
     const fullyPaid   = (inv.expectedReturn || 0) > 0 && (inv.dailyCredited || 0) >= inv.expectedReturn;
     const progress    = matured || claimed || fullyPaid ? 100 : Math.min(100, Math.max(0, Math.round(msElapsed / totalMs * 100)));
     const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
-    const stateBadge = claimed ? '<span class="inv-badge claimed">Claimed</span>'
-                     : matured ? '<span class="inv-badge matured">Matured</span>'
-                     : '<span class="inv-badge active">Active</span>';
-    const claimBtn = matured ? `<button class="btn-submit" style="margin-top:16px" onclick="closeModal('invDetailModal');claimInvestment('${inv.id}')"> Claim Return — ${ugx(inv.expectedReturn)}</button>` : '';
+    const stateBadge = claimed ? '<span class="inv-badge claimed">Collected</span>'
+                     : matured ? '<span class="inv-badge matured">Ready</span>'
+                     : '<span class="inv-badge active">Running</span>';
+    const claimBtn = matured ? `<button class="btn-submit" style="margin-top:16px" onclick="closeModal('invDetailModal');claimInvestment('${inv.id}')">Collect payout — ${ugx(inv.expectedReturn)}</button>` : '';
     body.innerHTML = `
       <div style="text-align:center">${imgHtml}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-size:17px;font-weight:800;color:var(--text)">${inv.productName||'Plan'}</div>
+        <div style="font-size:17px;font-weight:800;color:var(--text)">${inv.productName||'Asset'}</div>
         ${stateBadge}
       </div>
-      <div class="rec-row"><span class="rec-row-lbl">Amount Invested</span><span class="rec-row-val">${ugx(inv.amount)}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Expected Return</span><span class="rec-row-val s-green">+${ugx(inv.expectedReturn)}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Profit</span><span class="rec-row-val s-green">+${ugx((inv.expectedReturn||0)-(inv.amount||0))}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Activation cost</span><span class="rec-row-val">${ugx(inv.amount)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Total payout</span><span class="rec-row-val s-green">+${ugx(inv.expectedReturn)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Net gain</span><span class="rec-row-val s-green">+${ugx((inv.expectedReturn||0)-(inv.amount||0))}</span></div>
       <div class="rec-row"><span class="rec-row-lbl">Daily Yield</span><span class="rec-row-val s-green">+${ugx(inv.dailyReturn||0)}/day</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Paid to wallet</span><span class="rec-row-val s-green">+${ugx(inv.dailyCredited||0)}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Remaining at maturity</span><span class="rec-row-val">${ugx(Math.max(0,(inv.expectedReturn||0)-(inv.dailyCredited||0)))}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Date Started</span><span class="rec-row-val">${inv.date||'—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Investment Duration</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Matures On</span><span class="rec-row-val">${inv.maturityDate ? (tsDate(inv.maturityDate)||new Date()).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Time Left</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed' : matured ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Matured — Claim now!' : fullyPaid ? 'Fully paid out' : timeLeftStr}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Plan Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Paid so far</span><span class="rec-row-val s-green">+${ugx(inv.dailyCredited||0)}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Still to come</span><span class="rec-row-val">${ugx(Math.max(0,(inv.expectedReturn||0)-(inv.dailyCredited||0)))}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Activated on</span><span class="rec-row-val">${inv.date||'—'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Run length</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Completes on</span><span class="rec-row-val">${inv.maturityDate ? (tsDate(inv.maturityDate)||new Date()).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Time remaining</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed' : matured ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Matured — Claim now!' : fullyPaid ? 'Fully paid out' : timeLeftStr}</span></div>
+      <div class="rec-row"><span class="rec-row-lbl">Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
       <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:12px;color:var(--text2)">Progress</span>
         <span style="font-size:12px;font-weight:700;color:${matured||claimed||fullyPaid?'#22c55e':'#ff9d00'}">${progress}%</span>

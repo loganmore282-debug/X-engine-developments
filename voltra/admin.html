@@ -797,7 +797,15 @@ tr:hover td{background:rgba(255,255,255,.02)}
         </div>
       </div>
     </div>
-    <button class="btn btn-primary btn-full" id="pSaveBtn" onclick="saveProduct()">Save Plan</button>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select class="form-input" id="pCategory">
+        <option value="A">Class A</option>
+        <option value="B">Class B</option>
+        <option value="C">Class C</option>
+      </select>
+    </div>
+    <button class="btn btn-primary btn-full" id="pSaveBtn" onclick="saveProduct()">Save Asset</button>
   </div>
 </div>
 
@@ -1572,6 +1580,7 @@ window.openEditProduct = (id) => {
   document.getElementById('pDaily').value= p.dailyReturn || '';
   document.getElementById('pCycle').value= p.cycle || '';
   document.getElementById('pTotal').value= p.expectedReturn || '';
+  document.getElementById('pCategory').value = p.category || 'A';
   document.getElementById('pImageUrl').value = p.image || '';
   document.getElementById('pImagePreview').innerHTML = p.image ? `<img src="${p.image}" style="height:80px;border-radius:8px;margin-top:6px">` : '';
   document.getElementById('pImageFile').value = '';
@@ -1609,10 +1618,11 @@ window.saveProduct = async () => {
       imageUrl = await uploadImage(imgFile);
     }
 
+    const category = document.getElementById('pCategory').value || 'A';
     const data = {
       name, price, dailyReturn: daily, cycle,
       expectedReturn: total, active, isInStock: stock,
-      displayOrder: order, stars
+      displayOrder: order, stars, category
     };
     if (imageUrl) data.image = imageUrl;
 
