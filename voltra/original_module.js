@@ -465,9 +465,12 @@ async function pollAccount(uid) {
         showToast('Your account has been suspended. Contact support.', 'error');
         return;
       }
-      renderHome(_userData);
-      renderCommission(_userData);
-      renderMore(_userData);
+      // Each render is isolated: a throw in one must never block the others,
+      // otherwise the Account page can freeze on its static "UGX 0" defaults
+      // while Home shows the real balance.
+      try { renderHome(_userData);       } catch (_) {}
+      try { renderCommission(_userData); } catch (_) {}
+      try { renderMore(_userData);       } catch (_) {}
     }
   } catch (_) {}
   // Active investments (home preview)
@@ -733,6 +736,16 @@ window.showSection = (sec) => {
   document.querySelectorAll('.bnav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.sec === (navMap[sec] || sec));
   });
+  // Repaint the target section from the latest known user data the instant
+  // it opens — so Account/Team never show stale "UGX 0 / —" defaults while
+  // waiting for the next 6-second poll.
+  if (_userData) {
+    try {
+      if (sec === 'more')                              renderMore(_userData);
+      if (sec === 'commission')                        renderCommission(_userData);
+      if (sec === 'home')                              renderHome(_userData);
+    } catch (_) {}
+  }
   // topbar only visible on non-home sections
   const tb = document.getElementById('mainTopbar');
   if (tb) tb.style.display = (sec === 'home') ? 'none' : 'flex';
