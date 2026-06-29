@@ -833,17 +833,10 @@ function renderProducts(products) {
     </div>`;
   };
 
-  // Class A / B / C category filter
-  const cats = [['all','All'],['A','Class A'],['B','Class B'],['C','Class C']];
-  const tabs = `<div class="cat-tabs">${cats.map(([k,l]) =>
-    `<button class="cat-tab ${_assetCat===k?'on':''}" onclick="setAssetCat('${k}')">${l}</button>`).join('')}</div>`;
-  const filtered = list.filter(p => _assetCat === 'all' || (p.category||'A') === _assetCat);
-  const body = filtered.length
-    ? `<div class="prod-list">${filtered.map(cardHtml).join('')}</div>`
-    : `<div class="empty-state"><span class="es-icon">${ICN.box}</span><p>No assets in this class yet</p></div>`;
-  grid.innerHTML = tabs + body;
+  // Single flat list — no class tabs.
+  grid.innerHTML = `<div class="prod-list">${list.map(cardHtml).join('')}</div>`;
 }
-window.setAssetCat = (c) => { _assetCat = c; renderProducts(); };
+window.setAssetCat = () => {};
 
 window.openProductModal = async (productId) => {
   try {
