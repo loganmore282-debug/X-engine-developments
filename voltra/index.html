@@ -673,12 +673,14 @@ html:has(body.on-auth){background:#0a0e17}
 .apg-foot{padding:11px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.5}
 
 /* ── MODALS — centered pop, not bottom-sheet ── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.78);z-index:500;align-items:flex-end;justify-content:center;padding:0}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.88);z-index:500;align-items:center;justify-content:center;padding:16px}
 .modal-overlay.show{display:flex}
-.modal-sheet{background:var(--card);border:1px solid var(--border2);border-bottom:none;border-radius:22px 22px 0 0;width:100%;max-width:520px;padding:24px 22px calc(28px + env(safe-area-inset-bottom,0px));max-height:90vh;overflow-y:auto;box-shadow:0 -10px 40px rgba(0,0,0,0.5);animation:modalUp .3s cubic-bezier(.16,1,.3,1)}
-@keyframes modalUp{from{opacity:0;transform:translateY(100%)}to{opacity:1;transform:translateY(0)}}
-.modal-sheet .modal-handle{display:block;width:40px;height:4px;border-radius:3px;background:var(--border2);margin:0 auto 16px}
+.modal-sheet{background:var(--card);border:1px solid var(--border2);border-radius:20px;width:100%;max-width:480px;padding:24px;max-height:88vh;overflow-y:auto;box-shadow:0 16px 56px rgba(0,0,0,0.55);animation:modalFade .2s ease}
+@keyframes modalFade{from{opacity:0}to{opacity:1}}
 .modal-handle{display:none}
+/* account items (gift / bank / about / rules / terms / privacy / support) slide in from the right — a page-style entrance, not up/down */
+#contentModal .modal-sheet,#giftModal .modal-sheet,#bankModal .modal-sheet{animation:modalSlideR .32s cubic-bezier(.16,1,.3,1)}
+@keyframes modalSlideR{from{opacity:0;transform:translateX(64px)}to{opacity:1;transform:translateX(0)}}
 .modal-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px}
 .modal-sub{font-size:12px;color:var(--text2);margin-bottom:20px}
 .modal-close{float:right;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1;margin-top:-2px}
@@ -795,7 +797,7 @@ html:has(body.on-auth){background:#0a0e17}
 /* ── ANNOUNCEMENT DIALOG — centered pop ── */
 #announcementDialog{display:none;position:fixed;inset:0;background:rgba(2,6,18,0.9);z-index:3000;align-items:center;justify-content:center;padding:16px}
 #announcementDialog.show{display:flex}
-.ann-sheet{background:var(--card);border-radius:22px;width:100%;max-width:420px;overflow:hidden;max-height:88vh;overflow-y:auto;animation:modalUp .3s cubic-bezier(.16,1,.3,1)}
+.ann-sheet{background:var(--card);border-radius:20px;width:100%;max-width:420px;overflow:hidden;max-height:88vh;overflow-y:auto;animation:modalFade .2s ease}
 .ann-img{width:100%;height:180px;object-fit:cover;display:block;background:linear-gradient(135deg,#ff9d00,#cc7e00)}
 .ann-body{padding:20px 20px 28px}
 .ann-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:10px}
