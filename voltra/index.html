@@ -1667,12 +1667,46 @@ a.contact-card:active{transform:scale(0.98);border-color:var(--amber)}
       _deferredPrompt.userChoice.then(function(){ _deferredPrompt = null; });
       return;
     }
-    // iOS / Safari (no beforeinstallprompt) — show manual steps
+    // No captured prompt yet. On iOS there is no beforeinstallprompt at all.
     var iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    var msg = iOS
-      ? 'To install: tap the Share button, then "Add to Home Screen".'
-      : 'To install: open your browser menu (⋮) and tap "Install app" / "Add to Home screen".';
-    if (window.showToast) showToast(msg, 'info'); else alert(msg);
+    if (iOS) {
+      var im = 'To install: tap the Share button, then "Add to Home Screen".';
+      if (window.showToast) showToast(im, 'info'); else alert(im);
+      return;
+    }
+    // Chrome/Android: the prompt has not fired. Usually that means one of the
+    // install ingredients is not being served. Run a live check and report
+    // exactly what is missing so it can be fixed on the host.
+    (function diagnose(){
+      var problems = [];
+      var checks = [];
+      function probe(url, label){
+        checks.push(
+          fetch(url, { cache: 'no-store' })
+            .then(function(r){ if (!r.ok) problems.push(label + ' (' + r.status + ')'); })
+            .catch(function(){ problems.push(label + ' (unreachable)'); })
+        );
+      }
+      probe('manifest.json', 'manifest.json');
+      probe('icon-192.png', 'icon-192.png');
+      probe('icon-512.png', 'icon-512.png');
+      probe('sw.js', 'sw.js');
+      var swReady = ('serviceWorker' in navigator)
+        ? navigator.serviceWorker.getRegistration().then(function(reg){
+            if (!reg) problems.push('service worker not registered');
+          }).catch(function(){})
+        : Promise.resolve(problems.push('browser has no service worker support'));
+      checks.push(swReady);
+      Promise.all(checks).then(function(){
+        var msg;
+        if (problems.length) {
+          msg = 'Install not ready — missing: ' + problems.join(', ') + '. Make sure all app files are uploaded to the host root.';
+        } else {
+          msg = 'All app files are present. Open the browser menu (⋮) and tap "Install app". If you only see "Add to Home screen", wait ~30s and tap Get App again.';
+        }
+        if (window.showToast) showToast(msg, problems.length ? 'error' : 'info'); else alert(msg);
+      });
+    })();
   };
 })();
 </script>
