@@ -321,8 +321,8 @@ window.closeAnnouncement = () => document.getElementById('announcementDialog').c
 
 window.selectDepAmt = (amt, btn) => {
   document.getElementById('depAmount').value = amt;
-  document.querySelectorAll('.qa-btn').forEach(b => b.classList.remove('sel'));
-  btn.classList.add('sel');
+  document.querySelectorAll('.amt-btn').forEach(b => b.classList.remove('sel'));
+  if (btn) btn.classList.add('sel');
 };
 
 // ── TICKER ──
