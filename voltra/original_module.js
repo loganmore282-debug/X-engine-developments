@@ -877,7 +877,7 @@ window.openProductModal = async (productId) => {
     const btn = document.getElementById('pmBuyBtn');
     btn.textContent = inStock ? 'Activate' : 'Sold Out';
     btn.disabled    = !inStock;
-    openModal('productModal');
+    openPage('productPage');
   } catch (e) { showToast('Failed to load plan', 'error'); }
 };
 
@@ -889,7 +889,7 @@ window.confirmBuy = async () => {
     showToast(`Insufficient balance. Need ${ugx(p.price)}, have ${ugx(_userData?.walletBalance||0)}`, 'error'); return;
   }
   if (!confirm(`Activate ${p.name} for ${ugx(p.price)}?`)) return;
-  closeModal('productModal');
+  closePage('productPage');
   showLoading(true);
   try {
     const r = await api('/invest/create', { userId: _user.uid, productId: p.id });
@@ -1552,12 +1552,12 @@ function loadUser() { if (_user) pollAccount(_user.uid); }
 // ── GIFT CODE ──
 window.openGiftModal = () => {
   document.getElementById('giftCodeInput').value = '';
-  openModal('giftModal');
+  openPage('giftPage');
 };
 window.redeemGiftCode = async () => {
   const code = document.getElementById('giftCodeInput').value.trim().toUpperCase();
   if (!code) { showToast('Enter a gift code', 'error'); return; }
-  closeModal('giftModal');
+  closePage('giftPage');
   showLoading(true);
   try {
     const r = await api('/giftcode/redeem', { userId: _user.uid, code });
@@ -1572,7 +1572,7 @@ window.openBankModal = () => {
   renderBankList();
   document.getElementById('bankName').value  = '';
   document.getElementById('bankPhone').value = '';
-  openModal('bankModal');
+  openPage('bankPage');
 };
 function renderBankList() {
   const accounts = _userData?.bankAccounts || [];
@@ -1741,7 +1741,7 @@ window.openContentModal = (type) => {
     body = c.body;
   }
   document.getElementById('contentModalBody').innerHTML = body;
-  openModal('contentModal');
+  openPage('contentPage');
 };
 
 // ── MODAL HELPERS ──
