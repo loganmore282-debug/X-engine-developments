@@ -521,9 +521,15 @@ function renderHome(u) {
     : 'Tap to claim UGX 500 today';
   const ciBtn = document.getElementById('checkinBtn');
   if (ciBtn) {
-    ciBtn.textContent = doneCi ? 'Claimed' : 'Claim';
-    ciBtn.classList.toggle('done', doneCi);
-    ciBtn.disabled = doneCi;
+    if (doneCi) {
+      ciBtn.innerHTML = '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Claimed';
+      ciBtn.classList.add('done');
+      ciBtn.disabled = true;
+    } else {
+      ciBtn.textContent = 'Claim';
+      ciBtn.classList.remove('done');
+      ciBtn.disabled = false;
+    }
   }
 }
 
