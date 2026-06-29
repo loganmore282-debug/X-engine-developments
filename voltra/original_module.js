@@ -517,19 +517,32 @@ function renderHome(u) {
   const doneCi = u.lastCheckinDate === todayKey;
   const streakDays = u.checkinStreak || 0;
   document.getElementById('checkinSub').innerHTML = doneCi
-    ? `<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Claimed today · ${streakDays} day${streakDays===1?'':'s'} streak`
-    : 'Tap to claim UGX 500 today';
+    ? `<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> ${streakDays} day${streakDays===1?'':'s'} streak — back tomorrow`
+    : 'Power up your streak — claim UGX 500';
   const ciBtn = document.getElementById('checkinBtn');
   if (ciBtn) {
     if (doneCi) {
-      ciBtn.innerHTML = '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Claimed';
+      ciBtn.innerHTML = '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Claimed today';
       ciBtn.classList.add('done');
       ciBtn.disabled = true;
     } else {
-      ciBtn.textContent = 'Claim';
+      ciBtn.textContent = "Claim Today's Bonus";
       ciBtn.classList.remove('done');
       ciBtn.disabled = false;
     }
+  }
+  // 7-day energy streak tracker
+  const wk = document.getElementById('checkinWeek');
+  if (wk) {
+    const filled = Math.min(streakDays, 7);
+    let html = '';
+    for (let i = 1; i <= 7; i++) {
+      let cls = 'db-day';
+      if (i <= filled) cls += ' on';
+      else if (!doneCi && i === filled + 1) cls += ' today';
+      html += `<span class="${cls}"><svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></span>`;
+    }
+    wk.innerHTML = html;
   }
 }
 
@@ -856,6 +869,10 @@ window.openProductModal = async (productId) => {
     document.getElementById('pmDaily').textContent  = ugx(p.dailyReturn);
     document.getElementById('pmCycle').textContent  = p.cycle + ' days';
     document.getElementById('pmReturn').textContent = ugx(p.expectedReturn);
+    const profit = (p.expectedReturn || 0) - (p.price || 0);
+    document.getElementById('pmProfit').textContent = '+' + ugx(profit);
+    const pct = p.price ? Math.round(((p.expectedReturn || 0) / p.price) * 100) : 0;
+    document.getElementById('pmPct').textContent = pct + '% return in ' + (p.cycle || 0) + ' days';
     document.getElementById('pmWalletNote').textContent = `Your wallet: ${ugx(_userData?.walletBalance || 0)}` + (!inStock ? ' — This plan is currently sold out' : '');
     const btn = document.getElementById('pmBuyBtn');
     btn.textContent = inStock ? 'Confirm Investment' : 'Sold Out';
