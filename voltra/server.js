@@ -574,7 +574,7 @@ app.post('/sms/incoming', async (req, res) => {
               t.update(origSnap.ref, { reversed: true, reversedAt: FieldValue.serverTimestamp() });
               t.set(db.collection('transactions').doc(), {
                 userId: orig.userId, type: 'reversal',
-                description: `Online deposit reversed — ${reversal.txnId}`,
+                description: `Wallet recharge reversed — ${reversal.txnId}`,
                 amount: -debit, status: 'reversed', date, time,
                 createdAt: FieldValue.serverTimestamp()
               });
@@ -653,7 +653,7 @@ app.post('/sms/incoming', async (req, res) => {
           });
           t.set(db.collection('transactions').doc(), {
             userId, type: 'deposit',
-            description: `Online deposit — received`,
+            description: `Wallet recharge — received`,
             amount, phone: payerPhone, txnId,
             network: matchedDep.network || 'MoMo',
             status: 'success', date, time,
@@ -704,7 +704,7 @@ app.post('/admin/assign-deposit', async (req, res) => {
       });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'deposit',
-        description: `Online deposit (admin assigned) — ${dep.txnId || depositId}`,
+        description: `Wallet recharge (manually credited) — ${dep.txnId || depositId}`,
         amount: dep.amount, phone: dep.senderPhone || '', status: 'success', date, time,
         createdAt: FieldValue.serverTimestamp()
       });
@@ -1366,7 +1366,7 @@ app.post('/admin/deposit', async (req, res) => {
       if (!uSnap.exists) throw new Error('User not found');
       t.update(uRef, { walletBalance: FieldValue.increment(amt) });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'admin_credit', description: note || 'Admin credit',
+        userId, type: 'admin_credit', description: note || 'Voltra credit',
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
@@ -1547,12 +1547,19 @@ app.post('/deposit/verify-phone', async (req, res) => {
 // ═══════════════════════════════════════════
 // DEPOSIT — MARZPAY (USSD push-to-pay)
 // ═══════════════════════════════════════════
+const _depCreateDebounce = new Map();
 app.post('/deposit/marzpay', async (req, res) => {
   const userId = await verifyAuth(req) || req.body.userId;
   const { amount, phone: rawPhone } = req.body;
   if (!userId || !amount) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
   const amt = parseInt(amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  // Debounce duplicate submissions (double-tap / client retry) so a single recharge
+  // can never be created — and in sandbox credited — twice.
+  const _lastDep = _depCreateDebounce.get(userId) || 0;
+  if (Date.now() - _lastDep < 7000)
+    return res.status(429).json({ status: 'error', message: 'A recharge is already being processed. Please wait a moment.' });
+  _depCreateDebounce.set(userId, Date.now());
   try {
     const [uSnap, sett] = await Promise.all([
       db.collection('users').doc(userId).get(),
@@ -1629,7 +1636,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'deposit',
-          description: 'Online deposit',
+          description: 'Wallet recharge',
           amount: amt, status: 'success', date, time, marzReference: reference,
           createdAt: FieldValue.serverTimestamp()
         });
@@ -1749,38 +1756,45 @@ app.get('/deposit/config', async (_req, res) => {
 
 // Shared: credit a completed MarzPay deposit and update Firestore atomically.
 // Used by both the webhook and the active-polling fallback.
+const _creditingDeposits = new Set();
 async function creditMarzDeposit(depDoc, amount, provTxId) {
   const dep = depDoc.data();
-  // Already credited or truly failed — skip. Allow 'cancelled' through: money may have
-  // left the user's account if they paid before the cancel happened.
   if (dep.status === 'matched' || dep.status === 'failed') return false;
-  const { date, time } = nowStr();
-  await db.runTransaction(async t => {
-    const fresh = await t.get(depDoc.ref);
-    if (!fresh.exists) throw new Error('Deposit not found');
-    if (fresh.data().status === 'matched' || fresh.data().status === 'failed') return;
-    const uRef  = db.collection('users').doc(dep.userId);
-    const uSnap = await t.get(uRef);
-    if (!uSnap.exists) throw new Error('User not found');
-    const bal = uSnap.data().walletBalance || 0;
-    const holdUntil = new Date(Date.now() + 60 * 60 * 1000);
-    t.update(uRef, {
-      walletBalance:    bal + amount,
-      totalDeposited:   FieldValue.increment(amount),
-      withdrawableFrom: holdUntil
+  // M0 has NO atomic transactions, so the status re-read below cannot stop two
+  // concurrent callers (webhook + status-poll, or a duplicate webhook) from BOTH
+  // crediting — this was the deposit-doubling bug. Serialise per-deposit in-process.
+  if (_creditingDeposits.has(depDoc.id)) return false;
+  _creditingDeposits.add(depDoc.id);
+  try {
+    const { date, time } = nowStr();
+    let didCredit = false;
+    await db.runTransaction(async t => {
+      const fresh = await t.get(depDoc.ref);
+      if (!fresh.exists) return;
+      if (fresh.data().status === 'matched' || fresh.data().status === 'failed') return;
+      const uRef = db.collection('users').doc(dep.userId);
+      const holdUntil = new Date(Date.now() + 60 * 60 * 1000);
+      t.update(uRef, {
+        walletBalance:    FieldValue.increment(amount),
+        totalDeposited:   FieldValue.increment(amount),
+        withdrawableFrom: holdUntil
+      });
+      t.update(depDoc.ref, {
+        status: 'matched', creditedAmount: amount,
+        providerTxId: provTxId || null, matchedAt: FieldValue.serverTimestamp()
+      });
+      t.set(db.collection('transactions').doc(), {
+        userId: dep.userId, type: 'deposit',
+        description: 'Wallet recharge',
+        amount, status: 'success', date, time, marzReference: dep.marzReference,
+        createdAt: FieldValue.serverTimestamp()
+      });
+      didCredit = true;
     });
-    t.update(depDoc.ref, {
-      status: 'matched', creditedAmount: amount,
-      providerTxId: provTxId || null, matchedAt: FieldValue.serverTimestamp()
-    });
-    t.set(db.collection('transactions').doc(), {
-      userId: dep.userId, type: 'deposit',
-      description: 'Online deposit',
-      amount, status: 'success', date, time, marzReference: dep.marzReference,
-      createdAt: FieldValue.serverTimestamp()
-    });
-  });
-  return true;
+    return didCredit;
+  } finally {
+    _creditingDeposits.delete(depDoc.id);
+  }
 }
 
 // Active MarzPay status check — polls MarzPay API for a processing deposit.

@@ -1013,7 +1013,7 @@ window.openInvDetail = async (invId) => {
     // has a few hours left; the server marks these 'claimed', this is a guard
     // for the brief window before the next maturity sweep runs.
     const fullyPaid   = (inv.expectedReturn || 0) > 0 && (inv.dailyCredited || 0) >= inv.expectedReturn;
-    const progress    = matured || claimed || fullyPaid ? 100 : Math.min(100, Math.max(0, Math.round(msElapsed / totalMs * 100)));
+    const progress    = matured || claimed || fullyPaid ? 100 : (cycle ? Math.min(100, Math.round(daysElapsed / cycle * 100)) : 0);
     const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
     const stateBadge = claimed ? '<span class="inv-badge claimed">Collected</span>'
                      : matured ? '<span class="inv-badge matured">Ready</span>'
@@ -1179,7 +1179,7 @@ async function loadRecords(tab) {
 
     if (tab === 'deposits') {
       el.innerHTML = items.map(tx => {
-        const typeLabel = tx.type === 'admin_credit' ? 'Account Credit' : 'Recharge';
+        const typeLabel = tx.type === 'admin_credit' ? 'Voltra Credit' : 'Recharge';
         return recRow({
           icon: '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>', title: typeLabel, sub: `${tx.date||''} · ${tx.time||fmtDT(tx)}`,
           amt: '+' + ugx(tx.amount), amtClass: 's-green',
@@ -1193,7 +1193,7 @@ async function loadRecords(tab) {
     } else if (tab === 'revenue') {
       const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
       const typeIcon  = { checkin:_ICN_CHECKIN, cashback:_ICN_COINS, commission:_ICN_PEOPLE, gift_code:_ICN_GIFT, investment_return:_ICN_TREND, admin_credit:_ICN_BANK, reversal:_ICN_UNDO };
-      const typeLabel = { checkin:'Daily Spark', cashback:'Asset Payout', commission:'Team Bonus', gift_code:'Gift Reward', investment_return:'Asset Payout', admin_credit:'Account Credit', reversal:'Reversal' };
+      const typeLabel = { checkin:'Daily Spark', cashback:'Asset Payout', commission:'Team Bonus', gift_code:'Gift Reward', investment_return:'Asset Payout', admin_credit:'Voltra Credit', reversal:'Reversal' };
       el.innerHTML = `
         <div class="rev-hero">
           <div class="rev-hero-lbl">Total Inbound Balance</div>
@@ -1731,24 +1731,44 @@ const CONTENT = {
     title: 'Platform Rules',
     body: `<h3>How Voltra Works</h3>
       <ul>
-        <li>Minimum recharge is UGX 30,000</li>
-        <li>Minimum withdrawal is UGX 20,000 (multiples of 5,000 only)</li>
-        <li>A 15% fee applies on all withdrawals</li>
-        <li>Investment plans run for a fixed cycle and mature automatically</li>
-        <li>Daily check-in bonus is UGX 500 per day</li>
+        <li>You recharge your wallet, then activate an energy asset of your choice.</li>
+        <li>Each asset runs for a fixed cycle and pays its full return in one lump sum at maturity.</li>
+        <li>Nothing is paid out daily — your full payout lands automatically when the asset completes.</li>
+        <li>Once activated, an asset cannot be cancelled or refunded.</li>
       </ul>
-      <h3 style="margin-top:16px">Commission Rules</h3>
+      <h3 style="margin-top:16px">Recharge Rules</h3>
       <ul>
-        <li>Level 1: 20% of every investment your direct referral makes</li>
-        <li>Level 2: 5% of every investment by your L2 team</li>
-        <li>Level 3: 1% of every investment by your L3 team</li>
-        <li>Commission is credited instantly and can be withdrawn immediately</li>
+        <li>Minimum recharge is UGX 30,000.</li>
+        <li>Recharge only from a Mobile Money number registered in your own name.</li>
+        <li>Funds reflect in your wallet once the payment is confirmed by the provider.</li>
+      </ul>
+      <h3 style="margin-top:16px">Withdrawal Rules</h3>
+      <ul>
+        <li>Minimum withdrawal is UGX 20,000, in multiples of 5,000 only.</li>
+        <li>A 15% service fee applies to every payout and is shown before you confirm.</li>
+        <li>Payouts are sent to your chosen Mobile Money number, normally within 24 hours.</li>
+        <li>You can only withdraw funds that have cleared the holding period after a recharge.</li>
+      </ul>
+      <h3 style="margin-top:16px">Daily Energy Bonus</h3>
+      <ul>
+        <li>Claim a UGX 500 bonus once every day from the home screen.</li>
+        <li>Keep your streak alive by claiming on consecutive days.</li>
+        <li>The bonus is credited to your wallet instantly.</li>
+      </ul>
+      <h3 style="margin-top:16px">Referral Rewards</h3>
+      <ul>
+        <li>Level 1: 20% of every activation your direct invite makes.</li>
+        <li>Level 2: 5% of every activation by your Level 2 network.</li>
+        <li>Level 3: 1% of every activation by your Level 3 network.</li>
+        <li>Rewards are credited instantly and can be withdrawn immediately.</li>
+        <li>Self-referrals, fake accounts and farmed sign-ups are not allowed.</li>
       </ul>
       <h3 style="margin-top:16px">Account Rules</h3>
       <ul>
-        <li>One account per person only</li>
-        <li>Fraudulent activity will result in permanent suspension</li>
-        <li>All transactions are final and subject to review</li>
+        <li>One account per person only.</li>
+        <li>Fraud, multiple accounts or exploiting bugs leads to permanent suspension and forfeiture of funds.</li>
+        <li>Keep your password private — you are responsible for activity on your account.</li>
+        <li>All transactions are final and subject to review.</li>
       </ul>`
   },
   support: {
