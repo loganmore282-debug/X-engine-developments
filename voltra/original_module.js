@@ -620,25 +620,23 @@ function renderHomeInvestments(invs) {
     return;
   }
   el.innerHTML = invs.map(inv => {
-    const matured = inv.status === 'matured';
-    const msLeft2   = inv.maturityDate ? Math.max(0, tsMs(inv.maturityDate) - Date.now()) : 0;
-    const daysLeft = Math.ceil(msLeft2 / 86400000);
-    const imgHtml = inv.productImage
-      ? `<div class="inv-img"><img src="${inv.productImage}" alt=""></div>`
-      : `<div class="inv-img">${ICN.box}</div>`;
+    const matured = inv.status === 'matured' || inv.status === 'claimed';
+    const msLeft2 = inv.maturityDate ? Math.max(0, tsMs(inv.maturityDate) - Date.now()) : 0;
     const cycleDays = inv.cycle || 0;
-    const daysDone  = Math.floor(Math.max(0, cycleDays * 86400000 - msLeft2) / 86400000);
-    return `<div class="inv-item" style="cursor:pointer" onclick="openInvDetail('${inv.id}')">
-      ${imgHtml}
-      <div class="inv-info">
-        <div class="inv-name">${inv.productName || 'Investment'}</div>
-        <div class="inv-meta">${ugx(inv.amount)} · ${cycleDays} day${cycleDays!==1?'s':''}</div>
+    const daysDone = Math.floor(Math.max(0, cycleDays * 86400000 - msLeft2) / 86400000);
+    const pct = matured ? 100 : (cycleDays ? Math.min(100, Math.round(daysDone / cycleDays * 100)) : 0);
+    const dayNum = matured ? cycleDays : Math.min(cycleDays, daysDone + 1);
+    const imgHtml = inv.productImage
+      ? `<img class="aplan-img" src="${inv.productImage}" alt="">`
+      : `<span class="aplan-img">${ICN.box}</span>`;
+    return `<div class="aplan" onclick="openInvDetail('${inv.id}')">
+      <div class="aplan-top">
+        ${imgHtml}
+        <div class="aplan-id"><div class="aplan-name">${inv.productName || 'Asset'}</div><div class="aplan-sub">${ugx(inv.amount)} &middot; ${cycleDays}-day cycle</div></div>
+        <span class="aplan-badge ${matured ? 'done' : 'live'}">${matured ? 'Ready' : 'Charging'}</span>
       </div>
-      <div class="inv-right">
-        <div class="inv-return">${ugx(inv.expectedReturn)}</div>
-        <div class="inv-days" style="${matured?'color:#22c55e;font-weight:700':''}">${matured ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Matured' : 'Day '+Math.min(cycleDays,daysDone+1)+'/'+cycleDays}</div>
-        <span class="inv-badge ${matured ? 'matured' : 'active'}">${matured ? 'Matured' : 'Active'}</span>
-      </div>
+      <div class="aplan-charge"><div class="aplan-charge-fill" style="width:${pct}%"></div></div>
+      <div class="aplan-foot"><span>Day ${dayNum} of ${cycleDays}</span><span class="aplan-pay">Pays ${ugx(inv.expectedReturn)} at maturity</span></div>
     </div>`;
   }).join('');
 }
