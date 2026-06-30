@@ -124,14 +124,15 @@ input,textarea,select{font-family:var(--fam);outline:none}
 
 /* ── TABLES ── */
 .table-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border)}
-/* On phones, stack each table row into a self-contained card — no sideways sliding */
+/* On phones each row becomes a clean card; every line shows its field label */
 @media (max-width:760px){
   .table-wrap{overflow-x:visible;border:none}
   .table-wrap table,.table-wrap tbody{display:block;width:100%}
   .table-wrap thead{display:none}
-  .table-wrap tr{display:block;background:var(--bg2);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;padding:4px 2px}
-  .table-wrap td{display:flex;justify-content:space-between;align-items:center;gap:14px;border:none;padding:8px 13px;font-size:12.5px;text-align:right;white-space:normal;word-break:break-word}
-  .table-wrap td:first-child{font-weight:800;border-bottom:1px solid var(--border);text-align:left;font-size:13.5px}
+  .table-wrap tr{display:block;background:var(--bg2);border:1px solid var(--border);border-radius:12px;margin-bottom:12px;padding:4px 2px;box-shadow:0 2px 10px rgba(0,0,0,0.18)}
+  .table-wrap td{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border:none;border-bottom:1px solid var(--border);padding:10px 14px;font-size:13px;text-align:right;white-space:normal;word-break:break-word}
+  .table-wrap tr td:last-child{border-bottom:none}
+  .table-wrap td::before{content:attr(data-label);font-weight:700;color:var(--text2);text-align:left;flex-shrink:0;white-space:nowrap}
 }
 table{width:100%;border-collapse:collapse;min-width:600px}
 th{
@@ -1061,6 +1062,22 @@ window.initAdmin = async () => {
 };
 
 // ── TAB SWITCHING ──
+// Auto-label each table cell from its column header so that, when rows collapse
+// into cards on phones, every line reads "Field: value" (no straining).
+function labelizeTables(){
+  document.querySelectorAll('.table-wrap table').forEach(tbl => {
+    const heads = Array.from(tbl.querySelectorAll('thead th')).map(th => th.textContent.trim());
+    if (!heads.length) return;
+    tbl.querySelectorAll('tbody tr').forEach(tr => {
+      Array.from(tr.children).forEach((td, i) => { if (heads[i] && !td.dataset.label) td.setAttribute('data-label', heads[i]); });
+    });
+  });
+}
+(function(){
+  const obs = new MutationObserver(() => labelizeTables());
+  function start(){ const mc = document.querySelector('.main-content') || document.body; obs.observe(mc, { childList:true, subtree:true }); labelizeTables(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
 window.showTab = (tab, btn) => {
   _activeTab = tab;
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
