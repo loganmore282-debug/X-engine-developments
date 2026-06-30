@@ -162,7 +162,10 @@ async function isMaintenanceOn() {
   return _maint;
 }
 // Webhooks and admin routes must never be blocked by maintenance
-const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback'];
+// NOTE: '/settings/public' MUST bypass maintenance — the app reads it to DETECT
+// maintenance and show the lock screen. If it were blocked, the app would just
+// freeze (503 everywhere) instead of showing the maintenance screen.
+const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public'];
 app.use(async (req, res, next) => {
   const p = req.path;
   if (BYPASS.some(b => p === b || p.startsWith(b + '/'))) return next();
