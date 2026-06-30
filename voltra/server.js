@@ -66,7 +66,7 @@ const WELCOME_BONUS    = 7000;
 const COMM_L1          = 0.20;
 const COMM_L2          = 0.05;
 const COMM_L3          = 0.01;
-const LIQUIDITY_FEE    = 0.07;
+const LIQUIDITY_FEE    = 0.15;
 // Agent tier ladder — ordered highest → lowest (array order matters for findIndex)
 const AGENT_TIERS = [
   { key: 'executive_agent', label: 'Executive Agent', icon: '🚀', threshold: 50, weeklyPay: 280000 },

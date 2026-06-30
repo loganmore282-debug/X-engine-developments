@@ -241,9 +241,12 @@ async function api(path, body = {}, _attempt = 0) {
     });
     return await resp.json();
   } catch (e) {
-    // The backend can be cold (first request after idle fails); silently retry a
-    // couple of times with backoff so the user never sees a false "Network error".
-    if (_attempt < 2) {
+    // Retry ONLY safe, read-style endpoints on a cold/transient failure. NEVER retry
+    // money-moving calls — a lost response there could double-apply (this was the
+    // 30,000 -> 60,000 deposit bug).
+    const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/giftcode/'];
+    const unsafe = NO_RETRY.some(p => path.startsWith(p));
+    if (_attempt < 2 && !unsafe) {
       await new Promise(r => setTimeout(r, 800 * (_attempt + 1)));
       return api(path, body, _attempt + 1);
     }
@@ -1192,7 +1195,7 @@ async function loadRecords(tab) {
     } else if (tab === 'revenue') {
       const totalCashback = items.reduce((s, t) => s + (t.amount || 0), 0);
       const typeIcon  = { checkin:_ICN_CHECKIN, cashback:_ICN_COINS, commission:_ICN_PEOPLE, gift_code:_ICN_GIFT, investment_return:_ICN_TREND, admin_credit:_ICN_BANK, reversal:_ICN_UNDO };
-      const typeLabel = { checkin:'Daily Spark', cashback:'Daily Yield', commission:'Team Bonus', gift_code:'Gift Reward', investment_return:'Asset Payout', admin_credit:'Account Credit', reversal:'Reversal' };
+      const typeLabel = { checkin:'Daily Spark', cashback:'Asset Payout', commission:'Team Bonus', gift_code:'Gift Reward', investment_return:'Asset Payout', admin_credit:'Account Credit', reversal:'Reversal' };
       el.innerHTML = `
         <div class="rev-hero">
           <div class="rev-hero-lbl">Total Inbound Balance</div>
@@ -1469,7 +1472,7 @@ function handleDepResult(status, creditedAmount, amount) {
     document.getElementById('depSuccessAmt').textContent = ugx(creditedAmount || amount);
     document.getElementById('depPageTitle').textContent  = 'Payment Received';
     document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
-    showDepStep(3); launchConfetti(); loadUser();
+    showDepStep(3); loadUser();
   } else if (status === 'failed') {
     _depResolved = true;
     stopDepTimers();
@@ -1558,7 +1561,7 @@ window.updateWitFee = () => {
   const raw = parseInt(document.getElementById('witAmount').value, 10);
   const row = document.getElementById('witFeeRow');
   if (!raw || raw <= 0) { row.style.display = 'none'; return; }
-  const fee = Math.round(raw * 0.07);
+  const fee = Math.round(raw * 0.15);
   const net = raw - fee;
   const hint = raw % 5000 !== 0
     ? `<div class="wfee-hint">Amount must be a multiple of 5,000 — try ${ugx(Math.ceil(raw/5000)*5000)}</div>`
@@ -1566,7 +1569,7 @@ window.updateWitFee = () => {
   row.style.display = 'block';
   row.innerHTML = `
     <div class="wfee-row"><span>Payout amount</span><b>${ugx(raw)}</b></div>
-    <div class="wfee-row"><span>Service fee (7%)</span><b class="neg">− ${ugx(fee)}</b></div>
+    <div class="wfee-row"><span>Service fee (15%)</span><b class="neg">− ${ugx(fee)}</b></div>
     <div class="wfee-row net"><span>You receive</span><b>${ugx(net)}</b></div>
     ${hint}`;
 };
@@ -1732,7 +1735,7 @@ const CONTENT = {
       <ul>
         <li>Minimum recharge is UGX 30,000</li>
         <li>Minimum withdrawal is UGX 20,000 (multiples of 5,000 only)</li>
-        <li>A 7% fee applies on all withdrawals</li>
+        <li>A 15% fee applies on all withdrawals</li>
         <li>Investment plans run for a fixed cycle and mature automatically</li>
         <li>Daily check-in bonus is UGX 500 per day</li>
       </ul>
@@ -1762,37 +1765,50 @@ const CONTENT = {
   },
   terms: {
     title: 'Terms & Conditions',
-    body: `<h3>1. Acceptance</h3>
-      <p>By creating a Voltra account and using the platform, you agree to these Terms & Conditions. If you do not agree, please do not use Voltra.</p>
+    body: `<h3>1. Acceptance of Terms</h3>
+      <p>By creating a Voltra account and using the platform, you confirm that you have read, understood and agreed to these Terms &amp; Conditions in full. If you do not agree with any part of them, you must not register for or use Voltra. These terms form a binding agreement between you and Voltra.</p>
       <h3 style="margin-top:16px">2. Eligibility</h3>
-      <p>You must be at least 18 years old and the lawful owner of the mobile money account you use. One account is permitted per person.</p>
-      <h3 style="margin-top:16px">3. Deposits & Investments</h3>
-      <p>Recharges activate a power machine that pays a fixed daily return over its cycle. Returns are projections based on the selected plan and are credited daily to your wallet.</p>
-      <h3 style="margin-top:16px">4. Withdrawals</h3>
-      <p>Withdrawals are subject to the minimum amount, multiples rule and the liquidity fee shown on the withdrawal screen. Processing may take time during high demand.</p>
-      <h3 style="margin-top:16px">5. Risk</h3>
-      <p>All investments carry risk. Only commit funds you can afford to set aside. Voltra is not liable for losses arising from market conditions or events beyond our control.</p>
-      <h3 style="margin-top:16px">6. Prohibited Use</h3>
-      <p>Fraud, multiple accounts, automated abuse or any attempt to manipulate the platform will result in suspension and forfeiture of funds.</p>
-      <h3 style="margin-top:16px">7. Changes</h3>
-      <p>We may update these terms at any time. Continued use of Voltra after changes means you accept the updated terms.</p>`
+      <p>You must be at least 18 years old and the lawful owner of the mobile-money account you use to transact. Only one account is permitted per person; operating multiple accounts to abuse bonuses, referrals or promotions is strictly prohibited and may lead to suspension of every related account.</p>
+      <h3 style="margin-top:16px">3. Activating an Asset</h3>
+      <p>When you activate (recharge) an energy asset, the activation amount is deducted from your wallet and the asset begins its fixed earning cycle. Each asset states its entry cost, run length and total payout up front before you confirm.</p>
+      <p>Earnings are <strong>not paid daily</strong>. The full payout for an asset is credited to your wallet automatically in one lump sum when the asset reaches the end of its cycle (maturity). Nothing is paid out before maturity, and once an asset is activated the activation amount cannot be cancelled or refunded.</p>
+      <h3 style="margin-top:16px">4. Wallet &amp; Deposits</h3>
+      <p>Funds added to your wallet via Mobile Money are credited once the payment is confirmed by the payment provider. You are responsible for sending from a number registered in your own name and for entering the correct amount. Voltra is not responsible for transfers made to the wrong number or for amounts sent that do not match your request.</p>
+      <h3 style="margin-top:16px">5. Withdrawals &amp; Fees</h3>
+      <p>Withdrawals must meet the minimum amount and the multiples rule shown on the withdrawal screen. A service fee of <strong>15%</strong> applies to every payout and is shown clearly before you confirm. Payouts are sent to your nominated Mobile Money number and are normally processed within 24 hours, though processing may take longer during periods of high demand.</p>
+      <h3 style="margin-top:16px">6. Referral Rewards</h3>
+      <p>You earn a commission when people you invite activate assets — Level 1, Level 2 and Level 3 of your network. Rewards are credited instantly and are calculated on the activation amount. Self-referrals, fake accounts and any manipulation of the referral system are forbidden and will result in forfeiture of rewards.</p>
+      <h3 style="margin-top:16px">7. Risk Disclosure</h3>
+      <p>Participation carries risk. Projected returns are targets, not guarantees, and depend on the continued operation of the platform. Only commit funds you can afford to set aside. Voltra is not liable for losses arising from circumstances beyond our reasonable control, including network, carrier or third-party payment failures.</p>
+      <h3 style="margin-top:16px">8. Prohibited Conduct</h3>
+      <p>Fraud, chargeback abuse, multiple or fake accounts, automated bots, exploitation of bugs, or any attempt to manipulate balances, payouts or the referral system will result in immediate suspension and may lead to forfeiture of affected funds and a permanent ban.</p>
+      <h3 style="margin-top:16px">9. Account Suspension</h3>
+      <p>We may suspend or close any account that we reasonably believe is involved in fraud or a breach of these terms. Where funds are linked to fraudulent activity, they may be withheld pending review.</p>
+      <h3 style="margin-top:16px">10. Changes to These Terms</h3>
+      <p>We may update these Terms from time to time. The latest version is always available in the app, and your continued use of Voltra after an update means you accept the revised Terms.</p>`
   },
   privacy: {
     title: 'Privacy Policy',
     body: `<h3>1. Information We Collect</h3>
-      <p>We collect your name, phone number, transaction history and basic device information needed to operate your account and process payments.</p>
-      <h3 style="margin-top:16px">2. How We Use It</h3>
-      <p>Your information is used to run your account, process recharges and withdrawals, calculate earnings and commissions, and keep the platform secure.</p>
-      <h3 style="margin-top:16px">3. Sharing</h3>
-      <p>We do not sell your personal data. Information is shared only with payment providers as required to complete your transactions, or where required by law.</p>
-      <h3 style="margin-top:16px">4. Security</h3>
-      <p>Sensitive credentials are stored server-side and never exposed in the app. Access to your account is protected by your password — keep it private.</p>
-      <h3 style="margin-top:16px">5. Data Retention</h3>
-      <p>We keep account and transaction records for as long as your account is active and as required for legal and accounting purposes.</p>
-      <h3 style="margin-top:16px">6. Your Rights</h3>
-      <p>You may request a copy of your data or account deletion by contacting support. Some records may be retained where the law requires.</p>
-      <h3 style="margin-top:16px">7. Contact</h3>
-      <p>For any privacy question, reach us through the Support option in the app.</p>`
+      <p>We collect the information needed to operate your account: your name, phone number, the email derived from your number, your transaction and earnings history, referral relationships, and basic device/connection information used for security and fraud prevention.</p>
+      <h3 style="margin-top:16px">2. How We Use Your Information</h3>
+      <p>Your information is used to run your account, process recharges and withdrawals, calculate earnings, commissions and referral rewards, prevent fraud and abuse, provide customer support, and keep the platform secure and reliable.</p>
+      <h3 style="margin-top:16px">3. Payment Information</h3>
+      <p>Mobile-money transactions are processed through licensed payment providers. We share only the minimum details required to complete a deposit or payout. We never store your Mobile-Money PIN, and Voltra staff will never ask you for it.</p>
+      <h3 style="margin-top:16px">4. Data Sharing</h3>
+      <p>We do not sell your personal data. Information is shared only with our payment partners to complete your transactions, or where we are required to do so by law or to protect against fraud.</p>
+      <h3 style="margin-top:16px">5. Security</h3>
+      <p>Sensitive credentials are held server-side and are never exposed inside the app. Access to your account is protected by your password — keep it private and never share it. If you suspect unauthorised access, contact support immediately.</p>
+      <h3 style="margin-top:16px">6. Data Retention</h3>
+      <p>We keep account and transaction records for as long as your account is active and for as long afterwards as required for legal, accounting and anti-fraud purposes.</p>
+      <h3 style="margin-top:16px">7. Your Rights</h3>
+      <p>You may request a copy of your personal data or ask us to close your account by contacting support. Some records may be retained where the law requires or where there is an unresolved dispute.</p>
+      <h3 style="margin-top:16px">8. Cookies &amp; Local Storage</h3>
+      <p>The app stores small amounts of data on your device (such as your login preference and profile photo) so it loads faster and remembers you. This data stays on your device and is not used for advertising.</p>
+      <h3 style="margin-top:16px">9. Changes to This Policy</h3>
+      <p>We may update this Privacy Policy from time to time. The current version is always available here in the app.</p>
+      <h3 style="margin-top:16px">10. Contact</h3>
+      <p>For any privacy question or request, reach us through the Support option in the app.</p>`
   }
 };
 let _aboutImgs = [];
