@@ -128,6 +128,22 @@ const savedPass  = localStorage.getItem('nx_saved_pass');
 if (savedPhone) { document.getElementById('loginPhone').value = savedPhone; document.getElementById('rememberMe').checked = true; }
 if (savedPass)  { document.getElementById('loginPass').value  = savedPass; }
 
+// Auto-login when the browser/Google autofills (or remembers) saved credentials.
+let _autoLoginTried = false;
+function _maybeAutoLogin(){
+  if (_autoLoginTried) return;
+  const lf = document.getElementById('loginForm');
+  const ph = document.getElementById('loginPhone');
+  const pw = document.getElementById('loginPass');
+  if (!lf || !ph || !pw || lf.style.display === 'none') return;
+  if (ph.value.trim() && pw.value) { _autoLoginTried = true; doLogin(); }
+}
+['loginPhone','loginPass'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('animationstart', e => { if (e.animationName === 'nxAutofill') setTimeout(_maybeAutoLogin, 250); });
+});
+window.addEventListener('load', () => setTimeout(_maybeAutoLogin, 800));
+
 window.doLogin = async () => {
   const phone = document.getElementById('loginPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
   const pass  = document.getElementById('loginPass').value;
@@ -1297,16 +1313,28 @@ window.openTeamMembersModal = async () => {
 };
 
 // ── PAGE NAVIGATION ──
+let _overlayStack = [];
+function _pushOverlay(id){ _overlayStack.push(id); try { history.pushState({ voltraOv: id }, ''); } catch (_) {} }
+function _hidePage(id){ const el=document.getElementById(id); if(!el) return; el.classList.remove('open'); el.addEventListener('transitionend', () => { el.style.display='none'; }, { once:true }); }
 window.openPage = (id) => {
-  const el = document.getElementById(id);
+  const el = document.getElementById(id); if (!el) return;
   el.style.display = 'block';
   requestAnimationFrame(() => requestAnimationFrame(() => { el.classList.add('open'); el.scrollTop = 0; }));
+  _pushOverlay(id);
 };
 window.closePage = (id) => {
-  const el = document.getElementById(id);
-  el.classList.remove('open');
-  el.addEventListener('transitionend', () => { el.style.display = 'none'; }, { once: true });
+  if (_overlayStack.length && _overlayStack[_overlayStack.length-1] === id) { history.back(); }
+  else { _hidePage(id); }
 };
+// Phone/browser BACK closes the open page or modal instead of leaving the app.
+window.addEventListener('popstate', () => {
+  const id = _overlayStack.pop();
+  if (!id) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.classList.contains('page-overlay')) _hidePage(id);
+  else el.classList.remove('show');
+});
 
 // ── DEPOSIT PAGE ──
 let _depPollTimer   = null;
@@ -1812,8 +1840,56 @@ window.openContentModal = (type) => {
 };
 
 // ── MODAL HELPERS ──
-function openModal(id)  { document.getElementById(id).classList.add('show'); }
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+window.downloadStatement = async () => {
+  if (!_user || !(window.jspdf && window.jspdf.jsPDF)) { showToast('Statement unavailable — check your connection', 'error'); return; }
+  showLoading(true);
+  try {
+    const tr = await api('/account/transactions', { userId: _user.uid });
+    const txs = ((tr.status === 'success' ? tr.transactions : []) || []);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFillColor(10,14,23); doc.rect(0,0,210,30,'F');
+    doc.setTextColor(255,157,0); doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.text('VOLTRA', 14, 19);
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text('Financial Statement', 14, 26);
+    let y = 42; doc.setTextColor(20,20,20); doc.setFontSize(10);
+    const meta = [
+      ['Account holder', _userData && _userData.name || '-'],
+      ['Phone', _userData && _userData.phone || '-'],
+      ['Account ID', _user.uid],
+      ['Wallet balance', ugx(_userData && _userData.walletBalance || 0)],
+      ['Generated', new Date().toLocaleString('en-GB')]
+    ];
+    meta.forEach(m => { doc.setFont('helvetica','bold'); doc.text(m[0] + ':', 14, y); doc.setFont('helvetica','normal'); doc.text(String(m[1]), 55, y); y += 6; });
+    y += 4;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text('DATE / TIME', 14, y); doc.text('TYPE', 70, y); doc.text('DESCRIPTION', 100, y); doc.text('AMOUNT', 196, y, {align:'right'});
+    y += 2; doc.setDrawColor(200,200,200); doc.line(14, y, 196, y); y += 6;
+    doc.setFont('helvetica','normal');
+    if (!txs.length) doc.text('No transactions yet.', 14, y);
+    txs.forEach(t => {
+      if (y > 282) { doc.addPage(); y = 20; }
+      doc.setTextColor(60,60,60);
+      doc.text(((t.date||'') + ' ' + (t.time||'')).slice(0,22), 14, y);
+      doc.text(String(t.type||'').slice(0,14), 70, y);
+      doc.text(String(t.description||'').slice(0,34), 100, y);
+      const pos = (t.amount||0) >= 0;
+      doc.setTextColor(pos?22:200, pos?140:40, 60);
+      doc.text((pos?'+':'') + ugx(t.amount||0), 196, y, {align:'right'});
+      y += 6;
+    });
+    doc.setTextColor(150,150,150); doc.setFontSize(8);
+    doc.text('Voltra — Power Your Wealth', 14, 290);
+    const nm = (_userData && _userData.name) ? _userData.name.replace(/\s+/g,'') : _user.uid.slice(0,6);
+    doc.save('Voltra-Statement-' + nm + '.pdf');
+    showToast('Statement downloaded', 'success');
+  } catch (e) { showToast('Could not generate statement', 'error'); }
+  finally { showLoading(false); }
+};
+function openModal(id)  { document.getElementById(id).classList.add('show'); _pushOverlay(id); }
+function closeModal(id) {
+  if (_overlayStack.length && _overlayStack[_overlayStack.length-1] === id) { history.back(); }
+  else { const el = document.getElementById(id); if (el) el.classList.remove('show'); }
+}
 window.openModal  = openModal;
 window.closeModal = closeModal;
 
