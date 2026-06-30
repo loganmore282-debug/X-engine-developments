@@ -88,10 +88,13 @@ function cleanDesc(s){
 function planProgress(inv){
   const matured = inv.status === 'matured' || inv.status === 'claimed';
   const cycle = inv.cycle || inv.durationDays || 0;
+  const totalMs = cycle * 86400000;
   const msLeft = inv.maturityDate ? Math.max(0, tsMs(inv.maturityDate) - Date.now()) : 0;
-  const daysElapsed = Math.min(cycle, Math.floor(Math.max(0, cycle*86400000 - msLeft)/86400000));
-  const pct = matured ? 100 : (cycle ? Math.min(100, Math.round(daysElapsed/cycle*100)) : 0);
-  const dayNum = matured ? cycle : Math.min(cycle, daysElapsed+1);
+  const elapsed = Math.max(0, totalMs - msLeft);
+  const daysElapsed = Math.min(cycle, Math.floor(elapsed / 86400000));
+  // pct is CONTINUOUS (fills gradually so the bar visibly moves); the day label is whole-day.
+  const pct = matured ? 100 : (totalMs ? Math.min(100, Math.max(1, Math.round(elapsed / totalMs * 100))) : 0);
+  const dayNum = matured ? cycle : Math.min(cycle, daysElapsed + 1);
   return { cycle, pct, dayNum, matured, daysElapsed };
 }
 function showToast(msg, type='') {
