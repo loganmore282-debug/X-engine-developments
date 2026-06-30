@@ -68,6 +68,32 @@ function tsMs(v) {
 }
 function tsDate(v) { const m = tsMs(v); return m ? new Date(m) : null; }
 function shortUgx(n) { n = Number(n||0); return n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : n.toString(); }
+// Scrub legacy/Nexus wording from any stored description so old DB rows read clean.
+function cleanDesc(s){
+  if(!s) return s;
+  return String(s)
+    .replace(/Online deposit/gi,'Wallet recharge')
+    .replace(/Admin credit/gi,'Voltra credit')
+    .replace(/Account Credit/gi,'Voltra Credit')
+    .replace(/Welcome bonus/gi,'Sign-up reward')
+    .replace(/L1 commission/gi,'Level 1 reward')
+    .replace(/L2 commission/gi,'Level 2 reward')
+    .replace(/L3 commission/gi,'Level 3 reward')
+    .replace(/Daily cashback[^,;]*/gi,'Asset earnings')
+    .replace(/Invested in/gi,'Activated')
+    .replace(/Nexus/gi,'Voltra');
+}
+// Single source of truth for plan progress so the home card and the detail page
+// ALWAYS show the same bar/day (they used to diverge).
+function planProgress(inv){
+  const matured = inv.status === 'matured' || inv.status === 'claimed';
+  const cycle = inv.cycle || inv.durationDays || 0;
+  const msLeft = inv.maturityDate ? Math.max(0, tsMs(inv.maturityDate) - Date.now()) : 0;
+  const daysElapsed = Math.min(cycle, Math.floor(Math.max(0, cycle*86400000 - msLeft)/86400000));
+  const pct = matured ? 100 : (cycle ? Math.min(100, Math.round(daysElapsed/cycle*100)) : 0);
+  const dayNum = matured ? cycle : Math.min(cycle, daysElapsed+1);
+  return { cycle, pct, dayNum, matured, daysElapsed };
+}
 function showToast(msg, type='') {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = 'show ' + type;
@@ -620,12 +646,8 @@ function renderHomeInvestments(invs) {
     return;
   }
   el.innerHTML = invs.map(inv => {
-    const matured = inv.status === 'matured' || inv.status === 'claimed';
-    const msLeft2 = inv.maturityDate ? Math.max(0, tsMs(inv.maturityDate) - Date.now()) : 0;
-    const cycleDays = inv.cycle || 0;
-    const daysDone = Math.floor(Math.max(0, cycleDays * 86400000 - msLeft2) / 86400000);
-    const pct = matured ? 100 : (cycleDays ? Math.min(100, Math.round(daysDone / cycleDays * 100)) : 0);
-    const dayNum = matured ? cycleDays : Math.min(cycleDays, daysDone + 1);
+    const pp = planProgress(inv);
+    const matured = pp.matured, cycleDays = pp.cycle, pct = pp.pct, dayNum = pp.dayNum;
     const imgHtml = inv.productImage
       ? `<img class="aplan-img" src="${inv.productImage}" alt="">`
       : `<span class="aplan-img">${ICN.box}</span>`;
@@ -1013,7 +1035,7 @@ window.openInvDetail = async (invId) => {
     // has a few hours left; the server marks these 'claimed', this is a guard
     // for the brief window before the next maturity sweep runs.
     const fullyPaid   = (inv.expectedReturn || 0) > 0 && (inv.dailyCredited || 0) >= inv.expectedReturn;
-    const progress    = matured || claimed || fullyPaid ? 100 : (cycle ? Math.min(100, Math.round(daysElapsed / cycle * 100)) : 0);
+    const progress    = planProgress(inv).pct;
     const imgHtml  = inv.productImage ? `<img src="${inv.productImage}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:12px">` : '';
     const stateBadge = claimed ? '<span class="inv-badge claimed">Collected</span>'
                      : matured ? '<span class="inv-badge matured">Ready</span>'
@@ -1032,7 +1054,7 @@ window.openInvDetail = async (invId) => {
       </div>
       <div class="pd-prog">
         <div class="pd-prog-top">
-          <span>Day ${claimed||matured||fullyPaid ? cycle : Math.min(cycle, daysElapsed+1)} of ${cycle}</span>
+          <span>Day ${planProgress(inv).dayNum} of ${cycle}</span>
           <span class="${matured||claimed||fullyPaid?'s-green':''}">${claimed ? 'Completed' : matured||fullyPaid ? 'Ready — auto-paid' : timeLeftStr}</span>
         </div>
         <div class="pd-bar"><div class="pd-bar-fill" style="width:${progress}%;background:${matured||claimed||fullyPaid?'#22c55e':'#ff9d00'}"></div></div>
@@ -1186,7 +1208,7 @@ async function loadRecords(tab) {
           status: statusLabel(tx.status||'success'), statusCls: statusCls(tx.status||'success'),
           details: [
             { k:'Reference', v: orderRef(tx) },
-            { k:'Note', v: tx.description }
+            { k:'Note', v: cleanDesc(tx.description) }
           ]
         });
       }).join('');
@@ -1204,20 +1226,20 @@ async function loadRecords(tab) {
           icon: typeIcon[tx.type] || _ICN_COINS, title: typeLabel[tx.type] || tx.type,
           sub: `${tx.date||''} · ${tx.time||fmtDT(tx)}`,
           amt: '+' + ugx(tx.amount), amtClass: 's-green',
-          details: [ { k:'Detail', v: tx.description } ]
+          details: [ { k:'Detail', v: cleanDesc(tx.description) } ]
         })).join('');
     } else if (tab === 'referrals') {
       el.innerHTML = items.map(tx => recRow({
         icon: '<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="7" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2.5 19c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5v.5h-13z"/><path d="M16.5 13.2c2.7.2 5 2 5 4.8v1h-4v-1c0-1.9-.9-3.6-2.3-4.6.4-.1.9-.2 1.3-.2z"/></svg>', title: 'Team Bonus', sub: fmtDT(tx),
         amt: '+' + ugx(tx.amount), amtClass: 's-green',
         status: 'Success', statusCls: 's-green',
-        details: [ { k:'Reference', v: orderRef(tx) }, { k:'From', v: tx.description||'Affiliate' } ]
+        details: [ { k:'Reference', v: orderRef(tx) }, { k:'From', v: cleanDesc(tx.description)||'Affiliate' } ]
       })).join('');
     } else {
       el.innerHTML = items.map(tx => {
         const pos = tx.amount > 0;
         return recRow({
-          icon: pos ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>' : '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg>', title: tx.description||tx.type||'Transaction', sub: fmtDT(tx),
+          icon: pos ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>' : '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg>', title: cleanDesc(tx.description)||tx.type||'Transaction', sub: fmtDT(tx),
           amt: (pos?'+':'') + ugx(tx.amount), amtClass: pos?'s-green':'s-red',
           status: statusLabel(tx.status), statusCls: statusCls(tx.status),
           details: [ { k:'Reference', v: orderRef(tx) } ]
@@ -1283,7 +1305,7 @@ window.shareRefLink = () => {
 window.openTeamMembersModal = async () => {
   const body = document.getElementById('teamMembersBody');
   body.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">Loading…</div>';
-  openModal('teamMembersModal');
+  openPage('teamMembersPage');
   try {
     const r = await api('/team/members', { userId: _user.uid });
     const members = r.members || [];

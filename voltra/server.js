@@ -810,10 +810,8 @@ app.post('/team/members', async (req, res) => {
       const displayName = (d.name || '').split(' ')[0] || 'User';
       // Mask phone: keep country code + first 3 digits, hide rest  e.g. +256 77X XXX XXX
       const rawPhone = d.phone || '';
-      let maskedPhone = rawPhone;
-      if (rawPhone.length >= 10) {
-        maskedPhone = rawPhone.slice(0, rawPhone.length - 5) + '*****';
-      }
+      // Show the member's full number — these are the user's own direct referrals.
+      const maskedPhone = rawPhone;
       members.push({
         id: doc.id,
         name: displayName,
