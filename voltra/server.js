@@ -784,7 +784,9 @@ app.post('/account/ensure-refcode', async (req, res) => {
     const snap = await ref.get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const existing = snap.data().referralCode;
-    if (existing && /^N[A-Z0-9]{5}X$/.test(existing)) {
+    // Keep ANY existing code — only generate one when it's missing. (The old check
+    // matched the retired N…X pattern and was regenerating valid new codes on every login.)
+    if (existing) {
       return res.json({ status: 'success', referralCode: existing, changed: false });
     }
     const code = await generateUniqueRefCode();

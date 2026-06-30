@@ -1027,7 +1027,7 @@ window.openInvDetail = async (invId) => {
       <div class="pd-hero">
         <div class="pd-hero-lbl">Total cashback at maturity</div>
         <div class="pd-hero-val">${ugx(inv.expectedReturn)}</div>
-        <div class="pd-hero-sub">Activation ${ugx(inv.amount)} &nbsp;·&nbsp; net gain +${ugx((inv.expectedReturn||0)-(inv.amount||0))}</div>
+        <div class="pd-hero-sub">Activation ${ugx(inv.amount)} &nbsp;·&nbsp; full cashback ${ugx(inv.expectedReturn)}</div>
       </div>
       <div class="pd-prog">
         <div class="pd-prog-top">
