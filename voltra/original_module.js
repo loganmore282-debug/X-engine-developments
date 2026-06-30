@@ -513,9 +513,20 @@ async function pollAccount(uid) {
         .filter(inv => inv.status === 'active' || inv.status === 'matured');
       _activeInvCount = activeAll.length;
       renderHomeInvestments(activeAll.slice(0, 5));
-      // keep the Power Assets banner (active products + earnings so far) live
-      const cE = document.getElementById('prodBannerCount');   if (cE) cE.textContent = _activeInvCount;
-      const bE = document.getElementById('prodBannerBenefit'); if (bE) bE.textContent = ugx(_userData?.totalEarned || 0);
+      const cE = document.getElementById('prodBannerCount'); if (cE) cE.textContent = _activeInvCount;
+    }
+  } catch (_) {}
+  // Inbound total (all credits incl. deposits) + earnings (platform credits only),
+  // computed from the real transaction ledger so both figures read correctly.
+  try {
+    const tr = await api('/account/transactions', { userId: uid });
+    if (tr.status === 'success') {
+      const INBOUND = ['deposit','admin_credit','checkin','cashback','commission','gift_code','investment_return'];
+      const tx = (tr.transactions || []).filter(t => INBOUND.includes(t.type) && (t.amount || 0) > 0);
+      _inboundTotal  = tx.reduce((s, t) => s + t.amount, 0);
+      _earningsTotal = tx.filter(t => t.type !== 'deposit').reduce((s, t) => s + t.amount, 0);
+      const hc = document.getElementById('homeCumulative');     if (hc) hc.textContent = ugx(_inboundTotal);
+      const bE = document.getElementById('prodBannerBenefit');  if (bE) bE.textContent = ugx(_earningsTotal);
     }
   } catch (_) {}
 }
@@ -540,10 +551,12 @@ function startListener(uid) {
 function renderHome(u) {
   document.getElementById('homeBalance').textContent = ugx(u.walletBalance);
   document.getElementById('homeBalanceSub').textContent = u.walletBalance > 0 ? 'Invest in a plan to earn returns' : 'Tap deposit to add funds';
-  // Cumulative income = referral commission + cashback (check-in + investment returns)
+  // Inbound balance = total of every credit received. Computed precisely from the
+  // transaction ledger in pollAccount (_inboundTotal); fall back to field estimate.
   const referral = u.commissionEarned || 0;
   const cashback = (u.checkinEarned || 0) + (u.totalEarned || 0);
-  document.getElementById('homeCumulative').textContent = ugx(referral + cashback);
+  document.getElementById('homeCumulative').textContent =
+    ugx(_inboundTotal != null ? _inboundTotal : (referral + cashback));
   const firstName = u.name ? u.name.split(' ')[0] : '';
   document.getElementById('topGreeting').textContent = 'Hi, ' + firstName;
   // Check-in
@@ -847,6 +860,8 @@ async function loadProducts() {
 let _allAssets = [];
 let _assetCat  = 'all';
 let _activeInvCount = 0;
+let _inboundTotal = null;   // every credit ever (incl. deposits) — home "Inbound Balance"
+let _earningsTotal = 0;     // platform earnings only (excl. deposits) — "Earnings so far"
 function renderProducts(products) {
   if (products) _allAssets = products;
   const list = _allAssets;
@@ -854,7 +869,7 @@ function renderProducts(products) {
   const countEl   = document.getElementById('prodBannerCount');
   const benefitEl = document.getElementById('prodBannerBenefit');
   if (countEl)   countEl.textContent   = _activeInvCount || 0;
-  if (benefitEl) benefitEl.textContent = ugx(_userData?.totalEarned || 0);
+  if (benefitEl) benefitEl.textContent = ugx(_earningsTotal || 0);
   if (!list.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No assets available yet</p></div>`;
     return;
@@ -946,6 +961,13 @@ window.claimInvestment = async (invId) => {
 
 // ── INVESTMENT DETAIL MODAL ──
 let _invCache = {};
+window.goRecordTab = (tab) => {
+  showSection('records');
+  const order = ['deposits','withdrawals','referrals','investments','revenue'];
+  const i = order.indexOf(tab);
+  document.querySelectorAll('#recordsSection .pill-tab').forEach((b, idx) => b.classList.toggle('active', idx === i));
+  loadRecords(tab);
+};
 window.openInvDetail = async (invId) => {
   openPage('invDetailPage');
   const body = document.getElementById('invDetailBody');
@@ -982,28 +1004,29 @@ window.openInvDetail = async (invId) => {
     const claimBtn = matured ? `<button class="btn-submit" style="margin-top:16px" onclick="closePage('invDetailPage');claimInvestment('${inv.id}')">Collect payout — ${ugx(inv.expectedReturn)}</button>` : '';
     body.innerHTML = `
       <div style="text-align:center">${imgHtml}</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="font-size:17px;font-weight:800;color:var(--text)">${inv.productName||'Asset'}</div>
+      <div class="pd-head">
+        <div class="pd-name">${inv.productName||'Asset'}</div>
         ${stateBadge}
       </div>
-      <div class="rec-row"><span class="rec-row-lbl">Activation cost</span><span class="rec-row-val">${ugx(inv.amount)}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Total payout</span><span class="rec-row-val s-green">+${ugx(inv.expectedReturn)}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Net gain</span><span class="rec-row-val s-green">+${ugx((inv.expectedReturn||0)-(inv.amount||0))}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Daily Yield</span><span class="rec-row-val s-green">+${ugx(inv.dailyReturn||0)}/day</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Paid so far</span><span class="rec-row-val s-green">+${ugx(inv.dailyCredited||0)}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Still to come</span><span class="rec-row-val">${ugx(Math.max(0,(inv.expectedReturn||0)-(inv.dailyCredited||0)))}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Activated on</span><span class="rec-row-val">${inv.date||'—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Run length</span><span class="rec-row-val"><strong>${cycle} day${cycle!==1?'s':''}</strong></span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Completes on</span><span class="rec-row-val">${inv.maturityDate ? (tsDate(inv.maturityDate)||new Date()).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Time remaining</span><span class="rec-row-val" style="color:${claimed?'var(--text2)':matured||fullyPaid?'#22c55e':'var(--blue)'}">${claimed ? 'Completed' : matured ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Matured — Claim now!' : fullyPaid ? 'Fully paid out' : timeLeftStr}</span></div>
-      <div class="rec-row"><span class="rec-row-lbl">Day</span><span class="rec-row-val">${claimed||matured||fullyPaid ? 'Day '+cycle+' of '+cycle : 'Day '+Math.min(cycle, daysElapsed+1)+' of '+cycle}</span></div>
-      <div style="margin:14px 0 6px;display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:12px;color:var(--text2)">Progress</span>
-        <span style="font-size:12px;font-weight:700;color:${matured||claimed||fullyPaid?'#22c55e':'#ff9d00'}">${progress}%</span>
+      <div class="pd-hero">
+        <div class="pd-hero-lbl">Total cashback at maturity</div>
+        <div class="pd-hero-val">${ugx(inv.expectedReturn)}</div>
+        <div class="pd-hero-sub">Activation ${ugx(inv.amount)} &nbsp;·&nbsp; net gain +${ugx((inv.expectedReturn||0)-(inv.amount||0))}</div>
       </div>
-      <div style="background:var(--border);border-radius:99px;height:10px;overflow:hidden">
-        <div style="background:${matured||claimed||fullyPaid?'#22c55e':'#ff9d00'};height:100%;width:${progress}%;border-radius:99px;transition:width .4s"></div>
+      <div class="pd-prog">
+        <div class="pd-prog-top">
+          <span>Day ${claimed||matured||fullyPaid ? cycle : Math.min(cycle, daysElapsed+1)} of ${cycle}</span>
+          <span class="${matured||claimed||fullyPaid?'s-green':''}">${claimed ? 'Completed' : matured||fullyPaid ? 'Ready — auto-paid' : timeLeftStr}</span>
+        </div>
+        <div class="pd-bar"><div class="pd-bar-fill" style="width:${progress}%;background:${matured||claimed||fullyPaid?'#22c55e':'#ff9d00'}"></div></div>
       </div>
+      <div class="pd-chips">
+        <div class="pd-chip"><b>${ugx(inv.amount)}</b><span>Investment</span></div>
+        <div class="pd-chip"><b>${ugx(inv.dailyReturn||0)}</b><span>Daily rate</span></div>
+        <div class="pd-chip"><b>${cycle} days</b><span>Run length</span></div>
+        <div class="pd-chip"><b>${inv.maturityDate ? (tsDate(inv.maturityDate)||new Date()).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '—'}</b><span>Completes</span></div>
+      </div>
+      <div class="pd-note">Your full payout of <b>${ugx(inv.expectedReturn)}</b> is credited automatically to your wallet when this asset completes (day ${cycle}). Nothing is paid out before then.</div>
       ${claimBtn}`;
   } catch(e) { body.innerHTML = '<p style="color:var(--red);text-align:center">Failed to load details</p>'; }
 };
