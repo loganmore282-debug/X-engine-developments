@@ -1010,12 +1010,17 @@ app.post('/withdraw/reject', async (req, res) => {
 });
 
 // Shared: mark a withdrawal as processed + update user + tx record
+const _completingWithdrawals = new Set();
 async function completeWithdrawal(witDoc) {
   const wit = witDoc.data();
   if (wit.status === 'processed' || wit.status === 'failed') return false;
-  // Re-read status inside a transaction so the dual-track HTTP poll and the
-  // webhook can't BOTH apply this (double totalWithdrawn). First writer wins.
-  const applied = await db.runTransaction(async t => {
+  // Same no-ACID race as deposits: webhook + status-poll can both complete this.
+  // In-process single-writer lock prevents a double totalWithdrawn.
+  if (_completingWithdrawals.has(witDoc.id)) return false;
+  _completingWithdrawals.add(witDoc.id);
+  let applied;
+  try {
+  applied = await db.runTransaction(async t => {
     const fresh = await t.get(witDoc.ref);
     const fs = fresh.data();
     if (!fs || fs.status === 'processed' || fs.status === 'failed') return false;
@@ -1034,6 +1039,7 @@ async function completeWithdrawal(witDoc) {
   } catch (txErr) { console.warn('completeWithdrawal tx update:', txErr.message); }
   console.log(`✅ Withdrawal complete: ${witDoc.id} → ${wit.userId} ${fmtUGX(wit.netAmount || wit.amount)}`);
   return true;
+  } finally { _completingWithdrawals.delete(witDoc.id); }
 }
 
 // Shared: refund a failed withdrawal
