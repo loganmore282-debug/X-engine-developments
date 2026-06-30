@@ -97,11 +97,34 @@ function planProgress(inv){
   const dayNum = matured ? cycle : Math.min(cycle, daysElapsed + 1);
   return { cycle, pct, dayNum, matured, daysElapsed };
 }
+// Live maturity countdown — 4d : 23h : 12m : 05s; hits 'Matured' at zero.
+function cdText(matMs){
+  const d = matMs - Date.now();
+  if (!matMs || d <= 0) return 'Matured';
+  const s = Math.floor(d/1000);
+  const days = Math.floor(s/86400), hrs = Math.floor(s%86400/3600), mins = Math.floor(s%3600/60), secs = s%60;
+  const p = n => String(n).padStart(2,'0');
+  return days + 'd : ' + p(hrs) + 'h : ' + p(mins) + 'm : ' + p(secs) + 's';
+}
+setInterval(() => {
+  document.querySelectorAll('.cd-timer').forEach(el => {
+    const m = +el.dataset.mat || 0;
+    const txt = cdText(m);
+    el.textContent = txt;
+    if (txt === 'Matured') el.classList.add('matured');
+  });
+}, 1000);
 function showToast(msg, type='') {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.className = 'show ' + type;
+  const ICONS = {
+    success:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    error:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg>',
+    info:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>'
+  };
+  t.innerHTML = '<span class="toast-ico">' + (ICONS[type] || ICONS.info) + '</span><span class="toast-msg">' + msg + '</span>';
+  t.className = 'show ' + (type || 'info');
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.className = ''; }, 3200);
+  t._timer = setTimeout(() => { t.className = ''; }, 3800);
 }
 window.showToast = showToast; // let the plain PWA script surface toasts too
 function showLoading(show) {
@@ -661,7 +684,7 @@ function renderHomeInvestments(invs) {
         <span class="aplan-badge ${matured ? 'done' : 'live'}">${matured ? 'Ready' : 'Charging'}</span>
       </div>
       <div class="aplan-charge"><div class="aplan-charge-fill" style="width:${pct}%"></div></div>
-      <div class="aplan-foot"><span>Day ${dayNum} of ${cycleDays}</span><span class="aplan-pay">Pays ${ugx(inv.expectedReturn)} at maturity</span></div>
+      <div class="aplan-foot"><span class="cd-timer" data-mat="${inv.maturityDate ? tsMs(inv.maturityDate) : 0}">${cdText(inv.maturityDate ? tsMs(inv.maturityDate) : 0)}</span><span class="aplan-pay">Pays ${ugx(inv.expectedReturn)}</span></div>
     </div>`;
   }).join('');
 }
@@ -902,6 +925,7 @@ async function loadProducts() {
 let _allAssets = [];
 let _assetCat  = 'all';
 let _activeInvCount = 0;
+let _depRedirectTimer = null;
 let _inboundTotal = null;   // every credit ever (incl. deposits) — home "Inbound Balance"
 let _earningsTotal = 0;     // platform earnings only (excl. deposits) — "Earnings so far"
 function renderProducts(products) {
@@ -1057,7 +1081,7 @@ window.openInvDetail = async (invId) => {
       </div>
       <div class="pd-prog">
         <div class="pd-prog-top">
-          <span>Day ${planProgress(inv).dayNum} of ${cycle}</span>
+          <span class="cd-timer" data-mat="${inv.maturityDate ? tsMs(inv.maturityDate) : 0}">${cdText(inv.maturityDate ? tsMs(inv.maturityDate) : 0)}</span>
           <span class="${matured||claimed||fullyPaid?'s-green':''}">${claimed ? 'Completed' : matured||fullyPaid ? 'Ready — auto-paid' : timeLeftStr}</span>
         </div>
         <div class="pd-bar"><div class="pd-bar-fill" style="width:${progress}%;background:${matured||claimed||fullyPaid?'#22c55e':'#ff9d00'}"></div></div>
@@ -1496,6 +1520,15 @@ function handleDepResult(status, creditedAmount, amount) {
     document.getElementById('depPageTitle').textContent  = 'Payment Received';
     document.getElementById('depBackBtn').onclick = () => closePage('depositPage');
     showDepStep(3); loadUser();
+    let _rc = 5;
+    const _rcEl = document.getElementById('depRedirect');
+    if (_rcEl) _rcEl.textContent = _rc;
+    clearInterval(_depRedirectTimer);
+    _depRedirectTimer = setInterval(() => {
+      _rc--;
+      if (_rcEl) _rcEl.textContent = _rc;
+      if (_rc <= 0) { clearInterval(_depRedirectTimer); closePage('depositPage'); }
+    }, 1000);
   } else if (status === 'failed') {
     _depResolved = true;
     stopDepTimers();
@@ -1924,18 +1957,29 @@ window.downloadStatement = async () => {
     doc.text('DATE / TIME', 14, y); doc.text('TYPE', 70, y); doc.text('DESCRIPTION', 100, y); doc.text('AMOUNT', 196, y, {align:'right'});
     y += 2; doc.setDrawColor(200,200,200); doc.line(14, y, 196, y); y += 6;
     doc.setFont('helvetica','normal');
+    const TYPEMAP = { deposit:'Recharge', admin_credit:'Voltra Credit', checkin:'Daily Bonus', cashback:'Asset Payout', commission:'Referral Reward', gift_code:'Gift Reward', investment:'Activation', investment_return:'Asset Payout', withdrawal:'Payout', refund:'Refund', reversal:'Reversal', agent_bonus:'Agent Bonus', agent_promotion:'Promotion' };
+    let totalIn = 0, totalOut = 0;
     if (!txs.length) doc.text('No transactions yet.', 14, y);
     txs.forEach(t => {
-      if (y > 282) { doc.addPage(); y = 20; }
+      if (y > 278) { doc.addPage(); y = 20; }
+      const amt = t.amount || 0;
+      if (amt >= 0) totalIn += amt; else totalOut += -amt;
       doc.setTextColor(60,60,60);
       doc.text(((t.date||'') + ' ' + (t.time||'')).slice(0,22), 14, y);
-      doc.text(String(t.type||'').slice(0,14), 70, y);
-      doc.text(String(t.description||'').slice(0,34), 100, y);
-      const pos = (t.amount||0) >= 0;
+      doc.text((TYPEMAP[t.type] || 'Transaction').slice(0,16), 70, y);
+      doc.text(cleanDesc(String(t.description||'')).slice(0,32), 100, y);
+      const pos = amt >= 0;
       doc.setTextColor(pos?22:200, pos?140:40, 60);
-      doc.text((pos?'+':'') + ugx(t.amount||0), 196, y, {align:'right'});
+      doc.text((pos?'+':'') + ugx(amt), 196, y, {align:'right'});
       y += 6;
     });
+    // ── summary ──
+    if (y > 262) { doc.addPage(); y = 20; }
+    y += 4; doc.setDrawColor(210,210,210); doc.line(14, y, 196, y); y += 8;
+    doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.setTextColor(20,20,20); doc.text('Total received', 14, y); doc.setTextColor(22,140,60); doc.text('+' + ugx(totalIn), 196, y, {align:'right'}); y += 7;
+    doc.setTextColor(20,20,20); doc.text('Total paid out', 14, y); doc.setTextColor(200,40,60); doc.text('-' + ugx(totalOut), 196, y, {align:'right'}); y += 7;
+    doc.setTextColor(20,20,20); doc.text('Current wallet balance', 14, y); doc.text(ugx(_userData && _userData.walletBalance || 0), 196, y, {align:'right'}); y += 6;
     doc.setTextColor(150,150,150); doc.setFontSize(8);
     doc.text('Voltra — Power Your Wealth', 14, 290);
     const nm = (_userData && _userData.name) ? _userData.name.replace(/\s+/g,'') : _user.uid.slice(0,6);
