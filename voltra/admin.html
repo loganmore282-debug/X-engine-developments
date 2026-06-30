@@ -70,15 +70,15 @@ input,textarea,select{font-family:var(--fam);outline:none}
 /* ── TAB BAR ── */
 .tabbar{
   background:var(--bg2);border-bottom:1px solid var(--border);
-  display:flex;overflow-x:auto;gap:4px;padding:8px 12px;
-  scrollbar-width:none;position:sticky;top:57px;z-index:99
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;padding:10px 12px;
+  position:sticky;top:57px;z-index:99
 }
 .tabbar::-webkit-scrollbar{display:none}
 .tab-btn{
-  background:transparent;color:var(--text2);font-size:13px;
-  padding:8px 16px;border-radius:8px;white-space:nowrap;
-  transition:.15s;position:relative;border:1px solid transparent;
-  display:flex;align-items:center;gap:6px
+  background:var(--bg3);color:var(--text2);font-size:13px;
+  padding:10px 12px;border-radius:10px;white-space:nowrap;
+  transition:.15s;position:relative;border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer
 }
 .tab-btn svg{width:14px;height:14px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .tab-btn.active{background:rgba(37,99,235,.14);color:var(--primary);border-color:var(--border2)}
@@ -124,6 +124,15 @@ input,textarea,select{font-family:var(--fam);outline:none}
 
 /* ── TABLES ── */
 .table-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border)}
+/* On phones, stack each table row into a self-contained card — no sideways sliding */
+@media (max-width:760px){
+  .table-wrap{overflow-x:visible;border:none}
+  .table-wrap table,.table-wrap tbody{display:block;width:100%}
+  .table-wrap thead{display:none}
+  .table-wrap tr{display:block;background:var(--bg2);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;padding:4px 2px}
+  .table-wrap td{display:flex;justify-content:space-between;align-items:center;gap:14px;border:none;padding:8px 13px;font-size:12.5px;text-align:right;white-space:normal;word-break:break-word}
+  .table-wrap td:first-child{font-weight:800;border-bottom:1px solid var(--border);text-align:left;font-size:13.5px}
+}
 table{width:100%;border-collapse:collapse;min-width:600px}
 th{
   background:var(--bg3);color:var(--muted);font-size:11px;
