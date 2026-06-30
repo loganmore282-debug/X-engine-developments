@@ -377,6 +377,7 @@ async function loadSlideshow() {
       if (h) h.style.backgroundImage = `linear-gradient(135deg,rgba(10,14,23,0.55),rgba(10,14,23,0.35) 50%,rgba(10,14,23,0.7)), url('${s.withdrawImage}')`;
     }
     // About section image (admin-settable, stacked at top of About)
+    if (s.announcementBg) document.documentElement.style.setProperty('--annbg', "url('" + s.announcementBg + "')");
     _aboutImgs = [
       s.aboutImage1 || s.aboutImage || DEFAULT_SLIDE_IMAGES[0],
       s.aboutImage2 || DEFAULT_SLIDE_IMAGES[1],

@@ -738,6 +738,17 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <img id="withdrawImagePreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
         </div>
         <div class="form-group">
+          <label class="form-label">Announcement Dialog Background</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" type="url" id="announcementBgUrl" placeholder="Image URL or upload" style="flex:1">
+            <label style="cursor:pointer">
+              <input type="file" accept="image/*" style="display:none" onchange="uploadContentImage(this,'announcementBgUrl','announcementBgPreview','announcementBg')">
+              <span class="btn btn-secondary" style="white-space:nowrap">Upload</span>
+            </label>
+          </div>
+          <img id="announcementBgPreview" src="" alt="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        </div>
+        <div class="form-group">
           <label class="form-label">Deposit Instructions (HTML allowed)</label>
           <textarea class="form-textarea" id="depositInstructions" rows="6" placeholder="Leave empty to use default instructions…"></textarea>
         </div>
@@ -2049,6 +2060,9 @@ async function loadSettings() {
     const witImg = s.withdrawImage || '';
     document.getElementById('withdrawImageUrl').value = witImg;
     if (witImg) { const p=document.getElementById('withdrawImagePreview'); p.src=witImg; p.style.display='block'; }
+    const annBg = s.announcementBg || '';
+    document.getElementById('announcementBgUrl').value = annBg;
+    if (annBg) { const p=document.getElementById('announcementBgPreview'); p.src=annBg; p.style.display='block'; }
     if (prodBanner) { const p=document.getElementById('productsBannerPreview'); p.src=prodBanner; p.style.display='block'; }
     if (depImg)     { const p=document.getElementById('depositImagePreview');   p.src=depImg;     p.style.display='block'; }
     if (aboutImg)   { const p=document.getElementById('aboutImagePreview');     p.src=aboutImg;   p.style.display='block'; }
@@ -2136,6 +2150,7 @@ window.saveContentImages = async () => {
     productsBannerImage:  document.getElementById('productsBannerUrl').value.trim(),
     depositImage:         document.getElementById('depositImageUrl').value.trim(),
     withdrawImage:        document.getElementById('withdrawImageUrl').value.trim(),
+    announcementBg:       document.getElementById('announcementBgUrl').value.trim(),
     aboutImage1:          document.getElementById('aboutImage1Url').value.trim(),
     aboutImage2:          document.getElementById('aboutImage2Url').value.trim(),
     aboutImage3:          document.getElementById('aboutImage3Url').value.trim(),

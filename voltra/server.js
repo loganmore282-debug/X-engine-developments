@@ -1293,6 +1293,7 @@ app.post('/checkin', async (req, res) => {
 // GIFT CODES — admin generates, users redeem
 // ═══════════════════════════════════════════
 const _giftRateMap = new Map(); // userId → last attempt timestamp
+const _redeemingGifts = new Set(); // gift code id → being redeemed (single-writer)
 app.post('/giftcode/redeem', async (req, res) => {
   const userId = await verifyAuth(req) || req.body.userId;
   const { code } = req.body;
@@ -1311,27 +1312,44 @@ app.post('/giftcode/redeem', async (req, res) => {
     if ((gcd.usedBy || []).includes(userId)) return res.status(400).json({ status: 'error', message: 'You have already redeemed this code' });
     if (gcd.maxUsers && (gcd.usedBy || []).length >= gcd.maxUsers) return res.status(400).json({ status: 'error', message: 'Usage limit reached — this code has expired' });
     if (gcd.expiresAt && new Date(tsMillis(gcd.expiresAt)) < new Date()) return res.status(400).json({ status: 'error', message: 'This gift code has expired' });
-    // Admin-controlled payout band (settings/main → minGift / maxGift). Falls back to 200–2000.
-    const sett    = await getSettings();
-    const giftLo  = Math.max(0, Math.round(sett.minGift ?? 200));
-    const giftHi  = Math.max(giftLo, Math.round(sett.maxGift ?? 2000));
-    const amount  = Math.floor(Math.random() * (giftHi - giftLo + 1)) + giftLo;
-    const { date, time } = nowStr();
-    await db.runTransaction(async t => {
-      const uRef  = db.collection('users').doc(userId);
-      const uSnap = await t.get(uRef);
-      if (!uSnap.exists) throw new Error('User not found');
-      t.update(uRef, { walletBalance: FieldValue.increment(amount) });
-      t.update(gc.ref, { usedBy: FieldValue.arrayUnion(userId) });
-      t.set(db.collection('transactions').doc(), {
-        userId, type: 'gift_code',
-        description: `Gift code redeemed — ${code.toUpperCase()}`,
-        amount, status: 'success', code: code.toUpperCase(), date, time,
-        createdAt: FieldValue.serverTimestamp()
+    // Serialise redemptions of THIS code so a single-use code can't be claimed
+    // twice at the same instant (M0 has no atomic transactions; the usedBy length
+    // check above can be passed by two concurrent callers — the 2/1 bug).
+    if (_redeemingGifts.has(gc.id))
+      return res.status(429).json({ status: 'error', message: 'This code is being processed — try again in a moment.' });
+    _redeemingGifts.add(gc.id);
+    try {
+      const sett    = await getSettings();
+      const giftLo  = Math.max(0, Math.round(sett.minGift ?? 200));
+      const giftHi  = Math.max(giftLo, Math.round(sett.maxGift ?? 2000));
+      const amount  = Math.floor(Math.random() * (giftHi - giftLo + 1)) + giftLo;
+      const { date, time } = nowStr();
+      let redeemErr = null, redeemed = false;
+      await db.runTransaction(async t => {
+        // Re-read the gift fresh INSIDE the lock and enforce the cap atomically.
+        const fresh = await t.get(gc.ref);
+        if (!fresh.exists) { redeemErr = 'Invalid gift code'; return; }
+        const fd = fresh.data();
+        if (!fd.active) { redeemErr = 'This code is no longer active'; return; }
+        if ((fd.usedBy || []).includes(userId)) { redeemErr = 'You have already redeemed this code'; return; }
+        if (fd.maxUsers && (fd.usedBy || []).length >= fd.maxUsers) { redeemErr = 'Usage limit reached — this code has expired'; return; }
+        const uRef  = db.collection('users').doc(userId);
+        const uSnap = await t.get(uRef);
+        if (!uSnap.exists) { redeemErr = 'User not found'; return; }
+        t.update(uRef, { walletBalance: FieldValue.increment(amount) });
+        t.update(gc.ref, { usedBy: FieldValue.arrayUnion(userId) });
+        t.set(db.collection('transactions').doc(), {
+          userId, type: 'gift_code',
+          description: `Gift code redeemed — ${code.toUpperCase()}`,
+          amount, status: 'success', code: code.toUpperCase(), date, time,
+          createdAt: FieldValue.serverTimestamp()
+        });
+        redeemed = true;
       });
-    });
-    console.log(`🎁 Gift ${code} → ${userId} — ${fmtUGX(amount)}`);
-    return res.json({ status: 'success', amount, message: `🎁 You won ${fmtUGX(amount)}!` });
+      if (!redeemed) return res.status(400).json({ status: 'error', message: redeemErr || 'Could not redeem this code' });
+      console.log(`Gift ${code} -> ${userId} — ${fmtUGX(amount)}`);
+      return res.json({ status: 'success', amount, message: `You won ${fmtUGX(amount)}!` });
+    } finally { _redeemingGifts.delete(gc.id); }
   } catch (e) {
     console.error('Gift code error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
@@ -2574,6 +2592,7 @@ app.get('/settings/public', async (_req, res) => {
         aboutTitle3:         s.aboutTitle3          || '',
         aboutBody3:          s.aboutBody3           || '',
         withdrawImage:       s.withdrawImage        || '',
+        announcementBg:      s.announcementBg       || '',
         depositInstructions: s.depositInstructions  || '',
         announcement:        s.announcement         || null,
         supportTelegram:     s.supportTelegram      || '',
