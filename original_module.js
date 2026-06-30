@@ -463,10 +463,6 @@ function _showInvestAdvisory(p, depBal, dailyCashback, onProceed){
           <span style="color:var(--muted)">💳 Deducted from Deposit Wallet</span>
           <span style="font-weight:700;color:#ef4444">−UGX ${Number(p.price).toLocaleString()}</span>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px">
-          <span style="color:var(--muted)">📅 Daily cashback (starts day 2)</span>
-          <span style="font-weight:700;color:#F0B90B">+UGX ${Number(dailyCashback).toLocaleString()}</span>
-        </div>
         <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px">
           <span style="color:var(--muted)">🎯 Total payout at maturity</span>
           <span style="font-weight:700;color:#03A66D">+UGX ${Number(p.totalReturn||0).toLocaleString()}</span>
@@ -637,17 +633,7 @@ async function loadMyInvestments(){
       <div class="inv-progress-wrap" style="margin-bottom:6px"><div class="inv-progress" style="width:${pct}%"></div></div>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:10px"><span>${pct}% complete</span><span>${daysLeft>0?daysLeft+'d left':'Done ✓'}</span></div>
       <div class="inv-row"><span>Amount</span><span>${ugx(inv.amount)}</span></div>
-      <div class="inv-row"><span>Daily Cashback</span><span>${ugx(inv.dailyCashback)}</span></div>
       <div class="inv-row"><span>Total Return</span><span style="color:#F0B90B;font-weight:800">${ugx(inv.expectedReturn)}</span></div>
-      ${inv.lockedCashback===true && inv.status==='active'?`
-      <div style="margin:8px 0;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:9px 12px;font-size:12px;color:#fca5a5;line-height:1.6">
-        🔒 Daily cashback is <strong>locked</strong> — make a real deposit to unlock it immediately and receive all accumulated earnings in your Cumulative Wallet.
-        ${inv.pendingCashback?`<br>💰 Accumulated so far: <strong style="color:#fcd34d">${ugx(inv.pendingCashback)}</strong>`:''}
-      </div>`:''}
-      ${inv.lockedCashback!==true && inv.status==='active'?`
-      <div style="margin:8px 0;background:rgba(3,166,109,.06);border:1px solid rgba(3,166,109,.2);border-radius:8px;padding:7px 12px;font-size:11px;color:rgba(3,166,109,.9);line-height:1.6">
-        ✅ Daily cashback active — <strong>${ugx(inv.dailyCashback)}</strong> credited to Cumulative Wallet every 24 hrs
-      </div>`:''}
       ${inv.description?`<div class="inv-row"><span>Info</span><span style="color:var(--muted);text-align:right;max-width:60%;font-size:11px">${inv.description}</span></div>`:''}
       ${isMature?`<button class="btn-claim" onclick="claimInvestment('${id}')" style="background:linear-gradient(135deg,#F0B90B,#d4a017);color:#0B0E11;font-weight:900">🎉 Claim ${ugx(inv.expectedReturn)}</button>`:''}
     </div>`;
@@ -1053,7 +1039,7 @@ window.calcWithdrawFee = function(){
   const hintEl = document.getElementById('witRouteHint');
   if(!preview) return;
   if(amt < 1){ preview.style.display='none'; if(hintEl) hintEl.style.display='none'; return; }
-  const feePct = parseFloat(document.getElementById('witFeeDisplay')?.textContent)||11;
+  const feePct = parseFloat(document.getElementById('witFeeDisplay')?.textContent)||15;
   const fee = Math.round(amt * feePct / 100);
   const net = amt - fee;
   preview.style.display='block';
@@ -1910,8 +1896,134 @@ async function loadSettings(){
     }
     const aboutSnap=await getDoc(doc(db,'settings','about'));
     if(aboutSnap.exists()) document.getElementById('aboutContent').textContent=aboutSnap.data().content||'X-Engine investment platform.';
+    const termsDefault=`X-ENGINE INVESTMENT PLATFORM — TERMS & CONDITIONS
+Last updated: June 2026
+
+1. ACCEPTANCE OF TERMS
+By registering an account or using X-Engine ("the Platform"), you agree to be bound by these Terms & Conditions ("Terms"). If you do not agree, do not use the Platform. X-Engine reserves the right to update these Terms at any time; continued use of the Platform after any update constitutes acceptance of the revised Terms.
+
+2. ELIGIBILITY
+You must be at least 18 years of age and legally capable of entering into binding contracts in your jurisdiction to use the Platform. By creating an account you confirm that all information provided is accurate and that you meet these requirements.
+
+3. ACCOUNT REGISTRATION & SECURITY
+a) You are responsible for maintaining the confidentiality of your login credentials and withdrawal PIN.
+b) You must immediately notify X-Engine of any unauthorized use of your account.
+c) X-Engine will never ask for your PIN via phone, SMS, or email.
+d) Each phone number may be associated with only one account.
+
+4. INVESTMENT PRODUCTS
+a) All investment plans, amounts, returns, and durations are displayed on the Products page.
+b) Returns are credited to your Cumulative Wallet according to the plan schedule.
+c) Investment returns are not guaranteed against platform-level risks; invest only what you can afford.
+d) Once an investment is purchased, it cannot be cancelled or reversed.
+
+5. DEPOSITS
+a) Minimum deposit: UGX 30,000. Maximum per transaction: UGX 200,000.
+b) Deposits are processed via MTN or Airtel Mobile Money.
+c) Funds are credited to your Deposits Wallet upon confirmation. Deposited funds may only be used to purchase investment plans.
+d) Registration bonuses are credited separately and cannot be withdrawn directly.
+
+6. WITHDRAWALS
+a) Only earnings in your Cumulative Wallet (referral bonuses and investment returns) are withdrawable.
+b) A withdrawal fee of 15% applies to all withdrawals.
+c) Minimum withdrawal amounts apply per wallet type: UGX 10,000 (referral earnings), UGX 60,000 (investment returns).
+d) Withdrawals are processed to mobile money within the timeframe displayed at the time of request.
+e) X-Engine reserves the right to suspend withdrawals for security investigations.
+
+7. REFERRAL PROGRAMME
+a) You earn referral bonuses when users you refer make qualifying investments.
+b) Referral bonuses are subject to the same minimum withdrawal thresholds as other earnings.
+c) Fraudulent referral activity (self-referral, bot accounts) will result in immediate account termination and forfeiture of all balances.
+
+8. PROHIBITED CONDUCT
+You agree NOT to:
+• Create multiple accounts
+• Use bots or automated scripts
+• Provide false identification
+• Attempt to manipulate the Platform's systems
+• Engage in money laundering or any illegal financial activity
+Violation of any of the above may result in permanent account suspension and reporting to relevant authorities.
+
+9. PLATFORM AVAILABILITY
+X-Engine strives for continuous uptime but does not guarantee uninterrupted access. Scheduled maintenance will be announced in advance where possible. X-Engine is not liable for losses arising from temporary platform unavailability.
+
+10. LIMITATION OF LIABILITY
+To the maximum extent permitted by applicable law, X-Engine's total liability for any claim shall not exceed the amount of your uninvested deposit balance at the time of the claim. X-Engine is not liable for indirect, consequential, or speculative losses.
+
+11. PRIVACY
+Your use of the Platform is also governed by our Privacy Policy, accessible from the same menu as these Terms.
+
+12. GOVERNING LAW
+These Terms are governed by the laws of the Republic of Uganda. Any disputes shall be resolved in the courts of Uganda.
+
+13. CONTACT
+For queries: use the Customer Service link in your profile or contact us via the official Telegram channel.`;
     const termsSnap=await getDoc(doc(db,'settings','terms'));
-    if(termsSnap.exists()) document.getElementById('termsContent').textContent=termsSnap.data().content||'Terms and conditions apply.';
+    if(termsSnap.exists()) document.getElementById('termsContent').textContent=termsSnap.data().content||termsDefault;
+    else document.getElementById('termsContent').textContent=termsDefault;
+    const privacyDefault=`X-ENGINE INVESTMENT PLATFORM — PRIVACY POLICY
+Last updated: June 2026
+
+1. WHO WE ARE
+X-Engine ("we", "us", "our") is an investment platform serving users via the X-Engine mobile web application. We are committed to protecting your personal data.
+
+2. INFORMATION WE COLLECT
+a) Account data: phone number, password (hashed), registration date.
+b) Financial data: deposit history, investment records, withdrawal records, wallet balances.
+c) Technical data: device type, IP address, browser type, usage logs.
+d) Communication data: in-app notifications, customer service interactions.
+
+3. HOW WE USE YOUR INFORMATION
+• To operate and maintain your account
+• To process deposits and withdrawals
+• To send transaction notifications and platform announcements
+• To detect and prevent fraud and unauthorized access
+• To improve platform features and performance
+• To comply with legal obligations
+
+4. DATA SHARING
+We do not sell your personal data. We share data only with:
+• Mobile money providers (MTN, Airtel) — strictly for payment processing
+• Firebase (Google) — for secure authentication and database services
+• Railway — for server hosting
+These third parties are bound by their own privacy policies and applicable data protection laws.
+
+5. DATA RETENTION
+We retain your account data for as long as your account is active, and for a minimum of 5 years after account closure to comply with financial record-keeping requirements.
+
+6. DATA SECURITY
+We implement industry-standard security measures including:
+• Encrypted data transmission (HTTPS/TLS)
+• Hashed PIN storage
+• Firebase Authentication for account access
+• Server-side authorization on all sensitive operations
+No method of transmission over the internet is 100% secure; we cannot guarantee absolute security.
+
+7. YOUR RIGHTS
+You have the right to:
+• Access the personal data we hold about you
+• Request correction of inaccurate data
+• Request deletion of your account and associated data (subject to legal retention requirements)
+• Withdraw consent for marketing communications
+To exercise these rights, contact us through Customer Service in your profile.
+
+8. COOKIES & LOCAL STORAGE
+We use browser local storage to maintain your login session and app preferences. We do not use tracking cookies for advertising purposes.
+
+9. CHILDREN'S PRIVACY
+The Platform is not directed at individuals under 18. We do not knowingly collect personal data from minors.
+
+10. CHANGES TO THIS POLICY
+We may update this Privacy Policy periodically. Material changes will be notified via in-app announcement. Continued use of the Platform constitutes acceptance of the updated policy.
+
+11. CONTACT
+For privacy inquiries, use the Customer Service link in your profile or our official Telegram channel.`;
+    const privacyEl=document.getElementById('privacyContent');
+    if(privacyEl){
+      const privacySnap=await getDoc(doc(db,'settings','privacy'));
+      if(privacySnap.exists()) privacyEl.textContent=privacySnap.data().content||privacyDefault;
+      else privacyEl.textContent=privacyDefault;
+    }
   }catch(e){ console.error('loadSettings error:',e); }
 }
 
@@ -1921,6 +2033,7 @@ window._openHelp = function(){
 };
 window._showAbout = function(){ openModal('aboutModal'); };
 window._showTerms = function(){ openModal('termsModal'); };
+window._showPrivacy = function(){ openModal('privacyModal'); };
 window._openDownloadApp = function(){
   if(window._triggerPWAInstall && window._triggerPWAInstall()) return;
   if(_appDownloadLink) window.open(_appDownloadLink,'_blank');
@@ -2181,7 +2294,7 @@ function pollDepositLive(ref, amount, phone){
       if(d.status==='success'){
         clearInterval(_txPollTimer);
         txDialogSuccess(
-          'Deposit Successful! 🎉',
+          'Deposit Successful',
           'Your Deposits Wallet has been credited.',
           d.amountCredited||amount,
           [['Reference', ref.slice(0,8)+'...'],['Credited to','Deposits Wallet','var(--green)'],['Time',new Date().toLocaleTimeString('en-UG')]]

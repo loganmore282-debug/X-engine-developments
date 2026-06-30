@@ -286,7 +286,7 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
 /* ── LIVE TX DIALOG ── */
 #txDialog{position:fixed;inset:0;z-index:9999;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(4px)}
 #txDialog.open{display:flex}
-#txDialogBox{width:100%;max-width:480px;background:#1E2026;border-radius:28px 28px 0 0;padding:32px 24px 40px;animation:slideUp .3s cubic-bezier(.34,1.56,.64,1)}
+#txDialogBox{width:100%;max-width:480px;background:#1E2026;border-radius:28px 28px 0 0;padding:32px 24px 40px;animation:slideUp .3s ease-out}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .txd-icon{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px}
 .txd-icon.pending{background:#2B2200;animation:pulse 1.2s infinite}
@@ -769,7 +769,18 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
               <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
           </div>
-          <span class="menu-text">Regulations</span>
+          <span class="menu-text">Terms & Conditions</span>
+          <span class="menu-arrow">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </span>
+        </div>
+        <div class="menu-item" onclick="if(window._showPrivacy) window._showPrivacy(); else openModal('privacyModal')">
+          <div class="menu-icon" style="background:rgba(99,102,241,.12)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <span class="menu-text">Privacy Policy</span>
           <span class="menu-arrow">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
           </span>
@@ -1140,6 +1151,15 @@ img{-webkit-backface-visibility:hidden;backface-visibility:hidden}
   </div>
 </div>
 
+<!-- PRIVACY POLICY MODAL -->
+<div class="modal-overlay" id="privacyModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔒 Privacy Policy <button class="modal-close" onclick="closeModal('privacyModal')">✕</button></div>
+    <div id="privacyContent" style="font-size:13px;color:var(--text2);line-height:1.7;white-space:pre-wrap"></div>
+  </div>
+</div>
+
 <!-- ANNOUNCEMENT DIALOG -->
 <div class="dialog-overlay" id="announcementDialog">
   <div class="dialog-box">
@@ -1208,6 +1228,7 @@ function confirmInvest(){ if(window._confirmInvest) window._confirmInvest(); }
 function claimInvestment(id){ if(window._claimInvestment) window._claimInvestment(id); }
 function showAbout(){ if(window._showAbout) window._showAbout(); else openModal('aboutModal'); }
 function showTerms(){ if(window._showTerms) window._showTerms(); else openModal('termsModal'); }
+function showPrivacy(){ if(window._showPrivacy) window._showPrivacy(); else openModal('privacyModal'); }
 function openHelp(){ if(window._openHelp) window._openHelp(); else alert('Loading...'); }
 function dismissDialog(){ closeModal('announcementDialog'); document.getElementById('announcementDialog').classList.remove('open'); }
 function saveWithdrawPin(){ if(window._saveWithdrawPin) window._saveWithdrawPin(); }
@@ -1232,7 +1253,7 @@ function waPinKey(k){ if(_waPin.length<4){_waPin+=k;updatePinDots('wa',_waPin,'p
 function waPinDel(){ _waPin=_waPin.slice(0,-1);updatePinDots('wa',_waPin,'pin-dot'); }
 </script>
 
-<script src="core.d456f7b10456.js" defer></script>
+<script src="core.1715fef6cd5e.js" defer></script>
 
 <!-- LIVE TX DIALOG -->
 <div id="txDialog">

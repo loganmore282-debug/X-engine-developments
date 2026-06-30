@@ -1639,7 +1639,7 @@ app.post('/withdraw/request', verifyUser, async (req, res) => {
 
     const witCount  = user.withdrawalCount || 0;
     const witSettSnap = await db.collection('settings').doc('main').get();
-    const witFeePct = witSettSnap.exists ? (witSettSnap.data().withdrawalFee || 11) : 11;
+    const witFeePct = witSettSnap.exists ? (witSettSnap.data().withdrawalFee || 15) : 15;
     const fee       = Math.round(amt * witFeePct / 100);
     const netAmount = amt - fee;
     const reference = uuidv4();

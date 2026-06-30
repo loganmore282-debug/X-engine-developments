@@ -6,7 +6,7 @@
       app is fully closed)
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'xe-shell-v3';
+const CACHE = 'xe-shell-v4';
 const SHELL = [
   './',
   './index.html',

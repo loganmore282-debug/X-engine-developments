@@ -789,13 +789,13 @@ async function loadDashboard(){
       getDoc(doc(db,'settings','stats'))
     ]);
     const pendWit=await getDocs(query(collection(db,'withdrawals'),where('status','in',['pending','processing'])));
-    let totalDep=0,totalWit=0,totalInv=0;
-    depsSnap.forEach(d=>{ const a=d.data().amountCredited||d.data().amount||0; if(a>0) totalDep+=a; });
+    let totalDep=0,totalAdminCred=0,totalWit=0,totalInv=0;
+    depsSnap.forEach(d=>{ const a=d.data().amountCredited||d.data().amount||0; if(a>0){ if(d.data().createdBy==='admin') totalAdminCred+=a; else totalDep+=a; } });
     witsSnap.forEach(d=>totalWit+=(d.data().amount||0));
     invSnap.forEach(d=>totalInv+=(d.data().amount||0));
     const totalFees=statsSnap.exists()?( statsSnap.data().totalFeesCollected||0):0;
     document.getElementById('sTotal').textContent=usersSnap.size;
-    document.getElementById('sTotalDep').textContent=ugx(totalDep);
+    document.getElementById('sTotalDep').textContent=ugx(totalDep)+(totalAdminCred>0?` (+${ugx(totalAdminCred)} admin)`:'');
     document.getElementById('sTotalWit').textContent=ugx(totalWit);
     document.getElementById('sTotalInv').textContent=ugx(totalInv);
     document.getElementById('sActiveInv').textContent=invSnap.size;
