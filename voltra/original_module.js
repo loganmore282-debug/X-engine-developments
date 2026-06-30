@@ -193,15 +193,25 @@ window.doLogout = async () => {
 
 // ── API HELPER ──
 // Always sends the Firebase ID token so the server can verify the caller.
-async function api(path, body = {}) {
+async function api(path, body = {}, _attempt = 0) {
   const headers = { 'Content-Type': 'application/json' };
   if (_user) {
     try { headers['Authorization'] = 'Bearer ' + await _user.getIdToken(); } catch (_) {}
   }
-  const resp = await fetch(SERVER + path, {
-    method: 'POST', headers, body: JSON.stringify(body)
-  });
-  return resp.json();
+  try {
+    const resp = await fetch(SERVER + path, {
+      method: 'POST', headers, body: JSON.stringify(body)
+    });
+    return await resp.json();
+  } catch (e) {
+    // The backend can be cold (first request after idle fails); silently retry a
+    // couple of times with backoff so the user never sees a false "Network error".
+    if (_attempt < 2) {
+      await new Promise(r => setTimeout(r, 800 * (_attempt + 1)));
+      return api(path, body, _attempt + 1);
+    }
+    throw e;
+  }
 }
 
 // ── SLIDESHOW ──
@@ -477,10 +487,13 @@ async function pollAccount(uid) {
   try {
     const r = await api('/account/investments', { userId: uid });
     if (r.status === 'success') {
-      const active = (r.investments || [])
-        .filter(inv => inv.status === 'active' || inv.status === 'matured')
-        .slice(0, 5);
-      renderHomeInvestments(active);
+      const activeAll = (r.investments || [])
+        .filter(inv => inv.status === 'active' || inv.status === 'matured');
+      _activeInvCount = activeAll.length;
+      renderHomeInvestments(activeAll.slice(0, 5));
+      // keep the Power Assets banner (active products + earnings so far) live
+      const cE = document.getElementById('prodBannerCount');   if (cE) cE.textContent = _activeInvCount;
+      const bE = document.getElementById('prodBannerBenefit'); if (bE) bE.textContent = ugx(_userData?.totalEarned || 0);
     }
   } catch (_) {}
 }
@@ -811,17 +824,15 @@ async function loadProducts() {
 
 let _allAssets = [];
 let _assetCat  = 'all';
+let _activeInvCount = 0;
 function renderProducts(products) {
   if (products) _allAssets = products;
   const list = _allAssets;
   const grid = document.getElementById('productsGrid');
   const countEl   = document.getElementById('prodBannerCount');
   const benefitEl = document.getElementById('prodBannerBenefit');
-  if (countEl)   countEl.textContent   = list.length;
-  if (benefitEl) {
-    const maxReturn = list.reduce((m,p) => Math.max(m, p.expectedReturn||0), 0);
-    benefitEl.textContent = maxReturn ? ugx(maxReturn) : '—';
-  }
+  if (countEl)   countEl.textContent   = _activeInvCount || 0;
+  if (benefitEl) benefitEl.textContent = ugx(_userData?.totalEarned || 0);
   if (!list.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><span class="es-icon">${ICN.box}</span><p>No assets available yet</p></div>`;
     return;
@@ -869,10 +880,9 @@ window.openProductModal = async (productId) => {
     document.getElementById('pmDaily').textContent  = ugx(p.dailyReturn);
     document.getElementById('pmCycle').textContent  = p.cycle + ' days';
     document.getElementById('pmReturn').textContent = ugx(p.expectedReturn);
-    const profit = (p.expectedReturn || 0) - (p.price || 0);
-    document.getElementById('pmProfit').textContent = '+' + ugx(profit);
+    document.getElementById('pmProfit').textContent = ugx(p.expectedReturn || 0);
     const pct = p.price ? Math.round(((p.expectedReturn || 0) / p.price) * 100) : 0;
-    document.getElementById('pmPct').textContent = pct + '% return in ' + (p.cycle || 0) + ' days';
+    document.getElementById('pmPct').textContent = pct + '% total return · paid at maturity (day ' + (p.cycle || 0) + ')';
     document.getElementById('pmWalletNote').textContent = `Your wallet: ${ugx(_userData?.walletBalance || 0)}` + (!inStock ? ' — This plan is currently sold out' : '');
     const btn = document.getElementById('pmBuyBtn');
     btn.textContent = inStock ? 'Activate' : 'Sold Out';

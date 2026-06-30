@@ -1927,6 +1927,9 @@ app.post('/admin/check-maturities', async (req, res) => {
 // ═══════════════════════════════════════════
 let _cashbackRunning = false;
 async function runDailyCashback() {
+  // Earnings are credited ONLY at maturity — no daily cashback drip.
+  // The full expected return is paid out when the asset matures (via /invest/claim).
+  return 0;
   if (_cashbackRunning) { console.log('⏭️ Cashback already running — skipped'); return 0; }
   _cashbackRunning = true;
   try {
