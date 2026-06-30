@@ -2020,9 +2020,9 @@ async function loadSettings() {
     document.getElementById('settMinDep').value   = s.minDeposit     || 30000;
     document.getElementById('settMinWit').value   = s.minWithdrawal  || 15000;
     document.getElementById('settLiqFee').value   = s.liquidityFee  != null ? (s.liquidityFee  * 100).toFixed(1) : 17;
-    document.getElementById('settCommL1').value   = s.commL1        != null ? (s.commL1        * 100).toFixed(1) : 10;
+    document.getElementById('settCommL1').value   = s.commL1        != null ? (s.commL1        * 100).toFixed(1) : 20;
     document.getElementById('settCommL2').value   = s.commL2        != null ? (s.commL2        * 100).toFixed(1) : 5;
-    document.getElementById('settCommL3').value   = s.commL3        != null ? (s.commL3        * 100).toFixed(1) : 2;
+    document.getElementById('settCommL3').value   = s.commL3        != null ? (s.commL3        * 100).toFixed(1) : 1;
     // Announcement
     const ann = s.announcement || {};
     document.getElementById('annActive').checked    = !!ann.active;
@@ -2084,9 +2084,9 @@ window.saveSettings = async () => {
     minDeposit:      parseInt(document.getElementById('settMinDep').value)  || 30000,
     minWithdrawal:   parseInt(document.getElementById('settMinWit').value)  || 15000,
     liquidityFee:    (parseFloat(document.getElementById('settLiqFee').value) || 17) / 100,
-    commL1:          (parseFloat(document.getElementById('settCommL1').value) || 10) / 100,
+    commL1:          (parseFloat(document.getElementById('settCommL1').value) || 20) / 100,
     commL2:          (parseFloat(document.getElementById('settCommL2').value) || 5)  / 100,
-    commL3:          (parseFloat(document.getElementById('settCommL3').value) || 2)  / 100,
+    commL3:          (parseFloat(document.getElementById('settCommL3').value) || 1)  / 100,
   };
   try {
     await api('/admin/settings/update', { adminKey: _adminKey, ...s });

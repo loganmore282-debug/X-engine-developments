@@ -1488,11 +1488,15 @@ window.updateWitFee = () => {
   if (!raw || raw <= 0) { row.style.display = 'none'; return; }
   const fee = Math.round(raw * 0.07);
   const net = raw - fee;
-  const snapHint = raw % 5000 !== 0
-    ? ` · Must be multiple of 5,000 (try ${ugx(Math.ceil(raw/5000)*5000)})`
+  const hint = raw % 5000 !== 0
+    ? `<div class="wfee-hint">Amount must be a multiple of 5,000 — try ${ugx(Math.ceil(raw/5000)*5000)}</div>`
     : '';
   row.style.display = 'block';
-  row.textContent = `Fee: ${ugx(fee)} (7%)  ·  You receive: ${ugx(net)}${snapHint}`;
+  row.innerHTML = `
+    <div class="wfee-row"><span>Payout amount</span><b>${ugx(raw)}</b></div>
+    <div class="wfee-row"><span>Service fee (7%)</span><b class="neg">− ${ugx(fee)}</b></div>
+    <div class="wfee-row net"><span>You receive</span><b>${ugx(net)}</b></div>
+    ${hint}`;
 };
 
 window.submitWithdrawal = async () => {
@@ -1653,9 +1657,9 @@ const CONTENT = {
       </ul>
       <h3 style="margin-top:16px">Commission Rules</h3>
       <ul>
-        <li>Level 1: 12% of every investment your direct referral makes</li>
-        <li>Level 2: 4% of every investment by your L2 team</li>
-        <li>Level 3: 2% of every investment by your L3 team</li>
+        <li>Level 1: 20% of every investment your direct referral makes</li>
+        <li>Level 2: 5% of every investment by your L2 team</li>
+        <li>Level 3: 1% of every investment by your L3 team</li>
         <li>Commission is credited instantly and can be withdrawn immediately</li>
       </ul>
       <h3 style="margin-top:16px">Account Rules</h3>

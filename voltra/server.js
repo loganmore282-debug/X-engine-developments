@@ -63,9 +63,9 @@ const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credential
 const MIN_WITHDRAWAL   = 20000;
 const CHECKIN_BONUS    = 500;
 const WELCOME_BONUS    = 7000;
-const COMM_L1          = 0.12;
-const COMM_L2          = 0.04;
-const COMM_L3          = 0.02;
+const COMM_L1          = 0.20;
+const COMM_L2          = 0.05;
+const COMM_L3          = 0.01;
 const LIQUIDITY_FEE    = 0.07;
 // Agent tier ladder — ordered highest → lowest (array order matters for findIndex)
 const AGENT_TIERS = [
@@ -2022,30 +2022,44 @@ async function runMaturityCheck() {
   try {
     const snap = await db.collection('investments').where('status', '==', 'active').get();
     if (snap.empty) return 0;
-    let count = 0;
     const now = new Date();
-    const batch = db.batch();
-    snap.forEach(doc => {
+    let count = 0;
+    // Auto-credit the FULL expected return the instant a plan matures — the user
+    // never has to tap "claim". Each plan is settled in its own transaction so a
+    // single failure can't block the rest.
+    for (const doc of snap.docs) {
       const inv = doc.data();
       const matMs = tsMillis(inv.maturityDate); const mat = matMs ? new Date(matMs) : null;
-      // A plan whose daily cashback has already paid out the full expected
-      // return is complete — the money is already in the wallet, so mark it
-      // 'claimed' (nothing left to claim) instead of leaving it stuck active.
-      const fullyPaid = (inv.expectedReturn || 0) > 0 && (inv.dailyCredited || 0) >= (inv.expectedReturn || 0);
-      if (fullyPaid) {
-        batch.update(doc.ref, { status: 'claimed', claimedAt: FieldValue.serverTimestamp() });
+      if (!(mat && mat <= now)) continue;
+      const payout = Math.max(0, (inv.expectedReturn || 0) - (inv.dailyCredited || 0));
+      const { date, time } = nowStr();
+      try {
+        await db.runTransaction(async t => {
+          const fresh = await t.get(doc.ref);
+          if (!fresh.exists || fresh.data().status !== 'active') return; // already settled
+          t.update(doc.ref, {
+            status: 'claimed',
+            maturedAt: FieldValue.serverTimestamp(),
+            claimedAt: FieldValue.serverTimestamp(),
+            autoCredited: true
+          });
+          if (payout > 0) {
+            t.update(db.collection('users').doc(inv.userId), {
+              walletBalance: FieldValue.increment(payout),
+              totalEarned:   FieldValue.increment(payout)
+            });
+            t.set(db.collection('transactions').doc(), {
+              userId: inv.userId, type: 'cashback',
+              description: `Asset payout — ${inv.productName || 'Asset'}`,
+              amount: payout, status: 'success', date, time, investmentId: doc.id,
+              createdAt: FieldValue.serverTimestamp()
+            });
+          }
+        });
         count++;
-      } else if (mat && mat <= now) {
-        batch.update(doc.ref, { status: 'matured', maturedAt: FieldValue.serverTimestamp() });
-        count++;
-      }
-    });
-    if (count > 0) {
-      await batch.commit();
-      console.log(`⏰ Matured/completed: ${count} plan(s)`);
-      // Immediately credit any remaining cashback on newly matured plans
-      await runDailyCashback();
+      } catch (e) { console.error('Auto-credit error:', doc.id, e.message); }
     }
+    if (count > 0) console.log(`⏰ Auto-credited ${count} matured plan(s)`);
     return count;
   } catch (e) { console.error('Maturity error:', e.message); return 0; }
   finally { _maturityRunning = false; }
