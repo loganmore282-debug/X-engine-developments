@@ -4,7 +4,7 @@
    API / auth / Firestore calls are never cached — always live.
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'voltra-shell-v34';
+const CACHE = 'voltra-shell-v35';
 const SHELL = [
   './',
   './index.html',
