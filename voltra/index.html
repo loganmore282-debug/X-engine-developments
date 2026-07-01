@@ -431,6 +431,7 @@ html:has(body.on-auth){background:#0a0e17}
 /* ── TEAM — how it works ── */
 .team-howit{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:4px}
 .team-howit p{font-size:12px;color:var(--text2);line-height:1.8;margin-bottom:8px}
+.team-howit .howit-title{font-size:14px;font-weight:800;color:var(--amber);font-family:'Outfit',sans-serif;margin-bottom:10px}
 .team-howit p:last-child{margin-bottom:0}
 .team-howit strong{color:var(--text)}
 .invite-card{background:linear-gradient(135deg,rgba(255,157,0,0.14),rgba(255,157,0,0.03));border:1px solid var(--border2);border-radius:18px;padding:18px;margin-bottom:12px;text-align:center}
@@ -1343,10 +1344,12 @@ input:-webkit-autofill{animation-name:nxAutofill;animation-duration:.01s}
 
     <!-- How it works -->
     <div class="team-howit">
-      <p>When a friend you invite signs up and invests, you immediately receive a cash reward of <strong>20%</strong> of their investment amount.</p>
-      <p>When members of your Level 2 team invest, you receive a <strong>5%</strong> cash bonus.</p>
-      <p>When members of your Level 3 team invest, you receive a <strong>1%</strong> cash bonus.</p>
-      <p>Once a team member invests, the cash bonus is <strong>instantly credited</strong> to your account and you can withdraw it immediately.</p>
+      <div class="howit-title">How your network powers you</div>
+      <p>Share your code. Every person who activates an energy asset through you adds power to your network — and pays you a reward on what they put in.</p>
+      <p><strong>Level 1</strong> — earn <strong>20%</strong> on every activation by people you invite directly.</p>
+      <p><strong>Level 2</strong> — earn <strong>5%</strong> when the people they invite activate an asset.</p>
+      <p><strong>Level 3</strong> — earn <strong>1%</strong> on activations from the next layer of your network.</p>
+      <p>Rewards drop into your wallet the moment an activation completes — ready to withdraw straight away. The bigger your network, the more it powers your earnings.</p>
     </div>
 
   </div>
@@ -1575,6 +1578,13 @@ input:-webkit-autofill{animation-name:nxAutofill;animation-duration:.01s}
       <input type="tel" id="witPhone" placeholder="7XX XXX XXX" maxlength="9" inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'').replace(/^0+/,'')">
     </div>
     <div class="form-info">15% fee applies on all payouts. Processing within 24 hours.</div>
+    <div class="dep-steps" style="margin-top:18px">
+      <div class="ds-row"><span class="ds-num">1</span><span>Enter an amount of at least UGX 20,000, in multiples of 5,000.</span></div>
+      <div class="ds-row"><span class="ds-num">2</span><span>A 15% service fee is deducted — the app shows exactly what you will receive.</span></div>
+      <div class="ds-row"><span class="ds-num">3</span><span>Enter the Mobile Money number (in your own name) that should receive the money.</span></div>
+      <div class="ds-row"><span class="ds-num">4</span><span>Tap Request Payout. Funds are sent to that number, normally within 24 hours.</span></div>
+      <div class="ds-row"><span class="ds-num">5</span><span>Track it under History → Payouts; if anything fails, the amount is refunded to your wallet.</span></div>
+    </div>
     <button class="btn-submit" onclick="submitWithdrawal()">Request Payout</button>
   </div>
 </div>
