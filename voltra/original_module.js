@@ -1623,9 +1623,8 @@ window.updateWitFee = () => {
   const hint = '';
   row.style.display = 'block';
   row.innerHTML = `
-    <div class="wfee-row"><span>Payout amount</span><b>${ugx(raw)}</b></div>
-    <div class="wfee-row"><span>Service fee (15%)</span><b class="neg">− ${ugx(fee)}</b></div>
-    <div class="wfee-row net"><span>You receive</span><b>${ugx(net)}</b></div>
+    <div class="wfee-net"><span class="wfee-net-lbl">You'll receive</span><span class="wfee-net-val">${ugx(net)}</span></div>
+    <div class="wfee-sub"><span>From ${ugx(raw)}</span><span class="wfee-sep"></span><span>15% fee &minus;${ugx(fee)}</span></div>
     ${hint}`;
 };
 
