@@ -1785,9 +1785,10 @@ async function loadPrizeDraws() {
       const pct       = Math.min(100, Math.round((sold / d.totalTickets) * 100));
       return `<div class="prz-card">
         <div class="prz-title">${d.title}</div>
-        <div class="prz-prize"><span>Prize</span><b>${ugx(d.prizeAmount)}</b></div>
+        <div class="prz-prize"><span>Prize (per winner)</span><b>${ugx(d.prizeAmount)}</b></div>
         <div class="prz-bar"><div class="prz-bar-fill" style="width:${pct}%"></div></div>
         <div class="prz-meta"><span>${sold}/${d.totalTickets} tickets sold</span><span>${ugx(d.ticketPrice)} per ticket</span></div>
+        <div class="prz-meta"><span>${d.numWinners || 1} winner${(d.numWinners||1) > 1 ? 's' : ''} will be picked</span><span></span></div>
         <div class="prz-mine">You hold <b>${d.myTickets || 0}</b> ticket(s)</div>
         <div class="prz-buy-row">
           <input type="number" min="1" max="${remaining}" value="1" class="prz-qty" id="przQty-${d.id}">

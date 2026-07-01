@@ -1614,34 +1614,42 @@ async function resolveDraw(drawId) {
 
     const entriesSnap = await db.collection('prizeDrawEntries').where('drawId', '==', drawId).get();
     const entries = entriesSnap.docs.map(d => d.data());
-    const totalTickets = entries.reduce((s, e) => s + (e.quantity || 0), 0);
-    if (totalTickets <= 0) return; // nothing sold — nothing to draw
+    // Expand into one slot per ticket sold, then draw distinct slots without
+    // replacement — a user holding more tickets occupies more slots, so they
+    // have proportionally better odds but can still legitimately win more
+    // than one of the prize slots if several of their own tickets are drawn.
+    const tickets = [];
+    entries.forEach(e => { for (let i = 0; i < (e.quantity || 0); i++) tickets.push(e.userId); });
+    if (tickets.length <= 0) return; // nothing sold — nothing to draw
 
-    let pick = Math.floor(Math.random() * totalTickets);
-    let winnerId = entries[entries.length - 1].userId;
-    for (const e of entries) {
-      if (pick < e.quantity) { winnerId = e.userId; break; }
-      pick -= e.quantity;
+    const winnersToPick = Math.max(1, Math.min(draw.numWinners || 1, tickets.length));
+    for (let i = 0; i < winnersToPick; i++) {
+      const j = i + Math.floor(Math.random() * (tickets.length - i));
+      [tickets[i], tickets[j]] = [tickets[j], tickets[i]];
     }
+    const winnerIds = tickets.slice(0, winnersToPick);
 
     const { date, time } = nowStr();
-    const winnerSnap = await db.collection('users').doc(winnerId).get();
-    const winnerPhone = winnerSnap.exists ? (winnerSnap.data().phone || '') : '';
-
+    const winners = [];
     await db.runTransaction(async t => {
-      const wRef = db.collection('users').doc(winnerId);
-      t.update(wRef, { walletBalance: FieldValue.increment(draw.prizeAmount) });
-      t.set(db.collection('transactions').doc(), {
-        userId: winnerId, type: 'prize_draw_win',
-        description: `Prize Draw win — ${draw.title}`,
-        amount: draw.prizeAmount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-      });
+      for (const winnerId of winnerIds) {
+        const wRef = db.collection('users').doc(winnerId);
+        const wSnap = await t.get(wRef);
+        const phone = wSnap.exists ? (wSnap.data().phone || '') : '';
+        t.update(wRef, { walletBalance: FieldValue.increment(draw.prizeAmount) });
+        t.set(db.collection('transactions').doc(), {
+          userId: winnerId, type: 'prize_draw_win',
+          description: `Prize Draw win — ${draw.title}`,
+          amount: draw.prizeAmount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });
+        winners.push({ userId: winnerId, phone, prizeAmount: draw.prizeAmount });
+      }
       t.update(dRef, {
-        status: 'completed', winnerId, winnerPhone,
+        status: 'completed', winners,
         completedAt: FieldValue.serverTimestamp()
       });
     });
-    console.log(`🎟️ Prize Draw "${draw.title}" won by ${winnerId} — ${fmtUGX(draw.prizeAmount)}`);
+    console.log(`🎟️ Prize Draw "${draw.title}" — ${winners.length} winner(s), ${fmtUGX(draw.prizeAmount)} each`);
   } catch (e) {
     console.error('Prize draw resolve error:', e.message);
   } finally {
@@ -1653,18 +1661,21 @@ async function resolveDraw(drawId) {
 app.post('/admin/prize-draw/create', async (req, res) => {
   const { adminKey, title, ticketPrice, totalTickets, prizeAmount } = req.body;
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const price  = Math.round(Number(ticketPrice));
-  const total  = Math.round(Number(totalTickets));
-  const prize  = Math.round(Number(prizeAmount));
-  const name   = (title || '').trim() || 'Prize Draw';
+  const price   = Math.round(Number(ticketPrice));
+  const total   = Math.round(Number(totalTickets));
+  const prize   = Math.round(Number(prizeAmount));
+  const winners = Math.round(Number(req.body.numWinners) || 1);
+  const name    = (title || '').trim() || 'Prize Draw';
   if (!(price > 0))  return res.status(400).json({ status: 'error', message: 'Ticket price must be greater than 0' });
   if (!(total >= 2)) return res.status(400).json({ status: 'error', message: 'Total tickets must be at least 2' });
   if (!(prize > 0))  return res.status(400).json({ status: 'error', message: 'Prize amount must be greater than 0' });
+  if (!(winners >= 1)) return res.status(400).json({ status: 'error', message: 'Number of winners must be at least 1' });
+  if (winners > total) return res.status(400).json({ status: 'error', message: 'Number of winners cannot exceed total tickets' });
   try {
     const docRef = db.collection('prizeDraws').doc();
     await docRef.set({
-      title: name, ticketPrice: price, totalTickets: total, prizeAmount: prize,
-      ticketsSold: 0, status: 'active', winnerId: null, winnerPhone: null,
+      title: name, ticketPrice: price, totalTickets: total, prizeAmount: prize, numWinners: winners,
+      ticketsSold: 0, status: 'active', winners: [],
       createdAt: FieldValue.serverTimestamp()
     });
     return res.json({ status: 'success', drawId: docRef.id });

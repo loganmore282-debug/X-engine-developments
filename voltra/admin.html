@@ -521,8 +521,13 @@ tr:hover td{background:rgba(255,255,255,.02)}
             <label class="form-label">Prize amount (UGX)</label>
             <input class="form-input" type="number" id="pdPrizeAmount" value="50000" min="1">
           </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:120px">
+            <label class="form-label">Number of winners</label>
+            <input class="form-input" type="number" id="pdNumWinners" value="1" min="1">
+          </div>
           <button class="btn btn-primary" onclick="createPrizeDraw()">Create Draw</button>
         </div>
+        <p style="font-size:11px;color:var(--text2);margin:10px 0 0">Each winner receives the <strong>full</strong> prize amount. With 5 winners set, 5 winning tickets are drawn — usually 5 different people, though someone holding many tickets can occupy more than one winning slot and be paid more than once.</p>
       </div>
       <div class="section-head" style="margin-top:8px">
         <h3>All Prize Draws</h3>
@@ -1961,14 +1966,15 @@ async function loadPrizeDrawAdmin() {
       const sold = d.ticketsSold || 0;
       const canEnd = d.status === 'active' && sold > 0;
       const canCancel = d.status === 'active';
-      const winner = d.status === 'completed' ? (d.winnerPhone || d.winnerId || '—') : '—';
+      const winnersList = (d.winners || []).map(w => w.phone || w.userId).join(', ');
+      const winnerCell = d.status === 'completed' ? (winnersList || '—') : '—';
       return `<tr>
         <td>${d.title}</td>
         <td class="text-muted">${ugx(d.ticketPrice)}</td>
         <td>${sold}/${d.totalTickets}</td>
-        <td class="text-muted">${ugx(d.prizeAmount)}</td>
+        <td class="text-muted">${ugx(d.prizeAmount)} × ${d.numWinners || 1}</td>
         <td>${statusBadge(d.status)}</td>
-        <td class="text-muted" style="font-size:12px">${winner}</td>
+        <td class="text-muted" style="font-size:12px;max-width:180px">${winnerCell}</td>
         <td>
           ${canEnd ? `<button class="btn btn-primary btn-sm" onclick="endPrizeDraw('${d.id}')">End Now</button>` : ''}
           ${canCancel ? `<button class="btn btn-danger btn-sm" onclick="cancelPrizeDraw('${d.id}')">Cancel</button>` : '—'}
@@ -1978,7 +1984,7 @@ async function loadPrizeDrawAdmin() {
     document.getElementById('prizeDrawTable').innerHTML = `
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Title</th><th>Ticket Price</th><th>Sold</th><th>Prize</th><th>Status</th><th>Winner</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Title</th><th>Ticket Price</th><th>Sold</th><th>Prize × Winners</th><th>Status</th><th>Winner(s)</th><th>Actions</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
@@ -1992,12 +1998,15 @@ window.createPrizeDraw = async () => {
   const ticketPrice = parseInt(document.getElementById('pdTicketPrice').value) || 0;
   const totalTickets= parseInt(document.getElementById('pdTotalTickets').value) || 0;
   const prizeAmount = parseInt(document.getElementById('pdPrizeAmount').value) || 0;
+  const numWinners  = parseInt(document.getElementById('pdNumWinners').value) || 0;
   if (!title) { showToast('Enter a title', 'error'); return; }
   if (ticketPrice < 1) { showToast('Ticket price must be greater than 0', 'error'); return; }
   if (totalTickets < 2) { showToast('Total tickets must be at least 2', 'error'); return; }
   if (prizeAmount < 1) { showToast('Prize amount must be greater than 0', 'error'); return; }
+  if (numWinners < 1) { showToast('Number of winners must be at least 1', 'error'); return; }
+  if (numWinners > totalTickets) { showToast('Number of winners cannot exceed total tickets', 'error'); return; }
   try {
-    const r = await api('/admin/prize-draw/create', { adminKey: _adminKey, title, ticketPrice, totalTickets, prizeAmount });
+    const r = await api('/admin/prize-draw/create', { adminKey: _adminKey, title, ticketPrice, totalTickets, prizeAmount, numWinners });
     if (r.status === 'success') {
       showToast('Prize draw created!', 'success');
       document.getElementById('pdTitle').value = '';
