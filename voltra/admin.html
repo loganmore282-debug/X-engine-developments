@@ -342,6 +342,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <button class="tab-btn" data-tab="products" onclick="showTab('products',this)"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Plans</button>
     <button class="tab-btn" data-tab="slideshow" onclick="showTab('slideshow',this)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Slideshow</button>
     <button class="tab-btn" data-tab="giftcodes" onclick="showTab('giftcodes',this)"><svg viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg> Gift Codes</button>
+    <button class="tab-btn" data-tab="prizedraw" onclick="showTab('prizedraw',this)"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M8.7 13.5 7 22l5-3 5 3-1.7-8.5"/></svg> Prize Draw</button>
     <button class="tab-btn" data-tab="transactions" onclick="showTab('transactions',this)"><svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> Transactions</button>
     <button class="tab-btn" data-tab="referrals" onclick="showTab('referrals',this)"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Affiliates</button>
     <button class="tab-btn" data-tab="settings" onclick="showTab('settings',this)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
@@ -496,6 +497,39 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
       <div class="card" style="padding:0;overflow:hidden">
         <div id="codesTable"><div class="loading-row"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ── PRIZE DRAW ── -->
+    <div class="panel" id="prizedrawPanel">
+      <div class="card">
+        <div class="card-title">🎟️ Create Prize Draw</div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0;flex:2;min-width:160px">
+            <label class="form-label">Title</label>
+            <input class="form-input" type="text" id="pdTitle" placeholder="e.g. Weekend Prize Draw">
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:130px">
+            <label class="form-label">Ticket price (UGX)</label>
+            <input class="form-input" type="number" id="pdTicketPrice" value="1000" min="1">
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:130px">
+            <label class="form-label">Total tickets</label>
+            <input class="form-input" type="number" id="pdTotalTickets" value="100" min="2">
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:130px">
+            <label class="form-label">Prize amount (UGX)</label>
+            <input class="form-input" type="number" id="pdPrizeAmount" value="50000" min="1">
+          </div>
+          <button class="btn btn-primary" onclick="createPrizeDraw()">Create Draw</button>
+        </div>
+      </div>
+      <div class="section-head" style="margin-top:8px">
+        <h3>All Prize Draws</h3>
+        <button class="btn btn-ghost btn-sm" onclick="loadPrizeDrawAdmin()">↻ Refresh</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div id="prizeDrawTable"><div class="loading-row"><div class="spinner"></div></div></div>
       </div>
     </div>
 
@@ -993,7 +1027,7 @@ function statusBadge(s) {
     pending:'bs-pending', processing:'bs-processing', processed:'bs-success',
     success:'bs-success', active:'bs-active', rejected:'bs-rejected',
     failed:'bs-failed', banned:'bs-banned', used:'bs-used', deactivated:'bs-deactivated',
-    completed:'bs-success'
+    completed:'bs-success', cancelled:'bs-deactivated'
   };
   const cls = map[s] || 'bs-pending';
   return `<span class="badge-status ${cls}">${s}</span>`;
@@ -1076,6 +1110,7 @@ window.showTab = (tab, btn) => {
     dashboard: loadDashboard, withdrawals: loadPayouts,
     deposits: loadRecharges, users: loadUsers, products: loadProducts,
     slideshow: loadSlideshow, giftcodes: loadGiftCodes,
+    prizedraw: loadPrizeDrawAdmin,
     transactions: loadTransactions,
     referrals: loadAffiliates, settings: loadSettings
   };
@@ -1907,6 +1942,87 @@ window.deactivateCode = async (id) => {
     const r = await api('/admin/gift-codes/deactivate', { codeId: id, adminKey: _adminKey });
     showToast(r.status === 'success' ? 'Deactivated' : r.message, r.status === 'success' ? 'success' : 'error');
     loadGiftCodes();
+  } catch(e) { showToast('Error', 'error'); }
+};
+
+// ═══════════════════════════════════════════
+// PRIZE DRAW
+// ═══════════════════════════════════════════
+async function loadPrizeDrawAdmin() {
+  document.getElementById('prizeDrawTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
+  try {
+    const r = await api('/admin/prize-draw/list', { adminKey: _adminKey });
+    const draws = r.status === 'success' ? r.draws : [];
+    if (!draws.length) {
+      document.getElementById('prizeDrawTable').innerHTML = '<div class="empty"><div class="empty-icon">🎟️</div><div class="empty-text">No prize draws yet</div></div>';
+      return;
+    }
+    const rows = draws.map(d => {
+      const sold = d.ticketsSold || 0;
+      const canEnd = d.status === 'active' && sold > 0;
+      const canCancel = d.status === 'active';
+      const winner = d.status === 'completed' ? (d.winnerPhone || d.winnerId || '—') : '—';
+      return `<tr>
+        <td>${d.title}</td>
+        <td class="text-muted">${ugx(d.ticketPrice)}</td>
+        <td>${sold}/${d.totalTickets}</td>
+        <td class="text-muted">${ugx(d.prizeAmount)}</td>
+        <td>${statusBadge(d.status)}</td>
+        <td class="text-muted" style="font-size:12px">${winner}</td>
+        <td>
+          ${canEnd ? `<button class="btn btn-primary btn-sm" onclick="endPrizeDraw('${d.id}')">End Now</button>` : ''}
+          ${canCancel ? `<button class="btn btn-danger btn-sm" onclick="cancelPrizeDraw('${d.id}')">Cancel</button>` : '—'}
+        </td>
+      </tr>`;
+    }).join('');
+    document.getElementById('prizeDrawTable').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Title</th><th>Ticket Price</th><th>Sold</th><th>Prize</th><th>Status</th><th>Winner</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    document.getElementById('prizeDrawTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
+  }
+}
+
+window.createPrizeDraw = async () => {
+  const title       = document.getElementById('pdTitle').value.trim();
+  const ticketPrice = parseInt(document.getElementById('pdTicketPrice').value) || 0;
+  const totalTickets= parseInt(document.getElementById('pdTotalTickets').value) || 0;
+  const prizeAmount = parseInt(document.getElementById('pdPrizeAmount').value) || 0;
+  if (!title) { showToast('Enter a title', 'error'); return; }
+  if (ticketPrice < 1) { showToast('Ticket price must be greater than 0', 'error'); return; }
+  if (totalTickets < 2) { showToast('Total tickets must be at least 2', 'error'); return; }
+  if (prizeAmount < 1) { showToast('Prize amount must be greater than 0', 'error'); return; }
+  try {
+    const r = await api('/admin/prize-draw/create', { adminKey: _adminKey, title, ticketPrice, totalTickets, prizeAmount });
+    if (r.status === 'success') {
+      showToast('Prize draw created!', 'success');
+      document.getElementById('pdTitle').value = '';
+      loadPrizeDrawAdmin();
+    } else {
+      showToast(r.message || 'Failed', 'error');
+    }
+  } catch(e) { showToast('Error', 'error'); }
+};
+
+window.endPrizeDraw = async (id) => {
+  if (!confirm('End this draw now and pick a winner from the tickets sold so far?')) return;
+  try {
+    const r = await api('/admin/prize-draw/end', { drawId: id, adminKey: _adminKey });
+    showToast(r.status === 'success' ? 'Draw resolved' : (r.message || 'Failed'), r.status === 'success' ? 'success' : 'error');
+    loadPrizeDrawAdmin();
+  } catch(e) { showToast('Error', 'error'); }
+};
+
+window.cancelPrizeDraw = async (id) => {
+  if (!confirm('Cancel this draw and refund everyone who bought a ticket?')) return;
+  try {
+    const r = await api('/admin/prize-draw/cancel', { drawId: id, adminKey: _adminKey });
+    showToast(r.status === 'success' ? 'Draw cancelled and refunded' : (r.message || 'Failed'), r.status === 'success' ? 'success' : 'error');
+    loadPrizeDrawAdmin();
   } catch(e) { showToast('Error', 'error'); }
 };
 

@@ -331,7 +331,7 @@ async function api(path, body = {}, _attempt = 0) {
     // Retry ONLY safe, read-style endpoints on a cold/transient failure. NEVER retry
     // money-moving calls — a lost response there could double-apply (this was the
     // 30,000 -> 60,000 deposit bug).
-    const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/giftcode/'];
+    const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/giftcode/', '/prize-draw/buy'];
     const unsafe = NO_RETRY.some(p => path.startsWith(p));
     if (_attempt < 2 && !unsafe) {
       await new Promise(r => setTimeout(r, 800 * (_attempt + 1)));
@@ -651,7 +651,7 @@ async function pollAccount(uid) {
   try {
     const tr = await api('/account/transactions', { userId: uid });
     if (tr.status === 'success') {
-      const INBOUND = ['deposit','admin_credit','checkin','cashback','commission','gift_code','investment_return'];
+      const INBOUND = ['deposit','admin_credit','checkin','cashback','commission','gift_code','investment_return','prize_draw_win'];
       const tx = (tr.transactions || []).filter(t => INBOUND.includes(t.type) && (t.amount || 0) > 0);
       _inboundTotal  = tx.reduce((s, t) => s + t.amount, 0);
       _earningsTotal = tx.filter(t => t.type !== 'deposit').reduce((s, t) => s + t.amount, 0);
@@ -1272,7 +1272,7 @@ async function loadRecords(tab) {
     const tr = await api('/account/transactions', { userId: _user.uid });
     if (myToken !== _recToken) return; // newer tab was selected while awaiting
     const all = tr.status === 'success' ? tr.transactions : [];
-    const REVENUE_TYPES = ['checkin','cashback','commission','gift_code','investment_return','admin_credit'];
+    const REVENUE_TYPES = ['checkin','cashback','commission','gift_code','investment_return','admin_credit','prize_draw_win'];
     const items = tab === 'deposits'  ? all.filter(t => t.type === 'deposit' || t.type === 'admin_credit')
                : tab === 'referrals' ? all.filter(t => t.type === 'commission')
                : tab === 'revenue'   ? all.filter(t => REVENUE_TYPES.includes(t.type))
@@ -1761,6 +1761,55 @@ window.redeemGiftCode = async () => {
     showLoading(false);
     if (r.status === 'success') showToast(r.message, 'success');
     else showToast(r.message || 'Invalid code', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
+// ── PRIZE DRAW ──
+window.openPrizeDrawPage = () => {
+  openPage('prizeDrawPage');
+  loadPrizeDraws();
+};
+async function loadPrizeDraws() {
+  const wrap = document.getElementById('prizeDrawList');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">Loading…</div>';
+  try {
+    const r = await api('/prize-draw/active', { userId: _user.uid });
+    if (r.status !== 'success' || !r.draws.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">No prize draws running right now — check back soon.</div>';
+      return;
+    }
+    wrap.innerHTML = r.draws.map(d => {
+      const sold      = d.ticketsSold || 0;
+      const remaining = Math.max(0, d.totalTickets - sold);
+      const pct       = Math.min(100, Math.round((sold / d.totalTickets) * 100));
+      return `<div class="prz-card">
+        <div class="prz-title">${d.title}</div>
+        <div class="prz-prize"><span>Prize</span><b>${ugx(d.prizeAmount)}</b></div>
+        <div class="prz-bar"><div class="prz-bar-fill" style="width:${pct}%"></div></div>
+        <div class="prz-meta"><span>${sold}/${d.totalTickets} tickets sold</span><span>${ugx(d.ticketPrice)} per ticket</span></div>
+        <div class="prz-mine">You hold <b>${d.myTickets || 0}</b> ticket(s)</div>
+        <div class="prz-buy-row">
+          <input type="number" min="1" max="${remaining}" value="1" class="prz-qty" id="przQty-${d.id}">
+          <button class="btn-submit" onclick="buyPrizeDrawTicket('${d.id}', ${remaining})">Buy Ticket</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--red);font-size:13px">Failed to load</div>';
+  }
+}
+window.buyPrizeDrawTicket = async (drawId, remaining) => {
+  const inp = document.getElementById('przQty-' + drawId);
+  let qty = parseInt(inp && inp.value, 10) || 1;
+  if (qty < 1) qty = 1;
+  if (qty > remaining) qty = remaining;
+  showLoading(true);
+  try {
+    const r = await api('/prize-draw/buy', { userId: _user.uid, drawId, quantity: qty });
+    showLoading(false);
+    if (r.status === 'success') { showToast(r.message, 'success'); loadPrizeDraws(); }
+    else showToast(r.message || 'Could not buy ticket', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
 

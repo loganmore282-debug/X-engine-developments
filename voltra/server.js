@@ -1596,6 +1596,213 @@ app.post('/admin/gift-codes/deactivate', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// PRIZE DRAW — admin sets ticket price / total tickets / prize amount,
+// users buy tickets from their wallet, one random ticket wins the prize.
+// ═══════════════════════════════════════════
+const _buyingTickets  = new Set(); // drawId → being purchased (single-writer, also
+                                    // serialises a user's own double-submit on the same draw)
+const _resolvingDraws = new Set(); // drawId → winner is being picked (single-writer)
+
+async function resolveDraw(drawId) {
+  if (_resolvingDraws.has(drawId)) return;
+  _resolvingDraws.add(drawId);
+  try {
+    const dRef  = db.collection('prizeDraws').doc(drawId);
+    const dSnap = await dRef.get();
+    if (!dSnap.exists || dSnap.data().status !== 'active') return;
+    const draw = dSnap.data();
+
+    const entriesSnap = await db.collection('prizeDrawEntries').where('drawId', '==', drawId).get();
+    const entries = entriesSnap.docs.map(d => d.data());
+    const totalTickets = entries.reduce((s, e) => s + (e.quantity || 0), 0);
+    if (totalTickets <= 0) return; // nothing sold — nothing to draw
+
+    let pick = Math.floor(Math.random() * totalTickets);
+    let winnerId = entries[entries.length - 1].userId;
+    for (const e of entries) {
+      if (pick < e.quantity) { winnerId = e.userId; break; }
+      pick -= e.quantity;
+    }
+
+    const { date, time } = nowStr();
+    const winnerSnap = await db.collection('users').doc(winnerId).get();
+    const winnerPhone = winnerSnap.exists ? (winnerSnap.data().phone || '') : '';
+
+    await db.runTransaction(async t => {
+      const wRef = db.collection('users').doc(winnerId);
+      t.update(wRef, { walletBalance: FieldValue.increment(draw.prizeAmount) });
+      t.set(db.collection('transactions').doc(), {
+        userId: winnerId, type: 'prize_draw_win',
+        description: `Prize Draw win — ${draw.title}`,
+        amount: draw.prizeAmount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      t.update(dRef, {
+        status: 'completed', winnerId, winnerPhone,
+        completedAt: FieldValue.serverTimestamp()
+      });
+    });
+    console.log(`🎟️ Prize Draw "${draw.title}" won by ${winnerId} — ${fmtUGX(draw.prizeAmount)}`);
+  } catch (e) {
+    console.error('Prize draw resolve error:', e.message);
+  } finally {
+    _resolvingDraws.delete(drawId);
+  }
+}
+
+// ADMIN — create a draw
+app.post('/admin/prize-draw/create', async (req, res) => {
+  const { adminKey, title, ticketPrice, totalTickets, prizeAmount } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const price  = Math.round(Number(ticketPrice));
+  const total  = Math.round(Number(totalTickets));
+  const prize  = Math.round(Number(prizeAmount));
+  const name   = (title || '').trim() || 'Prize Draw';
+  if (!(price > 0))  return res.status(400).json({ status: 'error', message: 'Ticket price must be greater than 0' });
+  if (!(total >= 2)) return res.status(400).json({ status: 'error', message: 'Total tickets must be at least 2' });
+  if (!(prize > 0))  return res.status(400).json({ status: 'error', message: 'Prize amount must be greater than 0' });
+  try {
+    const docRef = db.collection('prizeDraws').doc();
+    await docRef.set({
+      title: name, ticketPrice: price, totalTickets: total, prizeAmount: prize,
+      ticketsSold: 0, status: 'active', winnerId: null, winnerPhone: null,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    return res.json({ status: 'success', drawId: docRef.id });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ADMIN — end a draw early (force the draw now) or cancel it (refund everyone)
+app.post('/admin/prize-draw/end', async (req, res) => {
+  const { adminKey, drawId } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!drawId) return res.status(400).json({ status: 'error', message: 'drawId required' });
+  try {
+    const snap = await db.collection('prizeDraws').doc(drawId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Draw not found' });
+    if (snap.data().status !== 'active') return res.status(400).json({ status: 'error', message: 'Draw is not active' });
+    if (!(snap.data().ticketsSold > 0)) return res.status(400).json({ status: 'error', message: 'No tickets sold yet — cancel it instead' });
+    await resolveDraw(drawId);
+    return res.json({ status: 'success', message: 'Draw resolved' });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+app.post('/admin/prize-draw/cancel', async (req, res) => {
+  const { adminKey, drawId } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!drawId) return res.status(400).json({ status: 'error', message: 'drawId required' });
+  try {
+    const dRef  = db.collection('prizeDraws').doc(drawId);
+    const dSnap = await dRef.get();
+    if (!dSnap.exists) return res.status(404).json({ status: 'error', message: 'Draw not found' });
+    if (dSnap.data().status !== 'active') return res.status(400).json({ status: 'error', message: 'Draw is not active' });
+    const price = dSnap.data().ticketPrice;
+    const { date, time } = nowStr();
+    const entriesSnap = await db.collection('prizeDrawEntries').where('drawId', '==', drawId).get();
+    for (const e of entriesSnap.docs) {
+      const ed = e.data();
+      const refund = ed.quantity * price;
+      await db.collection('users').doc(ed.userId).update({ walletBalance: FieldValue.increment(refund) });
+      await db.collection('transactions').doc().set({
+        userId: ed.userId, type: 'prize_draw_refund',
+        description: `Prize Draw cancelled — ticket refund (${dSnap.data().title})`,
+        amount: refund, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    }
+    await dRef.update({ status: 'cancelled' });
+    return res.json({ status: 'success', message: 'Draw cancelled and tickets refunded' });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+app.post('/admin/prize-draw/list', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('prizeDraws').orderBy('createdAt', 'desc').limit(100).get();
+    const draws = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return res.json({ status: 'success', draws });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// USER — active draws (+ how many tickets the caller already holds)
+app.post('/prize-draw/active', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  try {
+    const snap  = await db.collection('prizeDraws').where('status', '==', 'active').get();
+    const draws = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (userId && draws.length) {
+      const entriesSnap = await db.collection('prizeDrawEntries').where('userId', '==', userId).get();
+      const mine = {};
+      entriesSnap.docs.forEach(d => {
+        const ed = d.data();
+        mine[ed.drawId] = (mine[ed.drawId] || 0) + (ed.quantity || 0);
+      });
+      draws.forEach(dr => { dr.myTickets = mine[dr.id] || 0; });
+    }
+    return res.json({ status: 'success', draws });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// USER — buy tickets
+app.post('/prize-draw/buy', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  const { drawId } = req.body;
+  const quantity = Math.max(1, Math.round(Number(req.body.quantity) || 1));
+  if (!userId || !drawId) return res.status(400).json({ status: 'error', message: 'userId and drawId required' });
+  if (_buyingTickets.has(drawId))
+    return res.status(429).json({ status: 'error', message: 'This draw is busy — try again in a moment' });
+  _buyingTickets.add(drawId);
+  try {
+    const dRef  = db.collection('prizeDraws').doc(drawId);
+    const dSnap = await dRef.get();
+    if (!dSnap.exists) return res.status(404).json({ status: 'error', message: 'Draw not found' });
+    const draw = dSnap.data();
+    if (draw.status !== 'active') return res.status(400).json({ status: 'error', message: 'This draw has ended' });
+    const remaining = draw.totalTickets - (draw.ticketsSold || 0);
+    if (quantity > remaining) return res.status(400).json({ status: 'error', message: `Only ${remaining} ticket(s) left` });
+
+    const cost  = quantity * draw.ticketPrice;
+    const uRef  = db.collection('users').doc(userId);
+    const uSnap = await uRef.get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const bal = uSnap.data().walletBalance || 0;
+    if (bal < cost) return res.status(400).json({ status: 'error', message: `Need ${fmtUGX(cost)}, have ${fmtUGX(bal)}` });
+
+    const { date, time } = nowStr();
+    await db.runTransaction(async t => {
+      t.update(uRef, { walletBalance: bal - cost });
+      t.update(dRef, { ticketsSold: FieldValue.increment(quantity) });
+      t.set(db.collection('prizeDrawEntries').doc(), {
+        drawId, userId, quantity, createdAt: FieldValue.serverTimestamp()
+      });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'prize_draw_ticket',
+        description: `Prize Draw ticket x${quantity} — ${draw.title}`,
+        amount: -cost, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+
+    const soldNow = (draw.ticketsSold || 0) + quantity;
+    if (soldNow >= draw.totalTickets) resolveDraw(drawId).catch(e => console.error('Auto-resolve error:', e.message));
+    return res.json({ status: 'success', message: `Bought ${quantity} ticket(s) for ${fmtUGX(cost)}`, remaining: draw.totalTickets - soldNow });
+  } catch (e) {
+    console.error('Prize draw buy error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  } finally {
+    _buyingTickets.delete(drawId);
+  }
+});
+
+// ═══════════════════════════════════════════
 // DEPOSIT — PHONE VERIFICATION (proxies MarzPay)
 // ═══════════════════════════════════════════
 app.post('/deposit/verify-phone', async (req, res) => {
