@@ -165,7 +165,7 @@ async function isMaintenanceOn() {
 // NOTE: '/settings/public' MUST bypass maintenance — the app reads it to DETECT
 // maintenance and show the lock screen. If it were blocked, the app would just
 // freeze (503 everywhere) instead of showing the maintenance screen.
-const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public'];
+const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public', '/public/online-count'];
 app.use(async (req, res, next) => {
   const p = req.path;
   if (BYPASS.some(b => p === b || p.startsWith(b + '/'))) return next();
@@ -509,6 +509,27 @@ async function payCommissions(investorId, amount, investmentId) {
 // HEALTH
 // ═══════════════════════════════════════════
 app.get('/', (req, res) => res.json({ status: '◈ Business Server', time: new Date().toISOString() }));
+
+// ── LIVE ONLINE USERS COUNTER ──
+// Single in-memory value drifted server-side every 3s so every device polling
+// it sees the same figure at the same time (cosmetic — not a real session count).
+function _onlineRange() {
+  const h = new Date(Date.now() + 3 * 3600000).getUTCHours(); // Uganda time (EAT, UTC+3)
+  return (h >= 6 && h < 19) ? [200, 560] : [35, 300];
+}
+let _onlineCount = null;
+function driftOnlineCount() {
+  const [lo, hi] = _onlineRange();
+  if (_onlineCount === null || _onlineCount < lo || _onlineCount > hi) {
+    _onlineCount = lo + Math.floor(Math.random() * (hi - lo + 1));
+  } else {
+    const step = Math.floor(Math.random() * 21) - 10; // drift -10..+10
+    _onlineCount = Math.max(lo, Math.min(hi, _onlineCount + step));
+  }
+}
+driftOnlineCount();
+setInterval(driftOnlineCount, 3000);
+app.get('/public/online-count', (_req, res) => res.json({ status: 'success', count: _onlineCount }));
 
 // ── GIFT CODE GENERATION HELPER ──
 // 4 unambiguous characters — short and distinct from the old Nexus format.

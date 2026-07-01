@@ -502,28 +502,21 @@ window.selectDepAmt = (amt, btn) => {
 };
 
 // ── LIVE ONLINE USERS COUNTER ──
-// Cosmetic only — drifts a random figure inside a day/night band every 3s
-// instead of jumping, so it reads like a real concurrent-user count.
-let _onlineVal   = null;
+// Backend-driven so every device polling it shows the exact same figure at
+// the exact same time (server drifts the value; see /public/online-count).
 let _onlineTimer = null;
-function _onlineRange() {
-  const h = new Date().getHours();
-  return (h >= 6 && h < 19) ? [200, 560] : [35, 300]; // 6am–7pm vs overnight
-}
-function loadOnlineCounter() {
+async function pollOnlineCounter() {
   const el = document.getElementById('onlineCount');
   if (!el) return;
-  const [lo, hi] = _onlineRange();
-  if (_onlineVal === null || _onlineVal < lo || _onlineVal > hi)
-    _onlineVal = lo + Math.floor(Math.random() * (hi - lo + 1));
-  el.textContent = _onlineVal.toLocaleString();
-  clearInterval(_onlineTimer);
-  _onlineTimer = setInterval(() => {
-    const [dLo, dHi] = _onlineRange();
-    const step = Math.floor(Math.random() * 21) - 10; // drift -10..+10
-    _onlineVal = Math.max(dLo, Math.min(dHi, _onlineVal + step));
-    el.textContent = _onlineVal.toLocaleString();
-  }, 3000);
+  try {
+    const r = await fetch(SERVER + '/public/online-count').then(x => x.json());
+    if (r.status === 'success') el.textContent = Number(r.count).toLocaleString();
+  } catch (_) {}
+}
+function loadOnlineCounter() {
+  if (_onlineTimer) return; // already polling
+  pollOnlineCounter();
+  _onlineTimer = setInterval(pollOnlineCounter, 3000);
 }
 
 // ── TICKER ──
