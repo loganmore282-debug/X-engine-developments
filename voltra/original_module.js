@@ -306,6 +306,7 @@ window.doLogout = async () => {
   try { localStorage.removeItem('nx_photo'); } catch (_) {}
   if (_unsub)      { _unsub(); _unsub = null; }
   if (_maintTimer) { clearInterval(_maintTimer); _maintTimer = null; }
+  if (_onlineTimer) { clearInterval(_onlineTimer); _onlineTimer = null; }
   stopWitTimers();
   await signOut(auth);
   _user = null; _userData = null;
@@ -500,6 +501,31 @@ window.selectDepAmt = (amt, btn) => {
   if (btn) btn.classList.add('sel');
 };
 
+// ── LIVE ONLINE USERS COUNTER ──
+// Cosmetic only — drifts a random figure inside a day/night band every 3s
+// instead of jumping, so it reads like a real concurrent-user count.
+let _onlineVal   = null;
+let _onlineTimer = null;
+function _onlineRange() {
+  const h = new Date().getHours();
+  return (h >= 6 && h < 19) ? [200, 560] : [35, 300]; // 6am–7pm vs overnight
+}
+function loadOnlineCounter() {
+  const el = document.getElementById('onlineCount');
+  if (!el) return;
+  const [lo, hi] = _onlineRange();
+  if (_onlineVal === null || _onlineVal < lo || _onlineVal > hi)
+    _onlineVal = lo + Math.floor(Math.random() * (hi - lo + 1));
+  el.textContent = _onlineVal.toLocaleString();
+  clearInterval(_onlineTimer);
+  _onlineTimer = setInterval(() => {
+    const [dLo, dHi] = _onlineRange();
+    const step = Math.floor(Math.random() * 21) - 10; // drift -10..+10
+    _onlineVal = Math.max(dLo, Math.min(dHi, _onlineVal + step));
+    el.textContent = _onlineVal.toLocaleString();
+  }, 3000);
+}
+
 // ── TICKER ──
 function loadTicker() {
   const el = document.getElementById('homeTicker');
@@ -549,6 +575,7 @@ onAuthStateChanged(auth, async user => {
     loadProducts();
     loadRecords('deposits');
     loadTicker();
+    loadOnlineCounter();
     checkMaintenance();
     api('/account/ensure-refcode', { userId: user.uid }).catch(() => {});
     // self-heal: make sure the profile (name/phone) exists even if signup's create-profile didn't run
