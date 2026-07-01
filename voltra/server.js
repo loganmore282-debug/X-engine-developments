@@ -62,7 +62,7 @@ const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credential
 
 const MIN_WITHDRAWAL   = 20000;
 const CHECKIN_BONUS    = 500;
-const WELCOME_BONUS    = 7000;
+const WELCOME_BONUS    = 5500;
 const COMM_L1          = 0.20;
 const COMM_L2          = 0.05;
 const COMM_L3          = 0.01;
@@ -511,8 +511,9 @@ async function payCommissions(investorId, amount, investmentId) {
 app.get('/', (req, res) => res.json({ status: '◈ Business Server', time: new Date().toISOString() }));
 
 // ── GIFT CODE GENERATION HELPER ──
+// 4 unambiguous characters — short and distinct from the old Nexus format.
 function genGiftCode() {
-  return Array.from(crypto.randomBytes(8)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
+  return Array.from(crypto.randomBytes(4)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
 
 // ── ADMIN AUTH HELPER ──
@@ -714,6 +715,47 @@ app.post('/admin/assign-deposit', async (req, res) => {
     });
     return res.json({ status: 'success', message: `Credited ${fmtUGX(dep.amount)} to user` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════
+// REGISTRATION VERIFICATION CODE (anti-bot)
+// ═══════════════════════════════════════════
+// Short-lived, single-use numeric code a real user re-types before an account
+// can be created. Not an image CAPTCHA — but it forces every signup through
+// this extra request/response round trip, which stops naive scripts that
+// hammer /register directly to farm the sign-up bonus.
+const _regCaptchas  = new Map(); // captchaId → { code, expiresAt, attempts }
+const CAPTCHA_TTL_MS = 5 * 60 * 1000;
+
+function pruneCaptchas() {
+  const now = Date.now();
+  for (const [id, c] of _regCaptchas) if (c.expiresAt < now) _regCaptchas.delete(id);
+}
+
+app.post('/auth/captcha', (req, res) => {
+  pruneCaptchas();
+  const captchaId = crypto.randomBytes(16).toString('hex');
+  const code = String(crypto.randomInt(1000, 10000));
+  _regCaptchas.set(captchaId, { code, expiresAt: Date.now() + CAPTCHA_TTL_MS, attempts: 0 });
+  return res.json({ status: 'success', captchaId, code });
+});
+
+app.post('/auth/captcha/verify', (req, res) => {
+  const { captchaId, answer } = req.body;
+  const c = captchaId && _regCaptchas.get(captchaId);
+  if (!c || c.expiresAt < Date.now()) {
+    _regCaptchas.delete(captchaId);
+    return res.status(400).json({ status: 'error', message: 'Verification code expired — please refresh it' });
+  }
+  c.attempts++;
+  if (c.attempts > 5) {
+    _regCaptchas.delete(captchaId);
+    return res.status(400).json({ status: 'error', message: 'Too many attempts — please refresh the code' });
+  }
+  if (String(answer || '').trim() !== c.code)
+    return res.status(400).json({ status: 'error', message: 'Incorrect code — please try again' });
+  _regCaptchas.delete(captchaId); // single-use
+  return res.json({ status: 'success' });
 });
 
 // ═══════════════════════════════════════════

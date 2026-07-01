@@ -158,6 +158,28 @@ window.showRegister = () => {
   document.getElementById('loginForm').style.display = 'none';
   document.getElementById('registerForm').style.display = 'flex';
   window.scrollTo(0, 0);
+  loadRegCaptcha();
+};
+
+// ── REGISTRATION VERIFICATION CODE (anti-bot) ──
+let _regCaptchaId = null;
+window.loadRegCaptcha = async () => {
+  const box = document.getElementById('regCaptchaCode');
+  const inp = document.getElementById('regCaptchaInput');
+  if (inp) inp.value = '';
+  if (box) box.textContent = '····';
+  try {
+    const r = await fetch(SERVER + '/auth/captcha', { method: 'POST' }).then(x => x.json());
+    if (r.status === 'success' && box) {
+      _regCaptchaId = r.captchaId;
+      box.innerHTML = String(r.code).split('').map(ch => {
+        const rot = Math.round(Math.random() * 26 - 13);
+        const lift = Math.round(Math.random() * 6 - 3);
+        const hue  = 32 + Math.round(Math.random() * 20 - 10);
+        return `<span style="display:inline-block;transform:rotate(${rot}deg) translateY(${lift}px);color:hsl(${hue},95%,62%)">${ch}</span>`;
+      }).join('');
+    }
+  } catch (_) {}
 };
 window.showLogin = () => {
   document.getElementById('registerForm').style.display = 'none';
@@ -234,12 +256,24 @@ window.doRegister = async () => {
   const pass  = document.getElementById('regPass').value;
   const pass2 = document.getElementById('regPass2').value;
   const ref   = document.getElementById('regRef').value.trim().toUpperCase();
+  const captchaAnswer = document.getElementById('regCaptchaInput').value.trim();
   const name  = '0' + phone;   // no name field — use the phone as the display name
   if (phone.length !== 9) { showToast('Enter a valid 9-digit number (no leading 0)', 'error'); return; }
   if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
   if (pass !== pass2) { showToast('Passwords do not match', 'error'); return; }
+  if (!captchaAnswer) { showToast('Enter the verification code shown above', 'error'); return; }
   showLoading(true);
   try {
+    const capR = await fetch(SERVER + '/auth/captcha/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ captchaId: _regCaptchaId, answer: captchaAnswer })
+    }).then(x => x.json());
+    if (capR.status !== 'success') {
+      showLoading(false);
+      showToast(capR.message || 'Incorrect verification code', 'error');
+      loadRegCaptcha();
+      return;
+    }
     let cred;
     try {
       cred = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
@@ -411,28 +445,32 @@ async function loadSlideshow() {
     const em = s.supportEmail    || 'support@voltrapower.com';
     const hr = s.supportHours    || 'Monday – Saturday, 8:00 AM – 8:00 PM (EAT)';
     if (tg || wa || em) {
-      const tgSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>`;
-      const waSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>`;
-      const mailSvg  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>`;
-      const clockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
-      const card = (cls, icon, h, s, href) => {
+      const tgSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>`;
+      const waSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>`;
+      const mailSvg  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>`;
+      const clockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+      const tile = (cls, icon, h, s, href) => {
         const tag = href ? 'a' : 'div';
         const attr = href ? ` href="${href}" target="_blank" rel="noopener"` : '';
-        return `<${tag} class="contact-card"${attr}>
-          <span class="cc-ico ${cls}">${icon}</span>
-          <span class="cc-txt"><span class="cc-h">${h}</span><span class="cc-s">${s}</span></span>
-          ${href ? '<span class="cc-go">&rsaquo;</span>' : ''}
+        return `<${tag} class="sup-tile"${attr}>
+          <span class="sup-tile-ico ${cls}">${icon}</span>
+          <span class="sup-tile-h">${h}</span>
+          <span class="sup-tile-s">${s}</span>
         </${tag}>`;
       };
       CONTENT.support.body = `
-        <div class="contact-hero">
-          <span class="contact-hero-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
-          <div><div class="ch-title">We're here to help</div><div class="ch-sub">Reach our team any time</div></div>
+        <div class="sup-hero">
+          <span class="sup-hero-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
+          <div class="sup-title">Talk to Voltra</div>
+          <div class="sup-sub">Pick a channel below — we usually reply within a few hours</div>
         </div>
-        ${tg ? card('tg', tgSvg, 'Telegram', 'Join our support channel', tg) : ''}
-        ${wa ? card('wa', waSvg, 'WhatsApp', 'Chat with an agent now', 'https://wa.me/' + wa.replace(/\D/g,'')) : ''}
-        ${card('em', mailSvg, 'Email', em, 'mailto:' + em)}
-        ${card('hr', clockSvg, 'Support hours', hr, '')}`;
+        <div class="sup-grid">
+          ${tg ? tile('tg', tgSvg, 'Telegram', 'Support channel', tg) : ''}
+          ${wa ? tile('wa', waSvg, 'WhatsApp', 'Chat an agent', 'https://wa.me/' + wa.replace(/\D/g,'')) : ''}
+          ${tile('em', mailSvg, 'Email', em, 'mailto:' + em)}
+          ${tile('hr', clockSvg, 'Hours', hr, '')}
+        </div>
+        <div class="sup-note">For withdrawal issues, Telegram gets you the fastest response.</div>`;
     }
   } catch (_) { setupSlideshow([]); }
 }
@@ -1825,13 +1863,24 @@ const CONTENT = {
   },
   support: {
     title: 'Customer Service',
-    body: `<h3>Contact Us</h3>
-      <p>Our support team is available to help you with any issues or questions about your Voltra account.</p>
-      <p><strong>Telegram:</strong> Contact via our Telegram support channel</p>
-      <p><strong>WhatsApp:</strong> Send us a message on WhatsApp</p>
-      <p><strong>Email:</strong> support@voltrapower.com</p>
-      <p style="margin-top:16px">Support hours: Monday – Saturday, 8:00 AM – 8:00 PM (EAT)</p>
-      <p>For urgent withdrawal issues, please contact us directly via Telegram for fastest response.</p>`
+    body: `<div class="sup-hero">
+        <span class="sup-hero-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
+        <div class="sup-title">Talk to Voltra</div>
+        <div class="sup-sub">Pick a channel below — we usually reply within a few hours</div>
+      </div>
+      <div class="sup-grid">
+        <a class="sup-tile" href="mailto:support@voltrapower.com">
+          <span class="sup-tile-ico em"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></span>
+          <span class="sup-tile-h">Email</span>
+          <span class="sup-tile-s">support@voltrapower.com</span>
+        </a>
+        <div class="sup-tile">
+          <span class="sup-tile-ico hr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span class="sup-tile-h">Hours</span>
+          <span class="sup-tile-s">Mon–Sat, 8AM–8PM (EAT)</span>
+        </div>
+      </div>
+      <div class="sup-note">For withdrawal issues, Telegram gets you the fastest response.</div>`
   },
   terms: {
     title: 'Terms & Conditions',
