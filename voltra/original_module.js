@@ -1768,7 +1768,38 @@ window.redeemGiftCode = async () => {
 window.openPrizeDrawPage = () => {
   openPage('prizeDrawPage');
   loadPrizeDraws();
+  loadPrizeDrawHistory();
 };
+async function loadPrizeDrawHistory() {
+  const wrap = document.getElementById('prizeDrawHistory');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text2);font-size:12.5px">Loading…</div>';
+  try {
+    const r = await api('/prize-draw/history', { userId: _user.uid });
+    const hist = r.status === 'success' ? r.history : [];
+    if (!hist.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text2);font-size:12.5px">You haven\'t bought any tickets yet.</div>';
+      return;
+    }
+    wrap.innerHTML = hist.map(h => {
+      let tag = 'pending', tagLabel = 'In progress';
+      if (h.status === 'cancelled') { tag = 'cancelled'; tagLabel = 'Refunded'; }
+      else if (h.status === 'completed') {
+        if (h.wonCount > 0) { tag = 'won'; tagLabel = `Won ${ugx(h.wonAmount)}`; }
+        else { tag = 'lost'; tagLabel = 'Not this time'; }
+      }
+      return `<div class="prz-hist-item">
+        <div>
+          <div class="prz-hist-title">${h.title}</div>
+          <div class="prz-hist-sub">${h.myTickets} ticket${h.myTickets > 1 ? 's' : ''} — ${ugx(h.myTickets * h.ticketPrice)} spent</div>
+        </div>
+        <span class="prz-hist-tag ${tag}">${tagLabel}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--red);font-size:12.5px">Failed to load</div>';
+  }
+}
 async function loadPrizeDraws() {
   const wrap = document.getElementById('prizeDrawList');
   if (!wrap) return;
@@ -1809,7 +1840,7 @@ window.buyPrizeDrawTicket = async (drawId, remaining) => {
   try {
     const r = await api('/prize-draw/buy', { userId: _user.uid, drawId, quantity: qty });
     showLoading(false);
-    if (r.status === 'success') { showToast(r.message, 'success'); loadPrizeDraws(); }
+    if (r.status === 'success') { showToast(r.message, 'success'); loadPrizeDraws(); loadPrizeDrawHistory(); }
     else showToast(r.message || 'Could not buy ticket', 'error');
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
@@ -1923,6 +1954,14 @@ const CONTENT = {
         <li>Rewards are credited instantly and can be withdrawn immediately.</li>
         <li>Self-referrals, fake accounts and farmed sign-ups are not allowed.</li>
       </ul>
+      <h3 style="margin-top:16px">Prize Draw</h3>
+      <ul>
+        <li>Buy one or more tickets for a chance to win — every ticket held is a separate, equal chance.</li>
+        <li>More tickets bought means better odds, but never a guaranteed win.</li>
+        <li>Winner(s) are picked automatically and at random the moment all tickets sell out, or when Voltra ends the draw early.</li>
+        <li>Winnings are credited to your wallet instantly — no manual claim needed.</li>
+        <li>Ticket purchases are final. If a draw is cancelled instead of completed, every ticket bought for it is refunded in full.</li>
+      </ul>
       <h3 style="margin-top:16px">Account Rules</h3>
       <ul>
         <li>One account per person only.</li>
@@ -1967,13 +2006,15 @@ const CONTENT = {
       <p>Withdrawals must meet the minimum amount and the multiples rule shown on the withdrawal screen. A service fee of <strong>15%</strong> applies to every payout and is shown clearly before you confirm. Payouts are sent to your nominated Mobile Money number and are normally processed within 24 hours, though processing may take longer during periods of high demand.</p>
       <h3 style="margin-top:16px">6. Referral Rewards</h3>
       <p>You earn a commission when people you invite activate assets — Level 1, Level 2 and Level 3 of your network. Rewards are credited instantly and are calculated on the activation amount. Self-referrals, fake accounts and any manipulation of the referral system are forbidden and will result in forfeiture of rewards.</p>
-      <h3 style="margin-top:16px">7. Risk Disclosure</h3>
+      <h3 style="margin-top:16px">7. Prize Draw</h3>
+      <p>Voltra may run Prize Draws in which you buy one or more tickets from your wallet for a chance to win a fixed prize. Every ticket held is an equal, independent chance — more tickets improve your odds but never guarantee a win. The winner(s) are selected automatically and at random by the server once all tickets for a draw are sold, or when Voltra ends the draw early. Winnings are credited to your wallet instantly. Ticket purchases are final and non-refundable, except that if Voltra cancels a draw instead of completing it, every ticket bought for that draw is refunded in full. Using multiple accounts to unfairly increase your odds in a Prize Draw is prohibited and treated the same as any other multi-account abuse under these Terms.</p>
+      <h3 style="margin-top:16px">8. Risk Disclosure</h3>
       <p>Participation carries risk. Projected returns are targets, not guarantees, and depend on the continued operation of the platform. Only commit funds you can afford to set aside. Voltra is not liable for losses arising from circumstances beyond our reasonable control, including network, carrier or third-party payment failures.</p>
-      <h3 style="margin-top:16px">8. Prohibited Conduct</h3>
-      <p>Fraud, chargeback abuse, multiple or fake accounts, automated bots, exploitation of bugs, or any attempt to manipulate balances, payouts or the referral system will result in immediate suspension and may lead to forfeiture of affected funds and a permanent ban.</p>
-      <h3 style="margin-top:16px">9. Account Suspension</h3>
+      <h3 style="margin-top:16px">9. Prohibited Conduct</h3>
+      <p>Fraud, chargeback abuse, multiple or fake accounts, automated bots, exploitation of bugs, or any attempt to manipulate balances, payouts, the referral system or Prize Draw odds will result in immediate suspension and may lead to forfeiture of affected funds and a permanent ban.</p>
+      <h3 style="margin-top:16px">10. Account Suspension</h3>
       <p>We may suspend or close any account that we reasonably believe is involved in fraud or a breach of these terms. Where funds are linked to fraudulent activity, they may be withheld pending review.</p>
-      <h3 style="margin-top:16px">10. Changes to These Terms</h3>
+      <h3 style="margin-top:16px">11. Changes to These Terms</h3>
       <p>We may update these Terms from time to time. The latest version is always available in the app, and your continued use of Voltra after an update means you accept the revised Terms.</p>`
   },
   privacy: {

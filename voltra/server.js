@@ -1763,6 +1763,39 @@ app.post('/prize-draw/active', async (req, res) => {
   }
 });
 
+// USER — my own history across all draws (active + completed + cancelled)
+app.post('/prize-draw/history', async (req, res) => {
+  const userId = await verifyAuth(req) || req.body.userId;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const entriesSnap = await db.collection('prizeDrawEntries').where('userId', '==', userId).get();
+    const myTickets = {};
+    entriesSnap.docs.forEach(d => {
+      const e = d.data();
+      myTickets[e.drawId] = (myTickets[e.drawId] || 0) + (e.quantity || 0);
+    });
+    const drawIds = Object.keys(myTickets);
+    if (!drawIds.length) return res.json({ status: 'success', history: [] });
+
+    const drawSnaps = await Promise.all(drawIds.map(id => db.collection('prizeDraws').doc(id).get()));
+    const history = drawSnaps.filter(d => d.exists).map(d => {
+      const dd = d.data();
+      const myWins = (dd.winners || []).filter(w => w.userId === userId);
+      return {
+        id: d.id, title: dd.title, status: dd.status,
+        myTickets: myTickets[d.id], ticketPrice: dd.ticketPrice,
+        wonAmount: myWins.reduce((s, w) => s + (w.prizeAmount || 0), 0),
+        wonCount: myWins.length,
+        createdAt: dd.createdAt || null
+      };
+    });
+    history.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', history });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
 // USER — buy tickets
 app.post('/prize-draw/buy', async (req, res) => {
   const userId = await verifyAuth(req) || req.body.userId;
