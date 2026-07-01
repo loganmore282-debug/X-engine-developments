@@ -941,12 +941,6 @@ app.post('/withdraw/request', async (req, res) => {
     const minWit  = sett.minWithdrawal ?? MIN_WITHDRAWAL;
     if (amt < minWit)
       return res.status(400).json({ status: 'error', message: `Minimum withdrawal is ${fmtUGX(minWit)}` });
-    if (amt % 5000 !== 0) {
-      const lo = Math.floor(amt / 5000) * 5000;
-      const hi = lo + 5000;
-      const suggestion = lo >= minWit ? `${fmtUGX(lo)} or ${fmtUGX(hi)}` : `${fmtUGX(hi)}`;
-      return res.status(400).json({ status: 'error', message: `Amount must be a multiple of UGX 5,000. Try ${suggestion}` });
-    }
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });

@@ -1620,9 +1620,7 @@ window.updateWitFee = () => {
   if (!raw || raw <= 0) { row.style.display = 'none'; return; }
   const fee = Math.round(raw * 0.15);
   const net = raw - fee;
-  const hint = raw % 5000 !== 0
-    ? `<div class="wfee-hint">Amount must be a multiple of 5,000 — try ${ugx(Math.ceil(raw/5000)*5000)}</div>`
-    : '';
+  const hint = '';
   row.style.display = 'block';
   row.innerHTML = `
     <div class="wfee-row"><span>Payout amount</span><b>${ugx(raw)}</b></div>
@@ -1637,10 +1635,6 @@ window.submitWithdrawal = async () => {
   const phone  = document.getElementById('witPhone').value.trim().replace(/\D/g,'');
   if (!amount || amount <= 0) { showToast('Enter withdrawal amount', 'error'); return; }
   if (amount < 20000) { showToast('Minimum withdrawal is UGX 20,000', 'error'); return; }
-  if (amount % 5000 !== 0) {
-    const snap = Math.ceil(amount / 5000) * 5000;
-    showToast(`Amount must be a multiple of 5,000. Try ${ugx(snap)}`, 'error'); return;
-  }
   if (amount > (_userData.walletBalance || 0)) { showToast('Insufficient balance', 'error'); return; }
   if (!phone || phone.length < 9) { showToast('Enter a valid phone number', 'error'); return; }
   closePage('withdrawPage');
@@ -1803,7 +1797,7 @@ const CONTENT = {
       </ul>
       <h3 style="margin-top:16px">Withdrawal Rules</h3>
       <ul>
-        <li>Minimum withdrawal is UGX 20,000, in multiples of 5,000 only.</li>
+        <li>Minimum withdrawal is UGX 20,000.</li>
         <li>A 15% service fee applies to every payout and is shown before you confirm.</li>
         <li>Payouts are sent to your chosen Mobile Money number, normally within 24 hours.</li>
         <li>You can only withdraw funds that have cleared the holding period after a recharge.</li>
