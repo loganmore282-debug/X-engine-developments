@@ -408,7 +408,7 @@ async function loadSlideshow() {
     // Update customer service content from admin settings
     const tg = s.supportTelegram || '';
     const wa = s.supportWhatsapp || '';
-    const em = s.supportEmail    || 'support@voltrainvest.com';
+    const em = s.supportEmail    || 'support@voltrapower.com';
     const hr = s.supportHours    || 'Monday – Saturday, 8:00 AM – 8:00 PM (EAT)';
     if (tg || wa || em) {
       const tgSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>`;
@@ -1829,7 +1829,7 @@ const CONTENT = {
       <p>Our support team is available to help you with any issues or questions about your Voltra account.</p>
       <p><strong>Telegram:</strong> Contact via our Telegram support channel</p>
       <p><strong>WhatsApp:</strong> Send us a message on WhatsApp</p>
-      <p><strong>Email:</strong> support@voltrainvest.com</p>
+      <p><strong>Email:</strong> support@voltrapower.com</p>
       <p style="margin-top:16px">Support hours: Monday – Saturday, 8:00 AM – 8:00 PM (EAT)</p>
       <p>For urgent withdrawal issues, please contact us directly via Telegram for fastest response.</p>`
   },
