@@ -817,6 +817,17 @@ tr:hover td{background:rgba(255,255,255,.02)}
   </div>
 </div>
 
+<!-- ── TRANSACTION DETAIL MODAL ── -->
+<div class="overlay" id="txOverlay" onclick="if(event.target===this)closeModal('txOverlay')">
+  <div class="modal">
+    <div class="modal-title">
+      <span>Transaction Detail</span>
+      <button class="modal-close" onclick="closeModal('txOverlay')">✕</button>
+    </div>
+    <div id="txModalContent"></div>
+  </div>
+</div>
+
 <!-- ── REJECT MODAL ── -->
 <div class="overlay" id="rejectOverlay" onclick="if(event.target===this)closeModal('rejectOverlay')">
   <div class="modal">
@@ -1122,6 +1133,55 @@ window.showTab = (tab, btn) => {
   if (loaders[tab]) loaders[tab]();
 };
 
+// ── RECENT TRANSACTION DETAIL ──
+let _recentTxs = [];
+const TX_TYPE_LABELS = {
+  deposit: 'Recharge', admin_credit: 'Voltra Credit', withdrawal: 'Payout',
+  refund: 'Refund', investment: 'Asset Activation', investment_return: 'Asset Payout',
+  commission: 'Referral Reward', checkin: 'Daily Bonus', cashback: 'Cashback',
+  gift_code: 'Gift Code', prize_draw_ticket: 'Prize Draw Ticket',
+  prize_draw_win: 'Prize Draw Win', prize_draw_refund: 'Prize Draw Refund'
+};
+function txTypeLabel(type) { return TX_TYPE_LABELS[type] || (type || '—'); }
+
+window.showTxDetail = async (txId) => {
+  const t = _recentTxs.find(x => x.id === txId);
+  if (!t) return;
+  const amt = Number(t.amount || 0);
+  const amtStr = (amt >= 0 ? '+' : '-') + ugx(Math.abs(amt));
+  const amtColor = amt >= 0 ? 'var(--green)' : 'var(--red)';
+  const row = (label, value) => value == null || value === '' ? '' :
+    `<div style="display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--border2)">
+       <span class="text-muted" style="font-size:13px">${label}</span>
+       <span style="font-size:13px;font-weight:600;text-align:right;word-break:break-word">${value}</span>
+     </div>`;
+  const content = document.getElementById('txModalContent');
+  content.innerHTML = `
+    ${row('Type', txTypeLabel(t.type))}
+    ${row('Amount', `<span style="color:${amtColor};font-weight:800">${amtStr}</span>`)}
+    ${t.fee ? row('Fee', ugx(t.fee)) : ''}
+    ${t.netAmount ? row('Net amount', ugx(t.netAmount)) : ''}
+    ${row('Status', statusBadge(t.status || 'unknown'))}
+    ${row('Description', t.description || '—')}
+    ${t.phone ? row('Phone', t.phone) : ''}
+    ${t.code ? row('Code', t.code) : ''}
+    ${row('User ID', `<span style="font-family:monospace;font-size:11px">${t.userId || '—'}</span>`)}
+    <div id="txUserInfo"></div>
+    ${row('Transaction ID', `<span style="font-family:monospace;font-size:11px">${t.id}</span>`)}
+    ${row('Date', fmtDate(t.createdAt))}`;
+  openModal('txOverlay');
+  // Enrich with who the user actually is (name + phone)
+  if (t.userId) {
+    try {
+      const r = await api('/admin/user/detail', { adminKey: _adminKey, userId: t.userId });
+      if (r.status === 'success' && r.user) {
+        document.getElementById('txUserInfo').innerHTML =
+          row('User name', r.user.name || '—') + row('User phone', r.user.phone || '—');
+      }
+    } catch(e) {}
+  }
+};
+
 // ── WITHDRAWAL COUNT BADGE ──
 async function loadPayoutsCount() {
   try {
@@ -1160,14 +1220,15 @@ async function loadDashboard() {
   try {
     const r = await api('/admin/transactions/list', { adminKey: _adminKey, limit: 15 });
     const txs = r.status === 'success' ? r.transactions : [];
+    _recentTxs = txs;
     const rows = txs.map(t => {
       const amt = Number(t.amount||0);
       const amtStr = (amt >= 0 ? '+' : '-') + ugx(Math.abs(amt));
       const amtColor = amt >= 0 ? 'color:var(--green)' : 'color:var(--red)';
-      return `<tr>
+      return `<tr style="cursor:pointer" onclick="showTxDetail('${t.id}')">
         <td style="font-size:10px;color:var(--text2);font-family:monospace">${(t.id||'').slice(0,10)}…</td>
         <td>${t.userId ? t.userId.slice(0,8)+'…' : '—'}</td>
-        <td><span class="badge-status bs-pending" style="text-transform:none">${t.type||'—'}</span></td>
+        <td><span class="badge-status bs-pending" style="text-transform:none">${txTypeLabel(t.type)}</span></td>
         <td style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.description||''}">${t.description||'—'}</td>
         <td style="${amtColor};font-weight:600">${amtStr}</td>
         <td>${statusBadge(t.status||'unknown')}</td>

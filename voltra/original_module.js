@@ -520,40 +520,22 @@ function loadOnlineCounter() {
 }
 
 // ── TICKER ──
-function loadTicker() {
+// Global activity feed — pulled from the server so every device shows the same
+// rolling activity (server regenerates it every 30s; see /public/activity-feed).
+async function loadTicker() {
   const el = document.getElementById('homeTicker');
   if (!el) return;   // ticker removed from home — no-op
-  const round = (n, r) => Math.round(n / r) * r;
-  const randDep = () => round(30000 + Math.random() * 170000, 5000);   // 30k–200k
-  const randWit = () => round(15000 + Math.random() * 985000, 5000);   // 15k–1M
-  const randComm = () => round(5000 + Math.random() * 95000, 1000);    // 5k–100k
-  const randRet  = () => round(20000 + Math.random() * 480000, 5000);  // 20k–500k
-
-  // masked phone like 256****764
-  const ph = () => '256' + (7 + Math.floor(Math.random() * 3)) + '****' + String(100 + Math.floor(Math.random() * 900));
-  // Live-style activity: who did what, how much
-  const pool = [
-    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
-    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
-    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
-    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
-    { who:ph(), act:'got a team bonus', amt:`UGX ${randComm().toLocaleString()}` },
-    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
-    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
-    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
-    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
-    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
-    { who:ph(), act:'got a team bonus', amt:`UGX ${randComm().toLocaleString()}` },
-    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
-  ];
-
-  const text = pool.map(e =>
-    `<span class="tk-item"><span class="tk-dot"></span><b>${e.who}</b> ${e.act} <span class="tk-amt">${e.amt}</span></span>`
-  ).join('');
-  el.innerHTML = text + text;
-
-  // Refresh with new random values every 40 seconds
-  setTimeout(loadTicker, 40000);
+  try {
+    const r = await fetch(SERVER + '/public/activity-feed').then(x => x.json());
+    if (r.status === 'success' && Array.isArray(r.feed) && r.feed.length) {
+      const text = r.feed.map(e =>
+        `<span class="tk-item"><span class="tk-dot"></span><b>${e.who}</b> ${e.act} <span class="tk-amt">${e.amt}</span></span>`
+      ).join('');
+      el.innerHTML = text + text;
+    }
+  } catch (_) {}
+  clearTimeout(loadTicker._t);
+  loadTicker._t = setTimeout(loadTicker, 30000);
 }
 
 // ── AUTH STATE ──

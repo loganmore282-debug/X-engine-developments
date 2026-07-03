@@ -165,7 +165,7 @@ async function isMaintenanceOn() {
 // NOTE: '/settings/public' MUST bypass maintenance — the app reads it to DETECT
 // maintenance and show the lock screen. If it were blocked, the app would just
 // freeze (503 everywhere) instead of showing the maintenance screen.
-const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public', '/public/online-count'];
+const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public', '/public'];
 app.use(async (req, res, next) => {
   const p = req.path;
   if (BYPASS.some(b => p === b || p.startsWith(b + '/'))) return next();
@@ -515,7 +515,10 @@ app.get('/', (req, res) => res.json({ status: '◈ Business Server', time: new D
 // it sees the same figure at the same time (cosmetic — not a real session count).
 function _onlineRange() {
   const h = new Date(Date.now() + 3 * 3600000).getUTCHours(); // Uganda time (EAT, UTC+3)
-  return (h >= 6 && h < 19) ? [200, 560] : [35, 300];
+  if (h >= 0 && h < 6)  return [200, 405];   // midnight → early morning (climbing)
+  if (h >= 6 && h < 15) return [405, 830];   // morning → afternoon
+  if (h >= 15 && h < 20) return [830, 1350]; // evening peak
+  return [80, 200];                          // late evening → midnight (quiet)
 }
 let _onlineCount = null;
 function driftOnlineCount() {
@@ -523,13 +526,39 @@ function driftOnlineCount() {
   if (_onlineCount === null || _onlineCount < lo || _onlineCount > hi) {
     _onlineCount = lo + Math.floor(Math.random() * (hi - lo + 1));
   } else {
-    const step = Math.floor(Math.random() * 21) - 10; // drift -10..+10
+    const step = Math.floor(Math.random() * 25) - 12; // drift -12..+12
     _onlineCount = Math.max(lo, Math.min(hi, _onlineCount + step));
   }
 }
 driftOnlineCount();
 setInterval(driftOnlineCount, 3000);
 app.get('/public/online-count', (_req, res) => res.json({ status: 'success', count: _onlineCount }));
+
+// ── LIVE ACTIVITY FEED (global — server generates one feed so every device
+// shows the same rolling activity; refreshed every 30s). Cosmetic only.
+function _genActivityFeed() {
+  const round = (n, r) => Math.round(n / r) * r;
+  const randDep  = () => round(30000 + Math.random() * 170000, 5000);
+  const randWit  = () => round(15000 + Math.random() * 985000, 5000);
+  const randComm = () => round(5000 + Math.random() * 95000, 1000);
+  const randRet  = () => round(20000 + Math.random() * 480000, 5000);
+  const ph = () => '256' + (7 + Math.floor(Math.random() * 3)) + '****' + String(100 + Math.floor(Math.random() * 900));
+  const acts = [
+    () => ({ act: 'recharged',        amt: randDep() }),
+    () => ({ act: 'cashed out',       amt: randWit() }),
+    () => ({ act: 'earned',           amt: randRet() }),
+    () => ({ act: 'got a team bonus', amt: randComm() }),
+  ];
+  const feed = [];
+  for (let i = 0; i < 14; i++) {
+    const a = acts[Math.floor(Math.random() * acts.length)]();
+    feed.push({ who: ph(), act: a.act, amt: 'UGX ' + a.amt.toLocaleString('en-US') });
+  }
+  return feed;
+}
+let _activityFeed = _genActivityFeed();
+setInterval(() => { _activityFeed = _genActivityFeed(); }, 30000);
+app.get('/public/activity-feed', (_req, res) => res.json({ status: 'success', feed: _activityFeed }));
 
 // ── GIFT CODE GENERATION HELPER ──
 // 4 unambiguous characters — short and distinct from the old Nexus format.
@@ -1507,6 +1536,7 @@ app.post('/admin/stats', async (req, res) => {
         totalWithdrawn,
         totalInvested,
         pendingWithdrawals: withdrawalsSnap.size,
+        pendingPayouts:     withdrawalsSnap.size, // alias — admin badge reads this key
         activeInvestments:  investmentsSnap.size
       }
     });
