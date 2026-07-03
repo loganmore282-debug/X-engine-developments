@@ -60,6 +60,13 @@ const RAILWAY_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 
+// MarzSMS — used for password-reset OTP delivery. Credentials live ONLY in Railway env.
+const MARZSMS_BASE   = 'https://sms.wearemarz.com/api/v1';
+const MARZSMS_KEY    = process.env.MARZSMS_KEY    || ''; // API key (Basic-auth username)
+const MARZSMS_SECRET = process.env.MARZSMS_SECRET || ''; // API secret (Basic-auth password)
+const MARZSMS_BASIC  = (MARZSMS_KEY && MARZSMS_SECRET)
+  ? Buffer.from(MARZSMS_KEY + ':' + MARZSMS_SECRET).toString('base64') : '';
+
 const MIN_WITHDRAWAL   = 20000;
 const CHECKIN_BONUS    = 500;
 const WELCOME_BONUS    = 5500;
@@ -126,6 +133,21 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
     body: JSON.stringify(payload)
   });
   return resp.json();
+}
+// Send an SMS via MarzSMS (Basic auth). Returns { ok, message }.
+async function marzSendSMS(recipient, message) {
+  if (!MARZSMS_BASIC) return { ok: false, message: 'SMS not configured' };
+  try {
+    const resp = await fetch(`${MARZSMS_BASE}/sms/send`, {
+      method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+      headers: { 'Authorization': `Basic ${MARZSMS_BASIC}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient, message })
+    });
+    const d = await resp.json().catch(() => ({}));
+    return { ok: !!d.success, message: d.message || '' };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
 }
 // Get collection status — uses /collect-money/{uuid} per MarzPay docs
 async function marzGetCollectStatus(uuid) {
@@ -808,6 +830,86 @@ app.post('/auth/captcha/verify', (req, res) => {
     return res.status(400).json({ status: 'error', message: 'Incorrect code — please try again' });
   _regCaptchas.delete(captchaId); // single-use
   return res.json({ status: 'success' });
+});
+
+// ═══════════════════════════════════════════
+// PASSWORD RESET — SMS OTP (self-service, no admin needed)
+// ═══════════════════════════════════════════
+// User enters the phone they registered with → server SMSes a 6-digit code via
+// MarzSMS → user enters the code + a new password → server resets the Firebase
+// password. Codes are single-use, expire in 10 min, capped attempts + rate limit.
+const _resetOtps    = new Map(); // phone9 → { code, expiresAt, attempts }
+const _resetRate    = new Map(); // phone9 → last request timestamp
+const RESET_TTL_MS  = 10 * 60 * 1000;
+
+// Normalise any Ugandan input to the canonical 9-digit form used at registration.
+function phone9(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('256') && d.length === 12) d = d.slice(3);
+  d = d.replace(/^0+/, '');
+  return d;
+}
+
+app.post('/auth/reset/request', async (req, res) => {
+  const p9 = phone9(req.body.phone);
+  if (p9.length !== 9) return res.status(400).json({ status: 'error', message: 'Enter a valid 9-digit number' });
+  // Rate limit: one code per 60s per number
+  const last = _resetRate.get(p9) || 0;
+  if (Date.now() - last < 60000)
+    return res.status(429).json({ status: 'error', message: 'Please wait a minute before requesting another code' });
+  try {
+    // Only send to a number that actually has an account (avoids SMS abuse/cost)
+    let userExists = false;
+    try { await admin.auth().getUserByEmail(phoneToEmail(p9)); userExists = true; }
+    catch (_) { userExists = false; }
+    if (!userExists)
+      return res.status(404).json({ status: 'error', message: 'No account is registered with that number' });
+    if (!MARZSMS_BASIC)
+      return res.status(503).json({ status: 'error', message: 'Password reset by SMS is not available right now' });
+
+    const code = String(crypto.randomInt(100000, 1000000)); // 6 digits
+    _resetOtps.set(p9, { code, expiresAt: Date.now() + RESET_TTL_MS, attempts: 0 });
+    _resetRate.set(p9, Date.now());
+    const sms = await marzSendSMS('+256' + p9, `Your Voltra password reset code is ${code}. It expires in 10 minutes. Do not share it with anyone.`);
+    if (!sms.ok) {
+      _resetOtps.delete(p9);
+      return res.status(502).json({ status: 'error', message: 'Could not send the code. Try again shortly.' });
+    }
+    return res.json({ status: 'success', message: 'A reset code has been sent to your number' });
+  } catch (e) {
+    console.error('Reset request error:', e.message);
+    return res.status(500).json({ status: 'error', message: 'Could not start password reset' });
+  }
+});
+
+app.post('/auth/reset/confirm', async (req, res) => {
+  const p9  = phone9(req.body.phone);
+  const otp = String(req.body.otp || '').trim();
+  const newPassword = String(req.body.newPassword || '');
+  if (p9.length !== 9) return res.status(400).json({ status: 'error', message: 'Enter a valid 9-digit number' });
+  if (newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters' });
+  const rec = _resetOtps.get(p9);
+  if (!rec || rec.expiresAt < Date.now()) {
+    _resetOtps.delete(p9);
+    return res.status(400).json({ status: 'error', message: 'Code expired — request a new one' });
+  }
+  rec.attempts++;
+  if (rec.attempts > 5) {
+    _resetOtps.delete(p9);
+    return res.status(400).json({ status: 'error', message: 'Too many attempts — request a new code' });
+  }
+  if (otp !== rec.code)
+    return res.status(400).json({ status: 'error', message: 'Incorrect code' });
+  try {
+    const fbUser = await admin.auth().getUserByEmail(phoneToEmail(p9));
+    await admin.auth().updateUser(fbUser.uid, { password: newPassword });
+    _resetOtps.delete(p9); // single-use
+    console.log(`🔑 Password reset via OTP for ${p9}`);
+    return res.json({ status: 'success', message: 'Password reset. You can now log in with your new password.' });
+  } catch (e) {
+    console.error('Reset confirm error:', e.message);
+    return res.status(500).json({ status: 'error', message: 'Could not reset password' });
+  }
 });
 
 // ═══════════════════════════════════════════
@@ -1544,6 +1646,71 @@ app.post('/admin/stats', async (req, res) => {
     });
   } catch (e) {
     console.error('Admin stats error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// ADMIN — AGENT BONUS CLAWBACK
+// ═══════════════════════════════════════════
+// Reverses every agent_bonus (weekly stipend) ever paid. Default is a DRY RUN
+// that only reports the impact; pass execute:true to actually pull the money.
+// Balances may go NEGATIVE (money already spent/withdrawn is still clawed back,
+// per the owner's instruction). Each user is clawed at most once (agentClawedBack flag).
+app.post('/admin/agent-clawback', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const execute = req.body.execute === true;
+  try {
+    const txSnap = await db.collection('transactions').where('type', '==', 'agent_bonus').get();
+    const perUser = new Map(); // userId → total agent_bonus credited
+    txSnap.forEach(d => {
+      const t = d.data();
+      const amt = Number(t.amount || 0);
+      if (amt > 0) perUser.set(t.userId, (perUser.get(t.userId) || 0) + amt);
+    });
+
+    const affected = [];
+    let totalAmount = 0, wouldGoNegative = 0, executed = 0, skipped = 0;
+    for (const [userId, clawback] of perUser) {
+      const uRef  = db.collection('users').doc(userId);
+      const uSnap = await uRef.get();
+      if (!uSnap.exists) { skipped++; continue; }
+      const u = uSnap.data();
+      const balanceBefore = u.walletBalance || 0;
+      const balanceAfter  = balanceBefore - clawback;
+      const alreadyDone   = u.agentClawedBack === true;
+      affected.push({ userId, name: u.name || '', phone: u.phone || '',
+        clawback, balanceBefore, balanceAfter, alreadyDone });
+      if (!alreadyDone) { totalAmount += clawback; if (balanceAfter < 0) wouldGoNegative++; }
+
+      if (execute && !alreadyDone) {
+        const { date, time } = nowStr();
+        await db.runTransaction(async t => {
+          const fresh = await t.get(uRef);
+          if (!fresh.exists || fresh.data().agentClawedBack === true) return;
+          t.update(uRef, {
+            walletBalance:   FieldValue.increment(-clawback),
+            agentClawedBack: true,
+            isAgent:         false,
+            agentTier:       null
+          });
+          t.set(db.collection('transactions').doc(), {
+            userId, type: 'agent_reversal',
+            description: 'Balance adjustment',
+            amount: -clawback, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+          });
+        });
+        executed++;
+      }
+    }
+    affected.sort((a, b) => b.clawback - a.clawback);
+    return res.json({
+      status: 'success', executed: execute,
+      summary: { totalUsers: perUser.size, totalAmount, wouldGoNegative, appliedNow: executed, skipped },
+      affected
+    });
+  } catch (e) {
+    console.error('Agent clawback error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
   }
 });

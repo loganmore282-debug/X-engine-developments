@@ -183,8 +183,69 @@ window.loadRegCaptcha = async () => {
 };
 window.showLogin = () => {
   document.getElementById('registerForm').style.display = 'none';
+  const rf = document.getElementById('resetForm'); if (rf) rf.style.display = 'none';
   document.getElementById('loginForm').style.display = 'flex';
   window.scrollTo(0, 0);
+};
+
+// ── PASSWORD RESET (SMS OTP) ──
+window.showReset = () => {
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('resetForm').style.display = 'flex';
+  // reset the flow back to step 1
+  document.getElementById('resetStep2').style.display = 'none';
+  document.getElementById('resetSendBtn').style.display = 'block';
+  document.getElementById('resetConfirmBtn').style.display = 'none';
+  document.getElementById('resetPhone').value = '';
+  document.getElementById('resetOtp').value = '';
+  document.getElementById('resetNewPass').value = '';
+  document.getElementById('resetPhone').disabled = false;
+  window.scrollTo(0, 0);
+};
+window.requestResetCode = async () => {
+  const phone = document.getElementById('resetPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
+  if (phone.length !== 9) { showToast('Enter a valid 9-digit number', 'error'); return; }
+  showLoading(true);
+  try {
+    const r = await fetch(SERVER + '/auth/reset/request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone })
+    }).then(x => x.json());
+    showLoading(false);
+    if (r.status === 'success') {
+      showToast('Code sent — check your SMS', 'success');
+      document.getElementById('resetStep2').style.display = 'flex';
+      document.getElementById('resetSendBtn').style.display = 'none';
+      document.getElementById('resetConfirmBtn').style.display = 'block';
+      document.getElementById('resetPhone').disabled = true;
+      document.getElementById('resetHint').textContent = 'Enter the 6-digit code we sent and choose a new password.';
+    } else {
+      showToast(r.message || 'Could not send code', 'error');
+    }
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+window.confirmResetCode = async () => {
+  const phone = document.getElementById('resetPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
+  const otp   = document.getElementById('resetOtp').value.trim();
+  const newPassword = document.getElementById('resetNewPass').value;
+  if (otp.length !== 6) { showToast('Enter the 6-digit code', 'error'); return; }
+  if (!newPassword || newPassword.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+  showLoading(true);
+  try {
+    const r = await fetch(SERVER + '/auth/reset/confirm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, otp, newPassword })
+    }).then(x => x.json());
+    showLoading(false);
+    if (r.status === 'success') {
+      showToast('Password reset — please log in', 'success');
+      document.getElementById('loginPhone').value = phone;
+      showLogin();
+    } else {
+      showToast(r.message || 'Could not reset password', 'error');
+    }
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
 window.togglePass = (id, btn) => {
   const inp = document.getElementById(id);
@@ -1965,7 +2026,7 @@ window.downloadStatement = async () => {
     doc.text('DATE / TIME', 14, y); doc.text('TYPE', 70, y); doc.text('DESCRIPTION', 100, y); doc.text('AMOUNT', 196, y, {align:'right'});
     y += 2; doc.setDrawColor(200,200,200); doc.line(14, y, 196, y); y += 6;
     doc.setFont('helvetica','normal');
-    const TYPEMAP = { deposit:'Recharge', admin_credit:'Voltra Credit', checkin:'Daily Bonus', cashback:'Asset Payout', commission:'Referral Reward', gift_code:'Gift Reward', investment:'Activation', investment_return:'Asset Payout', withdrawal:'Payout', refund:'Refund', reversal:'Reversal', agent_bonus:'Agent Bonus', agent_promotion:'Promotion' };
+    const TYPEMAP = { deposit:'Recharge', admin_credit:'Voltra Credit', checkin:'Daily Bonus', cashback:'Asset Payout', commission:'Referral Reward', gift_code:'Gift Reward', investment:'Activation', investment_return:'Asset Payout', withdrawal:'Payout', refund:'Refund', reversal:'Reversal', prize_draw_ticket:'Prize Draw Ticket', prize_draw_win:'Prize Draw Win', prize_draw_refund:'Prize Draw Refund', agent_reversal:'Adjustment' };
     let totalIn = 0, totalOut = 0;
     if (!txs.length) doc.text('No transactions yet.', 14, y);
     txs.forEach(t => {

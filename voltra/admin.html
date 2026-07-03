@@ -572,6 +572,15 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
     <!-- ── SETTINGS ── -->
     <div class="panel" id="settingsPanel">
+      <div class="card" style="border:1px solid rgba(239,68,68,0.35)">
+        <div class="card-title">↩️ Reverse Agent Stipends</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px">One-time cleanup: pulls back every <strong>agent_bonus</strong> ever paid (a leftover Nexus feature). <strong style="color:#ef4444">Balances can go negative</strong> — money already spent or withdrawn is still clawed back. Always preview first.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="agentClawback(false)">Preview impact</button>
+          <button class="btn btn-danger" onclick="agentClawback(true)">Execute clawback</button>
+        </div>
+        <div id="clawbackResult" style="font-size:12px;margin-top:12px"></div>
+      </div>
       <div class="card">
         <div class="card-title">⚙️ Platform Settings</div>
         <div class="toggle-row">
@@ -1022,19 +1031,8 @@ function openModal(id)  { document.getElementById(id).classList.add('show'); }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 window.closeModal = closeModal;
 
-const ADMIN_TIER_CFG = {
-  junior_agent:    { label: 'Junior Agent',    stars: '🥉', color: '#cd7f32', bg: 'rgba(205,127,50,0.12)',  border: 'rgba(205,127,50,0.3)'  },
-  agent:           { label: 'Agent',           stars: '🥈', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)'  },
-  super_agent:     { label: 'Super Agent',     stars: '🥇', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.35)' },
-  regional_agent:  { label: 'Regional Agent',  stars: '💎', color: '#a78bfa', bg: 'rgba(139,92,246,0.15)', border: 'rgba(139,92,246,0.3)'  },
-  national_agent:  { label: 'National Agent',  stars: '👑', color: '#facc15', bg: 'rgba(250,204,21,0.12)', border: 'rgba(250,204,21,0.3)'  },
-  executive_agent: { label: 'Executive Agent', stars: '🚀', color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.3)'  },
-};
-function agentTierBadge(u) {
-  if (!u.isAgent && !u.agentTier) return '';
-  const cfg = ADMIN_TIER_CFG[u.agentTier || 'agent'] || ADMIN_TIER_CFG.agent;
-  return `<span style="display:inline-flex;align-items:center;background:${cfg.bg};border:1px solid ${cfg.border};color:${cfg.color};font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:6px;white-space:nowrap">${cfg.stars} ${cfg.label}</span>`;
-}
+// Agent programme removed — badge is a no-op so no tier markers render anywhere.
+function agentTierBadge(u) { return ''; }
 
 function statusBadge(s) {
   if (s === 'exhausted') return `<span class="badge badge-danger">Exhausted</span>`;
@@ -1140,7 +1138,8 @@ const TX_TYPE_LABELS = {
   refund: 'Refund', investment: 'Asset Activation', investment_return: 'Asset Payout',
   commission: 'Referral Reward', checkin: 'Daily Bonus', cashback: 'Cashback',
   gift_code: 'Gift Code', prize_draw_ticket: 'Prize Draw Ticket',
-  prize_draw_win: 'Prize Draw Win', prize_draw_refund: 'Prize Draw Refund'
+  prize_draw_win: 'Prize Draw Win', prize_draw_refund: 'Prize Draw Refund',
+  agent_bonus: 'Agent Bonus (removed)', agent_reversal: 'Agent Stipend Reversed'
 };
 function txTypeLabel(type) { return TX_TYPE_LABELS[type] || (type || '—'); }
 
@@ -1180,6 +1179,33 @@ window.showTxDetail = async (txId) => {
       }
     } catch(e) {}
   }
+};
+
+// ── AGENT STIPEND CLAWBACK ──
+window.agentClawback = async (execute) => {
+  const box = document.getElementById('clawbackResult');
+  if (execute && !confirm('EXECUTE clawback? This pulls back every agent stipend and CAN push balances negative. This cannot be auto-undone.')) return;
+  box.style.color = 'var(--text2)';
+  box.textContent = execute ? 'Executing…' : 'Calculating…';
+  try {
+    const r = await api('/admin/agent-clawback', { adminKey: _adminKey, execute: !!execute });
+    if (r.status !== 'success') { box.style.color = '#ef4444'; box.textContent = r.message || 'Failed'; return; }
+    const s = r.summary;
+    const head = execute
+      ? `<div style="color:#22c55e;font-weight:700;margin-bottom:8px">✓ Reversed ${s.appliedNow} user(s). Total pulled back: ${ugx(s.totalAmount)}.</div>`
+      : `<div style="color:#fbbf24;font-weight:700;margin-bottom:8px">Preview — nothing changed yet.</div>`;
+    const rows = (r.affected || []).slice(0, 100).map(a =>
+      `<tr>
+        <td style="font-size:11px">${a.phone || a.name || a.userId.slice(0,8)}</td>
+        <td style="text-align:right">${ugx(a.clawback)}</td>
+        <td style="text-align:right;color:${a.balanceAfter < 0 ? '#ef4444' : 'var(--text2)'}">${ugx(a.balanceAfter)}</td>
+        <td style="font-size:10px;color:var(--text2)">${a.alreadyDone ? 'done' : ''}</td>
+      </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text2);padding:12px">No agent stipends found</td></tr>';
+    box.style.color = 'var(--text)';
+    box.innerHTML = head +
+      `<div style="color:var(--text2);margin-bottom:8px">${s.totalUsers} user(s) affected · ${s.wouldGoNegative} would go negative</div>` +
+      `<div class="table-wrap"><table><thead><tr><th>User</th><th style="text-align:right">Clawback</th><th style="text-align:right">Balance after</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  } catch(e) { box.style.color = '#ef4444'; box.textContent = 'Error: ' + e.message; }
 };
 
 // ── WITHDRAWAL COUNT BADGE ──
@@ -1539,42 +1565,6 @@ window.openUserModal = (userId) => {
         <div style="font-size:14px;font-weight:700;color:var(--text)">${u.teamL1Count||0}/${u.teamL2Count||0}/${u.teamL3Count||0}</div>
       </div>
     </div>
-
-    ${(u.isAgent || u.agentTier) ? (() => {
-      const cfg = ADMIN_TIER_CFG[u.agentTier] || ADMIN_TIER_CFG.junior_agent;
-      const TIER_PAY = { junior_agent: 30000, agent: 75000, super_agent: 120000, regional_agent: 170000, national_agent: 220000, executive_agent: 280000 };
-      const TIER_NEXT = { junior_agent: { label: 'Agent', threshold: 10, prev: 5 }, agent: { label: 'Super Agent', threshold: 15, prev: 10 }, super_agent: { label: 'Regional Agent', threshold: 20, prev: 15 }, regional_agent: { label: 'National Agent', threshold: 30, prev: 20 }, national_agent: { label: 'Executive Agent', threshold: 50, prev: 30 } };
-      const pay = TIER_PAY[u.agentTier] || 30000;
-      const next = TIER_NEXT[u.agentTier];
-      const refs = u.activeReferralCount || 0;
-      const progressPct = next ? Math.min(Math.max((refs - next.prev) / (next.threshold - next.prev) * 100, 0), 100) : 100;
-      return `<!-- Agent stats card -->
-    <div style="background:linear-gradient(135deg,#1c1200,#2d1f00);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <span style="font-size:18px">${cfg.stars}</span>
-        <div>
-          <div style="font-size:12px;font-weight:800;color:${cfg.color};text-transform:uppercase;letter-spacing:.5px">${cfg.label}</div>
-          <div style="font-size:10px;color:rgba(245,158,11,0.5)">Agent Since ${u.agentSince ? fmtDate(u.agentSince) : '—'}</div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
-        <div style="background:rgba(245,158,11,0.08);border-radius:8px;padding:8px 10px;text-align:center">
-          <div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:3px">Weekly Pay</div>
-          <div style="font-size:12px;font-weight:800;color:#fbbf24">UGX ${pay.toLocaleString()}</div>
-        </div>
-        <div style="background:rgba(245,158,11,0.08);border-radius:8px;padding:8px 10px;text-align:center">
-          <div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:3px">Total Earned</div>
-          <div style="font-size:12px;font-weight:800;color:#fbbf24">${ugx(u.agentPayoutTotal||0)}</div>
-        </div>
-        <div style="background:rgba(245,158,11,0.08);border-radius:8px;padding:8px 10px;text-align:center">
-          <div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:3px">Active Refs</div>
-          <div style="font-size:12px;font-weight:800;color:#fbbf24">${refs}</div>
-        </div>
-      </div>
-      ${next ? `<div style="font-size:10px;color:rgba(245,158,11,0.55);margin-bottom:4px">${next.label}: ${refs}/${next.threshold} referrals</div>
-      <div style="height:5px;background:rgba(245,158,11,0.1);border-radius:3px;overflow:hidden"><div style="height:100%;width:${progressPct}%;background:linear-gradient(90deg,#d97706,#fbbf24);border-radius:3px"></div></div>` : '<div style="font-size:10px;color:rgba(245,158,11,0.5);text-align:center">Maximum tier — Executive Agent</div>'}
-    </div>`;
-    })() : ''}
 
     <!-- Actions row -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
