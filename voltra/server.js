@@ -338,6 +338,8 @@ function parseMoMoSMS(sms) {
 // or upgrade (Agent → Senior Agent → Regional Agent). Uses a transaction to
 // prevent race conditions. Never downgrades a tier.
 async function checkAgentPromotion(investorId) {
+  return; // DISABLED — agent tiers are a Nexus feature Voltra does not use. No auto-promotions.
+  /* eslint-disable no-unreachable */
   try {
     const invSnap = await db.collection('users').doc(investorId).get();
     if (!invSnap.exists) return;
@@ -2466,6 +2468,8 @@ function scheduleMidnightEAT() {
 // payout was 7+ days ago. Weekly pay is re-read inside the transaction so a
 // tier upgrade between runs is immediately reflected.
 async function runAgentPayouts() {
+  return 0; // DISABLED — no weekly agent stipends. Voltra does not run the Nexus agent programme.
+  /* eslint-disable no-unreachable */
   try {
     const EAT = 3 * 3600000;
     const nowMs = Date.now();
@@ -2680,9 +2684,7 @@ function startCrons() {
   scheduleMidnightEAT();
   setInterval(runDailyCashback, 2 * 60 * 60 * 1000);
   setTimeout(runDailyCashback, 3 * 60 * 1000);
-  // Agent weekly payouts: every 6 hours
-  setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
-  setTimeout(runAgentPayouts, 5 * 60 * 1000);
+  // Agent weekly payouts: REMOVED — Voltra does not run the Nexus agent programme.
   // Reconciliation every 15 min: stuck deposits/withdrawals + cashback +
   // commissions + referral counts — pulls live MongoDB state and self-heals.
   setInterval(runReconciliation, 15 * 60 * 1000);

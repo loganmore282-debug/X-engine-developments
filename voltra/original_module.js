@@ -748,136 +748,10 @@ function renderCommission(u) {
 
 // ── RENDER MORE ──
 function renderMore(u) {
-  const nameEl = document.getElementById('moreName');
-  const TIER_BADGES = {
-    junior_agent:    'Junior Agent',
-    agent:           'Agent',
-    super_agent:     'Super Agent',
-    regional_agent:  'Regional Agent',
-    national_agent:  'National Agent',
-    executive_agent: 'Executive Agent',
-  };
-  if (u.isAgent && u.agentTier) {
-    nameEl.innerHTML = (u.name || '—') + ` <span class="agent-badge">${TIER_BADGES[u.agentTier] || 'Agent'}</span>`;
-  } else {
-    nameEl.textContent = u.name || '—';
-  }
+  document.getElementById('moreName').textContent    = u.name    || '—';
   document.getElementById('morePhone').textContent   = u.phone   || '—';
   document.getElementById('moreBalance').textContent = 'Balance: ' + ugx(u.walletBalance);
   renderAvatars(u);
-}
-
-// ── RENDER AGENT CENTRE ──
-function renderAgentCentre(u) {
-  const TIERS = [
-    { key: 'member',          label: 'Member',          stars: '', threshold:  0, weeklyPay:      0 },
-    { key: 'junior_agent',    label: 'Junior Agent',    stars: '', threshold:  5, weeklyPay:  30000 },
-    { key: 'agent',           label: 'Agent',           stars: '', threshold: 10, weeklyPay:  75000 },
-    { key: 'super_agent',     label: 'Super Agent',     stars: '', threshold: 15, weeklyPay: 120000 },
-    { key: 'regional_agent',  label: 'Regional Agent',  stars: '', threshold: 20, weeklyPay: 170000 },
-    { key: 'national_agent',  label: 'National Agent',  stars: '', threshold: 30, weeklyPay: 220000 },
-    { key: 'executive_agent', label: 'Executive Agent', stars: '', threshold: 50, weeklyPay: 280000 },
-  ];
-  const refs           = u.activeReferralCount || 0;
-  const currentTier    = TIERS.find(t => t.key === (u.agentTier || 'member')) || TIERS[0];
-  const currentTierIdx = TIERS.indexOf(currentTier);
-  const nextTier       = TIERS[currentTierIdx + 1] || null;
-
-  // Hero
-  let heroHtml;
-  if (u.isAgent && currentTier && currentTier.key !== 'member') {
-    const agentSinceDate = u.agentSince
-      ? (tsDate(u.agentSince) || new Date()).toLocaleDateString('en-UG', { day:'numeric', month:'short', year:'numeric' })
-      : '—';
-    const lastPay = u.lastAgentPayoutDate;
-    let payoutLine = 'Next payout: Available now!';
-    if (lastPay) {
-      const nextMs = new Date(lastPay).getTime() + 7 * 86400000;
-      if (nextMs > Date.now()) {
-        const d = Math.ceil((nextMs - Date.now()) / 86400000);
-        payoutLine = 'Next payout: in ' + d + ' day' + (d === 1 ? '' : 's');
-      }
-    }
-    heroHtml = `
-      <div class="ac-hero is-agent">
-        <span class="ac-hero-star">${currentTier.stars}</span>
-        <div class="ac-hero-tier">${currentTier.label}</div>
-        <div class="ac-hero-name">${u.name || '—'}</div>
-        <div class="ac-hero-meta">Agent since ${agentSinceDate}</div>
-        <div class="ac-hero-payout">${payoutLine}</div>
-      </div>
-      <div class="ac-stats">
-        <div class="ac-stat">
-          <div class="ac-stat-val">${ugx(u.agentPayoutTotal || 0)}</div>
-          <div class="ac-stat-lbl">Total Earned</div>
-        </div>
-        <div class="ac-stat">
-          <div class="ac-stat-val">${ugx(currentTier.weeklyPay)}</div>
-          <div class="ac-stat-lbl">Weekly Salary</div>
-        </div>
-      </div>`;
-  } else {
-    const needed = nextTier ? Math.max(nextTier.threshold - refs, 0) : 0;
-    heroHtml = `
-      <div class="ac-hero no-agent">
-        <span class="ac-hero-star"></span>
-        <div class="ac-hero-tier">Member</div>
-        <div class="ac-hero-name">${u.name || '—'}</div>
-        <div class="ac-hero-meta">${needed > 0 ? `Get ${needed} more active referral${needed===1?'':'s'} to become ${nextTier.stars} ${nextTier.label}` : 'Invite friends to climb the ranks!'}</div>
-      </div>
-      <div class="ac-stats">
-        <div class="ac-stat">
-          <div class="ac-stat-val">${refs}</div>
-          <div class="ac-stat-lbl">Active Referrals</div>
-        </div>
-        <div class="ac-stat">
-          <div class="ac-stat-val">${needed}</div>
-          <div class="ac-stat-lbl">Needed for ${nextTier ? nextTier.label : 'Top'}</div>
-        </div>
-      </div>`;
-  }
-
-  // Tier cards
-  const tierCards = TIERS.map((tier, idx) => {
-    let state, barClass, barPct, barLabel;
-    if (tier.threshold === 0 || idx <= currentTierIdx) {
-      state = 'achieved'; barClass = 'gold'; barPct = 100;
-      barLabel = tier.threshold === 0 ? 'All members' : tier.threshold + ' / ' + tier.threshold;
-    } else if (idx === currentTierIdx + 1) {
-      const prev = TIERS[currentTierIdx].threshold;
-      state = 'inprogress'; barClass = 'blue';
-      barPct = Math.min(Math.max((refs - prev) / (tier.threshold - prev) * 100, 0), 100);
-      barLabel = refs + ' / ' + tier.threshold;
-    } else {
-      state = 'locked'; barClass = 'gray';
-      barPct = Math.min(refs / tier.threshold * 100, 100);
-      barLabel = refs + ' / ' + tier.threshold;
-    }
-    const pillLabel = state === 'achieved' ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Achieved' : state === 'inprogress' ? 'In Progress' : 'Locked';
-    const refsLine = tier.threshold === 0 ? 'Default rank' : tier.threshold + ' active referrals';
-    return `<div class="ac-tier-card ${state}">
-      <div class="ac-tier-top">
-        <div class="ac-tier-info">
-          <span class="ac-tier-stars">${tier.stars}</span>
-          <div>
-            <div class="ac-tier-name">${tier.label}</div>
-            <div class="ac-tier-refs">${refsLine}</div>
-          </div>
-        </div>
-        <span class="ac-status-pill ${state}">${pillLabel}</span>
-      </div>
-      <div class="ac-bar-row">
-        <div class="ac-bar"><div class="ac-bar-fill ${barClass}" style="width:${Math.max(barPct, barPct > 0 ? 3 : 0)}%"></div></div>
-        <span class="ac-bar-val">${barLabel}</span>
-      </div>
-      <div class="ac-tier-pay">Weekly salary: <b>${tier.weeklyPay > 0 ? ugx(tier.weeklyPay) : '—'}</b></div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('agentCentreContent').innerHTML =
-    heroHtml +
-    '<div class="ac-section-lbl">Agent Tier Journey</div>' +
-    tierCards;
 }
 
 function renderAvatars(u) {
@@ -893,8 +767,6 @@ function renderAvatars(u) {
       el.textContent = initial;
     }
   });
-  const avatarWrap = document.getElementById('moreAvatarWrap');
-  if (avatarWrap) avatarWrap.classList.toggle('agent-ring', !!u.isAgent);
 }
 
 // ── NAVIGATION ──
