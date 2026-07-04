@@ -283,8 +283,7 @@ window.addEventListener('load', () => setTimeout(_maybeAutoLogin, 800));
 // balance/check-in/deposit state is fresh the moment the user looks at it.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && _user) {
-    if (window.boostPoll) boostPoll();
-    if (typeof pollAccount === 'function') pollAccount(_user.uid).catch(() => {});
+    if (typeof pollAccount === 'function') pollAccount(_user.uid).catch(() => {}); // one refresh, not sustained
   }
 });
 
@@ -712,24 +711,18 @@ async function pollAccount(uid) {
   } catch (_) {}
 }
 
-// Adaptive polling: fast (1s) right after activity or when the app is in the
-// foreground being used, idle (6s) otherwise — so it feels instant while you're
-// tapping without hammering Railway/MongoDB M0 the rest of the time.
-let _pollFastUntil = 0;
-window.boostPoll = (ms = 15000) => { _pollFastUntil = Date.now() + ms; };
 function startListener(uid) {
   if (_unsub) _unsub();
   let stopped = false;
-  // Self-scheduling loop: each cycle waits for the previous poll to FINISH before
-  // scheduling the next, so slow/cold responses can never stack up requests.
+  // Steady 6-second poll. Self-scheduling (waits for each poll to FINISH before
+  // scheduling the next) so cold/slow responses never stack up requests — but no
+  // sustained fast polling, to stay well within Railway/MongoDB M0 limits.
   const loop = async () => {
     if (stopped) return;
     try { await pollAccount(uid); } catch (_) {}
     if (stopped) return;
-    const fast = Date.now() < _pollFastUntil;
-    _pollTimer = setTimeout(loop, fast ? 1000 : 6000);
+    _pollTimer = setTimeout(loop, 6000);
   };
-  boostPoll(); // start fast for the first few seconds after login
   loop();
   _unsub = () => { stopped = true; if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; } };
 
@@ -891,7 +884,6 @@ window.doCheckin = async () => {
   const todayKey = eat.toISOString().slice(0,10);
   if (_userData.lastCheckinDate === todayKey) { showToast('Already claimed today', 'success'); return; }
   if (_userData.status === 'banned') { showToast('Account suspended', 'error'); return; }
-  if (window.boostPoll) boostPoll(); // poll fast for a few seconds so the credit reflects instantly
   const ciBtn = document.getElementById('checkinBtn');
   const resetBtn = () => { if (ciBtn) { ciBtn.disabled = false; ciBtn.classList.remove('done'); ciBtn.textContent = "Claim Today's Bonus"; } };
   if (ciBtn) { ciBtn.disabled = true; ciBtn.textContent = 'Checking in…'; }
