@@ -870,20 +870,42 @@ window.doCheckin = async () => {
   if (_userData.status === 'banned') { showToast('Account suspended', 'error'); return; }
   const ciBtn = document.getElementById('checkinBtn');
   if (ciBtn) { ciBtn.disabled = true; ciBtn.textContent = '…'; }
-  try {
+
+  // Mark the check-in as done locally and refresh the card.
+  const markClaimed = (streak, bonus, credited) => {
+    _userData.lastCheckinDate = todayKey;
+    if (streak) _userData.checkinStreak = streak;
+    if (credited) showToast(`UGX ${(bonus||500).toLocaleString()} credited! Day ${streak || _userData.checkinStreak || 1}`, 'success');
+    else showToast('Bonus already credited today', 'success');
+    renderHome(_userData);
+  };
+
+  // Check-in is idempotent on the server (guarded by lastCheckinDate), so a lost
+  // response on a cold start is safe to re-verify: the server tells us if today
+  // was already claimed. We treat "already claimed today" as a SUCCESS, not an error.
+  const attempt = async () => {
     const r = await api('/checkin', { userId: _user.uid });
-    if (r.status === 'success') {
-      showToast(`UGX ${(r.bonus||500).toLocaleString()} credited! Day ${r.streak}`, 'success');
-      _userData.lastCheckinDate = todayKey;
-      if (r.streak) _userData.checkinStreak = r.streak;
-      renderHome(_userData);
-    } else {
-      showToast(r.message || 'Check-in failed', 'error');
-      if (ciBtn) { ciBtn.disabled = false; ciBtn.textContent = 'Claim'; }
-    }
+    if (r.status === 'success') { markClaimed(r.streak, r.bonus, true); return true; }
+    if (r.alreadyDone || /already/i.test(r.message || '')) { markClaimed(r.streak, r.bonus, false); return true; }
+    // A genuine business error (e.g. suspended) — surface it and stop.
+    showToast(r.message || 'Check-in failed', 'error');
+    if (ciBtn) { ciBtn.disabled = false; ciBtn.textContent = "Claim Today's Bonus"; }
+    return true; // handled — do not keep retrying a real rejection
+  };
+
+  try {
+    await attempt();
   } catch (e) {
-    showToast('Network error', 'error');
-    if (ciBtn) { ciBtn.disabled = false; ciBtn.textContent = 'Claim'; }
+    // Network/cold-start failure: the credit may have gone through anyway.
+    // Quietly re-verify a few times while the server finishes waking up.
+    if (ciBtn) ciBtn.textContent = 'Confirming…';
+    for (let i = 0; i < 3; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      if (_userData.lastCheckinDate === todayKey) { renderHome(_userData); return; } // listener confirmed it
+      try { await attempt(); return; } catch (_) { /* still waking — try again */ }
+    }
+    showToast('Network is slow — if your bonus was credited it will show shortly. You can tap again.', 'error');
+    if (ciBtn) { ciBtn.disabled = false; ciBtn.textContent = "Claim Today's Bonus"; }
   }
 };
 
