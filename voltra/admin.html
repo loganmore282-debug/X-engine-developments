@@ -1464,11 +1464,17 @@ function renderUsers() {
   let list = _allUsers;
   if (_userFilter !== 'all') list = list.filter(u => u.status === _userFilter || (!u.status && _userFilter === 'active'));
   if (_userSearch) {
-    const q = _userSearch.toLowerCase();
+    const q = _userSearch.toLowerCase().trim();
+    // Normalise any Ugandan phone format to bare 9 digits so 0758…, +256758…,
+    // 256758… and 758… all match the stored number.
+    const norm9 = s => { let d = String(s||'').replace(/\D/g,''); if (d.startsWith('256')) d = d.slice(3); return d.replace(/^0+/,''); };
+    const qDigits = q.replace(/\D/g,'');
+    const q9 = norm9(q);
     list = list.filter(u =>
       (u.name||'').toLowerCase().includes(q) ||
-      (u.phone||'').includes(q) ||
-      (u.email||'').toLowerCase().includes(q)
+      (u.email||'').toLowerCase().includes(q) ||
+      (u.id||'').toLowerCase().includes(q) ||
+      (qDigits && norm9(u.phone).includes(q9))
     );
   }
   if (!list.length) {
