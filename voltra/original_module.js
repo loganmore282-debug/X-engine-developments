@@ -870,32 +870,35 @@ window.doCheckin = async () => {
   if (_userData.status === 'banned') { showToast('Account suspended', 'error'); return; }
   const ciBtn = document.getElementById('checkinBtn');
   const resetBtn = () => { if (ciBtn) { ciBtn.disabled = false; ciBtn.classList.remove('done'); ciBtn.textContent = "Claim Today's Bonus"; } };
-  if (ciBtn) { ciBtn.disabled = true; ciBtn.textContent = '…'; }
+  if (ciBtn) { ciBtn.disabled = true; ciBtn.textContent = 'Checking in…'; }
 
-  // Mark the check-in as done locally and refresh the card.
-  const markClaimed = (streak, bonus, credited) => {
+  // Lock the card to its "claimed" state (decisive — never a spinning limbo).
+  const lockClaimed = (streak) => {
     _userData.lastCheckinDate = todayKey;
     if (streak) _userData.checkinStreak = streak;
-    showToast(credited ? `UGX ${(bonus||500).toLocaleString()} credited! Day ${streak || _userData.checkinStreak || 1}` : 'Bonus already credited today', 'success');
-    renderHome(_userData);
+    renderHome(_userData); // renderHome shows "✓ Claimed today" + disables the button
   };
 
   try {
     const r = await api('/checkin', { userId: _user.uid });
-    if (r.status === 'success') { markClaimed(r.streak, r.bonus, true); return; }
-    // Check-in is idempotent server-side, so "already claimed" means it went
-    // through (possibly on an earlier lost-response attempt) — treat as success.
-    if (r.alreadyDone || /already/i.test(r.message || '')) { markClaimed(r.streak, r.bonus, false); return; }
-    showToast(r.message || 'Check-in failed', 'error'); resetBtn(); return;
+    if (r.status === 'success') {
+      showToast(`UGX ${(r.bonus||500).toLocaleString()} credited! Day ${r.streak || _userData.checkinStreak || 1}`, 'success');
+      lockClaimed(r.streak);
+    } else if (r.alreadyDone || /already/i.test(r.message || '')) {
+      // Idempotent: "already claimed" means it went through — lock, don't error.
+      showToast('Already checked in today', 'success');
+      lockClaimed(r.streak);
+    } else {
+      showToast(r.message || 'Check-in failed. Try again.', 'error');
+      resetBtn();
+    }
   } catch (e) {
-    // Cold-start lost response: the credit may well have gone through. Don't alarm.
-    // The 6-second account poll flips the card to "Claimed today" on its own if it
-    // did. Give it a brief moment, then settle the button so it never hangs.
-    showToast('Confirming your bonus…', 'success');
-    setTimeout(() => {
-      if (_userData && _userData.lastCheckinDate === todayKey) renderHome(_userData); // poll confirmed it
-      else resetBtn(); // not confirmed yet — safe to tap again (idempotent)
-    }, 4000);
+    // Cold-start lost response — re-enable immediately so it's never stuck, then
+    // refresh right away: if the credit actually landed, the account data flips
+    // the card to "Claimed today" within a second (no waiting for the 6s poll).
+    showToast('Connection hiccup — confirming…', 'info');
+    resetBtn();
+    pollAccount(_user.uid).catch(() => {});
   }
 };
 
