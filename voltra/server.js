@@ -1719,15 +1719,18 @@ app.post('/admin/agent-clawback', async (req, res) => {
 // ADMIN — USERS LIST
 // ═══════════════════════════════════════════
 app.post('/admin/users', async (req, res) => {
-  const { adminKey, limit: lim = 200 } = req.body;
+  const { adminKey } = req.body;
+  const lim = Number(req.body.limit);
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('users')
-      .orderBy('createdAt', 'desc')
-      .limit(Number(lim) || 200)
-      .get();
+    // Default: return ALL users. A positive `limit` caps it; 0/absent = unlimited.
+    let q = db.collection('users');
+    if (lim && lim > 0) q = q.orderBy('createdAt', 'desc').limit(lim);
+    const snap = await q.get();
     const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return res.json({ status: 'success', users });
+    // Sort newest-first in memory so users missing a createdAt field aren't dropped
+    users.sort((a, b) => (tsMillis(b.createdAt) || 0) - (tsMillis(a.createdAt) || 0));
+    return res.json({ status: 'success', users, total: users.length });
   } catch (e) {
     return res.status(500).json({ status: 'error', message: e.message });
   }
