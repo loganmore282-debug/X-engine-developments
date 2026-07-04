@@ -636,12 +636,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <p style="font-size:12px;color:var(--text2);margin-bottom:12px">These appear as big tap buttons inside the Customer Service page users see.</p>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Telegram Channel / Group Link</label>
-            <input class="form-input" id="settSupportTg" placeholder="https://t.me/voltrasupport">
-          </div>
-          <div class="form-group">
-            <label class="form-label">WhatsApp Number (with country code)</label>
-            <input class="form-input" id="settSupportWa" placeholder="+256700000000">
+            <label class="form-label">WhatsApp Channel Link</label>
+            <input class="form-input" id="settSupportWa" placeholder="https://whatsapp.com/channel/xxxxxxxx">
           </div>
           <div class="form-group">
             <label class="form-label">Support Email</label>
@@ -1144,8 +1140,9 @@ const TX_TYPE_LABELS = {
 function txTypeLabel(type) { return TX_TYPE_LABELS[type] || (type || '—'); }
 
 window.showTxDetail = async (txId) => {
-  const t = _recentTxs.find(x => x.id === txId);
+  const t = (_recentTxs.find(x => x.id === txId)) || (_allTxs && _allTxs.find(x => x.id === txId));
   if (!t) return;
+  document.querySelector('#txOverlay .modal-title span').textContent = 'Transaction Detail';
   const amt = Number(t.amount || 0);
   const amtStr = (amt >= 0 ? '+' : '-') + ugx(Math.abs(amt));
   const amtColor = amt >= 0 ? 'var(--green)' : 'var(--red)';
@@ -2120,9 +2117,9 @@ function renderTransactions() {
     const amt    = Number(t.amount||0);
     const amtStr = (amt >= 0 ? '+' : '') + ugx(Math.abs(amt));
     const amtColor = amt >= 0 ? 'color:var(--green)' : 'color:var(--red)';
-    return `<tr>
+    return `<tr style="cursor:pointer" onclick="showTxDetail('${t.id}')">
       <td>${t.userId ? t.userId.slice(0,10)+'…' : '—'}</td>
-      <td><span class="badge-status bs-pending" style="text-transform:none">${t.type||'—'}</span></td>
+      <td><span class="badge-status bs-pending" style="text-transform:none">${txTypeLabel(t.type)}</span></td>
       <td style="${amtColor};font-weight:600">${amtStr}</td>
       <td class="text-muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description||'—'}</td>
       <td>${statusBadge(t.status||'unknown')}</td>
@@ -2149,12 +2146,18 @@ window.setTxFilter = (f, el) => {
 // ═══════════════════════════════════════════
 // REFERRALS
 // ═══════════════════════════════════════════
+let _allReferrals = [];
 async function loadAffiliates() {
   document.getElementById('referralsTable').innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
   try {
+    // Names/phones come from _allUsers — make sure it's loaded so the table isn't all dashes
+    if (!_allUsers.length) {
+      const ru = await api('/admin/users', { adminKey: _adminKey });
+      if (ru.status === 'success') _allUsers = ru.users;
+    }
     const r = await api('/admin/referrals/list', { adminKey: _adminKey });
-    const list = r.status === 'success' ? r.referrals : [];
-    renderAffiliates(list);
+    _allReferrals = r.status === 'success' ? r.referrals : [];
+    renderAffiliates(_allReferrals);
   } catch(e) {
     document.getElementById('referralsTable').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Error loading</div></div>';
   }
@@ -2170,10 +2173,10 @@ function renderAffiliates(list) {
   const userMap = {};
   _allUsers.forEach(u => { userMap[u.id] = u; });
 
-  const rows = list.map(r => {
+  const rows = list.map((r, i) => {
     const referrer = userMap[r.referrerId] || {};
     const referred = userMap[r.referredUserId] || {};
-    return `<tr>
+    return `<tr style="cursor:pointer" onclick="showAffiliateDetail(${i})">
       <td>
         <div style="font-weight:600;color:var(--text)">${referred.name || r.referredUserId?.slice(0,10) || '—'}</div>
       </td>
@@ -2194,6 +2197,36 @@ function renderAffiliates(list) {
       </table>
     </div>`;
 }
+
+window.showAffiliateDetail = (i) => {
+  const r = _allReferrals[i];
+  if (!r) return;
+  const userMap = {};
+  _allUsers.forEach(u => { userMap[u.id] = u; });
+  const referred = userMap[r.referredUserId] || {};
+  const referrer = userMap[r.referrerId] || {};
+  const row = (label, value) => value == null || value === '' ? '' :
+    `<div style="display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--border2)">
+       <span class="text-muted" style="font-size:13px">${label}</span>
+       <span style="font-size:13px;font-weight:600;text-align:right;word-break:break-word">${value}</span>
+     </div>`;
+  const uid = id => `<span style="font-family:monospace;font-size:11px">${id || '—'}</span>`;
+  document.getElementById('txModalContent').innerHTML = `
+    <div style="font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:2px 0 6px">Referred user (joined)</div>
+    ${row('Name', referred.name || '—')}
+    ${row('Phone', referred.phone || '—')}
+    ${row('Balance', referred.walletBalance != null ? ugx(referred.walletBalance) : '—')}
+    ${row('User ID', uid(r.referredUserId))}
+    <div style="font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">Referred by (inviter)</div>
+    ${row('Name', referrer.name || '—')}
+    ${row('Phone', referrer.phone || '—')}
+    ${row('Balance', referrer.walletBalance != null ? ugx(referrer.walletBalance) : '—')}
+    ${row('User ID', uid(r.referrerId))}
+    ${row('Date linked', fmtDate(r.createdAt))}
+    ${referrer.id ? `<button class="btn btn-ghost btn-full" style="margin-top:14px" onclick="closeModal('txOverlay');openUserModal('${referrer.id}')">Open inviter's full profile</button>` : ''}`;
+  document.querySelector('#txOverlay .modal-title span').textContent = 'Referral Detail';
+  openModal('txOverlay');
+};
 
 // ═══════════════════════════════════════════
 // SETTINGS
@@ -2248,9 +2281,7 @@ async function loadSettings() {
     if (annBg) { const p=document.getElementById('announcementBgPreview'); p.src=annBg; p.style.display='block'; }
     if (prodBanner) { const p=document.getElementById('productsBannerPreview'); p.src=prodBanner; p.style.display='block'; }
     if (depImg)     { const p=document.getElementById('depositImagePreview');   p.src=depImg;     p.style.display='block'; }
-    if (aboutImg)   { const p=document.getElementById('aboutImagePreview');     p.src=aboutImg;   p.style.display='block'; }
     // Customer service
-    document.getElementById('settSupportTg').value    = s.supportTelegram || '';
     document.getElementById('settSupportWa').value    = s.supportWhatsapp || '';
     document.getElementById('settSupportEmail').value = s.supportEmail    || '';
     document.getElementById('settSupportHours').value = s.supportHours    || '';
@@ -2353,8 +2384,8 @@ window.saveContentImages = async () => {
 
 window.saveSupportContent = async () => {
   const data = {
-    supportTelegram: document.getElementById('settSupportTg').value.trim(),
-    supportWhatsapp: document.getElementById('settSupportWa').value.trim(),
+    supportTelegram: '', // Telegram support removed — clear any old value
+    supportWhatsapp: document.getElementById('settSupportWa').value.trim(), // WhatsApp channel link
     supportEmail:    document.getElementById('settSupportEmail').value.trim(),
     supportHours:    document.getElementById('settSupportHours').value.trim(),
   };
