@@ -74,7 +74,7 @@ const obf = JavaScriptObfuscator.obfuscate(source, {
   identifierNamesGenerator: 'hexadecimal',
   renameGlobals: false,            // keep window._* handlers reachable from HTML onclick=""
   stringArray: true,
-  stringArrayThreshold: 0.75,
+  stringArrayThreshold: 1,         // encode EVERY string literal (guarantees the server URL & all endpoints are never a plain, grep-able string in the shipped file)
   stringArrayEncoding: ['base64'],
   selfDefending: false,            // breaks when wrapped/injected
   disableConsoleOutput: false,

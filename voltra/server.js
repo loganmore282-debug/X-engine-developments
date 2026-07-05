@@ -1031,7 +1031,8 @@ app.post('/team/members', async (req, res) => {
 // INVESTMENTS
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { productId } = req.body;
   if (!userId || !productId) return res.status(400).json({ status: 'error', message: 'userId and productId required' });
   try {
@@ -1084,7 +1085,8 @@ app.post('/invest/create', async (req, res) => {
 });
 
 app.post('/invest/claim', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { investmentId } = req.body;
   if (!userId || !investmentId) return res.status(400).json({ status: 'error', message: 'userId and investmentId required' });
   try {
@@ -1120,7 +1122,8 @@ app.post('/invest/claim', async (req, res) => {
 // WITHDRAWALS — user requests, admin processes via MarzPay
 // ═══════════════════════════════════════════
 app.post('/withdraw/request', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { amount, phone } = req.body;
   if (!userId || !amount || !phone)
     return res.status(400).json({ status: 'error', message: 'userId, amount and phone required' });
@@ -1438,8 +1441,8 @@ app.post('/withdraw/callback', async (req, res) => {
 // CHECK-IN
 // ═══════════════════════════════════════════
 app.post('/checkin', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
     const settSnap = await db.collection('settings').doc('main').get();
     const bonus    = settSnap.exists ? (settSnap.data().checkinBonus || CHECKIN_BONUS) : CHECKIN_BONUS;
@@ -1485,7 +1488,8 @@ app.post('/checkin', async (req, res) => {
 const _giftRateMap = new Map(); // userId → last attempt timestamp
 const _redeemingGifts = new Set(); // gift code id → being redeemed (single-writer)
 app.post('/giftcode/redeem', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { code } = req.body;
   if (!userId || !code) return res.status(400).json({ status: 'error', message: 'userId and code required' });
   // Rate limit: max 1 attempt per 10 seconds per user
@@ -2000,7 +2004,8 @@ app.post('/prize-draw/history', async (req, res) => {
 
 // USER — buy tickets
 app.post('/prize-draw/buy', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { drawId } = req.body;
   const quantity = Math.max(1, Math.round(Number(req.body.quantity) || 1));
   if (!userId || !drawId) return res.status(400).json({ status: 'error', message: 'userId and drawId required' });
@@ -2084,7 +2089,8 @@ app.post('/deposit/verify-phone', async (req, res) => {
 // ═══════════════════════════════════════════
 const _depCreateDebounce = new Map();
 app.post('/deposit/marzpay', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { amount, phone: rawPhone } = req.body;
   if (!userId || !amount) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
   const amt = parseInt(amount, 10);
@@ -2196,7 +2202,8 @@ app.post('/deposit/marzpay', async (req, res) => {
 // DEPOSIT — INITIATE (SMS-based, kept as fallback)
 // ═══════════════════════════════════════════
 app.post('/deposit/initiate', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { senderPhone, amount, network, senderName } = req.body;
   if (!userId || !senderPhone || !amount)
     return res.json({ status: 'error', message: 'userId, senderPhone and amount required' });
