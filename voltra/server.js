@@ -1007,7 +1007,7 @@ app.post('/account/ensure-refcode', async (req, res) => {
 // TEAM MEMBERS — list of people referred by this user
 // ═══════════════════════════════════════════
 app.post('/team/members', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own team only — no client-supplied id
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('users').where('referredBy', '==', userId).get();
@@ -1959,7 +1959,7 @@ app.post('/admin/prize-draw/list', async (req, res) => {
 
 // USER — active draws (+ how many tickets the caller already holds)
 app.post('/prize-draw/active', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // token-derived; null just omits "my tickets"
   try {
     const snap  = await db.collection('prizeDraws').where('status', '==', 'active').get();
     const draws = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1980,7 +1980,7 @@ app.post('/prize-draw/active', async (req, res) => {
 
 // USER — my own history across all draws (active + completed + cancelled)
 app.post('/prize-draw/history', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own history only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const entriesSnap = await db.collection('prizeDrawEntries').where('userId', '==', userId).get();
@@ -2942,8 +2942,11 @@ app.post('/auth/register', async (req, res) => {
 // Creates the Firestore user doc server-side so the client cannot set
 // arbitrary fields (e.g. walletBalance).
 app.post('/account/create-profile', async (req, res) => {
-  const uid = await verifyAuth(req) || req.body.userId;
+  const authedUid = await verifyAuth(req);
+  const uid = authedUid || req.body.userId; // fallback only for the mid-registration edge
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (authedUid && req.body.userId && authedUid !== req.body.userId)
+    return res.status(403).json({ status: 'error', message: 'Forbidden' });
   const { name, phone } = req.body;
   if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
   try {
@@ -3024,7 +3027,7 @@ app.post('/account/update-photo', async (req, res) => {
 
 // Live account data — the user app polls this for balance/profile.
 app.post('/account/data', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own account only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const snap = await db.collection('users').doc(userId).get();
@@ -3053,7 +3056,7 @@ app.get('/products/:id', async (req, res) => {
 
 // User's investments.
 app.post('/account/investments', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own account only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const snap = await db.collection('investments').where('userId', '==', userId).limit(50).get();
@@ -3074,7 +3077,7 @@ app.get('/investment/:id', async (req, res) => {
 
 // User's withdrawals.
 app.post('/account/withdrawals', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own account only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const snap = await db.collection('withdrawals').where('userId', '==', userId).limit(100).get();
@@ -3086,7 +3089,7 @@ app.post('/account/withdrawals', async (req, res) => {
 
 // User's transactions.
 app.post('/account/transactions', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own account only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const snap = await db.collection('transactions').where('userId', '==', userId).limit(200).get();
