@@ -2949,6 +2949,9 @@ app.post('/account/create-profile', async (req, res) => {
     return res.status(403).json({ status: 'error', message: 'Forbidden' });
   const { name, phone } = req.body;
   if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
+  // Strip anything that could be HTML/script so a crafted name can never inject
+  // markup into the admin panel (stored-XSS guard). Also cap the length.
+  const safeName = String(name).replace(/[<>]/g, '').trim().slice(0, 60);
   try {
     const ref  = db.collection('users').doc(uid);
     const snap = await ref.get();
@@ -2957,12 +2960,12 @@ app.post('/account/create-profile', async (req, res) => {
       // ensure name/phone are filled so the account screen shows details.
       const d = snap.data();
       if (!d.name || !d.phone) {
-        await ref.update({ name: String(name).trim(), phone: cleanPhone(phone), email: phoneToEmail(phone) });
+        await ref.update({ name: safeName, phone: cleanPhone(phone), email: phoneToEmail(phone) });
       }
       return res.json({ status: 'success', message: 'Profile ensured' });
     }
     await ref.set({
-      name: String(name).trim(),
+      name: safeName,
       phone: cleanPhone(phone),
       email: phoneToEmail(phone),
       walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,

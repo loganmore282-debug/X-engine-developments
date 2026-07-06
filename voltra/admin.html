@@ -1004,6 +1004,9 @@ async function uploadImage(file) {
 window.uploadImage = uploadImage;
 
 function ugx(n) { return 'UGX ' + Number(n||0).toLocaleString(); }
+// HTML-escape any user-controlled value before putting it in innerHTML — blocks
+// stored XSS (e.g. a crafted user name) from running script in the admin panel.
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 window.ugx = ugx;
 
 function fmtDate(ts) {
@@ -1158,9 +1161,9 @@ window.showTxDetail = async (txId) => {
     ${t.fee ? row('Fee', ugx(t.fee)) : ''}
     ${t.netAmount ? row('Net amount', ugx(t.netAmount)) : ''}
     ${row('Status', statusBadge(t.status || 'unknown'))}
-    ${row('Description', t.description || '—')}
-    ${t.phone ? row('Phone', t.phone) : ''}
-    ${t.code ? row('Code', t.code) : ''}
+    ${row('Description', esc(t.description || '—'))}
+    ${t.phone ? row('Phone', esc(t.phone)) : ''}
+    ${t.code ? row('Code', esc(t.code)) : ''}
     ${row('User ID', `<span style="font-family:monospace;font-size:11px">${t.userId || '—'}</span>`)}
     <div id="txUserInfo"></div>
     ${row('Transaction ID', `<span style="font-family:monospace;font-size:11px">${t.id}</span>`)}
@@ -1172,7 +1175,7 @@ window.showTxDetail = async (txId) => {
       const r = await api('/admin/user/detail', { adminKey: _adminKey, userId: t.userId });
       if (r.status === 'success' && r.user) {
         document.getElementById('txUserInfo').innerHTML =
-          row('User name', r.user.name || '—') + row('User phone', r.user.phone || '—');
+          row('User name', esc(r.user.name || '—')) + row('User phone', esc(r.user.phone || '—'));
       }
     } catch(e) {}
   }
@@ -1252,7 +1255,7 @@ async function loadDashboard() {
         <td style="font-size:10px;color:var(--text2);font-family:monospace">${(t.id||'').slice(0,10)}…</td>
         <td>${t.userId ? t.userId.slice(0,8)+'…' : '—'}</td>
         <td><span class="badge-status bs-pending" style="text-transform:none">${txTypeLabel(t.type)}</span></td>
-        <td style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.description||''}">${t.description||'—'}</td>
+        <td style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.description||'')}">${esc(t.description||'—')}</td>
         <td style="${amtColor};font-weight:600">${amtStr}</td>
         <td>${statusBadge(t.status||'unknown')}</td>
         <td class="text-muted">${fmtDate(t.createdAt)}</td>
@@ -1298,15 +1301,15 @@ function renderPayouts() {
     let actions = `<button class="btn btn-ghost btn-sm" onclick="openWithdrawUser('${w.userId||''}')">👁 View</button>`;
     if (w.status === 'pending') {
       actions += ` <button class="btn btn-success btn-sm" style="margin-left:4px" onclick="processWithdrawal('${w.id}')">Process</button>
-                 <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="rejectWithdrawal('${w.id}','${(w.userName||'').replace(/'/g,"\\'")}')">Reject</button>`;
+                 <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="rejectWithdrawal('${w.id}','${esc((w.userName||'').replace(/'/g,"\\'"))}')">Reject</button>`;
     }
     return `<tr style="cursor:pointer" onclick="openWithdrawUser('${w.userId||''}')">
-      <td><div style="font-weight:600;color:var(--text)">${w.userName || '—'}</div></td>
-      <td>${w.userPhone || '—'}</td>
+      <td><div style="font-weight:600;color:var(--text)">${esc(w.userName || '—')}</div></td>
+      <td>${esc(w.userPhone || '—')}</td>
       <td style="color:var(--text);font-weight:600">${ugx(w.amount)}</td>
       <td>${ugx(w.fee)}</td>
       <td style="color:var(--primary);font-weight:600">${ugx(w.netAmount)}</td>
-      <td>${w.withdrawalPhone || '—'}</td>
+      <td>${esc(w.withdrawalPhone || '—')}</td>
       <td class="text-muted">${fmtDate(w.createdAt)}</td>
       <td>${statusBadge(w.status)}</td>
       <td onclick="event.stopPropagation()">${actions}</td>
@@ -1394,7 +1397,7 @@ async function loadUnmatchedRecharges() {
       const amt   = Number(d.amount) || 0;
       return `<tr>
         <td>${phone||'—'}</td>
-        <td style="font-size:11px;color:var(--muted)">${d.senderName||'—'}</td>
+        <td style="font-size:11px;color:var(--muted)">${esc(d.senderName||'—')}</td>
         <td style="font-weight:700;color:var(--primary)">${ugx(amt)}</td>
         <td class="text-muted">${d.receivedAt ? fmtDate(d.receivedAt) : '—'}</td>
         <td><button class="btn btn-primary btn-sm" onclick="openAssignDeposit('${d.id}','${phone}',${amt})">Assign</button></td>
@@ -1480,10 +1483,10 @@ function renderUsers() {
   }
   const rows = list.map(u => `<tr>
     <td>
-      <div style="font-weight:600;color:var(--text)">${u.name||'—'}${agentTierBadge(u)}</div>
-      <div style="font-size:11px;color:var(--muted)">${u.email||''}</div>
+      <div style="font-weight:600;color:var(--text)">${esc(u.name||'—')}${agentTierBadge(u)}</div>
+      <div style="font-size:11px;color:var(--muted)">${esc(u.email||'')}</div>
     </td>
-    <td>${u.phone||'—'}</td>
+    <td>${esc(u.phone||'—')}</td>
     <td style="font-weight:600;color:var(--primary)">${ugx(u.walletBalance)}</td>
     <td>${statusBadge(u.status||'active')}</td>
     <td class="text-muted">${fmtDate(u.createdAt)}</td>
@@ -1524,9 +1527,9 @@ window.openUserModal = (userId) => {
     <div style="display:flex;align-items:center;gap:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:16px;margin-bottom:14px">
       <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#ff9d00,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:2px">${u.name||'Unknown'}${agentTierBadge(u)}</div>
-        <div style="font-size:12px;color:var(--text2)">${u.phone||'—'}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Joined ${fmtDate(u.createdAt)} · Code: <span style="font-family:monospace;color:#ffb84d">${u.referralCode||'—'}</span></div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:2px">${esc(u.name||'Unknown')}${agentTierBadge(u)}</div>
+        <div style="font-size:12px;color:var(--text2)">${esc(u.phone||'—')}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Joined ${fmtDate(u.createdAt)} · Code: <span style="font-family:monospace;color:#ffb84d">${esc(u.referralCode||'—')}</span></div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
         ${statusBadge(u.status||'active')}
@@ -1614,7 +1617,7 @@ window.openUserModal = (userId) => {
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
           <div>
             <div style="font-size:12px;font-weight:600;color:var(--text)">${t.type||'—'}</div>
-            <div style="font-size:11px;color:var(--muted)">${t.description||''}</div>
+            <div style="font-size:11px;color:var(--muted)">${esc(t.description||'')}</div>
             <div style="font-size:10px;color:var(--muted)">${fmtDate(t.createdAt)}</div>
           </div>
           <div style="font-size:14px;font-weight:700;color:${color};white-space:nowrap;margin-left:12px">${sign}${ugx(Math.abs(amt))}</div>
@@ -2121,7 +2124,7 @@ function renderTransactions() {
       <td>${t.userId ? t.userId.slice(0,10)+'…' : '—'}</td>
       <td><span class="badge-status bs-pending" style="text-transform:none">${txTypeLabel(t.type)}</span></td>
       <td style="${amtColor};font-weight:600">${amtStr}</td>
-      <td class="text-muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description||'—'}</td>
+      <td class="text-muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'—')}</td>
       <td>${statusBadge(t.status||'unknown')}</td>
       <td class="text-muted">${fmtDate(t.createdAt)}</td>
     </tr>`;
@@ -2178,13 +2181,13 @@ function renderAffiliates(list) {
     const referred = userMap[r.referredUserId] || {};
     return `<tr style="cursor:pointer" onclick="showAffiliateDetail(${i})">
       <td>
-        <div style="font-weight:600;color:var(--text)">${referred.name || r.referredUserId?.slice(0,10) || '—'}</div>
+        <div style="font-weight:600;color:var(--text)">${esc(referred.name || r.referredUserId?.slice(0,10) || '—')}</div>
       </td>
-      <td>${referred.phone || '—'}</td>
+      <td>${esc(referred.phone || '—')}</td>
       <td>
-        <div style="font-weight:600;color:var(--text)">${referrer.name || r.referrerId?.slice(0,10) || '—'}</div>
+        <div style="font-weight:600;color:var(--text)">${esc(referrer.name || r.referrerId?.slice(0,10) || '—')}</div>
       </td>
-      <td>${referrer.phone || '—'}</td>
+      <td>${esc(referrer.phone || '—')}</td>
       <td class="text-muted">${fmtDate(r.createdAt)}</td>
     </tr>`;
   }).join('');
@@ -2213,13 +2216,13 @@ window.showAffiliateDetail = (i) => {
   const uid = id => `<span style="font-family:monospace;font-size:11px">${id || '—'}</span>`;
   document.getElementById('txModalContent').innerHTML = `
     <div style="font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:2px 0 6px">Referred user (joined)</div>
-    ${row('Name', referred.name || '—')}
-    ${row('Phone', referred.phone || '—')}
+    ${row('Name', esc(referred.name || '—'))}
+    ${row('Phone', esc(referred.phone || '—'))}
     ${row('Balance', referred.walletBalance != null ? ugx(referred.walletBalance) : '—')}
     ${row('User ID', uid(r.referredUserId))}
     <div style="font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">Referred by (inviter)</div>
-    ${row('Name', referrer.name || '—')}
-    ${row('Phone', referrer.phone || '—')}
+    ${row('Name', esc(referrer.name || '—'))}
+    ${row('Phone', esc(referrer.phone || '—'))}
     ${row('Balance', referrer.walletBalance != null ? ugx(referrer.walletBalance) : '—')}
     ${row('User ID', uid(r.referrerId))}
     ${row('Date linked', fmtDate(r.createdAt))}
@@ -2418,9 +2421,9 @@ window.searchAssignUser = (q) => {
   }
   document.getElementById('assignUserResults').innerHTML = matches.map(u =>
     `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:6px;background:var(--bg3)"
-      onclick="selectAssignUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}','${u.phone||''}')">
-      <div style="font-weight:600;color:var(--text)">${u.name||'—'}</div>
-      <div style="font-size:11px;color:var(--muted)">${u.phone||'—'}</div>
+      onclick="selectAssignUser('${u.id}','${esc((u.name||'').replace(/'/g,"\\'"))}','${esc(u.phone||'')}')">
+      <div style="font-weight:600;color:var(--text)">${esc(u.name||'—')}</div>
+      <div style="font-size:11px;color:var(--muted)">${esc(u.phone||'—')}</div>
     </div>`
   ).join('');
 };
