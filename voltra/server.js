@@ -121,6 +121,24 @@ function uuidv4() {
 
 // ── MarzPay API helpers (JSON body — Voltra proven implementation) ──
 const MARZ_TIMEOUT = 20000; // 20 s — abort any hung MarzPay call
+// Friendly, user-facing message for any payment-provider (MarzPay) hiccup so we
+// never leak their raw "A database error occurred…" text to Voltra users.
+const PROVIDER_BUSY_MSG = 'The mobile-money service is temporarily busy. Please wait a moment and try again.';
+// Parse a MarzPay response safely — if they return an HTML error page (outage),
+// json() would throw "Unexpected token <"; normalise that to a provider error.
+async function _marzParse(resp) {
+  try { return await resp.json(); }
+  catch (_) { return { status: 'error', message: PROVIDER_BUSY_MSG, providerDown: true }; }
+}
+// Turn a MarzPay error into a clean user message — hide their internal
+// "database error / internal server" text behind the friendly busy message.
+function marzUserMsg(mp, fallback) {
+  const raw = String((mp && mp.message) || '');
+  if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
+      /database error|internal server|server error|try again later|temporarily/i.test(raw))
+    return PROVIDER_BUSY_MSG;
+  return raw || fallback || PROVIDER_BUSY_MSG;
+}
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
     description: description || 'Recharge' };
@@ -130,7 +148,7 @@ async function marzCollect({ amount, phone, reference, description, callbackUrl 
     headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return resp.json();
+  return _marzParse(resp);
 }
 async function marzSendMoney({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
@@ -141,7 +159,7 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
     headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return resp.json();
+  return _marzParse(resp);
 }
 // Send an SMS via MarzSMS (Basic auth). Returns { ok, message }.
 async function marzSendSMS(recipient, message) {
@@ -1331,7 +1349,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
     // Accept success, pending, and sandbox (test mode)
     const witSandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
     if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox) {
-      return res.status(400).json({ status: 'error', message: mpData.message || 'MarzPay disbursement failed' });
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Withdrawal could not be sent right now. Please try again.') });
     }
 
     // Update withdrawal to processing
@@ -1377,7 +1395,9 @@ app.post('/admin/withdraw/process', async (req, res) => {
     return res.json({ status: 'success', message: msg, sandbox: witSandbox });
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
-    return res.status(500).json({ status: 'error', message: e.message });
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not process withdrawal');
+    return res.status(500).json({ status: 'error', message: friendly });
   }
 });
 
@@ -2137,7 +2157,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     // Sandbox mode returns status:'sandbox' — treat as valid initiation
     const isSandbox = mpData.status === 'sandbox' || mpData.data?.collection?.mode === 'sandbox';
     if (mpData.status !== 'success' && !isSandbox)
-      return res.status(400).json({ status: 'error', message: mpData.message || 'Could not initiate payment. Try again.' });
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the payment right now. Please try again.') });
 
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
     const { date, time } = nowStr();
@@ -2203,7 +2223,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone, sandbox: isSandbox });
   } catch (e) {
     console.error('MarzPay deposit error:', e.message);
-    return res.status(500).json({ status: 'error', message: e.message });
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not start the payment');
+    return res.status(500).json({ status: 'error', message: friendly });
   }
 });
 
