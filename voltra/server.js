@@ -26,10 +26,19 @@ const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: t
   message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
 const apiLimiter  = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
+// Admin password guess-throttle — stops brute-forcing the admin key.
+const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
+// General admin-panel ceiling — generous for real use, still caps abuse.
+const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
 app.use('/auth/', authLimiter);
-app.use('/checkin', apiLimiter);
-app.use('/withdraw/request', apiLimiter);
-app.use('/invest/create', apiLimiter);
+app.use('/admin/check-key', adminLoginLimiter);
+app.use('/admin/', adminLimiter);
+// Rate-limit every money / value-moving endpoint (per IP, 60/min).
+['/checkin', '/withdraw/request', '/invest/create', '/invest/claim',
+ '/deposit/marzpay', '/deposit/initiate', '/prize-draw/buy', '/giftcode/redeem']
+  .forEach(p => app.use(p, apiLimiter));
 
 // ── FIREBASE AUTH (Auth only — Firestore replaced by MongoDB) ──
 let serviceAccount;
