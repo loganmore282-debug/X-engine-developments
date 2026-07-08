@@ -1,9 +1,26 @@
 (function(){
   "use strict";
   // Canonical site cloned copies get bounced to.
-  var REAL = "https://www.voltra-ug.site/";
-  // Allowed hosts: custom domain, any *.edgeone.app subdomain, localhost.
-  function hostOk(){ return true; }
+  var REAL = "https://voltrapower.com/";
+  // DOMAIN LOCK — only these exact hosts may run the app. A cloned/rehosted
+  // phishing copy on any other domain wipes itself and bounces to REAL.
+  // NOTE: keep "voltraplatform.edgeone.app" here until DNS fully moves to the
+  // .com; once every user is on voltrapower.com you can remove that line.
+  // Fails OPEN on any error so real users are never wrongly locked out.
+  function hostOk(){
+    try {
+      var h = (location.hostname || "").toLowerCase();
+      if (!h) return true; // installed PWA / file:// — don't wipe
+      var ALLOW = [
+        "voltrapower.com",
+        "www.voltrapower.com",
+        "voltraplatform.edgeone.app",
+        "localhost",
+        "127.0.0.1"
+      ];
+      return ALLOW.indexOf(h) !== -1;
+    } catch (e) { return true; }
+  }
 
   // 1. DOMAIN LOCK — block cloned rehosting
   if (!hostOk()) {
