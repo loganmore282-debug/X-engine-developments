@@ -6,11 +6,59 @@ called **Nexus**, but the owner's #1 rule is: **Voltra must NOT resemble Nexus**
 matching words, layouts, icons, fonts, buttons, or wording. When in doubt, make it
 visually/textually distinct from Nexus.
 
-Active dev branch: `claude/new-session-nagian`. All work is committed there.
+Active dev branch: **`claude/voltra-continue-kks4l0`** (latest; superseded
+`claude/new-session-nagian`). All work is committed AND pushed there.
 The owner speaks plainly, wants things done (not lots of questions), hates abbreviations
 ("UGX 23,000", never "23k"), wants SVG icons (no emoji in the UI), and wants the dark
 **amber** theme. The app icon is the **blue Voltra infinity mark** (intentional: amber
 UI + blue logo icon).
+
+**Current service-worker cache: `voltra-shell-v50`** (next edit → v51). Deploy targets
+unchanged: zip → EdgeOne, `admin.html` → admin host, `server.js` → Railway repo "business".
+
+## Session progress log (most recent session — read to know where we ended)
+Everything below is DONE, committed, and pushed on `claude/voltra-continue-kks4l0`:
+- **Gift codes**: 4-char codes; daily payout range admin-set. Welcome/sign-up bonus = **5,500**.
+- **Anti-bot registration**: server issues a scrambled numeric code the user re-types (`/auth/captcha*`).
+- **Support page** redesigned (hero + tile grid). Customer Service simplified to a single
+  **WhatsApp Channel link** (`supportWhatsapp` now holds a full URL) + Email + Hours; Telegram removed.
+- **Announcement dialog**: Cancel + "Learn More" (opens About) buttons.
+- **Live "users online now"** counter — server-driven, global, day/night bands
+  (00–06 200-405, 06–15 405-830, 15–20 830-1350, 20–24 80-200). Endpoint `/public/online-count`.
+- **Global activity ticker** — server-generated feed `/public/activity-feed` (refreshed 30s).
+- **Prize Draw** feature (raffle): admin sets title/ticket price/total tickets/prize amount/**number of winners**;
+  users buy tickets from wallet; server auto-draws N distinct winning tickets at sellout (or admin "End Now"),
+  pays full prize to each; "Cancel" refunds everyone. Collections `prizeDraws`/`prizeDrawEntries`.
+  Endpoints `/admin/prize-draw/*`, `/prize-draw/{active,history,buy}`. Menu tile + "My Tickets" history in app.
+  Rules + Terms updated with a Prize Draw clause.
+- **Nexus AGENT PROGRAMME FULLY REMOVED** — promotions + weekly stipends disabled server-side,
+  cron dropped; agent UI stripped from app + admin. Admin has a **one-time clawback tool** (Settings →
+  "Reverse Agent Stipends", dry-run preview + execute; balances can go negative) via `/admin/agent-clawback`.
+- **SMS OTP password reset** (self-service on login page): `/auth/reset/request` + `/auth/reset/confirm`,
+  sends a 6-digit code via **MarzSMS**. NEEDS Railway env vars **`MARZSMS_KEY`** + **`MARZSMS_SECRET`**.
+- **Admin**: Users list now returns ALL users (was capped 200) + count; user search normalises phone
+  formats (0.. / +256.. / 256.. / 9-digit); clickable **Transactions + Affiliates** rows → detail modal
+  (who/type/amount/status); pending-payouts badge fixed (server sends `pendingPayouts` alias).
+- **Check-in** reworked to the decisive Nexus pattern (no stuck "Confirming…"); account poll is a steady 6s
+  self-scheduling loop + one-off refresh after check-in and on app foreground (no sustained fast polling —
+  M0 resource-safe).
+- **SECURITY (all done)**: every money endpoint requires a verified Firebase token (dropped the
+  `req.body.userId` fallback); all read endpoints locked to the authenticated user; admin key check
+  rate-limited 8/min (+200/min admin ceiling, 60/min money endpoints); obfuscator `stringArrayThreshold:1`
+  so the Railway URL/endpoints are never plaintext in the shipped bundle; **stored-XSS fixed** (server strips
+  HTML from names on create-profile + admin HTML-escapes every user field via `esc()`).
+- **Payment errors**: MarzPay's raw "database error"/HTML/timeout no longer leak to users — friendly
+  "mobile-money service is temporarily busy" message (`PROVIDER_BUSY_MSG` / `marzUserMsg`).
+
+**Known external issue (NOT our bug):** MarzPay (wearemarz.com) had a provider-side outage
+(`DATABASE_ERROR`, timeouts, HTML error pages) breaking deposits+withdrawals. Fix is on MarzPay's
+side — contact them. Our code only made the failure message friendly.
+
+**Owner's environment:** deploys manually (Railway repo "business" for server.js — often FORGETS to
+redeploy it, then reports already-fixed bugs; always remind). On free Railway/MongoDB M0 → cold starts
+cause first-request lag (login/check-in feel slow until warm). Uganda MTN had network issues → owner
+told users to use Airtel. Owner uses Termux on Android now. Official domain voltrapower.com (GoDaddy);
+support email support@voltrapower.com (Titan mailbox created).
 
 ## Where the real app lives
 Everything shipped is under **`voltra/`** (NOT the repo-root files, which are the old
@@ -36,7 +84,7 @@ Nexus/X-engine). Key files:
    pull the fresh build; the owner hits stale-cache issues constantly — ALWAYS bump).
 5. Zip: `zip -j voltra/voltra-userpanel.zip voltra/index.html voltra/manifest.json
    voltra/sw.js voltra/icon-192.png voltra/icon-512.png`.
-6. Commit + push to `claude/new-session-nagian`, then send files with SendUserFile.
+6. Commit + push to `claude/voltra-continue-kks4l0`, then send files with SendUserFile.
 
 **index.html is ~600KB+** (embedded base64 images) — too big for the Read tool. Edit it
 with Python/grep/sed, or via the Edit tool on small unique anchors. `original_module.js`
