@@ -16,7 +16,15 @@ const app = express();
 // Trust the first proxy hop so express-rate-limit reads the real client IP
 // (otherwise it throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
 app.set('trust proxy', 1);
-app.use(helmet({ contentSecurityPolicy: false }));
+app.disable('x-powered-by'); // don't advertise Express
+app.use(helmet({
+  contentSecurityPolicy: false,               // API serves JSON, not HTML
+  hsts: { maxAge: 31536000, includeSubDomains: true }, // force HTTPS for a year
+  frameguard: { action: 'deny' },             // block clickjacking (no framing)
+  referrerPolicy: { policy: 'no-referrer' },  // don't leak the URL in Referer
+  noSniff: true,                              // block MIME-type sniffing
+  crossOriginResourcePolicy: { policy: 'same-site' }
+}));
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
@@ -3306,6 +3314,16 @@ function convertTimestamps(obj) {
 }
 
 // Migration endpoint removed — no longer needed post-migration
+
+// 404 for unknown routes — don't reveal anything about the API shape.
+app.use((req, res) => res.status(404).json({ status: 'error', message: 'Not found' }));
+// Global error handler — LAST middleware. Logs the real error server-side but
+// only ever returns a generic message, so stack traces / internals never leak.
+app.use((err, req, res, _next) => {
+  console.error('Unhandled route error:', err && err.message);
+  if (res.headersSent) return;
+  res.status(500).json({ status: 'error', message: 'Something went wrong. Please try again.' });
+});
 
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
