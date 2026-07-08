@@ -29,6 +29,21 @@ app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
 
+// ── NoSQL-INJECTION GUARD ──
+// MongoDB's equivalent of SQL injection: an attacker sends a value like
+// {"$ne": null} or a dotted key to smuggle query operators. No legitimate Voltra
+// request uses keys starting with "$" or containing ".", so we strip them from
+// every incoming body before any handler can pass them to the database.
+function stripMongoOperators(obj, depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 6) return;
+  for (const key of Object.keys(obj)) {
+    if (key.startsWith('$') || key.includes('.')) { delete obj[key]; continue; }
+    const v = obj[key];
+    if (v && typeof v === 'object') stripMongoOperators(v, depth + 1);
+  }
+}
+app.use((req, _res, next) => { try { stripMongoOperators(req.body); } catch (_) {} next(); });
+
 // ── RATE LIMITERS ──
 const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
