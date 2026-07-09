@@ -56,6 +56,9 @@ const ICN = {
 
 // ── UTILS ──
 function ugx(n) { return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+// HTML-escape user-controlled text before putting it in innerHTML (blocks XSS
+// from bank labels, other users' names, etc.).
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 // Timestamps now arrive from the server as ISO strings (MongoDB) but may still be
 // Firestore Timestamps or {seconds} objects in cached data — normalise all shapes.
 function tsMs(v) {
@@ -1347,7 +1350,7 @@ window.openTeamMembersModal = async () => {
     body.innerHTML = `
       <div style="font-size:11px;color:var(--text2);margin-bottom:12px">${members.length} member${members.length!==1?'s':''} — direct referrals only</div>
       ${members.map(m => {
-        const initials = (m.name||'U').slice(0,2).toUpperCase();
+        const initials = esc((m.name||'U').slice(0,2).toUpperCase());
         const joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
         const badge = m.hasInvested
           ? `<span style="font-size:10px;font-weight:700;color:#22c55e;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:5px;padding:2px 7px">Invested</span>`
@@ -1355,8 +1358,8 @@ window.openTeamMembersModal = async () => {
         return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border2)">
           <div style="width:40px;height:40px;border-radius:50%;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0">${initials}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">${m.name}</div>
-            <div style="font-size:11px;color:var(--text2)">${m.phone} · Joined ${joined}</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">${esc(m.name)}</div>
+            <div style="font-size:11px;color:var(--text2)">${esc(m.phone)} · Joined ${joined}</div>
           </div>
           <div>${badge}</div>
         </div>`;
@@ -1369,7 +1372,13 @@ window.openTeamMembersModal = async () => {
 // ── PAGE NAVIGATION ──
 let _overlayStack = [];
 function _pushOverlay(id){ _overlayStack.push(id); try { history.pushState({ voltraOv: id }, ''); } catch (_) {} }
-function _hidePage(id){ const el=document.getElementById(id); if(!el) return; el.classList.remove('open'); el.addEventListener('transitionend', () => { el.style.display='none'; }, { once:true }); }
+function _hidePage(id){
+  // Stop background status polls when their page closes, so a left-open deposit/
+  // withdraw never keeps hitting the server every 2s in the background.
+  if (id === 'depositPage'  && typeof stopDepTimers === 'function') stopDepTimers();
+  if (id === 'withdrawPage' && typeof stopWitTimers === 'function') stopWitTimers();
+  const el=document.getElementById(id); if(!el) return; el.classList.remove('open'); el.addEventListener('transitionend', () => { el.style.display='none'; }, { once:true });
+}
 window.openPage = (id) => {
   const el = document.getElementById(id); if (!el) return;
   el.style.display = 'block';
@@ -1580,11 +1589,11 @@ window.openWithdrawPage = () => {
     wrap.style.display = 'block';
     lbl.textContent = 'Or enter phone manually';
     list.innerHTML = accounts.map((a, i) => `
-      <div class="wit-acc-card" id="witAcc${i}" onclick="pickWitAccount(${i},'${String(a.phone).replace(/'/g,'')}')">
+      <div class="wit-acc-card" id="witAcc${i}" onclick="pickWitAccount(${i},'${String(a.phone).replace(/\D/g,'')}')">
         <div class="wit-acc-ico"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.63 4.4 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.13 1 .36 1.98.71 2.93a2 2 0 0 1-.45 2.11L7.91 9.91A16 16 0 0 0 14.09 16l.91-.91a2 2 0 0 1 2.11-.45c.95.35 1.93.58 2.93.71A2 2 0 0 1 22 16.92z"/></svg></div>
         <div class="wit-acc-info">
-          <div class="wit-acc-name">${a.name}</div>
-          <div class="wit-acc-num">+256 ${a.phone}</div>
+          <div class="wit-acc-name">${esc(a.name)}</div>
+          <div class="wit-acc-num">+256 ${esc(String(a.phone).replace(/\D/g,''))}</div>
         </div>
         <div class="wit-acc-chk" id="witChk${i}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
       </div>`).join('');
@@ -1805,8 +1814,8 @@ function renderBankList() {
     <div class="bank-item">
       <div class="bank-icon">${ICN.phone}</div>
       <div class="bank-info">
-        <div class="bank-name">${a.name || 'Account'}</div>
-        <div class="bank-phone">+256${a.phone}</div>
+        <div class="bank-name">${esc(a.name || 'Account')}</div>
+        <div class="bank-phone">+256${esc(String(a.phone).replace(/\D/g,''))}</div>
       </div>
       <button class="bank-del" onclick="removeBankAccount(${i})">${ICN.trash}</button>
     </div>`).join('');

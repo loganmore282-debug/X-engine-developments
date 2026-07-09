@@ -3069,9 +3069,11 @@ app.post('/account/add-bank', async (req, res) => {
   if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
   const digits = String(phone).replace(/\D/g, '').slice(-9);
   if (digits.length < 9) return res.status(400).json({ status: 'error', message: 'Invalid phone number' });
+  const safeName = String(name).replace(/[<>]/g, '').trim().slice(0, 40); // strip HTML from the label
+  if (!safeName) return res.status(400).json({ status: 'error', message: 'Invalid label' });
   try {
     await db.collection('users').doc(uid).update({
-      bankAccounts: FieldValue.arrayUnion({ name: String(name).trim(), phone: digits })
+      bankAccounts: FieldValue.arrayUnion({ name: safeName, phone: digits })
     });
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
