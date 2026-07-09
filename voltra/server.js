@@ -75,7 +75,7 @@ try {
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 // ── MONGODB (replaces Firestore) ──
-const { connectMongo, db, FieldValue } = require('./db');
+const { connectMongo, db, FieldValue, pingDb } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY        = process.env.ADMIN_KEY        || '';
@@ -237,7 +237,7 @@ async function isMaintenanceOn() {
 // NOTE: '/settings/public' MUST bypass maintenance — the app reads it to DETECT
 // maintenance and show the lock screen. If it were blocked, the app would just
 // freeze (503 everywhere) instead of showing the maintenance screen.
-const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public', '/public'];
+const BYPASS = ['/', '/health', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public', '/public'];
 app.use(async (req, res, next) => {
   const p = req.path;
   if (BYPASS.some(b => p === b || p.startsWith(b + '/'))) return next();
@@ -583,6 +583,13 @@ async function payCommissions(investorId, amount, investmentId) {
 // HEALTH
 // ═══════════════════════════════════════════
 app.get('/', (req, res) => res.json({ status: '◈ Business Server', time: new Date().toISOString() }));
+
+// Deep health check — verifies the database is actually reachable, so you (or an
+// uptime monitor) can catch a DB outage the moment it starts, before users do.
+app.get('/health', async (_req, res) => {
+  const dbOk = await pingDb();
+  res.status(dbOk ? 200 : 503).json({ status: dbOk ? 'ok' : 'degraded', db: dbOk ? 'up' : 'down', time: new Date().toISOString() });
+});
 
 // ── LIVE ONLINE USERS COUNTER ──
 // Single in-memory value drifted server-side every 3s so every device polling

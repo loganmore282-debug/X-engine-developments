@@ -13,12 +13,33 @@ let _client = null;
 let _mdb    = null;
 
 async function connectMongo(uri) {
-  _client = new MongoClient(uri, { serverSelectionTimeoutMS: 10000 });
+  _client = new MongoClient(uri, {
+    serverSelectionTimeoutMS: 10000, // give up finding a server after 10s
+    connectTimeoutMS:         15000,
+    socketTimeoutMS:          45000, // don't let a slow query hang a socket forever
+    maxPoolSize:              50,    // cap connections so one instance can't exhaust M0
+    minPoolSize:              0,
+    retryReads:               true,  // auto-retry reads through a transient blip
+    retryWrites:              true,  // auto-retry writes through a transient blip
+    waitQueueTimeoutMS:       10000
+  });
   await _client.connect();
   const dbName = new URL(uri).pathname.slice(1) || 'voltra';
   _mdb = _client.db(dbName);
+  // Surface pool/topology problems in the logs instead of failing silently.
+  _client.on('serverHeartbeatFailed', e => console.warn('⚠️ Mongo heartbeat failed:', e && e.failure && e.failure.message));
+  _client.on('close', () => console.warn('⚠️ Mongo connection closed'));
   console.log(`✅ MongoDB connected (${dbName})`);
   return _mdb;
+}
+
+// Lightweight liveness check for the /health endpoint — pings the DB with a
+// short deadline so monitoring can see an outage before users do.
+async function pingDb() {
+  try {
+    await _mdb.command({ ping: 1 }, { maxTimeMS: 4000 });
+    return true;
+  } catch (_) { return false; }
 }
 
 // ── FieldValue replacements ──────────────────────────────────────────────────
@@ -288,4 +309,4 @@ const db = {
   },
 };
 
-module.exports = { connectMongo, db, FieldValue, Timestamp };
+module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb };
