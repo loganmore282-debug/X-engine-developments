@@ -1372,13 +1372,7 @@ window.openTeamMembersModal = async () => {
 // ── PAGE NAVIGATION ──
 let _overlayStack = [];
 function _pushOverlay(id){ _overlayStack.push(id); try { history.pushState({ voltraOv: id }, ''); } catch (_) {} }
-function _hidePage(id){
-  // Stop background status polls when their page closes, so a left-open deposit/
-  // withdraw never keeps hitting the server every 2s in the background.
-  if (id === 'depositPage'  && typeof stopDepTimers === 'function') stopDepTimers();
-  if (id === 'withdrawPage' && typeof stopWitTimers === 'function') stopWitTimers();
-  const el=document.getElementById(id); if(!el) return; el.classList.remove('open'); el.addEventListener('transitionend', () => { el.style.display='none'; }, { once:true });
-}
+function _hidePage(id){ const el=document.getElementById(id); if(!el) return; el.classList.remove('open'); el.addEventListener('transitionend', () => { el.style.display='none'; }, { once:true }); }
 window.openPage = (id) => {
   const el = document.getElementById(id); if (!el) return;
   el.style.display = 'block';

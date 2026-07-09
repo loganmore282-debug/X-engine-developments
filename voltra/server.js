@@ -55,6 +55,16 @@ const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeade
 // General admin-panel ceiling — generous for real use, still caps abuse.
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
+// Global flood ceiling — a coarse net against a bot/DoS hammering the server
+// from a single source. Deliberately HIGH (1000/min per IP) because Ugandan
+// mobile users often share one carrier-NAT IP, so only egregious bot floods
+// trip it — never real users. Skips provider webhooks + the health check.
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 1000, standardHeaders: true, legacyHeaders: false,
+  skip: (req) => req.path.includes('/callback') || req.path === '/health' || req.path === '/sms/incoming',
+  message: { status: 'error', message: 'Too many requests. Slow down.' }
+});
+app.use(globalLimiter);
 app.use('/auth/', authLimiter);
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/', adminLimiter);

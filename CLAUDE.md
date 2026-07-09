@@ -13,7 +13,7 @@ The owner speaks plainly, wants things done (not lots of questions), hates abbre
 **amber** theme. The app icon is the **blue Voltra infinity mark** (intentional: amber
 UI + blue logo icon).
 
-**Current service-worker cache: `voltra-shell-v54`** (next edit → v55). Deploy targets
+**Current service-worker cache: `voltra-shell-v55`** (next edit → v56). Deploy targets
 unchanged: zip → EdgeOne, `admin.html` → admin host, `server.js` → Railway repo "business".
 
 ## Session progress log (most recent session — read to know where we ended)
