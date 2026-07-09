@@ -1133,7 +1133,7 @@ window.showTab = (tab, btn) => {
 // ── RECENT TRANSACTION DETAIL ──
 let _recentTxs = [];
 const TX_TYPE_LABELS = {
-  deposit: 'Recharge', admin_credit: 'Voltra Credit', withdrawal: 'Payout',
+  deposit: 'Recharge', admin_credit: 'Voltra Credit', admin_debit: 'Balance Adjustment', withdrawal: 'Payout',
   refund: 'Refund', investment: 'Asset Activation', investment_return: 'Asset Payout',
   commission: 'Referral Reward', checkin: 'Daily Bonus', cashback: 'Cashback',
   gift_code: 'Gift Code', prize_draw_ticket: 'Prize Draw Ticket',
@@ -1595,7 +1595,11 @@ window.openUserModal = (userId) => {
           <input class="form-input" id="creditNote" placeholder="Bonus credit">
         </div>
       </div>
-      <button class="btn btn-primary btn-full" onclick="submitCredit()">Credit Wallet</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button class="btn btn-primary" onclick="submitCredit()">➕ Credit (add)</button>
+        <button class="btn btn-danger" onclick="submitDebit()">➖ Debit (remove)</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">Debit removes money — use it to reverse a mistaken credit. Balance can go negative if already spent.</div>
     </div>
 
     <!-- How did they earn it? — recent transaction history -->
@@ -1665,6 +1669,19 @@ window.submitCredit = async () => {
   try {
     const r = await api('/admin/deposit', { userId, amount, note, adminKey: _adminKey });
     showToast(r.message || (r.status === 'success' ? 'Credited!' : 'Failed'), r.status === 'success' ? 'success' : 'error');
+    if (r.status === 'success') { closeModal('userOverlay'); loadUsers(); }
+  } catch(e) { showToast('Error', 'error'); }
+};
+
+window.submitDebit = async () => {
+  const userId = document.getElementById('creditUserId').value;
+  const amount = parseFloat(document.getElementById('creditAmount').value);
+  const note   = document.getElementById('creditNote').value.trim();
+  if (!userId || !amount || amount <= 0) { showToast('Enter a valid amount to remove', 'error'); return; }
+  if (!confirm(`Remove UGX ${amount.toLocaleString()} from this user's wallet? The balance can go negative.`)) return;
+  try {
+    const r = await api('/admin/debit', { userId, amount, note, adminKey: _adminKey });
+    showToast(r.message || (r.status === 'success' ? 'Removed!' : 'Failed'), r.status === 'success' ? 'success' : 'error');
     if (r.status === 'success') { closeModal('userOverlay'); loadUsers(); }
   } catch(e) { showToast('Error', 'error'); }
 };

@@ -1645,6 +1645,32 @@ app.post('/admin/deposit', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// Remove money from a wallet (e.g. reverse a mistaken over-credit). Balance may
+// go negative if the amount was already partly spent — that's intentional so a
+// mistake can be fully clawed back. Records an admin_debit transaction.
+app.post('/admin/debit', async (req, res) => {
+  const { userId, amount, note, adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const amt = Math.abs(parseFloat(amount || 0));
+  if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  try {
+    const { date, time } = nowStr();
+    let newBal = 0;
+    await db.runTransaction(async t => {
+      const uRef  = db.collection('users').doc(userId);
+      const uSnap = await t.get(uRef);
+      if (!uSnap.exists) throw new Error('User not found');
+      newBal = (uSnap.data().walletBalance || 0) - amt;
+      t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'admin_debit', description: note || 'Balance adjustment',
+        amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    return res.json({ status: 'success', message: `Removed ${fmtUGX(amt)} — new balance ${fmtUGX(newBal)}`, newBalance: newBal });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 app.post('/admin/ban', async (req, res) => {
   const { userId, adminKey, action, reason } = req.body;
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

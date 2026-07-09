@@ -2056,7 +2056,7 @@ window.downloadStatement = async () => {
     doc.text('DATE / TIME', 14, y); doc.text('TYPE', 70, y); doc.text('DESCRIPTION', 100, y); doc.text('AMOUNT', 196, y, {align:'right'});
     y += 2; doc.setDrawColor(200,200,200); doc.line(14, y, 196, y); y += 6;
     doc.setFont('helvetica','normal');
-    const TYPEMAP = { deposit:'Recharge', admin_credit:'Voltra Credit', checkin:'Daily Bonus', cashback:'Asset Payout', commission:'Referral Reward', gift_code:'Gift Reward', investment:'Activation', investment_return:'Asset Payout', withdrawal:'Payout', refund:'Refund', reversal:'Reversal', prize_draw_ticket:'Prize Draw Ticket', prize_draw_win:'Prize Draw Win', prize_draw_refund:'Prize Draw Refund', agent_reversal:'Adjustment' };
+    const TYPEMAP = { deposit:'Recharge', admin_credit:'Voltra Credit', checkin:'Daily Bonus', cashback:'Asset Payout', commission:'Referral Reward', gift_code:'Gift Reward', investment:'Activation', investment_return:'Asset Payout', withdrawal:'Payout', refund:'Refund', reversal:'Reversal', prize_draw_ticket:'Prize Draw Ticket', prize_draw_win:'Prize Draw Win', prize_draw_refund:'Prize Draw Refund', agent_reversal:'Adjustment', admin_debit:'Adjustment' };
     let totalIn = 0, totalOut = 0;
     if (!txs.length) doc.text('No transactions yet.', 14, y);
     txs.forEach(t => {
