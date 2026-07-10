@@ -3388,13 +3388,29 @@ app.use((err, req, res, _next) => {
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
 
+let _cronsStarted = false;
 async function startServer() {
   if (!MONGODB_URI) { console.error('❌ MONGODB_URI env var not set'); process.exit(1); }
-  await connectMongo(MONGODB_URI);
+
+  // Start listening RIGHT AWAY so the server is always reachable — even if the
+  // database is momentarily unreachable at boot. This prevents a crash-loop where
+  // a DB blip makes "restart" do nothing; /health stays up so you can diagnose,
+  // and the app self-heals the instant the DB comes back.
   app.listen(PORT, () => {
     console.log(`◈ Voltra Investment Server on port ${PORT}`);
     console.log(`  URL: ${RAILWAY_URL || '(set RAILWAY_URL)'}`);
-    startCrons();
   });
+
+  // Connect to MongoDB with unlimited background retries.
+  const tryConnect = async () => {
+    try {
+      await connectMongo(MONGODB_URI);
+      if (!_cronsStarted) { _cronsStarted = true; startCrons(); }
+    } catch (e) {
+      console.error('⏳ MongoDB not reachable yet — retrying in 5s:', e.message);
+      setTimeout(tryConnect, 5000);
+    }
+  };
+  tryConnect();
 }
 startServer().catch(e => { console.error('Startup error:', e.message); process.exit(1); });
