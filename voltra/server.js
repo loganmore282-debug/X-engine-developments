@@ -45,30 +45,42 @@ function stripMongoOperators(obj, depth = 0) {
 app.use((req, _res, next) => { try { stripMongoOperators(req.body); } catch (_) {} next(); });
 
 // ── RATE LIMITERS ──
-const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+// CRITICAL: Ugandan mobile networks (MTN/Airtel) put thousands of users behind a
+// few carrier-NAT IPs, so limiting per-IP wrongly punishes real users sharing an
+// IP (the whole app fails without a VPN). So for logged-in traffic we key the
+// limiter on the FIREBASE USER (decoded from the token, not verified here — auth
+// still happens in the handler), giving every user their OWN budget regardless of
+// shared IP. Only unauthenticated login/register falls back to per-IP.
+function rlKeyByUser(req) {
+  const auth = req.headers.authorization || '';
+  if (auth.startsWith('Bearer ')) {
+    try {
+      const p = JSON.parse(Buffer.from(auth.slice(7).split('.')[1], 'base64').toString('utf8'));
+      const uid = p && (p.user_id || p.sub);
+      if (uid) return 'u:' + uid;
+    } catch (_) {}
+  }
+  return req.ip;
+}
+// Login/register/OTP — no token yet, so per-IP. Generous so a group of real users
+// on one carrier-NAT IP isn't blocked, while still slowing a single-source flood.
+const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 40, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
-const apiLimiter  = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+// Money/value endpoints — keyed PER USER, so one user can't be blocked by others
+// sharing their IP.
+const apiLimiter  = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
-// Admin password guess-throttle — stops brute-forcing the admin key.
+// Admin password guess-throttle — stops brute-forcing the admin key (per IP is
+// fine: only the admin hits this path, not shared with users).
 const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
-// General admin-panel ceiling — generous for real use, still caps abuse.
-const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
+// General admin-panel ceiling — only the admin hits /admin/ paths.
+const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
-// Global flood ceiling — a coarse net against a bot/DoS hammering the server
-// from a single source. Deliberately HIGH (1000/min per IP) because Ugandan
-// mobile users often share one carrier-NAT IP, so only egregious bot floods
-// trip it — never real users. Skips provider webhooks + the health check.
-const globalLimiter = rateLimit({
-  windowMs: 60 * 1000, max: 1000, standardHeaders: true, legacyHeaders: false,
-  skip: (req) => req.path.includes('/callback') || req.path === '/health' || req.path === '/sms/incoming',
-  message: { status: 'error', message: 'Too many requests. Slow down.' }
-});
-app.use(globalLimiter);
 app.use('/auth/', authLimiter);
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/', adminLimiter);
-// Rate-limit every money / value-moving endpoint (per IP, 60/min).
+// Money / value-moving endpoints (per USER, 60/min).
 ['/checkin', '/withdraw/request', '/invest/create', '/invest/claim',
  '/deposit/marzpay', '/deposit/initiate', '/prize-draw/buy', '/giftcode/redeem']
   .forEach(p => app.use(p, apiLimiter));
