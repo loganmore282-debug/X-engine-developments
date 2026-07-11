@@ -4,7 +4,7 @@
    API / auth / Firestore calls are never cached — always live.
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'voltra-shell-v55';
+const CACHE = 'voltra-shell-v56';
 const SHELL = [
   './',
   './index.html',
@@ -41,6 +41,7 @@ self.addEventListener('fetch', (event) => {
   // Never cache backend / auth / firestore — always live
   if (
     url.hostname.includes('railway.app') ||
+    url.hostname === 'api.voltrapower.com' ||
     url.hostname.includes('firestore') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('identitytoolkit') ||
