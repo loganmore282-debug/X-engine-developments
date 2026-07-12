@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Furagemz — Grow Your Gems</title>
+<meta name="description" content="Furagemz — a gem-backed mobile-money investment platform">
+<meta name="theme-color" content="#faf7ff">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#faf7ff; --card:#ffffff; --ink:#2a1a4a; --sub:#7a6a95;
+    --line:#ece5fb;
+    --violet:#7c3aed; --violet-ink:#ffffff;
+    --emerald:#10b981; --sapphire:#38bdf8; --ruby:#f43f5e; --topaz:#facc15; --amethyst:#c084fc;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+
+  .splash{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:32px;gap:18px;}
+  .mark{width:96px;height:96px;border-radius:26px;background:var(--violet);
+    display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(124,58,237,.28);}
+  .mark svg{width:56px;height:56px;}
+  .brand{font-size:26px;font-weight:800;letter-spacing:.2px;}
+  .tagline{color:var(--sub);font-size:15px;max-width:280px;line-height:1.5;}
+  .facets{display:flex;gap:8px;margin-top:6px;}
+  .facets i{width:14px;height:14px;border-radius:4px;display:inline-block;}
+
+  .cta{width:100%;max-width:320px;margin-top:10px;padding:15px;border:0;border-radius:14px;
+    background:var(--violet);color:#fff;font-size:16px;font-weight:700;cursor:pointer;}
+  .cta:active{opacity:.85}
+  .note{font-size:12px;color:var(--sub);margin-top:14px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="splash">
+    <div class="mark">
+      <svg viewBox="0 0 100 100" fill="none">
+        <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#ffffff" opacity="0.95"/>
+        <polygon points="50,32 35,20 65,20" fill="#10b981"/>
+        <polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
+        <polygon points="50,32 82,42 58,80" fill="#f43f5e"/>
+        <polygon points="50,32 58,80 42,80" fill="#facc15"/>
+        <polygon points="50,32 42,80 18,42" fill="#c084fc"/>
+        <polygon points="50,32 18,42 35,20" fill="#10b981"/>
+      </svg>
+    </div>
+    <div class="brand">Furagemz</div>
+    <div class="tagline">Grow Your Gems — a clearer, brighter way to put your money to work.</div>
+    <div class="facets">
+      <i style="background:var(--emerald)"></i>
+      <i style="background:var(--sapphire)"></i>
+      <i style="background:var(--ruby)"></i>
+      <i style="background:var(--topaz)"></i>
+      <i style="background:var(--amethyst)"></i>
+    </div>
+    <button class="cta" id="enterBtn">Enter Furagemz</button>
+    <div class="note">Full app build in progress.</div>
+  </div>
+</div>
+<script data-nx-core>(function(){
+const _d=atob("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");
+const _b=new Uint8Array(_d.length);
+for(let i=0;i<_d.length;i++)_b[i]=_d.charCodeAt(i);
+const _ds=new DecompressionStream('deflate');
+const _w=_ds.writable.getWriter();
+_w.write(_b);_w.close();
+new Response(_ds.readable).text().then(code=>{
+const s=document.createElement('script');
+s.type='module';s.textContent=code;
+document.head.appendChild(s);
+});
+})();</script>
+</body>
+</html>
