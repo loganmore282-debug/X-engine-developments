@@ -72,7 +72,7 @@ app.use('/auth/', authLimiter);
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/', adminLimiter);
 // Money/value endpoints added in phase 2 will be registered here as they land:
-['/checkin', '/withdraw/request', '/invest/create', '/invest/claim', '/deposit/marzpay', '/redeem']
+['/checkin', '/withdraw/request', '/invest/create', '/invest/boost', '/deposit/marzpay', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── FIREBASE AUTH (Auth only — data lives in MongoDB) ──
@@ -106,12 +106,16 @@ const MIN_DEPOSIT      = 30000;
 const MIN_WITHDRAWAL   = 10000;   // no multiples restriction (owner's call, differs from Voltra)
 const WELCOME_BONUS    = 5000;
 const CHECKIN_BONUS    = 300;
-const COMM_L1          = 0.18;
-const COMM_L2          = 0.05;
-const COMM_L3          = 0.02;
+const COMM_L1          = 0.35;    // referral bonus, level 1
+const COMM_L2          = 0.02;    // level 2
+const COMM_L3          = 0.01;    // level 3
 const LIQUIDITY_FEE    = 0.05;    // withdrawal fee
 const RETURN_MULTIPLE  = 2.5;     // payout = price * RETURN_MULTIPLE, paid in full at maturity
-const CYCLE_DAYS       = 5;       // every tier's daily figure lands on a whole number at 2.5x
+const CYCLE_DAYS       = 30;      // stipulated investment period (days) — long enough that Boost matters
+// BOOST / ACCELERATE — after BOOST_UNLOCK_DAYS the holder may pay the same amount
+// again to cut the remaining wait: the gem then matures BOOST_MATURE_HOURS later.
+const BOOST_UNLOCK_DAYS  = 5;
+const BOOST_MATURE_HOURS = 3;
 
 // Gem tier ladder — prices distinct from Voltra's energy-asset ladder.
 const GEM_TIERS = [
@@ -383,6 +387,8 @@ app.get('/settings/public', async (_req, res) => {
     checkinBonus: s.checkinBonus ?? CHECKIN_BONUS,
     liquidityFee: s.liquidityFee ?? LIQUIDITY_FEE,
     gemTiers: GEM_TIERS,
+    boostUnlockDays:  s.boostUnlockDays  ?? BOOST_UNLOCK_DAYS,
+    boostMatureHours: s.boostMatureHours ?? BOOST_MATURE_HOURS,
     supportWhatsapp: s.supportWhatsapp || '',
     supportEmail:    s.supportEmail    || '',
     supportHours:    s.supportHours    || '',
@@ -742,9 +748,11 @@ app.post('/invest/create', async (req, res) => {
     if ((user.walletBalance || 0) < tier.price)
       return res.status(400).json({ status: 'error', message: `Need ${fmtUGX(tier.price)}, have ${fmtUGX(user.walletBalance || 0)}` });
 
-    const { date, time } = nowStr();
-    const matDate = new Date();
-    matDate.setDate(matDate.getDate() + tier.cycle);
+    const sett = await getSettings();
+    const unlockDays = Number(sett.boostUnlockDays ?? BOOST_UNLOCK_DAYS);
+    const now = Date.now();
+    const matDate = new Date(now + tier.cycle * 86400000);
+    const boostUnlockDate = new Date(now + unlockDays * 86400000);
     let invId;
     await db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
@@ -754,10 +762,12 @@ app.post('/invest/create', async (req, res) => {
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
       t.update(uRef, { walletBalance: bal - tier.price, totalInvested: FieldValue.increment(tier.price) });
+      const { date, time } = nowStr();
       t.set(invRef, {
         userId, tierKey: tier.key, tierLabel: tier.label,
         amount: tier.price, cycle: tier.cycle, expectedReturn: tier.expectedReturn,
         status: 'active', maturityDate: matDate,
+        boosted: false, boostUnlockDate,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
@@ -770,6 +780,56 @@ app.post('/invest/create', async (req, res) => {
     return res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.label} for ${fmtUGX(tier.price)}` });
   } catch (e) {
     console.error('Invest error:', e.message);
+    return res.status(400).json({ status: 'error', message: e.message });
+  }
+});
+
+// BOOST — after the unlock window, pay the same amount again to accelerate:
+// the gem then matures BOOST_MATURE_HOURS later (payout unchanged).
+app.post('/invest/boost', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const { investmentId } = req.body;
+  if (!investmentId) return res.status(400).json({ status: 'error', message: 'investmentId required' });
+  try {
+    const invRef  = db.collection('investments').doc(investmentId);
+    const invSnap = await invRef.get();
+    if (!invSnap.exists) return res.status(404).json({ status: 'error', message: 'Investment not found' });
+    const inv = invSnap.data();
+    if (inv.userId !== userId) return res.status(403).json({ status: 'error', message: 'Not your investment' });
+    if (inv.status !== 'active') return res.status(400).json({ status: 'error', message: 'This gem is no longer active' });
+    if (inv.boosted) return res.status(400).json({ status: 'error', message: 'This gem is already boosted' });
+    const unlockMs = tsMillis(inv.boostUnlockDate);
+    if (unlockMs && Date.now() < unlockMs) {
+      const daysLeft = Math.ceil((unlockMs - Date.now()) / 86400000);
+      return res.status(400).json({ status: 'error', message: `Boost unlocks in ${daysLeft} day${daysLeft === 1 ? '' : 's'}` });
+    }
+    const sett = await getSettings();
+    const hours = Number(sett.boostMatureHours ?? BOOST_MATURE_HOURS);
+    const cost  = inv.amount || 0;
+    const newMat = new Date(Date.now() + hours * 3600000);
+    const { date, time } = nowStr();
+    let err = null, ok = false;
+    await db.runTransaction(async t => {
+      const uRef  = db.collection('users').doc(userId);
+      const uSnap = await t.get(uRef);
+      if (!uSnap.exists) { err = 'User not found'; return; }
+      const bal = uSnap.data().walletBalance || 0;
+      if (bal < cost) { err = `Need ${fmtUGX(cost)} to boost, have ${fmtUGX(bal)}`; return; }
+      const freshInv = await t.get(invRef);
+      if (!freshInv.exists || freshInv.data().status !== 'active' || freshInv.data().boosted) { err = 'This gem cannot be boosted now'; return; }
+      t.update(uRef, { walletBalance: bal - cost, totalInvested: FieldValue.increment(cost) });
+      t.update(invRef, { boosted: true, boostedAt: FieldValue.serverTimestamp(), boostAmount: cost, maturityDate: newMat });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'boost', description: `Boosted ${inv.tierLabel || 'gem'} — matures in ${hours}h`,
+        amount: -cost, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
+      });
+      ok = true;
+    });
+    if (!ok) return res.status(400).json({ status: 'error', message: err || 'Could not boost' });
+    return res.json({ status: 'success', maturesInHours: hours, message: `Boosted — matures in ${hours} hours` });
+  } catch (e) {
+    console.error('Boost error:', e.message);
     return res.status(400).json({ status: 'error', message: e.message });
   }
 });

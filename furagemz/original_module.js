@@ -58,6 +58,7 @@ const ICN = {
   clock:        _svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   bank:         _svg('<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18"/><path d="M7 16h4"/>'),
   trash:        _svg('<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>'),
+  boost:        _svg('<path d="M13 3 5 13h6l-1 8 9-11h-6z"/>'),
 };
 
 // Faceted emerald-cut gem illustration, tinted to any tier colour. Layered
@@ -77,7 +78,7 @@ function typeColor(t) {
     topup: 'var(--emerald)', gem_payout: 'var(--ok)', commission: 'var(--sapphire)',
     checkin: 'var(--topaz)', withdrawal: 'var(--ruby)', admin_debit: 'var(--ruby)',
     investment: 'var(--amethyst)', refund: 'var(--sapphire)', admin_credit: 'var(--violet)',
-    redeem: 'var(--violet)'
+    redeem: 'var(--violet)', boost: '#ef4444'
   };
   return map[t] || 'var(--violet)';
 }
@@ -488,6 +489,77 @@ function daysLeft(inv) {
   const d = Math.ceil((mat - Date.now()) / 86400000);
   return d > 0 ? d : 0;
 }
+function fmtCountdown(ms) {
+  if (ms <= 0) return 'moments';
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+// Boost eligibility for an active gem.
+function boostState(inv) {
+  if (inv.status !== 'active') return { kind: 'none' };
+  if (inv.boosted) return { kind: 'boosted', ms: tsMs(inv.maturityDate) - Date.now() };
+  const unlock = tsMs(inv.boostUnlockDate);
+  if (unlock && Date.now() < unlock) return { kind: 'locked', days: Math.ceil((unlock - Date.now()) / 86400000) };
+  return { kind: 'ready', cost: inv.amount };
+}
+function boostRowHtml(inv) {
+  const bs = boostState(inv);
+  if (bs.kind === 'none') return '';
+  if (bs.kind === 'ready')   return `<div class="ga-boost"><span class="bs hot">Ready to accelerate</span><button class="boost-btn" data-boost="${esc(inv.id)}">${ICN.boost} Boost ${ugx(bs.cost)}</button></div>`;
+  if (bs.kind === 'boosted') return `<div class="ga-boost"><span class="bs hot">Boosted · matures in ${fmtCountdown(bs.ms)}</span></div>`;
+  return `<div class="ga-boost"><span class="bs">Boost unlocks in ${bs.days} day${bs.days === 1 ? '' : 's'}</span></div>`;
+}
+function bindBoosts(scope) {
+  (scope || document).querySelectorAll('[data-boost]').forEach(b =>
+    b.addEventListener('click', () => openBoostModal(b.dataset.boost)));
+}
+function openBoostModal(invId) {
+  const inv = _investments.find(i => i.id === invId);
+  if (!inv) return;
+  const hours = _publicSettings?.boostMatureHours || 3;
+  const cost = inv.amount || 0;
+  openModal(`
+    <div class="modal-head"><h2>Boost ${esc(inv.tierLabel || 'gem')}</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="boost-hero">${ICN.boost}</div>
+    <p class="boost-copy">Pay <b>${ugx(cost)}</b> again to accelerate this gem. It matures in about <b>${hours} hours</b> instead of waiting the full period — and your payout of <b>${ugx(inv.expectedReturn)}</b> stays the same.</p>
+    <div class="breakdown">
+      <div class="br"><span class="muted">Boost cost</span><span>${ugx(cost)}</span></div>
+      <div class="br"><span class="muted">Your balance</span><span>${ugx(_account?.walletBalance || 0)}</span></div>
+      <div class="br total"><span>Matures in</span><span>${hours} hours</span></div>
+    </div>
+    <button class="btn" id="mSubmit">Boost now</button>
+  `);
+  document.getElementById('mSubmit').addEventListener('click', async () => {
+    if ((_account?.walletBalance || 0) < cost) { closeModal(); return toast(`Need ${ugx(cost)} to boost`, 'err'); }
+    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
+    const r = await api('/invest/boost', { method: 'POST', body: { investmentId: invId } });
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not boost', 'err'); }
+    closeModal();
+    toast(r.message || 'Boosted', 'ok');
+    await loadAccount(); await loadTxns(); renderHome(); renderAccount();
+  });
+}
+function openHoldingsModal() {
+  const list = _investments.slice().sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
+  const rowHtml = inv => {
+    const bs = boostState(inv);
+    const matured = inv.status === 'matured' || inv.status === 'claimed';
+    const badge = matured ? `<span class="badge on">Matured</span>`
+      : inv.boosted ? `<span class="badge" style="background:#fff3e6;color:#c2410c">Boosted</span>`
+      : `<span class="badge off">Active</span>`;
+    let action = '';
+    if (bs.kind === 'ready')   action = `<button class="boost-btn" style="margin-top:10px" data-boost="${esc(inv.id)}">${ICN.boost} Boost ${ugx(bs.cost)}</button>`;
+    else if (bs.kind === 'boosted') action = `<div class="bs hot" style="margin-top:8px">Matures in ${fmtCountdown(bs.ms)}</div>`;
+    else if (bs.kind === 'locked')  action = `<div class="bs" style="margin-top:8px">Boost unlocks in ${bs.days} day${bs.days === 1 ? '' : 's'}</div>`;
+    return `<div class="hold-row"><div class="hold-top"><b>${esc(inv.tierLabel || 'Gem')}</b>${badge}</div>
+      <div class="hold-sub">${ugx(inv.amount)} in · pays ${ugx(inv.expectedReturn)}</div>${action}</div>`;
+  };
+  openModal(`
+    <div class="modal-head"><h2>My gems</h2><button class="modal-close">${ICN.close}</button></div>
+    ${list.length ? list.map(rowHtml).join('') : `<div class="empty-note">You have no gems yet. Buy one from the Gems tab.</div>`}
+  `);
+  bindBoosts(document.getElementById('modalRoot'));
+}
 
 const BANNER_SLIDES = [
   { bg: 'linear-gradient(120deg,#7c3aed 0%,#c026d3 100%)', art: '#e9d5ff', title: 'Grow your gems', sub: 'Buy a tier, get paid in full at maturity.' },
@@ -552,12 +624,15 @@ function renderHome() {
     <div class="sec-head"><h3>Your gems</h3>${active.length ? `<button class="link-btn" data-tab-jump="gems">Buy more</button>` : ''}</div>
     ${active.length ? active.map(inv => `
       <div class="gem-active">
-        <div class="ring">${ringSvg(gemProgress(inv), 'var(--violet)')}</div>
-        <div class="gem-active-info">
-          <div class="t">${esc(inv.tierLabel || 'Gem')}</div>
-          <div class="s">${daysLeft(inv)} day${daysLeft(inv) === 1 ? '' : 's'} left · ${ugx(inv.amount)} in</div>
-          <div class="p">Pays ${ugx(inv.expectedReturn)} at maturity</div>
+        <div class="ga-main">
+          <div class="ring">${ringSvg(gemProgress(inv), 'var(--violet)')}</div>
+          <div class="gem-active-info">
+            <div class="t">${esc(inv.tierLabel || 'Gem')}</div>
+            <div class="s">${inv.boosted ? 'Accelerating' : daysLeft(inv) + ' day' + (daysLeft(inv) === 1 ? '' : 's') + ' left'} · ${ugx(inv.amount)} in</div>
+            <div class="p">Pays ${ugx(inv.expectedReturn)} at maturity</div>
+          </div>
         </div>
+        ${boostRowHtml(inv)}
       </div>`).join('') : `<div class="empty-note">No active gems yet. Buy your first one from the Gems tab.</div>`}
     <div class="sec-head"><h3>Recent activity</h3>${_txns.length ? `<button class="link-btn" data-tab-jump="account">See all</button>` : ''}</div>
     ${recent.length ? recent.map(txnRowHtml).join('') : `<div class="empty-note">No activity yet.</div>`}
@@ -572,6 +647,7 @@ function renderHome() {
   el.querySelector('#qaRedeem').addEventListener('click', openRedeemModal);
   if (!checkedInToday) el.querySelector('#qaCheckin').addEventListener('click', doCheckin);
   el.querySelectorAll('[data-tab-jump]').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tabJump)));
+  bindBoosts(el);
   startBanner();
 }
 
@@ -874,7 +950,7 @@ function renderAccount() {
   `;
   el.querySelector('#mnRedeem').addEventListener('click', openRedeemModal);
   el.querySelector('#mnHistory').addEventListener('click', openHistoryModal);
-  el.querySelector('#mnGems').addEventListener('click', () => switchTab('gems'));
+  el.querySelector('#mnGems').addEventListener('click', openHoldingsModal);
   el.querySelector('#mnTeam').addEventListener('click', () => switchTab('team'));
   el.querySelector('#mnBanks').addEventListener('click', openBanksModal);
   el.querySelector('#mnPassword').addEventListener('click', openPasswordModal);

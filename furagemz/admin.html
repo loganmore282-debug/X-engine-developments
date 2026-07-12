@@ -350,9 +350,13 @@ async function renderSettings(){
       </div>
       <div class="row" style="margin-top:6px">
         <div><label>Withdrawal fee (0–1)</label><input id="sFee" type="number" step="0.01" value="${v('liquidityFee',0.05)}"></div>
-        <div><label>L1 commission (0–1)</label><input id="sC1" type="number" step="0.01" value="${v('commL1',0.18)}"></div>
-        <div><label>L2 commission (0–1)</label><input id="sC2" type="number" step="0.01" value="${v('commL2',0.05)}"></div>
-        <div><label>L3 commission (0–1)</label><input id="sC3" type="number" step="0.01" value="${v('commL3',0.02)}"></div>
+        <div><label>L1 commission (0–1)</label><input id="sC1" type="number" step="0.01" value="${v('commL1',0.35)}"></div>
+        <div><label>L2 commission (0–1)</label><input id="sC2" type="number" step="0.01" value="${v('commL2',0.02)}"></div>
+        <div><label>L3 commission (0–1)</label><input id="sC3" type="number" step="0.01" value="${v('commL3',0.01)}"></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Boost unlocks after (days)</label><input id="sBoostDays" type="number" value="${v('boostUnlockDays',5)}"></div>
+        <div><label>Boost matures in (hours)</label><input id="sBoostHrs" type="number" value="${v('boostMatureHours',3)}"></div>
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
@@ -382,7 +386,9 @@ async function renderSettings(){
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdrawal:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       checkinBonus:+$('sCheckin').value, liquidityFee:+$('sFee').value,
-      commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value, maintenanceMode:$('sMaint').checked
+      commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
+      boostUnlockDays:+$('sBoostDays').value, boostMatureHours:+$('sBoostHrs').value,
+      maintenanceMode:$('sMaint').checked
     };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
