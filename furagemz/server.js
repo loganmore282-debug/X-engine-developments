@@ -7,8 +7,8 @@ const rateLimit  = require('express-rate-limit');
 if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
 // ── GLOBAL ERROR SAFETY NET ──
-process.on('unhandledRejection', (reason) => console.error('⚠️ Unhandled rejection:', reason));
-process.on('uncaughtException',  (err)    => { console.error('💥 Uncaught exception:', err); process.exit(1); });
+process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:', reason));
+process.on('uncaughtException',  (err)    => { console.error('Uncaught exception:', err); process.exit(1); });
 
 const app = express();
 app.set('trust proxy', 1);
@@ -81,7 +81,7 @@ try {
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
   if (!serviceAccount.project_id) throw new Error('Missing project_id');
 } catch (e) {
-  console.error('❌ FIREBASE_SERVICE_ACCOUNT invalid:', e.message);
+  console.error('FIREBASE_SERVICE_ACCOUNT invalid:', e.message);
   process.exit(1);
 }
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
@@ -92,7 +92,7 @@ const { connectMongo, db, FieldValue, pingDb } = require('./db');
 // ── CONFIG (owner-set, locked in) ──
 const ADMIN_KEY        = process.env.ADMIN_KEY        || '';
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
-if (!FIREBASE_API_KEY) { console.error('❌ FIREBASE_API_KEY env var is required'); process.exit(1); }
+if (!FIREBASE_API_KEY) { console.error('FIREBASE_API_KEY env var is required'); process.exit(1); }
 const RAILWAY_URL  = (() => {
   let u = (process.env.RAILWAY_URL || '').trim().replace(/\/$/, '');
   if (u && !u.startsWith('http')) u = 'https://' + u;
@@ -110,9 +110,10 @@ const COMM_L1          = 0.18;
 const COMM_L2          = 0.05;
 const COMM_L3          = 0.02;
 const LIQUIDITY_FEE    = 0.05;    // withdrawal fee
+const RETURN_MULTIPLE  = 2.5;     // payout = price * RETURN_MULTIPLE, paid in full at maturity
+const CYCLE_DAYS       = 5;       // every tier's daily figure lands on a whole number at 2.5x
 
 // Gem tier ladder — prices distinct from Voltra's energy-asset ladder.
-// Return multiplier and cycle length finalized in phase 2 alongside invest endpoints.
 const GEM_TIERS = [
   { key: 'quartz',   label: 'Quartz',   price:   25000 },
   { key: 'amethyst', label: 'Amethyst', price:   75000 },
@@ -120,7 +121,77 @@ const GEM_TIERS = [
   { key: 'emerald',  label: 'Emerald',  price:  450000 },
   { key: 'sapphire', label: 'Sapphire', price:  800000 },
   { key: 'diamond',  label: 'Diamond',  price: 1200000 },
-];
+].map(t => {
+  const expectedReturn = Math.round(t.price * RETURN_MULTIPLE);
+  return { ...t, cycle: CYCLE_DAYS, expectedReturn, dailyReturn: expectedReturn / CYCLE_DAYS };
+});
+function findGemTier(key) { return GEM_TIERS.find(t => t.key === key) || null; }
+
+// ── UUID v4 generator ──
+function uuidv4() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ── MarzPay API helpers ──
+const MARZ_TIMEOUT = 20000; // 20 s — abort any hung MarzPay call
+const PROVIDER_BUSY_MSG = 'The mobile-money service is temporarily busy. Please wait a moment and try again.';
+async function _marzParse(resp) {
+  try { return await resp.json(); }
+  catch (_) { return { status: 'error', message: PROVIDER_BUSY_MSG, providerDown: true }; }
+}
+function marzUserMsg(mp, fallback) {
+  const raw = String((mp && mp.message) || '');
+  if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
+      /database error|internal server|server error|try again later|temporarily/i.test(raw))
+    return PROVIDER_BUSY_MSG;
+  return raw || fallback || PROVIDER_BUSY_MSG;
+}
+async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
+  const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
+    description: description || 'Deposit' };
+  if (callbackUrl) payload.callback_url = callbackUrl;
+  const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return _marzParse(resp);
+}
+async function marzSendMoney({ amount, phone, reference, description, callbackUrl }) {
+  const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
+    description: description || 'Payout' };
+  if (callbackUrl) payload.callback_url = callbackUrl;
+  const resp = await fetch(`${MARZPAY_BASE}/send-money`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return _marzParse(resp);
+}
+async function marzGetCollectStatus(uuid) {
+  try {
+    const resp = await fetch(`${MARZPAY_BASE}/collect-money/${uuid}`, {
+      signal: AbortSignal.timeout(MARZ_TIMEOUT),
+      headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+    });
+    const d = await resp.json();
+    return String(d?.data?.transaction?.status || d?.transaction?.status || d?.status || '').toLowerCase();
+  } catch (_) { return ''; }
+}
+async function marzGetStatus(uuid) {
+  try {
+    const resp = await fetch(`${MARZPAY_BASE}/send-money/${uuid}`, {
+      signal: AbortSignal.timeout(MARZ_TIMEOUT),
+      headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+    });
+    const d = await resp.json();
+    return String(d?.data?.transaction?.status || d?.transaction?.status || d?.status || '').toLowerCase();
+  } catch (_) { return ''; }
+}
 
 // ── SETTINGS CACHE — reads MongoDB `settings/main`, TTL 5 min ──
 // Admin-editable rates live here; hardcoded constants above are fallbacks
@@ -183,6 +254,118 @@ async function verifyAuth(req) {
     return decoded.uid;
   } catch (_) { return null; }
 }
+function verifyAdmin(req) {
+  if (!ADMIN_KEY) return false;
+  const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (header && header === ADMIN_KEY) return true;
+  return req.body?.adminKey === ADMIN_KEY;
+}
+
+// Milliseconds from any timestamp shape (Date, ISO string, {seconds}).
+function tsMillis(v) {
+  if (!v) return 0;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v.toDate === 'function')   return v.toDate().getTime();
+  if (typeof v === 'object' && v.seconds != null) return v.seconds * 1000;
+  const t = new Date(v).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+// ── COMMISSION CHAIN — fires once per investment (dedup via commPaid_<invId> flag) ──
+async function payCommissions(investorId, amount, investmentId) {
+  const { date, time } = nowStr();
+  try {
+    const [invSnap, sett] = await Promise.all([
+      db.collection('users').doc(investorId).get(),
+      getSettings()
+    ]);
+    if (!invSnap.exists) return;
+    const investor = invSnap.data();
+    const l1Id = investor.referredBy;
+    const seen = new Set([investorId]);
+    if (!l1Id || seen.has(l1Id)) return;
+    seen.add(l1Id);
+
+    const commL1 = sett.commL1 ?? COMM_L1;
+    const commL2 = sett.commL2 ?? COMM_L2;
+    const commL3 = sett.commL3 ?? COMM_L3;
+    const dedupFlag = `commPaid_${investmentId}`;
+
+    const l1Snap = await db.collection('users').doc(l1Id).get();
+    if (!l1Snap.exists) return;
+    const l1Amt = Math.round(amount * commL1);
+    if (l1Amt > 0 && !l1Snap.data()[dedupFlag]) {
+      await db.runTransaction(async t => {
+        const ref = db.collection('users').doc(l1Id);
+        const f   = await t.get(ref);
+        if (f.data()[dedupFlag]) return;
+        t.update(ref, {
+          walletBalance:      FieldValue.increment(l1Amt),
+          commissionEarned:   FieldValue.increment(l1Amt),
+          commissionL1Earned: FieldValue.increment(l1Amt),
+          [dedupFlag]:        true
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId: l1Id, type: 'commission',
+          description: `Level 1 referral bonus (${Math.round(commL1*100)}%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          amount: l1Amt, level: 1, fromUserId: investorId, investmentId, status: 'success',
+          date, time, createdAt: FieldValue.serverTimestamp()
+        });
+      });
+    }
+
+    const l2Id = l1Snap.data().referredBy;
+    if (!l2Id || seen.has(l2Id)) return;
+    seen.add(l2Id);
+    const l2Snap = await db.collection('users').doc(l2Id).get();
+    if (!l2Snap.exists) return;
+    const l2Amt = Math.round(amount * commL2);
+    if (l2Amt > 0 && !l2Snap.data()[dedupFlag]) {
+      await db.runTransaction(async t => {
+        const ref = db.collection('users').doc(l2Id);
+        const f   = await t.get(ref);
+        if (f.data()[dedupFlag]) return;
+        t.update(ref, {
+          walletBalance:      FieldValue.increment(l2Amt),
+          commissionEarned:   FieldValue.increment(l2Amt),
+          commissionL2Earned: FieldValue.increment(l2Amt),
+          [dedupFlag]:        true
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId: l2Id, type: 'commission',
+          description: `Level 2 referral bonus (${Math.round(commL2*100)}%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          amount: l2Amt, level: 2, fromUserId: investorId, investmentId, status: 'success',
+          date, time, createdAt: FieldValue.serverTimestamp()
+        });
+      });
+    }
+
+    const l3Id = l2Snap.data().referredBy;
+    if (!l3Id || seen.has(l3Id)) return;
+    const l3Snap = await db.collection('users').doc(l3Id).get();
+    if (!l3Snap.exists) return;
+    const l3Amt = Math.round(amount * commL3);
+    if (l3Amt > 0 && !l3Snap.data()[dedupFlag]) {
+      await db.runTransaction(async t => {
+        const ref = db.collection('users').doc(l3Id);
+        const f   = await t.get(ref);
+        if (f.data()[dedupFlag]) return;
+        t.update(ref, {
+          walletBalance:      FieldValue.increment(l3Amt),
+          commissionEarned:   FieldValue.increment(l3Amt),
+          commissionL3Earned: FieldValue.increment(l3Amt),
+          [dedupFlag]:        true
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId: l3Id, type: 'commission',
+          description: `Level 3 referral bonus (${Math.round(commL3*100)}%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          amount: l3Amt, level: 3, fromUserId: investorId, investmentId, status: 'success',
+          date, time, createdAt: FieldValue.serverTimestamp()
+        });
+      });
+    }
+  } catch (e) { console.error('Commission error:', e.message); }
+}
 
 // ── HEALTH ──
 app.get('/health', async (_req, res) => {
@@ -201,6 +384,10 @@ app.get('/settings/public', async (_req, res) => {
     liquidityFee: s.liquidityFee ?? LIQUIDITY_FEE,
     gemTiers: GEM_TIERS,
   });
+});
+
+app.get('/products', async (_req, res) => {
+  res.json({ status: 'success', products: GEM_TIERS });
 });
 
 // ═══════════════════════════════════════════
@@ -321,7 +508,7 @@ app.post('/register', async (req, res) => {
     const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
 
     batch.set(db.collection('transactions').doc(), {
-      userId, type: 'admin_credit', description: 'Sign-up reward',
+      userId, type: 'admin_credit', description: 'Welcome gift',
       amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
     });
 
@@ -372,6 +559,792 @@ app.post('/admin/check-key', (req, res) => {
   return res.json({ status: 'success' });
 });
 
+// ═══════════════════════════════════════════
+// TEAM — direct referrals only (own team, no client-supplied id)
+// ═══════════════════════════════════════════
+app.get('/team/members', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('users').where('referredBy', '==', userId).get();
+    const members = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      members.push({
+        id: doc.id,
+        name: d.name || 'User',
+        phone: d.phone || '',
+        joinedAt: d.createdAt ? new Date(tsMillis(d.createdAt)).toISOString() : null,
+        hasInvested: (d.totalInvested || 0) > 0,
+        totalInvested: d.totalInvested || 0,
+        referralCode: d.referralCode || null,
+      });
+    });
+    members.sort((a, b) => (b.joinedAt || '') > (a.joinedAt || '') ? 1 : -1);
+    return res.json({ status: 'success', members });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════
+// INVESTMENTS — buy a gem tier, paid out in full at maturity (no daily drip)
+// ═══════════════════════════════════════════
+app.post('/invest/create', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const { tierKey } = req.body;
+  const tier = findGemTier(tierKey);
+  if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown gem tier' });
+  try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if ((user.walletBalance || 0) < tier.price)
+      return res.status(400).json({ status: 'error', message: `Need ${fmtUGX(tier.price)}, have ${fmtUGX(user.walletBalance || 0)}` });
+
+    const { date, time } = nowStr();
+    const matDate = new Date();
+    matDate.setDate(matDate.getDate() + tier.cycle);
+    let invId;
+    await db.runTransaction(async t => {
+      const uRef  = db.collection('users').doc(userId);
+      const fresh = await t.get(uRef);
+      const bal   = fresh.data().walletBalance || 0;
+      if (bal < tier.price) throw new Error(`Need ${fmtUGX(tier.price)}, have ${fmtUGX(bal)}`);
+      const invRef = db.collection('investments').doc();
+      invId = invRef.id;
+      t.update(uRef, { walletBalance: bal - tier.price, totalInvested: FieldValue.increment(tier.price) });
+      t.set(invRef, {
+        userId, tierKey: tier.key, tierLabel: tier.label,
+        amount: tier.price, cycle: tier.cycle, expectedReturn: tier.expectedReturn,
+        status: 'active', maturityDate: matDate,
+        date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'investment', description: `Purchased ${tier.label}`,
+        amount: -tier.price, status: 'success', date, time,
+        investmentId: invRef.id, tierKey: tier.key, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    payCommissions(userId, tier.price, invId).catch(e => console.error('Commission err:', e.message));
+    return res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.label} for ${fmtUGX(tier.price)}` });
+  } catch (e) {
+    console.error('Invest error:', e.message);
+    return res.status(400).json({ status: 'error', message: e.message });
+  }
+});
+
+// ── MATURITY CRON — auto-credit the full expected return the instant a gem matures ──
+let _maturityRunning = false;
+async function runMaturityCheck() {
+  if (_maturityRunning) return 0;
+  _maturityRunning = true;
+  try {
+    const snap = await db.collection('investments').where('status', '==', 'active').get();
+    if (snap.empty) return 0;
+    const now = new Date();
+    let count = 0;
+    for (const doc of snap.docs) {
+      const inv = doc.data();
+      const matMs = tsMillis(inv.maturityDate); const mat = matMs ? new Date(matMs) : null;
+      if (!(mat && mat <= now)) continue;
+      const payout = inv.expectedReturn || 0;
+      const { date, time } = nowStr();
+      try {
+        await db.runTransaction(async t => {
+          const fresh = await t.get(doc.ref);
+          if (!fresh.exists || fresh.data().status !== 'active') return;
+          t.update(doc.ref, { status: 'matured', maturedAt: FieldValue.serverTimestamp() });
+          if (payout > 0) {
+            t.update(db.collection('users').doc(inv.userId), {
+              walletBalance: FieldValue.increment(payout),
+              totalEarned:   FieldValue.increment(payout)
+            });
+            t.set(db.collection('transactions').doc(), {
+              userId: inv.userId, type: 'gem_payout',
+              description: `Gem payout — ${inv.tierLabel || 'Gem'}`,
+              amount: payout, status: 'success', date, time, investmentId: doc.id,
+              createdAt: FieldValue.serverTimestamp()
+            });
+          }
+        });
+        count++;
+      } catch (e) { console.error('Maturity credit error:', doc.id, e.message); }
+    }
+    return count;
+  } catch (e) { console.error('Maturity check error:', e.message); return 0; }
+  finally { _maturityRunning = false; }
+}
+function startCrons() {
+  setInterval(runMaturityCheck, 15 * 60 * 1000);
+  setTimeout(runMaturityCheck, 60 * 1000);
+  console.log('Crons started (maturity check every 15m)');
+}
+app.post('/admin/check-maturities', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error' });
+  const matured = await runMaturityCheck();
+  return res.json({ status: 'success', matured });
+});
+
+// ═══════════════════════════════════════════
+// CHECK-IN
+// ═══════════════════════════════════════════
+app.post('/checkin', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const sett  = await getSettings();
+    const bonus = sett.checkinBonus ?? CHECKIN_BONUS;
+    const uRef  = db.collection('users').doc(userId);
+    const uSnap = await uRef.get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    const today = eatNow();
+    const todayKey = today.toISOString().slice(0, 10);
+    const yesterdayKey = new Date(today.getTime() - 86400000).toISOString().slice(0, 10);
+    if (user.lastCheckinDate === todayKey)
+      return res.status(400).json({ status: 'error', message: 'Already checked in today', alreadyDone: true });
+    const newStreak = user.lastCheckinDate === yesterdayKey ? (user.checkinStreak || 0) + 1 : 1;
+    const { date, time } = nowStr();
+    await db.runTransaction(async t => {
+      const fresh = await t.get(uRef);
+      if (fresh.data().lastCheckinDate === todayKey) throw new Error('ALREADY_DONE');
+      t.update(uRef, {
+        walletBalance:   FieldValue.increment(bonus),
+        lastCheckinDate: todayKey, checkinStreak: newStreak,
+        checkinDays:     FieldValue.increment(1),
+        checkinEarned:   FieldValue.increment(bonus)
+      });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'checkin', description: `Daily bonus — Day ${newStreak}`,
+        amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    return res.json({ status: 'success', bonus, streak: newStreak, message: `${fmtUGX(bonus)} credited` });
+  } catch (e) {
+    if (e.message === 'ALREADY_DONE')
+      return res.status(400).json({ status: 'error', message: 'Already checked in today', alreadyDone: true });
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
+// DEPOSIT — MarzPay collection
+// ═══════════════════════════════════════════
+const _depCreateDebounce = new Map();
+const _creditingDeposits = new Set();
+async function creditMarzDeposit(depDoc, amount, provTxId) {
+  const dep = depDoc.data();
+  if (dep.status === 'matched' || dep.status === 'failed') return false;
+  // M0 has NO atomic transactions — serialise per-deposit in-process so a webhook
+  // firing alongside a status-poll can never both credit the same deposit.
+  if (_creditingDeposits.has(depDoc.id)) return false;
+  _creditingDeposits.add(depDoc.id);
+  try {
+    const { date, time } = nowStr();
+    let didCredit = false;
+    await db.runTransaction(async t => {
+      const fresh = await t.get(depDoc.ref);
+      if (!fresh.exists) return;
+      if (fresh.data().status === 'matched' || fresh.data().status === 'failed') return;
+      const uRef = db.collection('users').doc(dep.userId);
+      t.update(uRef, {
+        walletBalance:  FieldValue.increment(amount),
+        totalDeposited: FieldValue.increment(amount)
+      });
+      t.update(depDoc.ref, {
+        status: 'matched', creditedAmount: amount,
+        providerTxId: provTxId || null, matchedAt: FieldValue.serverTimestamp()
+      });
+      t.set(db.collection('transactions').doc(), {
+        userId: dep.userId, type: 'topup', description: 'Wallet top-up',
+        amount, status: 'success', date, time, marzReference: dep.marzReference,
+        createdAt: FieldValue.serverTimestamp()
+      });
+      didCredit = true;
+    });
+    return didCredit;
+  } finally { _creditingDeposits.delete(depDoc.id); }
+}
+async function pollMarzDepositStatus(depDoc) {
+  const dep = depDoc.data();
+  const uuid = dep.marzTxUuid;
+  if (!uuid || !MARZPAY_KEY) return { credited: false, failed: false };
+  const rawStatus = await marzGetCollectStatus(uuid);
+  const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
+  const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+  if (isSuccess) {
+    const creditAmount = dep.amount;
+    await creditMarzDeposit(depDoc, creditAmount, null);
+    return { credited: true, failed: false, amount: creditAmount };
+  }
+  if (isFailed) {
+    if (dep.status !== 'failed') await depDoc.ref.update({ status: 'failed',
+      failedAt: FieldValue.serverTimestamp(), failureReason: 'Payment failed or cancelled' });
+    return { credited: false, failed: true };
+  }
+  return { credited: false, failed: false };
+}
+app.post('/deposit/marzpay', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const { amount, phone: rawPhone } = req.body;
+  const amt = parseInt(amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  const lastDep = _depCreateDebounce.get(userId) || 0;
+  if (Date.now() - lastDep < 7000)
+    return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+  _depCreateDebounce.set(userId, Date.now());
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    const minDep = sett.minDeposit ?? MIN_DEPOSIT;
+    if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
+
+    const phone = cleanPhone(rawPhone || user.phone || '');
+    if (!phone || phone.length < 10)
+      return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
+
+    const reference = uuidv4();
+    const mpData = await marzCollect({
+      amount: amt, phone, reference, description: user.name || userId,
+      callbackUrl: RAILWAY_URL ? RAILWAY_URL + '/deposit/callback' : undefined
+    });
+    const isSandbox = mpData.status === 'sandbox' || mpData.data?.collection?.mode === 'sandbox';
+    if (mpData.status !== 'success' && !isSandbox)
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the payment right now. Please try again.') });
+
+    const marzTxUuid = mpData.data?.transaction?.uuid || null;
+    const { date, time } = nowStr();
+    const depRef = db.collection('pendingDeposits').doc();
+
+    if (isSandbox) {
+      await db.runTransaction(async t => {
+        const uRef  = db.collection('users').doc(userId);
+        const uSnap2 = await t.get(uRef);
+        if (!uSnap2.exists) throw new Error('User not found');
+        t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
+        t.set(depRef, {
+          userId, phone, amount: amt, creditedAmount: amt,
+          marzReference: reference, marzTxUuid, status: 'matched', date, time,
+          matchedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp()
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId, type: 'topup', description: 'Wallet top-up',
+          amount: amt, status: 'success', date, time, marzReference: reference,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      });
+    } else {
+      await depRef.set({
+        userId, phone, amount: amt, marzReference: reference, marzTxUuid,
+        status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    }
+    return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone, sandbox: isSandbox });
+  } catch (e) {
+    console.error('Deposit error:', e.message);
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not start the payment');
+    return res.status(500).json({ status: 'error', message: friendly });
+  }
+});
+app.get('/deposit/status/:id', async (req, res) => {
+  try {
+    const snap = await db.collection('pendingDeposits').doc(req.params.id).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Not found' });
+    let dep = snap.data();
+    if (dep.status === 'processing') {
+      try {
+        const result = await pollMarzDepositStatus(snap);
+        if (result.credited || result.failed) {
+          const fresh = await db.collection('pendingDeposits').doc(snap.id).get();
+          dep = fresh.data();
+        }
+      } catch (pollErr) { console.warn('MarzPay poll error:', pollErr.message); }
+    }
+    return res.json({
+      status: 'success',
+      deposit: { id: snap.id, depositStatus: dep.status, amount: dep.amount, creditedAmount: dep.creditedAmount || dep.amount }
+    });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+async function handleDepositCallback(req, res) {
+  res.status(200).json({ received: true });
+  setImmediate(async () => {
+    const body = req.body;
+    try {
+      const reference = body.transaction?.reference || body.reference || body.merchant_reference || '';
+      if (!reference) return;
+      const rawStatus = (() => {
+        const s = String(body.transaction?.status || body.status || '').toLowerCase();
+        if (s) return s;
+        if (body.event_type === 'collection.completed') return 'completed';
+        if (body.event_type === 'collection.successful') return 'successful';
+        if (body.event_type === 'collection.failed')    return 'failed';
+        if (body.event_type === 'collection.cancelled') return 'cancelled';
+        return '';
+      })();
+      const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
+      const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+      if (!isSuccess && !isFailed) return;
+      const depSnap = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
+      if (depSnap.empty) return;
+      const depDoc = depSnap.docs[0];
+      if (isSuccess) {
+        if (depDoc.data().marzTxUuid) {
+          const realStatus = await marzGetCollectStatus(depDoc.data().marzTxUuid);
+          if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) return;
+        }
+        const amount   = parseInt(body.transaction?.amount?.raw || body.collection?.amount?.raw, 10) || depDoc.data().amount;
+        const provTxId = body.collection?.provider_transaction_id || null;
+        await creditMarzDeposit(depDoc, amount, provTxId);
+      } else if (isFailed) {
+        const failReason = body.transaction?.description || body.description || rawStatus || 'Payment declined';
+        if (depDoc.data().status !== 'failed')
+          await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(), failureReason: failReason });
+      }
+    } catch (e) { console.error('Deposit callback error:', e.message); }
+  });
+}
+app.post('/callback', handleDepositCallback);
+app.post('/deposit/callback', handleDepositCallback);
+
+// ═══════════════════════════════════════════
+// WITHDRAWALS — user requests, admin processes via MarzPay
+// ═══════════════════════════════════════════
+app.post('/withdraw/request', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const { amount, phone } = req.body;
+  const amt = parseFloat(amount);
+  if (!isFinite(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  const fullPhone = cleanPhone(phone);
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    const feeRate = sett.liquidityFee ?? LIQUIDITY_FEE;
+    const minWit  = sett.minWithdrawal ?? MIN_WITHDRAWAL;
+    if (amt < minWit) return res.status(400).json({ status: 'error', message: `Minimum withdrawal is ${fmtUGX(minWit)}` });
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if ((user.walletBalance || 0) < amt)
+      return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });
+
+    const fee = Math.round(amt * feeRate);
+    const netAmt = amt - fee;
+    const { date, time } = nowStr();
+    let witId;
+    await db.runTransaction(async t => {
+      const uRef  = db.collection('users').doc(userId);
+      const fresh = await t.get(uRef);
+      const bal   = fresh.data().walletBalance || 0;
+      if (bal < amt) throw new Error(`Insufficient: ${fmtUGX(bal)}`);
+      t.update(uRef, { walletBalance: bal - amt, withdrawalCount: FieldValue.increment(1) });
+      const witRef = db.collection('withdrawals').doc();
+      witId = witRef.id;
+      t.set(witRef, {
+        userId, userName: user.name || '', userPhone: user.phone || '',
+        withdrawalPhone: fullPhone, amount: amt, fee, netAmount: netAmt,
+        status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'withdrawal', description: 'Cash-out request — awaiting processing',
+        amount: -amt, fee, netAmount: netAmt, phone: fullPhone,
+        status: 'pending', date, time, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });
+  } catch (e) {
+    console.error('Withdrawal error:', e.message);
+    return res.status(400).json({ status: 'error', message: e.message });
+  }
+});
+const _completingWithdrawals = new Set();
+async function completeWithdrawal(witDoc) {
+  const wit = witDoc.data();
+  if (wit.status === 'processed' || wit.status === 'failed') return false;
+  if (_completingWithdrawals.has(witDoc.id)) return false;
+  _completingWithdrawals.add(witDoc.id);
+  try {
+    const applied = await db.runTransaction(async t => {
+      const fresh = await t.get(witDoc.ref);
+      const fs = fresh.data();
+      if (!fs || fs.status === 'processed' || fs.status === 'failed') return false;
+      t.update(witDoc.ref, { status: 'processed', completedAt: FieldValue.serverTimestamp() });
+      t.update(db.collection('users').doc(wit.userId), {
+        totalWithdrawn: FieldValue.increment(wit.netAmount || wit.amount)
+      });
+      return true;
+    });
+    if (!applied) return false;
+    try {
+      const txSnap = await db.collection('transactions').where('withdrawalId', '==', witDoc.id).limit(1).get();
+      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'success' });
+    } catch (txErr) { console.warn('completeWithdrawal tx update:', txErr.message); }
+    return true;
+  } finally { _completingWithdrawals.delete(witDoc.id); }
+}
+async function failWithdrawal(witDoc, reason) {
+  const wit = witDoc.data();
+  if (wit.status === 'processed' || wit.status === 'failed') return false;
+  const { date, time } = nowStr();
+  await db.runTransaction(async t => {
+    const freshWit = await t.get(witDoc.ref);
+    if (!freshWit.exists) return;
+    if (freshWit.data().status === 'processed' || freshWit.data().status === 'failed') return;
+    const uRef  = db.collection('users').doc(wit.userId);
+    const uSnap = await t.get(uRef);
+    if (!uSnap.exists) throw new Error('User not found');
+    t.update(uRef, { walletBalance: FieldValue.increment(wit.amount), withdrawalCount: FieldValue.increment(-1) });
+    t.update(witDoc.ref, { status: 'failed', failureReason: reason, failedAt: FieldValue.serverTimestamp() });
+    t.set(db.collection('transactions').doc(), {
+      userId: wit.userId, type: 'refund', description: 'Withdrawal refund — disbursement failed',
+      amount: wit.amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+    });
+  });
+  try {
+    const txSnap = await db.collection('transactions').where('withdrawalId', '==', witDoc.id).limit(1).get();
+    if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'failed' });
+  } catch (txErr) { console.warn('failWithdrawal tx update:', txErr.message); }
+  return true;
+}
+app.get('/withdraw/status/:id', async (req, res) => {
+  try {
+    const snap = await db.collection('withdrawals').doc(req.params.id).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error' });
+    let wit = snap.data();
+    if (wit.status === 'processing' && (wit.marzTxUuid || wit.marzReference)) {
+      try {
+        const rawStatus = await marzGetStatus(wit.marzTxUuid || wit.marzReference);
+        const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
+        const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+        if (isSuccess) await completeWithdrawal(snap);
+        else if (isFailed) await failWithdrawal(snap, 'Disbursement failed');
+        if (isSuccess || isFailed) {
+          const fresh = await db.collection('withdrawals').doc(req.params.id).get();
+          wit = fresh.data();
+        }
+      } catch (pollErr) { console.warn('Withdraw poll error:', pollErr.message); }
+    }
+    return res.json({ status: 'success', withdrawal: { id: snap.id, withdrawStatus: wit.status, amount: wit.amount, netAmount: wit.netAmount } });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/withdraw/callback', async (req, res) => {
+  res.status(200).json({ received: true });
+  setImmediate(async () => {
+    const body = req.body;
+    try {
+      const marzUuid  = body.transaction?.uuid || body.data?.transaction?.uuid || '';
+      const reference = body.transaction?.reference || body.reference || body.data?.transaction?.reference || '';
+      const rawStatus = (() => {
+        const s = String(body.transaction?.status || body.status || '').toLowerCase();
+        if (s) return s;
+        if (body.event_type === 'disbursement.completed') return 'completed';
+        if (body.event_type === 'disbursement.failed')    return 'failed';
+        return '';
+      })();
+      const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
+      const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+      if ((!marzUuid && !reference) || (!isSuccess && !isFailed)) return;
+      let witSnap = marzUuid
+        ? await db.collection('withdrawals').where('marzTxUuid', '==', marzUuid).limit(1).get()
+        : { empty: true };
+      if (witSnap.empty && reference)
+        witSnap = await db.collection('withdrawals').where('marzReference', '==', reference).limit(1).get();
+      if (witSnap.empty) return;
+      const witDoc = witSnap.docs[0];
+      if (isSuccess) {
+        if (witDoc.data().marzTxUuid) {
+          const realStatus = await marzGetStatus(witDoc.data().marzTxUuid);
+          if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) return;
+        }
+        await completeWithdrawal(witDoc);
+      } else if (isFailed) {
+        await failWithdrawal(witDoc, body.transaction?.description || body.description || 'Disbursement failed');
+      }
+    } catch (e) { console.error('Withdraw callback error:', e.message); }
+  });
+});
+app.post('/admin/withdraw/process', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { withdrawalId } = req.body;
+  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+  try {
+    const witSnap = await db.collection('withdrawals').doc(withdrawalId).get();
+    if (!witSnap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    const wit = witSnap.data();
+    if (wit.status !== 'pending') return res.status(400).json({ status: 'error', message: `Cannot process — status is '${wit.status}'` });
+
+    const phone = wit.withdrawalPhone || wit.userPhone || '';
+    const netAmount = wit.netAmount || wit.amount;
+    const reference = uuidv4();
+    const mpData = await marzSendMoney({
+      amount: netAmount, phone, reference, description: wit.userName || wit.userId,
+      callbackUrl: RAILWAY_URL ? RAILWAY_URL + '/withdraw/callback' : undefined
+    });
+    const witSandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
+    if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox)
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Withdrawal could not be sent right now. Please try again.') });
+
+    const { date, time } = nowStr();
+    const batch = db.batch();
+    const marzTxUuid = mpData.data?.transaction?.uuid || '';
+    if (witSandbox) {
+      batch.update(db.collection('withdrawals').doc(withdrawalId), {
+        status: 'processed', marzReference: reference, marzTxUuid,
+        processedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp()
+      });
+      batch.update(db.collection('users').doc(wit.userId), { totalWithdrawn: FieldValue.increment(netAmount) });
+    } else {
+      batch.update(db.collection('withdrawals').doc(withdrawalId), {
+        status: 'processing', marzReference: reference, marzTxUuid, processedAt: FieldValue.serverTimestamp()
+      });
+    }
+    await batch.commit();
+    try {
+      const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: witSandbox ? 'success' : 'processing', marzReference: reference });
+    } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+    const msg = witSandbox
+      ? `Sandbox: withdrawal marked complete — ${fmtUGX(netAmount)} to ${phone}`
+      : `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}`;
+    return res.json({ status: 'success', message: msg, sandbox: witSandbox });
+  } catch (e) {
+    console.error('Process withdrawal error:', e.message);
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not process withdrawal');
+    return res.status(500).json({ status: 'error', message: friendly });
+  }
+});
+app.post('/withdraw/reject', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { withdrawalId, reason } = req.body;
+  try {
+    const snap = await db.collection('withdrawals').doc(withdrawalId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Not found' });
+    const wit = snap.data();
+    if (['processed', 'rejected'].includes(wit.status))
+      return res.status(400).json({ status: 'error', message: 'Already ' + wit.status });
+    const batch = db.batch();
+    batch.update(db.collection('withdrawals').doc(withdrawalId), {
+      status: 'rejected', rejectionReason: reason || 'Rejected by admin', rejectedAt: FieldValue.serverTimestamp()
+    });
+    batch.update(db.collection('users').doc(wit.userId), {
+      walletBalance: FieldValue.increment(wit.amount), withdrawalCount: FieldValue.increment(-1)
+    });
+    await batch.commit();
+    return res.json({ status: 'success', message: `Rejected. ${fmtUGX(wit.amount)} refunded.` });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════
+// ACCOUNT — own investments / withdrawals / transactions
+// ═══════════════════════════════════════════
+app.get('/account/investments', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('investments').where('userId', '==', userId).get();
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', investments: list });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.get('/account/withdrawals', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('withdrawals').where('userId', '==', userId).get();
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', withdrawals: list });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.get('/account/transactions', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('transactions').where('userId', '==', userId).limit(300).get();
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', transactions: list });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════
+// ADMIN — wallet adjustments, deposits, stats, settings, lists
+// ═══════════════════════════════════════════
+app.post('/admin/deposit', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId, amount, note } = req.body;
+  const amt = parseFloat(amount || 0);
+  if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  try {
+    const { date, time } = nowStr();
+    await db.runTransaction(async t => {
+      const uRef  = db.collection('users').doc(userId);
+      const uSnap = await t.get(uRef);
+      if (!uSnap.exists) throw new Error('User not found');
+      t.update(uRef, { walletBalance: FieldValue.increment(amt) });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'admin_credit', description: note || 'Furagemz credit',
+        amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    return res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/debit', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId, amount, note } = req.body;
+  const amt = Math.abs(parseFloat(amount || 0));
+  if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  try {
+    const { date, time } = nowStr();
+    let newBal = 0;
+    await db.runTransaction(async t => {
+      const uRef  = db.collection('users').doc(userId);
+      const uSnap = await t.get(uRef);
+      if (!uSnap.exists) throw new Error('User not found');
+      newBal = (uSnap.data().walletBalance || 0) - amt;
+      t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'admin_debit', description: note || 'Balance adjustment',
+        amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    return res.json({ status: 'success', message: `Removed ${fmtUGX(amt)} — new balance ${fmtUGX(newBal)}`, newBalance: newBal });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/ban', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId, action, reason } = req.body;
+  try {
+    const isBan = action === 'ban';
+    await db.collection('users').doc(userId).update({
+      status: isBan ? 'banned' : 'active',
+      banReason: isBan ? (reason || 'Policy violation') : null,
+      bannedAt: isBan ? FieldValue.serverTimestamp() : null
+    });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/deposit/complete', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { depositId } = req.body;
+  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+  try {
+    const snap = await db.collection('pendingDeposits').doc(depositId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    if (snap.data().status === 'matched') return res.json({ status: 'success', message: 'Already credited' });
+    const result = await pollMarzDepositStatus(snap);
+    if (result.credited) return res.json({ status: 'success', message: `Credited ${fmtUGX(result.amount)} to user` });
+    if (result.failed) return res.status(400).json({ status: 'error', message: 'MarzPay confirms payment failed' });
+    return res.status(400).json({ status: 'error', message: 'MarzPay status still pending — try again in a moment' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/stats', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [usersSnap, withdrawalsSnap, investmentsSnap] = await Promise.all([
+      db.collection('users').limit(10000).get(),
+      db.collection('withdrawals').where('status', '==', 'pending').get(),
+      db.collection('investments').where('status', '==', 'active').get()
+    ]);
+    let totalWallet = 0, totalDeposited = 0, totalWithdrawn = 0;
+    usersSnap.forEach(d => {
+      const u = d.data();
+      totalWallet += u.walletBalance || 0;
+      totalDeposited += u.totalDeposited || 0;
+      totalWithdrawn += u.totalWithdrawn || 0;
+    });
+    let pendingPayouts = 0;
+    withdrawalsSnap.forEach(d => pendingPayouts += (d.data().netAmount || d.data().amount || 0));
+    return res.json({
+      status: 'success',
+      userCount: usersSnap.size,
+      totalWallet, totalDeposited, totalWithdrawn,
+      pendingWithdrawals: withdrawalsSnap.size, pendingPayouts,
+      activeInvestments: investmentsSnap.size
+    });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/settings', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('settings').doc('main').get();
+    return res.json({ status: 'success', settings: snap.exists ? snap.data() : {} });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/settings/update', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { adminKey, ...updates } = req.body;
+  if (!Object.keys(updates).length) return res.status(400).json({ status: 'error', message: 'No fields to update' });
+  try {
+    await db.collection('settings').doc('main').set(updates, { merge: true });
+    _settingsCache = null; _settingsCacheTs = 0;
+    return res.json({ status: 'success', updated: updates });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/users', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('users').limit(10000).get();
+    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return res.json({ status: 'success', users, count: users.length });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/user/detail', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const snap = await db.collection('users').doc(userId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    return res.json({ status: 'success', user: { id: snap.id, ...snap.data() } });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/transactions/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId, limit: lim = 200 } = req.body;
+  try {
+    if (userId) {
+      const snap = await db.collection('transactions').where('userId', '==', userId).limit(50).get();
+      const txs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      txs.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+      return res.json({ status: 'success', transactions: txs });
+    }
+    const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get();
+    return res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/deposits/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(200).get();
+    return res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/withdrawals/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { limit: lim = 200 } = req.body;
+  try {
+    const snap = await db.collection('withdrawals').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get();
+    return res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/referrals/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('referrals').orderBy('createdAt', 'desc').limit(200).get();
+    return res.json({ status: 'success', referrals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ── 404 + ERROR HANDLER ──
 app.use((req, res) => res.status(404).json({ status: 'error', message: 'Not found' }));
 app.use((err, _req, res, _next) => {
@@ -385,21 +1358,23 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
 
 async function startServer() {
-  if (!MONGODB_URI) { console.error('❌ MONGODB_URI env var not set'); process.exit(1); }
+  if (!MONGODB_URI) { console.error('MONGODB_URI env var not set'); process.exit(1); }
 
   // Start listening right away so the server is always reachable even if the
   // database is momentarily unreachable at boot — /health stays up for
   // diagnosis and the app self-heals the instant the DB comes back.
   app.listen(PORT, () => {
-    console.log(`◆ Furagemz Investment Server on port ${PORT}`);
+    console.log(`Furagemz Investment Server on port ${PORT}`);
     console.log(`  URL: ${RAILWAY_URL || '(set RAILWAY_URL)'}`);
   });
 
+  let cronsStarted = false;
   const tryConnect = async () => {
     try {
       await connectMongo(MONGODB_URI);
+      if (!cronsStarted) { cronsStarted = true; startCrons(); }
     } catch (e) {
-      console.error('⏳ MongoDB not reachable yet — retrying in 5s:', e.message);
+      console.error('MongoDB not reachable yet — retrying in 5s:', e.message);
       setTimeout(tryConnect, 5000);
     }
   };

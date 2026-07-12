@@ -27,9 +27,9 @@ async function connectMongo(uri) {
   const dbName = new URL(uri).pathname.slice(1) || 'furagemz';
   _mdb = _client.db(dbName);
   // Surface pool/topology problems in the logs instead of failing silently.
-  _client.on('serverHeartbeatFailed', e => console.warn('⚠️ Mongo heartbeat failed:', e && e.failure && e.failure.message));
-  _client.on('close', () => console.warn('⚠️ Mongo connection closed'));
-  console.log(`✅ MongoDB connected (${dbName})`);
+  _client.on('serverHeartbeatFailed', e => console.warn('Mongo heartbeat failed:', e && e.failure && e.failure.message));
+  _client.on('close', () => console.warn('Mongo connection closed'));
+  console.log(`MongoDB connected (${dbName})`);
   return _mdb;
 }
 
