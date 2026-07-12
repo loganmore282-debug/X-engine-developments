@@ -48,13 +48,27 @@ const ICN = {
   gem:          _svg('<path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20"/>'),
   people:       _svg('<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/><circle cx="18" cy="9" r="2.4"/>'),
   logout:       _svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
+  redeem:       _svg('<path d="M4 8h16a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4V9a1 1 0 0 1 1-1z"/><path d="M13 8v12" stroke-dasharray="2 2"/>'),
 };
+
+// Faceted emerald-cut gem illustration, tinted to any tier colour. Layered
+// polygons + white overlays give facets and shine on a flat brand colour.
+function gemArt(color) {
+  return `<svg viewBox="0 0 64 64" fill="none">
+    <polygon points="22,8 42,8 56,22 56,42 42,56 22,56 8,42 8,22" fill="${color}"/>
+    <polygon points="18,16 46,16 48,22 48,42 46,48 18,48 16,42 16,22" fill="#ffffff" opacity="0.15"/>
+    <polygon points="25,22 39,22 41,26 41,38 39,42 25,42 23,38 23,26" fill="#ffffff" opacity="0.20"/>
+    <polygon points="22,8 31,8 15,24 8,24 8,22" fill="#ffffff" opacity="0.28"/>
+    <polygon points="22,8 42,8 56,22 56,42 42,56 22,56 8,42 8,22" fill="none" stroke="#ffffff" stroke-opacity="0.4" stroke-width="1.3" stroke-linejoin="round"/>
+  </svg>`;
+}
 function typeIcon(t) { return ICN[t] || ICN.admin_credit; }
 function typeColor(t) {
   const map = {
     topup: 'var(--emerald)', gem_payout: 'var(--ok)', commission: 'var(--sapphire)',
     checkin: 'var(--topaz)', withdrawal: 'var(--ruby)', admin_debit: 'var(--ruby)',
-    investment: 'var(--amethyst)', refund: 'var(--sapphire)', admin_credit: 'var(--violet)'
+    investment: 'var(--amethyst)', refund: 'var(--sapphire)', admin_credit: 'var(--violet)',
+    redeem: 'var(--violet)'
   };
   return map[t] || 'var(--violet)';
 }
@@ -324,6 +338,26 @@ function daysLeft(inv) {
   return d > 0 ? d : 0;
 }
 
+const BANNER_SLIDES = [
+  { bg: 'linear-gradient(120deg,#7c3aed 0%,#c026d3 100%)', art: '#e9d5ff', title: 'Grow your gems', sub: 'Buy a tier, get paid in full at maturity.' },
+  { bg: 'linear-gradient(120deg,#0284c7 0%,#4338ca 100%)', art: '#bae6fd', title: 'Invite &amp; earn', sub: '18% on level 1, plus level 2 and 3.' },
+  { bg: 'linear-gradient(120deg,#059669 0%,#0d9488 100%)', art: '#a7f3d0', title: 'Redeem a code', sub: 'Got a Furagemz code? Turn it into cash.' },
+];
+let _bannerTimer = null, _bannerIdx = 0;
+function startBanner() {
+  if (_bannerTimer) { clearInterval(_bannerTimer); _bannerTimer = null; }
+  const track = document.getElementById('hbTrack');
+  if (!track) return;
+  const go = (i) => {
+    _bannerIdx = (i + BANNER_SLIDES.length) % BANNER_SLIDES.length;
+    track.querySelectorAll('.hb-slide').forEach((s, k) => s.classList.toggle('on', k === _bannerIdx));
+    document.querySelectorAll('#hbDots i').forEach((d, k) => d.classList.toggle('on', k === _bannerIdx));
+  };
+  go(0);
+  _bannerTimer = setInterval(() => go(_bannerIdx + 1), 4500);
+  document.querySelectorAll('#hbDots i').forEach((d, k) => d.addEventListener('click', () => go(k)));
+}
+
 function renderHome() {
   const el = document.getElementById('panel-home');
   const bal = _account?.walletBalance || 0;
@@ -332,6 +366,17 @@ function renderHome() {
   const recent = _txns.slice(0, 5);
 
   el.innerHTML = `
+    <div class="hero-banner">
+      <div id="hbTrack">
+        ${BANNER_SLIDES.map(s => `
+          <div class="hb-slide" style="background:${s.bg}">
+            <div class="hb-title">${s.title}</div>
+            <div class="hb-sub">${s.sub}</div>
+            <div class="hb-art">${gemArt(s.art)}</div>
+          </div>`).join('')}
+      </div>
+      <div class="hb-dots" id="hbDots">${BANNER_SLIDES.map(() => '<i></i>').join('')}</div>
+    </div>
     <div class="balance-card">
       <div class="balance-label">Wallet balance</div>
       <div class="balance-amt">${ugx(bal)}</div>
@@ -340,6 +385,7 @@ function renderHome() {
     <div class="quick-row">
       <button class="quick-btn" id="qaDeposit"><span class="qi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</span>Deposit</button>
       <button class="quick-btn" id="qaWithdraw"><span class="qi" style="background:var(--danger-bg);color:var(--danger)">${ICN.up}</span>Withdraw</button>
+      <button class="quick-btn" id="qaRedeem"><span class="qi" style="background:#f3e8ff;color:var(--violet)">${ICN.redeem}</span>Redeem</button>
       <button class="quick-btn${checkedInToday ? ' claimed' : ''}" id="qaCheckin"><span class="qi" style="background:#fef9e7;color:var(--topaz)">${ICN.checkin}</span>${checkedInToday ? 'Claimed' : 'Check in'}</button>
     </div>
     <div class="sec-head"><h3>Your gems</h3>${active.length ? `<button class="link-btn" data-tab-jump="gems">Buy more</button>` : ''}</div>
@@ -357,8 +403,10 @@ function renderHome() {
   `;
   el.querySelector('#qaDeposit').addEventListener('click', openDepositModal);
   el.querySelector('#qaWithdraw').addEventListener('click', openWithdrawModal);
+  el.querySelector('#qaRedeem').addEventListener('click', openRedeemModal);
   if (!checkedInToday) el.querySelector('#qaCheckin').addEventListener('click', doCheckin);
   el.querySelectorAll('[data-tab-jump]').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tabJump)));
+  startBanner();
 }
 
 function txnRowHtml(t) {
@@ -478,37 +526,57 @@ function openWithdrawModal() {
   });
 }
 
+function openRedeemModal() {
+  openModal(`
+    <div class="modal-head"><h2>Redeem a code</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="field"><label>Enter your code</label>
+      <input id="mCode" type="text" autocomplete="off" placeholder="ABC123"
+        style="text-transform:uppercase;letter-spacing:3px;text-align:center;font-weight:800;font-size:18px"></div>
+    <div class="note" style="text-align:left;margin-bottom:14px">A code can be redeemed once per account. The reward lands straight in your wallet.</div>
+    <button class="btn" id="mSubmit">Redeem code</button>
+  `);
+  document.getElementById('mSubmit').addEventListener('click', async () => {
+    const code = document.getElementById('mCode').value.trim().toUpperCase();
+    if (!code) return toast('Enter a code', 'err');
+    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
+    const r = await api('/redeem', { method: 'POST', body: { code } });
+    restore();
+    if (r.status !== 'success') return toast(r.message || 'Could not redeem this code', 'err');
+    closeModal();
+    toast(r.message || 'Code redeemed', 'ok');
+    await loadAccount(); await loadTxns(); renderHome(); renderAccount();
+  });
+}
+
 // ══════════════════════════════════════════════
 // GEMS
 // ══════════════════════════════════════════════
-const GEM_COLORS = { quartz: 'var(--sapphire)', amethyst: 'var(--amethyst)', topaz: 'var(--topaz)', emerald: 'var(--emerald)', sapphire: 'var(--sapphire)', diamond: 'var(--violet)' };
+const GEM_COLORS = { quartz: '#38bdf8', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#7c3aed' };
 function renderGems() {
   const el = document.getElementById('panel-gems');
   if (!_products.length) { el.innerHTML = `<div class="empty-note" style="margin-top:14px">Gem tiers not loaded yet.</div>`; loadProducts().then(renderGems); return; }
   el.innerHTML = `
     <div class="sec-head" style="margin-top:12px"><h3>Pick a gem to grow</h3></div>
-    <div class="gem-list">
-      ${_products.map(p => {
-        const color = GEM_COLORS[p.key] || 'var(--violet)';
-        return `
-        <div class="gem-row" data-tier="${p.key}" style="--accent:${color}">
-          <div class="facet" style="background:${color}">${ICN.gem}</div>
-          <div class="gr-body">
-            <div class="gr-name">${esc(p.label)}</div>
-            <div class="gr-pay">Pays ${ugx(p.expectedReturn)}</div>
-            <div class="gr-meta">Matures in ${p.cycle} days</div>
+    ${_products.map(p => {
+      const color = GEM_COLORS[p.key] || '#7c3aed';
+      const daily = Math.round(p.expectedReturn / (p.cycle || 1));
+      return `
+      <div class="gem-hero" style="--accent:${color}">
+        <div class="gh-head"><span class="gh-name">${esc(p.label)}</span><span class="gh-badge">Fixed</span></div>
+        <div class="gh-body">
+          <div class="gh-art">${gemArt(color)}</div>
+          <div class="gh-stats">
+            <div class="ghs"><span>Price</span><b>${ugx(p.price)}</b></div>
+            <div class="ghs"><span>Matures in</span><b>${p.cycle} days</b></div>
+            <div class="ghs"><span>Daily value</span><b>${ugx(daily)}</b></div>
+            <div class="ghs"><span>Total payout</span><b>${ugx(p.expectedReturn)}</b></div>
           </div>
-          <div class="gr-right">
-            <div class="gr-price">${ugx(p.price)}</div>
-            <div class="gr-cta">Buy</div>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
+        </div>
+        <div class="gh-foot"><span class="gh-price">${ugx(p.price)}</span><button class="gh-buy" data-tier="${p.key}">Buy now</button></div>
+      </div>`;
+    }).join('')}
   `;
-  el.querySelectorAll('[data-tier]').forEach(card => {
-    card.addEventListener('click', () => openGemDetail(card.dataset.tier));
-  });
+  el.querySelectorAll('.gh-buy').forEach(b => b.addEventListener('click', () => openGemDetail(b.dataset.tier)));
 }
 function openGemDetail(key) {
   const p = _products.find(t => t.key === key);
@@ -598,6 +666,7 @@ function renderAccount() {
       <div class="es"><div class="n">${ugx(_account?.totalWithdrawn || 0)}</div><div class="l">Withdrawn</div></div>
     </div>
     <div class="menu-list">
+      <button class="menu-row" id="mnRedeem"><span class="mi">${ICN.redeem}</span><span class="ml">Redeem a code</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnHistory"><span class="mi">${ICN.receipt}</span><span class="ml">Transaction history</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnGems"><span class="mi">${ICN.gem}</span><span class="ml">My gems</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnTeam"><span class="mi">${ICN.people}</span><span class="ml">Referrals &amp; team</span><span class="mr">${ICN.chevron}</span></button>
@@ -606,6 +675,7 @@ function renderAccount() {
       <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Log out</span></button>
     </div>
   `;
+  el.querySelector('#mnRedeem').addEventListener('click', openRedeemModal);
   el.querySelector('#mnHistory').addEventListener('click', openHistoryModal);
   el.querySelector('#mnGems').addEventListener('click', () => switchTab('gems'));
   el.querySelector('#mnTeam').addEventListener('click', () => switchTab('team'));

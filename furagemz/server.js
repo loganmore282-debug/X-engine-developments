@@ -72,7 +72,7 @@ app.use('/auth/', authLimiter);
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/', adminLimiter);
 // Money/value endpoints added in phase 2 will be registered here as they land:
-['/checkin', '/withdraw/request', '/invest/create', '/invest/claim', '/deposit/marzpay']
+['/checkin', '/withdraw/request', '/invest/create', '/invest/claim', '/deposit/marzpay', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── FIREBASE AUTH (Auth only — data lives in MongoDB) ──
@@ -727,6 +727,111 @@ app.post('/checkin', async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Already checked in today', alreadyDone: true });
     return res.status(500).json({ status: 'error', message: e.message });
   }
+});
+
+// ═══════════════════════════════════════════
+// REDEMPTION CODES — admin generates a code worth a fixed amount; each user
+// redeems it once. Distinct from Voltra's random-range gift codes: a Furagemz
+// code carries its own fixed `amount`, set when the admin creates it.
+// ═══════════════════════════════════════════
+function genCode() { return randChars(6); } // e.g. K7M2QP — unambiguous charset
+const _codeRateMap   = new Map();  // userId -> last attempt ts
+const _redeemingCodes = new Set(); // code doc id -> being redeemed (single-writer)
+
+app.post('/redeem', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ status: 'error', message: 'Enter a code' });
+  const lastTry = _codeRateMap.get(userId) || 0;
+  if (Date.now() - lastTry < 8000)
+    return res.status(429).json({ status: 'error', message: 'Too many attempts. Wait a moment.' });
+  _codeRateMap.set(userId, Date.now());
+  try {
+    const snap = await db.collection('redemptionCodes').where('code', '==', code.toUpperCase().trim()).limit(1).get();
+    if (snap.empty) return res.status(404).json({ status: 'error', message: 'Invalid code' });
+    const doc = snap.docs[0], d = doc.data();
+    if (!d.active) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
+    if ((d.usedBy || []).includes(userId)) return res.status(400).json({ status: 'error', message: 'You have already redeemed this code' });
+    if (d.maxUsers && (d.usedBy || []).length >= d.maxUsers) return res.status(400).json({ status: 'error', message: 'This code has reached its usage limit' });
+    if (d.expiresAt && new Date(tsMillis(d.expiresAt)) < new Date()) return res.status(400).json({ status: 'error', message: 'This code has expired' });
+    if (_redeemingCodes.has(doc.id))
+      return res.status(429).json({ status: 'error', message: 'This code is being processed — try again in a moment.' });
+    _redeemingCodes.add(doc.id);
+    try {
+      const amount = Math.max(0, Math.round(d.amount || 0));
+      const { date, time } = nowStr();
+      let err = null, ok = false;
+      await db.runTransaction(async t => {
+        const fresh = await t.get(doc.ref);
+        if (!fresh.exists) { err = 'Invalid code'; return; }
+        const fd = fresh.data();
+        if (!fd.active) { err = 'This code is no longer active'; return; }
+        if ((fd.usedBy || []).includes(userId)) { err = 'You have already redeemed this code'; return; }
+        if (fd.maxUsers && (fd.usedBy || []).length >= fd.maxUsers) { err = 'This code has reached its usage limit'; return; }
+        const uRef = db.collection('users').doc(userId);
+        const uSnap = await t.get(uRef);
+        if (!uSnap.exists) { err = 'User not found'; return; }
+        t.update(uRef, { walletBalance: FieldValue.increment(amount) });
+        t.update(doc.ref, { usedBy: FieldValue.arrayUnion(userId) });
+        t.set(db.collection('transactions').doc(), {
+          userId, type: 'redeem', description: `Code redeemed — ${code.toUpperCase()}`,
+          amount, status: 'success', code: code.toUpperCase(), date, time,
+          createdAt: FieldValue.serverTimestamp()
+        });
+        ok = true;
+      });
+      if (!ok) return res.status(400).json({ status: 'error', message: err || 'Could not redeem this code' });
+      return res.json({ status: 'success', amount, message: `${fmtUGX(amount)} added to your wallet` });
+    } finally { _redeemingCodes.delete(doc.id); }
+  } catch (e) {
+    console.error('Redeem error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+app.post('/admin/codes/generate', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { count = 1, amount, expiresInDays, maxUsers } = req.body;
+  const amt = Math.max(0, Math.round(parseFloat(amount) || 0));
+  if (!amt) return res.status(400).json({ status: 'error', message: 'amount required' });
+  const n = Math.min(Math.max(parseInt(count) || 1, 1), 50);
+  try {
+    const existingSnap = await db.collection('redemptionCodes').select('code').get();
+    const existing = new Set(existingSnap.docs.map(d => d.data().code));
+    const made = [];
+    const batch = db.batch();
+    const expiresAt = expiresInDays ? new Date(Date.now() + Number(expiresInDays) * 86400000) : null;
+    let attempts = 0;
+    while (made.length < n && attempts < n * 10) {
+      attempts++;
+      const code = genCode();
+      if (existing.has(code) || made.includes(code)) continue;
+      made.push(code); existing.add(code);
+      const docData = { code, amount: amt, active: true, usedBy: [],
+        maxUsers: maxUsers ? Math.max(1, parseInt(maxUsers)) : null, createdAt: FieldValue.serverTimestamp() };
+      if (expiresAt) docData.expiresAt = expiresAt;
+      batch.set(db.collection('redemptionCodes').doc(), docData);
+    }
+    await batch.commit();
+    return res.json({ status: 'success', codes: made, count: made.length, amount: amt });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/codes/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('redemptionCodes').orderBy('createdAt', 'desc').limit(200).get();
+    return res.json({ status: 'success', codes: snap.docs.map(d => ({ id: d.id, ...d.data(), usedCount: (d.data().usedBy || []).length })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/codes/deactivate', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { codeId } = req.body;
+  if (!codeId) return res.status(400).json({ status: 'error', message: 'codeId required' });
+  try {
+    await db.collection('redemptionCodes').doc(codeId).update({ active: false });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 // ═══════════════════════════════════════════
