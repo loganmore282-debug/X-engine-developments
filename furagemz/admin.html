@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Furagemz Admin</title>
+<style>
+  :root{
+    --bg:#f4f1fb; --card:#fff; --ink:#241640; --sub:#7a6a95; --line:#e7defa;
+    --violet:#7c3aed; --violet-dk:#5f21d6; --ok:#059669; --ok-bg:#ecfdf5;
+    --danger:#e11d48; --danger-bg:#fef1f3; --warn:#b45309; --warn-bg:#fffbeb;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  button,input,select,textarea{font-family:inherit}
+  .hidden{display:none !important}
+  .wrap{max-width:960px;margin:0 auto;padding:0 14px}
+
+  /* login */
+  .login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-card{background:var(--card);border-radius:20px;padding:30px 26px;width:100%;max-width:380px;
+    box-shadow:0 10px 40px rgba(76,29,149,.12);text-align:center;}
+  .brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px;}
+  .brand .mk{width:40px;height:40px;border-radius:12px;background:var(--violet);display:flex;align-items:center;justify-content:center;}
+  .brand .mk svg{width:24px;height:24px}
+  .brand b{font-size:20px}
+  .muted{color:var(--sub);font-size:13px}
+
+  input,select,textarea{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:11px;
+    font-size:14px;background:#fff;color:var(--ink);outline:none;margin-top:6px}
+  input:focus,select:focus,textarea:focus{border-color:var(--violet)}
+  label{display:block;font-size:12.5px;color:var(--sub);font-weight:600;margin-top:12px;text-align:left}
+  .btn{background:var(--violet);color:#fff;border:0;border-radius:11px;padding:12px 18px;font-size:14px;
+    font-weight:700;cursor:pointer}
+  .btn:active{opacity:.88}
+  .btn[disabled]{opacity:.55;cursor:default}
+  .btn.block{width:100%;margin-top:16px}
+  .btn.sm{padding:8px 13px;font-size:13px;border-radius:9px}
+  .btn.ok{background:var(--ok)}
+  .btn.danger{background:var(--danger)}
+  .btn.ghost{background:var(--line);color:var(--ink)}
+
+  /* shell */
+  .topbar{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0}
+  .topbar .mk{width:34px;height:34px;border-radius:10px;background:var(--violet);display:flex;align-items:center;justify-content:center}
+  .topbar .mk svg{width:20px;height:20px}
+  .topbar b{font-size:16px}
+  .spacer{flex:1}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 10px}
+  .tab{background:none;border:0;padding:8px 14px;border-radius:20px;font-size:13px;font-weight:700;
+    color:var(--sub);cursor:pointer}
+  .tab.active{background:var(--violet);color:#fff}
+  .content{padding:18px 0 60px}
+
+  h2.sec{font-size:17px;margin:4px 0 14px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .stat .n{font-size:20px;font-weight:800}
+  .stat .l{font-size:12px;color:var(--sub);margin-top:3px}
+
+  .panel-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row > div{flex:1;min-width:120px}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--sub);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  tr.clickable{cursor:pointer}
+  tr.clickable:hover{background:var(--bg)}
+  .pill-tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800}
+  .t-ok{background:var(--ok-bg);color:var(--ok)}
+  .t-warn{background:var(--warn-bg);color:var(--warn)}
+  .t-bad{background:var(--danger-bg);color:var(--danger)}
+  .t-mut{background:var(--line);color:var(--sub)}
+  .table-scroll{overflow-x:auto}
+  .empty{color:var(--sub);font-size:13px;padding:18px;text-align:center}
+
+  /* modal */
+  .modal-root{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+  .modal-bg{position:absolute;inset:0;background:rgba(30,15,60,.45)}
+  .modal{position:relative;background:#fff;border-radius:18px;padding:20px;max-width:440px;width:100%;
+    max-height:88vh;overflow-y:auto}
+  .modal h3{margin:0 0 4px;font-size:17px}
+  .kv{display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .kv .k{color:var(--sub)}
+  .modal-close{position:absolute;right:14px;top:14px;background:var(--line);border:0;border-radius:50%;
+    width:30px;height:30px;cursor:pointer;font-size:15px;color:var(--sub)}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:11px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+  .toast.ok{background:var(--ok)} .toast.err{background:var(--danger)}
+  .codebox{background:var(--bg);border-radius:10px;padding:12px;margin-top:12px;font-family:monospace;
+    font-size:15px;letter-spacing:1px;word-spacing:6px;line-height:1.9}
+  .switch-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login" id="loginView">
+  <div class="login-card">
+    <div class="brand">
+      <div class="mk"><svg viewBox="0 0 100 100" fill="none">
+        <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#fff" opacity=".95"/>
+        <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
+        <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
+        <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
+      <b>Furagemz Admin</b>
+    </div>
+    <p class="muted">Enter the admin key to continue.</p>
+    <input id="keyInput" type="password" placeholder="Admin key" autocomplete="off">
+    <button class="btn block" id="loginBtn">Sign in</button>
+    <p class="muted" id="loginErr" style="color:var(--danger);margin-top:12px"></p>
+  </div>
+</div>
+
+<!-- SHELL -->
+<div class="hidden" id="shell">
+  <div class="topbar">
+    <div class="wrap">
+      <div class="topbar-inner">
+        <div class="mk"><svg viewBox="0 0 100 100" fill="none">
+          <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#fff" opacity=".95"/>
+          <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
+          <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
+          <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
+        <b>Furagemz Admin</b>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" id="refreshBtn">Refresh</button>
+        <button class="btn ghost sm" id="logoutBtn">Log out</button>
+      </div>
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="users">Users</button>
+        <button class="tab" data-tab="deposits">Deposits</button>
+        <button class="tab" data-tab="withdrawals">Withdrawals</button>
+        <button class="tab" data-tab="codes">Codes</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </div>
+    </div>
+  </div>
+  <div class="wrap content" id="content"></div>
+</div>
+
+<div class="modal-root hidden" id="modalRoot"></div>
+
+<script>
+// Furagemz Admin panel. Owner: set SERVER to the Furagemz Railway backend URL.
+const SERVER = 'https://REPLACE-WITH-FURAGEMZ-RAILWAY-URL.up.railway.app';
+
+let ADMIN_KEY = '';
+try { ADMIN_KEY = sessionStorage.getItem('fg_admin_key') || ''; } catch (_) {}
+
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
+function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+let _toastT=null;
+function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
+
+async function api(path, body={}){
+  try{
+    const r = await fetch(SERVER+path, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ...body, adminKey: ADMIN_KEY }) });
+    return await r.json();
+  }catch(e){ return { status:'error', message:'Network error' }; }
+}
+
+// ── LOGIN ──
+async function doLogin(){
+  const key = $('keyInput').value.trim();
+  if(!key){ $('loginErr').textContent='Enter the admin key.'; return; }
+  const btn=$('loginBtn'); btn.disabled=true; btn.textContent='Checking…';
+  try{
+    const r = await fetch(SERVER+'/admin/check-key', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key }) });
+    const d = await r.json();
+    if(d.status==='success'){ ADMIN_KEY=key; try{ sessionStorage.setItem('fg_admin_key',key);}catch(_){} openShell(); }
+    else { $('loginErr').textContent = d.message || 'Invalid key.'; }
+  }catch(e){ $('loginErr').textContent='Network error.'; }
+  btn.disabled=false; btn.textContent='Sign in';
+}
+$('loginBtn').addEventListener('click', doLogin);
+$('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+$('logoutBtn').addEventListener('click', ()=>{ ADMIN_KEY=''; try{ sessionStorage.removeItem('fg_admin_key'); }catch(_){} $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden'); $('keyInput').value=''; });
+
+function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); }
+
+// ── TABS ──
+let _tab='dashboard';
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+$('refreshBtn').addEventListener('click',()=>switchTab(_tab));
+function switchTab(name){
+  _tab=name;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
+  const c=$('content'); c.innerHTML='<div class="empty">Loading…</div>';
+  ({ dashboard:renderDashboard, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals, codes:renderCodes, settings:renderSettings }[name])();
+}
+
+// ── DASHBOARD ──
+async function renderDashboard(){
+  const s = await api('/admin/stats');
+  if(s.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load stats. '+esc(s.message||'')+'</div>'; return; }
+  $('content').innerHTML = `
+    <h2 class="sec">Overview</h2>
+    <div class="cards">
+      <div class="stat"><div class="n">${s.userCount||0}</div><div class="l">Users</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalWallet)}</div><div class="l">Wallet balances</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalDeposited)}</div><div class="l">Total deposited</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalWithdrawn)}</div><div class="l">Total withdrawn</div></div>
+      <div class="stat"><div class="n">${s.activeInvestments||0}</div><div class="l">Active gems</div></div>
+      <div class="stat"><div class="n">${s.pendingWithdrawals||0}</div><div class="l">Pending payouts</div></div>
+      <div class="stat"><div class="n">${ugx(s.pendingPayouts)}</div><div class="l">Payout amount due</div></div>
+    </div>`;
+}
+
+// ── USERS ──
+let _users=[];
+async function renderUsers(){
+  const r = await api('/admin/users');
+  _users = (r.users||[]).sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
+  $('content').innerHTML = `
+    <h2 class="sec">Users (${_users.length})</h2>
+    <div class="panel-card"><input id="userSearch" placeholder="Search username or phone"></div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Username</th><th>Phone</th><th>Balance</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
+  $('userSearch').addEventListener('input', drawUsers);
+  drawUsers();
+}
+function drawUsers(){
+  const q = ($('userSearch')?.value||'').toLowerCase().trim();
+  const list = q ? _users.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.phone||'').includes(q)) : _users.slice(0,200);
+  $('userRows').innerHTML = list.length ? list.map(u=>`
+    <tr class="clickable" data-uid="${esc(u.id)}">
+      <td><b>${esc(u.username||'—')}</b></td><td>${esc(u.phone||'')}</td>
+      <td>${ugx(u.walletBalance)}</td>
+      <td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td>
+    </tr>`).join('') : '<tr><td colspan="4" class="empty">No users</td></tr>';
+  document.querySelectorAll('#userRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
+}
+async function openUser(uid){
+  const r = await api('/admin/user/detail',{ userId:uid });
+  if(r.status!=='success'){ toast(r.message||'Not found','err'); return; }
+  const u=r.user;
+  openModal(`
+    <h3>${esc(u.username||u.phone)}</h3>
+    <div class="muted" style="margin-bottom:10px">${esc(u.phone||'')}</div>
+    <div class="kv"><span class="k">Wallet balance</span><b>${ugx(u.walletBalance)}</b></div>
+    <div class="kv"><span class="k">Deposited</span><span>${ugx(u.totalDeposited)}</span></div>
+    <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
+    <div class="kv"><span class="k">Withdrawn</span><span>${ugx(u.totalWithdrawn)}</span></div>
+    <div class="kv"><span class="k">Earned</span><span>${ugx(u.totalEarned)}</span></div>
+    <div class="kv"><span class="k">Commission</span><span>${ugx(u.commissionEarned)}</span></div>
+    <div class="kv"><span class="k">Referral code</span><span>${esc(u.referralCode||u.username||'')}</span></div>
+    <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
+    <label>Amount (UGX)</label><input id="adjAmt" type="number" placeholder="0">
+    <label>Note (optional)</label><input id="adjNote" placeholder="Reason">
+    <div class="row" style="margin-top:14px">
+      <button class="btn ok sm" id="creditBtn">Credit</button>
+      <button class="btn danger sm" id="debitBtn">Debit</button>
+      <button class="btn ${u.status==='banned'?'ghost':'danger'} sm" id="banBtn">${u.status==='banned'?'Unban':'Ban'}</button>
+    </div>`);
+  const amt=()=>parseFloat($('adjAmt').value||0), note=()=>$('adjNote').value.trim();
+  $('creditBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); } });
+  $('debitBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); } });
+  $('banBtn').addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
+}
+
+// ── DEPOSITS ──
+async function renderDeposits(){
+  const r = await api('/admin/deposits/list');
+  const list = r.deposits||[];
+  $('content').innerHTML = `
+    <h2 class="sec">Deposits</h2>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Amount</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(d=>`
+      <tr><td>${fdate(d.createdAt)}</td><td><b>${ugx(d.amount)}</b></td><td>${esc(d.phone||'')}</td>
+      <td><span class="pill-tag ${d.status==='matched'?'t-ok':d.status==='failed'?'t-bad':'t-warn'}">${esc(d.status)}</span></td>
+      <td>${d.status==='processing'?`<button class="btn sm" data-done="${esc(d.id)}">Complete</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No deposits</td></tr>'}
+    </tbody></table></div>`;
+  document.querySelectorAll('[data-done]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/complete',{depositId:b.dataset.done}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); }));
+}
+
+// ── WITHDRAWALS ──
+async function renderWithdrawals(){
+  const r = await api('/admin/withdrawals/list');
+  const list = r.withdrawals||[];
+  $('content').innerHTML = `
+    <h2 class="sec">Withdrawals</h2>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Status</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(w=>`
+      <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
+      <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
+      <td><span class="pill-tag ${w.status==='processed'?'t-ok':w.status==='pending'?'t-warn':w.status==='processing'?'t-warn':'t-bad'}">${esc(w.status)}</span></td>
+      <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Pay</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>'}
+    </tbody></table></div>`;
+  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); }));
+  document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection?','Rejected by admin'); if(reason===null)return; const d=await api('/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); }));
+}
+
+// ── CODES ──
+async function renderCodes(){
+  const r = await api('/admin/codes/list');
+  const list = r.codes||[];
+  $('content').innerHTML = `
+    <h2 class="sec">Redemption codes</h2>
+    <div class="panel-card">
+      <div class="row">
+        <div><label>Amount (UGX)</label><input id="cAmt" type="number" placeholder="5000"></div>
+        <div><label>How many</label><input id="cCount" type="number" value="1" min="1" max="50"></div>
+        <div><label>Expires in days (optional)</label><input id="cExp" type="number" placeholder="—"></div>
+        <div><label>Max users per code (optional)</label><input id="cMax" type="number" placeholder="—"></div>
+      </div>
+      <button class="btn block" id="genBtn">Generate codes</button>
+      <div id="genOut"></div>
+    </div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Amount</th><th>Used</th><th>Status</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(c=>`
+      <tr><td><b>${esc(c.code)}</b></td><td>${ugx(c.amount)}</td><td>${c.usedCount||0}${c.maxUsers?(' / '+c.maxUsers):''}</td>
+      <td><span class="pill-tag ${c.active?'t-ok':'t-mut'}">${c.active?'Active':'Off'}</span></td>
+      <td>${c.active?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No codes yet</td></tr>'}
+    </tbody></table></div>`;
+  $('genBtn').addEventListener('click', async()=>{
+    const amount=parseFloat($('cAmt').value||0); if(!amount)return toast('Enter an amount','err');
+    const count=parseInt($('cCount').value||1), expiresInDays=$('cExp').value||undefined, maxUsers=$('cMax').value||undefined;
+    const b=$('genBtn'); b.disabled=true;b.textContent='Generating…';
+    const d=await api('/admin/codes/generate',{ amount, count, expiresInDays, maxUsers });
+    b.disabled=false;b.textContent='Generate codes';
+    if(d.status==='success'){ $('genOut').innerHTML=`<div class="codebox">${d.codes.map(esc).join('  ')}</div><div class="muted" style="margin-top:6px">${d.count} code(s) worth ${ugx(d.amount)} each</div>`; renderCodesListOnly(); }
+    else toast(d.message||'Failed','err');
+  });
+  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ const d=await api('/admin/codes/deactivate',{codeId:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderCodes(); }));
+}
+function renderCodesListOnly(){ /* codes list refresh handled by full re-render on next visit */ }
+
+// ── SETTINGS ──
+async function renderSettings(){
+  const r = await api('/admin/settings');
+  const s = r.settings||{};
+  const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
+  $('content').innerHTML = `
+    <h2 class="sec">Rates &amp; limits</h2>
+    <div class="panel-card">
+      <div class="row">
+        <div><label>Min deposit</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
+        <div><label>Min withdrawal</label><input id="sMinWit" type="number" value="${v('minWithdrawal',10000)}"></div>
+        <div><label>Welcome bonus</label><input id="sWelcome" type="number" value="${v('welcomeBonus',5000)}"></div>
+        <div><label>Check-in bonus</label><input id="sCheckin" type="number" value="${v('checkinBonus',300)}"></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Withdrawal fee (0–1)</label><input id="sFee" type="number" step="0.01" value="${v('liquidityFee',0.05)}"></div>
+        <div><label>L1 commission (0–1)</label><input id="sC1" type="number" step="0.01" value="${v('commL1',0.18)}"></div>
+        <div><label>L2 commission (0–1)</label><input id="sC2" type="number" step="0.01" value="${v('commL2',0.05)}"></div>
+        <div><label>L3 commission (0–1)</label><input id="sC3" type="number" step="0.01" value="${v('commL3',0.02)}"></div>
+      </div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
+      <button class="btn block" id="saveRates">Save rates</button>
+    </div>
+
+    <h2 class="sec">Announcement dialog</h2>
+    <div class="panel-card">
+      <div class="switch-row"><span><b>Show announcement popup</b></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="aEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
+      <label>Title (hero text)</label><input id="aTitle" value="${esc(v('annTitle','Notice'))}">
+      <label>Body</label><textarea id="aBody" rows="7" placeholder="Write the announcement…">${esc(v('annBody',''))}</textarea>
+      <label>Button label (optional)</label><input id="aCtaLabel" value="${esc(v('annCtaLabel',''))}">
+      <label>Button link (optional)</label><input id="aCtaUrl" value="${esc(v('annCtaUrl',''))}">
+      <button class="btn block" id="saveAnn">Save announcement</button>
+      <p class="muted" style="margin-top:10px">Saving re-shows the popup to everyone, even users who dismissed the previous one.</p>
+    </div>`;
+  $('saveRates').addEventListener('click', async()=>{
+    const upd = {
+      minDeposit:+$('sMinDep').value, minWithdrawal:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
+      checkinBonus:+$('sCheckin').value, liquidityFee:+$('sFee').value,
+      commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value, maintenanceMode:$('sMaint').checked
+    };
+    const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveAnn').addEventListener('click', async()=>{
+    const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value,
+      annCtaLabel:$('aCtaLabel').value.trim(), annCtaUrl:$('aCtaUrl').value.trim() };
+    const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+}
+
+// ── MODAL ──
+function openModal(html){ const r=$('modalRoot'); r.innerHTML=`<div class="modal-bg" data-close></div><div class="modal"><button class="modal-close" data-close>&times;</button>${html}</div>`; r.classList.remove('hidden'); r.querySelectorAll('[data-close]').forEach(e=>e.addEventListener('click',closeModal)); }
+function closeModal(){ const r=$('modalRoot'); r.classList.add('hidden'); r.innerHTML=''; }
+
+// ── BOOT ──
+if(ADMIN_KEY){ // resume a session — verify the stored key still works
+  fetch(SERVER+'/admin/check-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:ADMIN_KEY})})
+    .then(r=>r.json()).then(d=>{ if(d.status==='success') openShell(); }).catch(()=>{});
+}
+</script>
+</body>
+</html>
