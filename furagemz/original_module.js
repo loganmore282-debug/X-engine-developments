@@ -43,6 +43,11 @@ const ICN = {
   copy:         _svg('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
   down:         _svg('<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'),
   up:           _svg('<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>'),
+  chevron:      _svg('<polyline points="9 6 15 12 9 18"/>'),
+  receipt:      _svg('<path d="M5 3v18l2-1.5L9 21l2-1.5L13 21l2-1.5L17 21l2-1.5V3l-2 1.5L15 3l-2 1.5L11 3 9 4.5 7 3z"/><path d="M8 8h8M8 12h8"/>'),
+  gem:          _svg('<path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20"/>'),
+  people:       _svg('<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/><circle cx="18" cy="9" r="2.4"/>'),
+  logout:       _svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
 };
 function typeIcon(t) { return ICN[t] || ICN.admin_credit; }
 function typeColor(t) {
@@ -147,20 +152,20 @@ function showView(name) {
   document.getElementById('mainView').classList.toggle('hidden', name !== 'main');
 }
 
-document.getElementById('swLogin').addEventListener('click', () => {
-  document.getElementById('swLogin').classList.add('active');
-  document.getElementById('swRegister').classList.remove('active');
-  document.getElementById('loginForm').classList.add('active');
-  document.getElementById('registerForm').classList.remove('active');
+// Single link-style toggle between sign-in and create-account (no segmented control).
+let _authMode = 'login';
+function setAuthMode(mode) {
+  _authMode = mode;
+  const login = mode === 'login';
+  document.getElementById('loginForm').classList.toggle('active', login);
+  document.getElementById('registerForm').classList.toggle('active', !login);
+  document.getElementById('authHeading').textContent = login ? 'Welcome back' : 'Create your account';
+  document.getElementById('authSubheading').textContent = login ? 'Sign in to reach your wallet.' : 'It only takes a moment to start.';
+  document.getElementById('authToggleText').textContent = login ? 'New to Furagemz?' : 'Already have an account?';
+  document.getElementById('authToggleBtn').textContent = login ? 'Create an account' : 'Sign in';
   document.getElementById('authErr').classList.add('hidden');
-});
-document.getElementById('swRegister').addEventListener('click', () => {
-  document.getElementById('swRegister').classList.add('active');
-  document.getElementById('swLogin').classList.remove('active');
-  document.getElementById('registerForm').classList.add('active');
-  document.getElementById('loginForm').classList.remove('active');
-  document.getElementById('authErr').classList.add('hidden');
-});
+}
+document.getElementById('authToggleBtn').addEventListener('click', () => setAuthMode(_authMode === 'login' ? 'register' : 'login'));
 document.querySelectorAll('[data-toggle]').forEach(btn => {
   btn.innerHTML = ICN.eye;
   btn.addEventListener('click', () => {
@@ -386,16 +391,25 @@ async function doCheckin() {
 // ══════════════════════════════════════════════
 // DEPOSIT / WITHDRAW MODALS
 // ══════════════════════════════════════════════
+const DEPOSIT_CHIPS = [30000, 50000, 100000, 200000, 500000];
+const WITHDRAW_CHIPS = [10000, 25000, 50000, 100000];
+const WITHDRAW_FEE = 0.05;
+
 function openDepositModal() {
+  const phone0 = esc((_account?.phone || '').replace('+256', '0'));
   openModal(`
     <div class="modal-head"><h2>Deposit</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="field"><label>Amount (UGX)</label><input id="mAmt" type="number" inputmode="numeric" placeholder="30000" min="30000"></div>
-    <div class="field"><label>Mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${esc((_account?.phone || '').replace('+256', '0'))}"></div>
-    <div class="note" style="text-align:left;margin-bottom:14px">Minimum deposit ${ugx(30000)}. You'll get a prompt on your phone to approve.</div>
+    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="30000">
+    <div class="amt-chips">${DEPOSIT_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`).join('')}</div>
+    <div class="field" style="margin-top:16px"><label>Mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
+    <div class="note" style="text-align:left;margin-bottom:14px">Minimum ${ugx(30000)}. You'll approve a prompt on your phone.</div>
     <button class="btn" id="mSubmit">Deposit</button>
   `);
+  const amtEl = document.getElementById('mAmt');
+  document.querySelectorAll('#modalRoot .amt-chip').forEach(c =>
+    c.addEventListener('click', () => { amtEl.value = c.dataset.amt; amtEl.focus(); }));
   document.getElementById('mSubmit').addEventListener('click', async () => {
-    const amount = parseInt(document.getElementById('mAmt').value, 10);
+    const amount = parseInt(amtEl.value, 10);
     const phone = document.getElementById('mPhone').value.trim();
     if (!amount || amount < 30000) return toast('Minimum deposit is ' + ugx(30000), 'err');
     if (!phone) return toast('Enter a mobile-money phone number', 'err');
@@ -421,17 +435,38 @@ async function pollDeposit(depositId, tries = 0) {
 }
 
 function openWithdrawModal() {
+  const bal = _account?.walletBalance || 0;
+  const phone0 = esc((_account?.phone || '').replace('+256', '0'));
   openModal(`
     <div class="modal-head"><h2>Withdraw</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="field"><label>Amount (UGX)</label><input id="mAmt" type="number" inputmode="numeric" placeholder="10000" min="10000"></div>
-    <div class="field"><label>Mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${esc((_account?.phone || '').replace('+256', '0'))}"></div>
-    <div class="note" style="text-align:left;margin-bottom:14px">Minimum withdrawal ${ugx(10000)}. A 5% service fee applies. Available: ${ugx(_account?.walletBalance || 0)}.</div>
+    <div style="text-align:center;color:var(--sub);font-size:12.5px;margin-bottom:6px">Available ${ugx(bal)}</div>
+    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="10000">
+    <div class="amt-chips">${WITHDRAW_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`)
+      .join('')}<button class="amt-chip" data-amt="${bal}">All</button></div>
+    <div class="breakdown" id="mBreak">
+      <div class="br"><span class="muted">Amount</span><span id="brAmt">${ugx(0)}</span></div>
+      <div class="br"><span class="muted">Service fee (5%)</span><span id="brFee">${ugx(0)}</span></div>
+      <div class="br total"><span>You receive</span><span id="brNet">${ugx(0)}</span></div>
+    </div>
+    <div class="field"><label>Send to mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
     <button class="btn" id="mSubmit">Request withdrawal</button>
   `);
+  const amtEl = document.getElementById('mAmt');
+  const recompute = () => {
+    const a = parseInt(amtEl.value, 10) || 0;
+    const fee = Math.round(a * WITHDRAW_FEE);
+    document.getElementById('brAmt').textContent = ugx(a);
+    document.getElementById('brFee').textContent = '− ' + ugx(fee);
+    document.getElementById('brNet').textContent = ugx(Math.max(0, a - fee));
+  };
+  amtEl.addEventListener('input', recompute);
+  document.querySelectorAll('#modalRoot .amt-chip').forEach(c =>
+    c.addEventListener('click', () => { amtEl.value = c.dataset.amt; recompute(); }));
   document.getElementById('mSubmit').addEventListener('click', async () => {
-    const amount = parseInt(document.getElementById('mAmt').value, 10);
+    const amount = parseInt(amtEl.value, 10);
     const phone = document.getElementById('mPhone').value.trim();
     if (!amount || amount < 10000) return toast('Minimum withdrawal is ' + ugx(10000), 'err');
+    if (amount > bal) return toast('That is more than your balance', 'err');
     if (!phone) return toast('Enter a mobile-money phone number', 'err');
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     const r = await api('/withdraw/request', { method: 'POST', body: { amount, phone } });
@@ -439,7 +474,7 @@ function openWithdrawModal() {
     if (r.status !== 'success') return toast(r.message || 'Could not submit withdrawal', 'err');
     closeModal();
     toast('Withdrawal submitted. Processing soon.', 'ok');
-    await loadAccount(); renderHome(); renderAccount();
+    await loadAccount(); await loadTxns(); renderHome(); renderAccount();
   });
 }
 
@@ -451,15 +486,24 @@ function renderGems() {
   const el = document.getElementById('panel-gems');
   if (!_products.length) { el.innerHTML = `<div class="empty-note" style="margin-top:14px">Gem tiers not loaded yet.</div>`; loadProducts().then(renderGems); return; }
   el.innerHTML = `
-    <div class="sec-head" style="margin-top:12px"><h3>Choose a gem</h3></div>
-    <div class="gem-grid">
-      ${_products.map(p => `
-        <div class="gem-card" data-tier="${p.key}">
-          <div class="gem-swatch" style="background:${GEM_COLORS[p.key] || 'var(--violet)'}"></div>
-          <div class="t">${esc(p.label)}</div>
-          <div class="price">${ugx(p.price)}</div>
-          <div class="ret">Pays ${ugx(p.expectedReturn)}</div>
-        </div>`).join('')}
+    <div class="sec-head" style="margin-top:12px"><h3>Pick a gem to grow</h3></div>
+    <div class="gem-list">
+      ${_products.map(p => {
+        const color = GEM_COLORS[p.key] || 'var(--violet)';
+        return `
+        <div class="gem-row" data-tier="${p.key}" style="--accent:${color}">
+          <div class="facet" style="background:${color}">${ICN.gem}</div>
+          <div class="gr-body">
+            <div class="gr-name">${esc(p.label)}</div>
+            <div class="gr-pay">Pays ${ugx(p.expectedReturn)}</div>
+            <div class="gr-meta">Matures in ${p.cycle} days</div>
+          </div>
+          <div class="gr-right">
+            <div class="gr-price">${ugx(p.price)}</div>
+            <div class="gr-cta">Buy</div>
+          </div>
+        </div>`;
+      }).join('')}
     </div>
   `;
   el.querySelectorAll('[data-tier]').forEach(card => {
@@ -538,26 +582,46 @@ const TXN_FILTERS = [
 ];
 function renderAccount() {
   const el = document.getElementById('panel-account');
-  const filtered = _txnFilter === 'all' ? _txns : _txns.filter(t => t.type === _txnFilter);
+  const code = _account?.referralCode ? `<span class="reftag">CODE ${esc(_account.referralCode)}</span>` : '';
   el.innerHTML = `
-    <div class="profile-head">
+    <div class="id-card">
       <div class="avatar">${esc(initials(_account?.name))}</div>
       <div>
         <div class="name">${esc(_account?.name || 'Furagemz user')}</div>
         <div class="phone">${esc(_account?.phone || '')}</div>
+        ${code}
       </div>
     </div>
-    <div class="stat-row">
-      <div class="stat-box"><div class="n">${ugx(_account?.totalDeposited || 0)}</div><div class="l">Deposited</div></div>
-      <div class="stat-box"><div class="n">${ugx(_account?.totalEarned || 0)}</div><div class="l">Earned</div></div>
-      <div class="stat-box"><div class="n">${ugx(_account?.totalWithdrawn || 0)}</div><div class="l">Withdrawn</div></div>
+    <div class="earn-strip">
+      <div class="es"><div class="n">${ugx(_account?.totalDeposited || 0)}</div><div class="l">Deposited</div></div>
+      <div class="es"><div class="n">${ugx(_account?.totalEarned || 0)}</div><div class="l">Earned</div></div>
+      <div class="es"><div class="n">${ugx(_account?.totalWithdrawn || 0)}</div><div class="l">Withdrawn</div></div>
     </div>
-    <div class="sec-head"><h3>History</h3></div>
-    <div class="chips">${TXN_FILTERS.map(f => `<button class="chip${_txnFilter === f.key ? ' active' : ''}" data-filter="${f.key}">${f.label}</button>`).join('')}</div>
-    ${filtered.length ? filtered.map(txnRowHtml).join('') : `<div class="empty-note">No transactions here yet.</div>`}
-    <button class="logout-btn" id="logoutBtn">Log out</button>
+    <div class="menu-list">
+      <button class="menu-row" id="mnHistory"><span class="mi">${ICN.receipt}</span><span class="ml">Transaction history</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnGems"><span class="mi">${ICN.gem}</span><span class="ml">My gems</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnTeam"><span class="mi">${ICN.people}</span><span class="ml">Referrals &amp; team</span><span class="mr">${ICN.chevron}</span></button>
+    </div>
+    <div class="menu-list">
+      <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Log out</span></button>
+    </div>
   `;
-  el.querySelectorAll('[data-filter]').forEach(chip => {
-    chip.addEventListener('click', () => { _txnFilter = chip.dataset.filter; renderAccount(); });
-  });
+  el.querySelector('#mnHistory').addEventListener('click', openHistoryModal);
+  el.querySelector('#mnGems').addEventListener('click', () => switchTab('gems'));
+  el.querySelector('#mnTeam').addEventListener('click', () => switchTab('team'));
+}
+
+function openHistoryModal() {
+  const draw = () => {
+    const filtered = _txnFilter === 'all' ? _txns : _txns.filter(t => t.type === _txnFilter);
+    openModal(`
+      <div class="modal-head"><h2>Transaction history</h2><button class="modal-close">${ICN.close}</button></div>
+      <div class="chips">${TXN_FILTERS.map(f => `<button class="chip${_txnFilter === f.key ? ' active' : ''}" data-filter="${f.key}">${f.label}</button>`).join('')}</div>
+      ${filtered.length ? filtered.map(txnRowHtml).join('') : `<div class="empty-note">No transactions here yet.</div>`}
+    `);
+    document.querySelectorAll('#modalRoot [data-filter]').forEach(chip => {
+      chip.addEventListener('click', () => { _txnFilter = chip.dataset.filter; draw(); });
+    });
+  };
+  draw();
 }
