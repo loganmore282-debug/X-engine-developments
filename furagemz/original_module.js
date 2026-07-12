@@ -55,6 +55,8 @@ const ICN = {
   support:      _svg('<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/><path d="M9.5 10h.01M12 10h.01M14.5 10h.01"/>'),
   mail:         _svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'),
   clock:        _svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  bank:         _svg('<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18"/><path d="M7 16h4"/>'),
+  trash:        _svg('<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>'),
 };
 
 // Faceted emerald-cut gem illustration, tinted to any tier colour. Layered
@@ -607,9 +609,16 @@ function openWithdrawModal() {
       <div class="br"><span class="muted">Service fee (5%)</span><span id="brFee">${ugx(0)}</span></div>
       <div class="br total"><span>You receive</span><span id="brNet">${ugx(0)}</span></div>
     </div>
+    ${(_account?.bankAccounts || []).length ? `<label style="font-size:13px;color:var(--sub);font-weight:600;display:block;margin-bottom:7px">Saved accounts</label>
+      <div class="amt-chips" style="justify-content:flex-start;margin:0 0 12px">
+        ${(_account.bankAccounts).map(a => `<button type="button" class="amt-chip bank-pick" data-phone="${esc(a.phone)}">${esc(a.label || a.network || 'Account')}</button>`).join('')}
+      </div>` : ''}
     <div class="field"><label>Send to mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
     <button class="btn" id="mSubmit">Request withdrawal</button>
   `);
+  document.querySelectorAll('#modalRoot .bank-pick').forEach(b => b.addEventListener('click', () => {
+    document.getElementById('mPhone').value = '0' + b.dataset.phone;
+  }));
   const amtEl = document.getElementById('mAmt');
   const recompute = () => {
     const a = parseInt(amtEl.value, 10) || 0;
@@ -802,6 +811,7 @@ function renderAccount() {
       <button class="menu-row" id="mnTeam"><span class="mi">${ICN.people}</span><span class="ml">Referrals &amp; team</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
+      <button class="menu-row" id="mnBanks"><span class="mi">${ICN.bank}</span><span class="ml">Withdrawal accounts</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnPassword"><span class="mi">${ICN.lock}</span><span class="ml">Change password</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnSupport"><span class="mi">${ICN.support}</span><span class="ml">Contact support</span><span class="mr">${ICN.chevron}</span></button>
     </div>
@@ -813,8 +823,54 @@ function renderAccount() {
   el.querySelector('#mnHistory').addEventListener('click', openHistoryModal);
   el.querySelector('#mnGems').addEventListener('click', () => switchTab('gems'));
   el.querySelector('#mnTeam').addEventListener('click', () => switchTab('team'));
+  el.querySelector('#mnBanks').addEventListener('click', openBanksModal);
   el.querySelector('#mnPassword').addEventListener('click', openPasswordModal);
   el.querySelector('#mnSupport').addEventListener('click', openSupportModal);
+}
+
+function bankRowsHtml(accounts, withRemove) {
+  if (!accounts.length) return `<div class="empty-note">No saved accounts yet.</div>`;
+  return accounts.map(a => `
+    <div class="bank-row" data-phone="${esc(a.phone)}">
+      <span class="mi" style="background:#eef2ff;color:var(--sapphire)">${ICN.bank}</span>
+      <div class="bank-info"><div class="t">${esc(a.label || 'Account')}</div><div class="s">${esc(a.network || '')} · 0${esc(a.phone)}</div></div>
+      ${withRemove ? `<button class="bank-del" data-del="${esc(a.phone)}">${ICN.trash}</button>` : ''}
+    </div>`).join('');
+}
+function openBanksModal() {
+  const accounts = _account?.bankAccounts || [];
+  openModal(`
+    <div class="modal-head"><h2>Withdrawal accounts</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="support-body" id="bankList">${bankRowsHtml(accounts, true)}</div>
+    <div style="border-top:1px solid var(--line2);margin:16px 0 4px"></div>
+    <div class="field"><label>Label (optional)</label><input id="bkLabel" type="text" placeholder="e.g. My MTN number"></div>
+    <div class="field"><label>Mobile-money number</label><input id="bkPhone" type="tel" inputmode="numeric" placeholder="0771234567"></div>
+    <button class="btn" id="bkAdd">Save account</button>
+  `);
+  const refresh = async () => {
+    await loadAccount();
+    document.getElementById('bankList').innerHTML = bankRowsHtml(_account?.bankAccounts || [], true);
+    bindBankDeletes();
+  };
+  const bindBankDeletes = () => {
+    document.querySelectorAll('#bankList [data-del]').forEach(b => b.addEventListener('click', async () => {
+      const r = await api('/account/remove-bank', { method: 'POST', body: { phone: b.dataset.del } });
+      if (r.status !== 'success') return toast(r.message || 'Could not remove', 'err');
+      toast('Account removed', 'ok'); refresh();
+    }));
+  };
+  bindBankDeletes();
+  document.getElementById('bkAdd').addEventListener('click', async () => {
+    const label = document.getElementById('bkLabel').value.trim();
+    const phone = document.getElementById('bkPhone').value.trim();
+    if (!phone) return toast('Enter a mobile-money number', 'err');
+    const restore = setBusy(document.getElementById('bkAdd'), 'Please wait');
+    const r = await api('/account/add-bank', { method: 'POST', body: { label, phone } });
+    restore();
+    if (r.status !== 'success') return toast(r.message || 'Could not save', 'err');
+    document.getElementById('bkLabel').value = ''; document.getElementById('bkPhone').value = '';
+    toast('Account saved', 'ok'); refresh();
+  });
 }
 
 function openPasswordModal() {

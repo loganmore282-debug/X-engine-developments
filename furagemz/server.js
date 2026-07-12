@@ -603,6 +603,44 @@ app.get('/account', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ── SAVED WITHDRAWAL (MOBILE-MONEY) ACCOUNTS ──
+function detectNetwork(phone) {
+  let n = String(phone || '').replace(/\D/g, '');
+  if (n.startsWith('256') && n.length === 12) n = n.slice(3);
+  if (n.startsWith('0') && n.length === 10) n = n.slice(1);
+  const p2 = n.slice(0, 2);
+  if (['77', '78', '76', '31', '39'].includes(p2)) return 'MTN';
+  if (['70', '74', '75', '71'].includes(p2)) return 'Airtel';
+  return 'MTN';
+}
+app.post('/account/add-bank', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const digits = String(req.body.phone || '').replace(/\D/g, '').slice(-9);
+  if (digits.length < 9) return res.status(400).json({ status: 'error', message: 'Enter a valid phone number' });
+  const network = detectNetwork(digits);
+  const label = String(req.body.label || '').replace(/[<>]/g, '').trim().slice(0, 30) || (network + ' account');
+  try {
+    const snap = await db.collection('users').doc(uid).get();
+    const existing = (snap.data().bankAccounts || []);
+    if (existing.some(a => a.phone === digits)) return res.json({ status: 'error', message: 'That number is already saved' });
+    if (existing.length >= 5) return res.json({ status: 'error', message: 'You can save up to 5 accounts' });
+    await db.collection('users').doc(uid).update({ bankAccounts: FieldValue.arrayUnion({ label, phone: digits, network }) });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/account/remove-bank', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const digits = String(req.body.phone || '').replace(/\D/g, '').slice(-9);
+  try {
+    const snap = await db.collection('users').doc(uid).get();
+    const list = (snap.data().bankAccounts || []).filter(a => a.phone !== digits);
+    await db.collection('users').doc(uid).update({ bankAccounts: list });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ── ADMIN AUTH ──
 app.post('/admin/check-key', (req, res) => {
   const { key } = req.body;
