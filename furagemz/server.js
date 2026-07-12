@@ -383,6 +383,9 @@ app.get('/settings/public', async (_req, res) => {
     checkinBonus: s.checkinBonus ?? CHECKIN_BONUS,
     liquidityFee: s.liquidityFee ?? LIQUIDITY_FEE,
     gemTiers: GEM_TIERS,
+    supportWhatsapp: s.supportWhatsapp || '',
+    supportEmail:    s.supportEmail    || '',
+    supportHours:    s.supportHours    || '',
     announcement: {
       enabled:  !!s.annEnabled,
       // A content version so the app can re-show the popup after an edit

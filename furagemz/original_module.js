@@ -1,6 +1,6 @@
 import { initializeApp, getApps }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut }
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 // FURAGEMZ — Firebase web config. Owner: replace with the Furagemz Firebase
@@ -24,6 +24,8 @@ const auth = getAuth(app);
 let _user = null, _account = null, _investments = [], _members = [], _txns = [], _products = [];
 let _activeTab = 'home';
 let _txnFilter = 'all';
+let _hideBal = false;
+try { _hideBal = localStorage.getItem('fg_hide_bal') === '1'; } catch (_) {}
 
 // ── SVG ICONS ──
 const _svg = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
@@ -49,6 +51,10 @@ const ICN = {
   people:       _svg('<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/><circle cx="18" cy="9" r="2.4"/>'),
   logout:       _svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
   redeem:       _svg('<path d="M4 8h16a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4V9a1 1 0 0 1 1-1z"/><path d="M13 8v12" stroke-dasharray="2 2"/>'),
+  lock:         _svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+  support:      _svg('<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/><path d="M9.5 10h.01M12 10h.01M14.5 10h.01"/>'),
+  mail:         _svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'),
+  clock:        _svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
 };
 
 // Faceted emerald-cut gem illustration, tinted to any tier colour. Layered
@@ -470,10 +476,17 @@ function renderHome() {
       </div>
       <div class="hb-dots" id="hbDots">${BANNER_SLIDES.map(() => '<i></i>').join('')}</div>
     </div>
-    <div class="balance-card">
-      <div class="balance-label">Wallet balance</div>
-      <div class="balance-amt">${ugx(bal)}</div>
-      <div class="balance-sub">Total earned ${ugx(_account?.totalEarned || 0)}</div>
+    <div class="wallet-panel">
+      <div class="wallet-top">
+        <span class="wallet-label">Total balance</span>
+        <button class="wallet-eye" id="balEye">${_hideBal ? ICN.eyeOff : ICN.eye}</button>
+      </div>
+      <div class="wallet-amt" id="balAmt">${_hideBal ? '••••••' : ugx(bal)}</div>
+    </div>
+    <div class="wallet-stats">
+      <div class="wstat"><div class="wi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalDeposited || 0)}</div><div class="wl">Total deposits</div></div>
+      <div class="wstat"><div class="wi" style="background:var(--danger-bg);color:var(--danger)">${ICN.up}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0)}</div><div class="wl">Total withdrawals</div></div>
+      <div class="wstat"><div class="wi" style="background:#eef2ff;color:var(--sapphire)">${ICN.commission}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.commissionEarned || 0)}</div><div class="wl">Referral earnings</div></div>
     </div>
     <div class="quick-row">
       <button class="quick-btn" id="qaDeposit"><span class="qi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</span>Deposit</button>
@@ -494,6 +507,11 @@ function renderHome() {
     <div class="sec-head"><h3>Recent activity</h3>${_txns.length ? `<button class="link-btn" data-tab-jump="account">See all</button>` : ''}</div>
     ${recent.length ? recent.map(txnRowHtml).join('') : `<div class="empty-note">No activity yet.</div>`}
   `;
+  el.querySelector('#balEye').addEventListener('click', () => {
+    _hideBal = !_hideBal;
+    try { localStorage.setItem('fg_hide_bal', _hideBal ? '1' : '0'); } catch (_) {}
+    renderHome();
+  });
   el.querySelector('#qaDeposit').addEventListener('click', openDepositModal);
   el.querySelector('#qaWithdraw').addEventListener('click', openWithdrawModal);
   el.querySelector('#qaRedeem').addEventListener('click', openRedeemModal);
@@ -784,6 +802,10 @@ function renderAccount() {
       <button class="menu-row" id="mnTeam"><span class="mi">${ICN.people}</span><span class="ml">Referrals &amp; team</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
+      <button class="menu-row" id="mnPassword"><span class="mi">${ICN.lock}</span><span class="ml">Change password</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnSupport"><span class="mi">${ICN.support}</span><span class="ml">Contact support</span><span class="mr">${ICN.chevron}</span></button>
+    </div>
+    <div class="menu-list">
       <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Log out</span></button>
     </div>
   `;
@@ -791,6 +813,54 @@ function renderAccount() {
   el.querySelector('#mnHistory').addEventListener('click', openHistoryModal);
   el.querySelector('#mnGems').addEventListener('click', () => switchTab('gems'));
   el.querySelector('#mnTeam').addEventListener('click', () => switchTab('team'));
+  el.querySelector('#mnPassword').addEventListener('click', openPasswordModal);
+  el.querySelector('#mnSupport').addEventListener('click', openSupportModal);
+}
+
+function openPasswordModal() {
+  openModal(`
+    <div class="modal-head"><h2>Change password</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="field"><label>Current password</label><input id="pwCur" type="password" placeholder="Current password"></div>
+    <div class="field"><label>New password</label><input id="pwNew" type="password" placeholder="At least 6 characters"></div>
+    <div class="field"><label>Confirm new password</label><input id="pwNew2" type="password" placeholder="Re-enter new password"></div>
+    <button class="btn" id="mSubmit">Update password</button>
+  `);
+  document.getElementById('mSubmit').addEventListener('click', async () => {
+    const cur = document.getElementById('pwCur').value;
+    const nw = document.getElementById('pwNew').value;
+    const nw2 = document.getElementById('pwNew2').value;
+    if (!cur || !nw) return toast('Fill in both password fields', 'err');
+    if (nw.length < 6) return toast('New password must be at least 6 characters', 'err');
+    if (nw !== nw2) return toast('The new passwords do not match', 'err');
+    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
+    try {
+      const cred = EmailAuthProvider.credential(_user.email, cur);
+      await reauthenticateWithCredential(_user, cred);
+      await updatePassword(_user, nw);
+      closeModal();
+      toast('Password updated', 'ok');
+    } catch (err) {
+      restore();
+      const msg = /wrong-password|invalid-credential/.test(err.code || '') ? 'Current password is incorrect' : (err.message || 'Could not update password');
+      toast(msg, 'err');
+    }
+  });
+}
+
+function openSupportModal() {
+  const s = _publicSettings || {};
+  const wa = s.supportWhatsapp || '';
+  const email = s.supportEmail || '';
+  const hours = s.supportHours || 'Every day, 9:00 AM – 9:00 PM';
+  openModal(`
+    <div class="modal-head"><h2>Contact support</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="support-body">
+      ${wa ? `<a class="support-row" href="${esc(wa)}" target="_blank" rel="noopener"><span class="mi" style="background:var(--ok-bg);color:var(--ok)">${ICN.support}</span><span><b>WhatsApp channel</b><br><span class="s">Tap to open</span></span></a>` : ''}
+      ${email ? `<a class="support-row" href="mailto:${esc(email)}"><span class="mi" style="background:#eef2ff;color:var(--sapphire)">${ICN.mail}</span><span><b>Email us</b><br><span class="s">${esc(email)}</span></span></a>` : ''}
+      <div class="support-row" style="cursor:default"><span class="mi" style="background:#fef9e7;color:var(--topaz)">${ICN.clock}</span><span><b>Support hours</b><br><span class="s">${esc(hours)}</span></span></div>
+      ${!wa && !email ? `<div class="empty-note">Support contacts have not been set yet.</div>` : ''}
+    </div>
+  `);
 }
 
 function openHistoryModal() {

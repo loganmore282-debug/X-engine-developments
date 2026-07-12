@@ -369,6 +369,14 @@ async function renderSettings(){
       <label>Button link (optional)</label><input id="aCtaUrl" value="${esc(v('annCtaUrl',''))}">
       <button class="btn block" id="saveAnn">Save announcement</button>
       <p class="muted" style="margin-top:10px">Saving re-shows the popup to everyone, even users who dismissed the previous one.</p>
+    </div>
+
+    <h2 class="sec">Support contacts</h2>
+    <div class="panel-card">
+      <label>WhatsApp channel link</label><input id="spWa" value="${esc(v('supportWhatsapp',''))}" placeholder="https://whatsapp.com/channel/...">
+      <label>Support email</label><input id="spEmail" value="${esc(v('supportEmail',''))}" placeholder="support@furagemz.com">
+      <label>Support hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Every day, 9:00 AM – 9:00 PM">
+      <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>`;
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
@@ -382,6 +390,10 @@ async function renderSettings(){
     const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value,
       annCtaLabel:$('aCtaLabel').value.trim(), annCtaUrl:$('aCtaUrl').value.trim() };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveSupport').addEventListener('click', async()=>{
+    const upd = { supportWhatsapp:$('spWa').value.trim(), supportEmail:$('spEmail').value.trim(), supportHours:$('spHours').value.trim() };
+    const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }
 
