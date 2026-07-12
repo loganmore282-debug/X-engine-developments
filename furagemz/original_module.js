@@ -24,6 +24,7 @@ const auth = getAuth(app);
 let _user = null, _account = null, _investments = [], _members = [], _txns = [], _products = [];
 let _activeTab = 'home';
 let _txnFilter = 'all';
+let _feed = [];
 let _hideBal = false;
 try { _hideBal = localStorage.getItem('fg_hide_bal') === '1'; } catch (_) {}
 
@@ -174,9 +175,31 @@ function showView(name) {
   document.getElementById('mainView').classList.toggle('hidden', name !== 'main');
 }
 
-// Paint the gradient watermark gems behind the auth screen.
+// Paint the gradient watermark gems + floating decorative gems behind auth.
 document.getElementById('authArt1').innerHTML = gemArt('#ffffff');
 document.getElementById('authArt2').innerHTML = gemArt('#ffffff');
+document.querySelectorAll('.float-gem').forEach(el => { el.innerHTML = gemArt(el.dataset.fgem || '#ffffff'); });
+
+// ── Jumbled-letter captcha ──
+let _captchaId = null;
+async function loadCaptcha() {
+  const box = document.getElementById('captchaBox');
+  if (!box) return;
+  box.innerHTML = '<span style="color:#b9a9d6">…</span>';
+  const r = await api('/auth/captcha', { method: 'POST' });
+  if (r.status !== 'success') { box.innerHTML = '<span style="color:#b9a9d6">—</span>'; return; }
+  _captchaId = r.captchaId;
+  const cols = ['#7c3aed', '#0ea5e9', '#e11d48', '#059669', '#c026d3', '#eab308'];
+  const letters = String(r.challenge).split('').map(ch => {
+    const rot = (Math.random() * 40 - 20).toFixed(1);
+    const dy = (Math.random() * 10 - 5).toFixed(1);
+    const col = cols[Math.floor(Math.random() * cols.length)];
+    return `<span style="transform:rotate(${rot}deg) translateY(${dy}px);color:${col}">${esc(ch)}</span>`;
+  }).join('');
+  box.innerHTML = `<i class="cap-line cl1"></i><i class="cap-line cl2"></i>${letters}`;
+}
+const _capRefresh = document.getElementById('captchaRefresh');
+if (_capRefresh) _capRefresh.addEventListener('click', loadCaptcha);
 
 let _authMode = 'login';
 function setAuthMode(mode) {
@@ -187,6 +210,7 @@ function setAuthMode(mode) {
   document.getElementById('authTitle').textContent = login ? 'Start logging in' : 'Create your account';
   document.getElementById('authErr').classList.add('hidden');
   document.querySelector('.auth-scroll').scrollTop = 0;
+  if (!login) loadCaptcha();
 }
 document.getElementById('toRegister').addEventListener('click', () => setAuthMode('register'));
 document.getElementById('toLogin').addEventListener('click', () => setAuthMode('login'));
@@ -283,9 +307,14 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   if (pass.length < 6) return authError('Password must be at least 6 characters.');
   if (pass !== pass2) return authError('The two passwords do not match.');
   if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) return authError('Username must be 3–16 letters, numbers or underscore.');
+  const captcha = document.getElementById('rgCaptcha').value.trim();
+  if (!captcha) return authError('Type the letters shown in the box.');
   document.getElementById('authErr').classList.add('hidden');
   const restore = setBusy(document.getElementById('rgSubmit'), 'Please wait');
   try {
+    // Anti-bot: verify the jumbled-letter captcha before anything else.
+    const capR = await api('/auth/captcha/verify', { method: 'POST', body: { captchaId: _captchaId, answer: captcha } });
+    if (capR.status !== 'success') { restore(); loadCaptcha(); document.getElementById('rgCaptcha').value = ''; return authError(capR.message || 'Incorrect verification code.'); }
     // Pre-check availability so we don't create a phone account for a taken name.
     const chk = await api('/auth/check-username', { method: 'POST', body: { username } });
     if (chk.status === 'success' && !chk.available) { restore(); return authError(chk.reason || 'That username is taken.'); }
@@ -331,10 +360,31 @@ onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
   showView('main');
-  await loadAccount();
+  await Promise.all([loadAccount(), loadActivityFeed()]);
   render();
   loadPublicSettings().then(maybeShowAnnouncement);
 });
+
+async function loadActivityFeed() {
+  const r = await api('/public/activity-feed');
+  if (r.status === 'success') _feed = r.feed || [];
+}
+const TICK_COLORS = ['#7c3aed', '#0ea5e9', '#f43f5e', '#10b981', '#eab308', '#c084fc'];
+function tickColor(name) {
+  let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return TICK_COLORS[h % TICK_COLORS.length];
+}
+function tickerItemsHtml() {
+  if (!_feed.length) return '';
+  const one = f => {
+    const label = f.action === 'joined Furagemz'
+      ? `${esc(f.name)} joined Furagemz`
+      : `${esc(f.name)} ${esc(f.action)}${f.amount ? ` <span class="tk-amt">${ugx(f.amount)}</span>` : ''}`;
+    return `<div class="tick-item"><span class="tav" style="background:${tickColor(f.name)}">${esc(initials(f.name))}</span><span>${label} <span class="tk-ago">· ${f.ago}m</span></span></div>`;
+  };
+  const items = _feed.map(one).join('');
+  return items + items; // duplicated so the -50% marquee loops seamlessly
+}
 
 async function loadPublicSettings() {
   const r = await api('/settings/public');
@@ -478,6 +528,9 @@ function renderHome() {
       </div>
       <div class="hb-dots" id="hbDots">${BANNER_SLIDES.map(() => '<i></i>').join('')}</div>
     </div>
+    ${_feed.length ? `
+    <div class="ticker-head"><i class="live"></i><span>Live activity</span></div>
+    <div class="ticker"><div class="ticker-track">${tickerItemsHtml()}</div></div>` : ''}
     <div class="wallet-panel">
       <div class="wallet-top">
         <span class="wallet-label">Total balance</span>
@@ -611,7 +664,7 @@ function openWithdrawModal() {
     </div>
     ${(_account?.bankAccounts || []).length ? `<label style="font-size:13px;color:var(--sub);font-weight:600;display:block;margin-bottom:7px">Saved accounts</label>
       <div class="amt-chips" style="justify-content:flex-start;margin:0 0 12px">
-        ${(_account.bankAccounts).map(a => `<button type="button" class="amt-chip bank-pick" data-phone="${esc(a.phone)}">${esc(a.label || a.network || 'Account')}</button>`).join('')}
+        ${(_account.bankAccounts).map(a => `<button type="button" class="amt-chip bank-pick" data-phone="${esc(a.phone)}">${esc(a.holderName || a.network || 'Account')}</button>`).join('')}
       </div>` : ''}
     <div class="field"><label>Send to mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
     <button class="btn" id="mSubmit">Request withdrawal</button>
@@ -833,7 +886,7 @@ function bankRowsHtml(accounts, withRemove) {
   return accounts.map(a => `
     <div class="bank-row" data-phone="${esc(a.phone)}">
       <span class="mi" style="background:#eef2ff;color:var(--sapphire)">${ICN.bank}</span>
-      <div class="bank-info"><div class="t">${esc(a.label || 'Account')}</div><div class="s">${esc(a.network || '')} · 0${esc(a.phone)}</div></div>
+      <div class="bank-info"><div class="t">${esc(a.holderName || a.label || 'Account')}</div><div class="s">${esc(a.network || '')} · 0${esc(a.phone)}</div></div>
       ${withRemove ? `<button class="bank-del" data-del="${esc(a.phone)}">${ICN.trash}</button>` : ''}
     </div>`).join('');
 }
@@ -843,7 +896,7 @@ function openBanksModal() {
     <div class="modal-head"><h2>Withdrawal accounts</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="support-body" id="bankList">${bankRowsHtml(accounts, true)}</div>
     <div style="border-top:1px solid var(--line2);margin:16px 0 4px"></div>
-    <div class="field"><label>Label (optional)</label><input id="bkLabel" type="text" placeholder="e.g. My MTN number"></div>
+    <div class="field"><label>Account holder full name</label><input id="bkName" type="text" placeholder="Name registered on the SIM"></div>
     <div class="field"><label>Mobile-money number</label><input id="bkPhone" type="tel" inputmode="numeric" placeholder="0771234567"></div>
     <button class="btn" id="bkAdd">Save account</button>
   `);
@@ -861,14 +914,15 @@ function openBanksModal() {
   };
   bindBankDeletes();
   document.getElementById('bkAdd').addEventListener('click', async () => {
-    const label = document.getElementById('bkLabel').value.trim();
+    const holderName = document.getElementById('bkName').value.trim();
     const phone = document.getElementById('bkPhone').value.trim();
+    if (!holderName) return toast('Enter the account holder full name', 'err');
     if (!phone) return toast('Enter a mobile-money number', 'err');
     const restore = setBusy(document.getElementById('bkAdd'), 'Please wait');
-    const r = await api('/account/add-bank', { method: 'POST', body: { label, phone } });
+    const r = await api('/account/add-bank', { method: 'POST', body: { holderName, phone } });
     restore();
     if (r.status !== 'success') return toast(r.message || 'Could not save', 'err');
-    document.getElementById('bkLabel').value = ''; document.getElementById('bkPhone').value = '';
+    document.getElementById('bkName').value = ''; document.getElementById('bkPhone').value = '';
     toast('Account saved', 'ok'); refresh();
   });
 }

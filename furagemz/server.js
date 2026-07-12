@@ -418,6 +418,53 @@ async function usernameTaken(lower, exceptUid) {
   return snap.docs[0].id !== exceptUid;
 }
 
+// ── ANTI-BOT CAPTCHA (jumbled letters) ──
+// The server issues a short random LETTER code the client renders visually
+// jumbled; the user retypes it and the server verifies. In-memory, 5-min TTL.
+const CAPTCHA_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ'; // letters only, no I/L/O ambiguity
+const _captchas = new Map(); // id -> { answer, expires }
+function sweepCaptchas() { const now = Date.now(); for (const [k, v] of _captchas) if (v.expires < now) _captchas.delete(k); }
+app.post('/auth/captcha', (_req, res) => {
+  sweepCaptchas();
+  const len = 5, bytes = crypto.randomBytes(len);
+  let code = '';
+  for (let i = 0; i < len; i++) code += CAPTCHA_CHARS[bytes[i] % CAPTCHA_CHARS.length];
+  const id = uuidv4();
+  _captchas.set(id, { answer: code, expires: Date.now() + 5 * 60 * 1000 });
+  return res.json({ status: 'success', captchaId: id, challenge: code });
+});
+app.post('/auth/captcha/verify', (req, res) => {
+  sweepCaptchas();
+  const c = _captchas.get(req.body.captchaId);
+  if (!c) return res.json({ status: 'error', message: 'Verification expired. Refresh and try again.' });
+  const ok = String(req.body.answer || '').toUpperCase().replace(/\s/g, '') === c.answer;
+  if (ok) _captchas.delete(req.body.captchaId);
+  return res.json({ status: ok ? 'success' : 'error', message: ok ? '' : 'Incorrect code, try again.' });
+});
+
+// ── ACTIVITY FEED (server-generated social proof, refreshed 30s) ──
+const _FEED_NAMES = ['Grace','Peter','Sarah','John','Amina','David','Brian','Joan','Moses','Ritah','Ivan','Sharon','Denis','Faith','Isaac','Mercy','Samuel','Patience','Ronald','Esther','Andrew','Lydia','Kenneth','Sylvia','Robert','Winnie','Emmanuel','Doreen','Timothy','Barbara'];
+const _FEED_PLACES = ['Kampala','Wakiso','Mbarara','Gulu','Jinja','Mbale','Masaka','Lira','Fort Portal','Entebbe','Arua','Soroti','Hoima','Kabale'];
+function _pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+function genActivityFeed() {
+  const items = [];
+  for (let i = 0; i < 26; i++) {
+    const roll = Math.random();
+    let action, amount;
+    if      (roll < 0.34) { action = 'bought a gem';       amount = _pick([25000,75000,200000,450000,800000,1200000]); }
+    else if (roll < 0.64) { action = 'received a payout';  amount = _pick([62500,187500,500000,1125000,2000000]); }
+    else if (roll < 0.88) { action = 'withdrew';           amount = 5000 * (2 + Math.floor(Math.random() * 40)); }
+    else                  { action = 'joined Furagemz';    amount = 0; }
+    items.push({ name: _pick(_FEED_NAMES), place: _pick(_FEED_PLACES), action, amount, ago: Math.floor(Math.random() * 58) + 1 });
+  }
+  return items.sort((a, b) => a.ago - b.ago);
+}
+let _activityFeed = [], _activityTs = 0;
+app.get('/public/activity-feed', (_req, res) => {
+  if (Date.now() - _activityTs > 30000) { _activityFeed = genActivityFeed(); _activityTs = Date.now(); }
+  res.json({ status: 'success', feed: _activityFeed });
+});
+
 // Live availability check used by the register screen (public, rate-limited by /auth/).
 app.post('/auth/check-username', async (req, res) => {
   const norm = normalizeUsername(req.body.username);
@@ -618,14 +665,17 @@ app.post('/account/add-bank', async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const digits = String(req.body.phone || '').replace(/\D/g, '').slice(-9);
   if (digits.length < 9) return res.status(400).json({ status: 'error', message: 'Enter a valid phone number' });
+  // Full name of the mobile-money account holder (required, not a bank/label).
+  const holderName = String(req.body.holderName || '').replace(/[<>]/g, '').trim().slice(0, 40);
+  if (holderName.length < 2 || !/[a-zA-Z]/.test(holderName))
+    return res.status(400).json({ status: 'error', message: 'Enter the full name of the account holder' });
   const network = detectNetwork(digits);
-  const label = String(req.body.label || '').replace(/[<>]/g, '').trim().slice(0, 30) || (network + ' account');
   try {
     const snap = await db.collection('users').doc(uid).get();
     const existing = (snap.data().bankAccounts || []);
     if (existing.some(a => a.phone === digits)) return res.json({ status: 'error', message: 'That number is already saved' });
     if (existing.length >= 5) return res.json({ status: 'error', message: 'You can save up to 5 accounts' });
-    await db.collection('users').doc(uid).update({ bankAccounts: FieldValue.arrayUnion({ label, phone: digits, network }) });
+    await db.collection('users').doc(uid).update({ bankAccounts: FieldValue.arrayUnion({ holderName, phone: digits, network }) });
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -824,7 +874,7 @@ app.post('/checkin', async (req, res) => {
 // redeems it once. Distinct from Voltra's random-range gift codes: a Furagemz
 // code carries its own fixed `amount`, set when the admin creates it.
 // ═══════════════════════════════════════════
-function genCode() { return randChars(6); } // e.g. K7M2QP — unambiguous charset
+function genCode() { return randChars(6); } // 6 alphanumeric chars, e.g. Y68GDH (unambiguous charset)
 const _codeRateMap   = new Map();  // userId -> last attempt ts
 const _redeemingCodes = new Set(); // code doc id -> being redeemed (single-writer)
 
