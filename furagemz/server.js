@@ -383,11 +383,46 @@ app.get('/settings/public', async (_req, res) => {
     checkinBonus: s.checkinBonus ?? CHECKIN_BONUS,
     liquidityFee: s.liquidityFee ?? LIQUIDITY_FEE,
     gemTiers: GEM_TIERS,
+    announcement: {
+      enabled:  !!s.annEnabled,
+      // A content version so the app can re-show the popup after an edit
+      // (hash of the shown fields; changes whenever the admin edits any of them).
+      version:  s.annVersion || 0,
+      title:    s.annTitle    || 'Notice',
+      body:     s.annBody     || '',
+      ctaLabel: s.annCtaLabel || '',
+      ctaUrl:   s.annCtaUrl    || '',
+    },
   });
 });
 
 app.get('/products', async (_req, res) => {
   res.json({ status: 'success', products: GEM_TIERS });
+});
+
+// ── USERNAMES ──
+// A user's username IS their referral code. Rules: 3–16 chars, letters/
+// numbers/underscore only. Matching is case-insensitive (stored lowercased in
+// usernameLower); the original casing is kept for display.
+function normalizeUsername(raw) {
+  const v = String(raw || '').trim();
+  if (!/^[a-zA-Z0-9_]{3,16}$/.test(v)) return { ok: false, error: 'Username must be 3–16 letters, numbers or underscore.' };
+  return { ok: true, value: v, lower: v.toLowerCase() };
+}
+async function usernameTaken(lower, exceptUid) {
+  const snap = await db.collection('users').where('usernameLower', '==', lower).limit(1).get();
+  if (snap.empty) return false;
+  return snap.docs[0].id !== exceptUid;
+}
+
+// Live availability check used by the register screen (public, rate-limited by /auth/).
+app.post('/auth/check-username', async (req, res) => {
+  const norm = normalizeUsername(req.body.username);
+  if (!norm.ok) return res.json({ status: 'success', available: false, reason: norm.error });
+  try {
+    const taken = await usernameTaken(norm.lower, null);
+    return res.json({ status: 'success', available: !taken, reason: taken ? 'That username is taken.' : '' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 // ═══════════════════════════════════════════
@@ -449,32 +484,40 @@ app.post('/account/create-profile', async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   if (authedUid && req.body.userId && authedUid !== req.body.userId)
     return res.status(403).json({ status: 'error', message: 'Forbidden' });
-  const { name, phone } = req.body;
-  if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
-  const safeName = String(name).replace(/[<>]/g, '').trim().slice(0, 60);
+  const { username, phone } = req.body;
+  if (!username || !phone) return res.status(400).json({ status: 'error', message: 'username and phone required' });
+  const norm = normalizeUsername(username);
+  if (!norm.ok) return res.status(400).json({ status: 'error', message: norm.error, field: 'username' });
   try {
     const ref  = db.collection('users').doc(uid);
     const snap = await ref.get();
+    // Already provisioned (idempotent retry) — keep the existing username.
+    if (snap.exists && snap.data().username) return res.json({ status: 'success', message: 'Profile ensured', username: snap.data().username });
+
+    // Authoritative uniqueness check (case-insensitive). A live check runs on the
+    // client first, so this only catches the rare race.
+    if (await usernameTaken(norm.lower, uid))
+      return res.status(409).json({ status: 'error', message: 'That username is taken.', field: 'username' });
+
+    const base = {
+      username: norm.value, usernameLower: norm.lower, referralCode: norm.value,
+      phone: cleanPhone(phone), email: phoneToEmail(phone),
+    };
     if (snap.exists) {
-      const d = snap.data();
-      if (!d.name || !d.phone) {
-        await ref.update({ name: safeName, phone: cleanPhone(phone), email: phoneToEmail(phone) });
-      }
-      return res.json({ status: 'success', message: 'Profile ensured' });
+      await ref.update(base);
+    } else {
+      await ref.set({
+        ...base,
+        walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
+        totalEarned: 0, commissionEarned: 0, commissionL1Earned: 0,
+        commissionL2Earned: 0, commissionL3Earned: 0,
+        teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
+        checkinEarned: 0, checkinStreak: 0, checkinDays: 0,
+        withdrawalCount: 0, status: 'active',
+        bankAccounts: [], createdAt: FieldValue.serverTimestamp()
+      });
     }
-    await ref.set({
-      name: safeName,
-      phone: cleanPhone(phone),
-      email: phoneToEmail(phone),
-      walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
-      totalEarned: 0, commissionEarned: 0, commissionL1Earned: 0,
-      commissionL2Earned: 0, commissionL3Earned: 0,
-      teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
-      checkinEarned: 0, checkinStreak: 0, checkinDays: 0,
-      withdrawalCount: 0, status: 'active',
-      bankAccounts: [], createdAt: FieldValue.serverTimestamp()
-    });
-    return res.json({ status: 'success' });
+    return res.json({ status: 'success', username: norm.value });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -494,13 +537,19 @@ app.post('/register', async (req, res) => {
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (userSnap.data().registrationDone) return res.json({ status: 'already_done', referralCode: userSnap.data().referralCode || null });
 
+    // The referral a new user enters is a referrer's USERNAME. Match case-insensitively.
     let referrerId = null;
     if (referralCode) {
-      const refSnap = await db.collection('users').where('referralCode', '==', referralCode.toUpperCase().trim()).limit(1).get();
+      const wanted = String(referralCode).trim().toLowerCase();
+      let refSnap = await db.collection('users').where('usernameLower', '==', wanted).limit(1).get();
+      if (refSnap.empty) // fall back to legacy referralCode field for any pre-username accounts
+        refSnap = await db.collection('users').where('referralCode', '==', String(referralCode).trim()).limit(1).get();
       if (!refSnap.empty && refSnap.docs[0].id !== userId) referrerId = refSnap.docs[0].id;
     }
 
-    const myRefCode = userSnap.data().referralCode || await generateUniqueRefCode();
+    // A user's referral code is their username (set at profile creation); fall back
+    // to a random code only for any legacy account with no username.
+    const myRefCode = userSnap.data().referralCode || userSnap.data().username || await generateUniqueRefCode();
     const s = await getSettings();
     const WELCOME = s.welcomeBonus ?? WELCOME_BONUS;
     const { date, time } = nowStr();
@@ -572,12 +621,12 @@ app.get('/team/members', async (req, res) => {
       const d = doc.data();
       members.push({
         id: doc.id,
-        name: d.name || 'User',
+        name: d.username || d.name || 'User',
         phone: d.phone || '',
         joinedAt: d.createdAt ? new Date(tsMillis(d.createdAt)).toISOString() : null,
         hasInvested: (d.totalInvested || 0) > 0,
         totalInvested: d.totalInvested || 0,
-        referralCode: d.referralCode || null,
+        referralCode: d.referralCode || d.username || null,
       });
     });
     members.sort((a, b) => (b.joinedAt || '') > (a.joinedAt || '') ? 1 : -1);
@@ -1390,6 +1439,9 @@ app.post('/admin/settings/update', async (req, res) => {
   const { adminKey, ...updates } = req.body;
   if (!Object.keys(updates).length) return res.status(400).json({ status: 'error', message: 'No fields to update' });
   try {
+    // If any announcement field is touched, bump the version so the app re-shows
+    // the popup to everyone (even those who already dismissed the old one).
+    if (Object.keys(updates).some(k => k.startsWith('ann'))) updates.annVersion = Date.now();
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCache = null; _settingsCacheTs = 0;
     return res.json({ status: 'success', updated: updates });

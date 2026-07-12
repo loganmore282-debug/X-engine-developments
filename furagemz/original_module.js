@@ -166,20 +166,22 @@ function showView(name) {
   document.getElementById('mainView').classList.toggle('hidden', name !== 'main');
 }
 
-// Single link-style toggle between sign-in and create-account (no segmented control).
+// Paint the gradient watermark gems behind the auth screen.
+document.getElementById('authArt1').innerHTML = gemArt('#ffffff');
+document.getElementById('authArt2').innerHTML = gemArt('#ffffff');
+
 let _authMode = 'login';
 function setAuthMode(mode) {
   _authMode = mode;
   const login = mode === 'login';
   document.getElementById('loginForm').classList.toggle('active', login);
   document.getElementById('registerForm').classList.toggle('active', !login);
-  document.getElementById('authHeading').textContent = login ? 'Welcome back' : 'Create your account';
-  document.getElementById('authSubheading').textContent = login ? 'Sign in to reach your wallet.' : 'It only takes a moment to start.';
-  document.getElementById('authToggleText').textContent = login ? 'New to Furagemz?' : 'Already have an account?';
-  document.getElementById('authToggleBtn').textContent = login ? 'Create an account' : 'Sign in';
+  document.getElementById('authTitle').textContent = login ? 'Start logging in' : 'Create your account';
   document.getElementById('authErr').classList.add('hidden');
+  document.querySelector('.auth-scroll').scrollTop = 0;
 }
-document.getElementById('authToggleBtn').addEventListener('click', () => setAuthMode(_authMode === 'login' ? 'register' : 'login'));
+document.getElementById('toRegister').addEventListener('click', () => setAuthMode('register'));
+document.getElementById('toLogin').addEventListener('click', () => setAuthMode('login'));
 document.querySelectorAll('[data-toggle]').forEach(btn => {
   btn.innerHTML = ICN.eye;
   btn.addEventListener('click', () => {
@@ -194,6 +196,45 @@ function authError(msg) {
   box.textContent = msg;
   box.classList.remove('hidden');
 }
+
+// Prefill a referral username from ?ref= in the link.
+(() => {
+  try {
+    const ref = new URLSearchParams(location.search).get('ref');
+    if (ref) { document.getElementById('rgRef').value = ref; }
+  } catch (_) {}
+})();
+
+// Live username availability check (debounced).
+let _unameTimer = null, _unameOk = false;
+const unameInput = document.getElementById('rgUser');
+const unameHint = document.getElementById('unameHint');
+unameInput.addEventListener('input', () => {
+  _unameOk = false;
+  const v = unameInput.value.trim();
+  unameHint.className = 'uname-hint';
+  unameHint.textContent = '';
+  if (_unameTimer) clearTimeout(_unameTimer);
+  if (!v) return;
+  if (!/^[a-zA-Z0-9_]{3,16}$/.test(v)) {
+    unameHint.className = 'uname-hint bad';
+    unameHint.textContent = '3–16 letters, numbers or underscore.';
+    return;
+  }
+  _unameTimer = setTimeout(async () => {
+    const r = await api('/auth/check-username', { method: 'POST', body: { username: v } });
+    if (unameInput.value.trim() !== v) return; // changed since
+    if (r.status === 'success' && r.available) {
+      _unameOk = true;
+      unameHint.className = 'uname-hint ok';
+      unameHint.textContent = v + ' is available';
+    } else {
+      _unameOk = false;
+      unameHint.className = 'uname-hint bad';
+      unameHint.textContent = r.reason || 'That username is taken.';
+    }
+  }, 450);
+});
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -220,29 +261,42 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   }
 });
 
+// Keep the Firebase credential across a retry so a post-signup username
+// collision doesn't try to re-register the phone.
+let _pendingCred = null;
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const name = document.getElementById('rgName').value.trim();
   const phone = document.getElementById('rgPhone').value.trim();
   const pass = document.getElementById('rgPass').value;
-  const ref = document.getElementById('rgRef').value.trim().toUpperCase();
-  if (!name || !phone || !pass) return authError('Fill in your name, phone number and password.');
+  const pass2 = document.getElementById('rgPass2').value;
+  const username = document.getElementById('rgUser').value.trim();
+  const ref = document.getElementById('rgRef').value.trim();
+  if (!phone || !pass || !username) return authError('Fill in phone, password and a username.');
   if (pass.length < 6) return authError('Password must be at least 6 characters.');
+  if (pass !== pass2) return authError('The two passwords do not match.');
+  if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) return authError('Username must be 3–16 letters, numbers or underscore.');
   document.getElementById('authErr').classList.add('hidden');
   const restore = setBusy(document.getElementById('rgSubmit'), 'Please wait');
   try {
-    let cred;
-    try {
-      cred = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
-    } catch (primaryErr) {
-      if (primaryErr.code === 'auth/network-request-failed') {
-        const r = await api('/auth/register', { method: 'POST', body: { phone, password: pass } });
-        if (r.status !== 'success') throw new Error(r.message || 'Registration failed');
-        cred = await signInWithCustomToken(auth, r.customToken);
-      } else throw primaryErr;
+    // Pre-check availability so we don't create a phone account for a taken name.
+    const chk = await api('/auth/check-username', { method: 'POST', body: { username } });
+    if (chk.status === 'success' && !chk.available) { restore(); return authError(chk.reason || 'That username is taken.'); }
+
+    if (!_pendingCred) {
+      try {
+        _pendingCred = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
+      } catch (primaryErr) {
+        if (primaryErr.code === 'auth/network-request-failed') {
+          const r = await api('/auth/register', { method: 'POST', body: { phone, password: pass } });
+          if (r.status !== 'success') throw new Error(r.message || 'Registration failed');
+          _pendingCred = await signInWithCustomToken(auth, r.customToken);
+        } else throw primaryErr;
+      }
     }
-    await api('/account/create-profile', { method: 'POST', body: { name, phone: cleanPhone(phone).replace('+', '') } });
+    const prof = await api('/account/create-profile', { method: 'POST', body: { username, phone: cleanPhone(phone).replace('+', '') } });
+    if (prof.status !== 'success') { restore(); return authError(prof.message || 'Could not create your profile.'); }
     await api('/register', { method: 'POST', body: { referralCode: ref } });
+    _pendingCred = null; // success — onAuthStateChanged takes over
   } catch (err) {
     restore();
     const msg = err.code === 'auth/email-already-in-use'
@@ -264,13 +318,52 @@ async function doLogout() {
 // ══════════════════════════════════════════════
 // BOOT / DATA LOAD
 // ══════════════════════════════════════════════
+let _publicSettings = null;
 onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
   showView('main');
   await loadAccount();
   render();
+  loadPublicSettings().then(maybeShowAnnouncement);
 });
+
+async function loadPublicSettings() {
+  const r = await api('/settings/public');
+  if (r.status === 'success') _publicSettings = r;
+  return _publicSettings;
+}
+
+const FG_LOGO = `<svg viewBox="0 0 100 100" fill="none">
+  <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#7c3aed"/>
+  <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
+  <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
+  <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg>`;
+
+function maybeShowAnnouncement() {
+  const ann = _publicSettings?.announcement;
+  if (!ann || !ann.enabled || !ann.body) return;
+  let seen = null;
+  try { seen = localStorage.getItem('fg_ann_seen'); } catch (_) {}
+  if (String(seen) === String(ann.version)) return; // already dismissed this version
+  const root = document.getElementById('modalRoot');
+  root.style.alignItems = 'center';
+  root.innerHTML = `
+    <div class="modal-backdrop" data-close></div>
+    <div class="ann-card">
+      <div class="ann-hero"><span class="ann-htitle">${esc(ann.title || 'Notice')}</span>
+        <div class="ann-logo">${FG_LOGO}</div></div>
+      <div class="ann-body">
+        <div class="ann-text">${esc(ann.body)}</div>
+        ${ann.ctaUrl && ann.ctaLabel ? `<a class="ann-cta" href="${esc(ann.ctaUrl)}" target="_blank" rel="noopener">${esc(ann.ctaLabel)}</a>` : ''}
+        <button class="ann-ok" id="annOk">OK</button>
+      </div>
+    </div>`;
+  root.classList.remove('hidden');
+  const dismiss = () => { try { localStorage.setItem('fg_ann_seen', String(ann.version)); } catch (_) {} root.style.alignItems = ''; closeModal(); };
+  root.querySelector('#annOk').addEventListener('click', dismiss);
+  root.querySelector('[data-close]').addEventListener('click', dismiss);
+}
 
 async function loadAccount() {
   const [accR, invR] = await Promise.all([
@@ -607,14 +700,23 @@ function openGemDetail(key) {
 // ══════════════════════════════════════════════
 // TEAM
 // ══════════════════════════════════════════════
+function referralLink(code) {
+  try { return location.origin + location.pathname.replace(/index\.html$/, '') + '?ref=' + encodeURIComponent(code); }
+  catch (_) { return 'https://furagemz.com/?ref=' + code; }
+}
 function renderTeam() {
   const el = document.getElementById('panel-team');
-  const code = _account?.referralCode || '—';
+  const code = _account?.referralCode || _account?.username || '—';
+  const link = code !== '—' ? referralLink(code) : '';
   el.innerHTML = `
     <div class="ref-card">
       <div style="color:var(--sub);font-size:13px;font-weight:600">Your referral code</div>
       <div class="ref-code">${esc(code)}</div>
-      <button class="btn outline" id="copyRef" style="width:auto;padding:9px 20px;display:inline-flex;align-items:center;gap:7px">${ICN.copy} Copy code</button>
+      ${link ? `<div class="ref-link" id="refLink" title="Tap to copy">${esc(link)}</div>` : ''}
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+        <button class="btn outline" id="copyRef" style="width:auto;padding:9px 18px;display:inline-flex;align-items:center;gap:7px">${ICN.copy} Copy link</button>
+        <button class="btn" id="shareRef" style="width:auto;padding:9px 18px">Share</button>
+      </div>
       <div class="stat-row">
         <div class="stat-box"><div class="n">${_account?.teamL1Count || 0}</div><div class="l">Level 1</div></div>
         <div class="stat-box"><div class="n">${_account?.teamL2Count || 0}</div><div class="l">Level 2</div></div>
@@ -634,7 +736,17 @@ function renderTeam() {
   `;
   const copyBtn = el.querySelector('#copyRef');
   if (copyBtn) copyBtn.addEventListener('click', () => {
-    navigator.clipboard?.writeText(code).then(() => toast('Referral code copied', 'ok')).catch(() => toast(code));
+    navigator.clipboard?.writeText(link).then(() => toast('Referral link copied', 'ok')).catch(() => toast(link));
+  });
+  const linkEl = el.querySelector('#refLink');
+  if (linkEl) linkEl.addEventListener('click', () => {
+    navigator.clipboard?.writeText(link).then(() => toast('Referral link copied', 'ok')).catch(() => {});
+  });
+  const shareBtn = el.querySelector('#shareRef');
+  if (shareBtn) shareBtn.addEventListener('click', async () => {
+    const text = `Join me on Furagemz and grow your gems. Use my link: ${link}`;
+    if (navigator.share) { try { await navigator.share({ title: 'Furagemz', text, url: link }); } catch (_) {} }
+    else navigator.clipboard?.writeText(link).then(() => toast('Referral link copied', 'ok')).catch(() => {});
   });
 }
 
