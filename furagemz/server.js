@@ -1242,6 +1242,12 @@ app.post('/withdraw/request', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    // Anti-abuse: a user must have activated at least one gem before withdrawing
+    // (stops someone registering, taking the welcome bonus, and cashing out).
+    // Admin-toggleable via settings.requireInvestToWithdraw (default: required).
+    const mustInvest = sett.requireInvestToWithdraw !== false;
+    if (mustInvest && (user.totalInvested || 0) <= 0)
+      return res.status(400).json({ status: 'error', message: 'You need to activate at least one gem before you can withdraw.' });
     if ((user.walletBalance || 0) < amt)
       return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });
 

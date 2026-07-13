@@ -807,6 +807,7 @@ function openWithdrawModal() {
         ${(_account.bankAccounts).map(a => `<button type="button" class="amt-chip bank-pick" data-phone="${esc(a.phone)}">${esc(a.holderName || a.network || 'Account')}</button>`).join('')}
       </div>` : ''}
     <div class="field"><label>Send to mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
+    ${(_account?.totalInvested || 0) <= 0 ? `<div class="err-box" style="margin-bottom:14px">Activate at least one gem before you can withdraw.</div>` : ''}
     <button class="btn" id="mSubmit">Request withdrawal</button>
   `);
   document.querySelectorAll('#modalRoot .bank-pick').forEach(b => b.addEventListener('click', () => {
