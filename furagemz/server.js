@@ -115,7 +115,11 @@ const CYCLE_DAYS       = 30;      // stipulated investment period (days) — lon
 // BOOST / ACCELERATE — after BOOST_UNLOCK_DAYS the holder may pay the same amount
 // again to cut the remaining wait: the gem then matures BOOST_MATURE_HOURS later.
 const BOOST_UNLOCK_DAYS  = 5;
-const BOOST_MATURE_HOURS = 3;
+const BOOST_MATURE_HOURS = 72;    // after a boost, the gem matures 3 days later
+function durPhrase(hours) {
+  hours = Number(hours) || 0;
+  return hours % 24 === 0 ? `${hours / 24} day${hours / 24 === 1 ? '' : 's'}` : `${hours} hours`;
+}
 
 // Gem tier ladder — prices distinct from Voltra's energy-asset ladder.
 const GEM_TIERS = [
@@ -821,13 +825,13 @@ app.post('/invest/boost', async (req, res) => {
       t.update(uRef, { walletBalance: bal - cost, totalInvested: FieldValue.increment(cost) });
       t.update(invRef, { boosted: true, boostedAt: FieldValue.serverTimestamp(), boostAmount: cost, maturityDate: newMat });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'boost', description: `Boosted ${inv.tierLabel || 'gem'} — matures in ${hours}h`,
+        userId, type: 'boost', description: `Boosted ${inv.tierLabel || 'gem'} — matures in ${durPhrase(hours)}`,
         amount: -cost, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
       });
       ok = true;
     });
     if (!ok) return res.status(400).json({ status: 'error', message: err || 'Could not boost' });
-    return res.json({ status: 'success', maturesInHours: hours, message: `Boosted — matures in ${hours} hours` });
+    return res.json({ status: 'success', maturesInHours: hours, message: `Boosted — matures in ${durPhrase(hours)}` });
   } catch (e) {
     console.error('Boost error:', e.message);
     return res.status(400).json({ status: 'error', message: e.message });

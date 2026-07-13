@@ -356,7 +356,7 @@ async function renderSettings(){
       </div>
       <div class="row" style="margin-top:6px">
         <div><label>Boost unlocks after (days)</label><input id="sBoostDays" type="number" value="${v('boostUnlockDays',5)}"></div>
-        <div><label>Boost matures in (hours)</label><input id="sBoostHrs" type="number" value="${v('boostMatureHours',3)}"></div>
+        <div><label>Boost matures in (hours; 72 = 3 days)</label><input id="sBoostHrs" type="number" value="${v('boostMatureHours',72)}"></div>
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>

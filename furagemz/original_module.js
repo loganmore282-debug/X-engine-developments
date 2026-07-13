@@ -491,8 +491,13 @@ function daysLeft(inv) {
 }
 function fmtCountdown(ms) {
   if (ms <= 0) return 'moments';
-  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  if (d > 0) return `${d}d ${h}h`;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function durPhrase(hours) {
+  hours = Number(hours) || 0;
+  return hours % 24 === 0 ? `${hours / 24} day${hours / 24 === 1 ? '' : 's'}` : `${hours} hours`;
 }
 // Boost eligibility for an active gem.
 function boostState(inv) {
@@ -521,11 +526,11 @@ function openBoostModal(invId) {
   openModal(`
     <div class="modal-head"><h2>Boost ${esc(inv.tierLabel || 'gem')}</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="boost-hero">${ICN.boost}</div>
-    <p class="boost-copy">Pay <b>${ugx(cost)}</b> again to accelerate this gem. It matures in about <b>${hours} hours</b> instead of waiting the full period — and your payout of <b>${ugx(inv.expectedReturn)}</b> stays the same.</p>
+    <p class="boost-copy">Pay <b>${ugx(cost)}</b> again to accelerate this gem. It matures in about <b>${durPhrase(hours)}</b> instead of waiting the full period — and your payout of <b>${ugx(inv.expectedReturn)}</b> stays the same.</p>
     <div class="breakdown">
       <div class="br"><span class="muted">Boost cost</span><span>${ugx(cost)}</span></div>
       <div class="br"><span class="muted">Your balance</span><span>${ugx(_account?.walletBalance || 0)}</span></div>
-      <div class="br total"><span>Matures in</span><span>${hours} hours</span></div>
+      <div class="br total"><span>Matures in</span><span>${durPhrase(hours)}</span></div>
     </div>
     <button class="btn" id="mSubmit">Boost now</button>
   `);
@@ -651,16 +656,49 @@ function renderHome() {
   startBanner();
 }
 
+// Premium record card — gradient icon chip, clean title, tag, amount + status pill.
+const REC_META = {
+  topup:         { label: 'Deposit',          grad: 'linear-gradient(135deg,#10b981,#059669)' },
+  withdrawal:    { label: 'Withdrawal',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
+  commission:    { label: 'Referral reward',   grad: 'linear-gradient(135deg,#818cf8,#6366f1)' },
+  checkin:       { label: 'Daily bonus',       grad: 'linear-gradient(135deg,#fbbf24,#f59e0b)' },
+  gem_payout:    { label: 'Gem payout',        grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
+  investment:    { label: 'Gem purchase',      grad: 'linear-gradient(135deg,#c084fc,#9333ea)' },
+  boost:         { label: 'Gem boost',         grad: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
+  redeem:        { label: 'Code redeemed',     grad: 'linear-gradient(135deg,#a78bfa,#7c3aed)' },
+  admin_credit:  { label: 'Credit',            grad: 'linear-gradient(135deg,#38bdf8,#2563eb)' },
+  admin_debit:   { label: 'Adjustment',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
+  refund:        { label: 'Refund',            grad: 'linear-gradient(135deg,#38bdf8,#0ea5e9)' },
+};
+function recMeta(type) { return REC_META[type] || { label: 'Transaction', grad: 'linear-gradient(135deg,#a78bfa,#7c3aed)' }; }
+function statusInfo(s) {
+  s = String(s || 'success').toLowerCase();
+  if (['success', 'processed', 'matched'].includes(s)) return { label: 'Successful', cls: 'ok' };
+  if (['pending', 'processing'].includes(s))           return { label: 'Processing', cls: 'proc' };
+  if (['failed', 'cancelled', 'rejected'].includes(s)) return { label: 'Failed',     cls: 'bad' };
+  return { label: s.charAt(0).toUpperCase() + s.slice(1), cls: 'mut' };
+}
+function recTag(t) {
+  if (t.type === 'commission' && t.level) return `<span class="rec-tag">Level ${t.level} · ${Math.round((t.level === 1 ? 0.35 : t.level === 2 ? 0.02 : 0.01) * 100)}%</span>`;
+  if (t.type === 'withdrawal' && (t.netAmount != null)) return `<span class="rec-tag">Received ${ugx(t.netAmount)}</span>`;
+  if (t.type === 'redeem' && t.code) return `<span class="rec-tag">${esc(t.code)}</span>`;
+  return '';
+}
 function txnRowHtml(t) {
   const amt = t.amount || 0;
   const sign = amt > 0 ? '+' : (amt < 0 ? '−' : '');
-  return `<div class="activity-row">
-    <div class="act-dot" style="background:${typeColor(t.type)}22;color:${typeColor(t.type)}">${typeIcon(t.type)}</div>
-    <div class="act-info">
-      <div class="t">${esc(t.description || t.type)}</div>
-      <div class="s">${t.date || ''}${t.time ? ' · ' + t.time : ''}</div>
+  const m = recMeta(t.type), st = statusInfo(t.status);
+  return `<div class="rec">
+    <div class="rec-ic" style="background:${m.grad}">${typeIcon(t.type)}</div>
+    <div class="rec-body">
+      <div class="rec-title">${esc(m.label)}</div>
+      <div class="rec-meta">${esc(t.date || '')}${t.time ? ' · ' + esc(t.time) : ''}</div>
+      ${recTag(t)}
     </div>
-    <div class="act-amt ${amt >= 0 ? 'pos' : 'neg'}">${sign}${ugx(Math.abs(amt))}</div>
+    <div class="rec-right">
+      <div class="rec-amt ${amt >= 0 ? 'pos' : 'neg'}">${sign}${ugx(Math.abs(amt))}</div>
+      <div class="rec-status ${st.cls}">${st.label}</div>
+    </div>
   </div>`;
 }
 
@@ -910,11 +948,12 @@ function renderTeam() {
 // ACCOUNT
 // ══════════════════════════════════════════════
 const TXN_FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'topup', label: 'Deposits' },
-  { key: 'withdrawal', label: 'Withdrawals' },
-  { key: 'investment', label: 'Gems' },
-  { key: 'commission', label: 'Referrals' },
+  { key: 'all',         label: 'All',          types: null },
+  { key: 'deposits',    label: 'Deposits',     types: ['topup', 'admin_credit'] },
+  { key: 'withdrawals', label: 'Withdrawals',  types: ['withdrawal', 'refund'] },
+  { key: 'gems',        label: 'Gems',         types: ['investment', 'boost', 'gem_payout'] },
+  { key: 'referrals',   label: 'Referrals',    types: ['commission'] },
+  { key: 'bonuses',     label: 'Bonuses',      types: ['checkin', 'redeem'] },
 ];
 function renderAccount() {
   const el = document.getElementById('panel-account');
@@ -1050,12 +1089,20 @@ function openSupportModal() {
 }
 
 function openHistoryModal() {
+  if (!TXN_FILTERS.some(x => x.key === _txnFilter)) _txnFilter = 'all';
   const draw = () => {
-    const filtered = _txnFilter === 'all' ? _txns : _txns.filter(t => t.type === _txnFilter);
+    const f = TXN_FILTERS.find(x => x.key === _txnFilter) || TXN_FILTERS[0];
+    const filtered = f.types ? _txns.filter(t => f.types.includes(t.type)) : _txns;
+    let inSum = 0, outSum = 0;
+    filtered.forEach(t => { const a = t.amount || 0; if (a >= 0) inSum += a; else outSum += -a; });
     openModal(`
-      <div class="modal-head"><h2>Transaction history</h2><button class="modal-close">${ICN.close}</button></div>
-      <div class="chips">${TXN_FILTERS.map(f => `<button class="chip${_txnFilter === f.key ? ' active' : ''}" data-filter="${f.key}">${f.label}</button>`).join('')}</div>
-      ${filtered.length ? filtered.map(txnRowHtml).join('') : `<div class="empty-note">No transactions here yet.</div>`}
+      <div class="modal-head"><h2>Records</h2><button class="modal-close">${ICN.close}</button></div>
+      <div class="rec-summary">
+        <div class="rs in"><div class="rs-l">Money in</div><div class="rs-n">${ugx(inSum)}</div></div>
+        <div class="rs out"><div class="rs-l">Money out</div><div class="rs-n">${ugx(outSum)}</div></div>
+      </div>
+      <div class="chips rec-chips">${TXN_FILTERS.map(x => `<button class="chip${_txnFilter === x.key ? ' active' : ''}" data-filter="${x.key}">${x.label}</button>`).join('')}</div>
+      <div class="rec-list">${filtered.length ? filtered.map(txnRowHtml).join('') : `<div class="empty-note">No records here yet.</div>`}</div>
     `);
     document.querySelectorAll('#modalRoot [data-filter]').forEach(chip => {
       chip.addEventListener('click', () => { _txnFilter = chip.dataset.filter; draw(); });
