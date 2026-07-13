@@ -4,7 +4,7 @@
    API / auth calls are never cached — always live.
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'furagemz-shell-v21';
+const CACHE = 'furagemz-shell-v22';
 const SHELL = [
   './',
   './index.html',
@@ -49,16 +49,19 @@ self.addEventListener('fetch', (event) => {
     return; // browser handles normally
   }
 
-  // Navigations: network-first, fall back to cached shell
+  // Navigations: cache-first for instant app-shell load, then refresh the cache
+  // in the background (stale-while-revalidate). A new cache version (bumped every
+  // deploy) still forces the fresh shell on activate, so this stays correct.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
+      caches.match('./index.html').then((cached) => {
+        const network = fetch(req).then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put('./index.html', copy)).catch(() => {});
           return res;
-        })
-        .catch(() => caches.match('./index.html').then((r) => r || caches.match('./')))
+        }).catch(() => cached || caches.match('./'));
+        return cached || network;   // instant if cached, else wait for network
+      })
     );
     return;
   }

@@ -399,18 +399,16 @@ let _publicSettings = null;
 onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
-  // Load what the dashboard needs, but never let a cold/slow server keep the
-  // boot screen up forever: reveal the app within 9s max, then fill in data
-  // (and re-check maintenance/ban) once the loads actually finish.
-  const loads = Promise.all([loadAccount(), loadTxns(), loadActivityFeed(), loadPublicSettings()]);
-  await Promise.race([loads, new Promise(r => setTimeout(r, 9000))]);
-  if (checkGate()) return;         // maintenance / banned (if already known)
-  render();
+  // Show the app IMMEDIATELY, then stream data in and re-render each slice as it
+  // lands — the dashboard appears instantly (fast, like before) instead of the
+  // user staring at a loader while four requests finish.
   showView('main');
+  render();
   startRealtime();
-  maybeShowAnnouncement();
-  // If the data arrived after the 9s cutoff, re-render with it and re-check the gate.
-  loads.then(() => { if (checkGate()) return; if (!_pageOpen) render(); }).catch(() => {});
+  loadPublicSettings().then(() => { if (checkGate()) return; renderHome(); maybeShowAnnouncement(); });
+  loadAccount().then(() => { if (checkGate()) return; renderHome(); renderAccount(); renderTeam(); });
+  loadTxns().then(() => { renderHome(); renderAccount(); });
+  loadActivityFeed().then(() => renderHome());
 });
 // Returns true (and shows a blocker) if the app should be gated off.
 function checkGate() {
@@ -430,13 +428,21 @@ function checkGate() {
 // app regains focus) and re-renders the visible tab — so a commission landing,
 // a deposit clearing or a daily payout shows up on its own, no manual reload.
 // Pauses while the tab is hidden or a full-page/modal is open (M0-friendly).
-let _realtimeTimer = null;
+let _realtimeTimer = null, _realtimeSig = '';
+function dataSig() {
+  return [_account?.walletBalance, _account?.totalEarned, _account?.commissionEarned,
+    _txns.length, _investments.length, _members.length].join('|');
+}
 async function realtimeTick() {
   if (document.hidden || !_user || _pageOpen) return;
   try {
     await Promise.all([loadAccount(), loadTxns(), (_activeTab === 'team' ? loadTeam() : Promise.resolve())]);
   } catch (_) { return; }
   if (_pageOpen || document.hidden) return; // state changed during the await
+  // Only re-render when something actually changed — no needless flicker.
+  const sig = dataSig();
+  if (sig === _realtimeSig) return;
+  _realtimeSig = sig;
   if (_activeTab === 'home') renderHome();
   else if (_activeTab === 'account') renderAccount();
   else if (_activeTab === 'team') renderTeam();
