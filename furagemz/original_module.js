@@ -361,9 +361,9 @@ onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
   showView('main');
-  await Promise.all([loadAccount(), loadActivityFeed()]);
+  await Promise.all([loadAccount(), loadActivityFeed(), loadPublicSettings()]);
   render();
-  loadPublicSettings().then(maybeShowAnnouncement);
+  maybeShowAnnouncement();
 });
 
 async function loadActivityFeed() {
@@ -596,14 +596,18 @@ function renderHome() {
   el.innerHTML = `
     <div class="hero-banner">
       <div id="hbTrack">
-        ${BANNER_SLIDES.map(s => `
-          <div class="hb-slide" style="background:${s.bg}">
-            <div class="hb-title">${s.title}</div>
-            <div class="hb-sub">${s.sub}</div>
-            <div class="hb-art">${gemArt(s.art)}</div>
-          </div>`).join('')}
+        ${(() => {
+          const imgs = (_publicSettings?.slideshowImages || []).filter(Boolean);
+          if (imgs.length) return imgs.map(u => `<div class="hb-slide" style="background:#241640 center/cover no-repeat;background-image:url('${esc(u)}')"></div>`).join('');
+          return BANNER_SLIDES.map(s => `
+            <div class="hb-slide" style="background:${s.bg}">
+              <div class="hb-title">${s.title}</div>
+              <div class="hb-sub">${s.sub}</div>
+              <div class="hb-art">${gemArt(s.art)}</div>
+            </div>`).join('');
+        })()}
       </div>
-      <div class="hb-dots" id="hbDots">${BANNER_SLIDES.map(() => '<i></i>').join('')}</div>
+      <div class="hb-dots" id="hbDots">${((_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length) > 0 ? Array.from({length: (_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length}).map(() => '<i></i>').join('') : ''}</div>
     </div>
     ${_feed.length ? `
     <div class="ticker-head"><i class="live"></i><span>Live activity</span></div>
@@ -872,13 +876,14 @@ function renderGems() {
   el.innerHTML = `
     <div class="sec-head" style="margin-top:12px"><h3>Pick a gem to grow</h3></div>
     ${_products.map(p => {
-      const color = GEM_COLORS[p.key] || '#7c3aed';
+      const color = p.color || GEM_COLORS[p.key] || '#7c3aed';
       const daily = Math.round(p.expectedReturn / (p.cycle || 1));
+      const art = p.image ? `<img src="${esc(p.image)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:16px">` : gemArt(color);
       return `
       <div class="gem-hero" style="--accent:${color}">
         <div class="gh-head"><span class="gh-name">${esc(p.label)}</span><span class="gh-badge">Fixed</span></div>
         <div class="gh-body">
-          <div class="gh-art">${gemArt(color)}</div>
+          <div class="gh-art">${art}</div>
           <div class="gh-stats">
             <div class="ghs"><span>Price</span><b>${ugx(p.price)}</b></div>
             <div class="ghs"><span>Matures in</span><b>${p.cycle} days</b></div>
@@ -898,7 +903,8 @@ function openGemDetail(key) {
   const bal = _account?.walletBalance || 0;
   openModal(`
     <div class="modal-head"><h2>${esc(p.label)}</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="gem-swatch" style="background:${GEM_COLORS[p.key] || 'var(--violet)'};width:56px;height:56px;border-radius:16px;margin-bottom:16px"></div>
+    ${p.image ? `<img src="${esc(p.image)}" alt="" style="width:100%;height:150px;object-fit:cover;border-radius:16px;margin-bottom:16px">`
+      : `<div class="gem-swatch" style="background:${p.color || GEM_COLORS[p.key] || 'var(--violet)'};width:56px;height:56px;border-radius:16px;margin-bottom:16px"></div>`}
     <div class="stat-row">
       <div class="stat-box"><div class="n">${ugx(p.price)}</div><div class="l">Price</div></div>
       <div class="stat-box"><div class="n">${ugx(p.expectedReturn)}</div><div class="l">Total payout</div></div>

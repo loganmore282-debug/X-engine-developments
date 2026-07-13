@@ -6,16 +6,16 @@
 <title>Furagemz Admin</title>
 <style>
   :root{
-    --bg:#f4f1fb; --card:#fff; --ink:#241640; --sub:#7a6a95; --line:#e7defa;
+    --bg:#f4f1fb; --card:#fff; --ink:#241640; --sub:#7a6a95; --line:#e7defa; --line2:#f2edfc;
     --violet:#7c3aed; --violet-dk:#5f21d6; --ok:#059669; --ok-bg:#ecfdf5;
-    --danger:#e11d48; --danger-bg:#fef1f3; --warn:#b45309; --warn-bg:#fffbeb;
+    --danger:#e11d48; --danger-bg:#fef1f3; --warn:#b45309; --warn-bg:#fffbeb; --sky:#0ea5e9;
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
   button,input,select,textarea{font-family:inherit}
   .hidden{display:none !important}
-  .wrap{max-width:960px;margin:0 auto;padding:0 14px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 14px}
 
   /* login */
   .login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
@@ -39,6 +39,7 @@
   .btn.sm{padding:8px 13px;font-size:13px;border-radius:9px}
   .btn.ok{background:var(--ok)}
   .btn.danger{background:var(--danger)}
+  .btn.sky{background:var(--sky)}
   .btn.ghost{background:var(--line);color:var(--ink)}
 
   /* shell */
@@ -49,10 +50,12 @@
   .topbar b{font-size:16px}
   .spacer{flex:1}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 10px}
-  .tab{background:none;border:0;padding:8px 14px;border-radius:20px;font-size:13px;font-weight:700;
+  .tab{background:none;border:0;padding:8px 13px;border-radius:20px;font-size:13px;font-weight:700;
     color:var(--sub);cursor:pointer}
   .tab.active{background:var(--violet);color:#fff}
-  .content{padding:18px 0 60px}
+  .tab .badge-n{display:inline-block;min-width:17px;padding:0 5px;margin-left:5px;background:var(--danger);color:#fff;
+    border-radius:20px;font-size:10px;line-height:16px;}
+  .content{padding:18px 0 70px}
 
   h2.sec{font-size:17px;margin:4px 0 14px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
@@ -63,13 +66,16 @@
   .panel-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
   .row > div{flex:1;min-width:120px}
+  .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .subtab{background:var(--line2);border:0;color:var(--sub);border-radius:18px;padding:7px 13px;font-size:12.5px;font-weight:700;cursor:pointer}
+  .subtab.active{background:var(--violet);color:#fff}
 
   table{width:100%;border-collapse:collapse;font-size:13.5px}
-  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line)}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
   th{color:var(--sub);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
   tr.clickable{cursor:pointer}
   tr.clickable:hover{background:var(--bg)}
-  .pill-tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800}
+  .pill-tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800;white-space:nowrap}
   .t-ok{background:var(--ok-bg);color:var(--ok)}
   .t-warn{background:var(--warn-bg);color:var(--warn)}
   .t-bad{background:var(--danger-bg);color:var(--danger)}
@@ -77,11 +83,23 @@
   .table-scroll{overflow-x:auto}
   .empty{color:var(--sub);font-size:13px;padding:18px;text-align:center}
 
+  .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .prod{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+  .prod .thumb{height:90px;background:var(--line2) center/cover no-repeat;display:flex;align-items:center;justify-content:center;}
+  .prod .thumb .gemsw{width:44px;height:44px;border-radius:12px}
+  .prod .pb{padding:12px}
+  .prod .pt{font-weight:800}
+  .prod .pp{color:var(--sub);font-size:12.5px;margin-top:2px}
+  .prod .pr{color:var(--ok);font-size:12px;font-weight:700;margin-top:4px}
+  .prod .pa{display:flex;gap:6px;margin-top:10px}
+  .img-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--line2);flex-shrink:0}
+  .banner-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2)}
+
   /* modal */
   .modal-root{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
   .modal-bg{position:absolute;inset:0;background:rgba(30,15,60,.45)}
-  .modal{position:relative;background:#fff;border-radius:18px;padding:20px;max-width:440px;width:100%;
-    max-height:88vh;overflow-y:auto}
+  .modal{position:relative;background:#fff;border-radius:18px;padding:20px;max-width:460px;width:100%;
+    max-height:90vh;overflow-y:auto}
   .modal h3{margin:0 0 4px;font-size:17px}
   .kv{display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--line)}
   .kv .k{color:var(--sub)}
@@ -135,8 +153,12 @@
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="users">Users</button>
         <button class="tab" data-tab="deposits">Deposits</button>
-        <button class="tab" data-tab="withdrawals">Withdrawals</button>
+        <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
+        <button class="tab" data-tab="products">Products</button>
+        <button class="tab" data-tab="banners">Banners</button>
         <button class="tab" data-tab="codes">Codes</button>
+        <button class="tab" data-tab="transactions">Transactions</button>
+        <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings">Settings</button>
       </div>
     </div>
@@ -186,17 +208,24 @@ $('loginBtn').addEventListener('click', doLogin);
 $('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 $('logoutBtn').addEventListener('click', ()=>{ ADMIN_KEY=''; try{ sessionStorage.removeItem('fg_admin_key'); }catch(_){} $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden'); $('keyInput').value=''; });
 
-function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); }
+function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); }
 
 // ── TABS ──
 let _tab='dashboard';
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
-$('refreshBtn').addEventListener('click',()=>switchTab(_tab));
+$('refreshBtn').addEventListener('click',()=>{ switchTab(_tab); refreshBadges(); });
 function switchTab(name){
   _tab=name;
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
   const c=$('content'); c.innerHTML='<div class="empty">Loading…</div>';
-  ({ dashboard:renderDashboard, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals, codes:renderCodes, settings:renderSettings }[name])();
+  ({ dashboard:renderDashboard, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
+     products:renderProducts, banners:renderBanners, codes:renderCodes, transactions:renderTransactions,
+     referrals:renderReferrals, settings:renderSettings }[name])();
+}
+async function refreshBadges(){
+  const s = await api('/admin/stats');
+  if(s.status==='success' && s.pendingWithdrawals>0){ $('wBadge').textContent=s.pendingWithdrawals; $('wBadge').classList.remove('hidden'); }
+  else $('wBadge').classList.add('hidden');
 }
 
 // ── DASHBOARD ──
@@ -206,14 +235,31 @@ async function renderDashboard(){
   $('content').innerHTML = `
     <h2 class="sec">Overview</h2>
     <div class="cards">
-      <div class="stat"><div class="n">${s.userCount||0}</div><div class="l">Users</div></div>
+      <div class="stat"><div class="n">${s.userCount||0}</div><div class="l">Total users</div></div>
       <div class="stat"><div class="n">${ugx(s.totalWallet)}</div><div class="l">Wallet balances</div></div>
       <div class="stat"><div class="n">${ugx(s.totalDeposited)}</div><div class="l">Total deposited</div></div>
       <div class="stat"><div class="n">${ugx(s.totalWithdrawn)}</div><div class="l">Total withdrawn</div></div>
       <div class="stat"><div class="n">${s.activeInvestments||0}</div><div class="l">Active gems</div></div>
       <div class="stat"><div class="n">${s.pendingWithdrawals||0}</div><div class="l">Pending payouts</div></div>
       <div class="stat"><div class="n">${ugx(s.pendingPayouts)}</div><div class="l">Payout amount due</div></div>
+    </div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin-top:0">Recent transactions</h2>
+      <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Status</th></tr></thead><tbody id="dashTx"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
     </div>`;
+  const r = await api('/admin/transactions/list', { limit: 12 });
+  const list = r.transactions || [];
+  $('dashTx').innerHTML = list.length ? list.map(t=>`
+    <tr><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td>
+    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td>
+    <td>${statusPill(t.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">No transactions</td></tr>';
+}
+function statusPill(s){
+  s=String(s||'success').toLowerCase();
+  if(['success','processed','matched'].includes(s)) return `<span class="pill-tag t-ok">Successful</span>`;
+  if(['pending','processing'].includes(s)) return `<span class="pill-tag t-warn">Processing</span>`;
+  if(['failed','cancelled','rejected'].includes(s)) return `<span class="pill-tag t-bad">Failed</span>`;
+  return `<span class="pill-tag t-mut">${esc(s)}</span>`;
 }
 
 // ── USERS ──
@@ -224,19 +270,19 @@ async function renderUsers(){
   $('content').innerHTML = `
     <h2 class="sec">Users (${_users.length})</h2>
     <div class="panel-card"><input id="userSearch" placeholder="Search username or phone"></div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Username</th><th>Phone</th><th>Balance</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
+    <div class="panel-card table-scroll"><table><thead><tr><th>Username</th><th>Phone</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
   $('userSearch').addEventListener('input', drawUsers);
   drawUsers();
 }
 function drawUsers(){
   const q = ($('userSearch')?.value||'').toLowerCase().trim();
-  const list = q ? _users.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.phone||'').includes(q)) : _users.slice(0,200);
+  const list = q ? _users.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.phone||'').includes(q)) : _users.slice(0,300);
   $('userRows').innerHTML = list.length ? list.map(u=>`
     <tr class="clickable" data-uid="${esc(u.id)}">
       <td><b>${esc(u.username||'—')}</b></td><td>${esc(u.phone||'')}</td>
-      <td>${ugx(u.walletBalance)}</td>
+      <td>${ugx(u.walletBalance)}</td><td>${ugx(u.totalInvested)}</td>
       <td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td>
-    </tr>`).join('') : '<tr><td colspan="4" class="empty">No users</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No users</td></tr>';
   document.querySelectorAll('#userRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 async function openUser(uid){
@@ -253,6 +299,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Earned</span><span>${ugx(u.totalEarned)}</span></div>
     <div class="kv"><span class="k">Commission</span><span>${ugx(u.commissionEarned)}</span></div>
     <div class="kv"><span class="k">Referral code</span><span>${esc(u.referralCode||u.username||'')}</span></div>
+    <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'—')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
     <label>Amount (UGX)</label><input id="adjAmt" type="number" placeholder="0">
     <label>Note (optional)</label><input id="adjNote" placeholder="Reason">
@@ -262,8 +309,8 @@ async function openUser(uid){
       <button class="btn ${u.status==='banned'?'ghost':'danger'} sm" id="banBtn">${u.status==='banned'?'Unban':'Ban'}</button>
     </div>`);
   const amt=()=>parseFloat($('adjAmt').value||0), note=()=>$('adjNote').value.trim();
-  $('creditBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); } });
-  $('debitBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); } });
+  $('creditBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
+  $('debitBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('banBtn').addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
 }
 
@@ -272,31 +319,118 @@ async function renderDeposits(){
   const r = await api('/admin/deposits/list');
   const list = r.deposits||[];
   $('content').innerHTML = `
-    <h2 class="sec">Deposits</h2>
+    <h2 class="sec">Deposits (${list.length})</h2>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Amount</th><th>Phone</th><th>Status</th><th></th></tr></thead>
     <tbody>${list.length?list.map(d=>`
       <tr><td>${fdate(d.createdAt)}</td><td><b>${ugx(d.amount)}</b></td><td>${esc(d.phone||'')}</td>
-      <td><span class="pill-tag ${d.status==='matched'?'t-ok':d.status==='failed'?'t-bad':'t-warn'}">${esc(d.status)}</span></td>
+      <td>${statusPill(d.status==='matched'?'success':d.status)}</td>
       <td>${d.status==='processing'?`<button class="btn sm" data-done="${esc(d.id)}">Complete</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No deposits</td></tr>'}
     </tbody></table></div>`;
   document.querySelectorAll('[data-done]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/complete',{depositId:b.dataset.done}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); }));
 }
 
 // ── WITHDRAWALS ──
+let _wits=[], _witFilter='pending';
 async function renderWithdrawals(){
-  const r = await api('/admin/withdrawals/list');
-  const list = r.withdrawals||[];
+  const r = await api('/admin/withdrawals/list', { limit: 400 });
+  _wits = r.withdrawals||[];
+  const counts = { pending:0, processing:0, processed:0, rejected:0, failed:0 };
+  _wits.forEach(w=>{ counts[w.status] = (counts[w.status]||0)+1; });
+  const subs = [['pending','Pending'],['processing','Processing'],['processed','Processed'],['rejected','Rejected'],['failed','Failed'],['all','All']];
   $('content').innerHTML = `
     <h2 class="sec">Withdrawals</h2>
-    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Status</th><th></th></tr></thead>
-    <tbody>${list.length?list.map(w=>`
-      <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
-      <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
-      <td><span class="pill-tag ${w.status==='processed'?'t-ok':w.status==='pending'?'t-warn':w.status==='processing'?'t-warn':'t-bad'}">${esc(w.status)}</span></td>
-      <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Pay</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>'}
-    </tbody></table></div>`;
-  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); }));
-  document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection?','Rejected by admin'); if(reason===null)return; const d=await api('/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); }));
+    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${counts[k]?` (${counts[k]})`:''}</button>`).join('')}</div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody id="witRows"></tbody></table></div>`;
+  document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; renderWithdrawals(); }));
+  drawWits();
+}
+function drawWits(){
+  const list = _witFilter==='all' ? _wits : _wits.filter(w=>w.status===_witFilter);
+  $('witRows').innerHTML = list.length?list.map(w=>`
+    <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
+    <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
+    <td>${statusPill(w.status)}</td>
+    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Pay</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
+  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+  document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection?','Rejected by admin'); if(reason===null)return; const d=await api('/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+}
+
+// ── PRODUCTS (gems) ──
+function gemSwatch(color){ return `<div class="gemsw" style="background:${esc(color||'#7c3aed')}"></div>`; }
+async function renderProducts(){
+  const r = await api('/admin/products/list');
+  const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
+  $('content').innerHTML = `
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Gem products (${list.length})</h2>
+      <button class="btn sm" id="newProd">+ New gem</button></div>
+    <div class="prod-grid">${list.length?list.map(p=>`
+      <div class="prod">
+        <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':gemSwatch(p.color)}</div>
+        <div class="pb">
+          <div class="pt">${esc(p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}</div>
+          <div class="pp">${ugx(p.price)} · ${p.cycle||0} days</div>
+          <div class="pr">Pays ${ugx(p.expectedReturn)}</div>
+          <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.id)}">Edit</button><button class="btn sm danger" data-del="${esc(p.id)}">Delete</button></div>
+        </div>
+      </div>`).join(''):'<div class="empty">No products. Tap “New gem”.</div>'}</div>`;
+  $('newProd').addEventListener('click',()=>editProduct(null,list.length));
+  document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editProduct(list.find(p=>p.id===b.dataset.edit))));
+  document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Delete this gem?'))return; const d=await api('/admin/products/delete',{id:b.dataset.del}); toast(d.status==='success'?'Deleted':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderProducts(); }));
+}
+function editProduct(p, order){
+  p = p || {};
+  openModal(`
+    <h3>${p.id?'Edit gem':'New gem'}</h3>
+    <label>Name</label><input id="pLabel" value="${esc(p.label||'')}" placeholder="e.g. Emerald">
+    <label>Key (slug, lowercase — leave blank to auto)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="emerald">
+    <div class="row">
+      <div><label>Price (UGX)</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="450000"></div>
+      <div><label>Total payout (UGX)</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1125000"></div>
+    </div>
+    <div class="row">
+      <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||30}"></div>
+      <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
+    </div>
+    <label>Accent colour (hex)</label><input id="pColor" value="${esc(p.color||'#7c3aed')}" placeholder="#10b981">
+    <label>Image URL (optional)</label><input id="pImage" value="${esc(p.image||'')}" placeholder="https://…/gem.png">
+    <div class="switch-row" style="margin-top:10px"><span><b>Active</b> <span class="muted">(shown in the app)</span></span>
+      <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
+    <button class="btn block" id="pSave">Save gem</button>`);
+  $('pSave').addEventListener('click', async()=>{
+    const body = { id:p.id, label:$('pLabel').value, key:$('pKey').value, price:$('pPrice').value,
+      expectedReturn:$('pRet').value, cycle:$('pCycle').value, order:$('pOrder').value,
+      color:$('pColor').value, image:$('pImage').value, active:$('pActive').checked };
+    if(!parseFloat(body.price)) return toast('Enter a price','err');
+    const d=await api('/admin/products/save', body);
+    toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ closeModal(); renderProducts(); }
+  });
+}
+
+// ── BANNERS / IMAGES ──
+async function renderBanners(){
+  const r = await api('/admin/settings');
+  const s = r.settings||{};
+  const imgs = Array.isArray(s.slideshowImages)?s.slideshowImages:[];
+  $('content').innerHTML = `
+    <h2 class="sec">Home banner images</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">These rotate on the app Home banner. Paste image URLs (hosted anywhere). Leave empty to use the built-in gradient banners.</p>
+      <div id="bannerList">${imgs.length?imgs.map((u,i)=>`
+        <div class="banner-row"><img class="img-thumb" src="${esc(u)}" onerror="this.style.opacity=.3"><div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${esc(u)}</div><button class="btn danger sm" data-bi="${i}">Remove</button></div>`).join(''):'<div class="empty">No banner images yet.</div>'}</div>
+      <label>Add image URL</label><input id="bAdd" placeholder="https://…/banner.jpg">
+      <button class="btn block" id="bAddBtn">Add banner</button>
+    </div>
+    <h2 class="sec">Announcement background</h2>
+    <div class="panel-card">
+      <label>Announcement dialog background image URL (optional)</label><input id="annBg" value="${esc(s.announcementBg||'')}" placeholder="https://…/notice.jpg">
+      <button class="btn block" id="annBgSave">Save background</button>
+    </div>`;
+  let cur = imgs.slice();
+  const saveImgs = async()=>{ const d=await api('/admin/settings/update',{ slideshowImages: cur }); toast(d.status==='success'?'Saved':(d.message||'Failed'),d.status==='success'?'ok':'err'); if(d.status==='success') renderBanners(); };
+  document.querySelectorAll('[data-bi]').forEach(b=>b.addEventListener('click',()=>{ cur.splice(+b.dataset.bi,1); saveImgs(); }));
+  $('bAddBtn').addEventListener('click',()=>{ const u=$('bAdd').value.trim(); if(!u)return toast('Enter a URL','err'); cur.push(u); saveImgs(); });
+  $('annBgSave').addEventListener('click',async()=>{ const d=await api('/admin/settings/update',{ announcementBg:$('annBg').value.trim() }); toast(d.status==='success'?'Saved':(d.message||'Failed'),d.status==='success'?'ok':'err'); });
 }
 
 // ── CODES ──
@@ -327,12 +461,42 @@ async function renderCodes(){
     const b=$('genBtn'); b.disabled=true;b.textContent='Generating…';
     const d=await api('/admin/codes/generate',{ amount, count, expiresInDays, maxUsers });
     b.disabled=false;b.textContent='Generate codes';
-    if(d.status==='success'){ $('genOut').innerHTML=`<div class="codebox">${d.codes.map(esc).join('  ')}</div><div class="muted" style="margin-top:6px">${d.count} code(s) worth ${ugx(d.amount)} each</div>`; renderCodesListOnly(); }
+    if(d.status==='success'){ $('genOut').innerHTML=`<div class="codebox">${d.codes.map(esc).join('  ')}</div><div class="muted" style="margin-top:6px">${d.count} code(s) worth ${ugx(d.amount)} each</div>`; setTimeout(renderCodes,1200); }
     else toast(d.message||'Failed','err');
   });
   document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ const d=await api('/admin/codes/deactivate',{codeId:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderCodes(); }));
 }
-function renderCodesListOnly(){ /* codes list refresh handled by full re-render on next visit */ }
+
+// ── TRANSACTIONS ──
+let _txns=[], _txFilter='all';
+async function renderTransactions(){
+  const r = await api('/admin/transactions/list', { limit: 400 });
+  _txns = r.transactions||[];
+  const subs=[['all','All'],['topup','Deposits'],['withdrawal','Withdrawals'],['commission','Commissions'],['investment','Gems'],['boost','Boosts'],['checkin','Check-in'],['redeem','Codes']];
+  $('content').innerHTML = `
+    <h2 class="sec">Transactions</h2>
+    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_txFilter===k?' active':''}" data-tf="${k}">${l}</button>`).join('')}</div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Description</th><th>Amount</th><th>Status</th></tr></thead><tbody id="txRows"></tbody></table></div>`;
+  document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>{ _txFilter=b.dataset.tf; drawTxns(); document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x.dataset.tf===_txFilter)); }));
+  drawTxns();
+}
+function drawTxns(){
+  const list=_txFilter==='all'?_txns:_txns.filter(t=>t.type===_txFilter);
+  $('txRows').innerHTML = list.length?list.slice(0,300).map(t=>`
+    <tr><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
+    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td>
+    <td>${statusPill(t.status)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
+}
+
+// ── REFERRALS ──
+async function renderReferrals(){
+  const r = await api('/admin/referrals/list');
+  const list = r.referrals||[];
+  $('content').innerHTML = `
+    <h2 class="sec">Referrals (${list.length})</h2>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Referrer</th><th>New user</th></tr></thead>
+    <tbody>${list.length?list.map(x=>`<tr><td>${fdate(x.createdAt)}</td><td>${esc(x.referrerId||'')}</td><td>${esc(x.referredUserId||'')}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
+}
 
 // ── SETTINGS ──
 async function renderSettings(){
@@ -374,7 +538,7 @@ async function renderSettings(){
       <label>Button label (optional)</label><input id="aCtaLabel" value="${esc(v('annCtaLabel',''))}">
       <label>Button link (optional)</label><input id="aCtaUrl" value="${esc(v('annCtaUrl',''))}">
       <button class="btn block" id="saveAnn">Save announcement</button>
-      <p class="muted" style="margin-top:10px">Saving re-shows the popup to everyone, even users who dismissed the previous one.</p>
+      <p class="muted" style="margin-top:10px">Saving re-shows the popup to everyone.</p>
     </div>
 
     <h2 class="sec">Support contacts</h2>
@@ -410,7 +574,7 @@ function openModal(html){ const r=$('modalRoot'); r.innerHTML=`<div class="modal
 function closeModal(){ const r=$('modalRoot'); r.classList.add('hidden'); r.innerHTML=''; }
 
 // ── BOOT ──
-if(ADMIN_KEY){ // resume a session — verify the stored key still works
+if(ADMIN_KEY){
   fetch(SERVER+'/admin/check-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:ADMIN_KEY})})
     .then(r=>r.json()).then(d=>{ if(d.status==='success') openShell(); }).catch(()=>{});
 }

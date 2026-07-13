@@ -395,6 +395,9 @@ app.get('/settings/public', async (_req, res) => {
     gemTiers: GEM_TIERS,
     boostUnlockDays:  s.boostUnlockDays  ?? BOOST_UNLOCK_DAYS,
     boostMatureHours: s.boostMatureHours ?? BOOST_MATURE_HOURS,
+    slideshowImages: Array.isArray(s.slideshowImages) ? s.slideshowImages : [],
+    announcementBg:  s.announcementBg || '',
+    brandTagline:    s.brandTagline || '',
     supportWhatsapp: s.supportWhatsapp || '',
     supportEmail:    s.supportEmail    || '',
     supportHours:    s.supportHours    || '',
@@ -411,8 +414,43 @@ app.get('/settings/public', async (_req, res) => {
   });
 });
 
+// Gem products live in the `products` collection (admin-managed, not hardcoded).
+// GEM_TIERS is only the seed + a safety fallback.
+const GEM_COLORS = { quartz: '#38bdf8', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#7c3aed' };
+async function seedProducts() {
+  try {
+    const snap = await db.collection('products').limit(1).get();
+    if (!snap.empty) return;
+    let order = 0;
+    for (const t of GEM_TIERS) {
+      await db.collection('products').add({
+        key: t.key, label: t.label, price: t.price, expectedReturn: t.expectedReturn,
+        cycle: t.cycle, dailyReturn: t.dailyReturn, image: '', color: GEM_COLORS[t.key] || '#7c3aed',
+        order: order++, active: true, createdAt: FieldValue.serverTimestamp()
+      });
+    }
+    console.log('Seeded default gem products');
+  } catch (e) { console.error('seedProducts error:', e.message); }
+}
+async function fetchProducts(includeInactive) {
+  const snap = await db.collection('products').get();
+  let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (!includeInactive) list = list.filter(p => p.active !== false);
+  list.sort((a, b) => (a.order || 0) - (b.order || 0) || (a.price || 0) - (b.price || 0));
+  return list;
+}
+async function getProductByKeyOrId(idOrKey) {
+  let snap = await db.collection('products').where('key', '==', idOrKey).limit(1).get();
+  if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  const byId = await db.collection('products').doc(idOrKey).get();
+  if (byId.exists) return { id: byId.id, ...byId.data() };
+  return null;
+}
 app.get('/products', async (_req, res) => {
-  res.json({ status: 'success', products: GEM_TIERS });
+  try {
+    const list = await fetchProducts(false);
+    res.json({ status: 'success', products: list.length ? list : GEM_TIERS });
+  } catch (e) { res.json({ status: 'success', products: GEM_TIERS }); }
 });
 
 // ── USERNAMES ──
@@ -744,8 +782,12 @@ app.post('/invest/create', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { tierKey } = req.body;
-  const tier = findGemTier(tierKey);
+  const tier = (await getProductByKeyOrId(tierKey)) || findGemTier(tierKey);
   if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown gem tier' });
+  if (tier.active === false) return res.status(400).json({ status: 'error', message: 'This gem is not available right now' });
+  // Ensure derived numbers exist even for a minimally-filled admin product.
+  tier.cycle = Number(tier.cycle) || CYCLE_DAYS;
+  tier.expectedReturn = Number(tier.expectedReturn) || Math.round((tier.price || 0) * RETURN_MULTIPLE);
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
@@ -1665,6 +1707,44 @@ app.post('/admin/referrals/list', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ── ADMIN: GEM PRODUCTS (create/edit/delete) ──
+app.post('/admin/products/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { return res.json({ status: 'success', products: await fetchProducts(true) }); }
+  catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/products/save', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { id } = req.body;
+  const price = Math.round(parseFloat(req.body.price) || 0);
+  if (price <= 0) return res.status(400).json({ status: 'error', message: 'Price is required' });
+  const cycle = Math.max(1, Math.round(parseFloat(req.body.cycle) || CYCLE_DAYS));
+  const expectedReturn = Math.round(parseFloat(req.body.expectedReturn) || price * RETURN_MULTIPLE);
+  const label = String(req.body.label || '').replace(/[<>]/g, '').trim().slice(0, 40) || 'Gem';
+  const key = String(req.body.key || label).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24) || ('gem' + Date.now());
+  const data = {
+    key, label, price, cycle, expectedReturn, dailyReturn: expectedReturn / cycle,
+    image: String(req.body.image || '').trim().slice(0, 600),
+    color: String(req.body.color || '#7c3aed').trim().slice(0, 24),
+    order: Math.round(parseFloat(req.body.order) || 0),
+    active: req.body.active !== false && req.body.active !== 'false',
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  try {
+    if (id) { await db.collection('products').doc(id).update(data); return res.json({ status: 'success', id, action: 'updated' }); }
+    data.createdAt = FieldValue.serverTimestamp();
+    const ref = db.collection('products').doc();
+    await ref.set(data);
+    return res.json({ status: 'success', id: ref.id, action: 'created' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/products/delete', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!req.body.id) return res.status(400).json({ status: 'error', message: 'id required' });
+  try { await db.collection('products').doc(req.body.id).delete(); return res.json({ status: 'success' }); }
+  catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ── 404 + ERROR HANDLER ──
 app.use((req, res) => res.status(404).json({ status: 'error', message: 'Not found' }));
 app.use((err, _req, res, _next) => {
@@ -1692,7 +1772,7 @@ async function startServer() {
   const tryConnect = async () => {
     try {
       await connectMongo(MONGODB_URI);
-      if (!cronsStarted) { cronsStarted = true; startCrons(); }
+      if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts(); }
     } catch (e) {
       console.error('MongoDB not reachable yet — retrying in 5s:', e.message);
       setTimeout(tryConnect, 5000);
