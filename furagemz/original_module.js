@@ -6,12 +6,12 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 // FURAGEMZ — Firebase web config. Owner: replace with the Furagemz Firebase
 // project's own web config once that project is created (separate from Voltra's).
 const firebaseConfig = {
-  apiKey:            "REPLACE_WITH_FURAGEMZ_FIREBASE_API_KEY",
-  authDomain:        "REPLACE_WITH_FURAGEMZ_PROJECT.firebaseapp.com",
-  projectId:         "REPLACE_WITH_FURAGEMZ_PROJECT",
-  storageBucket:     "REPLACE_WITH_FURAGEMZ_PROJECT.firebasestorage.app",
-  messagingSenderId: "REPLACE_WITH_SENDER_ID",
-  appId:             "REPLACE_WITH_APP_ID"
+  apiKey:            "AIzaSyBcyftQBgJXPoVhNx0BSSv-ZUz81k2YxZ0",
+  authDomain:        "furagemz.firebaseapp.com",
+  projectId:         "furagemz",
+  storageBucket:     "furagemz.firebasestorage.app",
+  messagingSenderId: "538053506631",
+  appId:             "1:538053506631:web:a388e60009a456befda362"
 };
 
 // Owner: replace with the Furagemz Railway backend URL once deployed.
