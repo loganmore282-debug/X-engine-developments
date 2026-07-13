@@ -316,9 +316,19 @@ function tsMillis(v) {
 }
 
 // ── COMMISSION CHAIN — fires once per investment (dedup via commPaid_<invId> flag) ──
+// Wrapper: on a clean run (including the "no referrer" case — nothing owed) it
+// marks the investment `commDone` so the reconciler skips it. On ANY failure it
+// leaves commDone unset, so reconcileCommissions() retries it later — a referral
+// reward is therefore never permanently lost, even if this call fails mid-way.
 async function payCommissions(investorId, amount, investmentId) {
+  let ok = false;
+  try { await _payChain(investorId, amount, investmentId); ok = true; }
+  catch (e) { console.error('Commission error:', e.message); }
+  if (ok) { try { await db.collection('investments').doc(investmentId).update({ commDone: true }); } catch (_) {} }
+}
+async function _payChain(investorId, amount, investmentId) {
   const { date, time } = nowStr();
-  try {
+  {
     const [invSnap, sett] = await Promise.all([
       db.collection('users').doc(investorId).get(),
       getSettings()
@@ -408,7 +418,30 @@ async function payCommissions(investorId, amount, investmentId) {
         });
       });
     }
-  } catch (e) { console.error('Commission error:', e.message); }
+  }
+}
+
+// ── COMMISSION RECONCILER ──
+// Safety net so a referrer NEVER loses a reward: re-runs payCommissions for any
+// investment not yet marked commDone (a call that failed, or an older record).
+// payCommissions is idempotent (per-level commPaid_<invId> flags + transactions),
+// so re-running can only pay what's still owed — never double-pay.
+let _reconcilingComm = false;
+async function reconcileCommissions(limit = 800) {
+  if (_reconcilingComm) return 0;
+  _reconcilingComm = true;
+  let fixed = 0;
+  try {
+    const snap = await db.collection('investments').orderBy('createdAt', 'desc').limit(limit).get();
+    for (const doc of snap.docs) {
+      const inv = doc.data();
+      if (inv.commDone) continue;
+      await payCommissions(inv.userId, inv.amount, doc.id);
+      fixed++;
+    }
+  } catch (e) { console.error('reconcileCommissions error:', e.message); }
+  finally { _reconcilingComm = false; }
+  return fixed;
 }
 
 // ── HEALTH ──
@@ -1042,8 +1075,16 @@ async function runDailyPayouts() {
 function startCrons() {
   setInterval(runDailyPayouts, 5 * 60 * 1000);
   setTimeout(runDailyPayouts, 60 * 1000);
-  console.log('Crons started (daily cashback check every 5m)');
+  // Referral safety-net: catch any commission that didn't get paid at invest time.
+  setInterval(reconcileCommissions, 10 * 60 * 1000);
+  setTimeout(reconcileCommissions, 90 * 1000);
+  console.log('Crons started (daily cashback 5m, commission reconcile 10m)');
 }
+app.post('/admin/commissions/reconcile', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const fixed = await reconcileCommissions(2000);
+  return res.json({ status: 'success', processed: fixed });
+});
 app.post('/admin/check-maturities', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error' });
   const credited = await runDailyPayouts();

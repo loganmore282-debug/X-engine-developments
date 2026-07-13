@@ -362,7 +362,14 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     }
     const prof = await api('/account/create-profile', { method: 'POST', body: { username, phone: cleanPhone(phone).replace('+', '') } });
     if (prof.status !== 'success') { restore(); return authError(prof.message || 'Could not create your profile.'); }
-    await api('/register', { method: 'POST', body: { referralCode: ref } });
+    // Register applies the welcome bonus AND records the referral link. It is
+    // idempotent server-side (registrationDone guard), so retry it a few times on
+    // a network blip — otherwise a referral could be silently lost at sign-up.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const reg = await api('/register', { method: 'POST', body: { referralCode: ref } });
+      if (reg.status === 'success' || reg.status === 'already_done') break;
+      await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+    }
     _pendingCred = null; // success — onAuthStateChanged takes over
   } catch (err) {
     restore();
@@ -405,8 +412,31 @@ onAuthStateChanged(auth, async (user) => {
   }
   render();
   showView('main');
+  startRealtime();
   maybeShowAnnouncement();
 });
+
+// ── REAL-TIME REFRESH ──
+// Silently re-pulls balance, transactions and team every 15s (and the moment the
+// app regains focus) and re-renders the visible tab — so a commission landing,
+// a deposit clearing or a daily payout shows up on its own, no manual reload.
+// Pauses while the tab is hidden or a full-page/modal is open (M0-friendly).
+let _realtimeTimer = null;
+async function realtimeTick() {
+  if (document.hidden || !_user || _pageOpen) return;
+  try {
+    await Promise.all([loadAccount(), loadTxns(), (_activeTab === 'team' ? loadTeam() : Promise.resolve())]);
+  } catch (_) { return; }
+  if (_pageOpen || document.hidden) return; // state changed during the await
+  if (_activeTab === 'home') renderHome();
+  else if (_activeTab === 'account') renderAccount();
+  else if (_activeTab === 'team') renderTeam();
+}
+function startRealtime() {
+  if (_realtimeTimer) return;
+  _realtimeTimer = setInterval(realtimeTick, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) realtimeTick(); });
+}
 
 // Full-screen blocker (maintenance / banned) — replaces the app entirely.
 function showBlocker(title, msg, actionLabel, action) {
@@ -669,7 +699,7 @@ function startBanner() {
     track.querySelectorAll('.hb-slide').forEach((s, k) => s.classList.toggle('on', k === _bannerIdx));
     document.querySelectorAll('#hbDots i').forEach((d, k) => d.classList.toggle('on', k === _bannerIdx));
   };
-  go(0);
+  go(_bannerIdx % BANNER_SLIDES.length);  // resume position (real-time refresh re-renders home)
   _bannerTimer = setInterval(() => go(_bannerIdx + 1), 4500);
   document.querySelectorAll('#hbDots i').forEach((d, k) => d.addEventListener('click', () => go(k)));
 }
