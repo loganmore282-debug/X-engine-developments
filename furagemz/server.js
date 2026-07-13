@@ -122,10 +122,14 @@ const COMM_L3          = 0.01;    // level 3
 const LIQUIDITY_FEE    = 0.05;    // withdrawal fee
 const RETURN_MULTIPLE  = 13;      // payout = price * RETURN_MULTIPLE, paid in full at maturity
 const CYCLE_DAYS       = 60;      // stipulated investment period (days), fixed for every gem
-// BOOST / ACCELERATE — after BOOST_UNLOCK_DAYS the holder may pay the same amount
-// again to cut the remaining wait: the gem then matures BOOST_MATURE_HOURS later.
-const BOOST_UNLOCK_DAYS  = 5;
-const BOOST_MATURE_HOURS = 72;    // after a boost, the gem matures 3 days later
+// EARNINGS: each gem pays daily cashback (expectedReturn / cycle) every 24 hours
+// from the exact purchase time, for `cycle` days, totalling expectedReturn.
+// BOOST / ACCELERATE — after BOOST_UNLOCK_DAYS the holder may pay BOOST_COST_PCT of
+// the gem's total return to compress all remaining payouts into BOOST_MATURE_DAYS.
+const BOOST_UNLOCK_DAYS  = 5;     // boost becomes available 5 days after purchase
+const BOOST_COST_PCT     = 0.30;  // boost fee = 30% of the gem's total return
+const BOOST_MATURE_DAYS  = 5;     // after a boost, the gem finishes paying in 5 days
+const BOOST_MATURE_HOURS = BOOST_MATURE_DAYS * 24;
 function durPhrase(hours) {
   hours = Number(hours) || 0;
   return hours % 24 === 0 ? `${hours / 24} day${hours / 24 === 1 ? '' : 's'}` : `${hours} hours`;
@@ -407,6 +411,8 @@ app.get('/settings/public', async (_req, res) => {
     gemTiers: GEM_TIERS,
     boostUnlockDays:  s.boostUnlockDays  ?? BOOST_UNLOCK_DAYS,
     boostMatureHours: s.boostMatureHours ?? BOOST_MATURE_HOURS,
+    boostMatureDays:  s.boostMatureDays  ?? BOOST_MATURE_DAYS,
+    boostCostPct:     s.boostCostPct     ?? BOOST_COST_PCT,
     slideshowImages: Array.isArray(s.slideshowImages) ? s.slideshowImages : [],
     announcementBg:  s.announcementBg || '',
     brandTagline:    s.brandTagline || '',
@@ -428,7 +434,8 @@ app.get('/settings/public', async (_req, res) => {
 
 // Gem products live in the `products` collection (admin-managed, not hardcoded).
 // GEM_TIERS is only the seed + a safety fallback.
-const GEM_COLORS = { quartz: '#38bdf8', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#7c3aed' };
+// Colours match each gem's real appearance: Quartz = clear/silver, Diamond = bright platinum.
+const GEM_COLORS = { quartz: '#64748b', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#334155' };
 async function seedProducts() {
   try {
     const snap = await db.collection('products').limit(1).get();
@@ -813,6 +820,11 @@ app.post('/invest/create', async (req, res) => {
     const now = Date.now();
     const matDate = new Date(now + tier.cycle * 86400000);
     const boostUnlockDate = new Date(now + unlockDays * 86400000);
+    // Daily cashback schedule: first payout is exactly 24 hours after purchase,
+    // then every 24 hours, for `cycle` days. dailyPayout × cycle === expectedReturn
+    // (the final payout absorbs any rounding remainder so the total is exact).
+    const dailyPayout  = Math.round(tier.expectedReturn / tier.cycle);
+    const nextPayoutAt = new Date(now + 86400000);
     let invId;
     await db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
@@ -828,6 +840,7 @@ app.post('/invest/create', async (req, res) => {
         amount: tier.price, cycle: tier.cycle, expectedReturn: tier.expectedReturn,
         status: 'active', maturityDate: matDate,
         boosted: false, boostUnlockDate,
+        dailyPayout, payoutsTotal: tier.cycle, payoutsMade: 0, paidOut: 0, nextPayoutAt,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
@@ -844,8 +857,9 @@ app.post('/invest/create', async (req, res) => {
   }
 });
 
-// BOOST — after the unlock window, pay the same amount again to accelerate:
-// the gem then matures BOOST_MATURE_HOURS later (payout unchanged).
+// BOOST — after the unlock window, pay BOOST_COST_PCT of the gem's total return
+// to compress every remaining daily payout into BOOST_MATURE_DAYS. The gem's total
+// payout is unchanged; the remaining balance is just paid out over 5 days instead.
 app.post('/invest/boost', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -865,9 +879,10 @@ app.post('/invest/boost', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `Boost unlocks in ${daysLeft} day${daysLeft === 1 ? '' : 's'}` });
     }
     const sett = await getSettings();
-    const hours = Number(sett.boostMatureHours ?? BOOST_MATURE_HOURS);
-    const cost  = inv.amount || 0;
-    const newMat = new Date(Date.now() + hours * 3600000);
+    const costPct = Number(sett.boostCostPct ?? BOOST_COST_PCT);
+    const days    = Number(sett.boostMatureDays ?? BOOST_MATURE_DAYS);
+    const cost    = Math.round((inv.expectedReturn || 0) * costPct);
+    const newMat  = new Date(Date.now() + days * 86400000);
     const { date, time } = nowStr();
     let err = null, ok = false;
     await db.runTransaction(async t => {
@@ -877,73 +892,113 @@ app.post('/invest/boost', async (req, res) => {
       const bal = uSnap.data().walletBalance || 0;
       if (bal < cost) { err = `Need ${fmtUGX(cost)} to boost, have ${fmtUGX(bal)}`; return; }
       const freshInv = await t.get(invRef);
-      if (!freshInv.exists || freshInv.data().status !== 'active' || freshInv.data().boosted) { err = 'This gem cannot be boosted now'; return; }
-      t.update(uRef, { walletBalance: bal - cost, totalInvested: FieldValue.increment(cost) });
-      t.update(invRef, { boosted: true, boostedAt: FieldValue.serverTimestamp(), boostAmount: cost, maturityDate: newMat });
+      const fd = freshInv.exists ? freshInv.data() : null;
+      if (!fd || fd.status !== 'active' || fd.boosted) { err = 'This gem cannot be boosted now'; return; }
+      // Remaining money still to be paid, now spread across `days` daily payouts.
+      const paidOut   = Number(fd.paidOut || 0);
+      const remaining = Math.max(0, (fd.expectedReturn || 0) - paidOut);
+      const made      = Number(fd.payoutsMade || 0);
+      t.update(uRef, { walletBalance: bal - cost });
+      t.update(invRef, {
+        boosted: true, boostedAt: FieldValue.serverTimestamp(), boostAmount: cost,
+        maturityDate: newMat, payoutsTotal: made + days,
+        dailyPayout: Math.round(remaining / days),
+        nextPayoutAt: new Date(Date.now() + 86400000)
+      });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'boost', description: `Boosted ${inv.tierLabel || 'gem'} — matures in ${durPhrase(hours)}`,
+        userId, type: 'boost', description: `Boosted ${inv.tierLabel || 'gem'} — pays out over ${days} days`,
         amount: -cost, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
       });
       ok = true;
     });
     if (!ok) return res.status(400).json({ status: 'error', message: err || 'Could not boost' });
-    return res.json({ status: 'success', maturesInHours: hours, message: `Boosted — matures in ${durPhrase(hours)}` });
+    return res.json({ status: 'success', maturesInDays: days, cost, message: `Boosted — pays out over ${days} days` });
   } catch (e) {
     console.error('Boost error:', e.message);
     return res.status(400).json({ status: 'error', message: e.message });
   }
 });
 
-// ── MATURITY CRON — auto-credit the full expected return the instant a gem matures ──
-let _maturityRunning = false;
-async function runMaturityCheck() {
-  if (_maturityRunning) return 0;
-  _maturityRunning = true;
+// ── DAILY-CASHBACK CRON ──
+// Credits each active gem's daily cashback every 24 hours from the exact purchase
+// time. Any payouts missed while the server was asleep are caught up in one pass,
+// and the final payout pays the exact remaining balance so the total always equals
+// expectedReturn. Guarded by a single-run flag + per-gem transaction (M0 has no
+// real locks, so we never let two passes credit the same gem twice).
+let _payoutRunning = false;
+async function runDailyPayouts() {
+  if (_payoutRunning) return 0;
+  _payoutRunning = true;
   try {
     const snap = await db.collection('investments').where('status', '==', 'active').get();
     if (snap.empty) return 0;
-    const now = new Date();
-    let count = 0;
+    const now = Date.now();
+    let credited = 0;
     for (const doc of snap.docs) {
-      const inv = doc.data();
-      const matMs = tsMillis(inv.maturityDate); const mat = matMs ? new Date(matMs) : null;
-      if (!(mat && mat <= now)) continue;
-      const payout = inv.expectedReturn || 0;
-      const { date, time } = nowStr();
       try {
         await db.runTransaction(async t => {
           const fresh = await t.get(doc.ref);
           if (!fresh.exists || fresh.data().status !== 'active') return;
-          t.update(doc.ref, { status: 'matured', maturedAt: FieldValue.serverTimestamp() });
-          if (payout > 0) {
+          const inv = fresh.data();
+          // Lazily migrate gems created before the daily-cashback schedule existed.
+          const cycle       = Number(inv.cycle) || CYCLE_DAYS;
+          const expected    = Number(inv.expectedReturn) || 0;
+          const total       = Number(inv.payoutsTotal) || cycle;
+          let   made         = Number(inv.payoutsMade || 0);
+          let   paidOut      = Number(inv.paidOut || 0);
+          const dailyPayout  = Number(inv.dailyPayout) || Math.round(expected / cycle);
+          const createdMs    = tsMillis(inv.createdAt) || now;
+          let   nextMs        = tsMillis(inv.nextPayoutAt) || (createdMs + 86400000);
+          if (made >= total) { t.update(doc.ref, { status: 'matured', maturedAt: FieldValue.serverTimestamp() }); return; }
+
+          // How many 24h payouts are now due (catch up on any missed ones)?
+          let due = 0;
+          let cursor = nextMs;
+          while (cursor <= now && made + due < total) { due++; cursor += 86400000; }
+          if (due === 0) {
+            if (!inv.payoutsTotal) t.update(doc.ref, { payoutsTotal: total, payoutsMade: made, paidOut, dailyPayout, nextPayoutAt: new Date(nextMs) });
+            return;
+          }
+          const reachesEnd = (made + due) >= total;
+          // Final batch pays the exact remaining balance (absorbs any rounding).
+          const credit = reachesEnd ? Math.max(0, expected - paidOut) : dailyPayout * due;
+          const newMade    = made + due;
+          const newPaidOut = paidOut + credit;
+          const newNextMs  = nextMs + due * 86400000;
+          const { date, time } = nowStr();
+          const upd = { payoutsTotal: total, payoutsMade: newMade, paidOut: newPaidOut,
+            dailyPayout, nextPayoutAt: new Date(newNextMs) };
+          if (newMade >= total) { upd.status = 'matured'; upd.maturedAt = FieldValue.serverTimestamp(); }
+          t.update(doc.ref, upd);
+          if (credit > 0) {
             t.update(db.collection('users').doc(inv.userId), {
-              walletBalance: FieldValue.increment(payout),
-              totalEarned:   FieldValue.increment(payout)
+              walletBalance: FieldValue.increment(credit),
+              totalEarned:   FieldValue.increment(credit)
             });
             t.set(db.collection('transactions').doc(), {
               userId: inv.userId, type: 'gem_payout',
-              description: `Gem payout — ${inv.tierLabel || 'Gem'}`,
-              amount: payout, status: 'success', date, time, investmentId: doc.id,
+              description: `Daily cashback — ${inv.tierLabel || 'Gem'}`,
+              amount: credit, status: 'success', date, time, investmentId: doc.id,
               createdAt: FieldValue.serverTimestamp()
             });
           }
         });
-        count++;
-      } catch (e) { console.error('Maturity credit error:', doc.id, e.message); }
+        credited++;
+      } catch (e) { console.error('Daily payout error:', doc.id, e.message); }
     }
-    return count;
-  } catch (e) { console.error('Maturity check error:', e.message); return 0; }
-  finally { _maturityRunning = false; }
+    return credited;
+  } catch (e) { console.error('Daily payout check error:', e.message); return 0; }
+  finally { _payoutRunning = false; }
 }
 function startCrons() {
-  setInterval(runMaturityCheck, 15 * 60 * 1000);
-  setTimeout(runMaturityCheck, 60 * 1000);
-  console.log('Crons started (maturity check every 15m)');
+  setInterval(runDailyPayouts, 5 * 60 * 1000);
+  setTimeout(runDailyPayouts, 60 * 1000);
+  console.log('Crons started (daily cashback check every 5m)');
 }
 app.post('/admin/check-maturities', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error' });
-  const matured = await runMaturityCheck();
-  return res.json({ status: 'success', matured });
+  const credited = await runDailyPayouts();
+  return res.json({ status: 'success', credited });
 });
 
 // ═══════════════════════════════════════════
@@ -1772,7 +1827,8 @@ app.post('/admin/products/reseed', async (req, res) => {
     for (let i = 0; i < GEM_TIERS.length; i++) {
       const t = GEM_TIERS[i];
       const core = { key: t.key, label: t.label, price: t.price, cycle: t.cycle,
-        expectedReturn: t.expectedReturn, dailyReturn: t.dailyReturn, updatedAt: FieldValue.serverTimestamp() };
+        expectedReturn: t.expectedReturn, dailyReturn: t.dailyReturn,
+        color: GEM_COLORS[t.key] || '#7c3aed', updatedAt: FieldValue.serverTimestamp() };
       const existing = byKey[t.key];
       if (existing) { await db.collection('products').doc(existing.id).update(core); updated++; }
       else {

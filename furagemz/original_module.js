@@ -513,13 +513,18 @@ function durPhrase(hours) {
   hours = Number(hours) || 0;
   return hours % 24 === 0 ? `${hours / 24} day${hours / 24 === 1 ? '' : 's'}` : `${hours} hours`;
 }
+// Boost cost = a percentage of the gem's total return (default 30%).
+function boostCost(inv) {
+  const pct = (_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.30;
+  return Math.round((inv.expectedReturn || 0) * pct);
+}
 // Boost eligibility for an active gem.
 function boostState(inv) {
   if (inv.status !== 'active') return { kind: 'none' };
   if (inv.boosted) return { kind: 'boosted', ms: tsMs(inv.maturityDate) - Date.now() };
   const unlock = tsMs(inv.boostUnlockDate);
   if (unlock && Date.now() < unlock) return { kind: 'locked', days: Math.ceil((unlock - Date.now()) / 86400000) };
-  return { kind: 'ready', cost: inv.amount };
+  return { kind: 'ready', cost: boostCost(inv) };
 }
 function boostRowHtml(inv) {
   const bs = boostState(inv);
@@ -535,16 +540,17 @@ function bindBoosts(scope) {
 function openBoostModal(invId) {
   const inv = _investments.find(i => i.id === invId);
   if (!inv) return;
-  const hours = _publicSettings?.boostMatureHours || 3;
-  const cost = inv.amount || 0;
+  const days = _publicSettings?.boostMatureDays || 5;
+  const pct  = Math.round(((_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.30) * 100);
+  const cost = boostCost(inv);
   openModal(`
     <div class="modal-head"><h2>Boost ${esc(inv.tierLabel || 'gem')}</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="boost-hero">${ICN.boost}</div>
-    <p class="boost-copy">Pay <b>${ugx(cost)}</b> again to accelerate this gem. It matures in about <b>${durPhrase(hours)}</b> instead of waiting the full period — and your payout of <b>${ugx(inv.expectedReturn)}</b> stays the same.</p>
+    <p class="boost-copy">Pay <b>${ugx(cost)}</b> (${pct}% of this gem's total return) to accelerate it. All the cashback still to come is then paid out over the next <b>${days} days</b> instead of the full period — your total payout of <b>${ugx(inv.expectedReturn)}</b> stays the same.</p>
     <div class="breakdown">
-      <div class="br"><span class="muted">Boost cost</span><span>${ugx(cost)}</span></div>
+      <div class="br"><span class="muted">Boost cost (${pct}%)</span><span>${ugx(cost)}</span></div>
       <div class="br"><span class="muted">Your balance</span><span>${ugx(_account?.walletBalance || 0)}</span></div>
-      <div class="br total"><span>Matures in</span><span>${durPhrase(hours)}</span></div>
+      <div class="br total"><span>Pays out over</span><span>${days} days</span></div>
     </div>
     <button class="btn" id="mSubmit">Boost now</button>
   `);
@@ -652,7 +658,7 @@ function renderHome() {
           <div class="gem-active-info">
             <div class="t">${esc(inv.tierLabel || 'Gem')}</div>
             <div class="s">${inv.boosted ? 'Accelerating' : daysLeft(inv) + ' day' + (daysLeft(inv) === 1 ? '' : 's') + ' left'} · ${ugx(inv.amount)} in</div>
-            <div class="p">Pays ${ugx(inv.expectedReturn)} at maturity</div>
+            <div class="p">Earns ${ugx(Math.round((inv.expectedReturn || 0) / (inv.cycle || 1)))} daily · ${ugx(inv.expectedReturn)} total</div>
           </div>
         </div>
         ${boostRowHtml(inv)}
@@ -906,7 +912,7 @@ function openRedeemModal() {
 // ══════════════════════════════════════════════
 // GEMS
 // ══════════════════════════════════════════════
-const GEM_COLORS = { quartz: '#38bdf8', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#7c3aed' };
+const GEM_COLORS = { quartz: '#64748b', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#334155' };
 function renderGems() {
   const el = document.getElementById('panel-gems');
   if (!_products.length) { el.innerHTML = `<div class="empty-note" style="margin-top:14px">Gem tiers not loaded yet.</div>`; loadProducts().then(renderGems); return; }
@@ -918,7 +924,7 @@ function renderGems() {
       const art = p.image ? `<img src="${esc(p.image)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:16px">` : gemArt(color);
       return `
       <div class="gem-hero" style="--accent:${color}">
-        <div class="gh-head"><span class="gh-name">${esc(p.label)}</span><span class="gh-badge">Fixed</span></div>
+        <div class="gh-head"><span class="gh-name">${esc(p.label)}</span><span class="gh-badge">Daily</span></div>
         <div class="gh-body">
           <div class="gh-art">${art}</div>
           <div class="gh-stats">
@@ -943,11 +949,14 @@ function openGemDetail(key) {
     ${p.image ? `<img src="${esc(p.image)}" alt="" style="width:100%;height:150px;object-fit:cover;border-radius:16px;margin-bottom:16px">`
       : `<div class="gem-swatch" style="background:${p.color || GEM_COLORS[p.key] || 'var(--violet)'};width:56px;height:56px;border-radius:16px;margin-bottom:16px"></div>`}
     <div class="stat-row">
-      <div class="stat-box"><div class="n">${ugx(p.price)}</div><div class="l">Price</div></div>
+      <div class="stat-box"><div class="n">${ugx(Math.round(p.expectedReturn / (p.cycle || 1)))}</div><div class="l">Daily cashback</div></div>
       <div class="stat-box"><div class="n">${ugx(p.expectedReturn)}</div><div class="l">Total payout</div></div>
-      <div class="stat-box"><div class="n">${p.cycle}d</div><div class="l">Matures in</div></div>
+      <div class="stat-box"><div class="n">${p.cycle}d</div><div class="l">Runs for</div></div>
     </div>
-    <div class="note" style="text-align:left;margin:16px 0">Paid out in full the moment it matures — no separate claim step. Your wallet balance: ${ugx(bal)}.</div>
+    <div class="info-note" style="margin:16px 0">
+      <span class="in-ic">${ICN.info}</span>
+      <div class="in-tx">You earn <b>${ugx(Math.round(p.expectedReturn / (p.cycle || 1)))}</b> every 24 hours, starting one day after you buy, for <b>${p.cycle} days</b> — <b>${ugx(p.expectedReturn)}</b> in total, paid straight to your wallet. Your balance: ${ugx(bal)}.</div>
+    </div>
     <button class="btn" id="mSubmit">Buy for ${ugx(p.price)}</button>
   `);
   document.getElementById('mSubmit').addEventListener('click', async () => {
