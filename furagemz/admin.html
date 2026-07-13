@@ -93,6 +93,12 @@
   .prod .pr{color:var(--ok);font-size:12px;font-weight:700;margin-top:4px}
   .prod .pa{display:flex;gap:6px;margin-top:10px}
   .img-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--line2);flex-shrink:0}
+  .img-picker{display:flex;gap:12px;align-items:center;margin:4px 0 8px}
+  .img-prev{width:72px;height:72px;border-radius:12px;background:var(--line2);flex-shrink:0;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;font-size:11px}
+  .img-prev img{width:100%;height:100%;object-fit:cover}
+  .img-picker-actions{display:flex;flex-direction:column;gap:8px}
+  .file-btn{display:inline-flex;align-items:center;justify-content:center;text-align:center}
   .banner-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2)}
 
   /* modal */
@@ -180,6 +186,31 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+// Read an uploaded image File, downscale it (canvas) and return a compressed
+// JPEG data URI. Keeps the base64 stored in the DB small so uploads don't bloat
+// the M0 database. maxDim caps the longest edge; quality is JPEG compression.
+function fileToDataUrl(file, maxDim=900, quality=0.82){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type)) return reject(new Error('Please choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That image could not be loaded'));
+      img.onload=()=>{
+        let{width:w,height:h}=img;
+        if(w>maxDim||h>maxDim){ const s=maxDim/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+        try{ resolve(c.toDataURL('image/jpeg',quality)); }
+        catch(e){ reject(new Error('Could not process the image')); }
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
 let _toastT=null;
 function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
 
@@ -392,16 +423,37 @@ function editProduct(p, order){
       <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
     </div>
     <label>Accent colour (hex)</label><input id="pColor" value="${esc(p.color||'#7c3aed')}" placeholder="#10b981">
-    <label>Image URL (optional)</label><input id="pImage" value="${esc(p.image||'')}" placeholder="https://…/gem.png">
+    <label>Gem image</label>
+    <div class="img-picker">
+      <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
+      <div class="img-picker-actions">
+        <label class="btn sm file-btn">Upload image<input type="file" id="pFile" accept="image/*" hidden></label>
+        <button class="btn sm danger" id="pImgClear" type="button"${p.image?'':' style="display:none"'}>Remove</button>
+      </div>
+    </div>
+    <label class="muted" style="font-size:11px">…or paste a hosted image URL</label>
+    <input id="pImage" value="${esc(p.image&&!/^data:/.test(p.image)?p.image:'')}" placeholder="https://…/gem.png">
     <div class="switch-row" style="margin-top:10px"><span><b>Active</b> <span class="muted">(shown in the app)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
     <button class="btn block" id="pSave">Save gem</button>`);
+  let imgData = p.image||''; // uploaded data URI (takes priority over the URL field)
+  const setPrev = (src)=>{ $('pImgPrev').innerHTML = src?`<img src="${esc(src)}" alt="">`:'<span class="muted">No image</span>'; $('pImgClear').style.display = src?'':'none'; };
+  $('pFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{ imgData = await fileToDataUrl(f); $('pImage').value=''; setPrev(imgData); toast('Image ready — tap Save gem','ok'); }
+    catch(err){ toast(err.message||'Could not read image','err'); }
+  });
+  $('pImgClear').addEventListener('click', ()=>{ imgData=''; $('pImage').value=''; setPrev(''); });
+  $('pImage').addEventListener('input', ()=>{ imgData=''; setPrev($('pImage').value.trim()); });
   $('pSave').addEventListener('click', async()=>{
+    const image = imgData || $('pImage').value.trim();
     const body = { id:p.id, label:$('pLabel').value, key:$('pKey').value, price:$('pPrice').value,
       expectedReturn:$('pRet').value, cycle:$('pCycle').value, order:$('pOrder').value,
-      color:$('pColor').value, image:$('pImage').value, active:$('pActive').checked };
+      color:$('pColor').value, image, active:$('pActive').checked };
     if(!parseFloat(body.price)) return toast('Enter a price','err');
+    const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';
     const d=await api('/admin/products/save', body);
+    $('pSave').disabled=false; $('pSave').textContent=restore;
     toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); renderProducts(); }
   });
@@ -415,11 +467,12 @@ async function renderBanners(){
   $('content').innerHTML = `
     <h2 class="sec">Home banner images</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">These rotate on the app Home banner. Paste image URLs (hosted anywhere). Leave empty to use the built-in gradient banners.</p>
+      <p class="muted" style="margin-top:0">These rotate on the app Home banner. Upload from your device, or paste a hosted URL. Leave empty to use the built-in gradient banners.</p>
       <div id="bannerList">${imgs.length?imgs.map((u,i)=>`
-        <div class="banner-row"><img class="img-thumb" src="${esc(u)}" onerror="this.style.opacity=.3"><div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${esc(u)}</div><button class="btn danger sm" data-bi="${i}">Remove</button></div>`).join(''):'<div class="empty">No banner images yet.</div>'}</div>
-      <label>Add image URL</label><input id="bAdd" placeholder="https://…/banner.jpg">
-      <button class="btn block" id="bAddBtn">Add banner</button>
+        <div class="banner-row"><img class="img-thumb" src="${esc(u)}" onerror="this.style.opacity=.3"><div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${/^data:/.test(u)?'Uploaded image':esc(u)}</div><button class="btn danger sm" data-bi="${i}">Remove</button></div>`).join(''):'<div class="empty">No banner images yet.</div>'}</div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload banner image<input type="file" id="bFile" accept="image/*" hidden></label>
+      <label>…or add a hosted image URL</label>
+      <div class="row" style="align-items:flex-end"><div style="flex:1"><input id="bAdd" placeholder="https://…/banner.jpg"></div><button class="btn sm" id="bAddBtn" style="width:auto">Add</button></div>
     </div>
     <h2 class="sec">Announcement background</h2>
     <div class="panel-card">
@@ -430,6 +483,11 @@ async function renderBanners(){
   const saveImgs = async()=>{ const d=await api('/admin/settings/update',{ slideshowImages: cur }); toast(d.status==='success'?'Saved':(d.message||'Failed'),d.status==='success'?'ok':'err'); if(d.status==='success') renderBanners(); };
   document.querySelectorAll('[data-bi]').forEach(b=>b.addEventListener('click',()=>{ cur.splice(+b.dataset.bi,1); saveImgs(); }));
   $('bAddBtn').addEventListener('click',()=>{ const u=$('bAdd').value.trim(); if(!u)return toast('Enter a URL','err'); cur.push(u); saveImgs(); });
+  $('bFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{ const data=await fileToDataUrl(f,1280,0.82); cur.push(data); toast('Uploading…','ok'); saveImgs(); }
+    catch(err){ toast(err.message||'Could not read image','err'); }
+  });
   $('annBgSave').addEventListener('click',async()=>{ const d=await api('/admin/settings/update',{ announcementBg:$('annBg').value.trim() }); toast(d.status==='success'?'Saved':(d.message||'Failed'),d.status==='success'?'ok':'err'); });
 }
 
@@ -547,6 +605,14 @@ async function renderSettings(){
       <label>Support email</label><input id="spEmail" value="${esc(v('supportEmail',''))}" placeholder="support@furagemz.com">
       <label>Support hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Every day, 9:00 AM – 9:00 PM">
       <button class="btn block" id="saveSupport">Save support contacts</button>
+    </div>
+
+    <h2 class="sec">About page</h2>
+    <div class="panel-card">
+      <label>App tagline (shown under the logo)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Grow your money with gems.">
+      <label>About text (shown on the app's About page)</label>
+      <textarea id="abText" rows="8" placeholder="Describe Furagemz for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
+      <button class="btn block" id="saveAbout">Save about page</button>
     </div>`;
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
@@ -566,6 +632,10 @@ async function renderSettings(){
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportWhatsapp:$('spWa').value.trim(), supportEmail:$('spEmail').value.trim(), supportHours:$('spHours').value.trim() };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveAbout').addEventListener('click', async()=>{
+    const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value };
+    const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'About saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }
 

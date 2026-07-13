@@ -41,6 +41,9 @@ const ICN = {
   admin_debit:  _svg('<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>'),
   refund:       _svg('<path d="M3 10h11a5 5 0 0 1 0 10H9"/><path d="m7 5-4 5 4 5"/>'),
   close:        _svg('<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>'),
+  back:         _svg('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+  info:         _svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
+  about:        _svg('<circle cx="12" cy="12" r="9"/><path d="M12 16v-5"/><path d="M12 8h.01"/>'),
   eye:          _svg('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>'),
   eyeOff:       _svg('<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'),
   copy:         _svg('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
@@ -123,19 +126,30 @@ function setBusy(btn, busyText) {
   return () => { btn.disabled = prevDisabled; btn.textContent = prevText; };
 }
 
+// Pages slide in from the right (full screen) instead of the old bottom-sheet.
+// The phone Back button closes the open page rather than leaving the app:
+// each open pushes a history entry, popstate closes without re-pushing.
+let _pageOpen = false;
 function openModal(html) {
   const root = document.getElementById('modalRoot');
+  root.style.alignItems = '';
   root.innerHTML = `<div class="modal-backdrop" data-close></div><div class="modal-card">${html}</div>`;
   root.classList.remove('hidden');
-  root.querySelector('[data-close]').addEventListener('click', closeModal);
+  root.querySelector('[data-close]').addEventListener('click', () => closeModal());
   const closeBtn = root.querySelector('.modal-close');
-  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (closeBtn) { closeBtn.innerHTML = ICN.back; closeBtn.addEventListener('click', () => closeModal()); }
+  if (!_pageOpen) { _pageOpen = true; try { history.pushState({ fgPage: 1 }, ''); } catch (_) {} }
 }
-function closeModal() {
+function closeModal(fromPop) {
   const root = document.getElementById('modalRoot');
   root.classList.add('hidden');
   root.innerHTML = '';
+  if (_pageOpen) {
+    _pageOpen = false;
+    if (!fromPop) { try { history.back(); } catch (_) {} }
+  }
 }
+window.addEventListener('popstate', () => { if (_pageOpen) closeModal(true); });
 
 function phoneToEmail(phone) { return String(phone).replace(/\D/g, '') + '@furagemz-app.com'; }
 function cleanPhone(raw) {
@@ -729,12 +743,22 @@ const WITHDRAW_FEE = 0.05;
 
 function openDepositModal() {
   const phone0 = esc((_account?.phone || '').replace('+256', '0'));
+  const minDep = _publicSettings?.minDeposit || 30000;
   openModal(`
     <div class="modal-head"><h2>Deposit</h2><button class="modal-close">${ICN.close}</button></div>
-    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="30000">
+    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="${minDep}">
     <div class="amt-chips">${DEPOSIT_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`).join('')}</div>
     <div class="field" style="margin-top:16px"><label>Mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
-    <div class="note" style="text-align:left;margin-bottom:14px">Minimum ${ugx(30000)}. You'll approve a prompt on your phone.</div>
+    <div class="info-note">
+      <span class="in-ic">${ICN.info}</span>
+      <div class="in-tx"><b>How to deposit.</b>
+        <ol>
+          <li>Enter the amount (minimum <b>${ugx(minDep)}</b>) and the phone number that holds your mobile money.</li>
+          <li>Tap <b>Deposit</b> — a payment prompt is sent to that phone.</li>
+          <li>Approve it with your mobile-money PIN. Your wallet updates here automatically once it clears.</li>
+        </ol>
+      </div>
+    </div>
     <button class="btn" id="mSubmit">Deposit</button>
   `);
   const amtEl = document.getElementById('mAmt');
@@ -743,7 +767,7 @@ function openDepositModal() {
   document.getElementById('mSubmit').addEventListener('click', async () => {
     const amount = parseInt(amtEl.value, 10);
     const phone = document.getElementById('mPhone').value.trim();
-    if (!amount || amount < 30000) return toast('Minimum deposit is ' + ugx(30000), 'err');
+    if (!amount || amount < minDep) return toast('Minimum deposit is ' + ugx(minDep), 'err');
     if (!phone) return toast('Enter a mobile-money phone number', 'err');
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     const r = await api('/deposit/marzpay', { method: 'POST', body: { amount, phone } });
@@ -795,16 +819,29 @@ function depositResult(kind, amount) {
 function openWithdrawModal() {
   const bal = _account?.walletBalance || 0;
   const phone0 = esc((_account?.phone || '').replace('+256', '0'));
+  const minW = _publicSettings?.minWithdrawal || 10000;
+  const feeRate = (_publicSettings?.liquidityFee != null) ? _publicSettings.liquidityFee : WITHDRAW_FEE;
+  const feePct = Math.round(feeRate * 100);
   openModal(`
     <div class="modal-head"><h2>Withdraw</h2><button class="modal-close">${ICN.close}</button></div>
     <div style="text-align:center;color:var(--sub);font-size:12.5px;margin-bottom:6px">Available ${ugx(bal)}</div>
-    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="10000">
+    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="${minW}">
     <div class="amt-chips">${WITHDRAW_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`)
       .join('')}<button class="amt-chip" data-amt="${bal}">All</button></div>
     <div class="breakdown" id="mBreak">
       <div class="br"><span class="muted">Amount</span><span id="brAmt">${ugx(0)}</span></div>
-      <div class="br"><span class="muted">Service fee (5%)</span><span id="brFee">${ugx(0)}</span></div>
+      <div class="br"><span class="muted">Service fee (${feePct}%)</span><span id="brFee">${ugx(0)}</span></div>
       <div class="br total"><span>You receive</span><span id="brNet">${ugx(0)}</span></div>
+    </div>
+    <div class="info-note">
+      <span class="in-ic">${ICN.info}</span>
+      <div class="in-tx"><b>How to withdraw.</b>
+        <ol>
+          <li>Minimum withdrawal is <b>${ugx(minW)}</b>. A <b>${feePct}%</b> service fee is deducted, so you receive the amount shown above.</li>
+          <li>Money is sent to the mobile-money number you enter below. Save an account to reuse it next time.</li>
+          <li>You must have activated at least one gem before you can withdraw. Requests are processed shortly after you submit.</li>
+        </ol>
+      </div>
     </div>
     ${(_account?.bankAccounts || []).length ? `<label style="font-size:13px;color:var(--sub);font-weight:600;display:block;margin-bottom:7px">Saved accounts</label>
       <div class="amt-chips" style="justify-content:flex-start;margin:0 0 12px">
@@ -820,7 +857,7 @@ function openWithdrawModal() {
   const amtEl = document.getElementById('mAmt');
   const recompute = () => {
     const a = parseInt(amtEl.value, 10) || 0;
-    const fee = Math.round(a * WITHDRAW_FEE);
+    const fee = Math.round(a * feeRate);
     document.getElementById('brAmt').textContent = ugx(a);
     document.getElementById('brFee').textContent = '− ' + ugx(fee);
     document.getElementById('brNet').textContent = ugx(Math.max(0, a - fee));
@@ -831,7 +868,7 @@ function openWithdrawModal() {
   document.getElementById('mSubmit').addEventListener('click', async () => {
     const amount = parseInt(amtEl.value, 10);
     const phone = document.getElementById('mPhone').value.trim();
-    if (!amount || amount < 10000) return toast('Minimum withdrawal is ' + ugx(10000), 'err');
+    if (!amount || amount < minW) return toast('Minimum withdrawal is ' + ugx(minW), 'err');
     if (amount > bal) return toast('That is more than your balance', 'err');
     if (!phone) return toast('Enter a mobile-money phone number', 'err');
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
@@ -931,6 +968,11 @@ function referralLink(code) {
   try { return location.origin + location.pathname.replace(/index\.html$/, '') + '?ref=' + encodeURIComponent(code); }
   catch (_) { return 'https://furagemz.com/?ref=' + code; }
 }
+function commPct(level) {
+  const s = _publicSettings || {};
+  const raw = level === 1 ? (s.commL1 ?? 0.35) : level === 2 ? (s.commL2 ?? 0.02) : (s.commL3 ?? 0.01);
+  return Math.round(raw * 100);
+}
 function renderTeam() {
   const el = document.getElementById('panel-team');
   const code = _account?.referralCode || _account?.username || '—';
@@ -945,9 +987,20 @@ function renderTeam() {
         <button class="btn" id="shareRef" style="width:auto;padding:9px 18px">Share</button>
       </div>
       <div class="stat-row">
-        <div class="stat-box"><div class="n">${_account?.teamL1Count || 0}</div><div class="l">Level 1</div></div>
-        <div class="stat-box"><div class="n">${_account?.teamL2Count || 0}</div><div class="l">Level 2</div></div>
-        <div class="stat-box"><div class="n">${_account?.teamL3Count || 0}</div><div class="l">Level 3</div></div>
+        <div class="stat-box"><div class="pct">${commPct(1)}%</div><div class="n">${_account?.teamL1Count || 0}</div><div class="l">Level 1</div></div>
+        <div class="stat-box"><div class="pct">${commPct(2)}%</div><div class="n">${_account?.teamL2Count || 0}</div><div class="l">Level 2</div></div>
+        <div class="stat-box"><div class="pct">${commPct(3)}%</div><div class="n">${_account?.teamL3Count || 0}</div><div class="l">Level 3</div></div>
+      </div>
+    </div>
+    <div class="info-note" style="margin-top:14px">
+      <span class="in-ic">${ICN.info}</span>
+      <div class="in-tx">
+        <b>How referral rewards work.</b> Share your code or link. When someone joins with it and buys a gem, you earn a reward — instantly, straight to your wallet.
+        <ol>
+          <li><b>Level 1</b> (people you invite): <b>${commPct(1)}%</b> of every gem they buy.</li>
+          <li><b>Level 2</b> (people they invite): <b>${commPct(2)}%</b>.</li>
+          <li><b>Level 3</b> (the next layer): <b>${commPct(3)}%</b>.</li>
+        </ol>
       </div>
     </div>
     <div class="sec-head"><h3>Direct referrals</h3></div>
@@ -1014,6 +1067,7 @@ function renderAccount() {
       <button class="menu-row" id="mnBanks"><span class="mi">${ICN.bank}</span><span class="ml">Withdrawal accounts</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnPassword"><span class="mi">${ICN.lock}</span><span class="ml">Change password</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnSupport"><span class="mi">${ICN.support}</span><span class="ml">Contact support</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnAbout"><span class="mi">${ICN.about}</span><span class="ml">About Furagemz</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
       <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Log out</span></button>
@@ -1026,6 +1080,27 @@ function renderAccount() {
   el.querySelector('#mnBanks').addEventListener('click', openBanksModal);
   el.querySelector('#mnPassword').addEventListener('click', openPasswordModal);
   el.querySelector('#mnSupport').addEventListener('click', openSupportModal);
+  el.querySelector('#mnAbout').addEventListener('click', openAboutModal);
+}
+
+// About page — content is admin-managed (settings.aboutText). Falls back to a
+// short default so the page is never empty before the admin writes their own.
+function openAboutModal() {
+  const raw = (_publicSettings?.aboutText || '').trim();
+  const tagline = _publicSettings?.brandTagline || 'Grow your money with gems.';
+  const paras = raw
+    ? raw.split(/\n{2,}|\r\n\r\n/).map(p => `<p>${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('')
+    : `<p>Furagemz is a mobile-money savings and rewards platform. You buy a gem tier, and it pays out in full when it matures — a simple, fixed return with no daily claiming.</p>
+       <p>Invite friends with your referral code to earn rewards across three levels, redeem codes for instant wallet credit, and check in daily for a bonus.</p>`;
+  openModal(`
+    <div class="modal-head"><h2>About Furagemz</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="about-hero">
+      <div class="about-logo">${FG_LOGO}</div>
+      <div class="about-name">Furagemz</div>
+      <div class="about-tag">${esc(tagline)}</div>
+    </div>
+    <div class="about-body">${paras}</div>
+  `);
 }
 
 function bankRowsHtml(accounts, withRemove) {

@@ -21,6 +21,14 @@ app.use(helmet({
   noSniff: true,
   crossOriginResourcePolicy: { policy: 'same-site' }
 }));
+// Admin image uploads (product images / home banners) arrive as base64 data
+// URIs, which exceed the tight default body limit. Give only those two admin
+// routes a larger parser; everything else stays capped at 64kb. Once this
+// parses the body, the global 64kb parser below sees it as already-read and
+// skips it.
+const bigJson = express.json({ limit: '8mb' });
+const BIG_BODY_PATHS = new Set(['/admin/products/save', '/admin/settings/update']);
+app.use((req, res, next) => BIG_BODY_PATHS.has(req.path) ? bigJson(req, res, next) : next());
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
@@ -392,6 +400,10 @@ app.get('/settings/public', async (_req, res) => {
     welcomeBonus: s.welcomeBonus ?? WELCOME_BONUS,
     checkinBonus: s.checkinBonus ?? CHECKIN_BONUS,
     liquidityFee: s.liquidityFee ?? LIQUIDITY_FEE,
+    commL1: s.commL1 ?? COMM_L1,
+    commL2: s.commL2 ?? COMM_L2,
+    commL3: s.commL3 ?? COMM_L3,
+    aboutText: s.aboutText || '',
     gemTiers: GEM_TIERS,
     boostUnlockDays:  s.boostUnlockDays  ?? BOOST_UNLOCK_DAYS,
     boostMatureHours: s.boostMatureHours ?? BOOST_MATURE_HOURS,
