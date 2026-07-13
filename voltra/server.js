@@ -16,20 +16,74 @@ const app = express();
 // Trust the first proxy hop so express-rate-limit reads the real client IP
 // (otherwise it throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
 app.set('trust proxy', 1);
-app.use(helmet({ contentSecurityPolicy: false }));
+app.disable('x-powered-by'); // don't advertise Express
+app.use(helmet({
+  contentSecurityPolicy: false,               // API serves JSON, not HTML
+  hsts: { maxAge: 31536000, includeSubDomains: true }, // force HTTPS for a year
+  frameguard: { action: 'deny' },             // block clickjacking (no framing)
+  referrerPolicy: { policy: 'no-referrer' },  // don't leak the URL in Referer
+  noSniff: true,                              // block MIME-type sniffing
+  crossOriginResourcePolicy: { policy: 'same-site' }
+}));
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
 
+// ── NoSQL-INJECTION GUARD ──
+// MongoDB's equivalent of SQL injection: an attacker sends a value like
+// {"$ne": null} or a dotted key to smuggle query operators. No legitimate Voltra
+// request uses keys starting with "$" or containing ".", so we strip them from
+// every incoming body before any handler can pass them to the database.
+function stripMongoOperators(obj, depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 6) return;
+  for (const key of Object.keys(obj)) {
+    if (key.startsWith('$') || key.includes('.')) { delete obj[key]; continue; }
+    const v = obj[key];
+    if (v && typeof v === 'object') stripMongoOperators(v, depth + 1);
+  }
+}
+app.use((req, _res, next) => { try { stripMongoOperators(req.body); } catch (_) {} next(); });
+
 // ── RATE LIMITERS ──
-const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+// CRITICAL: Ugandan mobile networks (MTN/Airtel) put thousands of users behind a
+// few carrier-NAT IPs, so limiting per-IP wrongly punishes real users sharing an
+// IP (the whole app fails without a VPN). So for logged-in traffic we key the
+// limiter on the FIREBASE USER (decoded from the token, not verified here — auth
+// still happens in the handler), giving every user their OWN budget regardless of
+// shared IP. Only unauthenticated login/register falls back to per-IP.
+function rlKeyByUser(req) {
+  const auth = req.headers.authorization || '';
+  if (auth.startsWith('Bearer ')) {
+    try {
+      const p = JSON.parse(Buffer.from(auth.slice(7).split('.')[1], 'base64').toString('utf8'));
+      const uid = p && (p.user_id || p.sub);
+      if (uid) return 'u:' + uid;
+    } catch (_) {}
+  }
+  return req.ip;
+}
+// Login/register/OTP — no token yet, so per-IP. Generous so a group of real users
+// on one carrier-NAT IP isn't blocked, while still slowing a single-source flood.
+const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 40, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
-const apiLimiter  = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+// Money/value endpoints — keyed PER USER, so one user can't be blocked by others
+// sharing their IP.
+const apiLimiter  = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+// Admin password guess-throttle — stops brute-forcing the admin key (per IP is
+// fine: only the admin hits this path, not shared with users).
+const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
+// General admin-panel ceiling — only the admin hits /admin/ paths.
+const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
 app.use('/auth/', authLimiter);
-app.use('/checkin', apiLimiter);
-app.use('/withdraw/request', apiLimiter);
-app.use('/invest/create', apiLimiter);
+app.use('/admin/check-key', adminLoginLimiter);
+app.use('/admin/', adminLimiter);
+// Money / value-moving endpoints (per USER, 60/min).
+['/checkin', '/withdraw/request', '/invest/create', '/invest/claim',
+ '/deposit/marzpay', '/deposit/initiate', '/prize-draw/buy', '/giftcode/redeem']
+  .forEach(p => app.use(p, apiLimiter));
 
 // ── FIREBASE AUTH (Auth only — Firestore replaced by MongoDB) ──
 let serviceAccount;
@@ -43,7 +97,7 @@ try {
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 // ── MONGODB (replaces Firestore) ──
-const { connectMongo, db, FieldValue } = require('./db');
+const { connectMongo, db, FieldValue, pingDb } = require('./db');
 
 // ── CONFIG ──
 const ADMIN_KEY        = process.env.ADMIN_KEY        || '';
@@ -60,9 +114,16 @@ const RAILWAY_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 
+// MarzSMS — used for password-reset OTP delivery. Credentials live ONLY in Railway env.
+const MARZSMS_BASE   = 'https://sms.wearemarz.com/api/v1';
+const MARZSMS_KEY    = process.env.MARZSMS_KEY    || ''; // API key (Basic-auth username)
+const MARZSMS_SECRET = process.env.MARZSMS_SECRET || ''; // API secret (Basic-auth password)
+const MARZSMS_BASIC  = (MARZSMS_KEY && MARZSMS_SECRET)
+  ? Buffer.from(MARZSMS_KEY + ':' + MARZSMS_SECRET).toString('base64') : '';
+
 const MIN_WITHDRAWAL   = 20000;
 const CHECKIN_BONUS    = 500;
-const WELCOME_BONUS    = 7000;
+const WELCOME_BONUS    = 5500;
 const COMM_L1          = 0.20;
 const COMM_L2          = 0.05;
 const COMM_L3          = 0.01;
@@ -105,6 +166,24 @@ function uuidv4() {
 
 // ── MarzPay API helpers (JSON body — Voltra proven implementation) ──
 const MARZ_TIMEOUT = 20000; // 20 s — abort any hung MarzPay call
+// Friendly, user-facing message for any payment-provider (MarzPay) hiccup so we
+// never leak their raw "A database error occurred…" text to Voltra users.
+const PROVIDER_BUSY_MSG = 'The mobile-money service is temporarily busy. Please wait a moment and try again.';
+// Parse a MarzPay response safely — if they return an HTML error page (outage),
+// json() would throw "Unexpected token <"; normalise that to a provider error.
+async function _marzParse(resp) {
+  try { return await resp.json(); }
+  catch (_) { return { status: 'error', message: PROVIDER_BUSY_MSG, providerDown: true }; }
+}
+// Turn a MarzPay error into a clean user message — hide their internal
+// "database error / internal server" text behind the friendly busy message.
+function marzUserMsg(mp, fallback) {
+  const raw = String((mp && mp.message) || '');
+  if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
+      /database error|internal server|server error|try again later|temporarily/i.test(raw))
+    return PROVIDER_BUSY_MSG;
+  return raw || fallback || PROVIDER_BUSY_MSG;
+}
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
     description: description || 'Recharge' };
@@ -114,7 +193,7 @@ async function marzCollect({ amount, phone, reference, description, callbackUrl 
     headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return resp.json();
+  return _marzParse(resp);
 }
 async function marzSendMoney({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
@@ -125,7 +204,22 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
     headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return resp.json();
+  return _marzParse(resp);
+}
+// Send an SMS via MarzSMS (Basic auth). Returns { ok, message }.
+async function marzSendSMS(recipient, message) {
+  if (!MARZSMS_BASIC) return { ok: false, message: 'SMS not configured' };
+  try {
+    const resp = await fetch(`${MARZSMS_BASE}/sms/send`, {
+      method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+      headers: { 'Authorization': `Basic ${MARZSMS_BASIC}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient, message })
+    });
+    const d = await resp.json().catch(() => ({}));
+    return { ok: !!d.success, message: d.message || '' };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
 }
 // Get collection status — uses /collect-money/{uuid} per MarzPay docs
 async function marzGetCollectStatus(uuid) {
@@ -165,7 +259,7 @@ async function isMaintenanceOn() {
 // NOTE: '/settings/public' MUST bypass maintenance — the app reads it to DETECT
 // maintenance and show the lock screen. If it were blocked, the app would just
 // freeze (503 everywhere) instead of showing the maintenance screen.
-const BYPASS = ['/', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public'];
+const BYPASS = ['/', '/health', '/sms/incoming', '/admin', '/auth/', '/callback', '/deposit/callback', '/withdraw/callback', '/settings/public', '/public'];
 app.use(async (req, res, next) => {
   const p = req.path;
   if (BYPASS.some(b => p === b || p.startsWith(b + '/'))) return next();
@@ -338,6 +432,8 @@ function parseMoMoSMS(sms) {
 // or upgrade (Agent → Senior Agent → Regional Agent). Uses a transaction to
 // prevent race conditions. Never downgrades a tier.
 async function checkAgentPromotion(investorId) {
+  return; // DISABLED — agent tiers are a Nexus feature Voltra does not use. No auto-promotions.
+  /* eslint-disable no-unreachable */
   try {
     const invSnap = await db.collection('users').doc(investorId).get();
     if (!invSnap.exists) return;
@@ -510,9 +606,67 @@ async function payCommissions(investorId, amount, investmentId) {
 // ═══════════════════════════════════════════
 app.get('/', (req, res) => res.json({ status: '◈ Business Server', time: new Date().toISOString() }));
 
+// Deep health check — verifies the database is actually reachable, so you (or an
+// uptime monitor) can catch a DB outage the moment it starts, before users do.
+app.get('/health', async (_req, res) => {
+  const dbOk = await pingDb();
+  res.status(dbOk ? 200 : 503).json({ status: dbOk ? 'ok' : 'degraded', db: dbOk ? 'up' : 'down', time: new Date().toISOString() });
+});
+
+// ── LIVE ONLINE USERS COUNTER ──
+// Single in-memory value drifted server-side every 3s so every device polling
+// it sees the same figure at the same time (cosmetic — not a real session count).
+function _onlineRange() {
+  const h = new Date(Date.now() + 3 * 3600000).getUTCHours(); // Uganda time (EAT, UTC+3)
+  if (h >= 0 && h < 6)  return [200, 405];   // midnight → early morning (climbing)
+  if (h >= 6 && h < 15) return [405, 830];   // morning → afternoon
+  if (h >= 15 && h < 20) return [830, 1350]; // evening peak
+  return [80, 200];                          // late evening → midnight (quiet)
+}
+let _onlineCount = null;
+function driftOnlineCount() {
+  const [lo, hi] = _onlineRange();
+  if (_onlineCount === null || _onlineCount < lo || _onlineCount > hi) {
+    _onlineCount = lo + Math.floor(Math.random() * (hi - lo + 1));
+  } else {
+    const step = Math.floor(Math.random() * 25) - 12; // drift -12..+12
+    _onlineCount = Math.max(lo, Math.min(hi, _onlineCount + step));
+  }
+}
+driftOnlineCount();
+setInterval(driftOnlineCount, 3000);
+app.get('/public/online-count', (_req, res) => res.json({ status: 'success', count: _onlineCount }));
+
+// ── LIVE ACTIVITY FEED (global — server generates one feed so every device
+// shows the same rolling activity; refreshed every 30s). Cosmetic only.
+function _genActivityFeed() {
+  const round = (n, r) => Math.round(n / r) * r;
+  const randDep  = () => round(30000 + Math.random() * 170000, 5000);
+  const randWit  = () => round(15000 + Math.random() * 985000, 5000);
+  const randComm = () => round(5000 + Math.random() * 95000, 1000);
+  const randRet  = () => round(20000 + Math.random() * 480000, 5000);
+  const ph = () => '256' + (7 + Math.floor(Math.random() * 3)) + '****' + String(100 + Math.floor(Math.random() * 900));
+  const acts = [
+    () => ({ act: 'recharged',        amt: randDep() }),
+    () => ({ act: 'cashed out',       amt: randWit() }),
+    () => ({ act: 'earned',           amt: randRet() }),
+    () => ({ act: 'got a team bonus', amt: randComm() }),
+  ];
+  const feed = [];
+  for (let i = 0; i < 14; i++) {
+    const a = acts[Math.floor(Math.random() * acts.length)]();
+    feed.push({ who: ph(), act: a.act, amt: 'UGX ' + a.amt.toLocaleString('en-US') });
+  }
+  return feed;
+}
+let _activityFeed = _genActivityFeed();
+setInterval(() => { _activityFeed = _genActivityFeed(); }, 30000);
+app.get('/public/activity-feed', (_req, res) => res.json({ status: 'success', feed: _activityFeed }));
+
 // ── GIFT CODE GENERATION HELPER ──
+// 4 unambiguous characters — short and distinct from the old Nexus format.
 function genGiftCode() {
-  return Array.from(crypto.randomBytes(8)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
+  return Array.from(crypto.randomBytes(4)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
 
 // ── ADMIN AUTH HELPER ──
@@ -717,6 +871,127 @@ app.post('/admin/assign-deposit', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// REGISTRATION VERIFICATION CODE (anti-bot)
+// ═══════════════════════════════════════════
+// Short-lived, single-use numeric code a real user re-types before an account
+// can be created. Not an image CAPTCHA — but it forces every signup through
+// this extra request/response round trip, which stops naive scripts that
+// hammer /register directly to farm the sign-up bonus.
+const _regCaptchas  = new Map(); // captchaId → { code, expiresAt, attempts }
+const CAPTCHA_TTL_MS = 5 * 60 * 1000;
+
+function pruneCaptchas() {
+  const now = Date.now();
+  for (const [id, c] of _regCaptchas) if (c.expiresAt < now) _regCaptchas.delete(id);
+}
+
+app.post('/auth/captcha', (req, res) => {
+  pruneCaptchas();
+  const captchaId = crypto.randomBytes(16).toString('hex');
+  const code = String(crypto.randomInt(1000, 10000));
+  _regCaptchas.set(captchaId, { code, expiresAt: Date.now() + CAPTCHA_TTL_MS, attempts: 0 });
+  return res.json({ status: 'success', captchaId, code });
+});
+
+app.post('/auth/captcha/verify', (req, res) => {
+  const { captchaId, answer } = req.body;
+  const c = captchaId && _regCaptchas.get(captchaId);
+  if (!c || c.expiresAt < Date.now()) {
+    _regCaptchas.delete(captchaId);
+    return res.status(400).json({ status: 'error', message: 'Verification code expired — please refresh it' });
+  }
+  c.attempts++;
+  if (c.attempts > 5) {
+    _regCaptchas.delete(captchaId);
+    return res.status(400).json({ status: 'error', message: 'Too many attempts — please refresh the code' });
+  }
+  if (String(answer || '').trim() !== c.code)
+    return res.status(400).json({ status: 'error', message: 'Incorrect code — please try again' });
+  _regCaptchas.delete(captchaId); // single-use
+  return res.json({ status: 'success' });
+});
+
+// ═══════════════════════════════════════════
+// PASSWORD RESET — SMS OTP (self-service, no admin needed)
+// ═══════════════════════════════════════════
+// User enters the phone they registered with → server SMSes a 6-digit code via
+// MarzSMS → user enters the code + a new password → server resets the Firebase
+// password. Codes are single-use, expire in 10 min, capped attempts + rate limit.
+const _resetOtps    = new Map(); // phone9 → { code, expiresAt, attempts }
+const _resetRate    = new Map(); // phone9 → last request timestamp
+const RESET_TTL_MS  = 10 * 60 * 1000;
+
+// Normalise any Ugandan input to the canonical 9-digit form used at registration.
+function phone9(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('256') && d.length === 12) d = d.slice(3);
+  d = d.replace(/^0+/, '');
+  return d;
+}
+
+app.post('/auth/reset/request', async (req, res) => {
+  const p9 = phone9(req.body.phone);
+  if (p9.length !== 9) return res.status(400).json({ status: 'error', message: 'Enter a valid 9-digit number' });
+  // Rate limit: one code per 60s per number
+  const last = _resetRate.get(p9) || 0;
+  if (Date.now() - last < 60000)
+    return res.status(429).json({ status: 'error', message: 'Please wait a minute before requesting another code' });
+  try {
+    // Only send to a number that actually has an account (avoids SMS abuse/cost)
+    let userExists = false;
+    try { await admin.auth().getUserByEmail(phoneToEmail(p9)); userExists = true; }
+    catch (_) { userExists = false; }
+    if (!userExists)
+      return res.status(404).json({ status: 'error', message: 'No account is registered with that number' });
+    if (!MARZSMS_BASIC)
+      return res.status(503).json({ status: 'error', message: 'Password reset by SMS is not available right now' });
+
+    const code = String(crypto.randomInt(100000, 1000000)); // 6 digits
+    _resetOtps.set(p9, { code, expiresAt: Date.now() + RESET_TTL_MS, attempts: 0 });
+    _resetRate.set(p9, Date.now());
+    const sms = await marzSendSMS('+256' + p9, `Your Voltra password reset code is ${code}. It expires in 10 minutes. Do not share it with anyone.`);
+    if (!sms.ok) {
+      _resetOtps.delete(p9);
+      return res.status(502).json({ status: 'error', message: 'Could not send the code. Try again shortly.' });
+    }
+    return res.json({ status: 'success', message: 'A reset code has been sent to your number' });
+  } catch (e) {
+    console.error('Reset request error:', e.message);
+    return res.status(500).json({ status: 'error', message: 'Could not start password reset' });
+  }
+});
+
+app.post('/auth/reset/confirm', async (req, res) => {
+  const p9  = phone9(req.body.phone);
+  const otp = String(req.body.otp || '').trim();
+  const newPassword = String(req.body.newPassword || '');
+  if (p9.length !== 9) return res.status(400).json({ status: 'error', message: 'Enter a valid 9-digit number' });
+  if (newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'Password must be at least 6 characters' });
+  const rec = _resetOtps.get(p9);
+  if (!rec || rec.expiresAt < Date.now()) {
+    _resetOtps.delete(p9);
+    return res.status(400).json({ status: 'error', message: 'Code expired — request a new one' });
+  }
+  rec.attempts++;
+  if (rec.attempts > 5) {
+    _resetOtps.delete(p9);
+    return res.status(400).json({ status: 'error', message: 'Too many attempts — request a new code' });
+  }
+  if (otp !== rec.code)
+    return res.status(400).json({ status: 'error', message: 'Incorrect code' });
+  try {
+    const fbUser = await admin.auth().getUserByEmail(phoneToEmail(p9));
+    await admin.auth().updateUser(fbUser.uid, { password: newPassword });
+    _resetOtps.delete(p9); // single-use
+    console.log(`🔑 Password reset via OTP for ${p9}`);
+    return res.json({ status: 'success', message: 'Password reset. You can now log in with your new password.' });
+  } catch (e) {
+    console.error('Reset confirm error:', e.message);
+    return res.status(500).json({ status: 'error', message: 'Could not reset password' });
+  }
+});
+
+// ═══════════════════════════════════════════
 // REGISTRATION
 // ═══════════════════════════════════════════
 app.post('/register', async (req, res) => {
@@ -802,7 +1077,7 @@ app.post('/account/ensure-refcode', async (req, res) => {
 // TEAM MEMBERS — list of people referred by this user
 // ═══════════════════════════════════════════
 app.post('/team/members', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own team only — no client-supplied id
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('users').where('referredBy', '==', userId).get();
@@ -835,7 +1110,8 @@ app.post('/team/members', async (req, res) => {
 // INVESTMENTS
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { productId } = req.body;
   if (!userId || !productId) return res.status(400).json({ status: 'error', message: 'userId and productId required' });
   try {
@@ -888,7 +1164,8 @@ app.post('/invest/create', async (req, res) => {
 });
 
 app.post('/invest/claim', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { investmentId } = req.body;
   if (!userId || !investmentId) return res.status(400).json({ status: 'error', message: 'userId and investmentId required' });
   try {
@@ -924,7 +1201,8 @@ app.post('/invest/claim', async (req, res) => {
 // WITHDRAWALS — user requests, admin processes via MarzPay
 // ═══════════════════════════════════════════
 app.post('/withdraw/request', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { amount, phone } = req.body;
   if (!userId || !amount || !phone)
     return res.status(400).json({ status: 'error', message: 'userId, amount and phone required' });
@@ -1123,7 +1401,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
     // Accept success, pending, and sandbox (test mode)
     const witSandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
     if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox) {
-      return res.status(400).json({ status: 'error', message: mpData.message || 'MarzPay disbursement failed' });
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Withdrawal could not be sent right now. Please try again.') });
     }
 
     // Update withdrawal to processing
@@ -1169,7 +1447,9 @@ app.post('/admin/withdraw/process', async (req, res) => {
     return res.json({ status: 'success', message: msg, sandbox: witSandbox });
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
-    return res.status(500).json({ status: 'error', message: e.message });
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not process withdrawal');
+    return res.status(500).json({ status: 'error', message: friendly });
   }
 });
 
@@ -1242,8 +1522,8 @@ app.post('/withdraw/callback', async (req, res) => {
 // CHECK-IN
 // ═══════════════════════════════════════════
 app.post('/checkin', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
     const settSnap = await db.collection('settings').doc('main').get();
     const bonus    = settSnap.exists ? (settSnap.data().checkinBonus || CHECKIN_BONUS) : CHECKIN_BONUS;
@@ -1289,7 +1569,8 @@ app.post('/checkin', async (req, res) => {
 const _giftRateMap = new Map(); // userId → last attempt timestamp
 const _redeemingGifts = new Set(); // gift code id → being redeemed (single-writer)
 app.post('/giftcode/redeem', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { code } = req.body;
   if (!userId || !code) return res.status(400).json({ status: 'error', message: 'userId and code required' });
   // Rate limit: max 1 attempt per 10 seconds per user
@@ -1393,6 +1674,32 @@ app.post('/admin/deposit', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// Remove money from a wallet (e.g. reverse a mistaken over-credit). Balance may
+// go negative if the amount was already partly spent — that's intentional so a
+// mistake can be fully clawed back. Records an admin_debit transaction.
+app.post('/admin/debit', async (req, res) => {
+  const { userId, amount, note, adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const amt = Math.abs(parseFloat(amount || 0));
+  if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  try {
+    const { date, time } = nowStr();
+    let newBal = 0;
+    await db.runTransaction(async t => {
+      const uRef  = db.collection('users').doc(userId);
+      const uSnap = await t.get(uRef);
+      if (!uSnap.exists) throw new Error('User not found');
+      newBal = (uSnap.data().walletBalance || 0) - amt;
+      t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'admin_debit', description: note || 'Balance adjustment',
+        amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+    return res.json({ status: 'success', message: `Removed ${fmtUGX(amt)} — new balance ${fmtUGX(newBal)}`, newBalance: newBal });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 app.post('/admin/ban', async (req, res) => {
   const { userId, adminKey, action, reason } = req.body;
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -1444,6 +1751,7 @@ app.post('/admin/stats', async (req, res) => {
         totalWithdrawn,
         totalInvested,
         pendingWithdrawals: withdrawalsSnap.size,
+        pendingPayouts:     withdrawalsSnap.size, // alias — admin badge reads this key
         activeInvestments:  investmentsSnap.size
       }
     });
@@ -1454,18 +1762,86 @@ app.post('/admin/stats', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// ADMIN — AGENT BONUS CLAWBACK
+// ═══════════════════════════════════════════
+// Reverses every agent_bonus (weekly stipend) ever paid. Default is a DRY RUN
+// that only reports the impact; pass execute:true to actually pull the money.
+// Balances may go NEGATIVE (money already spent/withdrawn is still clawed back,
+// per the owner's instruction). Each user is clawed at most once (agentClawedBack flag).
+app.post('/admin/agent-clawback', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const execute = req.body.execute === true;
+  try {
+    const txSnap = await db.collection('transactions').where('type', '==', 'agent_bonus').get();
+    const perUser = new Map(); // userId → total agent_bonus credited
+    txSnap.forEach(d => {
+      const t = d.data();
+      const amt = Number(t.amount || 0);
+      if (amt > 0) perUser.set(t.userId, (perUser.get(t.userId) || 0) + amt);
+    });
+
+    const affected = [];
+    let totalAmount = 0, wouldGoNegative = 0, executed = 0, skipped = 0;
+    for (const [userId, clawback] of perUser) {
+      const uRef  = db.collection('users').doc(userId);
+      const uSnap = await uRef.get();
+      if (!uSnap.exists) { skipped++; continue; }
+      const u = uSnap.data();
+      const balanceBefore = u.walletBalance || 0;
+      const balanceAfter  = balanceBefore - clawback;
+      const alreadyDone   = u.agentClawedBack === true;
+      affected.push({ userId, name: u.name || '', phone: u.phone || '',
+        clawback, balanceBefore, balanceAfter, alreadyDone });
+      if (!alreadyDone) { totalAmount += clawback; if (balanceAfter < 0) wouldGoNegative++; }
+
+      if (execute && !alreadyDone) {
+        const { date, time } = nowStr();
+        await db.runTransaction(async t => {
+          const fresh = await t.get(uRef);
+          if (!fresh.exists || fresh.data().agentClawedBack === true) return;
+          t.update(uRef, {
+            walletBalance:   FieldValue.increment(-clawback),
+            agentClawedBack: true,
+            isAgent:         false,
+            agentTier:       null
+          });
+          t.set(db.collection('transactions').doc(), {
+            userId, type: 'agent_reversal',
+            description: 'Balance adjustment',
+            amount: -clawback, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+          });
+        });
+        executed++;
+      }
+    }
+    affected.sort((a, b) => b.clawback - a.clawback);
+    return res.json({
+      status: 'success', executed: execute,
+      summary: { totalUsers: perUser.size, totalAmount, wouldGoNegative, appliedNow: executed, skipped },
+      affected
+    });
+  } catch (e) {
+    console.error('Agent clawback error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════
 // ADMIN — USERS LIST
 // ═══════════════════════════════════════════
 app.post('/admin/users', async (req, res) => {
-  const { adminKey, limit: lim = 200 } = req.body;
+  const { adminKey } = req.body;
+  const lim = Number(req.body.limit);
   if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('users')
-      .orderBy('createdAt', 'desc')
-      .limit(Number(lim) || 200)
-      .get();
+    // Default: return ALL users. A positive `limit` caps it; 0/absent = unlimited.
+    let q = db.collection('users');
+    if (lim && lim > 0) q = q.orderBy('createdAt', 'desc').limit(lim);
+    const snap = await q.get();
     const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return res.json({ status: 'success', users });
+    // Sort newest-first in memory so users missing a createdAt field aren't dropped
+    users.sort((a, b) => (tsMillis(b.createdAt) || 0) - (tsMillis(a.createdAt) || 0));
+    return res.json({ status: 'success', users, total: users.length });
   } catch (e) {
     return res.status(500).json({ status: 'error', message: e.message });
   }
@@ -1533,6 +1909,258 @@ app.post('/admin/gift-codes/deactivate', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// PRIZE DRAW — admin sets ticket price / total tickets / prize amount,
+// users buy tickets from their wallet, one random ticket wins the prize.
+// ═══════════════════════════════════════════
+const _buyingTickets  = new Set(); // drawId → being purchased (single-writer, also
+                                    // serialises a user's own double-submit on the same draw)
+const _resolvingDraws = new Set(); // drawId → winner is being picked (single-writer)
+
+async function resolveDraw(drawId) {
+  if (_resolvingDraws.has(drawId)) return;
+  _resolvingDraws.add(drawId);
+  try {
+    const dRef  = db.collection('prizeDraws').doc(drawId);
+    const dSnap = await dRef.get();
+    if (!dSnap.exists || dSnap.data().status !== 'active') return;
+    const draw = dSnap.data();
+
+    const entriesSnap = await db.collection('prizeDrawEntries').where('drawId', '==', drawId).get();
+    const entries = entriesSnap.docs.map(d => d.data());
+    // Expand into one slot per ticket sold, then draw distinct slots without
+    // replacement — a user holding more tickets occupies more slots, so they
+    // have proportionally better odds but can still legitimately win more
+    // than one of the prize slots if several of their own tickets are drawn.
+    const tickets = [];
+    entries.forEach(e => { for (let i = 0; i < (e.quantity || 0); i++) tickets.push(e.userId); });
+    if (tickets.length <= 0) return; // nothing sold — nothing to draw
+
+    const winnersToPick = Math.max(1, Math.min(draw.numWinners || 1, tickets.length));
+    for (let i = 0; i < winnersToPick; i++) {
+      const j = i + Math.floor(Math.random() * (tickets.length - i));
+      [tickets[i], tickets[j]] = [tickets[j], tickets[i]];
+    }
+    const winnerIds = tickets.slice(0, winnersToPick);
+
+    const { date, time } = nowStr();
+    const winners = [];
+    await db.runTransaction(async t => {
+      for (const winnerId of winnerIds) {
+        const wRef = db.collection('users').doc(winnerId);
+        const wSnap = await t.get(wRef);
+        const phone = wSnap.exists ? (wSnap.data().phone || '') : '';
+        t.update(wRef, { walletBalance: FieldValue.increment(draw.prizeAmount) });
+        t.set(db.collection('transactions').doc(), {
+          userId: winnerId, type: 'prize_draw_win',
+          description: `Prize Draw win — ${draw.title}`,
+          amount: draw.prizeAmount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });
+        winners.push({ userId: winnerId, phone, prizeAmount: draw.prizeAmount });
+      }
+      t.update(dRef, {
+        status: 'completed', winners,
+        completedAt: FieldValue.serverTimestamp()
+      });
+    });
+    console.log(`🎟️ Prize Draw "${draw.title}" — ${winners.length} winner(s), ${fmtUGX(draw.prizeAmount)} each`);
+  } catch (e) {
+    console.error('Prize draw resolve error:', e.message);
+  } finally {
+    _resolvingDraws.delete(drawId);
+  }
+}
+
+// ADMIN — create a draw
+app.post('/admin/prize-draw/create', async (req, res) => {
+  const { adminKey, title, ticketPrice, totalTickets, prizeAmount } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const price   = Math.round(Number(ticketPrice));
+  const total   = Math.round(Number(totalTickets));
+  const prize   = Math.round(Number(prizeAmount));
+  const winners = Math.round(Number(req.body.numWinners) || 1);
+  const name    = (title || '').trim() || 'Prize Draw';
+  if (!(price > 0))  return res.status(400).json({ status: 'error', message: 'Ticket price must be greater than 0' });
+  if (!(total >= 2)) return res.status(400).json({ status: 'error', message: 'Total tickets must be at least 2' });
+  if (!(prize > 0))  return res.status(400).json({ status: 'error', message: 'Prize amount must be greater than 0' });
+  if (!(winners >= 1)) return res.status(400).json({ status: 'error', message: 'Number of winners must be at least 1' });
+  if (winners > total) return res.status(400).json({ status: 'error', message: 'Number of winners cannot exceed total tickets' });
+  try {
+    const docRef = db.collection('prizeDraws').doc();
+    await docRef.set({
+      title: name, ticketPrice: price, totalTickets: total, prizeAmount: prize, numWinners: winners,
+      ticketsSold: 0, status: 'active', winners: [],
+      createdAt: FieldValue.serverTimestamp()
+    });
+    return res.json({ status: 'success', drawId: docRef.id });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// ADMIN — end a draw early (force the draw now) or cancel it (refund everyone)
+app.post('/admin/prize-draw/end', async (req, res) => {
+  const { adminKey, drawId } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!drawId) return res.status(400).json({ status: 'error', message: 'drawId required' });
+  try {
+    const snap = await db.collection('prizeDraws').doc(drawId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Draw not found' });
+    if (snap.data().status !== 'active') return res.status(400).json({ status: 'error', message: 'Draw is not active' });
+    if (!(snap.data().ticketsSold > 0)) return res.status(400).json({ status: 'error', message: 'No tickets sold yet — cancel it instead' });
+    await resolveDraw(drawId);
+    return res.json({ status: 'success', message: 'Draw resolved' });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+app.post('/admin/prize-draw/cancel', async (req, res) => {
+  const { adminKey, drawId } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!drawId) return res.status(400).json({ status: 'error', message: 'drawId required' });
+  try {
+    const dRef  = db.collection('prizeDraws').doc(drawId);
+    const dSnap = await dRef.get();
+    if (!dSnap.exists) return res.status(404).json({ status: 'error', message: 'Draw not found' });
+    if (dSnap.data().status !== 'active') return res.status(400).json({ status: 'error', message: 'Draw is not active' });
+    const price = dSnap.data().ticketPrice;
+    const { date, time } = nowStr();
+    const entriesSnap = await db.collection('prizeDrawEntries').where('drawId', '==', drawId).get();
+    for (const e of entriesSnap.docs) {
+      const ed = e.data();
+      const refund = ed.quantity * price;
+      await db.collection('users').doc(ed.userId).update({ walletBalance: FieldValue.increment(refund) });
+      await db.collection('transactions').doc().set({
+        userId: ed.userId, type: 'prize_draw_refund',
+        description: `Prize Draw cancelled — ticket refund (${dSnap.data().title})`,
+        amount: refund, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    }
+    await dRef.update({ status: 'cancelled' });
+    return res.json({ status: 'success', message: 'Draw cancelled and tickets refunded' });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+app.post('/admin/prize-draw/list', async (req, res) => {
+  const { adminKey } = req.body;
+  if (adminKey !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('prizeDraws').orderBy('createdAt', 'desc').limit(100).get();
+    const draws = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return res.json({ status: 'success', draws });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// USER — active draws (+ how many tickets the caller already holds)
+app.post('/prize-draw/active', async (req, res) => {
+  const userId = await verifyAuth(req); // token-derived; null just omits "my tickets"
+  try {
+    const snap  = await db.collection('prizeDraws').where('status', '==', 'active').get();
+    const draws = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (userId && draws.length) {
+      const entriesSnap = await db.collection('prizeDrawEntries').where('userId', '==', userId).get();
+      const mine = {};
+      entriesSnap.docs.forEach(d => {
+        const ed = d.data();
+        mine[ed.drawId] = (mine[ed.drawId] || 0) + (ed.quantity || 0);
+      });
+      draws.forEach(dr => { dr.myTickets = mine[dr.id] || 0; });
+    }
+    return res.json({ status: 'success', draws });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// USER — my own history across all draws (active + completed + cancelled)
+app.post('/prize-draw/history', async (req, res) => {
+  const userId = await verifyAuth(req); // your own history only
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const entriesSnap = await db.collection('prizeDrawEntries').where('userId', '==', userId).get();
+    const myTickets = {};
+    entriesSnap.docs.forEach(d => {
+      const e = d.data();
+      myTickets[e.drawId] = (myTickets[e.drawId] || 0) + (e.quantity || 0);
+    });
+    const drawIds = Object.keys(myTickets);
+    if (!drawIds.length) return res.json({ status: 'success', history: [] });
+
+    const drawSnaps = await Promise.all(drawIds.map(id => db.collection('prizeDraws').doc(id).get()));
+    const history = drawSnaps.filter(d => d.exists).map(d => {
+      const dd = d.data();
+      const myWins = (dd.winners || []).filter(w => w.userId === userId);
+      return {
+        id: d.id, title: dd.title, status: dd.status,
+        myTickets: myTickets[d.id], ticketPrice: dd.ticketPrice,
+        wonAmount: myWins.reduce((s, w) => s + (w.prizeAmount || 0), 0),
+        wonCount: myWins.length,
+        createdAt: dd.createdAt || null
+      };
+    });
+    history.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', history });
+  } catch (e) {
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// USER — buy tickets
+app.post('/prize-draw/buy', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const { drawId } = req.body;
+  const quantity = Math.max(1, Math.round(Number(req.body.quantity) || 1));
+  if (!userId || !drawId) return res.status(400).json({ status: 'error', message: 'userId and drawId required' });
+  if (_buyingTickets.has(drawId))
+    return res.status(429).json({ status: 'error', message: 'This draw is busy — try again in a moment' });
+  _buyingTickets.add(drawId);
+  try {
+    const dRef  = db.collection('prizeDraws').doc(drawId);
+    const dSnap = await dRef.get();
+    if (!dSnap.exists) return res.status(404).json({ status: 'error', message: 'Draw not found' });
+    const draw = dSnap.data();
+    if (draw.status !== 'active') return res.status(400).json({ status: 'error', message: 'This draw has ended' });
+    const remaining = draw.totalTickets - (draw.ticketsSold || 0);
+    if (quantity > remaining) return res.status(400).json({ status: 'error', message: `Only ${remaining} ticket(s) left` });
+
+    const cost  = quantity * draw.ticketPrice;
+    const uRef  = db.collection('users').doc(userId);
+    const uSnap = await uRef.get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const bal = uSnap.data().walletBalance || 0;
+    if (bal < cost) return res.status(400).json({ status: 'error', message: `Need ${fmtUGX(cost)}, have ${fmtUGX(bal)}` });
+
+    const { date, time } = nowStr();
+    await db.runTransaction(async t => {
+      t.update(uRef, { walletBalance: bal - cost });
+      t.update(dRef, { ticketsSold: FieldValue.increment(quantity) });
+      t.set(db.collection('prizeDrawEntries').doc(), {
+        drawId, userId, quantity, createdAt: FieldValue.serverTimestamp()
+      });
+      t.set(db.collection('transactions').doc(), {
+        userId, type: 'prize_draw_ticket',
+        description: `Prize Draw ticket x${quantity} — ${draw.title}`,
+        amount: -cost, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    });
+
+    const soldNow = (draw.ticketsSold || 0) + quantity;
+    if (soldNow >= draw.totalTickets) resolveDraw(drawId).catch(e => console.error('Auto-resolve error:', e.message));
+    return res.json({ status: 'success', message: `Bought ${quantity} ticket(s) for ${fmtUGX(cost)}`, remaining: draw.totalTickets - soldNow });
+  } catch (e) {
+    console.error('Prize draw buy error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  } finally {
+    _buyingTickets.delete(drawId);
+  }
+});
+
+// ═══════════════════════════════════════════
 // DEPOSIT — PHONE VERIFICATION (proxies MarzPay)
 // ═══════════════════════════════════════════
 app.post('/deposit/verify-phone', async (req, res) => {
@@ -1568,7 +2196,8 @@ app.post('/deposit/verify-phone', async (req, res) => {
 // ═══════════════════════════════════════════
 const _depCreateDebounce = new Map();
 app.post('/deposit/marzpay', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { amount, phone: rawPhone } = req.body;
   if (!userId || !amount) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
   const amt = parseInt(amount, 10);
@@ -1606,7 +2235,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     // Sandbox mode returns status:'sandbox' — treat as valid initiation
     const isSandbox = mpData.status === 'sandbox' || mpData.data?.collection?.mode === 'sandbox';
     if (mpData.status !== 'success' && !isSandbox)
-      return res.status(400).json({ status: 'error', message: mpData.message || 'Could not initiate payment. Try again.' });
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the payment right now. Please try again.') });
 
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
     const { date, time } = nowStr();
@@ -1672,7 +2301,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone, sandbox: isSandbox });
   } catch (e) {
     console.error('MarzPay deposit error:', e.message);
-    return res.status(500).json({ status: 'error', message: e.message });
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not start the payment');
+    return res.status(500).json({ status: 'error', message: friendly });
   }
 });
 
@@ -1680,7 +2311,8 @@ app.post('/deposit/marzpay', async (req, res) => {
 // DEPOSIT — INITIATE (SMS-based, kept as fallback)
 // ═══════════════════════════════════════════
 app.post('/deposit/initiate', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { senderPhone, amount, network, senderName } = req.body;
   if (!userId || !senderPhone || !amount)
     return res.json({ status: 'error', message: 'userId, senderPhone and amount required' });
@@ -2122,6 +2754,8 @@ function scheduleMidnightEAT() {
 // payout was 7+ days ago. Weekly pay is re-read inside the transaction so a
 // tier upgrade between runs is immediately reflected.
 async function runAgentPayouts() {
+  return 0; // DISABLED — no weekly agent stipends. Voltra does not run the Nexus agent programme.
+  /* eslint-disable no-unreachable */
   try {
     const EAT = 3 * 3600000;
     const nowMs = Date.now();
@@ -2336,9 +2970,7 @@ function startCrons() {
   scheduleMidnightEAT();
   setInterval(runDailyCashback, 2 * 60 * 60 * 1000);
   setTimeout(runDailyCashback, 3 * 60 * 1000);
-  // Agent weekly payouts: every 6 hours
-  setInterval(runAgentPayouts, 6 * 60 * 60 * 1000);
-  setTimeout(runAgentPayouts, 5 * 60 * 1000);
+  // Agent weekly payouts: REMOVED — Voltra does not run the Nexus agent programme.
   // Reconciliation every 15 min: stuck deposits/withdrawals + cashback +
   // commissions + referral counts — pulls live MongoDB state and self-heals.
   setInterval(runReconciliation, 15 * 60 * 1000);
@@ -2410,10 +3042,16 @@ app.post('/auth/register', async (req, res) => {
 // Creates the Firestore user doc server-side so the client cannot set
 // arbitrary fields (e.g. walletBalance).
 app.post('/account/create-profile', async (req, res) => {
-  const uid = await verifyAuth(req) || req.body.userId;
+  const authedUid = await verifyAuth(req);
+  const uid = authedUid || req.body.userId; // fallback only for the mid-registration edge
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (authedUid && req.body.userId && authedUid !== req.body.userId)
+    return res.status(403).json({ status: 'error', message: 'Forbidden' });
   const { name, phone } = req.body;
   if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
+  // Strip anything that could be HTML/script so a crafted name can never inject
+  // markup into the admin panel (stored-XSS guard). Also cap the length.
+  const safeName = String(name).replace(/[<>]/g, '').trim().slice(0, 60);
   try {
     const ref  = db.collection('users').doc(uid);
     const snap = await ref.get();
@@ -2422,12 +3060,12 @@ app.post('/account/create-profile', async (req, res) => {
       // ensure name/phone are filled so the account screen shows details.
       const d = snap.data();
       if (!d.name || !d.phone) {
-        await ref.update({ name: String(name).trim(), phone: cleanPhone(phone), email: phoneToEmail(phone) });
+        await ref.update({ name: safeName, phone: cleanPhone(phone), email: phoneToEmail(phone) });
       }
       return res.json({ status: 'success', message: 'Profile ensured' });
     }
     await ref.set({
-      name: String(name).trim(),
+      name: safeName,
       phone: cleanPhone(phone),
       email: phoneToEmail(phone),
       walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
@@ -2453,9 +3091,11 @@ app.post('/account/add-bank', async (req, res) => {
   if (!name || !phone) return res.status(400).json({ status: 'error', message: 'name and phone required' });
   const digits = String(phone).replace(/\D/g, '').slice(-9);
   if (digits.length < 9) return res.status(400).json({ status: 'error', message: 'Invalid phone number' });
+  const safeName = String(name).replace(/[<>]/g, '').trim().slice(0, 40); // strip HTML from the label
+  if (!safeName) return res.status(400).json({ status: 'error', message: 'Invalid label' });
   try {
     await db.collection('users').doc(uid).update({
-      bankAccounts: FieldValue.arrayUnion({ name: String(name).trim(), phone: digits })
+      bankAccounts: FieldValue.arrayUnion({ name: safeName, phone: digits })
     });
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
@@ -2492,7 +3132,7 @@ app.post('/account/update-photo', async (req, res) => {
 
 // Live account data — the user app polls this for balance/profile.
 app.post('/account/data', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own account only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const snap = await db.collection('users').doc(userId).get();
@@ -2521,7 +3161,7 @@ app.get('/products/:id', async (req, res) => {
 
 // User's investments.
 app.post('/account/investments', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own account only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const snap = await db.collection('investments').where('userId', '==', userId).limit(50).get();
@@ -2542,7 +3182,7 @@ app.get('/investment/:id', async (req, res) => {
 
 // User's withdrawals.
 app.post('/account/withdrawals', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own account only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const snap = await db.collection('withdrawals').where('userId', '==', userId).limit(100).get();
@@ -2554,7 +3194,7 @@ app.post('/account/withdrawals', async (req, res) => {
 
 // User's transactions.
 app.post('/account/transactions', async (req, res) => {
-  const userId = await verifyAuth(req) || req.body.userId;
+  const userId = await verifyAuth(req); // your own account only
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
     const snap = await db.collection('transactions').where('userId', '==', userId).limit(200).get();
@@ -2747,16 +3387,42 @@ function convertTimestamps(obj) {
 
 // Migration endpoint removed — no longer needed post-migration
 
+// 404 for unknown routes — don't reveal anything about the API shape.
+app.use((req, res) => res.status(404).json({ status: 'error', message: 'Not found' }));
+// Global error handler — LAST middleware. Logs the real error server-side but
+// only ever returns a generic message, so stack traces / internals never leak.
+app.use((err, req, res, _next) => {
+  console.error('Unhandled route error:', err && err.message);
+  if (res.headersSent) return;
+  res.status(500).json({ status: 'error', message: 'Something went wrong. Please try again.' });
+});
+
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
 
+let _cronsStarted = false;
 async function startServer() {
   if (!MONGODB_URI) { console.error('❌ MONGODB_URI env var not set'); process.exit(1); }
-  await connectMongo(MONGODB_URI);
+
+  // Start listening RIGHT AWAY so the server is always reachable — even if the
+  // database is momentarily unreachable at boot. This prevents a crash-loop where
+  // a DB blip makes "restart" do nothing; /health stays up so you can diagnose,
+  // and the app self-heals the instant the DB comes back.
   app.listen(PORT, () => {
     console.log(`◈ Voltra Investment Server on port ${PORT}`);
     console.log(`  URL: ${RAILWAY_URL || '(set RAILWAY_URL)'}`);
-    startCrons();
   });
+
+  // Connect to MongoDB with unlimited background retries.
+  const tryConnect = async () => {
+    try {
+      await connectMongo(MONGODB_URI);
+      if (!_cronsStarted) { _cronsStarted = true; startCrons(); }
+    } catch (e) {
+      console.error('⏳ MongoDB not reachable yet — retrying in 5s:', e.message);
+      setTimeout(tryConnect, 5000);
+    }
+  };
+  tryConnect();
 }
 startServer().catch(e => { console.error('Startup error:', e.message); process.exit(1); });

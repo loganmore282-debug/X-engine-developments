@@ -58,7 +58,7 @@ const guardObf = JavaScriptObfuscator.obfuscate(guardSrc, {
   stringArrayThreshold: 0.75,
   stringArrayEncoding: ['base64'],
   selfDefending: false,
-  disableConsoleOutput: false,
+  disableConsoleOutput: true,
 }).getObfuscatedCode();
 const guardTag = `<script data-nx-guard>${guardObf}</script>`;
 if (/<script data-nx-guard>[\s\S]*?<\/script>/.test(html)) {
@@ -74,10 +74,10 @@ const obf = JavaScriptObfuscator.obfuscate(source, {
   identifierNamesGenerator: 'hexadecimal',
   renameGlobals: false,            // keep window._* handlers reachable from HTML onclick=""
   stringArray: true,
-  stringArrayThreshold: 0.75,
+  stringArrayThreshold: 1,         // encode EVERY string literal (guarantees the server URL & all endpoints are never a plain, grep-able string in the shipped file)
   stringArrayEncoding: ['base64'],
   selfDefending: false,            // breaks when wrapped/injected
-  disableConsoleOutput: false,
+  disableConsoleOutput: true,
 }).getObfuscatedCode();
 fs.writeFileSync('/tmp/_nx_obf.mjs', obf);
 execSync('node --check /tmp/_nx_obf.mjs');

@@ -17,7 +17,7 @@ const firebaseConfig = {
 };
 
 // NOTE: VOLTRA — replace with your own Railway server URL once deployed.
-const SERVER = 'https://business-production-f4c2.up.railway.app';
+const SERVER = 'https://api.voltrapower.com';
 
 const _BOLT = '<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
 const _ICN_CHECKIN='<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>',_ICN_COINS='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',_ICN_PEOPLE='<svg class="eico" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="7" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2.5 19c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5v.5h-13z"/><path d="M16.5 13.2c2.7.2 5 2 5 4.8v1h-4v-1c0-1.9-.9-3.6-2.3-4.6.4-.1.9-.2 1.3-.2z"/></svg>',_ICN_GIFT='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',_ICN_TREND='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',_ICN_BANK='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>',_ICN_UNDO='<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>';
@@ -56,6 +56,9 @@ const ICN = {
 
 // ── UTILS ──
 function ugx(n) { return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+// HTML-escape user-controlled text before putting it in innerHTML (blocks XSS
+// from bank labels, other users' names, etc.).
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 // Timestamps now arrive from the server as ISO strings (MongoDB) but may still be
 // Firestore Timestamps or {seconds} objects in cached data — normalise all shapes.
 function tsMs(v) {
@@ -158,11 +161,94 @@ window.showRegister = () => {
   document.getElementById('loginForm').style.display = 'none';
   document.getElementById('registerForm').style.display = 'flex';
   window.scrollTo(0, 0);
+  loadRegCaptcha();
+};
+
+// ── REGISTRATION VERIFICATION CODE (anti-bot) ──
+let _regCaptchaId = null;
+window.loadRegCaptcha = async () => {
+  const box = document.getElementById('regCaptchaCode');
+  const inp = document.getElementById('regCaptchaInput');
+  if (inp) inp.value = '';
+  if (box) box.textContent = '····';
+  try {
+    const r = await fetch(SERVER + '/auth/captcha', { method: 'POST' }).then(x => x.json());
+    if (r.status === 'success' && box) {
+      _regCaptchaId = r.captchaId;
+      box.innerHTML = String(r.code).split('').map(ch => {
+        const rot = Math.round(Math.random() * 26 - 13);
+        const lift = Math.round(Math.random() * 6 - 3);
+        const hue  = 32 + Math.round(Math.random() * 20 - 10);
+        return `<span style="display:inline-block;transform:rotate(${rot}deg) translateY(${lift}px);color:hsl(${hue},95%,62%)">${ch}</span>`;
+      }).join('');
+    }
+  } catch (_) {}
 };
 window.showLogin = () => {
   document.getElementById('registerForm').style.display = 'none';
+  const rf = document.getElementById('resetForm'); if (rf) rf.style.display = 'none';
   document.getElementById('loginForm').style.display = 'flex';
   window.scrollTo(0, 0);
+};
+
+// ── PASSWORD RESET (SMS OTP) ──
+window.showReset = () => {
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('resetForm').style.display = 'flex';
+  // reset the flow back to step 1
+  document.getElementById('resetStep2').style.display = 'none';
+  document.getElementById('resetSendBtn').style.display = 'block';
+  document.getElementById('resetConfirmBtn').style.display = 'none';
+  document.getElementById('resetPhone').value = '';
+  document.getElementById('resetOtp').value = '';
+  document.getElementById('resetNewPass').value = '';
+  document.getElementById('resetPhone').disabled = false;
+  window.scrollTo(0, 0);
+};
+window.requestResetCode = async () => {
+  const phone = document.getElementById('resetPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
+  if (phone.length !== 9) { showToast('Enter a valid 9-digit number', 'error'); return; }
+  showLoading(true);
+  try {
+    const r = await fetch(SERVER + '/auth/reset/request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone })
+    }).then(x => x.json());
+    showLoading(false);
+    if (r.status === 'success') {
+      showToast('Code sent — check your SMS', 'success');
+      document.getElementById('resetStep2').style.display = 'flex';
+      document.getElementById('resetSendBtn').style.display = 'none';
+      document.getElementById('resetConfirmBtn').style.display = 'block';
+      document.getElementById('resetPhone').disabled = true;
+      document.getElementById('resetHint').textContent = 'Enter the 6-digit code we sent and choose a new password.';
+    } else {
+      showToast(r.message || 'Could not send code', 'error');
+    }
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+window.confirmResetCode = async () => {
+  const phone = document.getElementById('resetPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
+  const otp   = document.getElementById('resetOtp').value.trim();
+  const newPassword = document.getElementById('resetNewPass').value;
+  if (otp.length !== 6) { showToast('Enter the 6-digit code', 'error'); return; }
+  if (!newPassword || newPassword.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+  showLoading(true);
+  try {
+    const r = await fetch(SERVER + '/auth/reset/confirm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, otp, newPassword })
+    }).then(x => x.json());
+    showLoading(false);
+    if (r.status === 'success') {
+      showToast('Password reset — please log in', 'success');
+      document.getElementById('loginPhone').value = phone;
+      showLogin();
+    } else {
+      showToast(r.message || 'Could not reset password', 'error');
+    }
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
 window.togglePass = (id, btn) => {
   const inp = document.getElementById(id);
@@ -195,6 +281,14 @@ function _maybeAutoLogin(){
   if (el) el.addEventListener('animationstart', e => { if (e.animationName === 'nxAutofill') setTimeout(_maybeAutoLogin, 250); });
 });
 window.addEventListener('load', () => setTimeout(_maybeAutoLogin, 800));
+
+// When the app returns to the foreground, poll fast for a few seconds so the
+// balance/check-in/deposit state is fresh the moment the user looks at it.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && _user) {
+    if (typeof pollAccount === 'function') pollAccount(_user.uid).catch(() => {}); // one refresh, not sustained
+  }
+});
 
 window.doLogin = async () => {
   const phone = document.getElementById('loginPhone').value.trim().replace(/\D/g,'').replace(/^0+/,'');
@@ -234,12 +328,24 @@ window.doRegister = async () => {
   const pass  = document.getElementById('regPass').value;
   const pass2 = document.getElementById('regPass2').value;
   const ref   = document.getElementById('regRef').value.trim().toUpperCase();
+  const captchaAnswer = document.getElementById('regCaptchaInput').value.trim();
   const name  = '0' + phone;   // no name field — use the phone as the display name
   if (phone.length !== 9) { showToast('Enter a valid 9-digit number (no leading 0)', 'error'); return; }
   if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
   if (pass !== pass2) { showToast('Passwords do not match', 'error'); return; }
+  if (!captchaAnswer) { showToast('Enter the verification code shown above', 'error'); return; }
   showLoading(true);
   try {
+    const capR = await fetch(SERVER + '/auth/captcha/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ captchaId: _regCaptchaId, answer: captchaAnswer })
+    }).then(x => x.json());
+    if (capR.status !== 'success') {
+      showLoading(false);
+      showToast(capR.message || 'Incorrect verification code', 'error');
+      loadRegCaptcha();
+      return;
+    }
     let cred;
     try {
       cred = await createUserWithEmailAndPassword(auth, phoneToEmail(phone), pass);
@@ -272,6 +378,7 @@ window.doLogout = async () => {
   try { localStorage.removeItem('nx_photo'); } catch (_) {}
   if (_unsub)      { _unsub(); _unsub = null; }
   if (_maintTimer) { clearInterval(_maintTimer); _maintTimer = null; }
+  if (_onlineTimer) { clearInterval(_onlineTimer); _onlineTimer = null; }
   stopWitTimers();
   await signOut(auth);
   _user = null; _userData = null;
@@ -296,7 +403,7 @@ async function api(path, body = {}, _attempt = 0) {
     // Retry ONLY safe, read-style endpoints on a cold/transient failure. NEVER retry
     // money-moving calls — a lost response there could double-apply (this was the
     // 30,000 -> 60,000 deposit bug).
-    const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/giftcode/'];
+    const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/giftcode/', '/prize-draw/buy'];
     const unsafe = NO_RETRY.some(p => path.startsWith(p));
     if (_attempt < 2 && !unsafe) {
       await new Promise(r => setTimeout(r, 800 * (_attempt + 1)));
@@ -405,34 +512,37 @@ async function loadSlideshow() {
         _pendingAnnouncement = s.announcement;
       }
     }
-    // Update customer service content from admin settings
-    const tg = s.supportTelegram || '';
+    // Update customer service content from admin settings.
+    // supportWhatsapp now holds the WhatsApp CHANNEL link (a full URL), not a number.
     const wa = s.supportWhatsapp || '';
     const em = s.supportEmail    || 'support@voltrapower.com';
     const hr = s.supportHours    || 'Monday – Saturday, 8:00 AM – 8:00 PM (EAT)';
-    if (tg || wa || em) {
-      const tgSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>`;
-      const waSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>`;
-      const mailSvg  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>`;
-      const clockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
-      const card = (cls, icon, h, s, href) => {
+    if (wa || em) {
+      const tgSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-2.02 9.52c-.148.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.883.701z"/></svg>`;
+      const waSvg = `<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>`;
+      const mailSvg  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>`;
+      const clockSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+      const tile = (cls, icon, h, s, href) => {
         const tag = href ? 'a' : 'div';
         const attr = href ? ` href="${href}" target="_blank" rel="noopener"` : '';
-        return `<${tag} class="contact-card"${attr}>
-          <span class="cc-ico ${cls}">${icon}</span>
-          <span class="cc-txt"><span class="cc-h">${h}</span><span class="cc-s">${s}</span></span>
-          ${href ? '<span class="cc-go">&rsaquo;</span>' : ''}
+        return `<${tag} class="sup-tile"${attr}>
+          <span class="sup-tile-ico ${cls}">${icon}</span>
+          <span class="sup-tile-h">${h}</span>
+          <span class="sup-tile-s">${s}</span>
         </${tag}>`;
       };
       CONTENT.support.body = `
-        <div class="contact-hero">
-          <span class="contact-hero-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
-          <div><div class="ch-title">We're here to help</div><div class="ch-sub">Reach our team any time</div></div>
+        <div class="sup-hero">
+          <span class="sup-hero-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
+          <div class="sup-title">Talk to Voltra</div>
+          <div class="sup-sub">Pick a channel below — we usually reply within a few hours</div>
         </div>
-        ${tg ? card('tg', tgSvg, 'Telegram', 'Join our support channel', tg) : ''}
-        ${wa ? card('wa', waSvg, 'WhatsApp', 'Chat with an agent now', 'https://wa.me/' + wa.replace(/\D/g,'')) : ''}
-        ${card('em', mailSvg, 'Email', em, 'mailto:' + em)}
-        ${card('hr', clockSvg, 'Support hours', hr, '')}`;
+        <div class="sup-grid">
+          ${wa ? tile('wa', waSvg, 'WhatsApp Channel', 'Join for updates', wa) : ''}
+          ${tile('em', mailSvg, 'Email', em, 'mailto:' + em)}
+          ${tile('hr', clockSvg, 'Hours', hr, '')}
+        </div>
+        <div class="sup-note">For withdrawal issues, message us on WhatsApp for the fastest response.</div>`;
     }
   } catch (_) { setupSlideshow([]); }
 }
@@ -462,41 +572,41 @@ window.selectDepAmt = (amt, btn) => {
   if (btn) btn.classList.add('sel');
 };
 
+// ── LIVE ONLINE USERS COUNTER ──
+// Backend-driven so every device polling it shows the exact same figure at
+// the exact same time (server drifts the value; see /public/online-count).
+let _onlineTimer = null;
+async function pollOnlineCounter() {
+  const el = document.getElementById('onlineCount');
+  if (!el) return;
+  try {
+    const r = await fetch(SERVER + '/public/online-count').then(x => x.json());
+    if (r.status === 'success') el.textContent = Number(r.count).toLocaleString();
+  } catch (_) {}
+}
+function loadOnlineCounter() {
+  if (_onlineTimer) return; // already polling
+  pollOnlineCounter();
+  _onlineTimer = setInterval(pollOnlineCounter, 3000);
+}
+
 // ── TICKER ──
-function loadTicker() {
+// Global activity feed — pulled from the server so every device shows the same
+// rolling activity (server regenerates it every 30s; see /public/activity-feed).
+async function loadTicker() {
   const el = document.getElementById('homeTicker');
   if (!el) return;   // ticker removed from home — no-op
-  const round = (n, r) => Math.round(n / r) * r;
-  const randDep = () => round(30000 + Math.random() * 170000, 5000);   // 30k–200k
-  const randWit = () => round(15000 + Math.random() * 985000, 5000);   // 15k–1M
-  const randComm = () => round(5000 + Math.random() * 95000, 1000);    // 5k–100k
-  const randRet  = () => round(20000 + Math.random() * 480000, 5000);  // 20k–500k
-
-  // masked phone like 256****764
-  const ph = () => '256' + (7 + Math.floor(Math.random() * 3)) + '****' + String(100 + Math.floor(Math.random() * 900));
-  // Live-style activity: who did what, how much
-  const pool = [
-    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
-    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
-    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
-    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
-    { who:ph(), act:'got a team bonus', amt:`UGX ${randComm().toLocaleString()}` },
-    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
-    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
-    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
-    { who:ph(), act:'recharged',  amt:`UGX ${randDep().toLocaleString()}` },
-    { who:ph(), act:'cashed out', amt:`UGX ${randWit().toLocaleString()}` },
-    { who:ph(), act:'got a team bonus', amt:`UGX ${randComm().toLocaleString()}` },
-    { who:ph(), act:'earned',     amt:`UGX ${randRet().toLocaleString()}` },
-  ];
-
-  const text = pool.map(e =>
-    `<span class="tk-item"><span class="tk-dot"></span><b>${e.who}</b> ${e.act} <span class="tk-amt">${e.amt}</span></span>`
-  ).join('');
-  el.innerHTML = text + text;
-
-  // Refresh with new random values every 40 seconds
-  setTimeout(loadTicker, 40000);
+  try {
+    const r = await fetch(SERVER + '/public/activity-feed').then(x => x.json());
+    if (r.status === 'success' && Array.isArray(r.feed) && r.feed.length) {
+      const text = r.feed.map(e =>
+        `<span class="tk-item"><span class="tk-dot"></span><b>${e.who}</b> ${e.act} <span class="tk-amt">${e.amt}</span></span>`
+      ).join('');
+      el.innerHTML = text + text;
+    }
+  } catch (_) {}
+  clearTimeout(loadTicker._t);
+  loadTicker._t = setTimeout(loadTicker, 30000);
 }
 
 // ── AUTH STATE ──
@@ -511,6 +621,7 @@ onAuthStateChanged(auth, async user => {
     loadProducts();
     loadRecords('deposits');
     loadTicker();
+    loadOnlineCounter();
     checkMaintenance();
     api('/account/ensure-refcode', { userId: user.uid }).catch(() => {});
     // self-heal: make sure the profile (name/phone) exists even if signup's create-profile didn't run
@@ -593,7 +704,7 @@ async function pollAccount(uid) {
   try {
     const tr = await api('/account/transactions', { userId: uid });
     if (tr.status === 'success') {
-      const INBOUND = ['deposit','admin_credit','checkin','cashback','commission','gift_code','investment_return'];
+      const INBOUND = ['deposit','admin_credit','checkin','cashback','commission','gift_code','investment_return','prize_draw_win'];
       const tx = (tr.transactions || []).filter(t => INBOUND.includes(t.type) && (t.amount || 0) > 0);
       _inboundTotal  = tx.reduce((s, t) => s + t.amount, 0);
       _earningsTotal = tx.filter(t => t.type !== 'deposit').reduce((s, t) => s + t.amount, 0);
@@ -605,10 +716,18 @@ async function pollAccount(uid) {
 
 function startListener(uid) {
   if (_unsub) _unsub();
-  // Immediate first load, then poll every 6 s so balance/check-in/deposits reflect quickly.
-  pollAccount(uid);
-  _pollTimer = setInterval(() => pollAccount(uid), 6000);
-  _unsub = () => { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } };
+  let stopped = false;
+  // Steady 6-second poll. Self-scheduling (waits for each poll to FINISH before
+  // scheduling the next) so cold/slow responses never stack up requests — but no
+  // sustained fast polling, to stay well within Railway/MongoDB M0 limits.
+  const loop = async () => {
+    if (stopped) return;
+    try { await pollAccount(uid); } catch (_) {}
+    if (stopped) return;
+    _pollTimer = setTimeout(loop, 6000);
+  };
+  loop();
+  _unsub = () => { stopped = true; if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; } };
 
   // Resume watching any in-flight withdrawal so user gets notified even after re-opening app.
   api('/account/withdrawals', { userId: uid })
@@ -708,136 +827,10 @@ function renderCommission(u) {
 
 // ── RENDER MORE ──
 function renderMore(u) {
-  const nameEl = document.getElementById('moreName');
-  const TIER_BADGES = {
-    junior_agent:    'Junior Agent',
-    agent:           'Agent',
-    super_agent:     'Super Agent',
-    regional_agent:  'Regional Agent',
-    national_agent:  'National Agent',
-    executive_agent: 'Executive Agent',
-  };
-  if (u.isAgent && u.agentTier) {
-    nameEl.innerHTML = (u.name || '—') + ` <span class="agent-badge">${TIER_BADGES[u.agentTier] || 'Agent'}</span>`;
-  } else {
-    nameEl.textContent = u.name || '—';
-  }
+  document.getElementById('moreName').textContent    = u.name    || '—';
   document.getElementById('morePhone').textContent   = u.phone   || '—';
   document.getElementById('moreBalance').textContent = 'Balance: ' + ugx(u.walletBalance);
   renderAvatars(u);
-}
-
-// ── RENDER AGENT CENTRE ──
-function renderAgentCentre(u) {
-  const TIERS = [
-    { key: 'member',          label: 'Member',          stars: '', threshold:  0, weeklyPay:      0 },
-    { key: 'junior_agent',    label: 'Junior Agent',    stars: '', threshold:  5, weeklyPay:  30000 },
-    { key: 'agent',           label: 'Agent',           stars: '', threshold: 10, weeklyPay:  75000 },
-    { key: 'super_agent',     label: 'Super Agent',     stars: '', threshold: 15, weeklyPay: 120000 },
-    { key: 'regional_agent',  label: 'Regional Agent',  stars: '', threshold: 20, weeklyPay: 170000 },
-    { key: 'national_agent',  label: 'National Agent',  stars: '', threshold: 30, weeklyPay: 220000 },
-    { key: 'executive_agent', label: 'Executive Agent', stars: '', threshold: 50, weeklyPay: 280000 },
-  ];
-  const refs           = u.activeReferralCount || 0;
-  const currentTier    = TIERS.find(t => t.key === (u.agentTier || 'member')) || TIERS[0];
-  const currentTierIdx = TIERS.indexOf(currentTier);
-  const nextTier       = TIERS[currentTierIdx + 1] || null;
-
-  // Hero
-  let heroHtml;
-  if (u.isAgent && currentTier && currentTier.key !== 'member') {
-    const agentSinceDate = u.agentSince
-      ? (tsDate(u.agentSince) || new Date()).toLocaleDateString('en-UG', { day:'numeric', month:'short', year:'numeric' })
-      : '—';
-    const lastPay = u.lastAgentPayoutDate;
-    let payoutLine = 'Next payout: Available now!';
-    if (lastPay) {
-      const nextMs = new Date(lastPay).getTime() + 7 * 86400000;
-      if (nextMs > Date.now()) {
-        const d = Math.ceil((nextMs - Date.now()) / 86400000);
-        payoutLine = 'Next payout: in ' + d + ' day' + (d === 1 ? '' : 's');
-      }
-    }
-    heroHtml = `
-      <div class="ac-hero is-agent">
-        <span class="ac-hero-star">${currentTier.stars}</span>
-        <div class="ac-hero-tier">${currentTier.label}</div>
-        <div class="ac-hero-name">${u.name || '—'}</div>
-        <div class="ac-hero-meta">Agent since ${agentSinceDate}</div>
-        <div class="ac-hero-payout">${payoutLine}</div>
-      </div>
-      <div class="ac-stats">
-        <div class="ac-stat">
-          <div class="ac-stat-val">${ugx(u.agentPayoutTotal || 0)}</div>
-          <div class="ac-stat-lbl">Total Earned</div>
-        </div>
-        <div class="ac-stat">
-          <div class="ac-stat-val">${ugx(currentTier.weeklyPay)}</div>
-          <div class="ac-stat-lbl">Weekly Salary</div>
-        </div>
-      </div>`;
-  } else {
-    const needed = nextTier ? Math.max(nextTier.threshold - refs, 0) : 0;
-    heroHtml = `
-      <div class="ac-hero no-agent">
-        <span class="ac-hero-star"></span>
-        <div class="ac-hero-tier">Member</div>
-        <div class="ac-hero-name">${u.name || '—'}</div>
-        <div class="ac-hero-meta">${needed > 0 ? `Get ${needed} more active referral${needed===1?'':'s'} to become ${nextTier.stars} ${nextTier.label}` : 'Invite friends to climb the ranks!'}</div>
-      </div>
-      <div class="ac-stats">
-        <div class="ac-stat">
-          <div class="ac-stat-val">${refs}</div>
-          <div class="ac-stat-lbl">Active Referrals</div>
-        </div>
-        <div class="ac-stat">
-          <div class="ac-stat-val">${needed}</div>
-          <div class="ac-stat-lbl">Needed for ${nextTier ? nextTier.label : 'Top'}</div>
-        </div>
-      </div>`;
-  }
-
-  // Tier cards
-  const tierCards = TIERS.map((tier, idx) => {
-    let state, barClass, barPct, barLabel;
-    if (tier.threshold === 0 || idx <= currentTierIdx) {
-      state = 'achieved'; barClass = 'gold'; barPct = 100;
-      barLabel = tier.threshold === 0 ? 'All members' : tier.threshold + ' / ' + tier.threshold;
-    } else if (idx === currentTierIdx + 1) {
-      const prev = TIERS[currentTierIdx].threshold;
-      state = 'inprogress'; barClass = 'blue';
-      barPct = Math.min(Math.max((refs - prev) / (tier.threshold - prev) * 100, 0), 100);
-      barLabel = refs + ' / ' + tier.threshold;
-    } else {
-      state = 'locked'; barClass = 'gray';
-      barPct = Math.min(refs / tier.threshold * 100, 100);
-      barLabel = refs + ' / ' + tier.threshold;
-    }
-    const pillLabel = state === 'achieved' ? '<svg class="eico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Achieved' : state === 'inprogress' ? 'In Progress' : 'Locked';
-    const refsLine = tier.threshold === 0 ? 'Default rank' : tier.threshold + ' active referrals';
-    return `<div class="ac-tier-card ${state}">
-      <div class="ac-tier-top">
-        <div class="ac-tier-info">
-          <span class="ac-tier-stars">${tier.stars}</span>
-          <div>
-            <div class="ac-tier-name">${tier.label}</div>
-            <div class="ac-tier-refs">${refsLine}</div>
-          </div>
-        </div>
-        <span class="ac-status-pill ${state}">${pillLabel}</span>
-      </div>
-      <div class="ac-bar-row">
-        <div class="ac-bar"><div class="ac-bar-fill ${barClass}" style="width:${Math.max(barPct, barPct > 0 ? 3 : 0)}%"></div></div>
-        <span class="ac-bar-val">${barLabel}</span>
-      </div>
-      <div class="ac-tier-pay">Weekly salary: <b>${tier.weeklyPay > 0 ? ugx(tier.weeklyPay) : '—'}</b></div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('agentCentreContent').innerHTML =
-    heroHtml +
-    '<div class="ac-section-lbl">Agent Tier Journey</div>' +
-    tierCards;
 }
 
 function renderAvatars(u) {
@@ -853,8 +846,6 @@ function renderAvatars(u) {
       el.textContent = initial;
     }
   });
-  const avatarWrap = document.getElementById('moreAvatarWrap');
-  if (avatarWrap) avatarWrap.classList.toggle('agent-ring', !!u.isAgent);
 }
 
 // ── NAVIGATION ──
@@ -897,21 +888,36 @@ window.doCheckin = async () => {
   if (_userData.lastCheckinDate === todayKey) { showToast('Already claimed today', 'success'); return; }
   if (_userData.status === 'banned') { showToast('Account suspended', 'error'); return; }
   const ciBtn = document.getElementById('checkinBtn');
-  if (ciBtn) { ciBtn.disabled = true; ciBtn.textContent = '…'; }
+  const resetBtn = () => { if (ciBtn) { ciBtn.disabled = false; ciBtn.classList.remove('done'); ciBtn.textContent = "Claim Today's Bonus"; } };
+  if (ciBtn) { ciBtn.disabled = true; ciBtn.textContent = 'Checking in…'; }
+
+  // Lock the card to its "claimed" state (decisive — never a spinning limbo).
+  const lockClaimed = (streak) => {
+    _userData.lastCheckinDate = todayKey;
+    if (streak) _userData.checkinStreak = streak;
+    renderHome(_userData); // renderHome shows "✓ Claimed today" + disables the button
+  };
+
   try {
     const r = await api('/checkin', { userId: _user.uid });
     if (r.status === 'success') {
-      showToast(`UGX ${(r.bonus||500).toLocaleString()} credited! Day ${r.streak}`, 'success');
-      _userData.lastCheckinDate = todayKey;
-      if (r.streak) _userData.checkinStreak = r.streak;
-      renderHome(_userData);
+      showToast(`UGX ${(r.bonus||500).toLocaleString()} credited! Day ${r.streak || _userData.checkinStreak || 1}`, 'success');
+      lockClaimed(r.streak);
+    } else if (r.alreadyDone || /already/i.test(r.message || '')) {
+      // Idempotent: "already claimed" means it went through — lock, don't error.
+      showToast('Already checked in today', 'success');
+      lockClaimed(r.streak);
     } else {
-      showToast(r.message || 'Check-in failed', 'error');
-      if (ciBtn) { ciBtn.disabled = false; ciBtn.textContent = 'Claim'; }
+      showToast(r.message || 'Check-in failed. Try again.', 'error');
+      resetBtn();
     }
   } catch (e) {
-    showToast('Network error', 'error');
-    if (ciBtn) { ciBtn.disabled = false; ciBtn.textContent = 'Claim'; }
+    // Cold-start lost response — re-enable immediately so it's never stuck, then
+    // refresh right away: if the credit actually landed, the account data flips
+    // the card to "Claimed today" within a second (no waiting for the 6s poll).
+    showToast('Connection hiccup — confirming…', 'info');
+    resetBtn();
+    pollAccount(_user.uid).catch(() => {});
   }
 };
 
@@ -1214,7 +1220,7 @@ async function loadRecords(tab) {
     const tr = await api('/account/transactions', { userId: _user.uid });
     if (myToken !== _recToken) return; // newer tab was selected while awaiting
     const all = tr.status === 'success' ? tr.transactions : [];
-    const REVENUE_TYPES = ['checkin','cashback','commission','gift_code','investment_return','admin_credit'];
+    const REVENUE_TYPES = ['checkin','cashback','commission','gift_code','investment_return','admin_credit','prize_draw_win'];
     const items = tab === 'deposits'  ? all.filter(t => t.type === 'deposit' || t.type === 'admin_credit')
                : tab === 'referrals' ? all.filter(t => t.type === 'commission')
                : tab === 'revenue'   ? all.filter(t => REVENUE_TYPES.includes(t.type))
@@ -1344,7 +1350,7 @@ window.openTeamMembersModal = async () => {
     body.innerHTML = `
       <div style="font-size:11px;color:var(--text2);margin-bottom:12px">${members.length} member${members.length!==1?'s':''} — direct referrals only</div>
       ${members.map(m => {
-        const initials = (m.name||'U').slice(0,2).toUpperCase();
+        const initials = esc((m.name||'U').slice(0,2).toUpperCase());
         const joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
         const badge = m.hasInvested
           ? `<span style="font-size:10px;font-weight:700;color:#22c55e;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);border-radius:5px;padding:2px 7px">Invested</span>`
@@ -1352,8 +1358,8 @@ window.openTeamMembersModal = async () => {
         return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border2)">
           <div style="width:40px;height:40px;border-radius:50%;background:var(--bluefade);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0">${initials}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">${m.name}</div>
-            <div style="font-size:11px;color:var(--text2)">${m.phone} · Joined ${joined}</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">${esc(m.name)}</div>
+            <div style="font-size:11px;color:var(--text2)">${esc(m.phone)} · Joined ${joined}</div>
           </div>
           <div>${badge}</div>
         </div>`;
@@ -1577,11 +1583,11 @@ window.openWithdrawPage = () => {
     wrap.style.display = 'block';
     lbl.textContent = 'Or enter phone manually';
     list.innerHTML = accounts.map((a, i) => `
-      <div class="wit-acc-card" id="witAcc${i}" onclick="pickWitAccount(${i},'${String(a.phone).replace(/'/g,'')}')">
+      <div class="wit-acc-card" id="witAcc${i}" onclick="pickWitAccount(${i},'${String(a.phone).replace(/\D/g,'')}')">
         <div class="wit-acc-ico"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.63 4.4 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.13 1 .36 1.98.71 2.93a2 2 0 0 1-.45 2.11L7.91 9.91A16 16 0 0 0 14.09 16l.91-.91a2 2 0 0 1 2.11-.45c.95.35 1.93.58 2.93.71A2 2 0 0 1 22 16.92z"/></svg></div>
         <div class="wit-acc-info">
-          <div class="wit-acc-name">${a.name}</div>
-          <div class="wit-acc-num">+256 ${a.phone}</div>
+          <div class="wit-acc-name">${esc(a.name)}</div>
+          <div class="wit-acc-num">+256 ${esc(String(a.phone).replace(/\D/g,''))}</div>
         </div>
         <div class="wit-acc-chk" id="witChk${i}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
       </div>`).join('');
@@ -1706,6 +1712,87 @@ window.redeemGiftCode = async () => {
   } catch (e) { showLoading(false); showToast('Network error', 'error'); }
 };
 
+// ── PRIZE DRAW ──
+window.openPrizeDrawPage = () => {
+  openPage('prizeDrawPage');
+  loadPrizeDraws();
+  loadPrizeDrawHistory();
+};
+async function loadPrizeDrawHistory() {
+  const wrap = document.getElementById('prizeDrawHistory');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text2);font-size:12.5px">Loading…</div>';
+  try {
+    const r = await api('/prize-draw/history', { userId: _user.uid });
+    const hist = r.status === 'success' ? r.history : [];
+    if (!hist.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text2);font-size:12.5px">You haven\'t bought any tickets yet.</div>';
+      return;
+    }
+    wrap.innerHTML = hist.map(h => {
+      let tag = 'pending', tagLabel = 'In progress';
+      if (h.status === 'cancelled') { tag = 'cancelled'; tagLabel = 'Refunded'; }
+      else if (h.status === 'completed') {
+        if (h.wonCount > 0) { tag = 'won'; tagLabel = `Won ${ugx(h.wonAmount)}`; }
+        else { tag = 'lost'; tagLabel = 'Not this time'; }
+      }
+      return `<div class="prz-hist-item">
+        <div>
+          <div class="prz-hist-title">${h.title}</div>
+          <div class="prz-hist-sub">${h.myTickets} ticket${h.myTickets > 1 ? 's' : ''} — ${ugx(h.myTickets * h.ticketPrice)} spent</div>
+        </div>
+        <span class="prz-hist-tag ${tag}">${tagLabel}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--red);font-size:12.5px">Failed to load</div>';
+  }
+}
+async function loadPrizeDraws() {
+  const wrap = document.getElementById('prizeDrawList');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">Loading…</div>';
+  try {
+    const r = await api('/prize-draw/active', { userId: _user.uid });
+    if (r.status !== 'success' || !r.draws.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--text2);font-size:13px">No prize draws running right now — check back soon.</div>';
+      return;
+    }
+    wrap.innerHTML = r.draws.map(d => {
+      const sold      = d.ticketsSold || 0;
+      const remaining = Math.max(0, d.totalTickets - sold);
+      const pct       = Math.min(100, Math.round((sold / d.totalTickets) * 100));
+      return `<div class="prz-card">
+        <div class="prz-title">${d.title}</div>
+        <div class="prz-prize"><span>Prize (per winner)</span><b>${ugx(d.prizeAmount)}</b></div>
+        <div class="prz-bar"><div class="prz-bar-fill" style="width:${pct}%"></div></div>
+        <div class="prz-meta"><span>${sold}/${d.totalTickets} tickets sold</span><span>${ugx(d.ticketPrice)} per ticket</span></div>
+        <div class="prz-meta"><span>${d.numWinners || 1} winner${(d.numWinners||1) > 1 ? 's' : ''} will be picked</span><span></span></div>
+        <div class="prz-mine">You hold <b>${d.myTickets || 0}</b> ticket(s)</div>
+        <div class="prz-buy-row">
+          <input type="number" min="1" max="${remaining}" value="1" class="prz-qty" id="przQty-${d.id}">
+          <button class="btn-submit" onclick="buyPrizeDrawTicket('${d.id}', ${remaining})">Buy Ticket</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--red);font-size:13px">Failed to load</div>';
+  }
+}
+window.buyPrizeDrawTicket = async (drawId, remaining) => {
+  const inp = document.getElementById('przQty-' + drawId);
+  let qty = parseInt(inp && inp.value, 10) || 1;
+  if (qty < 1) qty = 1;
+  if (qty > remaining) qty = remaining;
+  showLoading(true);
+  try {
+    const r = await api('/prize-draw/buy', { userId: _user.uid, drawId, quantity: qty });
+    showLoading(false);
+    if (r.status === 'success') { showToast(r.message, 'success'); loadPrizeDraws(); loadPrizeDrawHistory(); }
+    else showToast(r.message || 'Could not buy ticket', 'error');
+  } catch (e) { showLoading(false); showToast('Network error', 'error'); }
+};
+
 // ── BANK ACCOUNTS ──
 window.openBankModal = () => {
   renderBankList();
@@ -1721,8 +1808,8 @@ function renderBankList() {
     <div class="bank-item">
       <div class="bank-icon">${ICN.phone}</div>
       <div class="bank-info">
-        <div class="bank-name">${a.name || 'Account'}</div>
-        <div class="bank-phone">+256${a.phone}</div>
+        <div class="bank-name">${esc(a.name || 'Account')}</div>
+        <div class="bank-phone">+256${esc(String(a.phone).replace(/\D/g,''))}</div>
       </div>
       <button class="bank-del" onclick="removeBankAccount(${i})">${ICN.trash}</button>
     </div>`).join('');
@@ -1815,6 +1902,14 @@ const CONTENT = {
         <li>Rewards are credited instantly and can be withdrawn immediately.</li>
         <li>Self-referrals, fake accounts and farmed sign-ups are not allowed.</li>
       </ul>
+      <h3 style="margin-top:16px">Prize Draw</h3>
+      <ul>
+        <li>Buy one or more tickets for a chance to win — every ticket held is a separate, equal chance.</li>
+        <li>More tickets bought means better odds, but never a guaranteed win.</li>
+        <li>Winner(s) are picked automatically and at random the moment all tickets sell out, or when Voltra ends the draw early.</li>
+        <li>Winnings are credited to your wallet instantly — no manual claim needed.</li>
+        <li>Ticket purchases are final. If a draw is cancelled instead of completed, every ticket bought for it is refunded in full.</li>
+      </ul>
       <h3 style="margin-top:16px">Account Rules</h3>
       <ul>
         <li>One account per person only.</li>
@@ -1825,13 +1920,24 @@ const CONTENT = {
   },
   support: {
     title: 'Customer Service',
-    body: `<h3>Contact Us</h3>
-      <p>Our support team is available to help you with any issues or questions about your Voltra account.</p>
-      <p><strong>Telegram:</strong> Contact via our Telegram support channel</p>
-      <p><strong>WhatsApp:</strong> Send us a message on WhatsApp</p>
-      <p><strong>Email:</strong> support@voltrapower.com</p>
-      <p style="margin-top:16px">Support hours: Monday – Saturday, 8:00 AM – 8:00 PM (EAT)</p>
-      <p>For urgent withdrawal issues, please contact us directly via Telegram for fastest response.</p>`
+    body: `<div class="sup-hero">
+        <span class="sup-hero-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="26" height="26"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
+        <div class="sup-title">Talk to Voltra</div>
+        <div class="sup-sub">Pick a channel below — we usually reply within a few hours</div>
+      </div>
+      <div class="sup-grid">
+        <a class="sup-tile" href="mailto:support@voltrapower.com">
+          <span class="sup-tile-ico em"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg></span>
+          <span class="sup-tile-h">Email</span>
+          <span class="sup-tile-s">support@voltrapower.com</span>
+        </a>
+        <div class="sup-tile">
+          <span class="sup-tile-ico hr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span class="sup-tile-h">Hours</span>
+          <span class="sup-tile-s">Mon–Sat, 8AM–8PM (EAT)</span>
+        </div>
+      </div>
+      <div class="sup-note">For withdrawal issues, Telegram gets you the fastest response.</div>`
   },
   terms: {
     title: 'Terms & Conditions',
@@ -1848,13 +1954,15 @@ const CONTENT = {
       <p>Withdrawals must meet the minimum amount and the multiples rule shown on the withdrawal screen. A service fee of <strong>15%</strong> applies to every payout and is shown clearly before you confirm. Payouts are sent to your nominated Mobile Money number and are normally processed within 24 hours, though processing may take longer during periods of high demand.</p>
       <h3 style="margin-top:16px">6. Referral Rewards</h3>
       <p>You earn a commission when people you invite activate assets — Level 1, Level 2 and Level 3 of your network. Rewards are credited instantly and are calculated on the activation amount. Self-referrals, fake accounts and any manipulation of the referral system are forbidden and will result in forfeiture of rewards.</p>
-      <h3 style="margin-top:16px">7. Risk Disclosure</h3>
+      <h3 style="margin-top:16px">7. Prize Draw</h3>
+      <p>Voltra may run Prize Draws in which you buy one or more tickets from your wallet for a chance to win a fixed prize. Every ticket held is an equal, independent chance — more tickets improve your odds but never guarantee a win. The winner(s) are selected automatically and at random by the server once all tickets for a draw are sold, or when Voltra ends the draw early. Winnings are credited to your wallet instantly. Ticket purchases are final and non-refundable, except that if Voltra cancels a draw instead of completing it, every ticket bought for that draw is refunded in full. Using multiple accounts to unfairly increase your odds in a Prize Draw is prohibited and treated the same as any other multi-account abuse under these Terms.</p>
+      <h3 style="margin-top:16px">8. Risk Disclosure</h3>
       <p>Participation carries risk. Projected returns are targets, not guarantees, and depend on the continued operation of the platform. Only commit funds you can afford to set aside. Voltra is not liable for losses arising from circumstances beyond our reasonable control, including network, carrier or third-party payment failures.</p>
-      <h3 style="margin-top:16px">8. Prohibited Conduct</h3>
-      <p>Fraud, chargeback abuse, multiple or fake accounts, automated bots, exploitation of bugs, or any attempt to manipulate balances, payouts or the referral system will result in immediate suspension and may lead to forfeiture of affected funds and a permanent ban.</p>
-      <h3 style="margin-top:16px">9. Account Suspension</h3>
+      <h3 style="margin-top:16px">9. Prohibited Conduct</h3>
+      <p>Fraud, chargeback abuse, multiple or fake accounts, automated bots, exploitation of bugs, or any attempt to manipulate balances, payouts, the referral system or Prize Draw odds will result in immediate suspension and may lead to forfeiture of affected funds and a permanent ban.</p>
+      <h3 style="margin-top:16px">10. Account Suspension</h3>
       <p>We may suspend or close any account that we reasonably believe is involved in fraud or a breach of these terms. Where funds are linked to fraudulent activity, they may be withheld pending review.</p>
-      <h3 style="margin-top:16px">10. Changes to These Terms</h3>
+      <h3 style="margin-top:16px">11. Changes to These Terms</h3>
       <p>We may update these Terms from time to time. The latest version is always available in the app, and your continued use of Voltra after an update means you accept the revised Terms.</p>`
   },
   privacy: {
@@ -1951,7 +2059,7 @@ window.downloadStatement = async () => {
     doc.text('DATE / TIME', 14, y); doc.text('TYPE', 70, y); doc.text('DESCRIPTION', 100, y); doc.text('AMOUNT', 196, y, {align:'right'});
     y += 2; doc.setDrawColor(200,200,200); doc.line(14, y, 196, y); y += 6;
     doc.setFont('helvetica','normal');
-    const TYPEMAP = { deposit:'Recharge', admin_credit:'Voltra Credit', checkin:'Daily Bonus', cashback:'Asset Payout', commission:'Referral Reward', gift_code:'Gift Reward', investment:'Activation', investment_return:'Asset Payout', withdrawal:'Payout', refund:'Refund', reversal:'Reversal', agent_bonus:'Agent Bonus', agent_promotion:'Promotion' };
+    const TYPEMAP = { deposit:'Recharge', admin_credit:'Voltra Credit', checkin:'Daily Bonus', cashback:'Asset Payout', commission:'Referral Reward', gift_code:'Gift Reward', investment:'Activation', investment_return:'Asset Payout', withdrawal:'Payout', refund:'Refund', reversal:'Reversal', prize_draw_ticket:'Prize Draw Ticket', prize_draw_win:'Prize Draw Win', prize_draw_refund:'Prize Draw Refund', agent_reversal:'Adjustment', admin_debit:'Adjustment' };
     let totalIn = 0, totalOut = 0;
     if (!txs.length) doc.text('No transactions yet.', 14, y);
     txs.forEach(t => {
