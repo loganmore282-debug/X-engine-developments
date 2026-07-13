@@ -93,8 +93,10 @@ const { connectMongo, db, FieldValue, pingDb } = require('./db');
 const ADMIN_KEY        = process.env.ADMIN_KEY        || '';
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || '';
 if (!FIREBASE_API_KEY) { console.error('FIREBASE_API_KEY env var is required'); process.exit(1); }
-const RAILWAY_URL  = (() => {
-  let u = (process.env.RAILWAY_URL || '').trim().replace(/\/$/, '');
+// Public base URL for payment callbacks. Render sets RENDER_EXTERNAL_URL
+// automatically; PUBLIC_URL / RAILWAY_URL are manual fallbacks for other hosts.
+const PUBLIC_URL  = (() => {
+  let u = (process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || process.env.RAILWAY_URL || '').trim().replace(/\/$/, '');
   if (u && !u.startsWith('http')) u = 'https://' + u;
   return u;
 })();
@@ -1120,7 +1122,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     const reference = uuidv4();
     const mpData = await marzCollect({
       amount: amt, phone, reference, description: user.name || userId,
-      callbackUrl: RAILWAY_URL ? RAILWAY_URL + '/deposit/callback' : undefined
+      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
     });
     const isSandbox = mpData.status === 'sandbox' || mpData.data?.collection?.mode === 'sandbox';
     if (mpData.status !== 'success' && !isSandbox)
@@ -1393,7 +1395,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const reference = uuidv4();
     const mpData = await marzSendMoney({
       amount: netAmount, phone, reference, description: wit.userName || wit.userId,
-      callbackUrl: RAILWAY_URL ? RAILWAY_URL + '/withdraw/callback' : undefined
+      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
     });
     const witSandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
     if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox)
@@ -1677,7 +1679,7 @@ async function startServer() {
   // diagnosis and the app self-heals the instant the DB comes back.
   app.listen(PORT, () => {
     console.log(`Furagemz Investment Server on port ${PORT}`);
-    console.log(`  URL: ${RAILWAY_URL || '(set RAILWAY_URL)'}`);
+    console.log(`  URL: ${PUBLIC_URL || '(RENDER_EXTERNAL_URL not set yet)'}`);
   });
 
   let cronsStarted = false;

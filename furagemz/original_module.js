@@ -14,8 +14,8 @@ const firebaseConfig = {
   appId:             "1:538053506631:web:a388e60009a456befda362"
 };
 
-// Owner: replace with the Furagemz Railway backend URL once deployed.
-const SERVER = 'https://REPLACE-WITH-FURAGEMZ-RAILWAY-URL.up.railway.app';
+// Owner: replace with the Furagemz Render backend URL once deployed.
+const SERVER = 'https://REPLACE-WITH-FURAGEMZ.onrender.com';
 
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
