@@ -26,6 +26,12 @@ const auth = getAuth(app);
 let _installPrompt = null;
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // If a new service worker takes over (e.g. escaping an old cached build),
+  // reload ONCE so the user immediately gets the fresh version.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    try { if (sessionStorage.getItem('fg_swreload')) return; sessionStorage.setItem('fg_swreload', '1'); } catch (_) {}
+    location.reload();
+  });
 }
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _installPrompt = e; });
 window.addEventListener('appinstalled', () => { _installPrompt = null; try { toast('Furagemz installed', 'ok'); } catch (_) {} });
@@ -701,7 +707,7 @@ function openHoldingsModal() {
 
 const BANNER_SLIDES = [
   { bg: 'linear-gradient(120deg,#7c3aed 0%,#c026d3 100%)', art: '#e9d5ff', title: 'Grow your gems', sub: 'Buy a tier, get paid in full at maturity.' },
-  { bg: 'linear-gradient(120deg,#0284c7 0%,#4338ca 100%)', art: '#bae6fd', title: 'Invite &amp; earn', sub: '18% on level 1, plus level 2 and 3.' },
+  { bg: 'linear-gradient(120deg,#0284c7 0%,#4338ca 100%)', art: '#bae6fd', title: 'Invite &amp; earn', sub: '35% on level 1, plus level 2 and 3.' },
   { bg: 'linear-gradient(120deg,#059669 0%,#0d9488 100%)', art: '#a7f3d0', title: 'Redeem a code', sub: 'Got a Furagemz code? Turn it into cash.' },
 ];
 let _bannerTimer = null, _bannerIdx = 0;
