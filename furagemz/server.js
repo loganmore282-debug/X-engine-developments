@@ -120,8 +120,8 @@ const COMM_L1          = 0.35;    // referral bonus, level 1
 const COMM_L2          = 0.02;    // level 2
 const COMM_L3          = 0.01;    // level 3
 const LIQUIDITY_FEE    = 0.05;    // withdrawal fee
-const RETURN_MULTIPLE  = 2.5;     // payout = price * RETURN_MULTIPLE, paid in full at maturity
-const CYCLE_DAYS       = 30;      // stipulated investment period (days) — long enough that Boost matters
+const RETURN_MULTIPLE  = 13;      // payout = price * RETURN_MULTIPLE, paid in full at maturity
+const CYCLE_DAYS       = 60;      // stipulated investment period (days), fixed for every gem
 // BOOST / ACCELERATE — after BOOST_UNLOCK_DAYS the holder may pay the same amount
 // again to cut the remaining wait: the gem then matures BOOST_MATURE_HOURS later.
 const BOOST_UNLOCK_DAYS  = 5;
@@ -133,12 +133,12 @@ function durPhrase(hours) {
 
 // Gem tier ladder — prices distinct from Voltra's energy-asset ladder.
 const GEM_TIERS = [
-  { key: 'quartz',   label: 'Quartz',   price:   25000 },
-  { key: 'amethyst', label: 'Amethyst', price:   75000 },
-  { key: 'topaz',    label: 'Topaz',    price:  200000 },
-  { key: 'emerald',  label: 'Emerald',  price:  450000 },
-  { key: 'sapphire', label: 'Sapphire', price:  800000 },
-  { key: 'diamond',  label: 'Diamond',  price: 1200000 },
+  { key: 'quartz',   label: 'Quartz',   price:   30000 },
+  { key: 'amethyst', label: 'Amethyst', price:   95000 },
+  { key: 'topaz',    label: 'Topaz',    price:  160000 },
+  { key: 'emerald',  label: 'Emerald',  price:  350000 },
+  { key: 'sapphire', label: 'Sapphire', price:  500000 },
+  { key: 'diamond',  label: 'Diamond',  price: 1000000 },
 ].map(t => {
   const expectedReturn = Math.round(t.price * RETURN_MULTIPLE);
   return { ...t, cycle: CYCLE_DAYS, expectedReturn, dailyReturn: expectedReturn / CYCLE_DAYS };
@@ -1755,6 +1755,32 @@ app.post('/admin/products/delete', async (req, res) => {
   if (!req.body.id) return res.status(400).json({ status: 'error', message: 'id required' });
   try { await db.collection('products').doc(req.body.id).delete(); return res.json({ status: 'success' }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+// One-click reset: push the default GEM_TIERS ladder (current prices, ×RETURN_MULTIPLE
+// payout, fixed cycle) into the DB. Matches existing gems by key and updates their
+// price/cycle/payout/label; any uploaded image, colour, order and active flag are
+// kept. Missing tiers are created. Use after changing the ladder in code.
+app.post('/admin/products/reseed', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('products').get();
+    const byKey = {};
+    snap.docs.forEach(d => { const k = (d.data().key || '').toLowerCase(); if (k) byKey[k] = { id: d.id, ...d.data() }; });
+    let updated = 0, created = 0;
+    for (let i = 0; i < GEM_TIERS.length; i++) {
+      const t = GEM_TIERS[i];
+      const core = { key: t.key, label: t.label, price: t.price, cycle: t.cycle,
+        expectedReturn: t.expectedReturn, dailyReturn: t.dailyReturn, updatedAt: FieldValue.serverTimestamp() };
+      const existing = byKey[t.key];
+      if (existing) { await db.collection('products').doc(existing.id).update(core); updated++; }
+      else {
+        await db.collection('products').add({ ...core, image: '', color: GEM_COLORS[t.key] || '#7c3aed',
+          order: i, active: true, createdAt: FieldValue.serverTimestamp() });
+        created++;
+      }
+    }
+    return res.json({ status: 'success', updated, created, tiers: GEM_TIERS.map(t => ({ label: t.label, price: t.price, expectedReturn: t.expectedReturn, cycle: t.cycle })) });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 // ── 404 + ERROR HANDLER ──
