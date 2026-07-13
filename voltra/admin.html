@@ -413,7 +413,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="panel" id="usersPanel">
       <div class="section-head">
         <h3>Users</h3>
-        <button class="btn btn-ghost btn-sm" onclick="loadUsers()">↻ Refresh</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="exportUsersCSV()">⬇ CSV</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportUsersHTML()">⬇ HTML</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadUsers()">↻ Refresh</button>
+        </div>
       </div>
       <input class="search-input" id="userSearch" placeholder="Search by name or phone…" oninput="onUserSearch(this.value)">
       <div class="filter-tabs">
@@ -1460,7 +1464,7 @@ async function loadUsers() {
   }
 }
 
-function renderUsers() {
+function getFilteredUsers() {
   let list = _allUsers;
   if (_userFilter !== 'all') list = list.filter(u => u.status === _userFilter || (!u.status && _userFilter === 'active'));
   if (_userSearch) {
@@ -1477,6 +1481,11 @@ function renderUsers() {
       (qDigits && norm9(u.phone).includes(q9))
     );
   }
+  return list;
+}
+
+function renderUsers() {
+  let list = getFilteredUsers();
   if (!list.length) {
     document.getElementById('usersTable').innerHTML = '<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">No users found</div></div>';
     return;
@@ -1507,6 +1516,61 @@ function renderUsers() {
       </table>
     </div>`;
 }
+
+// ── EXPORT USERS (CSV / HTML) — exports whatever the current filter+search shows ──
+function _downloadBlob(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function _csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+window.exportUsersCSV = () => {
+  const list = getFilteredUsers();
+  if (!list.length) { showToast('No users to export', 'error'); return; }
+  const header = ['Name', 'Phone', 'Email', 'Balance (UGX)', 'Status', 'Joined', 'User ID'];
+  const rows = list.map(u => [
+    u.name || '', u.phone || '', u.email || '', Number(u.walletBalance || 0),
+    u.status || 'active', fmtDate(u.createdAt), u.id || ''
+  ].map(_csvCell).join(','));
+  const csv = header.join(',') + '\n' + rows.join('\n');
+  _downloadBlob(csv, `voltra-users-${Date.now()}.csv`, 'text/csv;charset=utf-8');
+  showToast(`Exported ${list.length} user(s) as CSV`, 'success');
+};
+window.exportUsersHTML = () => {
+  const list = getFilteredUsers();
+  if (!list.length) { showToast('No users to export', 'error'); return; }
+  const rows = list.map(u => `<tr>
+    <td>${esc(u.name || '—')}</td>
+    <td>${esc(u.phone || '—')}</td>
+    <td>${esc(u.email || '—')}</td>
+    <td>${ugx(u.walletBalance)}</td>
+    <td>${esc(u.status || 'active')}</td>
+    <td>${esc(fmtDate(u.createdAt))}</td>
+    <td>${esc(u.id || '')}</td>
+  </tr>`).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Voltra Users Export</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#0f1115;color:#e8e8e8;padding:24px}
+    h1{color:#f5a623}
+    table{border-collapse:collapse;width:100%;background:#1a1d24}
+    th,td{border:1px solid #2a2e38;padding:8px 12px;text-align:left;font-size:13px}
+    th{background:#20242e;color:#f5a623}
+    tr:nth-child(even){background:#171a21}
+  </style></head><body>
+  <h1>Voltra — Users Export</h1>
+  <p>Exported ${new Date().toLocaleString()} — ${list.length} user(s)</p>
+  <table><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Balance</th><th>Status</th><th>Joined</th><th>User ID</th></tr></thead>
+  <tbody>${rows}</tbody></table>
+  </body></html>`;
+  _downloadBlob(html, `voltra-users-${Date.now()}.html`, 'text/html;charset=utf-8');
+  showToast(`Exported ${list.length} user(s) as HTML`, 'success');
+};
 
 window.onUserSearch = (v) => { _userSearch = v; renderUsers(); };
 window.setUserFilter = (f, el) => {
