@@ -217,22 +217,23 @@ function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('
 async function api(path, body={}){
   try{
     const r = await fetch(SERVER+path, { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ ...body, adminKey: ADMIN_KEY }) });
+      body: JSON.stringify({ ...body, adminKey: ADMIN_KEY }), signal:AbortSignal.timeout(30000) });
     return await r.json();
-  }catch(e){ return { status:'error', message:'Network error' }; }
+  }catch(e){ return { status:'error', message: e.name==='TimeoutError'?'Server is waking up — try again in a moment.':'Network error' }; }
 }
 
 // ── LOGIN ──
 async function doLogin(){
   const key = $('keyInput').value.trim();
   if(!key){ $('loginErr').textContent='Enter the admin key.'; return; }
-  const btn=$('loginBtn'); btn.disabled=true; btn.textContent='Checking…';
+  const btn=$('loginBtn'); btn.disabled=true; btn.textContent='Checking…'; $('loginErr').textContent='';
   try{
-    const r = await fetch(SERVER+'/admin/check-key', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key }) });
+    // Timeout so a cold/asleep server can't leave the button stuck on "Checking…".
+    const r = await fetch(SERVER+'/admin/check-key', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key }), signal:AbortSignal.timeout(25000) });
     const d = await r.json();
     if(d.status==='success'){ ADMIN_KEY=key; try{ sessionStorage.setItem('fg_admin_key',key);}catch(_){} openShell(); }
     else { $('loginErr').textContent = d.message || 'Invalid key.'; }
-  }catch(e){ $('loginErr').textContent='Network error.'; }
+  }catch(e){ $('loginErr').textContent = e.name==='TimeoutError' ? 'Server is waking up — wait a few seconds and try again.' : 'Network error — check your connection and try again.'; }
   btn.disabled=false; btn.textContent='Sign in';
 }
 $('loginBtn').addEventListener('click', doLogin);

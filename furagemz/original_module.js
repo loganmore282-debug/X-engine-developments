@@ -183,7 +183,8 @@ async function api(path, { method = 'GET', body } = {}, _attempt = 0) {
   const headers = { 'Content-Type': 'application/json' };
   if (_user) { try { headers['Authorization'] = 'Bearer ' + await _user.getIdToken(); } catch (_) {} }
   try {
-    const resp = await fetch(SERVER + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    // Abort a hung request (cold server / dropped network) so nothing waits forever.
+    const resp = await fetch(SERVER + path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
     return await resp.json();
   } catch (e) {
     const unsafe = NO_RETRY.some(p => path.startsWith(p));
@@ -398,23 +399,31 @@ let _publicSettings = null;
 onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
-  // Load everything the dashboard needs (transactions included, so "Recent
-  // activity" is populated) BEFORE revealing the main view — no blank/white
-  // flash, no lazy pop-in.
-  await Promise.all([loadAccount(), loadTxns(), loadActivityFeed(), loadPublicSettings()]);
-  // Maintenance mode blocks the whole app for normal users.
-  if (_publicSettings?.maintenanceMode) {
-    return showBlocker('Under maintenance', _publicSettings.maintenanceMsg || 'Furagemz is being upgraded. Please check back shortly.', 'Try again', () => location.reload());
-  }
-  // Banned users can't use the app.
-  if (_account?.status === 'banned') {
-    return showBlocker('Account suspended', 'Your account has been suspended. Contact support if you believe this is a mistake.', 'Log out', doLogout);
-  }
+  // Load what the dashboard needs, but never let a cold/slow server keep the
+  // boot screen up forever: reveal the app within 9s max, then fill in data
+  // (and re-check maintenance/ban) once the loads actually finish.
+  const loads = Promise.all([loadAccount(), loadTxns(), loadActivityFeed(), loadPublicSettings()]);
+  await Promise.race([loads, new Promise(r => setTimeout(r, 9000))]);
+  if (checkGate()) return;         // maintenance / banned (if already known)
   render();
   showView('main');
   startRealtime();
   maybeShowAnnouncement();
+  // If the data arrived after the 9s cutoff, re-render with it and re-check the gate.
+  loads.then(() => { if (checkGate()) return; if (!_pageOpen) render(); }).catch(() => {});
 });
+// Returns true (and shows a blocker) if the app should be gated off.
+function checkGate() {
+  if (_publicSettings?.maintenanceMode) {
+    showBlocker('Under maintenance', _publicSettings.maintenanceMsg || 'Furagemz is being upgraded. Please check back shortly.', 'Try again', () => location.reload());
+    return true;
+  }
+  if (_account?.status === 'banned') {
+    showBlocker('Account suspended', 'Your account has been suspended. Contact support if you believe this is a mistake.', 'Log out', doLogout);
+    return true;
+  }
+  return false;
+}
 
 // ── REAL-TIME REFRESH ──
 // Silently re-pulls balance, transactions and team every 15s (and the moment the
@@ -906,11 +915,31 @@ async function pollDepositUI(depositId, amount, tries) {
   if (tries > 25)      { depositResult('slow', amount); return; }
   setTimeout(() => pollDepositUI(depositId, amount, tries + 1), 3000);
 }
+// Celebratory confetti burst on a successful payment (pure CSS particles, no emoji).
+function fireConfetti() {
+  const card = document.querySelector('#modalRoot .modal-card'); if (!card) return;
+  const colors = ['#7c3aed', '#10b981', '#38bdf8', '#f43f5e', '#eab308', '#c084fc'];
+  const wrap = document.createElement('div'); wrap.className = 'confetti';
+  for (let i = 0; i < 28; i++) {
+    const p = document.createElement('i');
+    const angle = Math.random() * 2 * Math.PI, dist = 70 + Math.random() * 150;
+    p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+    p.style.setProperty('--dy', (Math.sin(angle) * dist - 40) + 'px');
+    p.style.setProperty('--rot', (Math.random() * 720 - 360) + 'deg');
+    p.style.background = colors[i % colors.length];
+    p.style.animationDelay = (Math.random() * 0.08) + 's';
+    if (i % 3 === 0) p.style.borderRadius = '50%';
+    wrap.appendChild(p);
+  }
+  card.appendChild(wrap);
+  setTimeout(() => wrap.remove(), 1600);
+}
+
 function depositResult(kind, amount) {
   const orb = document.getElementById('payOrb'); if (!orb) return;
   const title = document.getElementById('payTitle'), sub = document.getElementById('paySub'), dots = document.getElementById('payDots');
   if (dots) dots.style.display = 'none';
-  if (kind === 'ok')  { orb.className = 'pay-orb ok';  orb.innerHTML = CHECK_SVG; title.textContent = 'Deposit successful'; sub.innerHTML = `<b>${ugx(amount)}</b> has been added to your wallet.`; }
+  if (kind === 'ok')  { orb.className = 'pay-orb ok';  orb.innerHTML = CHECK_SVG; title.textContent = 'Successful!'; sub.innerHTML = `<b>${ugx(amount)}</b> has been added to your wallet.`; fireConfetti(); }
   else if (kind === 'bad') { orb.className = 'pay-orb bad'; orb.innerHTML = XMARK_SVG; title.textContent = 'Deposit not completed'; sub.textContent = 'The payment was not confirmed. If money left your account, contact support.'; }
   else { title.textContent = 'Still processing'; sub.textContent = 'This is taking a little longer. It will update on its own once confirmed.'; }
   const card = document.querySelector('#modalRoot .modal-card');
