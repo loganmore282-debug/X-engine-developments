@@ -1736,7 +1736,9 @@ app.post('/admin/products/save', async (req, res) => {
   const key = String(req.body.key || label).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24) || ('gem' + Date.now());
   const data = {
     key, label, price, cycle, expectedReturn, dailyReturn: expectedReturn / cycle,
-    image: String(req.body.image || '').trim().slice(0, 600),
+    // Allow both short hosted URLs and full base64 data-URI uploads (the admin
+    // downscales images before sending, so this stays well under the 8mb body cap).
+    image: String(req.body.image || '').trim().slice(0, 4000000),
     color: String(req.body.color || '#7c3aed').trim().slice(0, 24),
     order: Math.round(parseFloat(req.body.order) || 0),
     active: req.body.active !== false && req.body.active !== 'false',
