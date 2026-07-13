@@ -1078,7 +1078,11 @@ function startCrons() {
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
   setTimeout(reconcileCommissions, 90 * 1000);
-  console.log('Crons started (daily cashback 5m, commission reconcile 10m)');
+  // KEEP-WARM: ping Mongo every 4 min so the free M0 connection never goes cold —
+  // this is what makes login / admin / check-in feel instant instead of laggy on
+  // the first request after a quiet spell.
+  setInterval(() => { pingDb().catch(() => {}); }, 4 * 60 * 1000);
+  console.log('Crons started (daily cashback 5m, commission reconcile 10m, keep-warm 4m)');
 }
 app.post('/admin/commissions/reconcile', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

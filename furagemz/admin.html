@@ -137,6 +137,7 @@
     <input id="keyInput" type="password" placeholder="Admin key" autocomplete="off">
     <button class="btn block" id="loginBtn">Sign in</button>
     <p class="muted" id="loginErr" style="color:var(--danger);margin-top:12px"></p>
+    <p class="muted" id="srvStatus" style="margin-top:10px;font-size:12px"></p>
   </div>
 </div>
 
@@ -229,11 +230,11 @@ async function doLogin(){
   const btn=$('loginBtn'); btn.disabled=true; btn.textContent='Checking…'; $('loginErr').textContent='';
   try{
     // Timeout so a cold/asleep server can't leave the button stuck on "Checking…".
-    const r = await fetch(SERVER+'/admin/check-key', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key }), signal:AbortSignal.timeout(25000) });
+    const r = await fetch(SERVER+'/admin/check-key', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key }), signal:AbortSignal.timeout(15000) });
     const d = await r.json();
     if(d.status==='success'){ ADMIN_KEY=key; try{ sessionStorage.setItem('fg_admin_key',key);}catch(_){} openShell(); }
     else { $('loginErr').textContent = d.message || 'Invalid key.'; }
-  }catch(e){ $('loginErr').textContent = e.name==='TimeoutError' ? 'Server is waking up — wait a few seconds and try again.' : 'Network error — check your connection and try again.'; }
+  }catch(e){ $('loginErr').textContent = e.name==='TimeoutError' ? 'Server is still waking up — give it a few seconds and tap Sign in again.' : 'Can’t reach the server — check your connection and try again.'; }
   btn.disabled=false; btn.textContent='Sign in';
 }
 $('loginBtn').addEventListener('click', doLogin);
@@ -692,9 +693,24 @@ function closeModal(){ const r=$('modalRoot'); r.classList.add('hidden'); r.inne
 
 // ── BOOT ──
 if(ADMIN_KEY){
-  fetch(SERVER+'/admin/check-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:ADMIN_KEY})})
+  fetch(SERVER+'/admin/check-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:ADMIN_KEY}),signal:AbortSignal.timeout(15000)})
     .then(r=>r.json()).then(d=>{ if(d.status==='success') openShell(); }).catch(()=>{});
 }
+// Warm-up probe: shows whether the server is reachable so the login never looks
+// "stuck". Pings /health on load and every 4s until the server answers.
+(function warmup(){
+  const el=document.getElementById('srvStatus'); if(!el) return;
+  let ok=false;
+  const ping=()=>{
+    if(ok) return;
+    el.textContent='Connecting to server…'; el.style.color='var(--muted,#888)';
+    fetch(SERVER+'/health',{signal:AbortSignal.timeout(12000)})
+      .then(r=>r.json()).then(d=>{ ok=true; el.textContent = d.status==='ok'?'Server ready.':'Server reachable.'; el.style.color='#16a34a'; setTimeout(()=>{ el.textContent=''; },2500); })
+      .catch(()=>{ el.textContent='Server is starting up… this can take up to a minute on first load.'; el.style.color='#b45309'; });
+  };
+  ping();
+  const iv=setInterval(()=>{ if(ok){ clearInterval(iv); return; } ping(); }, 4000);
+})();
 </script>
 </body>
 </html>
