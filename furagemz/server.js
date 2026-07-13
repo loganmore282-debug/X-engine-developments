@@ -89,6 +89,9 @@ app.use('/admin/', adminLimiter);
 // the owner can still work and the app can show a maintenance screen).
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/checkin', '/redeem', '/team', '/register'];
 app.use(async (req, res, next) => {
+  // Payment-provider webhooks/callbacks (GUARD_EXEMPT) must ALWAYS run, even in
+  // maintenance, or deposits/withdrawals in flight would never get confirmed.
+  if (GUARD_EXEMPT.has(req.path)) return next();
   if (!MAINTENANCE_BLOCK.some(p => req.path.startsWith(p))) return next();
   try {
     const s = await getSettings();

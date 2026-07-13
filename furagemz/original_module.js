@@ -379,6 +379,8 @@ document.getElementById('mainView').addEventListener('click', (e) => {
 async function doLogout() {
   await signOut(auth);
   _user = null; _account = null;
+  // Remove the maintenance/banned blocker if it's up, or it would cover the auth view.
+  document.getElementById('blockerView')?.remove();
   showView('auth');
 }
 
