@@ -185,7 +185,8 @@ async function api(path, { method = 'GET', body } = {}, _attempt = 0) {
 // AUTH
 // ══════════════════════════════════════════════
 function showView(name) {
-  document.getElementById('splashView').classList.add('hidden');
+  const splash = document.getElementById('splashView');
+  if (splash) splash.classList.add('hidden');
   document.getElementById('authView').classList.toggle('hidden', name !== 'auth');
   document.getElementById('mainView').classList.toggle('hidden', name !== 'main');
 }
@@ -374,9 +375,12 @@ let _publicSettings = null;
 onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
-  showView('main');
-  await Promise.all([loadAccount(), loadActivityFeed(), loadPublicSettings()]);
+  // Load everything the dashboard needs (transactions included, so "Recent
+  // activity" is populated) BEFORE revealing the main view — no blank/white
+  // flash, no lazy pop-in.
+  await Promise.all([loadAccount(), loadTxns(), loadActivityFeed(), loadPublicSettings()]);
   render();
+  showView('main');
   maybeShowAnnouncement();
 });
 
@@ -515,7 +519,7 @@ function durPhrase(hours) {
 }
 // Boost cost = a percentage of the gem's total return (default 30%).
 function boostCost(inv) {
-  const pct = (_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.30;
+  const pct = (_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.20;
   return Math.round((inv.expectedReturn || 0) * pct);
 }
 // Boost eligibility for an active gem.
@@ -1206,11 +1210,13 @@ function openSupportModal() {
 
 function openHistoryModal() {
   if (!TXN_FILTERS.some(x => x.key === _txnFilter)) _txnFilter = 'all';
+  // Money in / Money out are lifetime totals across ALL transactions, so they
+  // stay put no matter which filter chip is selected (only the list below filters).
+  let inSum = 0, outSum = 0;
+  _txns.forEach(t => { const a = t.amount || 0; if (a >= 0) inSum += a; else outSum += -a; });
   const draw = () => {
     const f = TXN_FILTERS.find(x => x.key === _txnFilter) || TXN_FILTERS[0];
     const filtered = f.types ? _txns.filter(t => f.types.includes(t.type)) : _txns;
-    let inSum = 0, outSum = 0;
-    filtered.forEach(t => { const a = t.amount || 0; if (a >= 0) inSum += a; else outSum += -a; });
     openModal(`
       <div class="modal-head"><h2>Records</h2><button class="modal-close">${ICN.close}</button></div>
       <div class="rec-summary">

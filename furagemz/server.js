@@ -127,7 +127,7 @@ const CYCLE_DAYS       = 60;      // stipulated investment period (days), fixed 
 // BOOST / ACCELERATE — after BOOST_UNLOCK_DAYS the holder may pay BOOST_COST_PCT of
 // the gem's total return to compress all remaining payouts into BOOST_MATURE_DAYS.
 const BOOST_UNLOCK_DAYS  = 5;     // boost becomes available 5 days after purchase
-const BOOST_COST_PCT     = 0.30;  // boost fee = 30% of the gem's total return
+const BOOST_COST_PCT     = 0.20;  // boost fee = 20% of the gem's total return
 const BOOST_MATURE_DAYS  = 5;     // after a boost, the gem finishes paying in 5 days
 const BOOST_MATURE_HOURS = BOOST_MATURE_DAYS * 24;
 function durPhrase(hours) {
@@ -1681,21 +1681,39 @@ app.post('/admin/stats', async (req, res) => {
       db.collection('withdrawals').where('status', '==', 'pending').get(),
       db.collection('investments').where('status', '==', 'active').get()
     ]);
-    let totalWallet = 0, totalDeposited = 0, totalWithdrawn = 0;
+    let totalWallet = 0, totalDeposited = 0, totalWithdrawn = 0, totalInvested = 0,
+        totalEarned = 0, totalCommissions = 0, referredUsers = 0;
     usersSnap.forEach(d => {
       const u = d.data();
-      totalWallet += u.walletBalance || 0;
-      totalDeposited += u.totalDeposited || 0;
-      totalWithdrawn += u.totalWithdrawn || 0;
+      totalWallet      += u.walletBalance   || 0;
+      totalDeposited   += u.totalDeposited  || 0;
+      totalWithdrawn   += u.totalWithdrawn  || 0;
+      totalInvested    += u.totalInvested   || 0;
+      totalEarned      += u.totalEarned     || 0;
+      totalCommissions += u.commissionEarned || 0;
+      if (u.referredBy) referredUsers += 1;
+    });
+    // Cashback still owed on active gems (expectedReturn minus what's been paid).
+    let outstandingPayout = 0;
+    investmentsSnap.forEach(d => {
+      const inv = d.data();
+      outstandingPayout += Math.max(0, (inv.expectedReturn || 0) - (inv.paidOut || 0));
     });
     let pendingPayouts = 0;
     withdrawalsSnap.forEach(d => pendingPayouts += (d.data().netAmount || d.data().amount || 0));
+    // Overall health: real money that came in vs everything the platform still owes
+    // (current wallet balances + pending withdrawals + future gem cashback).
+    const netCashIn    = totalDeposited - totalWithdrawn;
+    const liabilities  = totalWallet + pendingPayouts + outstandingPayout;
+    const healthBalance = netCashIn - liabilities;
     return res.json({
       status: 'success',
       userCount: usersSnap.size,
       totalWallet, totalDeposited, totalWithdrawn,
+      totalInvested, totalEarned, totalCommissions, referredUsers,
       pendingWithdrawals: withdrawalsSnap.size, pendingPayouts,
-      activeInvestments: investmentsSnap.size
+      activeInvestments: investmentsSnap.size, outstandingPayout,
+      netCashIn, liabilities, healthBalance
     });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });

@@ -267,12 +267,23 @@ async function renderDashboard(){
     <h2 class="sec">Overview</h2>
     <div class="cards">
       <div class="stat"><div class="n">${s.userCount||0}</div><div class="l">Total users</div></div>
+      <div class="stat"><div class="n">${s.referredUsers||0}</div><div class="l">Joined via referral</div></div>
       <div class="stat"><div class="n">${ugx(s.totalWallet)}</div><div class="l">Wallet balances</div></div>
       <div class="stat"><div class="n">${ugx(s.totalDeposited)}</div><div class="l">Total deposited</div></div>
       <div class="stat"><div class="n">${ugx(s.totalWithdrawn)}</div><div class="l">Total withdrawn</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalInvested)}</div><div class="l">Total invested</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalEarned)}</div><div class="l">Cashback paid</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalCommissions)}</div><div class="l">Referral commissions</div></div>
       <div class="stat"><div class="n">${s.activeInvestments||0}</div><div class="l">Active gems</div></div>
+      <div class="stat"><div class="n">${ugx(s.outstandingPayout)}</div><div class="l">Future cashback owed</div></div>
       <div class="stat"><div class="n">${s.pendingWithdrawals||0}</div><div class="l">Pending payouts</div></div>
       <div class="stat"><div class="n">${ugx(s.pendingPayouts)}</div><div class="l">Payout amount due</div></div>
+    </div>
+    <h2 class="sec">Platform health</h2>
+    <div class="cards">
+      <div class="stat"><div class="n">${ugx(s.netCashIn)}</div><div class="l">Net cash in (deposits − withdrawals)</div></div>
+      <div class="stat"><div class="n">${ugx(s.liabilities)}</div><div class="l">Total owed (wallets + payouts + cashback)</div></div>
+      <div class="stat"><div class="n" style="color:${(s.healthBalance||0)>=0?'var(--ok)':'var(--danger)'}">${ugx(s.healthBalance)}</div><div class="l">Health balance ${(s.healthBalance||0)>=0?'(reserve)':'(shortfall)'}</div></div>
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Recent transactions</h2>
