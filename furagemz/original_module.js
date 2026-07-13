@@ -618,7 +618,7 @@ function renderHome() {
     <div class="wallet-stats">
       <div class="wstat"><div class="wi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalDeposited || 0)}</div><div class="wl">Total deposits</div></div>
       <div class="wstat"><div class="wi" style="background:var(--danger-bg);color:var(--danger)">${ICN.up}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0)}</div><div class="wl">Total withdrawals</div></div>
-      <div class="wstat"><div class="wi" style="background:#eef2ff;color:var(--sapphire)">${ICN.commission}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.commissionEarned || 0)}</div><div class="wl">Referral earnings</div></div>
+      <div class="wstat"><div class="wi" style="background:#eef2ff;color:var(--sapphire)">${ICN.commission}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.commissionEarned || 0)}</div><div class="wl">Commissions</div></div>
     </div>
     <div class="quick-row">
       <button class="quick-btn" id="qaDeposit"><span class="qi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</span>Deposit</button>
@@ -660,7 +660,7 @@ function renderHome() {
 const REC_META = {
   topup:         { label: 'Deposit',          grad: 'linear-gradient(135deg,#10b981,#059669)' },
   withdrawal:    { label: 'Withdrawal',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
-  commission:    { label: 'Referral reward',   grad: 'linear-gradient(135deg,#818cf8,#6366f1)' },
+  commission:    { label: 'Commission',        grad: 'linear-gradient(135deg,#818cf8,#6366f1)' },
   checkin:       { label: 'Daily bonus',       grad: 'linear-gradient(135deg,#fbbf24,#f59e0b)' },
   gem_payout:    { label: 'Gem payout',        grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
   investment:    { label: 'Gem purchase',      grad: 'linear-gradient(135deg,#c084fc,#9333ea)' },
@@ -744,22 +744,48 @@ function openDepositModal() {
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     const r = await api('/deposit/marzpay', { method: 'POST', body: { amount, phone } });
     if (r.status !== 'success') { restore(); return toast(r.message || 'Could not start deposit', 'err'); }
-    closeModal();
-    toast('Approve the payment prompt on your phone', 'ok');
-    pollDeposit(r.depositId);
+    openDepositPending(r.depositId, amount);
   });
 }
-async function pollDeposit(depositId, tries = 0) {
-  if (tries > 20) return;
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const XMARK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+// Deposit "polling" experience — a pulsing status while we confirm the payment,
+// resolving in-place to a success or failed state (no blocking spinner).
+function openDepositPending(depositId, amount) {
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `<div class="modal-backdrop"></div><div class="modal-card">
+    <div class="pay-wait">
+      <div class="pay-orb" id="payOrb">${ICN.down}</div>
+      <div class="pay-title" id="payTitle">Approve on your phone</div>
+      <div class="pay-sub" id="paySub">Enter your mobile-money PIN to approve <b>${ugx(amount)}</b>. We'll confirm it here automatically.</div>
+      <div class="pay-dots" id="payDots"><i></i><i></i><i></i></div>
+    </div>
+  </div>`;
+  root.classList.remove('hidden');
+  pollDepositUI(depositId, amount, 0);
+}
+async function pollDepositUI(depositId, amount, tries) {
   const r = await api('/deposit/status/' + depositId);
   const s = r.deposit?.depositStatus;
-  if (s === 'matched') {
-    toast(ugx(r.deposit.creditedAmount) + ' credited to your wallet', 'ok');
-    await loadAccount(); renderHome(); renderAccount();
-    return;
+  if (s === 'matched') { depositResult('ok', r.deposit.creditedAmount || amount); await loadAccount(); await loadTxns(); renderHome(); renderAccount(); return; }
+  if (s === 'failed')  { depositResult('bad', amount); return; }
+  if (tries > 25)      { depositResult('slow', amount); return; }
+  setTimeout(() => pollDepositUI(depositId, amount, tries + 1), 3000);
+}
+function depositResult(kind, amount) {
+  const orb = document.getElementById('payOrb'); if (!orb) return;
+  const title = document.getElementById('payTitle'), sub = document.getElementById('paySub'), dots = document.getElementById('payDots');
+  if (dots) dots.style.display = 'none';
+  if (kind === 'ok')  { orb.className = 'pay-orb ok';  orb.innerHTML = CHECK_SVG; title.textContent = 'Deposit successful'; sub.innerHTML = `<b>${ugx(amount)}</b> has been added to your wallet.`; }
+  else if (kind === 'bad') { orb.className = 'pay-orb bad'; orb.innerHTML = XMARK_SVG; title.textContent = 'Deposit not completed'; sub.textContent = 'The payment was not confirmed. If money left your account, contact support.'; }
+  else { title.textContent = 'Still processing'; sub.textContent = 'This is taking a little longer. It will update on its own once confirmed.'; }
+  const card = document.querySelector('#modalRoot .modal-card');
+  if (card && !card.querySelector('#payDone')) {
+    const b = document.createElement('button');
+    b.className = 'btn'; b.id = 'payDone'; b.textContent = 'Done'; b.style.marginTop = '10px';
+    b.addEventListener('click', closeModal);
+    card.appendChild(b);
   }
-  if (s === 'failed') { toast('Deposit did not go through', 'err'); return; }
-  setTimeout(() => pollDeposit(depositId, tries + 1), 3000);
 }
 
 function openWithdrawModal() {
@@ -951,8 +977,7 @@ const TXN_FILTERS = [
   { key: 'all',         label: 'All',          types: null },
   { key: 'deposits',    label: 'Deposits',     types: ['topup', 'admin_credit'] },
   { key: 'withdrawals', label: 'Withdrawals',  types: ['withdrawal', 'refund'] },
-  { key: 'gems',        label: 'Gems',         types: ['investment', 'boost', 'gem_payout'] },
-  { key: 'referrals',   label: 'Referrals',    types: ['commission'] },
+  { key: 'commissions', label: 'Commissions',  types: ['commission'] },
   { key: 'bonuses',     label: 'Bonuses',      types: ['checkin', 'redeem'] },
 ];
 function renderAccount() {
