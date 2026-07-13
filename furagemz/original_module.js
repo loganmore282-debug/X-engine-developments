@@ -20,6 +20,19 @@ const SERVER = 'https://ugandalove.onrender.com';
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
+// ── PWA: register the service worker + capture the install prompt so the
+// "Download app" screen can trigger a real install even if the user dismissed
+// the browser's own banner. ──
+let _installPrompt = null;
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _installPrompt = e; });
+window.addEventListener('appinstalled', () => { _installPrompt = null; try { toast('Furagemz installed', 'ok'); } catch (_) {} });
+function isInstalled() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
 // ── STATE ──
 let _user = null, _account = null, _investments = [], _members = [], _txns = [], _products = [];
 let _activeTab = 'home';
@@ -42,6 +55,7 @@ const ICN = {
   refund:       _svg('<path d="M3 10h11a5 5 0 0 1 0 10H9"/><path d="m7 5-4 5 4 5"/>'),
   close:        _svg('<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>'),
   back:         _svg('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+  download:     _svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
   info:         _svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
   about:        _svg('<circle cx="12" cy="12" r="9"/><path d="M12 16v-5"/><path d="M12 8h.01"/>'),
   eye:          _svg('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>'),
@@ -379,10 +393,31 @@ onAuthStateChanged(auth, async (user) => {
   // activity" is populated) BEFORE revealing the main view — no blank/white
   // flash, no lazy pop-in.
   await Promise.all([loadAccount(), loadTxns(), loadActivityFeed(), loadPublicSettings()]);
+  // Maintenance mode blocks the whole app for normal users.
+  if (_publicSettings?.maintenanceMode) {
+    return showBlocker('Under maintenance', _publicSettings.maintenanceMsg || 'Furagemz is being upgraded. Please check back shortly.', 'Try again', () => location.reload());
+  }
+  // Banned users can't use the app.
+  if (_account?.status === 'banned') {
+    return showBlocker('Account suspended', 'Your account has been suspended. Contact support if you believe this is a mistake.', 'Log out', doLogout);
+  }
   render();
   showView('main');
   maybeShowAnnouncement();
 });
+
+// Full-screen blocker (maintenance / banned) — replaces the app entirely.
+function showBlocker(title, msg, actionLabel, action) {
+  document.getElementById('authView')?.classList.add('hidden');
+  document.getElementById('mainView')?.classList.add('hidden');
+  const old = document.getElementById('blockerView'); if (old) old.remove();
+  const el = document.createElement('div');
+  el.id = 'blockerView'; el.className = 'blocker';
+  el.innerHTML = `<div class="blocker-card"><div class="blocker-logo">${FG_LOGO}</div>
+    <h2>${esc(title)}</h2><p>${esc(msg)}</p><button class="btn" id="blockerBtn">${esc(actionLabel)}</button></div>`;
+  document.body.appendChild(el);
+  document.getElementById('blockerBtn').addEventListener('click', action);
+}
 
 async function loadActivityFeed() {
   const r = await api('/public/activity-feed');
@@ -493,9 +528,36 @@ function render() {
 function ringSvg(pct, color) {
   const r = 22, c = 2 * Math.PI * r;
   const off = c * (1 - Math.min(1, Math.max(0, pct)));
+  // Start empty (offset = full circumference) and store the target; animateRings()
+  // sweeps each ring to its real value on render, so progress is visibly "moving".
   return `<svg viewBox="0 0 54 54"><circle class="ring-track" cx="27" cy="27" r="${r}" fill="none" stroke-width="5"/>
-    <circle cx="27" cy="27" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round"
-      stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
+    <circle class="ring-prog" cx="27" cy="27" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${c}" data-off="${off.toFixed(2)}"/></svg>`;
+}
+// Sweep every progress ring from empty to its real value, then keep them updated.
+function animateRings() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll('#panel-home .ring-prog').forEach(circ => {
+      const off = parseFloat(circ.getAttribute('data-off'));
+      if (!isNaN(off)) circ.style.strokeDashoffset = off;
+    });
+  });
+}
+let _ringTimer = null;
+function startRingTick() {
+  if (_ringTimer) return;
+  // Recompute progress every 30s (no network) so a gem's ring keeps creeping
+  // forward while the user watches the home screen.
+  _ringTimer = setInterval(() => {
+    if (_activeTab !== 'home') return;
+    document.querySelectorAll('#panel-home .ring[data-inv]').forEach(el => {
+      const inv = _investments.find(i => i.id === el.dataset.inv);
+      const circ = el.querySelector('.ring-prog');
+      if (!inv || !circ) return;
+      const c = 2 * Math.PI * 22;
+      circ.style.strokeDashoffset = c * (1 - gemProgress(inv));
+    });
+  }, 30000);
 }
 function gemProgress(inv) {
   const start = tsMs(inv.createdAt), mat = tsMs(inv.maturityDate);
@@ -519,7 +581,7 @@ function durPhrase(hours) {
 }
 // Boost cost = a percentage of the gem's total return (default 30%).
 function boostCost(inv) {
-  const pct = (_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.20;
+  const pct = (_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.30;
   return Math.round((inv.expectedReturn || 0) * pct);
 }
 // Boost eligibility for an active gem.
@@ -658,7 +720,7 @@ function renderHome() {
     ${active.length ? active.map(inv => `
       <div class="gem-active">
         <div class="ga-main">
-          <div class="ring">${ringSvg(gemProgress(inv), 'var(--violet)')}</div>
+          <div class="ring" data-inv="${esc(inv.id)}">${ringSvg(gemProgress(inv), 'var(--violet)')}</div>
           <div class="gem-active-info">
             <div class="t">${esc(inv.tierLabel || 'Gem')}</div>
             <div class="s">${inv.boosted ? 'Accelerating' : daysLeft(inv) + ' day' + (daysLeft(inv) === 1 ? '' : 's') + ' left'} · ${ugx(inv.amount)} in</div>
@@ -682,6 +744,8 @@ function renderHome() {
   el.querySelectorAll('[data-tab-jump]').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tabJump)));
   bindBoosts(el);
   startBanner();
+  animateRings();
+  startRingTick();
 }
 
 // Premium record card — gradient icon chip, clean title, tag, amount + status pill.
@@ -1080,6 +1144,7 @@ function renderAccount() {
       <button class="menu-row" id="mnBanks"><span class="mi">${ICN.bank}</span><span class="ml">Withdrawal accounts</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnPassword"><span class="mi">${ICN.lock}</span><span class="ml">Change password</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnSupport"><span class="mi">${ICN.support}</span><span class="ml">Contact support</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnDownload"><span class="mi">${ICN.download}</span><span class="ml">Download app</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnAbout"><span class="mi">${ICN.about}</span><span class="ml">About Furagemz</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
@@ -1093,7 +1158,43 @@ function renderAccount() {
   el.querySelector('#mnBanks').addEventListener('click', openBanksModal);
   el.querySelector('#mnPassword').addEventListener('click', openPasswordModal);
   el.querySelector('#mnSupport').addEventListener('click', openSupportModal);
+  el.querySelector('#mnDownload').addEventListener('click', openDownloadModal);
   el.querySelector('#mnAbout').addEventListener('click', openAboutModal);
+}
+
+// Download / install screen — app details are server-driven (settings/public).
+function openDownloadModal() {
+  const s = _publicSettings || {};
+  const installed = isInstalled();
+  openModal(`
+    <div class="modal-head"><h2>Download app</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="about-hero">
+      <div class="about-logo">${FG_LOGO}</div>
+      <div class="about-name">Furagemz</div>
+      <div class="about-tag">Install Furagemz on your phone</div>
+    </div>
+    <div class="dl-meta">
+      <div class="dl-row"><span>Version</span><b>${esc(s.appVersion || '1.0.0')}</b></div>
+      <div class="dl-row"><span>Developer</span><b>${esc(s.appDeveloper || 'Furagemz Developers')}</b></div>
+      <div class="dl-row"><span>Size</span><b>${esc(s.appSize || '—')}</b></div>
+      <div class="dl-row"><span>Platform</span><b>Android · iPhone · Web</b></div>
+    </div>
+    ${installed
+      ? `<div class="info-note"><span class="in-ic">${ICN.info}</span><div class="in-tx">Furagemz is already installed on this device. Open it from your home screen.</div></div>`
+      : `<button class="btn" id="dlInstall">${ICN.download} Install Furagemz</button>
+         <div class="info-note" style="margin-top:14px"><span class="in-ic">${ICN.info}</span><div class="in-tx">If the install button does nothing, open your browser menu and tap <b>Add to Home screen</b> (or <b>Install app</b>).</div></div>`}
+  `);
+  const btn = document.getElementById('dlInstall');
+  if (btn) btn.addEventListener('click', async () => {
+    if (_installPrompt) {
+      _installPrompt.prompt();
+      try { await _installPrompt.userChoice; } catch (_) {}
+      _installPrompt = null;
+      closeModal();
+    } else {
+      toast('Open your browser menu → Add to Home screen', '');
+    }
+  });
 }
 
 // About page — content is admin-managed (settings.aboutText). Falls back to a
@@ -1214,21 +1315,29 @@ function openHistoryModal() {
   // stay put no matter which filter chip is selected (only the list below filters).
   let inSum = 0, outSum = 0;
   _txns.forEach(t => { const a = t.amount || 0; if (a >= 0) inSum += a; else outSum += -a; });
-  const draw = () => {
+  // Build the page ONCE. Tapping a filter chip only re-renders the list + chip
+  // state below — the page never re-mounts, so there's no reload/flash.
+  openModal(`
+    <div class="modal-head"><h2>Records</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="rec-summary">
+      <div class="rs in"><div class="rs-l">Money in</div><div class="rs-n">${ugx(inSum)}</div></div>
+      <div class="rs out"><div class="rs-l">Money out</div><div class="rs-n">${ugx(outSum)}</div></div>
+    </div>
+    <div class="chips rec-chips" id="recChips">${TXN_FILTERS.map(x => `<button class="chip${_txnFilter === x.key ? ' active' : ''}" data-filter="${x.key}">${x.label}</button>`).join('')}</div>
+    <div class="rec-list" id="recList"></div>
+  `);
+  const listEl = document.getElementById('recList');
+  const drawList = () => {
     const f = TXN_FILTERS.find(x => x.key === _txnFilter) || TXN_FILTERS[0];
     const filtered = f.types ? _txns.filter(t => f.types.includes(t.type)) : _txns;
-    openModal(`
-      <div class="modal-head"><h2>Records</h2><button class="modal-close">${ICN.close}</button></div>
-      <div class="rec-summary">
-        <div class="rs in"><div class="rs-l">Money in</div><div class="rs-n">${ugx(inSum)}</div></div>
-        <div class="rs out"><div class="rs-l">Money out</div><div class="rs-n">${ugx(outSum)}</div></div>
-      </div>
-      <div class="chips rec-chips">${TXN_FILTERS.map(x => `<button class="chip${_txnFilter === x.key ? ' active' : ''}" data-filter="${x.key}">${x.label}</button>`).join('')}</div>
-      <div class="rec-list">${filtered.length ? filtered.map(txnRowHtml).join('') : `<div class="empty-note">No records here yet.</div>`}</div>
-    `);
-    document.querySelectorAll('#modalRoot [data-filter]').forEach(chip => {
-      chip.addEventListener('click', () => { _txnFilter = chip.dataset.filter; draw(); });
-    });
+    listEl.innerHTML = filtered.length ? filtered.map(txnRowHtml).join('') : `<div class="empty-note">No records here yet.</div>`;
   };
-  draw();
+  document.querySelectorAll('#recChips [data-filter]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      _txnFilter = chip.dataset.filter;
+      document.querySelectorAll('#recChips [data-filter]').forEach(c => c.classList.toggle('active', c.dataset.filter === _txnFilter));
+      drawList();
+    });
+  });
+  drawList();
 }

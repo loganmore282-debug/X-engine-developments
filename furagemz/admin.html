@@ -343,13 +343,22 @@ async function openUser(uid){
     <div class="kv"><span class="k">Referral code</span><span>${esc(u.referralCode||u.username||'')}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'—')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
+    ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned${u.banReason?' — '+esc(u.banReason):''}</div>`:''}
     <label>Amount (UGX)</label><input id="adjAmt" type="number" placeholder="0">
     <label>Note (optional)</label><input id="adjNote" placeholder="Reason">
     <div class="row" style="margin-top:14px">
       <button class="btn ok sm" id="creditBtn">Credit</button>
       <button class="btn danger sm" id="debitBtn">Debit</button>
       <button class="btn ${u.status==='banned'?'ghost':'danger'} sm" id="banBtn">${u.status==='banned'?'Unban':'Ban'}</button>
-    </div>`);
+    </div>
+    <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
+    <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td class="empty">Loading…</td></tr></tbody></table></div>`);
+  (async()=>{
+    const tr=await api('/admin/transactions/list',{ userId:uid });
+    const tx=(tr.transactions||[]).slice(0,25);
+    $('userTx').innerHTML = tx.length?tx.map(t=>`<tr><td style="white-space:nowrap">${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td>
+      <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap;text-align:right">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td class="empty">No transactions</td></tr>';
+  })();
   const amt=()=>parseFloat($('adjAmt').value||0), note=()=>$('adjNote').value.trim();
   $('creditBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('debitBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
@@ -560,9 +569,10 @@ async function renderTransactions(){
 function drawTxns(){
   const list=_txFilter==='all'?_txns:_txns.filter(t=>t.type===_txFilter);
   $('txRows').innerHTML = list.length?list.slice(0,300).map(t=>`
-    <tr><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
+    <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td>
     <td>${statusPill(t.status)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
+  document.querySelectorAll('#txRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 
 // ── REFERRALS ──
@@ -571,8 +581,9 @@ async function renderReferrals(){
   const list = r.referrals||[];
   $('content').innerHTML = `
     <h2 class="sec">Referrals (${list.length})</h2>
-    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Referrer</th><th>New user</th></tr></thead>
-    <tbody>${list.length?list.map(x=>`<tr><td>${fdate(x.createdAt)}</td><td>${esc(x.referrerId||'')}</td><td>${esc(x.referredUserId||'')}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Referrer</th><th>New user</th><th>Level</th></tr></thead>
+    <tbody>${list.length?list.map(x=>`<tr class="${x.referrerId?'clickable':''}" ${x.referrerId?`data-uid="${esc(x.referrerId)}"`:''}><td>${fdate(x.createdAt)}</td><td><b>${esc(x.referrerName||x.referrerId||'')}</b></td><td>${esc(x.referredName||x.referredUserId||'')}</td><td>${x.level?('L'+x.level):'L1'}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
+  document.querySelectorAll('#content tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 
 // ── SETTINGS ──
@@ -601,8 +612,9 @@ async function renderSettings(){
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a gem before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
-      <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
+      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="Furagemz is being upgraded. Please check back shortly.">
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
@@ -631,6 +643,11 @@ async function renderSettings(){
       <label>App tagline (shown under the logo)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Grow your money with gems.">
       <label>About text (shown on the app's About page)</label>
       <textarea id="abText" rows="8" placeholder="Describe Furagemz for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
+      <div class="row" style="margin-top:6px">
+        <div><label>App version</label><input id="abVer" value="${esc(v('appVersion','1.7.0'))}" placeholder="1.7.0"></div>
+        <div><label>Developer</label><input id="abDev" value="${esc(v('appDeveloper','Furagemz Developers'))}"></div>
+        <div><label>App size</label><input id="abSize" value="${esc(v('appSize','2.4 MB'))}" placeholder="2.4 MB"></div>
+      </div>
       <button class="btn block" id="saveAbout">Save about page</button>
     </div>`;
   $('saveRates').addEventListener('click', async()=>{
@@ -639,7 +656,8 @@ async function renderSettings(){
       checkinBonus:+$('sCheckin').value, liquidityFee:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       boostUnlockDays:+$('sBoostDays').value, boostMatureHours:+$('sBoostHrs').value,
-      requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked
+      requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
+      maintenanceMsg:$('sMaintMsg').value.trim()
     };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
@@ -653,7 +671,8 @@ async function renderSettings(){
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveAbout').addEventListener('click', async()=>{
-    const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value };
+    const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value,
+      appVersion:$('abVer').value.trim(), appDeveloper:$('abDev').value.trim(), appSize:$('abSize').value.trim() };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'About saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }

@@ -83,6 +83,23 @@ app.use('/admin/', adminLimiter);
 ['/checkin', '/withdraw/request', '/invest/create', '/invest/boost', '/deposit/marzpay', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 
+// ── MAINTENANCE GATE ──
+// When maintenance mode is on, every money/account action is blocked for normal
+// users (admin panel, auth, health and public read-only endpoints stay open so
+// the owner can still work and the app can show a maintenance screen).
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/checkin', '/redeem', '/team', '/register'];
+app.use(async (req, res, next) => {
+  if (!MAINTENANCE_BLOCK.some(p => req.path.startsWith(p))) return next();
+  try {
+    const s = await getSettings();
+    if (s && s.maintenanceMode) {
+      return res.status(503).json({ status: 'error', code: 'MAINTENANCE',
+        message: s.maintenanceMsg || 'Furagemz is under maintenance. Please check back shortly.' });
+    }
+  } catch (_) {}
+  next();
+});
+
 // ── FIREBASE AUTH (Auth only — data lives in MongoDB) ──
 let serviceAccount;
 try {
@@ -112,6 +129,8 @@ const PUBLIC_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 
+const APP_VERSION      = '1.7.0';   // shown on the in-app "Download app" screen
+const APP_SIZE         = '2.4 MB';  // approximate installed PWA size
 const MIN_DEPOSIT      = 30000;
 const MIN_WITHDRAWAL   = 10000;   // no multiples restriction (owner's call, differs from Voltra)
 const WELCOME_BONUS    = 5000;
@@ -127,7 +146,7 @@ const CYCLE_DAYS       = 60;      // stipulated investment period (days), fixed 
 // BOOST / ACCELERATE — after BOOST_UNLOCK_DAYS the holder may pay BOOST_COST_PCT of
 // the gem's total return to compress all remaining payouts into BOOST_MATURE_DAYS.
 const BOOST_UNLOCK_DAYS  = 5;     // boost becomes available 5 days after purchase
-const BOOST_COST_PCT     = 0.20;  // boost fee = 20% of the gem's total return
+const BOOST_COST_PCT     = 0.30;  // boost fee = 30% of the gem's total return
 const BOOST_MATURE_DAYS  = 5;     // after a boost, the gem finishes paying in 5 days
 const BOOST_MATURE_HOURS = BOOST_MATURE_DAYS * 24;
 function durPhrase(hours) {
@@ -413,6 +432,11 @@ app.get('/settings/public', async (_req, res) => {
     boostMatureHours: s.boostMatureHours ?? BOOST_MATURE_HOURS,
     boostMatureDays:  s.boostMatureDays  ?? BOOST_MATURE_DAYS,
     boostCostPct:     s.boostCostPct     ?? BOOST_COST_PCT,
+    maintenanceMode:  !!s.maintenanceMode,
+    maintenanceMsg:   s.maintenanceMsg || 'Furagemz is under maintenance. Please check back shortly.',
+    appVersion:       s.appVersion || APP_VERSION,
+    appDeveloper:     s.appDeveloper || 'Furagemz Developers',
+    appSize:          s.appSize || APP_SIZE,
     slideshowImages: Array.isArray(s.slideshowImages) ? s.slideshowImages : [],
     announcementBg:  s.announcementBg || '',
     brandTagline:    s.brandTagline || '',
@@ -511,26 +535,48 @@ app.post('/auth/captcha/verify', (req, res) => {
   return res.json({ status: ok ? 'success' : 'error', message: ok ? '' : 'Incorrect code, try again.' });
 });
 
-// ── ACTIVITY FEED (server-generated social proof, refreshed 30s) ──
-const _FEED_NAMES = ['Grace','Peter','Sarah','John','Amina','David','Brian','Joan','Moses','Ritah','Ivan','Sharon','Denis','Faith','Isaac','Mercy','Samuel','Patience','Ronald','Esther','Andrew','Lydia','Kenneth','Sylvia','Robert','Winnie','Emmanuel','Doreen','Timothy','Barbara'];
-const _FEED_PLACES = ['Kampala','Wakiso','Mbarara','Gulu','Jinja','Mbale','Masaka','Lira','Fort Portal','Entebbe','Arua','Soroti','Hoima','Kabale'];
-function _pick(a) { return a[Math.floor(Math.random() * a.length)]; }
-function genActivityFeed() {
-  const items = [];
-  for (let i = 0; i < 26; i++) {
-    const roll = Math.random();
-    let action, amount;
-    if      (roll < 0.34) { action = 'bought a gem';       amount = _pick([25000,75000,200000,450000,800000,1200000]); }
-    else if (roll < 0.64) { action = 'received a payout';  amount = _pick([62500,187500,500000,1125000,2000000]); }
-    else if (roll < 0.88) { action = 'withdrew';           amount = 5000 * (2 + Math.floor(Math.random() * 40)); }
-    else                  { action = 'joined Furagemz';    amount = 0; }
-    items.push({ name: _pick(_FEED_NAMES), place: _pick(_FEED_PLACES), action, amount, ago: Math.floor(Math.random() * 58) + 1 });
-  }
-  return items.sort((a, b) => a.ago - b.ago);
+// ── ACTIVITY FEED — built from REAL user transactions, global (same on every
+// device), cached ~25s. Names are shown first-name only for privacy. ──
+const _FEED_ACTIONS = {
+  topup:        'deposited',
+  admin_credit: 'topped up',
+  withdrawal:   'withdrew',
+  gem_payout:   'earned cashback of',
+  investment:   'activated a gem worth',
+  commission:   'earned a referral reward of',
+  redeem:       'redeemed a code for',
+  checkin:      'claimed a daily bonus of',
+};
+function _firstName(nm) {
+  const first = String(nm || '').trim().split(/\s+/)[0] || 'Member';
+  return first.charAt(0).toUpperCase() + first.slice(1);
 }
-let _activityFeed = [], _activityTs = 0;
-app.get('/public/activity-feed', (_req, res) => {
-  if (Date.now() - _activityTs > 30000) { _activityFeed = genActivityFeed(); _activityTs = Date.now(); }
+async function buildActivityFeed() {
+  const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(60).get();
+  const rows = snap.docs.map(d => d.data())
+    .filter(t => _FEED_ACTIONS[t.type] && t.amount != null && Math.abs(t.amount) > 0);
+  const ids = [...new Set(rows.map(t => t.userId).filter(Boolean))].slice(0, 40);
+  const nameMap = {};
+  await Promise.all(ids.map(async id => {
+    try { const u = await db.collection('users').doc(id).get(); if (u.exists) nameMap[id] = u.data().name || u.data().username || 'Member'; }
+    catch (_) {}
+  }));
+  return rows.slice(0, 30).map(t => ({
+    name:   _firstName(nameMap[t.userId] || 'Member'),
+    action: _FEED_ACTIONS[t.type],
+    amount: Math.abs(t.amount || 0),
+    ago:    Math.max(1, Math.round((Date.now() - tsMillis(t.createdAt)) / 60000)),
+  }));
+}
+let _activityFeed = [], _activityTs = 0, _activityBuilding = false;
+app.get('/public/activity-feed', async (_req, res) => {
+  if (!_activityBuilding && Date.now() - _activityTs > 25000) {
+    _activityBuilding = true;
+    buildActivityFeed()
+      .then(f => { _activityFeed = f; _activityTs = Date.now(); })
+      .catch(e => console.error('activity feed error:', e.message))
+      .finally(() => { _activityBuilding = false; });
+  }
   res.json({ status: 'success', feed: _activityFeed });
 });
 
@@ -1615,7 +1661,9 @@ app.post('/admin/deposit', async (req, res) => {
       const uRef  = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
-      t.update(uRef, { walletBalance: FieldValue.increment(amt) });
+      // Count admin credits toward the user's deposit total so they validate and
+      // show up as a deposit everywhere (history, dashboard, health totals).
+      t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'admin_credit', description: note || 'Furagemz credit',
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
@@ -1788,7 +1836,16 @@ app.post('/admin/referrals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('referrals').orderBy('createdAt', 'desc').limit(200).get();
-    return res.json({ status: 'success', referrals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Resolve the referrer / new-user IDs to usernames so the panel is readable.
+    const ids = [...new Set(rows.flatMap(r => [r.referrerId, r.referredUserId]).filter(Boolean))];
+    const names = {};
+    await Promise.all(ids.map(async id => {
+      try { const u = await db.collection('users').doc(id).get(); if (u.exists) names[id] = u.data().username || u.data().name || u.data().phone || id; }
+      catch (_) {}
+    }));
+    rows.forEach(r => { r.referrerName = names[r.referrerId] || r.referrerId || '—'; r.referredName = names[r.referredUserId] || r.referredUserId || '—'; });
+    return res.json({ status: 'success', referrals: rows });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
