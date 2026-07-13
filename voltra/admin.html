@@ -1521,10 +1521,21 @@ function renderUsers() {
 function _downloadBlob(content, filename, mime) {
   const blob = new Blob([content], { type: mime });
   const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+  const supportsDownload = 'download' in document.createElement('a');
+  if (!supportsDownload) {
+    // Old/in-app browsers that ignore the download attribute: open it so the
+    // user can long-press → Save/Share instead of silently doing nothing.
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  // Revoking immediately can cancel the download before some mobile browsers
+  // actually start it — give it a moment before freeing the blob URL.
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 2000);
 }
 function _csvCell(v) {
   const s = String(v == null ? '' : v);
