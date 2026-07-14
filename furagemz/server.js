@@ -358,6 +358,7 @@ async function _payChain(investorId, amount, investmentId) {
           walletBalance:      FieldValue.increment(l1Amt),
           commissionEarned:   FieldValue.increment(l1Amt),
           commissionL1Earned: FieldValue.increment(l1Amt),
+          totalEarned:        FieldValue.increment(l1Amt),
           [dedupFlag]:        true
         });
         t.set(db.collection('transactions').doc(), {
@@ -384,6 +385,7 @@ async function _payChain(investorId, amount, investmentId) {
           walletBalance:      FieldValue.increment(l2Amt),
           commissionEarned:   FieldValue.increment(l2Amt),
           commissionL2Earned: FieldValue.increment(l2Amt),
+          totalEarned:        FieldValue.increment(l2Amt),
           [dedupFlag]:        true
         });
         t.set(db.collection('transactions').doc(), {
@@ -409,6 +411,7 @@ async function _payChain(investorId, amount, investmentId) {
           walletBalance:      FieldValue.increment(l3Amt),
           commissionEarned:   FieldValue.increment(l3Amt),
           commissionL3Earned: FieldValue.increment(l3Amt),
+          totalEarned:        FieldValue.increment(l3Amt),
           [dedupFlag]:        true
         });
         t.set(db.collection('transactions').doc(), {
@@ -1124,7 +1127,8 @@ app.post('/checkin', async (req, res) => {
         walletBalance:   FieldValue.increment(bonus),
         lastCheckinDate: todayKey, checkinStreak: newStreak,
         checkinDays:     FieldValue.increment(1),
-        checkinEarned:   FieldValue.increment(bonus)
+        checkinEarned:   FieldValue.increment(bonus),
+        totalEarned:     FieldValue.increment(bonus)
       });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'checkin', description: `Daily bonus — Day ${newStreak}`,
@@ -1182,7 +1186,7 @@ app.post('/redeem', async (req, res) => {
         const uRef = db.collection('users').doc(userId);
         const uSnap = await t.get(uRef);
         if (!uSnap.exists) { err = 'User not found'; return; }
-        t.update(uRef, { walletBalance: FieldValue.increment(amount) });
+        t.update(uRef, { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount) });
         t.update(doc.ref, { usedBy: FieldValue.arrayUnion(userId) });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'redeem', description: `Code redeemed — ${code.toUpperCase()}`,
@@ -1770,6 +1774,72 @@ app.post('/admin/deposit/complete', async (req, res) => {
     return res.status(400).json({ status: 'error', message: 'MarzPay status still pending — try again in a moment' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
+// ── USER-TOTALS RECOUNT ──
+// Rebuilds every user's running counters (totalDeposited, totalEarned,
+// commissionEarned incl. per-level, checkinEarned, totalWithdrawn) from the
+// transactions ledger — the source of truth — so the stat tiles in the app can
+// never drift from reality (e.g. credits made before a counter existed, or
+// requests lost while the server was down). Safe to re-run any time: it SETS
+// exact recomputed values, so running twice changes nothing.
+const DEP_TYPES  = new Set(['topup', 'admin_credit']);
+const EARN_TYPES = new Set(['gem_payout', 'checkin', 'commission', 'redeem']);
+const OK_STATUS  = new Set(['success', 'processed', 'matched']);
+async function recountUserTotals() {
+  const [txSnap, witSnap, usersSnap] = await Promise.all([
+    db.collection('transactions').get(),
+    db.collection('withdrawals').where('status', '==', 'processed').get(),
+    db.collection('users').limit(10000).get(),
+  ]);
+  const zero = () => ({ totalDeposited: 0, totalEarned: 0, commissionEarned: 0,
+    commissionL1Earned: 0, commissionL2Earned: 0, commissionL3Earned: 0,
+    checkinEarned: 0, totalWithdrawn: 0 });
+  const agg = {};
+  const bucket = id => (agg[id] = agg[id] || zero());
+  txSnap.forEach(d => {
+    const t = d.data();
+    if (!t.userId || !(t.amount > 0)) return;
+    if (t.status && !OK_STATUS.has(String(t.status).toLowerCase())) return;
+    const b = bucket(t.userId);
+    // Welcome gift is a sign-up bonus, not real money in — keep it out of "deposited".
+    if (DEP_TYPES.has(t.type) && t.description !== 'Welcome gift') b.totalDeposited += t.amount;
+    if (EARN_TYPES.has(t.type)) b.totalEarned += t.amount;
+    if (t.type === 'commission') {
+      b.commissionEarned += t.amount;
+      if (t.level === 1) b.commissionL1Earned += t.amount;
+      else if (t.level === 2) b.commissionL2Earned += t.amount;
+      else if (t.level === 3) b.commissionL3Earned += t.amount;
+    }
+    if (t.type === 'checkin') b.checkinEarned += t.amount;
+  });
+  witSnap.forEach(d => {
+    const w = d.data();
+    if (w.userId) bucket(w.userId).totalWithdrawn += (w.netAmount || w.amount || 0);
+  });
+  let updated = 0;
+  for (const doc of usersSnap.docs) {
+    try { await db.collection('users').doc(doc.id).update(agg[doc.id] || zero()); updated++; }
+    catch (e) { console.error('recount update error:', doc.id, e.message); }
+  }
+  return updated;
+}
+// One-time self-heal at boot: fixes every account whose counters predate the
+// counter fixes (e.g. check-ins that never counted into totalEarned).
+async function runRecountMigrationOnce() {
+  try {
+    const s = await getSettings();
+    if (s.recountV1Done) return;
+    const n = await recountUserTotals();
+    await db.collection('settings').doc('main').set({ recountV1Done: true }, { merge: true });
+    _settingsCache = null; _settingsCacheTs = 0;
+    console.log('User-totals recount migration done:', n, 'users');
+  } catch (e) { console.error('Recount migration error:', e.message); }
+}
+app.post('/admin/users/recount', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { return res.json({ status: 'success', updated: await recountUserTotals() }); }
+  catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 app.post('/admin/stats', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -1992,7 +2062,7 @@ async function startServer() {
   const tryConnect = async () => {
     try {
       await connectMongo(MONGODB_URI);
-      if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts(); }
+      if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts(); runRecountMigrationOnce(); }
     } catch (e) {
       console.error('MongoDB not reachable yet — retrying in 5s:', e.message);
       setTimeout(tryConnect, 5000);

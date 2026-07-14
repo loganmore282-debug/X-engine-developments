@@ -311,10 +311,17 @@ async function renderUsers(){
   const r = await api('/admin/users');
   _users = (r.users||[]).sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
   $('content').innerHTML = `
-    <h2 class="sec">Users (${_users.length})</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Users (${_users.length})</h2>
+      <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning totals from the transaction ledger">Recalculate totals</button></div>
     <div class="panel-card"><input id="userSearch" placeholder="Search username or phone"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Username</th><th>Phone</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
   $('userSearch').addEventListener('input', drawUsers);
+  $('recountBtn').addEventListener('click', async()=>{
+    const b=$('recountBtn'); b.disabled=true; b.textContent='Recalculating…';
+    const d=await api('/admin/users/recount');
+    toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+    renderUsers();
+  });
   drawUsers();
 }
 function drawUsers(){
