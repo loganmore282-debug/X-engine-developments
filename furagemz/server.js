@@ -1239,8 +1239,8 @@ app.post('/admin/payments/sync', async (req, res) => {
 function startCrons() {
   // Every 2 minutes so a payout lands within moments of its exact 24h mark —
   // plus the settle-on-open hook in /account/investments for instant landing.
-  setInterval(runDailyPayouts, 2 * 60 * 1000);
-  setTimeout(runDailyPayouts, 60 * 1000);
+  setInterval(runDailyPayouts, 60 * 1000);
+  setTimeout(runDailyPayouts, 15 * 1000);
   // Background payment settlement — every 45s, so a paid deposit lands even if
   // the user closed the app and the callback never arrived.
   setInterval(pollPendingPayments, 30 * 1000);
