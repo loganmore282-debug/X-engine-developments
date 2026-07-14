@@ -1284,20 +1284,24 @@ const TXN_FILTERS = [
 ];
 function renderAccount() {
   const el = document.getElementById('panel-account');
-  const code = _account?.referralCode ? `<span class="reftag">CODE ${esc(_account.referralCode)}</span>` : '';
+  const rc = _account?.referralCode || '';
+  const code = rc ? `<span class="acc-code" id="accCode">CODE ${esc(rc)} ${ICN.copy}</span>` : '';
   el.innerHTML = `
-    <div class="id-card">
-      <div class="avatar">${esc(initials(_account?.name))}</div>
-      <div>
-        <div class="name">${esc(_account?.name || 'Furagemz user')}</div>
-        <div class="phone">${esc(_account?.phone || '')}</div>
-        ${code}
+    <div class="acc-card">
+      <div class="acc-top">
+        <div class="acc-av">${esc(initials(_account?.name))}</div>
+        <div>
+          <div class="acc-name">${esc(_account?.name || 'Furagemz user')}</div>
+          <div class="acc-phone">${esc(_account?.phone || '')}</div>
+          ${code}
+        </div>
       </div>
-    </div>
-    <div class="earn-strip">
-      <div class="es"><div class="n">${ugx(_account?.totalDeposited || 0)}</div><div class="l">Deposited</div></div>
-      <div class="es"><div class="n">${ugx(_account?.totalEarned || 0)}</div><div class="l">Earned</div></div>
-      <div class="es"><div class="n">${ugx(_account?.totalWithdrawn || 0)}</div><div class="l">Withdrawn</div></div>
+      <div class="acc-stats">
+        <div class="as"><div class="n">${ugx(_account?.totalDeposited || 0)}</div><div class="l">Deposited</div></div>
+        <div class="as"><div class="n">${ugx(_account?.totalEarned || 0)}</div><div class="l">Earned</div></div>
+        <div class="as"><div class="n">${ugx(_account?.totalWithdrawn || 0)}</div><div class="l">Withdrawn</div></div>
+      </div>
+      <div class="acc-tier">${ICN.gem} Furagemz member</div>
     </div>
     <div class="menu-list">
       <button class="menu-row" id="mnRedeem"><span class="mi">${ICN.redeem}</span><span class="ml">Redeem a code</span><span class="mr">${ICN.chevron}</span></button>
@@ -1316,6 +1320,10 @@ function renderAccount() {
       <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Log out</span></button>
     </div>
   `;
+  const accCode = el.querySelector('#accCode');
+  if (accCode) accCode.addEventListener('click', () => {
+    try { navigator.clipboard.writeText(rc); toast('Code copied'); } catch (e) {}
+  });
   el.querySelector('#mnRedeem').addEventListener('click', openRedeemModal);
   el.querySelector('#mnHistory').addEventListener('click', openHistoryModal);
   el.querySelector('#mnGems').addEventListener('click', openHoldingsModal);
