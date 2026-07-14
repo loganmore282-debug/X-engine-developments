@@ -76,6 +76,7 @@ const ICN = {
   lock:         _svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
   support:      _svg('<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/><path d="M9.5 10h.01M12 10h.01M14.5 10h.01"/>'),
   mail:         _svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'),
+  telegram:     _svg('<path d="M21 4 3 11.5l6 2M21 4 15 20l-6-6.5M21 4 9 13.5"/>'),
   clock:        _svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   bank:         _svg('<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18"/><path d="M7 16h4"/>'),
   trash:        _svg('<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>'),
@@ -1098,7 +1099,7 @@ function openRedeemModal() {
   openModal(`
     <div class="modal-head"><h2>Redeem a code</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="field"><label>Enter your code</label>
-      <input id="mCode" type="text" autocomplete="off" placeholder="ABC123"
+      <input id="mCode" type="text" autocomplete="off" placeholder="XXXXXXXXXX" maxlength="10"
         style="text-transform:uppercase;letter-spacing:3px;text-align:center;font-weight:800;font-size:18px"></div>
     <div class="note" style="text-align:left;margin-bottom:14px">A code can be redeemed once per account. The reward lands straight in your wallet.</div>
     <button class="btn" id="mSubmit">Redeem code</button>
@@ -1469,15 +1470,15 @@ function openPasswordModal() {
 function openSupportModal() {
   const s = _publicSettings || {};
   const wa = s.supportWhatsapp || '';
-  const email = s.supportEmail || '';
+  const tg = s.supportTelegram || '';
   const hours = s.supportHours || 'Every day, 9:00 AM – 9:00 PM';
   openModal(`
     <div class="modal-head"><h2>Contact support</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="support-body">
-      ${wa ? `<a class="support-row" href="${esc(wa)}" target="_blank" rel="noopener"><span class="mi" style="background:var(--ok-bg);color:var(--ok)">${ICN.support}</span><span><b>WhatsApp channel</b><br><span class="s">Tap to open</span></span></a>` : ''}
-      ${email ? `<a class="support-row" href="mailto:${esc(email)}"><span class="mi" style="background:#eef2ff;color:var(--sapphire)">${ICN.mail}</span><span><b>Email us</b><br><span class="s">${esc(email)}</span></span></a>` : ''}
+      ${wa ? `<a class="support-row" href="${esc(wa)}" target="_blank" rel="noopener"><span class="mi" style="background:var(--ok-bg);color:var(--ok)">${ICN.support}</span><span><b>WhatsApp</b><br><span class="s">Tap to open</span></span></a>` : ''}
+      ${tg ? `<a class="support-row" href="${esc(tg)}" target="_blank" rel="noopener"><span class="mi" style="background:#eef2ff;color:var(--sapphire)">${ICN.telegram}</span><span><b>Telegram group</b><br><span class="s">Tap to open</span></span></a>` : ''}
       <div class="support-row" style="cursor:default"><span class="mi" style="background:#fef9e7;color:var(--topaz)">${ICN.clock}</span><span><b>Support hours</b><br><span class="s">${esc(hours)}</span></span></div>
-      ${!wa && !email ? `<div class="empty-note">Support contacts have not been set yet.</div>` : ''}
+      ${!wa && !tg ? `<div class="empty-note">Support contacts have not been set yet.</div>` : ''}
     </div>
   `);
 }

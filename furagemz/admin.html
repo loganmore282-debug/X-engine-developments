@@ -684,8 +684,8 @@ async function renderSettings(){
 
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
-      <label>WhatsApp channel link</label><input id="spWa" value="${esc(v('supportWhatsapp',''))}" placeholder="https://whatsapp.com/channel/...">
-      <label>Support email</label><input id="spEmail" value="${esc(v('supportEmail',''))}" placeholder="support@furagemz.com">
+      <label>WhatsApp number or link</label><input id="spWa" value="${esc(v('supportWhatsapp',''))}" placeholder="https://wa.me/256700000000">
+      <label>Telegram group link</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/yourgroup">
       <label>Support hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Every day, 9:00 AM – 9:00 PM">
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>
@@ -719,7 +719,7 @@ async function renderSettings(){
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveSupport').addEventListener('click', async()=>{
-    const upd = { supportWhatsapp:$('spWa').value.trim(), supportEmail:$('spEmail').value.trim(), supportHours:$('spHours').value.trim() };
+    const upd = { supportWhatsapp:$('spWa').value.trim(), supportTelegram:$('spTg').value.trim(), supportHours:$('spHours').value.trim() };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveAbout').addEventListener('click', async()=>{

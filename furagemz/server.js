@@ -562,7 +562,7 @@ app.get('/settings/public', async (_req, res) => {
     announcementBg:  s.announcementBg || '',
     brandTagline:    s.brandTagline || '',
     supportWhatsapp: s.supportWhatsapp || '',
-    supportEmail:    s.supportEmail    || '',
+    supportTelegram: s.supportTelegram || '',
     supportHours:    s.supportHours    || '',
     announcement: {
       enabled:  !!s.annEnabled,
@@ -1314,7 +1314,7 @@ app.post('/checkin', async (req, res) => {
 // redeems it once. Distinct from Voltra's random-range gift codes: a Furagemz
 // code carries its own fixed `amount`, set when the admin creates it.
 // ═══════════════════════════════════════════
-function genCode() { return randChars(6); } // 6 alphanumeric chars, e.g. Y68GDH (unambiguous charset)
+function genCode() { return randChars(10); } // 10 alphanumeric chars (unambiguous charset)
 const _codeRateMap   = new Map();  // userId -> last attempt ts
 const _redeemingCodes = new Set(); // code doc id -> being redeemed (single-writer)
 
