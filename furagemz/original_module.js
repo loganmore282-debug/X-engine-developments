@@ -20,19 +20,15 @@ const SERVER = 'https://ugandalove.onrender.com';
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// ── PWA: register the service worker + capture the install prompt so the
-// "Download app" screen can trigger a real install even if the user dismissed
-// the browser's own banner. ──
+// ── SERVICE WORKER REMOVED (owner's call) ──
+// Actively unregister any previously-installed worker and wipe its caches so
+// every phone that got stuck on a cached build goes straight back to the live
+// site. The app now always loads directly from the network, like Voltra's origin.
 let _installPrompt = null;
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
-  // If a new service worker takes over (e.g. escaping an old cached build),
-  // reload ONCE so the user immediately gets the fresh version.
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    try { if (sessionStorage.getItem('fg_swreload')) return; sessionStorage.setItem('fg_swreload', '1'); } catch (_) {}
-    location.reload();
-  });
+  navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
 }
+try { if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))); } catch (_) {}
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _installPrompt = e; });
 window.addEventListener('appinstalled', () => { _installPrompt = null; try { toast('Furagemz installed', 'ok'); } catch (_) {} });
 function isInstalled() {
