@@ -639,10 +639,10 @@ async function renderSettings(){
         <div><label>Min deposit</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
         <div><label>Min withdrawal</label><input id="sMinWit" type="number" value="${v('minWithdrawal',10000)}"></div>
         <div><label>Welcome bonus</label><input id="sWelcome" type="number" value="${v('welcomeBonus',5000)}"></div>
-        <div><label>Check-in bonus</label><input id="sCheckin" type="number" value="${v('checkinBonus',300)}"></div>
+        <div><label>Check-in bonus</label><input id="sCheckin" type="number" value="${v('checkinBonus',500)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
-        <div><label>Withdrawal fee (0–1)</label><input id="sFee" type="number" step="0.01" value="${v('liquidityFee',0.05)}"></div>
+        <div><label>Withdrawal fee (0–1)</label><input id="sFee" type="number" step="0.01" value="${v('liquidityFee',0.14)}"></div>
         <div><label>L1 commission (0–1)</label><input id="sC1" type="number" step="0.01" value="${v('commL1',0.35)}"></div>
         <div><label>L2 commission (0–1)</label><input id="sC2" type="number" step="0.01" value="${v('commL2',0.02)}"></div>
         <div><label>L3 commission (0–1)</label><input id="sC3" type="number" step="0.01" value="${v('commL3',0.01)}"></div>

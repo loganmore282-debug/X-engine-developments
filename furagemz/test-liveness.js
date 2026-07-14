@@ -204,8 +204,8 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
 
   console.log('\n── 6. Check-in + redeem');
   r = await call('POST', '/checkin', { token: B });
-  check('check-in pays 300', r.body?.bonus === 300, r.body);
-  check('check-in counted into totalEarned', userDoc('bob-uid').totalEarned >= 300, userDoc('bob-uid').totalEarned);
+  check('check-in pays 500', r.body?.bonus === 500, r.body);
+  check('check-in counted into totalEarned', userDoc('bob-uid').totalEarned >= 500, userDoc('bob-uid').totalEarned);
   r = await call('POST', '/checkin', { token: B });
   check('second check-in same day blocked', r.code === 400 && r.body?.alreadyDone === true, r.body);
   await call('POST', '/admin/codes/generate', { body: { ...ADMIN, amount: 5000, count: 1 } });
@@ -226,9 +226,9 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   marzTx.set(witDoc.marzTxUuid, 'completed');
   const wcb = { event_type: 'disbursement.completed', transaction: { uuid: witDoc.marzTxUuid, status: 'completed' } };
   await call('POST', '/withdraw/callback', { body: wcb }); await sleep(250);
-  check('withdrawal processed, totalWithdrawn = net 9500', userDoc('bob-uid').totalWithdrawn === 9500, userDoc('bob-uid').totalWithdrawn);
+  check('withdrawal processed, totalWithdrawn = net 8600 (14% fee)', userDoc('bob-uid').totalWithdrawn === 8600, userDoc('bob-uid').totalWithdrawn);
   await call('POST', '/withdraw/callback', { body: wcb }); await sleep(250);
-  check('withdraw callback REPLAY does not double-count', userDoc('bob-uid').totalWithdrawn === 9500, userDoc('bob-uid').totalWithdrawn);
+  check('withdraw callback REPLAY does not double-count', userDoc('bob-uid').totalWithdrawn === 8600, userDoc('bob-uid').totalWithdrawn);
   // reject double-refund
   r = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
   const wit2 = r.body.withdrawalId;

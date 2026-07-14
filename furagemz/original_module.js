@@ -453,7 +453,7 @@ async function realtimeTick() {
 }
 function startRealtime() {
   if (_realtimeTimer) return;
-  _realtimeTimer = setInterval(realtimeTick, 10000);
+  _realtimeTimer = setInterval(realtimeTick, 7000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) realtimeTick(); });
   startCountdownTick();
 }
@@ -905,7 +905,7 @@ async function doCheckin() {
 // ══════════════════════════════════════════════
 const DEPOSIT_CHIPS = [30000, 50000, 100000, 200000, 500000];
 const WITHDRAW_CHIPS = [10000, 25000, 50000, 100000];
-const WITHDRAW_FEE = 0.05;
+const WITHDRAW_FEE = 0.14;
 
 function openDepositModal() {
   const phone0 = esc((_account?.phone || '').replace('+256', '0'));
@@ -963,8 +963,8 @@ async function pollDepositUI(depositId, amount, tries) {
   const s = r.deposit?.depositStatus;
   if (s === 'matched') { depositResult('ok', r.deposit.creditedAmount || amount); await loadAccount(); await loadTxns(); renderHome(); renderAccount(); return; }
   if (s === 'failed')  { depositResult('bad', amount); return; }
-  if (tries > 48)      { depositResult('slow', amount); return; }
-  setTimeout(() => pollDepositUI(depositId, amount, tries + 1), 2500);
+  if (tries > 100)     { depositResult('slow', amount); return; }
+  setTimeout(() => pollDepositUI(depositId, amount, tries + 1), 1200);
 }
 // Full-screen celebratory confetti: pieces rain from the top of the SCREEN,
 // fluttering side-to-side with varied sizes, shapes, spin and speed — like real

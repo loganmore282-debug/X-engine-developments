@@ -138,11 +138,11 @@ const APP_SIZE         = '2.4 MB';  // approximate installed PWA size
 const MIN_DEPOSIT      = 30000;
 const MIN_WITHDRAWAL   = 10000;   // no multiples restriction (owner's call, differs from Voltra)
 const WELCOME_BONUS    = 5000;
-const CHECKIN_BONUS    = 300;
+const CHECKIN_BONUS    = 500;
 const COMM_L1          = 0.35;    // referral bonus, level 1
 const COMM_L2          = 0.02;    // level 2
 const COMM_L3          = 0.01;    // level 3
-const LIQUIDITY_FEE    = 0.05;    // withdrawal fee
+const LIQUIDITY_FEE    = 0.14;    // withdrawal fee
 const RETURN_MULTIPLE  = 13;      // payout = price * RETURN_MULTIPLE, paid in full at maturity
 const CYCLE_DAYS       = 60;      // stipulated investment period (days), fixed for every gem
 // EARNINGS: each gem pays daily cashback (expectedReturn / cycle) every 24 hours
@@ -1215,8 +1215,8 @@ function startCrons() {
   setTimeout(runDailyPayouts, 60 * 1000);
   // Background payment settlement — every 45s, so a paid deposit lands even if
   // the user closed the app and the callback never arrived.
-  setInterval(pollPendingPayments, 45 * 1000);
-  setTimeout(pollPendingPayments, 20 * 1000);
+  setInterval(pollPendingPayments, 30 * 1000);
+  setTimeout(pollPendingPayments, 15 * 1000);
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
   setTimeout(reconcileCommissions, 90 * 1000);
@@ -1512,6 +1512,11 @@ app.post('/deposit/marzpay', async (req, res) => {
     return res.status(500).json({ status: 'error', message: friendly });
   }
 });
+// The app polls this fast (~1s) while the pending screen is open. We answer
+// instantly from the DB and only ask MarzPay itself at most once every 2s per
+// deposit — so the user sees the credit the moment it exists without hammering
+// the provider.
+const _depPollGate = new Map(); // depositId -> last MarzPay check ms
 app.get('/deposit/status/:id', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -1520,7 +1525,8 @@ app.get('/deposit/status/:id', async (req, res) => {
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Not found' });
     if (snap.data().userId !== userId) return res.status(403).json({ status: 'error', message: 'Forbidden' });
     let dep = snap.data();
-    if (dep.status === 'processing') {
+    if (dep.status === 'processing' && Date.now() - (_depPollGate.get(snap.id) || 0) > 2000) {
+      _depPollGate.set(snap.id, Date.now());
       try {
         const result = await pollMarzDepositStatus(snap);
         if (result.credited || result.failed) {
@@ -2030,6 +2036,20 @@ async function recountUserTotals() {
   }
   return updated;
 }
+// One-time rate update (owner's call, 2026-07): check-in bonus 500, withdrawal
+// fee 14%. Forced into the settings doc once so an older admin-saved value
+// (300 / 5%) can't override the new defaults; admin can still change them later.
+async function runRatePatchOnce() {
+  try {
+    const s = await getSettings();
+    if (s.ratePatchV2Done) return;
+    await db.collection('settings').doc('main').set(
+      { checkinBonus: 500, liquidityFee: 0.14, ratePatchV2Done: true }, { merge: true });
+    _settingsCache = null; _settingsCacheTs = 0;
+    console.log('Rate patch applied: check-in 500, withdrawal fee 14%');
+  } catch (e) { console.error('Rate patch error:', e.message); }
+}
+
 // One-time self-heal at boot: fixes every account whose counters predate the
 // counter fixes (e.g. check-ins that never counted into totalEarned).
 async function runRecountMigrationOnce() {
@@ -2302,7 +2322,7 @@ async function startServer() {
   const tryConnect = async () => {
     try {
       await connectMongo(MONGODB_URI);
-      if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts(); runRecountMigrationOnce(); }
+      if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts(); runRecountMigrationOnce(); runRatePatchOnce(); }
     } catch (e) {
       console.error('MongoDB not reachable yet — retrying in 5s:', e.message);
       setTimeout(tryConnect, 5000);
