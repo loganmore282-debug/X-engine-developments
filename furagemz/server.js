@@ -712,6 +712,20 @@ app.post('/auth/check-username', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// Referral-code existence check used by the register screen BEFORE the account
+// is created — a forged/mistyped code must stop registration, not slide through.
+app.post('/auth/check-referral', async (req, res) => {
+  const raw = String(req.body.referralCode || '').trim();
+  if (!raw) return res.json({ status: 'success', valid: true, empty: true }); // no code = fine
+  try {
+    let snap = await db.collection('users').where('usernameLower', '==', raw.toLowerCase()).limit(1).get();
+    if (snap.empty)
+      snap = await db.collection('users').where('referralCode', '==', raw).limit(1).get();
+    return res.json({ status: 'success', valid: !snap.empty,
+      reason: snap.empty ? 'That referral code does not exist. Check it or leave it empty.' : '' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ═══════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════
@@ -828,13 +842,21 @@ app.post('/register', async (req, res) => {
     if (userSnap.data().registrationDone) return res.json({ status: 'already_done', referralCode: userSnap.data().referralCode || null });
 
     // The referral a new user enters is a referrer's USERNAME. Match case-insensitively.
+    // STRICT: a non-empty code MUST belong to a real user — forged/mistyped codes
+    // are rejected so registration cannot continue with a dead referral.
     let referrerId = null;
-    if (referralCode) {
+    if (referralCode && String(referralCode).trim()) {
       const wanted = String(referralCode).trim().toLowerCase();
       let refSnap = await db.collection('users').where('usernameLower', '==', wanted).limit(1).get();
       if (refSnap.empty) // fall back to legacy referralCode field for any pre-username accounts
         refSnap = await db.collection('users').where('referralCode', '==', String(referralCode).trim()).limit(1).get();
-      if (!refSnap.empty && refSnap.docs[0].id !== userId) referrerId = refSnap.docs[0].id;
+      if (refSnap.empty)
+        return res.status(400).json({ status: 'error', code: 'BAD_REFERRAL',
+          message: 'That referral code does not exist. Check it and try again, or leave it empty.' });
+      if (refSnap.docs[0].id === userId)
+        return res.status(400).json({ status: 'error', code: 'BAD_REFERRAL',
+          message: 'You cannot use your own referral code.' });
+      referrerId = refSnap.docs[0].id;
     }
 
     // A user's referral code is their username (set at profile creation); fall back

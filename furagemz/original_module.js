@@ -363,6 +363,12 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     // Pre-check availability so we don't create a phone account for a taken name.
     const chk = await api('/auth/check-username', { method: 'POST', body: { username } });
     if (chk.status === 'success' && !chk.available) { restore(); return authError(chk.reason || 'That username is taken.'); }
+    // Pre-check the referral code — a code that doesn't belong to a real user
+    // stops registration HERE, before any account is created.
+    if (ref) {
+      const rchk = await api('/auth/check-referral', { method: 'POST', body: { referralCode: ref } });
+      if (rchk.status === 'success' && !rchk.valid) { restore(); return authError(rchk.reason || 'That referral code does not exist.'); }
+    }
 
     if (!_pendingCred) {
       try {
@@ -380,9 +386,13 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     // Register applies the welcome bonus AND records the referral link. It is
     // idempotent server-side (registrationDone guard), so retry it a few times on
     // a network blip — otherwise a referral could be silently lost at sign-up.
+    let regRef = ref;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const reg = await api('/register', { method: 'POST', body: { referralCode: ref } });
+      const reg = await api('/register', { method: 'POST', body: { referralCode: regRef } });
       if (reg.status === 'success' || reg.status === 'already_done') break;
+      // Code vanished between pre-check and now (e.g. referrer deleted): finish
+      // the registration without it rather than leaving a half-created account.
+      if (reg.code === 'BAD_REFERRAL') { regRef = ''; continue; }
       await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
     }
     _pendingCred = null; // success — onAuthStateChanged takes over
@@ -418,7 +428,7 @@ onAuthStateChanged(auth, async (user) => {
   // dashboard, so it appears already populated: no "UGX 0 → real" flash and no
   // default banners flashing before the admin images. Capped so a slow network
   // can't hang the sync screen; anything still loading finishes in the background.
-  const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadActivityFeed()]);
+  const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadActivityFeed(), loadProducts(), loadTeam()]);
   await Promise.race([essential, new Promise(r => setTimeout(r, 8000))]);
   if (checkGate()) return;
   render();
@@ -446,17 +456,29 @@ function checkGate() {
 // app regains focus) and re-renders the visible tab — so a commission landing,
 // a deposit clearing or a daily payout shows up on its own, no manual reload.
 // Pauses while the tab is hidden or a full-page/modal is open (M0-friendly).
-let _realtimeTimer = null, _realtimeSig = '';
+let _realtimeTimer = null, _realtimeSig = '', _tickN = 0;
 function dataSig() {
   return [_account?.walletBalance, _account?.totalEarned, _account?.commissionEarned,
-    _txns.length, _investments.length, _members.length].join('|');
+    _account?.totalWithdrawn, _account?.totalDeposited, _account?.teamL1Count,
+    _txns.length, _txns[0]?.status, _investments.length,
+    _investments.map(i => i.status).join(''), _members.length].join('|');
 }
 async function realtimeTick() {
   if (document.hidden || !_user || _pageOpen) return;
+  _tickN++;
+  // Every ~20th tick also refresh the live activity ticker (server caches it,
+  // so this is cheap) — the feed stays alive instead of freezing at boot.
+  const wantFeed = _tickN % 20 === 0;
   try {
-    await Promise.all([loadAccount(), loadTxns(), (_activeTab === 'team' ? loadTeam() : Promise.resolve())]);
+    await Promise.all([loadAccount(), loadTxns(),
+      (_activeTab === 'team' ? loadTeam() : Promise.resolve()),
+      (wantFeed ? loadActivityFeed() : Promise.resolve())]);
   } catch (_) { return; }
   if (_pageOpen || document.hidden) return; // state changed during the await
+  if (wantFeed) {
+    const track = document.querySelector('#panel-home .ticker-track');
+    if (track) track.innerHTML = tickerItemsHtml();
+  }
   // Only re-render when something actually changed — no needless flicker.
   const sig = dataSig();
   if (sig === _realtimeSig) return;
@@ -467,7 +489,7 @@ async function realtimeTick() {
 }
 function startRealtime() {
   if (_realtimeTimer) return;
-  _realtimeTimer = setInterval(realtimeTick, 7000);
+  _realtimeTimer = setInterval(realtimeTick, 4000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) realtimeTick(); });
   startCountdownTick();
 }
@@ -588,9 +610,14 @@ async function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-' + name));
   document.getElementById('topbarTitle').textContent = { home: 'Home', gems: 'Gems', team: 'Team', account: 'Account' }[name];
-  if (name === 'gems' && !_products.length) { await loadProducts(); renderGems(); }
-  if (name === 'team') { await loadTeam(); renderTeam(); }
-  if (name === 'account' && !_txns.length) { await loadTxns(); renderAccount(); }
+  // INSTANT tabs: paint whatever is cached NOW, refresh silently in the
+  // background and repaint when fresh data lands — never block the switch.
+  if (name === 'gems' && !_products.length)
+    loadProducts().then(() => { if (_activeTab === 'gems') renderGems(); }).catch(() => {});
+  if (name === 'team')
+    loadTeam().then(() => { if (_activeTab === 'team') renderTeam(); }).catch(() => {});
+  if (name === 'account' && !_txns.length)
+    loadTxns().then(() => { if (_activeTab === 'account') renderAccount(); }).catch(() => {});
 }
 
 function render() {

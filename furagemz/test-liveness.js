@@ -99,6 +99,24 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('POST', '/register', { token: B, body: { referralCode: 'alice' } });
   check('re-register is idempotent (no double welcome)', r.body?.status === 'already_done' && userDoc('bob-uid').walletBalance === 5000, r.body);
 
+  console.log('\n── 1b. Forged referral codes are REJECTED');
+  const Z = 'uid:zed-uid';
+  r = await call('POST', '/account/create-profile', { token: Z, body: { username: 'zed', phone: '0771000009' } });
+  check('zed profile created', r.body?.status === 'success', r.body);
+  r = await call('POST', '/register', { token: Z, body: { referralCode: 'GHOST999' } });
+  check('nonexistent referral code rejected (400 BAD_REFERRAL)', r.code === 400 && r.body?.code === 'BAD_REFERRAL', r.body);
+  check('zed NOT registered after forged code', !userDoc('zed-uid').registrationDone);
+  r = await call('POST', '/register', { token: Z, body: { referralCode: 'zed' } });
+  check('own referral code rejected (400)', r.code === 400 && r.body?.code === 'BAD_REFERRAL', r.body);
+  r = await call('POST', '/auth/check-referral', { body: { referralCode: 'GHOST999' } });
+  check('check-referral flags a fake code invalid', r.body?.status === 'success' && r.body?.valid === false, r.body);
+  r = await call('POST', '/auth/check-referral', { body: { referralCode: 'ALICE' } });
+  check('check-referral accepts a real code (case-insensitive)', r.body?.valid === true, r.body);
+  r = await call('POST', '/auth/check-referral', { body: { referralCode: '' } });
+  check('check-referral: empty code is allowed', r.body?.valid === true && r.body?.empty === true, r.body);
+  r = await call('POST', '/register', { token: Z, body: { referralCode: 'ALICE' } });
+  check('zed registers fine with a REAL code after the forged attempt', r.body?.status === 'success' && r.body?.referrerId === 'alice-uid', r.body);
+
   console.log('\n── 2. Account security / isolation');
   r = await call('POST', '/register', { body: { userId: 'alice-uid' } });
   check('unauthenticated /register rejected (401)', r.code === 401, r.code);
@@ -210,8 +228,11 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('second check-in same day blocked', r.code === 400 && r.body?.alreadyDone === true, r.body);
   await call('POST', '/admin/codes/generate', { body: { ...ADMIN, amount: 5000, count: 1 } });
   const code = [...mockdb.__store.get('redemptionCodes').values()][0].code;
+  check('generated code is 10 characters', code.length === 10, code);
   r = await call('POST', '/redeem', { token: B, body: { code } });
   check('code redeems 5000', r.body?.status === 'success', r.body);
+  r = await call('POST', '/redeem', { token: B, body: { code: 'FAKEFAKE11' } });
+  check('nonexistent redeem code rejected', r.body?.status !== 'success', r.body);
   r = await call('POST', '/redeem', { token: B, body: { code } });
   check('same code cannot be redeemed twice by same user', r.body?.status !== 'success', r.body);
 
@@ -291,7 +312,7 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   await call('POST', '/account/create-profile', { token: C, body: { username: 'carol', phone: '0771000003' } });
   await call('POST', '/register', { token: C, body: { referralCode: 'alice' } });
   await call('POST', '/checkin', { token: C });
-  check('carol exists with data (alice teamL1Count = 2)', !!userDoc('carol-uid') && userDoc('alice-uid').teamL1Count === 2,
+  check('carol exists with data (alice teamL1Count = 3: bob+zed+carol)', !!userDoc('carol-uid') && userDoc('alice-uid').teamL1Count === 3,
     { carol: !!userDoc('carol-uid'), l1: userDoc('alice-uid').teamL1Count });
   r = await call('POST', '/admin/user/delete', { body: { ...ADMIN, userId: 'carol-uid' } });
   check('delete without typed confirmation refused', r.code === 400, r.body);
@@ -300,7 +321,7 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('user document gone', !userDoc('carol-uid'));
   check('all her transactions wiped', countTx('carol-uid', 'checkin') === 0 && countTx('carol-uid', 'admin_credit') === 0);
   check('referral link records wiped', ![...(mockdb.__store.get('referrals')||new Map()).values()].some(x => x.referredUserId === 'carol-uid'));
-  check("alice's team count corrected back to 1", userDoc('alice-uid').teamL1Count === 1, userDoc('alice-uid').teamL1Count);
+  check("alice's team count corrected back to 2", userDoc('alice-uid').teamL1Count === 2, userDoc('alice-uid').teamL1Count);
   r = await call('GET', '/account', { token: C });
   check('deleted account can no longer be fetched', r.code === 404, r.code);
 
