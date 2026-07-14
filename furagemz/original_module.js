@@ -242,8 +242,8 @@ async function loadCaptcha() {
   }).join('');
   box.innerHTML = `<i class="cap-line cl1"></i><i class="cap-line cl2"></i>${letters}`;
 }
-const _capRefresh = document.getElementById('captchaRefresh');
-if (_capRefresh) _capRefresh.addEventListener('click', loadCaptcha);
+// Captcha auto-loads when the register form opens and refreshes itself after a
+// wrong answer — no manual "reload" button for the user to tap.
 
 let _authMode = 'login';
 function setAuthMode(mode) {
@@ -556,6 +556,16 @@ async function loadProducts() {
   if (r.status === 'success') _products = r.products || [];
 }
 let _teamStats = null;
+// Client-side copy of the milestone ladder so the Task centre renders instantly
+// (0% / unpaid) before /team/stats returns — no loader. Server is source of truth
+// for what's actually paid; these fill in the moment stats arrive.
+const TEAM_MILESTONES = [
+  { target:   60000, reward:  3000 },
+  { target:  100000, reward: 10000 },
+  { target:  250000, reward: 15000 },
+  { target:  500000, reward: 25000 },
+  { target: 1000000, reward: 50000 },
+];
 async function loadTeam() {
   const [r, s] = await Promise.all([api('/team/members'), api('/team/stats')]);
   if (r.status === 'success') _members = r.members || [];
@@ -1221,7 +1231,7 @@ function renderTeam() {
 
     <div class="sec-head"><h3>Task centre</h3></div>
     <div class="task-intro">Your level 1 team has deposited <b>${ugx(l1Total)}</b> so far. Hit each target below and the reward drops into your wallet instantly.</div>
-    ${(ts?.milestones || []).map(m => {
+    ${(ts?.milestones || TEAM_MILESTONES).map(m => {
       const pct = Math.min(100, Math.round((l1Total / m.target) * 100));
       return `
       <div class="task-row${m.paid ? ' done' : ''}">
@@ -1233,7 +1243,7 @@ function renderTeam() {
         </div>
         <div class="task-reward">${m.paid ? `<span class="task-paid">${CHECK_SVG}</span>` : `<b>${ugx(m.reward)}</b>`}</div>
       </div>`;
-    }).join('') || `<div class="empty-note">Task centre is loading…</div>`}
+    }).join('')}
 
     <div class="sec-head"><h3>Direct referrals</h3></div>
     ${_members.length ? _members.map(m => `
