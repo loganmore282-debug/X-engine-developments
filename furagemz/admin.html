@@ -684,8 +684,8 @@ async function renderSettings(){
 
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
-      <label>WhatsApp number or link</label><input id="spWa" value="${esc(v('supportWhatsapp',''))}" placeholder="https://wa.me/256700000000">
-      <label>Telegram group link</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/yourgroup">
+      <label>WhatsApp number or link</label><input id="spWa" value="${esc(v('supportWhatsapp',''))}" placeholder="+256700000000 or https://wa.me/256700000000">
+      <label>Telegram group (username or link)</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="yourgroup or https://t.me/yourgroup">
       <label>Support hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Every day, 9:00 AM – 9:00 PM">
       <button class="btn block" id="saveSupport">Save support contacts</button>
     </div>

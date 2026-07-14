@@ -1467,10 +1467,25 @@ function openPasswordModal() {
   });
 }
 
+// Admin may type a bare phone number or a full link — always produce a real, clickable URL.
+function waLink(v) {
+  v = String(v || '').trim();
+  if (!v) return '';
+  if (/^https?:\/\//i.test(v)) return v;
+  const digits = v.replace(/\D/g, '');
+  return digits ? `https://wa.me/${digits}` : '';
+}
+function tgLink(v) {
+  v = String(v || '').trim();
+  if (!v) return '';
+  if (/^https?:\/\//i.test(v)) return v;
+  return `https://t.me/${v.replace(/^@/, '')}`;
+}
+
 function openSupportModal() {
   const s = _publicSettings || {};
-  const wa = s.supportWhatsapp || '';
-  const tg = s.supportTelegram || '';
+  const wa = waLink(s.supportWhatsapp || '');
+  const tg = tgLink(s.supportTelegram || '');
   const hours = s.supportHours || 'Every day, 9:00 AM – 9:00 PM';
   openModal(`
     <div class="modal-head"><h2>Contact support</h2><button class="modal-close">${ICN.close}</button></div>
