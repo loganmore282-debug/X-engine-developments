@@ -412,16 +412,20 @@ let _publicSettings = null;
 onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
-  // Show the app IMMEDIATELY, then stream data in and re-render each slice as it
-  // lands — the dashboard appears instantly (fast, like before) instead of the
-  // user staring at a loader while four requests finish.
-  showView('main');
+  // Keep the branded syncing screen up and load the ESSENTIAL data — balance,
+  // gems, transactions AND settings (banner images) — BEFORE revealing the
+  // dashboard, so it appears already populated: no "UGX 0 → real" flash and no
+  // default banners flashing before the admin images. Capped so a slow network
+  // can't hang the sync screen; anything still loading finishes in the background.
+  const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadActivityFeed()]);
+  await Promise.race([essential, new Promise(r => setTimeout(r, 8000))]);
+  if (checkGate()) return;
   render();
+  showView('main');
   startRealtime();
-  loadPublicSettings().then(() => { if (checkGate()) return; renderHome(); maybeShowAnnouncement(); });
-  loadAccount().then(() => { if (checkGate()) return; renderHome(); renderAccount(); renderTeam(); });
-  loadTxns().then(() => { renderHome(); renderAccount(); });
-  loadActivityFeed().then(() => renderHome());
+  maybeShowAnnouncement();
+  // If the 8s cap fired before data was ready, repaint the moment it lands.
+  essential.then(() => { if (checkGate()) return; if (!_pageOpen) render(); }).catch(() => {});
 });
 // Returns true (and shows a blocker) if the app should be gated off.
 function checkGate() {
