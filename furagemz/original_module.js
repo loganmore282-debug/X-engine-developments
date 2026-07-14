@@ -157,6 +157,7 @@ function openModal(html) {
   root.style.alignItems = '';
   root.innerHTML = `<div class="modal-backdrop" data-close></div><div class="modal-card">${html}</div>`;
   root.classList.remove('hidden');
+  document.body.classList.add('no-scroll'); // freeze the dashboard behind the dialog
   root.querySelector('[data-close]').addEventListener('click', () => closeModal());
   const closeBtn = root.querySelector('.modal-close');
   if (closeBtn) { closeBtn.innerHTML = ICN.back; closeBtn.addEventListener('click', () => closeModal()); }
@@ -166,6 +167,7 @@ function closeModal(fromPop) {
   const root = document.getElementById('modalRoot');
   root.classList.add('hidden');
   root.innerHTML = '';
+  document.body.classList.remove('no-scroll');
   if (_pageOpen) {
     _pageOpen = false;
     if (!fromPop) { try { history.back(); } catch (_) {} }
@@ -550,6 +552,7 @@ function maybeShowAnnouncement() {
   if (!ann || !ann.enabled || !ann.body) return;
   // Shows on EVERY visit while enabled (owner's choice) — no "seen" memory.
   const root = document.getElementById('modalRoot');
+  document.body.classList.add('no-scroll'); // freeze the dashboard while the dialog is up
   root.style.alignItems = 'center';
   root.innerHTML = `
     <div class="modal-backdrop" data-close></div>
@@ -1009,6 +1012,7 @@ function openDepositPending(depositId, amount) {
     </div>
   </div>`;
   root.classList.remove('hidden');
+  document.body.classList.add('no-scroll');
   pollDepositUI(depositId, amount, 0);
 }
 async function pollDepositUI(depositId, amount, tries) {
