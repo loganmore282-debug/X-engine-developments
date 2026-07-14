@@ -684,10 +684,12 @@ app.post('/auth/login', async (req, res) => {
 // Creates the user doc server-side so the client cannot set arbitrary
 // fields (e.g. walletBalance).
 app.post('/account/create-profile', async (req, res) => {
-  const authedUid = await verifyAuth(req);
-  const uid = authedUid || req.body.userId; // fallback only for the mid-registration edge
+  // STRICT: identity comes only from the verified Firebase token — a client can
+  // never name another user's id. (The client signs in before calling this, so
+  // the token is always available; no unauthenticated fallback.)
+  const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  if (authedUid && req.body.userId && authedUid !== req.body.userId)
+  if (req.body.userId && req.body.userId !== uid)
     return res.status(403).json({ status: 'error', message: 'Forbidden' });
   const { username, phone } = req.body;
   if (!username || !phone) return res.status(400).json({ status: 'error', message: 'username and phone required' });
@@ -730,10 +732,11 @@ app.post('/account/create-profile', async (req, res) => {
 // REGISTRATION — welcome bonus + 3-level referral graph
 // ═══════════════════════════════════════════
 app.post('/register', async (req, res) => {
-  const authedUid = await verifyAuth(req);
-  const userId = authedUid || req.body.userId;
+  // STRICT: token-derived identity only. Without this, anyone could call
+  // /register with a victim's uid and plant their own referral code on them.
+  const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  if (authedUid && req.body.userId && authedUid !== req.body.userId)
+  if (req.body.userId && req.body.userId !== userId)
     return res.status(403).json({ status: 'error', message: 'Forbidden' });
   const { referralCode } = req.body;
   try {
@@ -1372,9 +1375,12 @@ app.post('/deposit/marzpay', async (req, res) => {
   }
 });
 app.get('/deposit/status/:id', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('pendingDeposits').doc(req.params.id).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Not found' });
+    if (snap.data().userId !== userId) return res.status(403).json({ status: 'error', message: 'Forbidden' });
     let dep = snap.data();
     if (dep.status === 'processing') {
       try {
@@ -1538,9 +1544,12 @@ async function failWithdrawal(witDoc, reason) {
   return true;
 }
 app.get('/withdraw/status/:id', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('withdrawals').doc(req.params.id).get();
     if (!snap.exists) return res.status(404).json({ status: 'error' });
+    if (snap.data().userId !== userId) return res.status(403).json({ status: 'error', message: 'Forbidden' });
     let wit = snap.data();
     if (wit.status === 'processing' && (wit.marzTxUuid || wit.marzReference)) {
       try {
@@ -1652,16 +1661,24 @@ app.post('/withdraw/reject', async (req, res) => {
     const snap = await db.collection('withdrawals').doc(withdrawalId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Not found' });
     const wit = snap.data();
-    if (['processed', 'rejected'].includes(wit.status))
+    if (['processed', 'rejected', 'failed'].includes(wit.status))
       return res.status(400).json({ status: 'error', message: 'Already ' + wit.status });
-    const batch = db.batch();
-    batch.update(db.collection('withdrawals').doc(withdrawalId), {
-      status: 'rejected', rejectionReason: reason || 'Rejected by admin', rejectedAt: FieldValue.serverTimestamp()
+    // Transaction with a fresh status recheck so a concurrent reject / failure
+    // callback can never refund the same withdrawal twice.
+    let refunded = false;
+    await db.runTransaction(async t => {
+      const fresh = await t.get(snap.ref);
+      const fs = fresh.exists ? fresh.data() : null;
+      if (!fs || ['processed', 'rejected', 'failed'].includes(fs.status)) return;
+      t.update(snap.ref, {
+        status: 'rejected', rejectionReason: reason || 'Rejected by admin', rejectedAt: FieldValue.serverTimestamp()
+      });
+      t.update(db.collection('users').doc(wit.userId), {
+        walletBalance: FieldValue.increment(wit.amount), withdrawalCount: FieldValue.increment(-1)
+      });
+      refunded = true;
     });
-    batch.update(db.collection('users').doc(wit.userId), {
-      walletBalance: FieldValue.increment(wit.amount), withdrawalCount: FieldValue.increment(-1)
-    });
-    await batch.commit();
+    if (!refunded) return res.status(400).json({ status: 'error', message: 'Already finalised — nothing refunded' });
     return res.json({ status: 'success', message: `Rejected. ${fmtUGX(wit.amount)} refunded.` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });

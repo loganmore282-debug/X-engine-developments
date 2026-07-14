@@ -453,6 +453,7 @@ function startRealtime() {
   if (_realtimeTimer) return;
   _realtimeTimer = setInterval(realtimeTick, 15000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) realtimeTick(); });
+  startCountdownTick();
 }
 
 // Full-screen blocker (maintenance / banned) — replaces the app entirely.
@@ -624,6 +625,42 @@ function fmtCountdown(ms) {
   if (d > 0) return `${d}d ${h}h`;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
+// ── LIVE NEXT-CASHBACK COUNTDOWN ──
+// The payout moment is set by the SERVER (investment.nextPayoutAt, advanced by
+// the payout cron); the app only displays the remaining time, ticking locally.
+function nextPayoutMs(inv) {
+  const t = tsMs(inv.nextPayoutAt);
+  if (t) return t;
+  // Legacy gems (created before the schedule existed): first payout is 24h
+  // after purchase, then every 24h — same formula the server migrates them to.
+  const start = tsMs(inv.createdAt);
+  return start ? start + ((inv.payoutsMade || 0) + 1) * 86400000 : 0;
+}
+function fmtHMS(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return (d > 0 ? d + 'd ' : '') + pad(h) + 'h ' + pad(m) + 'm ' + pad(sec) + 's';
+}
+function cashbackLineHtml(inv) {
+  if (inv.status !== 'active') return '';
+  const next = nextPayoutMs(inv);
+  if (!next) return '';
+  const daily = inv.dailyPayout || Math.round((inv.expectedReturn || 0) / (inv.cycle || 1));
+  return `<div class="cd-line">Next cashback of <b>${ugx(daily)}</b> in <span class="cd" data-cdnext="${next}">${fmtHMS(next - Date.now())}</span></div>`;
+}
+let _cdTimer = null;
+function startCountdownTick() {
+  if (_cdTimer) return;
+  _cdTimer = setInterval(() => {
+    document.querySelectorAll('[data-cdnext]').forEach(el => {
+      const t = parseInt(el.dataset.cdnext, 10);
+      if (!t) return;
+      const left = t - Date.now();
+      el.textContent = left > 0 ? fmtHMS(left) : 'any moment now';
+    });
+  }, 1000);
+}
 function durPhrase(hours) {
   hours = Number(hours) || 0;
   return hours % 24 === 0 ? `${hours / 24} day${hours / 24 === 1 ? '' : 's'}` : `${hours} hours`;
@@ -692,7 +729,7 @@ function openHoldingsModal() {
     else if (bs.kind === 'boosted') action = `<div class="bs hot" style="margin-top:8px">Matures in ${fmtCountdown(bs.ms)}</div>`;
     else if (bs.kind === 'locked')  action = `<div class="bs" style="margin-top:8px">Boost unlocks in ${bs.days} day${bs.days === 1 ? '' : 's'}</div>`;
     return `<div class="hold-row"><div class="hold-top"><b>${esc(inv.tierLabel || 'Gem')}</b>${badge}</div>
-      <div class="hold-sub">${ugx(inv.amount)} in · pays ${ugx(inv.expectedReturn)}</div>${action}</div>`;
+      <div class="hold-sub">${ugx(inv.amount)} in · pays ${ugx(inv.expectedReturn)}</div>${cashbackLineHtml(inv)}${action}</div>`;
   };
   openModal(`
     <div class="modal-head"><h2>My gems</h2><button class="modal-close">${ICN.close}</button></div>
@@ -776,6 +813,7 @@ function renderHome() {
             <div class="p">Earns ${ugx(Math.round((inv.expectedReturn || 0) / (inv.cycle || 1)))} daily · ${ugx(inv.expectedReturn)} total</div>
           </div>
         </div>
+        ${cashbackLineHtml(inv)}
         ${boostRowHtml(inv)}
       </div>`).join('') : `<div class="empty-note">No active gems yet. Buy your first one from the Gems tab.</div>`}
     <div class="sec-head"><h3>Recent activity</h3>${_txns.length ? `<button class="link-btn" data-tab-jump="account">See all</button>` : ''}</div>
