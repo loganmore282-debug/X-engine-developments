@@ -304,6 +304,24 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('GET', '/account', { token: C });
   check('deleted account can no longer be fetched', r.code === 404, r.code);
 
+  console.log('\n── 12. Concurrency: parallel debits cannot double-spend');
+  const D = 'uid:dave-uid';
+  await call('POST', '/account/create-profile', { token: D, body: { username: 'dave', phone: '0771000004' } });
+  await call('POST', '/register', { token: D, body: {} });
+  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'dave-uid', amount: 30000, note: 'seed' } });
+  const daveStart = userDoc('dave-uid').walletBalance; // 5000 welcome + 30000 = 35000
+  // Fire TWO Quartz (30000) buys at the same instant with only enough for one.
+  const [pr1, pr2] = await Promise.all([
+    call('POST', '/invest/create', { token: D, body: { tierKey: 'quartz' } }),
+    call('POST', '/invest/create', { token: D, body: { tierKey: 'quartz' } }),
+  ]);
+  await sleep(200);
+  const successes = [pr1, pr2].filter(x => x.body?.status === 'success').length;
+  const daveInv = [...mockdb.__store.get('investments').values()].filter(i => i.userId === 'dave-uid').length;
+  check('exactly ONE of two parallel buys succeeds', successes === 1, { s: successes, r1: pr1.body?.status, r2: pr2.body?.status });
+  check('exactly ONE gem created (no double activation)', daveInv === 1, daveInv);
+  check('balance debited exactly once (35000-30000=5000, not lost/doubled)', userDoc('dave-uid').walletBalance === daveStart - 30000, userDoc('dave-uid').walletBalance);
+
   console.log(`\n══ RESULT: ${pass} passed, ${fail} failed ══`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

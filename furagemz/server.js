@@ -299,6 +299,23 @@ async function generateUniqueRefCode() {
   return randChars(9);
 }
 
+// ── PER-KEY MUTEX ──
+// M0 has NO real transactions: runTransaction gives no isolation, and `await
+// t.get()` yields the event loop, so two parallel requests can both read the
+// same balance and both write it — a double-spend. Credit paths already serialise
+// with in-process Sets; this mutex serialises the DEBIT paths (invest / boost /
+// withdraw) and money settlement the same way. Single Node instance ⇒ real
+// mutual exclusion. Each call runs strictly after the previous one for the key.
+const _lockTails = new Map();
+function withLock(key, fn) {
+  const prev = _lockTails.get(key) || Promise.resolve();
+  const run  = prev.then(() => fn(), () => fn());
+  const tail = run.then(() => {}, () => {});
+  _lockTails.set(key, tail);
+  tail.finally(() => { if (_lockTails.get(key) === tail) _lockTails.delete(key); });
+  return run;
+}
+
 // Verify Firebase ID token — returns uid on success, null on failure.
 // Every user-action endpoint calls this so the server never trusts a
 // client-provided userId (money endpoints must never skip this).
@@ -334,8 +351,13 @@ function tsMillis(v) {
 // reward is therefore never permanently lost, even if this call fails mid-way.
 async function payCommissions(investorId, amount, investmentId) {
   let ok = false;
-  try { await _payChain(investorId, amount, investmentId); ok = true; }
-  catch (e) { console.error('Commission error:', e.message); }
+  // Serialise per investment so the invest-time call and the reconciler can't
+  // both pay the same commission (the per-level flags are re-checked in the
+  // transaction, but M0 has no real isolation, so add a true single-writer lock).
+  await withLock('comm:' + investmentId, async () => {
+    try { await _payChain(investorId, amount, investmentId); ok = true; }
+    catch (e) { console.error('Commission error:', e.message); }
+  });
   if (ok) { try { await db.collection('investments').doc(investmentId).update({ commDone: true }); } catch (_) {} }
 }
 async function _payChain(investorId, amount, investmentId) {
@@ -470,6 +492,9 @@ async function checkTeamMilestones(userId) {
   snap.forEach(d => { l1Total += d.data().totalDeposited || 0; });
   const uRef = db.collection('users').doc(userId);
   const { date, time } = nowStr();
+  // Serialise per referrer so the deposit-hook path and the settle-on-open path
+  // can't both pay the same milestone (M0 has no real transaction isolation).
+  await withLock('milestone:' + userId, async () => {
   for (const m of TEAM_MILESTONES) {
     if (l1Total < m.target) break;
     const flag = 'teamMilestone_' + m.target;
@@ -491,6 +516,7 @@ async function checkTeamMilestones(userId) {
       });
     } catch (e) { console.error('Milestone pay error:', userId, m.target, e.message); }
   }
+  });
   return l1Total;
 }
 // Fire-and-forget hook: after ANY deposit credit, check the depositor's
@@ -996,14 +1022,16 @@ app.post('/invest/create', async (req, res) => {
     const dailyPayout  = Math.round(tier.expectedReturn / tier.cycle);
     const nextPayoutAt = new Date(now + 86400000);
     let invId;
-    await db.runTransaction(async t => {
+    await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       const bal   = fresh.data().walletBalance || 0;
       if (bal < tier.price) throw new Error(`Need ${fmtUGX(tier.price)}, have ${fmtUGX(bal)}`);
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
-      t.update(uRef, { walletBalance: bal - tier.price, totalInvested: FieldValue.increment(tier.price) });
+      // Atomic decrement (not absolute write) so even a missed lock only overdraws,
+      // never loses a debit.
+      t.update(uRef, { walletBalance: FieldValue.increment(-tier.price), totalInvested: FieldValue.increment(tier.price) });
       const { date, time } = nowStr();
       t.set(invRef, {
         userId, tierKey: tier.key, tierLabel: tier.label,
@@ -1018,7 +1046,7 @@ app.post('/invest/create', async (req, res) => {
         amount: -tier.price, status: 'success', date, time,
         investmentId: invRef.id, tierKey: tier.key, createdAt: FieldValue.serverTimestamp()
       });
-    });
+    }));
     payCommissions(userId, tier.price, invId).catch(e => console.error('Commission err:', e.message));
     return res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.label} for ${fmtUGX(tier.price)}` });
   } catch (e) {
@@ -1055,7 +1083,7 @@ app.post('/invest/boost', async (req, res) => {
     const newMat  = new Date(Date.now() + days * 86400000);
     const { date, time } = nowStr();
     let err = null, ok = false;
-    await db.runTransaction(async t => {
+    await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) { err = 'User not found'; return; }
@@ -1068,7 +1096,7 @@ app.post('/invest/boost', async (req, res) => {
       const paidOut   = Number(fd.paidOut || 0);
       const remaining = Math.max(0, (fd.expectedReturn || 0) - paidOut);
       const made      = Number(fd.payoutsMade || 0);
-      t.update(uRef, { walletBalance: bal - cost });
+      t.update(uRef, { walletBalance: FieldValue.increment(-cost) });
       t.update(invRef, {
         boosted: true, boostedAt: FieldValue.serverTimestamp(), boostAmount: cost,
         maturityDate: newMat, payoutsTotal: made + days,
@@ -1080,7 +1108,7 @@ app.post('/invest/boost', async (req, res) => {
         amount: -cost, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
       });
       ok = true;
-    });
+    }));
     if (!ok) return res.status(400).json({ status: 'error', message: err || 'Could not boost' });
     return res.json({ status: 'success', maturesInDays: days, cost, message: `Boosted — pays out over ${days} days` });
   } catch (e) {
@@ -1568,9 +1596,11 @@ async function handleDepositCallback(req, res) {
           const realStatus = await marzGetCollectStatus(depDoc.data().marzTxUuid);
           if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) return;
         }
-        const amount   = parseInt(body.transaction?.amount?.raw || body.collection?.amount?.raw, 10) || depDoc.data().amount;
+        // SECURITY: credit the amount the SERVER initiated the collection for —
+        // never an amount from the (unauthenticated) callback body. A forged
+        // callback with an inflated amount is therefore worthless.
         const provTxId = body.collection?.provider_transaction_id || null;
-        await creditMarzDeposit(depDoc, amount, provTxId);
+        await creditMarzDeposit(depDoc, depDoc.data().amount, provTxId);
       } else if (isFailed) {
         const failReason = body.transaction?.description || body.description || rawStatus || 'Payment declined';
         if (depDoc.data().status !== 'failed')
@@ -1613,12 +1643,12 @@ app.post('/withdraw/request', async (req, res) => {
     const netAmt = amt - fee;
     const { date, time } = nowStr();
     let witId;
-    await db.runTransaction(async t => {
+    await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       const bal   = fresh.data().walletBalance || 0;
       if (bal < amt) throw new Error(`Insufficient: ${fmtUGX(bal)}`);
-      t.update(uRef, { walletBalance: bal - amt, withdrawalCount: FieldValue.increment(1) });
+      t.update(uRef, { walletBalance: FieldValue.increment(-amt), withdrawalCount: FieldValue.increment(1) });
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
       t.set(witRef, {
@@ -1631,7 +1661,7 @@ app.post('/withdraw/request', async (req, res) => {
         amount: -amt, fee, netAmount: netAmt, phone: fullPhone,
         status: 'pending', date, time, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
-    });
+    }));
     return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });
   } catch (e) {
     console.error('Withdrawal error:', e.message);

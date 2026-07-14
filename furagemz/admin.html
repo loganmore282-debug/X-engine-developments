@@ -660,7 +660,7 @@ async function renderSettings(){
       </div>
       <div class="row" style="margin-top:6px">
         <div><label>Boost unlocks after (days)</label><input id="sBoostDays" type="number" value="${v('boostUnlockDays',5)}"></div>
-        <div><label>Boost matures in (hours; 72 = 3 days)</label><input id="sBoostHrs" type="number" value="${v('boostMatureHours',72)}"></div>
+        <div><label>Boost matures in (days)</label><input id="sBoostDaysM" type="number" value="${v('boostMatureDays',5)}"></div>
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a gem before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
@@ -707,7 +707,7 @@ async function renderSettings(){
       minDeposit:+$('sMinDep').value, minWithdrawal:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       checkinBonus:+$('sCheckin').value, liquidityFee:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
-      boostUnlockDays:+$('sBoostDays').value, boostMatureHours:+$('sBoostHrs').value,
+      boostUnlockDays:+$('sBoostDays').value, boostMatureDays:+$('sBoostDaysM').value,
       requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
       maintenanceMsg:$('sMaintMsg').value.trim()
     };
