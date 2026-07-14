@@ -252,7 +252,7 @@ function setAuthMode(mode) {
   const login = mode === 'login';
   document.getElementById('loginForm').classList.toggle('active', login);
   document.getElementById('registerForm').classList.toggle('active', !login);
-  document.getElementById('authTitle').textContent = login ? 'Start logging in' : 'Create your account';
+  document.getElementById('authTitle').textContent = login ? 'Welcome back' : 'Create your account';
   document.getElementById('authErr').classList.add('hidden');
   document.querySelector('.auth-scroll').scrollTop = 0;
   if (!login) loadCaptcha();
