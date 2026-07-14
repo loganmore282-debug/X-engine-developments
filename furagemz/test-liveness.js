@@ -145,7 +145,8 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   console.log('\n── 3b. Failed deposits appear in history');
   r = await call('POST', '/deposit/marzpay', { token: B, body: { amount: 50000, phone: '0771000002' } });
   check('bob deposit attempt initiated', r.body?.status === 'success', r.body);
-  const dep2 = mockdb.__store.get('pendingDeposits').get(r.body.depositId);
+  const dep2Id = r.body.depositId;
+  const dep2 = mockdb.__store.get('pendingDeposits').get(dep2Id);
   await call('POST', '/deposit/callback', { body: { event_type: 'collection.failed', transaction: { reference: dep2.marzReference, status: 'failed' } } });
   await sleep(250);
   check('failed deposit did NOT credit', userDoc('bob-uid').walletBalance === 5000, userDoc('bob-uid').walletBalance);
@@ -195,6 +196,11 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   await call('POST', '/admin/check-maturities', { body: ADMIN }); await sleep(200);
   check('running the cron again pays NOTHING extra', userDoc('bob-uid').walletBalance === balBefore + 6500, userDoc('bob-uid').walletBalance - balBefore);
   check('nextPayoutAt advanced ~24h by the server', new Date(invEntry[1].nextPayoutAt).getTime() > Date.now() + 22 * 3600000);
+  invEntry[1].nextPayoutAt = new Date(Date.now() - 1000); // countdown hits zero
+  const balPre2 = userDoc('bob-uid').walletBalance;
+  r = await call('GET', '/account/investments', { token: B });
+  check('settle-on-open: cashback lands the instant the app opens at zero', userDoc('bob-uid').walletBalance === balPre2 + 6500,
+    userDoc('bob-uid').walletBalance - balPre2);
 
   console.log('\n── 6. Check-in + redeem');
   r = await call('POST', '/checkin', { token: B });
@@ -271,6 +277,14 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('recount runs', r.body?.status === 'success', r.body);
   const after = { dep: userDoc('alice-uid').totalDeposited, earned: userDoc('bob-uid').totalEarned, wd: userDoc('bob-uid').totalWithdrawn };
   check('ledger recount matches incremental counters exactly', JSON.stringify(before) === JSON.stringify(after), { before, after });
+
+  console.log('\n── 10. Admin force-credit (owner verified payment manually)');
+  const bobBalFc = userDoc('bob-uid').walletBalance;
+  r = await call('POST', '/admin/deposit/force-credit', { body: { ...ADMIN, depositId: dep2Id } });
+  check('failed-but-verified deposit force-credited once', r.body?.status === 'success' && userDoc('bob-uid').walletBalance === bobBalFc + 50000,
+    { resp: r.body, bal: userDoc('bob-uid').walletBalance });
+  r = await call('POST', '/admin/deposit/force-credit', { body: { ...ADMIN, depositId: dep2Id } });
+  check('force-credit re-run never double-credits', userDoc('bob-uid').walletBalance === bobBalFc + 50000 && /Already/i.test(r.body?.message || ''), r.body);
 
   console.log(`\n══ RESULT: ${pass} passed, ${fail} failed ══`);
   process.exit(fail ? 1 : 0);

@@ -359,6 +359,14 @@ async function openUser(uid){
       <button class="btn danger sm" id="debitBtn">Debit</button>
       <button class="btn ${u.status==='banned'?'ghost':'danger'} sm" id="banBtn">${u.status==='banned'?'Unban':'Ban'}</button>
     </div>
+    <h4 style="margin:18px 0 8px;font-size:14px">Gems (${(r.investments||[]).length})</h4>
+    ${(r.investments||[]).length?`<div class="table-scroll" style="max-height:170px"><table><tbody>
+      ${r.investments.map(iv=>`<tr><td><b>${esc(iv.tierLabel||'Gem')}</b></td><td>${ugx(iv.amount)}</td>
+        <td><span class="pill-tag ${iv.status==='active'?'t-warn':iv.status==='matured'?'t-ok':'t-mut'}">${esc(iv.status)}</span></td>
+        <td style="white-space:nowrap">${ugx(iv.paidOut)} / ${ugx(iv.expectedReturn)}</td></tr>`).join('')}
+    </tbody></table></div>`:'<p class="muted" style="margin:0">No gems yet.</p>'}
+    <h4 style="margin:18px 0 8px;font-size:14px">Saved withdrawal accounts</h4>
+    ${(u.bankAccounts||[]).length?(u.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holderName||'Account')}</span><span>${esc(a.network||'')} · 0${esc(a.phone)}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
     <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td class="empty">Loading…</td></tr></tbody></table></div>`);
   (async()=>{
@@ -384,9 +392,15 @@ async function renderDeposits(){
     <tbody>${list.length?list.map(d=>`
       <tr><td>${fdate(d.createdAt)}</td><td><b>${ugx(d.amount)}</b></td><td>${esc(d.phone||'')}</td>
       <td>${statusPill(d.status==='matched'?'success':d.status)}</td>
-      <td>${d.status==='processing'?`<button class="btn sm" data-done="${esc(d.id)}">Complete</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No deposits</td></tr>'}
+      <td style="white-space:nowrap">${d.status==='processing'?`<button class="btn sm" data-done="${esc(d.id)}">Complete</button> `:''}${d.status!=='matched'?`<button class="btn sm ghost" data-force="${esc(d.id)}" title="Credit this deposit after verifying the payment on the MarzPay dashboard">Force credit</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No deposits</td></tr>'}
     </tbody></table></div>`;
   document.querySelectorAll('[data-done]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/complete',{depositId:b.dataset.done}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); }));
+  document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!confirm('Force-credit this deposit to the user? Only do this after verifying the payment on the MarzPay dashboard.'))return;
+    b.disabled=true;b.textContent='…';
+    const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
+    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
+  }));
   $('paySync').addEventListener('click',async()=>{
     const b=$('paySync'); b.disabled=true; b.textContent='Syncing…';
     const d=await api('/admin/payments/sync');
@@ -576,13 +590,17 @@ async function renderTransactions(){
   const subs=[['all','All'],['topup','Deposits'],['withdrawal','Withdrawals'],['commission','Commissions'],['investment','Gems'],['boost','Boosts'],['checkin','Check-in'],['redeem','Codes']];
   $('content').innerHTML = `
     <h2 class="sec">Transactions</h2>
+    <div class="panel-card"><input id="txSearch" placeholder="Search description, type or user id"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_txFilter===k?' active':''}" data-tf="${k}">${l}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Description</th><th>Amount</th><th>Status</th></tr></thead><tbody id="txRows"></tbody></table></div>`;
   document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>{ _txFilter=b.dataset.tf; drawTxns(); document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x.dataset.tf===_txFilter)); }));
+  $('txSearch').addEventListener('input', drawTxns);
   drawTxns();
 }
 function drawTxns(){
-  const list=_txFilter==='all'?_txns:_txns.filter(t=>t.type===_txFilter);
+  let list=_txFilter==='all'?_txns:_txns.filter(t=>t.type===_txFilter);
+  const q=($('txSearch')?.value||'').toLowerCase().trim();
+  if(q) list=list.filter(t=>(t.description||'').toLowerCase().includes(q)||(t.type||'').includes(q)||(t.userId||'').toLowerCase().includes(q));
   $('txRows').innerHTML = list.length?list.slice(0,300).map(t=>`
     <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td>

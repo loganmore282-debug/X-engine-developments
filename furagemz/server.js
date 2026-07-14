@@ -1209,7 +1209,9 @@ app.post('/admin/payments/sync', async (req, res) => {
 });
 
 function startCrons() {
-  setInterval(runDailyPayouts, 5 * 60 * 1000);
+  // Every 2 minutes so a payout lands within moments of its exact 24h mark —
+  // plus the settle-on-open hook in /account/investments for instant landing.
+  setInterval(runDailyPayouts, 2 * 60 * 1000);
   setTimeout(runDailyPayouts, 60 * 1000);
   // Background payment settlement — every 45s, so a paid deposit lands even if
   // the user closed the app and the callback never arrived.
@@ -1837,7 +1839,18 @@ app.get('/account/investments', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('investments').where('userId', '==', userId).get();
+    let snap = await db.collection('investments').where('userId', '==', userId).get();
+    // Settle-on-open: if any of this user's payouts is due right now, run the
+    // payout engine immediately (guarded, idempotent) and re-read — so the
+    // cashback lands the moment the countdown reaches zero, not minutes later.
+    const due = snap.docs.some(d => {
+      const inv = d.data();
+      return inv.status === 'active' && tsMillis(inv.nextPayoutAt) > 0 && tsMillis(inv.nextPayoutAt) <= Date.now();
+    });
+    if (due) {
+      await runDailyPayouts();
+      snap = await db.collection('investments').where('userId', '==', userId).get();
+    }
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
     return res.json({ status: 'success', investments: list });
@@ -2035,6 +2048,29 @@ app.post('/admin/users/recount', async (req, res) => {
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// Voltra-style "Assign & Credit": when the owner has verified a payment on the
+// MarzPay dashboard but the API/webhook can't confirm it, force-credit the
+// deposit to its user. Uses the same locked, idempotent credit path — a
+// force-credit can never double-credit, and an already-matched deposit is a no-op.
+app.post('/admin/deposit/force-credit', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { depositId } = req.body;
+  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+  try {
+    let snap = await db.collection('pendingDeposits').doc(depositId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    if (snap.data().status === 'matched') return res.json({ status: 'success', message: 'Already credited' });
+    if (snap.data().status === 'failed') {
+      // Owner has verified the money actually arrived — revive, then credit.
+      await snap.ref.update({ status: 'processing', revivedByAdminAt: FieldValue.serverTimestamp() });
+      snap = await db.collection('pendingDeposits').doc(depositId).get();
+    }
+    const ok = await creditMarzDeposit(snap, snap.data().amount, 'ADMIN-FORCED');
+    if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit — try again' });
+    return res.json({ status: 'success', message: `Force-credited ${fmtUGX(snap.data().amount)} to the user` });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 app.post('/admin/stats', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -2112,9 +2148,18 @@ app.post('/admin/user/detail', async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const snap = await db.collection('users').doc(userId).get();
+    const [snap, invSnap] = await Promise.all([
+      db.collection('users').doc(userId).get(),
+      db.collection('investments').where('userId', '==', userId).limit(50).get(),
+    ]);
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    return res.json({ status: 'success', user: { id: snap.id, ...snap.data() } });
+    const investments = invSnap.docs.map(d => {
+      const v = d.data();
+      return { id: d.id, tierLabel: v.tierLabel, amount: v.amount, status: v.status,
+        paidOut: v.paidOut || 0, expectedReturn: v.expectedReturn, createdAt: v.createdAt };
+    });
+    investments.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', user: { id: snap.id, ...snap.data() }, investments });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/transactions/list', async (req, res) => {
