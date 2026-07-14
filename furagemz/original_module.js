@@ -548,9 +548,7 @@ const FG_LOGO = `<svg viewBox="0 0 100 100" fill="none">
 function maybeShowAnnouncement() {
   const ann = _publicSettings?.announcement;
   if (!ann || !ann.enabled || !ann.body) return;
-  let seen = null;
-  try { seen = localStorage.getItem('fg_ann_seen'); } catch (_) {}
-  if (String(seen) === String(ann.version)) return; // already dismissed this version
+  // Shows on EVERY visit while enabled (owner's choice) — no "seen" memory.
   const root = document.getElementById('modalRoot');
   root.style.alignItems = 'center';
   root.innerHTML = `
@@ -565,7 +563,7 @@ function maybeShowAnnouncement() {
       </div>
     </div>`;
   root.classList.remove('hidden');
-  const dismiss = () => { try { localStorage.setItem('fg_ann_seen', String(ann.version)); } catch (_) {} root.style.alignItems = ''; closeModal(); };
+  const dismiss = () => { root.style.alignItems = ''; closeModal(); };
   root.querySelector('#annOk').addEventListener('click', dismiss);
   root.querySelector('[data-close]').addEventListener('click', dismiss);
 }
@@ -1108,7 +1106,9 @@ function openWithdrawModal() {
     document.getElementById('brNet').textContent = ugx(Math.max(0, a - fee));
   };
   amtEl.addEventListener('input', recompute);
-  document.querySelectorAll('#modalRoot .amt-chip').forEach(c =>
+  // NOT .bank-pick: saved-account buttons share the chip styling but must only
+  // fill the phone — binding them here wiped the typed amount back to 0.
+  document.querySelectorAll('#modalRoot .amt-chip:not(.bank-pick)').forEach(c =>
     c.addEventListener('click', () => { amtEl.value = c.dataset.amt; recompute(); }));
   document.getElementById('mSubmit').addEventListener('click', async () => {
     const amount = parseInt(amtEl.value, 10);
