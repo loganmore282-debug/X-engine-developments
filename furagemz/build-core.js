@@ -127,5 +127,13 @@ if (/<script data-nx-core>[\s\S]*?<\/script>/.test(html)) {
 
 fs.writeFileSync(HTML, html);
 log('index.html    :', fs.statSync(HTML).size, 'bytes — IIFE inlined');
-log('\nDone. Deploy index.html + manifest.json + sw.js + icon-192.png + icon-512.png to EdgeOne.');
-log('No separate core.*.js file needed — everything is inside index.html.');
+
+// ── Sync the clean deploy folder (dist/) — ONLY shippable files land here so
+//    EdgeOne's git auto-deploy never exposes source (original_module.js/server.js/etc.)
+const DIST = __dirname + '/dist';
+if (!fs.existsSync(DIST)) fs.mkdirSync(DIST);
+['index.html', 'manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png']
+  .forEach((f) => fs.copyFileSync(__dirname + '/' + f, DIST + '/' + f));
+log('dist/         : synced (index.html, manifest.json, sw.js, icon-192.png, icon-512.png)');
+
+log('\nDone. EdgeOne auto-deploys the dist/ folder from git — no manual upload needed.');
