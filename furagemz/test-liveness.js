@@ -13,6 +13,7 @@ process.env.MONGODB_URI = 'mongodb://mock';
 process.env.ADMIN_KEY = 'test-admin-key';
 process.env.FIREBASE_API_KEY = 'test';
 process.env.FIREBASE_SERVICE_ACCOUNT = '{"project_id":"t","private_key":"k","client_email":"e"}';
+process.env.MARZPAY_KEY = 'dGVzdDp0ZXN0';
 process.env.PORT = '3997';
 
 const Module = require('module');
@@ -232,6 +233,25 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('second reject refunds NOTHING', r.body?.status === 'error' && userDoc('bob-uid').walletBalance === balAfterReq + 10000, r.body);
   r = await call('GET', '/withdraw/status/' + witId, { token: A });
   check("alice cannot read bob's withdrawal status (403)", r.code === 403, r.code);
+  // rejected withdrawal must show honestly in the user's history (not stuck on Processing)
+  r = await call('GET', '/account/transactions', { token: B });
+  const rejRow = (r.body?.transactions || []).find(t => t.withdrawalId === wit2);
+  check('rejected withdrawal shows Failed in history (not Processing)', rejRow && ['failed', 'rejected'].includes(rejRow.status), rejRow && rejRow.status);
+  const refundRow = (r.body?.transactions || []).find(t => t.type === 'refund' && t.description.includes('rejected'));
+  check('rejection refund appears as a visible record', !!refundRow, refundRow);
+
+  console.log('\n── 7b. Background sweep settles payments with NO callback and NO app open');
+  await sleep(7100); // clear the per-user deposit debounce
+  r = await call('POST', '/deposit/marzpay', { token: A, body: { amount: 40000, phone: '0771000001' } });
+  check('new deposit initiated (user then closes the app)', r.body?.status === 'success', r.body);
+  const dep3 = mockdb.__store.get('pendingDeposits').get(r.body.depositId);
+  marzTx.set(dep3.marzTxUuid, 'completed'); // customer paid, but NO callback ever arrives
+  const aliceBalPre = userDoc('alice-uid').walletBalance;
+  r = await call('POST', '/admin/payments/sync', { body: ADMIN }); await sleep(250);
+  check('background sweep credits the paid deposit by itself', userDoc('alice-uid').walletBalance === aliceBalPre + 40000,
+    { before: aliceBalPre, after: userDoc('alice-uid').walletBalance });
+  await call('POST', '/admin/payments/sync', { body: ADMIN }); await sleep(250);
+  check('sweep re-run never double-credits', userDoc('alice-uid').walletBalance === aliceBalPre + 40000, userDoc('alice-uid').walletBalance);
 
   console.log('\n── 8. Maintenance gate + banning');
   await call('POST', '/admin/settings/update', { body: { ...ADMIN, maintenanceMode: true } });

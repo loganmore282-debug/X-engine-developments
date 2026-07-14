@@ -378,7 +378,8 @@ async function renderDeposits(){
   const r = await api('/admin/deposits/list');
   const list = r.deposits||[];
   $('content').innerHTML = `
-    <h2 class="sec">Deposits (${list.length})</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Deposits (${list.length})</h2>
+      <button class="btn sm ghost" id="paySync" title="Poll MarzPay for every processing deposit and withdrawal and settle them now">Sync with MarzPay</button></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Amount</th><th>Phone</th><th>Status</th><th></th></tr></thead>
     <tbody>${list.length?list.map(d=>`
       <tr><td>${fdate(d.createdAt)}</td><td><b>${ugx(d.amount)}</b></td><td>${esc(d.phone||'')}</td>
@@ -386,6 +387,12 @@ async function renderDeposits(){
       <td>${d.status==='processing'?`<button class="btn sm" data-done="${esc(d.id)}">Complete</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No deposits</td></tr>'}
     </tbody></table></div>`;
   document.querySelectorAll('[data-done]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/complete',{depositId:b.dataset.done}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); }));
+  $('paySync').addEventListener('click',async()=>{
+    const b=$('paySync'); b.disabled=true; b.textContent='Syncing…';
+    const d=await api('/admin/payments/sync');
+    toast(d.status==='success'?`Settled ${d.settled} payment(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+    renderDeposits();
+  });
 }
 
 // ── WITHDRAWALS ──

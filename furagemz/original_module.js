@@ -453,7 +453,7 @@ async function realtimeTick() {
 }
 function startRealtime() {
   if (_realtimeTimer) return;
-  _realtimeTimer = setInterval(realtimeTick, 15000);
+  _realtimeTimer = setInterval(realtimeTick, 10000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) realtimeTick(); });
   startCountdownTick();
 }
@@ -963,27 +963,31 @@ async function pollDepositUI(depositId, amount, tries) {
   const s = r.deposit?.depositStatus;
   if (s === 'matched') { depositResult('ok', r.deposit.creditedAmount || amount); await loadAccount(); await loadTxns(); renderHome(); renderAccount(); return; }
   if (s === 'failed')  { depositResult('bad', amount); return; }
-  if (tries > 25)      { depositResult('slow', amount); return; }
-  setTimeout(() => pollDepositUI(depositId, amount, tries + 1), 3000);
+  if (tries > 48)      { depositResult('slow', amount); return; }
+  setTimeout(() => pollDepositUI(depositId, amount, tries + 1), 2500);
 }
-// Celebratory confetti burst on a successful payment (pure CSS particles, no emoji).
+// Full-screen celebratory confetti: pieces rain from the top of the SCREEN,
+// fluttering side-to-side with varied sizes, shapes, spin and speed — like real
+// confetti falling — then clear on their own. Pure CSS particles, no emoji.
 function fireConfetti() {
-  const card = document.querySelector('#modalRoot .modal-card'); if (!card) return;
-  const colors = ['#7c3aed', '#10b981', '#38bdf8', '#f43f5e', '#eab308', '#c084fc'];
-  const wrap = document.createElement('div'); wrap.className = 'confetti';
-  for (let i = 0; i < 28; i++) {
+  const colors = ['#7c3aed', '#10b981', '#38bdf8', '#f43f5e', '#eab308', '#c084fc', '#fb7185', '#34d399'];
+  const wrap = document.createElement('div'); wrap.className = 'confetti-sky';
+  for (let i = 0; i < 100; i++) {
     const p = document.createElement('i');
-    const angle = Math.random() * 2 * Math.PI, dist = 70 + Math.random() * 150;
-    p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
-    p.style.setProperty('--dy', (Math.sin(angle) * dist - 40) + 'px');
-    p.style.setProperty('--rot', (Math.random() * 720 - 360) + 'deg');
+    const w = 6 + Math.random() * 7;
+    p.style.left = (Math.random() * 100) + 'vw';
+    p.style.width = w + 'px';
+    p.style.height = (i % 4 === 0 ? w : 4 + Math.random() * 8) + 'px';
+    if (i % 4 === 0) p.style.borderRadius = '50%';           // some round pieces
     p.style.background = colors[i % colors.length];
-    p.style.animationDelay = (Math.random() * 0.08) + 's';
-    if (i % 3 === 0) p.style.borderRadius = '50%';
+    p.style.setProperty('--sway', (Math.random() * 180 - 90) + 'px');
+    p.style.setProperty('--rot', (Math.random() * 1000 - 500) + 'deg');
+    p.style.animationDuration = (2.4 + Math.random() * 1.8) + 's';
+    p.style.animationDelay = (Math.random() * 0.8) + 's';
     wrap.appendChild(p);
   }
-  card.appendChild(wrap);
-  setTimeout(() => wrap.remove(), 1600);
+  document.body.appendChild(wrap);
+  setTimeout(() => wrap.remove(), 5200);
 }
 
 function depositResult(kind, amount) {

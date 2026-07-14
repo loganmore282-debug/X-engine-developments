@@ -1160,9 +1160,61 @@ async function runDailyPayouts() {
   } catch (e) { console.error('Daily payout check error:', e.message); return 0; }
   finally { _payoutRunning = false; }
 }
+// ── BACKGROUND PAYMENT SWEEP ──
+// Settles every in-flight payment WITHOUT needing the app open or a callback to
+// arrive: polls MarzPay directly for all processing deposits and withdrawals,
+// credits/fails them, and expires deposit attempts that were abandoned (e.g. a
+// user cancelled the PIN prompt and started a new one). This is what keeps
+// statuses truthful in near-real-time and stops "stuck on Processing" rows.
+let _paySweepRunning = false;
+async function pollPendingPayments() {
+  if (_paySweepRunning || !MARZPAY_KEY) return 0;
+  _paySweepRunning = true;
+  let settled = 0;
+  try {
+    const depSnap = await db.collection('pendingDeposits')
+      .where('status', '==', 'processing').orderBy('createdAt', 'desc').limit(25).get();
+    for (const doc of depSnap.docs) {
+      try {
+        const r = await pollMarzDepositStatus(doc);
+        if (r.credited || r.failed) { settled++; continue; }
+        // Abandoned attempt (cancelled prompt, never paid): expire after 6 hours
+        // so it shows honestly as failed instead of processing forever.
+        if (Date.now() - tsMillis(doc.data().createdAt) > 6 * 3600000) {
+          await doc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(),
+            failureReason: 'Payment window expired' });
+          settled++;
+        }
+      } catch (e) { console.warn('deposit sweep:', doc.id, e.message); }
+    }
+    const witSnap = await db.collection('withdrawals')
+      .where('status', '==', 'processing').orderBy('createdAt', 'desc').limit(25).get();
+    for (const doc of witSnap.docs) {
+      const w = doc.data();
+      if (!w.marzTxUuid && !w.marzReference) continue;
+      try {
+        const raw = await marzGetStatus(w.marzTxUuid || w.marzReference);
+        if (['completed', 'successful', 'success', 'paid'].includes(raw)) { await completeWithdrawal(doc); settled++; }
+        else if (['failed', 'cancelled', 'error', 'declined'].includes(raw)) { await failWithdrawal(doc, 'Disbursement failed'); settled++; }
+      } catch (e) { console.warn('withdraw sweep:', doc.id, e.message); }
+    }
+  } catch (e) { console.error('Payment sweep error:', e.message); }
+  finally { _paySweepRunning = false; }
+  return settled;
+}
+app.post('/admin/payments/sync', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const settled = await pollPendingPayments();
+  return res.json({ status: 'success', settled });
+});
+
 function startCrons() {
   setInterval(runDailyPayouts, 5 * 60 * 1000);
   setTimeout(runDailyPayouts, 60 * 1000);
+  // Background payment settlement — every 45s, so a paid deposit lands even if
+  // the user closed the app and the callback never arrived.
+  setInterval(pollPendingPayments, 45 * 1000);
+  setTimeout(pollPendingPayments, 20 * 1000);
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
   setTimeout(reconcileCommissions, 90 * 1000);
@@ -1763,6 +1815,17 @@ app.post('/withdraw/reject', async (req, res) => {
       refunded = true;
     });
     if (!refunded) return res.status(400).json({ status: 'error', message: 'Already finalised — nothing refunded' });
+    // Reflect the rejection in the user's history: flip the original withdrawal
+    // record off "Processing" and add a visible refund record.
+    try {
+      const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'rejected' });
+    } catch (txErr) { console.warn('reject tx update:', txErr.message); }
+    const { date, time } = nowStr();
+    await db.collection('transactions').add({
+      userId: wit.userId, type: 'refund', description: 'Withdrawal refund — request rejected',
+      amount: wit.amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+    });
     return res.json({ status: 'success', message: `Rejected. ${fmtUGX(wit.amount)} refunded.` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -1794,11 +1857,23 @@ app.get('/account/transactions', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [snap, depSnap] = await Promise.all([
+    const [snap, depSnap, witSnap] = await Promise.all([
       db.collection('transactions').where('userId', '==', userId).limit(300).get(),
       db.collection('pendingDeposits').where('userId', '==', userId).limit(100).get(),
+      db.collection('withdrawals').where('userId', '==', userId).limit(100).get(),
     ]);
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Self-heal: withdrawal records always show the withdrawal's TRUE current
+    // status (fixes any historical row stuck on "Processing" after a reject/fail).
+    const witStatus = {};
+    witSnap.forEach(d => { witStatus[d.id] = d.data().status; });
+    list.forEach(t => {
+      if (t.type === 'withdrawal' && t.withdrawalId && witStatus[t.withdrawalId]) {
+        const ws = witStatus[t.withdrawalId];
+        t.status = ws === 'processed' ? 'success'
+          : (ws === 'pending' || ws === 'processing') ? 'pending' : 'failed';
+      }
+    });
     // "I deposited but never saw it": failed / still-processing deposit attempts
     // appear in history too, with their real status, so nothing seems to vanish.
     // (Credited ones already exist as real 'topup' transactions — skip those.)
