@@ -286,6 +286,24 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('POST', '/admin/deposit/force-credit', { body: { ...ADMIN, depositId: dep2Id } });
   check('force-credit re-run never double-credits', userDoc('bob-uid').walletBalance === bobBalFc + 50000 && /Already/i.test(r.body?.message || ''), r.body);
 
+  console.log('\n── 11. Admin account deletion (full data wipe)');
+  const C = 'uid:carol-uid';
+  await call('POST', '/account/create-profile', { token: C, body: { username: 'carol', phone: '0771000003' } });
+  await call('POST', '/register', { token: C, body: { referralCode: 'alice' } });
+  await call('POST', '/checkin', { token: C });
+  check('carol exists with data (alice teamL1Count = 2)', !!userDoc('carol-uid') && userDoc('alice-uid').teamL1Count === 2,
+    { carol: !!userDoc('carol-uid'), l1: userDoc('alice-uid').teamL1Count });
+  r = await call('POST', '/admin/user/delete', { body: { ...ADMIN, userId: 'carol-uid' } });
+  check('delete without typed confirmation refused', r.code === 400, r.body);
+  r = await call('POST', '/admin/user/delete', { body: { ...ADMIN, userId: 'carol-uid', confirm: 'DELETE' } });
+  check('account deleted with confirmation', r.body?.status === 'success', r.body);
+  check('user document gone', !userDoc('carol-uid'));
+  check('all her transactions wiped', countTx('carol-uid', 'checkin') === 0 && countTx('carol-uid', 'admin_credit') === 0);
+  check('referral link records wiped', ![...(mockdb.__store.get('referrals')||new Map()).values()].some(x => x.referredUserId === 'carol-uid'));
+  check("alice's team count corrected back to 1", userDoc('alice-uid').teamL1Count === 1, userDoc('alice-uid').teamL1Count);
+  r = await call('GET', '/account', { token: C });
+  check('deleted account can no longer be fetched', r.code === 404, r.code);
+
   console.log(`\n══ RESULT: ${pass} passed, ${fail} failed ══`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

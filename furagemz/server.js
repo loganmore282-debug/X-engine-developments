@@ -2068,6 +2068,54 @@ app.post('/admin/users/recount', async (req, res) => {
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// PERMANENT account deletion: removes the user and ALL their data — transactions,
+// investments, deposits, withdrawals, referral links — fixes the referrer's team
+// counts up the chain, and frees the phone number in Firebase so it can register
+// again. Requires confirm:"DELETE" so a stray click can never wipe an account.
+app.post('/admin/user/delete', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId, confirm } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  if (confirm !== 'DELETE') return res.status(400).json({ status: 'error', message: 'Type DELETE to confirm' });
+  try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const u = uSnap.data();
+    // Walk the referral chain and correct team counts before the link is lost.
+    try {
+      if (u.referredBy) {
+        await db.collection('users').doc(u.referredBy).update({ teamL1Count: FieldValue.increment(-1) });
+        const l1 = await db.collection('users').doc(u.referredBy).get();
+        const l2Id = l1.exists ? l1.data().referredBy : null;
+        if (l2Id) {
+          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(-1) });
+          const l2 = await db.collection('users').doc(l2Id).get();
+          const l3Id = l2.exists ? l2.data().referredBy : null;
+          if (l3Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(-1) });
+        }
+      }
+    } catch (chainErr) { console.warn('delete: team-count fix:', chainErr.message); }
+    const wipe = async (coll, field = 'userId') => {
+      const snap = await db.collection(coll).where(field, '==', userId).get();
+      let n = 0;
+      for (const d of snap.docs) { try { await d.ref.delete(); n++; } catch (_) {} }
+      return n;
+    };
+    const removed = {
+      transactions:  await wipe('transactions'),
+      investments:   await wipe('investments'),
+      withdrawals:   await wipe('withdrawals'),
+      deposits:      await wipe('pendingDeposits'),
+      referralsOut:  await wipe('referrals', 'referrerId'),
+      referralsIn:   await wipe('referrals', 'referredUserId'),
+    };
+    await db.collection('users').doc(userId).delete();
+    // Free the phone number for re-registration (best-effort; auth may lag).
+    try { await admin.auth().deleteUser(userId); } catch (fbErr) { console.warn('delete: firebase auth:', fbErr.message); }
+    return res.json({ status: 'success', message: 'Account and all its data deleted', removed });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // Voltra-style "Assign & Credit": when the owner has verified a payment on the
 // MarzPay dashboard but the API/webhook can't confirm it, force-credit the
 // deposit to its user. Uses the same locked, idempotent credit path — a

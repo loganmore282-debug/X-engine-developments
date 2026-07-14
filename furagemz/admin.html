@@ -358,6 +358,7 @@ async function openUser(uid){
       <button class="btn ok sm" id="creditBtn">Credit</button>
       <button class="btn danger sm" id="debitBtn">Debit</button>
       <button class="btn ${u.status==='banned'?'ghost':'danger'} sm" id="banBtn">${u.status==='banned'?'Unban':'Ban'}</button>
+      <button class="btn danger sm" id="delBtn" title="Permanently delete this account and ALL its data">Delete account</button>
     </div>
     <h4 style="margin:18px 0 8px;font-size:14px">Gems (${(r.investments||[]).length})</h4>
     ${(r.investments||[]).length?`<div class="table-scroll" style="max-height:170px"><table><tbody>
@@ -379,6 +380,16 @@ async function openUser(uid){
   $('creditBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('debitBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('banBtn').addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
+  $('delBtn').addEventListener('click', async()=>{
+    const typed = prompt(`This PERMANENTLY deletes ${u.username||u.phone} and ALL their data — deposits, withdrawals, gems, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
+    if (typed === null) return;
+    if (typed.trim() !== 'DELETE') return toast('Not deleted — you must type DELETE exactly','err');
+    const b=$('delBtn'); b.disabled=true; b.textContent='Deleting…';
+    const d=await api('/admin/user/delete',{userId:uid,confirm:'DELETE'});
+    toast(d.status==='success'?'Account and all data deleted':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ closeModal(); renderUsers(); }
+    else { b.disabled=false; b.textContent='Delete account'; }
+  });
 }
 
 // ── DEPOSITS ──
