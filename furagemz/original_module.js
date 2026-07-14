@@ -58,6 +58,8 @@ const ICN = {
   close:        _svg('<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>'),
   back:         _svg('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
   download:     _svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+  phone:        _svg('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 5h3"/><path d="M12 17.5h.01"/>'),
+  award:        _svg('<circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 22l5-3 5 3-1.5-8"/>'),
   info:         _svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
   about:        _svg('<circle cx="12" cy="12" r="9"/><path d="M12 16v-5"/><path d="M12 8h.01"/>'),
   eye:          _svg('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>'),
@@ -97,7 +99,7 @@ function typeColor(t) {
     topup: 'var(--emerald)', gem_payout: 'var(--ok)', commission: 'var(--sapphire)',
     checkin: 'var(--topaz)', withdrawal: 'var(--ruby)', admin_debit: 'var(--ruby)',
     investment: 'var(--amethyst)', refund: 'var(--sapphire)', admin_credit: 'var(--violet)',
-    redeem: 'var(--violet)', boost: '#ef4444'
+    redeem: 'var(--violet)', boost: '#ef4444', team_reward: '#db2777'
   };
   return map[t] || 'var(--violet)';
 }
@@ -540,9 +542,11 @@ async function loadProducts() {
   const r = await api('/products');
   if (r.status === 'success') _products = r.products || [];
 }
+let _teamStats = null;
 async function loadTeam() {
-  const r = await api('/team/members');
+  const [r, s] = await Promise.all([api('/team/members'), api('/team/stats')]);
   if (r.status === 'success') _members = r.members || [];
+  if (s.status === 'success') _teamStats = s;
 }
 async function loadTxns() {
   const r = await api('/account/transactions');
@@ -840,6 +844,7 @@ const REC_META = {
   topup:         { label: 'Deposit',          grad: 'linear-gradient(135deg,#10b981,#059669)' },
   withdrawal:    { label: 'Withdrawal',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
   commission:    { label: 'Commission',        grad: 'linear-gradient(135deg,#818cf8,#6366f1)' },
+  team_reward:   { label: 'Team reward',       grad: 'linear-gradient(135deg,#f472b6,#db2777)' },
   checkin:       { label: 'Daily bonus',       grad: 'linear-gradient(135deg,#fbbf24,#f59e0b)' },
   gem_payout:    { label: 'Gem payout',        grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
   investment:    { label: 'Gem purchase',      grad: 'linear-gradient(135deg,#c084fc,#9333ea)' },
@@ -944,7 +949,7 @@ function openDepositPending(depositId, amount) {
   const root = document.getElementById('modalRoot');
   root.innerHTML = `<div class="modal-backdrop"></div><div class="modal-card">
     <div class="pay-wait">
-      <div class="pay-orb" id="payOrb">${ICN.down}</div>
+      <div class="pay-orb" id="payOrb">${ICN.phone}</div>
       <div class="pay-title" id="payTitle">Approve on your phone</div>
       <div class="pay-sub" id="paySub">Enter your mobile-money PIN to approve <b>${ugx(amount)}</b>. We'll confirm it here automatically.</div>
       <div class="pay-dots" id="payDots"><i></i><i></i><i></i></div>
@@ -1161,41 +1166,67 @@ function renderTeam() {
   const el = document.getElementById('panel-team');
   const code = _account?.referralCode || _account?.username || '—';
   const link = code !== '—' ? referralLink(code) : '';
+  const ts = _teamStats;
+  const l1Total = ts?.l1DepositTotal || 0;
+  const totalTeamEarn = (ts?.earned?.commissions || _account?.commissionEarned || 0) + (ts?.earned?.teamRewards || 0);
+  const LVL = [
+    { n: 1, count: ts?.counts?.l1 ?? _account?.teamL1Count ?? 0, earned: ts?.earned?.l1 || 0, tint: '#7c3aed', bg: '#f3e8ff' },
+    { n: 2, count: ts?.counts?.l2 ?? _account?.teamL2Count ?? 0, earned: ts?.earned?.l2 || 0, tint: '#0ea5e9', bg: '#e0f2fe' },
+    { n: 3, count: ts?.counts?.l3 ?? _account?.teamL3Count ?? 0, earned: ts?.earned?.l3 || 0, tint: '#059669', bg: '#d1fae5' },
+  ];
   el.innerHTML = `
-    <div class="ref-card">
-      <div style="color:var(--sub);font-size:13px;font-weight:600">Your referral code</div>
-      <div class="ref-code">${esc(code)}</div>
-      ${link ? `<div class="ref-link" id="refLink" title="Tap to copy">${esc(link)}</div>` : ''}
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
-        <button class="btn outline" id="copyRef" style="width:auto;padding:9px 18px;display:inline-flex;align-items:center;gap:7px">${ICN.copy} Copy link</button>
-        <button class="btn" id="shareRef" style="width:auto;padding:9px 18px">Share</button>
+    <div class="team-hero">
+      <div class="th-top">
+        <div>
+          <div class="th-label">Team earnings</div>
+          <div class="th-amt">${ugx(totalTeamEarn)}</div>
+        </div>
+        <div class="th-art">${gemArt('#ffffff')}</div>
       </div>
-      <div class="stat-row">
-        <div class="stat-box"><div class="pct">${commPct(1)}%</div><div class="n">${_account?.teamL1Count || 0}</div><div class="l">Level 1</div></div>
-        <div class="stat-box"><div class="pct">${commPct(2)}%</div><div class="n">${_account?.teamL2Count || 0}</div><div class="l">Level 2</div></div>
-        <div class="stat-box"><div class="pct">${commPct(3)}%</div><div class="n">${_account?.teamL3Count || 0}</div><div class="l">Level 3</div></div>
-      </div>
-    </div>
-    <div class="info-note" style="margin-top:14px">
-      <span class="in-ic">${ICN.info}</span>
-      <div class="in-tx">
-        <b>How referral rewards work.</b> Share your code or link. When someone joins with it and buys a gem, you earn a reward — instantly, straight to your wallet.
-        <ol>
-          <li><b>Level 1</b> (people you invite): <b>${commPct(1)}%</b> of every gem they buy.</li>
-          <li><b>Level 2</b> (people they invite): <b>${commPct(2)}%</b>.</li>
-          <li><b>Level 3</b> (the next layer): <b>${commPct(3)}%</b>.</li>
-        </ol>
+      <div class="th-code-row">
+        <div class="th-code"><span>Code</span><b>${esc(code)}</b></div>
+        <button class="th-btn" id="copyRef">${ICN.copy} Copy link</button>
+        <button class="th-btn solid" id="shareRef">Share</button>
       </div>
     </div>
+
+    <div class="lvl-list">
+      ${LVL.map(l => `
+        <div class="lvl-row">
+          <div class="lvl-badge" style="background:${l.bg};color:${l.tint}">L${l.n}</div>
+          <div class="lvl-info">
+            <div class="t">Level ${l.n} · earns ${commPct(l.n)}% of every gem</div>
+            <div class="s">${l.count} member${l.count === 1 ? '' : 's'}</div>
+          </div>
+          <div class="lvl-earn">${ugx(l.earned)}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="sec-head"><h3>Task centre</h3></div>
+    <div class="task-intro">Your level 1 team has deposited <b>${ugx(l1Total)}</b> so far. Hit each target below and the reward drops into your wallet instantly.</div>
+    ${(ts?.milestones || []).map(m => {
+      const pct = Math.min(100, Math.round((l1Total / m.target) * 100));
+      return `
+      <div class="task-row${m.paid ? ' done' : ''}">
+        <div class="task-ic">${ICN.award}</div>
+        <div class="task-body">
+          <div class="task-t">Team deposits reach ${ugx(m.target)}</div>
+          <div class="task-bar"><i style="width:${pct}%"></i></div>
+          <div class="task-s">${m.paid ? 'Reward paid to your wallet' : pct + '% there'}</div>
+        </div>
+        <div class="task-reward">${m.paid ? `<span class="task-paid">${CHECK_SVG}</span>` : `<b>${ugx(m.reward)}</b>`}</div>
+      </div>`;
+    }).join('') || `<div class="empty-note">Task centre is loading…</div>`}
+
     <div class="sec-head"><h3>Direct referrals</h3></div>
     ${_members.length ? _members.map(m => `
       <div class="member-row">
-        <div class="avatar">${esc(initials(m.name))}</div>
+        <div class="avatar" style="background:${tickColor(m.name)}">${esc(initials(m.name))}</div>
         <div class="member-info">
           <div class="t">${esc(m.name)}</div>
           <div class="s">${m.joinedAt ? timeAgo(new Date(m.joinedAt).getTime()) : ''}</div>
         </div>
-        <div class="badge ${m.hasInvested ? 'on' : 'off'}">${m.hasInvested ? 'Active' : 'New'}</div>
+        <div class="badge ${m.hasInvested ? 'on' : 'off'}">${m.hasInvested ? 'Invested' : 'New'}</div>
       </div>`).join('') : `<div class="empty-note">Share your code — nobody has joined yet.</div>`}
   `;
   const copyBtn = el.querySelector('#copyRef');
@@ -1221,7 +1252,7 @@ const TXN_FILTERS = [
   { key: 'all',         label: 'All',          types: null },
   { key: 'deposits',    label: 'Deposits',     types: ['topup', 'admin_credit'] },
   { key: 'withdrawals', label: 'Withdrawals',  types: ['withdrawal', 'refund'] },
-  { key: 'commissions', label: 'Commissions',  types: ['commission'] },
+  { key: 'commissions', label: 'Commissions',  types: ['commission', 'team_reward'] },
   { key: 'bonuses',     label: 'Bonuses',      types: ['checkin', 'redeem'] },
 ];
 function renderAccount() {
@@ -1418,10 +1449,15 @@ function openSupportModal() {
 
 function openHistoryModal() {
   if (!TXN_FILTERS.some(x => x.key === _txnFilter)) _txnFilter = 'all';
-  // Money in / Money out are lifetime totals across ALL transactions, so they
-  // stay put no matter which filter chip is selected (only the list below filters).
+  // Money in / Money out are lifetime totals across ALL SUCCESSFUL transactions —
+  // failed/pending attempts (e.g. a declined deposit) appear in the list with
+  // their status but never count into the totals.
   let inSum = 0, outSum = 0;
-  _txns.forEach(t => { const a = t.amount || 0; if (a >= 0) inSum += a; else outSum += -a; });
+  _txns.forEach(t => {
+    const st = String(t.status || 'success').toLowerCase();
+    if (!['success', 'processed', 'matched'].includes(st)) return;
+    const a = t.amount || 0; if (a >= 0) inSum += a; else outSum += -a;
+  });
   // Build the page ONCE. Tapping a filter chip only re-renders the list + chip
   // state below — the page never re-mounts, so there's no reload/flash.
   openModal(`

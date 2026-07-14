@@ -172,6 +172,17 @@ const GEM_TIERS = [
 });
 function findGemTier(key) { return GEM_TIERS.find(t => t.key === key) || null; }
 
+// TEAM TASK CENTRE — milestone rewards on the TOTAL DEPOSITS of a user's
+// level-1 team. Paid instantly by the server the moment a threshold is crossed
+// (deposit-credit hook) and re-checked whenever the user opens the Team screen.
+const TEAM_MILESTONES = [
+  { target:   60000, reward:  3000 },
+  { target:  100000, reward: 10000 },
+  { target:  250000, reward: 15000 },
+  { target:  500000, reward: 25000 },
+  { target: 1000000, reward: 50000 },
+];
+
 // ── UUID v4 generator ──
 function uuidv4() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -448,6 +459,50 @@ async function reconcileCommissions(limit = 800) {
   return fixed;
 }
 
+// ── TEAM MILESTONE ENGINE ──
+// Sums the caller's level-1 team deposits and pays every milestone that is
+// reached but not yet paid. Idempotent: each milestone sets a flag inside a
+// transaction with a fresh recheck (same proven pattern as commissions), so a
+// reward can never be paid twice no matter how often this runs.
+async function checkTeamMilestones(userId) {
+  const snap = await db.collection('users').where('referredBy', '==', userId).get();
+  let l1Total = 0;
+  snap.forEach(d => { l1Total += d.data().totalDeposited || 0; });
+  const uRef = db.collection('users').doc(userId);
+  const { date, time } = nowStr();
+  for (const m of TEAM_MILESTONES) {
+    if (l1Total < m.target) break;
+    const flag = 'teamMilestone_' + m.target;
+    try {
+      await db.runTransaction(async t => {
+        const fresh = await t.get(uRef);
+        if (!fresh.exists || fresh.data()[flag]) return;
+        t.update(uRef, {
+          walletBalance: FieldValue.increment(m.reward),
+          totalEarned:   FieldValue.increment(m.reward),
+          [flag]: true
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId, type: 'team_reward',
+          description: `Team reward — level 1 team deposits reached ${fmtUGX(m.target)}`,
+          amount: m.reward, milestone: m.target, status: 'success',
+          date, time, createdAt: FieldValue.serverTimestamp()
+        });
+      });
+    } catch (e) { console.error('Milestone pay error:', userId, m.target, e.message); }
+  }
+  return l1Total;
+}
+// Fire-and-forget hook: after ANY deposit credit, check the depositor's
+// referrer so their milestone pays out the instant the threshold is crossed.
+async function notifyTeamDeposit(depositorId) {
+  try {
+    const u = await db.collection('users').doc(depositorId).get();
+    const refId = u.exists ? u.data().referredBy : null;
+    if (refId) await checkTeamMilestones(refId);
+  } catch (e) { console.error('Team deposit hook error:', e.message); }
+}
+
 // ── HEALTH ──
 app.get('/health', async (_req, res) => {
   const dbOk = await pingDb().catch(() => false);
@@ -584,6 +639,7 @@ const _FEED_ACTIONS = {
   gem_payout:   'earned cashback of',
   investment:   'activated a gem worth',
   commission:   'earned a referral reward of',
+  team_reward:  'earned a team reward of',
   redeem:       'redeemed a code for',
   checkin:      'claimed a daily bonus of',
 };
@@ -880,6 +936,31 @@ app.get('/team/members', async (req, res) => {
     });
     members.sort((a, b) => (b.joinedAt || '') > (a.joinedAt || '') ? 1 : -1);
     return res.json({ status: 'success', members });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Team task-centre stats. Calling this ALSO settles any milestone that is due
+// (idempotent), so a user opening the Team screen is paid instantly if a
+// threshold was crossed while the deposit hook couldn't reach them.
+app.get('/team/stats', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const l1DepositTotal = await checkTeamMilestones(userId);
+    const uSnap = await db.collection('users').doc(userId).get();
+    const u = uSnap.exists ? uSnap.data() : {};
+    const milestones = TEAM_MILESTONES.map(m => ({
+      target: m.target, reward: m.reward,
+      achieved: l1DepositTotal >= m.target,
+      paid: !!u['teamMilestone_' + m.target],
+    }));
+    return res.json({
+      status: 'success', l1DepositTotal, milestones,
+      counts:  { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
+      earned:  { l1: u.commissionL1Earned || 0, l2: u.commissionL2Earned || 0, l3: u.commissionL3Earned || 0,
+                 commissions: u.commissionEarned || 0,
+                 teamRewards: TEAM_MILESTONES.reduce((s, m) => s + (u['teamMilestone_' + m.target] ? m.reward : 0), 0) },
+    });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -1286,6 +1367,8 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
       });
       didCredit = true;
     });
+    // Instant team-milestone check for the depositor's referrer.
+    if (didCredit) notifyTeamDeposit(dep.userId).catch(() => {});
     return didCredit;
   } finally { _creditingDeposits.delete(depDoc.id); }
 }
@@ -1366,6 +1449,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
       });
     }
+    if (isSandbox) notifyTeamDeposit(userId).catch(() => {});
     return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone, sandbox: isSandbox });
   } catch (e) {
     console.error('Deposit error:', e.message);
@@ -1710,10 +1794,27 @@ app.get('/account/transactions', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('transactions').where('userId', '==', userId).limit(300).get();
+    const [snap, depSnap] = await Promise.all([
+      db.collection('transactions').where('userId', '==', userId).limit(300).get(),
+      db.collection('pendingDeposits').where('userId', '==', userId).limit(100).get(),
+    ]);
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // "I deposited but never saw it": failed / still-processing deposit attempts
+    // appear in history too, with their real status, so nothing seems to vanish.
+    // (Credited ones already exist as real 'topup' transactions — skip those.)
+    depSnap.forEach(d => {
+      const dep = d.data();
+      if (dep.status === 'matched') return;
+      list.push({
+        id: 'dep_' + d.id, type: 'topup',
+        description: dep.status === 'failed'
+          ? 'Deposit failed — money was not taken' : 'Deposit — waiting for approval',
+        amount: dep.amount, status: dep.status === 'failed' ? 'failed' : 'pending',
+        date: dep.date, time: dep.time, createdAt: dep.createdAt,
+      });
+    });
     list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
-    return res.json({ status: 'success', transactions: list });
+    return res.json({ status: 'success', transactions: list.slice(0, 300) });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -1739,6 +1840,8 @@ app.post('/admin/deposit', async (req, res) => {
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
+    // Admin credits count as deposits, so they can complete a team milestone too.
+    notifyTeamDeposit(userId).catch(() => {});
     return res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -1799,7 +1902,7 @@ app.post('/admin/deposit/complete', async (req, res) => {
 // requests lost while the server was down). Safe to re-run any time: it SETS
 // exact recomputed values, so running twice changes nothing.
 const DEP_TYPES  = new Set(['topup', 'admin_credit']);
-const EARN_TYPES = new Set(['gem_payout', 'checkin', 'commission', 'redeem']);
+const EARN_TYPES = new Set(['gem_payout', 'checkin', 'commission', 'redeem', 'team_reward']);
 const OK_STATUS  = new Set(['success', 'processed', 'matched']);
 async function recountUserTotals() {
   const [txSnap, witSnap, usersSnap] = await Promise.all([

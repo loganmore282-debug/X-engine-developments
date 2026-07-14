@@ -141,15 +141,42 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('GET', '/deposit/status/' + depId, { token: A });
   check('alice reads own deposit status', r.body?.deposit?.depositStatus === 'matched', r.body);
 
-  console.log('\n── 4. Invest + 3-level commission idempotency');
+  console.log('\n── 3b. Failed deposits appear in history');
+  r = await call('POST', '/deposit/marzpay', { token: B, body: { amount: 50000, phone: '0771000002' } });
+  check('bob deposit attempt initiated', r.body?.status === 'success', r.body);
+  const dep2 = mockdb.__store.get('pendingDeposits').get(r.body.depositId);
+  await call('POST', '/deposit/callback', { body: { event_type: 'collection.failed', transaction: { reference: dep2.marzReference, status: 'failed' } } });
+  await sleep(250);
+  check('failed deposit did NOT credit', userDoc('bob-uid').walletBalance === 5000, userDoc('bob-uid').walletBalance);
+  r = await call('GET', '/account/transactions', { token: B });
+  const failedRow = (r.body?.transactions || []).find(t => t.type === 'topup' && t.status === 'failed');
+  check('failed deposit shows in history with Failed status', !!failedRow && failedRow.amount === 50000, failedRow);
+
+  console.log('\n── 4. Team task centre: milestones paid INSTANTLY on team deposits');
+  // Bob is alice's L1. His deposits so far: 30000 (below the 60k milestone).
+  check('no milestone before 60k threshold', !userDoc('alice-uid').teamMilestone_60000);
   await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'bob-uid', amount: 100000, note: 'test credit' } });
   check('admin credit lands (bob 5000+100000)', userDoc('bob-uid').walletBalance === 105000, userDoc('bob-uid').walletBalance);
+  await sleep(300); // milestone hook fires async
+  const aliceMs = userDoc('alice-uid');
+  check('L1 deposits hit 100000 → 60k (3000) AND 100k (10000) paid instantly',
+    aliceMs.teamMilestone_60000 === true && aliceMs.teamMilestone_100000 === true && aliceMs.walletBalance === 35000 + 13000,
+    { bal: aliceMs.walletBalance, m60: aliceMs.teamMilestone_60000, m100: aliceMs.teamMilestone_100000 });
+  check('exactly 2 team_reward transactions', countTx('alice-uid', 'team_reward') === 2, countTx('alice-uid', 'team_reward'));
+  r = await call('GET', '/team/stats', { token: A });
+  check('/team/stats reports totals + milestone states', r.body?.l1DepositTotal === 100000
+    && r.body?.milestones?.[0]?.paid && r.body?.milestones?.[1]?.paid && !r.body?.milestones?.[2]?.achieved, r.body);
+  await call('GET', '/team/stats', { token: A });
+  check('re-opening team screen NEVER double-pays milestones', countTx('alice-uid', 'team_reward') === 2 && userDoc('alice-uid').walletBalance === 48000,
+    { n: countTx('alice-uid', 'team_reward'), bal: userDoc('alice-uid').walletBalance });
+
+  console.log('\n── 4b. Invest + 3-level commission idempotency');
   r = await call('POST', '/invest/create', { token: B, body: { tierKey: 'quartz' } });
   check('bob buys Quartz 30000', r.body?.status === 'success', r.body);
   await sleep(400); // commissions fire async
   const aliceAfterComm = userDoc('alice-uid');
   check('alice got L1 commission 35% of 30000 = 10500', aliceAfterComm.commissionEarned === 10500, aliceAfterComm.commissionEarned);
-  check('commission also counted into totalEarned', aliceAfterComm.totalEarned === 10500, aliceAfterComm.totalEarned);
+  check('commissions + team rewards all in totalEarned (23500)', aliceAfterComm.totalEarned === 23500, aliceAfterComm.totalEarned);
   r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN }); await sleep(300);
   check('commission reconciler NEVER double-pays', userDoc('alice-uid').commissionEarned === 10500, userDoc('alice-uid').commissionEarned);
 
