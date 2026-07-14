@@ -692,7 +692,15 @@ async function buildActivityFeed() {
 }
 let _activityFeed = [], _activityTs = 0, _activityBuilding = false;
 app.get('/public/activity-feed', async (_req, res) => {
-  if (!_activityBuilding && Date.now() - _activityTs > 25000) {
+  // COLD START: the very first request after a deploy must WAIT for the build —
+  // returning an empty feed here made the app's ticker vanish until a reload.
+  if (!_activityFeed.length && !_activityBuilding) {
+    _activityBuilding = true;
+    try { _activityFeed = await buildActivityFeed(); _activityTs = Date.now(); }
+    catch (e) { console.error('activity feed error:', e.message); }
+    finally { _activityBuilding = false; }
+  } else if (!_activityBuilding && Date.now() - _activityTs > 25000) {
+    // Warm cache: refresh in the background, serve the current copy instantly.
     _activityBuilding = true;
     buildActivityFeed()
       .then(f => { _activityFeed = f; _activityTs = Date.now(); })

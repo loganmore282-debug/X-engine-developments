@@ -458,26 +458,31 @@ function checkGate() {
 // Pauses while the tab is hidden or a full-page/modal is open (M0-friendly).
 let _realtimeTimer = null, _realtimeSig = '', _tickN = 0;
 function dataSig() {
+  // Per-row statuses (not just counts): a deposit flipping pending→success or a
+  // withdrawal being processed MUST repaint recent activity without a reload.
   return [_account?.walletBalance, _account?.totalEarned, _account?.commissionEarned,
     _account?.totalWithdrawn, _account?.totalDeposited, _account?.teamL1Count,
-    _txns.length, _txns[0]?.status, _investments.length,
+    _txns.length, _txns.slice(0, 30).map(t => t.status).join(''), _investments.length,
     _investments.map(i => i.status).join(''), _members.length].join('|');
 }
 async function realtimeTick() {
   if (document.hidden || !_user || _pageOpen) return;
   _tickN++;
-  // Every ~20th tick also refresh the live activity ticker (server caches it,
-  // so this is cheap) — the feed stays alive instead of freezing at boot.
-  const wantFeed = _tickN % 20 === 0;
+  // Refresh the live ticker every ~60s — but RETRY EVERY TICK while it's empty
+  // (a cold server may serve an empty feed right after a deploy; without the
+  // retry the ticker stayed invisible until a manual reload).
+  const wantFeed = _tickN % 15 === 0 || !_feed.length;
   try {
     await Promise.all([loadAccount(), loadTxns(),
       (_activeTab === 'team' ? loadTeam() : Promise.resolve()),
       (wantFeed ? loadActivityFeed() : Promise.resolve())]);
   } catch (_) { return; }
   if (_pageOpen || document.hidden) return; // state changed during the await
-  if (wantFeed) {
+  if (wantFeed && _feed.length) {
     const track = document.querySelector('#panel-home .ticker-track');
     if (track) track.innerHTML = tickerItemsHtml();
+    document.getElementById('tickerHead')?.classList.remove('hidden');
+    document.getElementById('tickerWrap')?.classList.remove('hidden');
   }
   // Only re-render when something actually changed — no needless flicker.
   const sig = dataSig();
@@ -836,9 +841,8 @@ function renderHome() {
       </div>
       <div class="hb-dots" id="hbDots">${((_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length) > 0 ? Array.from({length: (_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length}).map(() => '<i></i>').join('') : ''}</div>
     </div>
-    ${_feed.length ? `
-    <div class="ticker-head"><i class="live"></i><span>Live activity</span></div>
-    <div class="ticker"><div class="ticker-track">${tickerItemsHtml()}</div></div>` : ''}
+    <div class="ticker-head${_feed.length ? '' : ' hidden'}" id="tickerHead"><i class="live"></i><span>Live activity</span></div>
+    <div class="ticker${_feed.length ? '' : ' hidden'}" id="tickerWrap"><div class="ticker-track">${tickerItemsHtml()}</div></div>
     <div class="wallet-panel">
       <div class="wallet-top">
         <span class="wallet-label">Total balance</span>
