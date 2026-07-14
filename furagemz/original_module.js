@@ -130,18 +130,21 @@ function toast(msg, kind = '') {
   const root = document.getElementById('toastRoot');
   const el = document.createElement('div');
   el.className = 'toast' + (kind ? ' ' + kind : '');
-  el.textContent = msg;
+  // Rises from the bottom and spreads open, holds, then collapses back down the
+  // same way it came in (CSS handles enter; the 'out' class reverses it).
+  el.innerHTML = `<span class="toast-in">${esc(msg)}</span>`;
   root.appendChild(el);
-  setTimeout(() => el.remove(), 3200);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 380); }, 2800);
 }
 
-// Disable a button and swap its label while a request is in flight — plain
-// text state change, no spinner/shimmer/animated loader anywhere in the app.
-function setBusy(btn, busyText) {
+// Disable a button while a request is in flight and show an animated three-dot
+// loader (no "Please wait" / "Loading…" text anywhere).
+function setBusy(btn) {
   if (!btn) return () => {};
-  const prevText = btn.textContent, prevDisabled = btn.disabled;
-  btn.disabled = true; btn.textContent = busyText;
-  return () => { btn.disabled = prevDisabled; btn.textContent = prevText; };
+  const prevHTML = btn.innerHTML, prevDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-dots"><i></i><i></i><i></i></span>';
+  return () => { btn.disabled = prevDisabled; btn.innerHTML = prevHTML; };
 }
 
 // Pages slide in from the right (full screen) instead of the old bottom-sheet.
@@ -204,10 +207,16 @@ async function api(path, { method = 'GET', body } = {}, _attempt = 0) {
 // AUTH
 // ══════════════════════════════════════════════
 function showView(name) {
-  const splash = document.getElementById('splashView');
-  if (splash) splash.classList.add('hidden');
+  const boot = document.getElementById('bootView');
+  if (boot) boot.classList.add('hidden');
   document.getElementById('authView').classList.toggle('hidden', name !== 'auth');
   document.getElementById('mainView').classList.toggle('hidden', name !== 'main');
+  // Remember on THIS device that the user reached the dashboard, so next launch
+  // skips the login screen and auto-syncs straight in.
+  try {
+    if (name === 'main') localStorage.setItem('fg_wasAuthed', '1');
+    else if (name === 'auth') localStorage.removeItem('fg_wasAuthed');
+  } catch (_) {}
 }
 
 // Paint the gradient watermark gems + floating decorative gems behind auth.
