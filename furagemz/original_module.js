@@ -383,7 +383,10 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         } else throw primaryErr;
       }
     }
-    const prof = await api('/account/create-profile', { method: 'POST', body: { username, phone: cleanPhone(phone).replace('+', '') } });
+    // The referral code travels WITH profile creation (stored server-side as
+    // pendingReferral), so an interrupted sign-up can never lose the referral.
+    try { if (ref) localStorage.setItem('fg_pending_ref', ref); } catch (_) {}
+    const prof = await api('/account/create-profile', { method: 'POST', body: { username, phone: cleanPhone(phone).replace('+', ''), referralCode: ref } });
     if (prof.status !== 'success') { restore(); return authError(prof.message || 'Could not create your profile.'); }
     // Register applies the welcome bonus AND records the referral link. It is
     // idempotent server-side (registrationDone guard), so retry it a few times on
@@ -391,7 +394,10 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     let regRef = ref;
     for (let attempt = 0; attempt < 3; attempt++) {
       const reg = await api('/register', { method: 'POST', body: { referralCode: regRef } });
-      if (reg.status === 'success' || reg.status === 'already_done') break;
+      if (reg.status === 'success' || reg.status === 'already_done') {
+        try { localStorage.removeItem('fg_pending_ref'); } catch (_) {}
+        break;
+      }
       // Code vanished between pre-check and now (e.g. referrer deleted): finish
       // the registration without it rather than leaving a half-created account.
       if (reg.code === 'BAD_REFERRAL') { regRef = ''; continue; }
@@ -433,6 +439,18 @@ onAuthStateChanged(auth, async (user) => {
   const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadActivityFeed(), loadProducts(), loadTeam()]);
   await Promise.race([essential, new Promise(r => setTimeout(r, 8000))]);
   if (checkGate()) return;
+  // SELF-HEAL: an interrupted sign-up (app closed / network died between the
+  // two registration calls) leaves the account unfinished — no welcome bonus,
+  // referral not linked. Finish it now; the server reads the stored referral.
+  if (_account && !_account.registrationDone) {
+    let backupRef = ''; try { backupRef = localStorage.getItem('fg_pending_ref') || ''; } catch (_) {}
+    api('/register', { method: 'POST', body: { referralCode: backupRef } }).then(async (r) => {
+      if (r.status === 'success' || r.status === 'already_done') {
+        try { localStorage.removeItem('fg_pending_ref'); } catch (_) {}
+        await loadAccount(); if (!_pageOpen) render();
+      }
+    }).catch(() => {});
+  }
   render();
   showView('main');
   startRealtime();
@@ -854,7 +872,7 @@ function renderHome() {
     <div class="wallet-stats">
       <div class="wstat"><div class="wi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalDeposited || 0)}</div><div class="wl">Total deposits</div></div>
       <div class="wstat"><div class="wi" style="background:var(--danger-bg);color:var(--danger)">${ICN.up}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0)}</div><div class="wl">Total withdrawals</div></div>
-      <div class="wstat"><div class="wi" style="background:#eef2ff;color:var(--sapphire)">${ICN.commission}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.commissionEarned || 0)}</div><div class="wl">Commissions</div></div>
+      <div class="wstat"><div class="wi" style="background:#eef2ff;color:var(--sapphire)">${ICN.commission}</div><div class="wn">${_hideBal ? '••••' : ugx((_teamStats?.earned?.commissions ?? _account?.commissionEarned ?? 0) + (_teamStats?.earned?.teamRewards || 0))}</div><div class="wl">Team earnings</div></div>
     </div>
     <div class="quick-row">
       <button class="quick-btn" id="qaDeposit"><span class="qi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</span>Deposit</button>

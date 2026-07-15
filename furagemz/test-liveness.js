@@ -117,6 +117,19 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('POST', '/register', { token: Z, body: { referralCode: 'ALICE' } });
   check('zed registers fine with a REAL code after the forged attempt', r.body?.status === 'success' && r.body?.referrerId === 'alice-uid', r.body);
 
+  console.log('\n── 1c. Interrupted sign-up can NEVER lose the referral');
+  const DV = 'uid:dave-uid';
+  r = await call('POST', '/account/create-profile', { token: DV, body: { username: 'dave', phone: '0771000010', referralCode: 'BOB' } });
+  check('dave profile created with referral stored server-side', r.body?.status === 'success', r.body);
+  check('pendingReferral persisted on the user doc', userDoc('dave-uid').pendingReferral === 'BOB');
+  // The app "dies" here — /register never ran with the typed code. The boot
+  // self-heal later calls /register with an EMPTY body:
+  r = await call('POST', '/register', { token: DV, body: {} });
+  check('self-heal /register recovers the stored referral -> bob', r.body?.status === 'success' && r.body?.referrerId === 'bob-uid', r.body);
+  check('bob teamL1Count incremented by the recovered referral', userDoc('bob-uid').teamL1Count === 1);
+  check('pendingReferral cleared after success', (userDoc('dave-uid').pendingReferral || '') === '');
+  check('dave got his welcome bonus exactly once', userDoc('dave-uid').walletBalance === 5000);
+
   console.log('\n── 2. Account security / isolation');
   r = await call('POST', '/register', { body: { userId: 'alice-uid' } });
   check('unauthenticated /register rejected (401)', r.code === 401, r.code);

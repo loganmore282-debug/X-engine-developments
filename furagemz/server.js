@@ -814,6 +814,12 @@ app.post('/account/create-profile', async (req, res) => {
       username: norm.value, usernameLower: norm.lower, referralCode: norm.value,
       phone: cleanPhone(phone), email: phoneToEmail(phone),
     };
+    // DURABLE REFERRAL: persist the entered code on the user doc at profile
+    // creation, so even if the follow-up /register call never arrives (app
+    // closed, network died, server mid-deploy), the referral is NOT lost —
+    // /register and the boot self-heal read it back from here.
+    const pendingRef = String(req.body.referralCode || '').trim();
+    if (pendingRef) base.pendingReferral = pendingRef;
     if (snap.exists) {
       await ref.update(base);
     } else {
@@ -844,27 +850,36 @@ app.post('/register', async (req, res) => {
     return res.status(403).json({ status: 'error', message: 'Forbidden' });
   const { referralCode } = req.body;
   try {
+    // Serialise per user: the sign-up flow and the boot self-heal may both call
+    // /register — without this lock M0 could pay the welcome bonus twice.
+    await withLock('reg:' + userId, async () => {
     const userRef  = db.collection('users').doc(userId);
     const userSnap = await userRef.get();
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (userSnap.data().registrationDone) return res.json({ status: 'already_done', referralCode: userSnap.data().referralCode || null });
 
     // The referral a new user enters is a referrer's USERNAME. Match case-insensitively.
-    // STRICT: a non-empty code MUST belong to a real user — forged/mistyped codes
-    // are rejected so registration cannot continue with a dead referral.
+    // STRICT: a non-empty code in the BODY must belong to a real user — forged/
+    // mistyped codes are rejected so registration cannot continue with a dead
+    // referral. When the body has no code, fall back to the pendingReferral
+    // stored at profile creation (self-heal for interrupted sign-ups); a stored
+    // code that no longer resolves must NOT block the account forever.
+    const bodyCode   = String(referralCode || '').trim();
+    const storedCode = String(userSnap.data().pendingReferral || '').trim();
+    const useCode    = bodyCode || storedCode;
+    const strict     = !!bodyCode;
     let referrerId = null;
-    if (referralCode && String(referralCode).trim()) {
-      const wanted = String(referralCode).trim().toLowerCase();
-      let refSnap = await db.collection('users').where('usernameLower', '==', wanted).limit(1).get();
+    if (useCode) {
+      let refSnap = await db.collection('users').where('usernameLower', '==', useCode.toLowerCase()).limit(1).get();
       if (refSnap.empty) // fall back to legacy referralCode field for any pre-username accounts
-        refSnap = await db.collection('users').where('referralCode', '==', String(referralCode).trim()).limit(1).get();
-      if (refSnap.empty)
+        refSnap = await db.collection('users').where('referralCode', '==', useCode).limit(1).get();
+      if (refSnap.empty && strict)
         return res.status(400).json({ status: 'error', code: 'BAD_REFERRAL',
           message: 'That referral code does not exist. Check it and try again, or leave it empty.' });
-      if (refSnap.docs[0].id === userId)
+      if (!refSnap.empty && refSnap.docs[0].id === userId && strict)
         return res.status(400).json({ status: 'error', code: 'BAD_REFERRAL',
           message: 'You cannot use your own referral code.' });
-      referrerId = refSnap.docs[0].id;
+      if (!refSnap.empty && refSnap.docs[0].id !== userId) referrerId = refSnap.docs[0].id;
     }
 
     // A user's referral code is their username (set at profile creation); fall back
@@ -874,7 +889,7 @@ app.post('/register', async (req, res) => {
     const WELCOME = s.welcomeBonus ?? WELCOME_BONUS;
     const { date, time } = nowStr();
     const batch = db.batch();
-    const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
+    const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME), pendingReferral: '' };
 
     batch.set(db.collection('transactions').doc(), {
       userId, type: 'admin_credit', description: 'Welcome gift',
@@ -901,6 +916,7 @@ app.post('/register', async (req, res) => {
     batch.update(userRef, update);
     await batch.commit();
     return res.json({ status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode });
+    }); // end withLock
   } catch (e) {
     console.error('Register error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
