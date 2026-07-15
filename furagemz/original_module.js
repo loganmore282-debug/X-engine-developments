@@ -1248,13 +1248,13 @@ function openGemDetail(key) {
       <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>After ${p.cycle} days you have earned <b>${ugx(p.expectedReturn)}</b>, paid to your wallet</div>
     </div>
 
-    <div class="gd-bal ${canAfford ? '' : 'low'}">
+    <div class="gd-bal">
       <span>Your balance</span><b>${ugx(bal)}</b>
     </div>
-    <button class="btn gd-cta" id="mSubmit">${canAfford ? `Activate for ${ugx(p.price)}` : `Deposit ${ugx(p.price - bal)} more to activate`}</button>
+    <button class="btn gd-cta" id="mSubmit">Buy for ${ugx(p.price)}</button>
   `);
   document.getElementById('mSubmit').addEventListener('click', async () => {
-    if (bal < p.price) { closeModal(); switchTab('home'); openDepositModal(); return; }
+    if (bal < p.price) { closeModal(); return toast(`Need ${ugx(p.price)}, you have ${ugx(bal)}`, 'err'); }
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     const r = await api('/invest/create', { method: 'POST', body: { tierKey: key } });
     if (r.status !== 'success') { restore(); return toast(r.message || 'Purchase failed', 'err'); }
