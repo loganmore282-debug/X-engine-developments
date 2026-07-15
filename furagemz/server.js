@@ -547,40 +547,6 @@ app.get('/health', async (_req, res) => {
   res.status(dbOk ? 200 : 503).json({ status: dbOk ? 'ok' : 'db_unreachable' });
 });
 
-// TEMP DIAGNOSTIC (admin-key gated): dumps the RAW schedule of every active gem
-// so we can see exactly what createdAt / payoutsMade / nextPayoutAt are stored,
-// versus what the deterministic formula and the real last payout say.
-app.get('/admin/debug/schedule', async (req, res) => {
-  if (req.query.key !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'bad key' });
-  try {
-    const snap = await db.collection('investments').where('status', '==', 'active').get();
-    const now = Date.now();
-    const rows = [];
-    for (const d of snap.docs) {
-      const inv = d.data();
-      const createdMs = tsMillis(inv.createdAt) || 0;
-      const madeStored = Number(inv.payoutsMade || 0);
-      const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
-      // Real last payout time from the ledger:
-      let lastPayMs = 0, payCount = 0;
-      const pays = await db.collection('transactions')
-        .where('investmentId', '==', d.id).get();
-      pays.forEach(p => { const t = p.data(); if (t.type === 'gem_payout') { payCount++; const ms = tsMillis(t.createdAt); if (ms > lastPayMs) lastPayMs = ms; } });
-      rows.push({
-        gem: inv.tierLabel || inv.tierKey, user: inv.userId,
-        createdAt: createdMs ? new Date(createdMs).toISOString() : null,
-        payoutsMade_stored: madeStored,
-        gem_payout_rows_in_ledger: payCount,
-        lastPayout_ledger: lastPayMs ? new Date(lastPayMs).toISOString() : null,
-        nextPayoutAt_stored: inv.nextPayoutAt ? new Date(tsMillis(inv.nextPayoutAt)).toISOString() : null,
-        formula_next_from_created: createdMs ? new Date(createdMs + Math.min(total || madeStored + 1, madeStored + 1) * 86400000).toISOString() : null,
-        hours_until_stored_next: inv.nextPayoutAt ? +(((tsMillis(inv.nextPayoutAt) - now) / 3600000).toFixed(2)) : null,
-      });
-    }
-    res.json({ status: 'success', now: new Date(now).toISOString(), count: rows.length, gems: rows });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
-
 app.get('/settings/public', async (_req, res) => {
   const s = await getSettings();
   res.json({
