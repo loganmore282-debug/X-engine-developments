@@ -222,15 +222,32 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('GET', '/account/investments', { token: B });
   check('app receives nextPayoutAt for the live countdown', !!(r.body?.investments?.[0]?.nextPayoutAt), r.body?.investments?.[0] && Object.keys(r.body.investments[0]));
   const balBefore = userDoc('bob-uid').walletBalance;
-  inv.nextPayoutAt = new Date(Date.now() - 60000); // 1 payout due
+  // Deterministic engine: elapsed time comes from createdAt, not the stored
+  // nextPayoutAt. Backdate purchase by 25h -> exactly ONE 24h mark has passed.
+  const created0 = Date.now() - 25 * 3600000;
+  inv.createdAt = new Date(created0);
   await call('POST', '/admin/check-maturities', { body: ADMIN }); await sleep(200);
   check('one daily cashback of 6500 credited', userDoc('bob-uid').walletBalance === balBefore + 6500, userDoc('bob-uid').walletBalance - balBefore);
   await call('POST', '/admin/check-maturities', { body: ADMIN }); await sleep(200);
   check('running the cron again pays NOTHING extra', userDoc('bob-uid').walletBalance === balBefore + 6500, userDoc('bob-uid').walletBalance - balBefore);
-  check('nextPayoutAt advanced ~24h by the server', new Date(invEntry[1].nextPayoutAt).getTime() > Date.now() + 22 * 3600000);
-  invEntry[1].nextPayoutAt = new Date(Date.now() - 1000); // countdown hits zero
+  // nextPayoutAt must equal createdAt + 2×24h EXACTLY (aligned to purchase time,
+  // not a drifted minute) — this is the countdown the app shows.
+  const expectNext = created0 + 2 * 86400000;
+  check('nextPayoutAt is EXACTLY purchase-time + 2×24h (no drift)',
+    Math.abs(new Date(invEntry[1].nextPayoutAt).getTime() - expectNext) < 2000,
+    { got: new Date(invEntry[1].nextPayoutAt).getTime(), want: expectNext });
+  // DRIFT HEAL: corrupt the stored nextPayoutAt to a bogus 3h-from-now value.
+  // The server must ignore it and re-anchor to the purchase schedule.
+  invEntry[1].nextPayoutAt = new Date(Date.now() + 3 * 3600000);
+  await call('POST', '/admin/check-maturities', { body: ADMIN }); await sleep(200);
+  check('drifted nextPayoutAt is HEALED back to the true schedule',
+    Math.abs(new Date(invEntry[1].nextPayoutAt).getTime() - expectNext) < 2000,
+    new Date(invEntry[1].nextPayoutAt).getTime());
+  // Settle-on-open at the next real mark: backdate to 49h -> a 2nd payout is due.
+  invEntry[1].createdAt = new Date(Date.now() - 49 * 3600000);
   const balPre2 = userDoc('bob-uid').walletBalance;
   r = await call('GET', '/account/investments', { token: B });
+  await sleep(150);
   check('settle-on-open: cashback lands the instant the app opens at zero', userDoc('bob-uid').walletBalance === balPre2 + 6500,
     userDoc('bob-uid').walletBalance - balPre2);
 

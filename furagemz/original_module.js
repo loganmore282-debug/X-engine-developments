@@ -708,12 +708,19 @@ function fmtCountdown(ms) {
 // The payout moment is set by the SERVER (investment.nextPayoutAt, advanced by
 // the payout cron); the app only displays the remaining time, ticking locally.
 function nextPayoutMs(inv) {
-  const t = tsMs(inv.nextPayoutAt);
-  if (t) return t;
-  // Legacy gems (created before the schedule existed): first payout is 24h
-  // after purchase, then every 24h — same formula the server migrates them to.
+  // DETERMINISTIC, drift-proof: the next payout is always exactly
+  // purchase-time + (payouts already made + 1) × 24h — the SAME formula the
+  // server settles on. Computing it here means the countdown is correct the
+  // instant data loads, even if a gem's stored nextPayoutAt drifted before the
+  // server healed it. Fall back to the stored value only if createdAt is missing.
   const start = tsMs(inv.createdAt);
-  return start ? start + ((inv.payoutsMade || 0) + 1) * 86400000 : 0;
+  const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
+  if (start) {
+    const madeNext = (inv.payoutsMade || 0) + 1;
+    const n = total ? Math.min(madeNext, total) : madeNext;
+    return start + n * 86400000;
+  }
+  return tsMs(inv.nextPayoutAt);
 }
 function fmtHMS(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));

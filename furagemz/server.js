@@ -1215,15 +1215,20 @@ async function runDailyPayouts() {
           let   paidOut      = Number(inv.paidOut || 0);
           const dailyPayout  = Number(inv.dailyPayout) || Math.round(expected / cycle);
           const createdMs    = tsMillis(inv.createdAt) || now;
-          let   nextMs        = tsMillis(inv.nextPayoutAt) || (createdMs + 86400000);
           if (made >= total) { t.update(doc.ref, { status: 'matured', maturedAt: FieldValue.serverTimestamp() }); return; }
 
-          // How many 24h payouts are now due (catch up on any missed ones)?
-          let due = 0;
-          let cursor = nextMs;
-          while (cursor <= now && made + due < total) { due++; cursor += 86400000; }
-          if (due === 0) {
-            if (!inv.payoutsTotal) t.update(doc.ref, { payoutsTotal: total, payoutsMade: made, paidOut, dailyPayout, nextPayoutAt: new Date(nextMs) });
+          // DETERMINISTIC schedule anchored on the PURCHASE time: payout N is due
+          // at createdAt + N×24h. This is immune to drift and SELF-HEALS any gem
+          // whose stored nextPayoutAt wandered — the countdown always points at
+          // the true next 24h mark from purchase, never a shifted minute.
+          const elapsedDays = Math.floor((now - createdMs) / 86400000);
+          const targetMade  = Math.min(total, Math.max(made, elapsedDays));
+          const due         = targetMade - made;
+          // nextPayoutAt is ALWAYS recomputed to the exact schedule point, even
+          // when nothing is due yet — this is what repairs a drifted value.
+          if (due <= 0) {
+            t.update(doc.ref, { payoutsTotal: total, payoutsMade: made, paidOut, dailyPayout,
+              nextPayoutAt: new Date(createdMs + Math.min(total, made + 1) * 86400000) });
             return;
           }
           const reachesEnd = (made + due) >= total;
@@ -1231,7 +1236,7 @@ async function runDailyPayouts() {
           const credit = reachesEnd ? Math.max(0, expected - paidOut) : dailyPayout * due;
           const newMade    = made + due;
           const newPaidOut = paidOut + credit;
-          const newNextMs  = nextMs + due * 86400000;
+          const newNextMs  = createdMs + Math.min(total, newMade + 1) * 86400000;
           const { date, time } = nowStr();
           const upd = { payoutsTotal: total, payoutsMade: newMade, paidOut: newPaidOut,
             dailyPayout, nextPayoutAt: new Date(newNextMs) };
@@ -2127,7 +2132,13 @@ app.get('/account/investments', async (req, res) => {
     // cashback lands the moment the countdown reaches zero, not minutes later.
     const due = snap.docs.some(d => {
       const inv = d.data();
-      return inv.status === 'active' && tsMillis(inv.nextPayoutAt) > 0 && tsMillis(inv.nextPayoutAt) <= Date.now();
+      if (inv.status !== 'active') return false;
+      // Deterministic: due if more 24h marks have passed since purchase than the
+      // number of payouts already made (ignores any drifted stored nextPayoutAt).
+      const createdMs = tsMillis(inv.createdAt) || Date.now();
+      const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
+      const elapsedDays = Math.floor((Date.now() - createdMs) / 86400000);
+      return Math.min(total || elapsedDays, elapsedDays) > (inv.payoutsMade || 0);
     });
     if (due) {
       await runDailyPayouts();
