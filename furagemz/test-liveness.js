@@ -382,6 +382,27 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
     userDoc('finn-uid').walletBalance === 35000 && countTx('finn-uid', 'topup') === 1,
     { bal: userDoc('finn-uid').walletBalance, topups: countTx('finn-uid', 'topup') });
 
+  console.log('\n── 13b. Redemption codes: messy input + lost-credit healer');
+  await call('POST', '/admin/codes/generate', { body: { ...ADMIN, amount: 2000, count: 2 } });
+  const allCodes = [...mockdb.__store.get('redemptionCodes').entries()];
+  const [cId1, cD1] = allCodes[allCodes.length - 2];
+  const [cId2, cD2] = allCodes[allCodes.length - 1];
+  // Paste with spaces + lowercase must still be recognised globally.
+  const messy = ' ' + cD1.code.slice(0, 4).toLowerCase() + ' ' + cD1.code.slice(4).toLowerCase() + ' ';
+  const finnBal = userDoc('finn-uid').walletBalance;
+  r = await call('POST', '/redeem', { token: F, body: { code: messy } });
+  check('lowercase + spaced code still redeems', r.body?.status === 'success', r.body);
+  check('credit landed', userDoc('finn-uid').walletBalance === finnBal + 2000, userDoc('finn-uid').walletBalance);
+  // Simulate the crash window: user marked in usedBy but the credit never ran.
+  mockdb.__store.get('redemptionCodes').get(cId2).usedBy = ['zed-uid'];
+  const zedBal = userDoc('zed-uid').walletBalance;
+  r = await call('POST', '/admin/redemptions/reconcile', { body: { ...ADMIN } });
+  check('reconciler detects and heals the lost credit', r.body?.status === 'success' && r.body?.healed === 1, r.body);
+  check('zed received the missing money', userDoc('zed-uid').walletBalance === zedBal + 2000, userDoc('zed-uid').walletBalance);
+  r = await call('POST', '/admin/redemptions/reconcile', { body: { ...ADMIN } });
+  check('re-running the healer never double-pays', r.body?.healed === 0 && userDoc('zed-uid').walletBalance === zedBal + 2000,
+    { healed: r.body?.healed, bal: userDoc('zed-uid').walletBalance });
+
   console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
   r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });
   check('audit endpoint runs', r.body?.status === 'success', r.body?.message);

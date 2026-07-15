@@ -188,7 +188,7 @@ function cleanPhone(raw) {
 // Sends the Firebase ID token so the server can verify the caller. Money
 // endpoints are never retried on failure — a lost response must never be
 // re-sent, or a payment/investment could be applied twice.
-const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/checkin', '/register'];
+const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/checkin', '/register', '/redeem'];
 async function api(path, { method = 'GET', body } = {}, _attempt = 0) {
   const headers = { 'Content-Type': 'application/json' };
   if (_user) { try { headers['Authorization'] = 'Bearer ' + await _user.getIdToken(); } catch (_) {} }
@@ -1152,13 +1152,13 @@ function openRedeemModal() {
   openModal(`
     <div class="modal-head"><h2>Redeem a code</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="field"><label>Enter your code</label>
-      <input id="mCode" type="text" autocomplete="off" placeholder="XXXXXXXXXX" maxlength="10"
+      <input id="mCode" type="text" autocomplete="off" placeholder="XXXXXXXXXX" maxlength="14"
         style="text-transform:uppercase;letter-spacing:3px;text-align:center;font-weight:800;font-size:18px"></div>
     <div class="note" style="text-align:left;margin-bottom:14px">A code can be redeemed once per account. The reward lands straight in your wallet.</div>
     <button class="btn" id="mSubmit">Redeem code</button>
   `);
   document.getElementById('mSubmit').addEventListener('click', async () => {
-    const code = document.getElementById('mCode').value.trim().toUpperCase();
+    const code = document.getElementById('mCode').value.toUpperCase().replace(/[\s-]/g, '');
     if (!code) return toast('Enter a code', 'err');
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     const r = await api('/redeem', { method: 'POST', body: { code } });

@@ -1387,6 +1387,9 @@ function startCrons() {
   // Hourly ledger audit — balances vs ledger, duplicate credits, stuck payouts.
   setInterval(auditIntegrity, 60 * 60 * 1000);
   setTimeout(auditIntegrity, 3 * 60 * 1000);
+  // Redemption healer — a marked-but-uncredited code redemption always pays out.
+  setInterval(reconcileRedemptions, 10 * 60 * 1000);
+  setTimeout(reconcileRedemptions, 2 * 60 * 1000);
   // KEEP-WARM: ping Mongo every 4 min so the free M0 connection never goes cold —
   // this is what makes login / admin / check-in feel instant instead of laggy on
   // the first request after a quiet spell.
@@ -1460,14 +1463,16 @@ const _redeemingCodes = new Set(); // code doc id -> being redeemed (single-writ
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const { code } = req.body;
+  // GLOBAL recognition: uppercase + strip every space/dash, so a code pasted
+  // from WhatsApp as "AB CD-EF GH23" still matches exactly what was generated.
+  const code = String(req.body.code || '').toUpperCase().replace(/[\s-]/g, '');
   if (!code) return res.status(400).json({ status: 'error', message: 'Enter a code' });
   const lastTry = _codeRateMap.get(userId) || 0;
   if (Date.now() - lastTry < 8000)
     return res.status(429).json({ status: 'error', message: 'Too many attempts. Wait a moment.' });
   _codeRateMap.set(userId, Date.now());
   try {
-    const snap = await db.collection('redemptionCodes').where('code', '==', code.toUpperCase().trim()).limit(1).get();
+    const snap = await db.collection('redemptionCodes').where('code', '==', code).limit(1).get();
     if (snap.empty) return res.status(404).json({ status: 'error', message: 'Invalid code' });
     const doc = snap.docs[0], d = doc.data();
     if (!d.active) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
@@ -1491,13 +1496,18 @@ app.post('/redeem', async (req, res) => {
         const uRef = db.collection('users').doc(userId);
         const uSnap = await t.get(uRef);
         if (!uSnap.exists) { err = 'User not found'; return; }
-        t.update(uRef, { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount) });
+        // ORDER MATTERS on M0 (ops apply sequentially, no rollback): mark the
+        // code used FIRST, ledger row second, wallet credit LAST. If the
+        // process dies mid-way, reconcileRedemptions() sees "marked but no
+        // ledger row" and pays the user — money can be delayed, never lost,
+        // and never doubled.
         t.update(doc.ref, { usedBy: FieldValue.arrayUnion(userId) });
         t.set(db.collection('transactions').doc(), {
-          userId, type: 'redeem', description: `Code redeemed — ${code.toUpperCase()}`,
-          amount, status: 'success', code: code.toUpperCase(), date, time,
+          userId, type: 'redeem', description: `Code redeemed — ${code}`,
+          amount, status: 'success', code, date, time,
           createdAt: FieldValue.serverTimestamp()
         });
+        t.update(uRef, { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount) });
         ok = true;
       });
       if (!ok) return res.status(400).json({ status: 'error', message: err || 'Could not redeem this code' });
@@ -1507,6 +1517,55 @@ app.post('/redeem', async (req, res) => {
     console.error('Redeem error:', e.message);
     return res.status(500).json({ status: 'error', message: e.message });
   }
+});
+
+// REDEMPTION RECONCILER — heals "I redeemed but got nothing": if a user is in
+// a code's usedBy list but has NO redeem ledger row for that code (the process
+// died between marking and crediting), pay them now. Runs on a cron and from
+// the admin panel; the in-lock re-check makes it impossible to pay twice.
+async function reconcileRedemptions() {
+  let healed = 0;
+  try {
+    const codesSnap = await db.collection('redemptionCodes').orderBy('createdAt', 'desc').limit(150).get();
+    for (const cDoc of codesSnap.docs) {
+      const c = cDoc.data();
+      const used = c.usedBy || [];
+      if (!used.length) continue;
+      const txSnap = await db.collection('transactions').where('code', '==', c.code).get();
+      const credited = new Set();
+      txSnap.forEach(d => { const t = d.data(); if (t.type === 'redeem') credited.add(t.userId); });
+      for (const uid of used) {
+        if (credited.has(uid)) continue;
+        const amount = Math.max(0, Math.round(c.amount || 0));
+        if (!amount) continue;
+        await withLock('redeemfix:' + cDoc.id + ':' + uid, async () => {
+          // Re-check inside the lock so two overlapping sweeps can't both pay.
+          const again = await db.collection('transactions').where('code', '==', c.code).get();
+          let has = false;
+          again.forEach(d => { const t = d.data(); if (t.type === 'redeem' && t.userId === uid) has = true; });
+          if (has) return;
+          const uSnap = await db.collection('users').doc(uid).get();
+          if (!uSnap.exists) return; // account deleted since
+          const { date, time } = nowStr();
+          await db.runTransaction(async t => {
+            t.set(db.collection('transactions').doc(), {
+              userId: uid, type: 'redeem', description: `Code redeemed — ${c.code} (recovered)`,
+              amount, status: 'success', code: c.code, date, time, createdAt: FieldValue.serverTimestamp() });
+            t.update(db.collection('users').doc(uid), {
+              walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount) });
+          });
+          healed++;
+          console.log('RECOVERED redemption:', c.code, 'user', uid, 'amount', amount);
+        });
+      }
+    }
+  } catch (e) { console.error('reconcileRedemptions error:', e.message); }
+  return healed;
+}
+app.post('/admin/redemptions/reconcile', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const healed = await reconcileRedemptions();
+  return res.json({ status: 'success', healed });
 });
 
 app.post('/admin/codes/generate', async (req, res) => {
