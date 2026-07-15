@@ -356,6 +356,39 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('exactly ONE gem created (no double activation)', daveInv === 1, daveInv);
   check('balance debited exactly once (35000-30000=5000, not lost/doubled)', userDoc('dave-uid').walletBalance === daveStart - 30000, userDoc('dave-uid').walletBalance);
 
+  console.log('\n── 13. Late MarzPay confirmation NEVER loses a paid deposit');
+  const F = 'uid:finn-uid';
+  await call('POST', '/account/create-profile', { token: F, body: { username: 'finn', phone: '0771000005' } });
+  await call('POST', '/register', { token: F, body: {} });
+  r = await call('POST', '/deposit/marzpay', { token: F, body: { amount: 30000, phone: '0771000005' } });
+  const fdep = mockdb.__store.get('pendingDeposits').get(r.body.depositId);
+  const fdepId = r.body.depositId;
+  // The network dies mid-payment: MarzPay first reports failed…
+  await call('POST', '/deposit/callback', { body: { event_type: 'collection.failed', transaction: { reference: fdep.marzReference, status: 'failed' } } });
+  await sleep(200);
+  check('deposit marked failed after the failure report', mockdb.__store.get('pendingDeposits').get(fdepId).status === 'failed');
+  check('no money credited yet', userDoc('finn-uid').walletBalance === 5000, userDoc('finn-uid').walletBalance);
+  // …but the customer HAD paid (carrier SMS!): MarzPay later confirms success.
+  marzTx.set(fdep.marzTxUuid, 'completed');
+  await call('POST', '/deposit/callback', { body: { event_type: 'collection.completed',
+    transaction: { reference: fdep.marzReference, status: 'completed', amount: { raw: 30000 } } } });
+  await sleep(250);
+  check('late success CREDITS the already-expired deposit', userDoc('finn-uid').walletBalance === 35000, userDoc('finn-uid').walletBalance);
+  check('exactly one topup row (no double credit)', countTx('finn-uid', 'topup') === 1, countTx('finn-uid', 'topup'));
+  await call('POST', '/deposit/callback', { body: { event_type: 'collection.completed',
+    transaction: { reference: fdep.marzReference, status: 'completed', amount: { raw: 30000 } } } });
+  await sleep(200);
+  check('replaying the late success still credits ONCE',
+    userDoc('finn-uid').walletBalance === 35000 && countTx('finn-uid', 'topup') === 1,
+    { bal: userDoc('finn-uid').walletBalance, topups: countTx('finn-uid', 'topup') });
+
+  console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
+  r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });
+  check('audit endpoint runs', r.body?.status === 'success', r.body?.message);
+  check('audit checked every registered user', (r.body?.usersChecked || 0) >= 5, r.body?.usersChecked);
+  check('EVERY balance matches its ledger — no mismatches, duplicates or stuck payouts',
+    r.body?.healthy === true, r.body?.alerts);
+
   console.log(`\n══ RESULT: ${pass} passed, ${fail} failed ══`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

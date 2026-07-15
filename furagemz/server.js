@@ -1241,19 +1241,23 @@ async function runDailyPayouts() {
 // user cancelled the PIN prompt and started a new one). This is what keeps
 // statuses truthful in near-real-time and stops "stuck on Processing" rows.
 let _paySweepRunning = false;
+let _sweepN = 0;
 async function pollPendingPayments() {
   if (_paySweepRunning || !MARZPAY_KEY) return 0;
   _paySweepRunning = true;
+  _sweepN++;
   let settled = 0;
   try {
+    // OLDEST first — a busy day can never starve older pending deposits.
     const depSnap = await db.collection('pendingDeposits')
-      .where('status', '==', 'processing').orderBy('createdAt', 'desc').limit(25).get();
+      .where('status', '==', 'processing').orderBy('createdAt', 'asc').limit(60).get();
     for (const doc of depSnap.docs) {
       try {
         const r = await pollMarzDepositStatus(doc);
         if (r.credited || r.failed) { settled++; continue; }
         // Abandoned attempt (cancelled prompt, never paid): expire after 6 hours
-        // so it shows honestly as failed instead of processing forever.
+        // so it shows honestly as failed instead of processing forever. A LATE
+        // success at MarzPay still credits — the rescue pass below re-checks.
         if (Date.now() - tsMillis(doc.data().createdAt) > 6 * 3600000) {
           await doc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(),
             failureReason: 'Payment window expired' });
@@ -1261,11 +1265,30 @@ async function pollPendingPayments() {
         }
       } catch (e) { console.warn('deposit sweep:', doc.id, e.message); }
     }
+    // RESCUE PASS (every ~10th sweep ≈ 5 min): deposits we expired or MarzPay
+    // reported failed in the last 48h are re-checked — if the gateway NOW says
+    // the money arrived (late confirmation after an outage), credit it. This is
+    // the "I paid, my carrier SMS proves it, but the app says failed" healer.
+    if (_sweepN % 10 === 0) {
+      const failSnap = await db.collection('pendingDeposits')
+        .where('status', '==', 'failed').orderBy('createdAt', 'desc').limit(150).get();
+      for (const doc of failSnap.docs) {
+        const d = doc.data();
+        if (!d.marzTxUuid) continue;
+        if (Date.now() - tsMillis(d.createdAt) > 48 * 3600000) continue;
+        try {
+          const raw = await marzGetCollectStatus(d.marzTxUuid);
+          if (['completed', 'successful', 'success', 'paid'].includes(raw)) {
+            if (await creditMarzDeposit(doc, d.amount, null)) { settled++; console.log('RESCUED late deposit', doc.id); }
+          }
+        } catch (e) { console.warn('deposit rescue:', doc.id, e.message); }
+      }
+    }
     const witSnap = await db.collection('withdrawals')
-      .where('status', '==', 'processing').orderBy('createdAt', 'desc').limit(25).get();
+      .where('status', '==', 'processing').orderBy('createdAt', 'asc').limit(60).get();
     for (const doc of witSnap.docs) {
       const w = doc.data();
-      if (!w.marzTxUuid && !w.marzReference) continue;
+      if (!w.marzTxUuid && !w.marzReference) continue; // no gateway ref — integrity audit flags these
       try {
         const raw = await marzGetStatus(w.marzTxUuid || w.marzReference);
         if (['completed', 'successful', 'success', 'paid'].includes(raw)) { await completeWithdrawal(doc); settled++; }
@@ -1282,6 +1305,73 @@ app.post('/admin/payments/sync', async (req, res) => {
   return res.json({ status: 'success', settled });
 });
 
+// ═══════════════════════════════════════════
+// INTEGRITY AUDIT — the server's own accountant. Recomputes every user's
+// balance from the transaction ledger and cross-checks it against the stored
+// wallet, hunts duplicate credits, negative balances and withdrawals stuck at
+// the gateway. Runs hourly + on demand from the admin panel. It NEVER edits
+// money by itself — it reports, the owner decides.
+// Ledger math: withdrawal rows debit the wallet the moment they are created
+// (any status — a failed one is offset by its refund row); every other row
+// counts only once it is 'success'.
+// ═══════════════════════════════════════════
+let _auditRunning = false;
+async function auditIntegrity() {
+  if (_auditRunning) return null;
+  _auditRunning = true;
+  try {
+    const alerts = [];
+    const usersSnap = await db.collection('users').get();
+    for (const uDoc of usersSnap.docs) {
+      const u = uDoc.data(); const uid = uDoc.id;
+      if (!u.registrationDone) continue; // unfinished sign-ups have no ledger yet
+      if ((u.walletBalance || 0) < 0)
+        alerts.push({ kind: 'negative_balance', userId: uid, username: u.username || '', balance: u.walletBalance });
+      const txSnap = await db.collection('transactions').where('userId', '==', uid).get();
+      let expected = 0;
+      const creditRefs = new Map();
+      txSnap.forEach(d => {
+        const t = d.data();
+        if (t.type === 'withdrawal' || t.status === 'success') expected += (t.amount || 0);
+        if (t.type === 'topup' && (t.depositId || t.marzReference)) {
+          const k = String(t.depositId || t.marzReference);
+          creditRefs.set(k, (creditRefs.get(k) || 0) + 1);
+        }
+      });
+      for (const [ref, n] of creditRefs) if (n > 1)
+        alerts.push({ kind: 'duplicate_credit', userId: uid, username: u.username || '', ref, times: n });
+      const bal = u.walletBalance || 0;
+      if (Math.abs(expected - bal) > 1)
+        alerts.push({ kind: 'balance_mismatch', userId: uid, username: u.username || '',
+          balance: bal, ledger: expected, diff: bal - expected });
+    }
+    // Withdrawals stuck in processing — gateway state unknown or unmoving.
+    const wSnap = await db.collection('withdrawals').where('status', '==', 'processing').get();
+    wSnap.forEach(d => {
+      const w = d.data();
+      const ageH = Math.round((Date.now() - tsMillis(w.processedAt || w.createdAt)) / 3600000);
+      if (!w.marzTxUuid && !w.marzReference && ageH >= 1)
+        alerts.push({ kind: 'withdrawal_no_gateway_ref', withdrawalId: d.id, userId: w.userId,
+          username: w.userName || '', amount: w.amount, hours: ageH });
+      else if (ageH >= 3)
+        alerts.push({ kind: 'withdrawal_stuck', withdrawalId: d.id, userId: w.userId,
+          username: w.userName || '', amount: w.amount, hours: ageH });
+    });
+    const result = { ranAt: new Date().toISOString(), usersChecked: usersSnap.size,
+      alertCount: alerts.length, healthy: alerts.length === 0, alerts: alerts.slice(0, 200) };
+    await db.collection('integrity').doc('latest').set(result);
+    if (alerts.length) console.warn('INTEGRITY AUDIT:', alerts.length, 'alert(s)', JSON.stringify(alerts.slice(0, 5)));
+    return result;
+  } catch (e) { console.error('Integrity audit error:', e.message); return null; }
+  finally { _auditRunning = false; }
+}
+app.post('/admin/integrity', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const result = await auditIntegrity();
+  if (!result) return res.status(500).json({ status: 'error', message: 'Audit did not complete (already running?)' });
+  return res.json({ status: 'success', ...result });
+});
+
 function startCrons() {
   // Every 2 minutes so a payout lands within moments of its exact 24h mark —
   // plus the settle-on-open hook in /account/investments for instant landing.
@@ -1294,6 +1384,9 @@ function startCrons() {
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
   setTimeout(reconcileCommissions, 90 * 1000);
+  // Hourly ledger audit — balances vs ledger, duplicate credits, stuck payouts.
+  setInterval(auditIntegrity, 60 * 60 * 1000);
+  setTimeout(auditIntegrity, 3 * 60 * 1000);
   // KEEP-WARM: ping Mongo every 4 min so the free M0 connection never goes cold —
   // this is what makes login / admin / check-in feel instant instead of laggy on
   // the first request after a quiet spell.
@@ -1467,7 +1560,10 @@ const _depCreateDebounce = new Map();
 const _creditingDeposits = new Set();
 async function creditMarzDeposit(depDoc, amount, provTxId) {
   const dep = depDoc.data();
-  if (dep.status === 'matched' || dep.status === 'failed') return false;
+  // Only an ALREADY-CREDITED deposit is refused. A deposit we expired to
+  // 'failed' can still be credited later — MarzPay confirming success late
+  // (delayed callback, network outage) must always land the user's money.
+  if (dep.status === 'matched') return false;
   // M0 has NO atomic transactions — serialise per-deposit in-process so a webhook
   // firing alongside a status-poll can never both credit the same deposit.
   if (_creditingDeposits.has(depDoc.id)) return false;
@@ -1478,7 +1574,7 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
     await db.runTransaction(async t => {
       const fresh = await t.get(depDoc.ref);
       if (!fresh.exists) return;
-      if (fresh.data().status === 'matched' || fresh.data().status === 'failed') return;
+      if (fresh.data().status === 'matched') return;
       const uRef = db.collection('users').doc(dep.userId);
       t.update(uRef, {
         walletBalance:  FieldValue.increment(amount),
@@ -1491,7 +1587,7 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
       t.set(db.collection('transactions').doc(), {
         userId: dep.userId, type: 'topup', description: 'Wallet top-up',
         amount, status: 'success', date, time, marzReference: dep.marzReference,
-        createdAt: FieldValue.serverTimestamp()
+        depositId: depDoc.id, createdAt: FieldValue.serverTimestamp()
       });
       didCredit = true;
     });
