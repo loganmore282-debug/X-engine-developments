@@ -85,6 +85,10 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   await sleep(1200); // server listening + crons/seed done (pingDb resolves instantly)
   const A = 'uid:alice-uid', B = 'uid:bob-uid';
   const ADMIN = { adminKey: 'test-admin-key' };
+  // Pin the welcome bonus to 5000 for this suite so the many downstream balance
+  // assertions stay valid regardless of the production default (now 7000). This
+  // proves the bonus is CONFIG-DRIVEN, not hardcoded.
+  await call('POST', '/admin/settings/update', { body: { ...ADMIN, welcomeBonus: 5000 } });
 
   console.log('\n── 1. Registration + referral graph');
   let r = await call('POST', '/account/create-profile', { token: A, body: { username: 'alice', phone: '0771000001' } });
