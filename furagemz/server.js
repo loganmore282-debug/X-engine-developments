@@ -33,6 +33,18 @@ app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
 
+// ── SECURITY HEADERS ── (API responses must never be framed, sniffed or leak referrers)
+app.use((_req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Strict-Transport-Security': 'max-age=63072000; includeSubDomains',
+    'Cache-Control': 'no-store',
+  });
+  next();
+});
+
 // ── NoSQL-INJECTION GUARD ──
 // No legitimate Furagemz request uses keys starting with "$" or containing ".",
 // so strip them from every incoming body before any handler reaches the database.
@@ -1814,9 +1826,17 @@ async function handleDepositCallback(req, res) {
         const provTxId = body.collection?.provider_transaction_id || null;
         await creditMarzDeposit(depDoc, depDoc.data().amount, provTxId);
       } else if (isFailed) {
+        const d = depDoc.data();
+        // A settled deposit can NEVER be downgraded — a forged failure on a
+        // credited deposit would re-open it for the rescue pass to credit AGAIN.
+        if (d.status !== 'processing') return;
+        // And a failure report is only believed when MarzPay itself confirms it.
+        if (d.marzTxUuid) {
+          const realStatus = await marzGetCollectStatus(d.marzTxUuid);
+          if (realStatus && !['failed', 'cancelled', 'error', 'declined'].includes(realStatus)) return;
+        }
         const failReason = body.transaction?.description || body.description || rawStatus || 'Payment declined';
-        if (depDoc.data().status !== 'failed')
-          await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(), failureReason: failReason });
+        await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(), failureReason: failReason });
       }
     } catch (e) { console.error('Deposit callback error:', e.message); }
   });
@@ -1908,6 +1928,12 @@ async function completeWithdrawal(witDoc) {
 async function failWithdrawal(witDoc, reason) {
   const wit = witDoc.data();
   if (wit.status === 'processed' || wit.status === 'failed') return false;
+  // Same in-process lock as completeWithdrawal: two failure reports (or a
+  // failure racing a success) can never both act on one withdrawal — M0 has
+  // no transaction isolation, so this Set is the only real gate.
+  if (_completingWithdrawals.has(witDoc.id)) return false;
+  _completingWithdrawals.add(witDoc.id);
+  try {
   const { date, time } = nowStr();
   await db.runTransaction(async t => {
     const freshWit = await t.get(witDoc.ref);
@@ -1928,6 +1954,7 @@ async function failWithdrawal(witDoc, reason) {
     if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'failed' });
   } catch (txErr) { console.warn('failWithdrawal tx update:', txErr.message); }
   return true;
+  } finally { _completingWithdrawals.delete(witDoc.id); }
 }
 app.get('/withdraw/status/:id', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -1984,6 +2011,13 @@ app.post('/withdraw/callback', async (req, res) => {
         }
         await completeWithdrawal(witDoc);
       } else if (isFailed) {
+        // NEVER trust a failure report blindly: a forged "failed" webhook after
+        // the money was really sent would refund the user AND leave them paid
+        // (double money). Refund only when MarzPay ITSELF confirms the failure.
+        const uuid = witDoc.data().marzTxUuid;
+        if (!uuid) return; // nothing verifiable was ever sent — sweep/admin decides
+        const realStatus = await marzGetStatus(uuid);
+        if (!['failed', 'cancelled', 'error', 'declined'].includes(realStatus)) return;
         await failWithdrawal(witDoc, body.transaction?.description || body.description || 'Disbursement failed');
       }
     } catch (e) { console.error('Withdraw callback error:', e.message); }

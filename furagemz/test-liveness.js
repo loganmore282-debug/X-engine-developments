@@ -178,6 +178,7 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('bob deposit attempt initiated', r.body?.status === 'success', r.body);
   const dep2Id = r.body.depositId;
   const dep2 = mockdb.__store.get('pendingDeposits').get(dep2Id);
+  marzTx.set(dep2.marzTxUuid, 'failed'); // MarzPay itself confirms the failure
   await call('POST', '/deposit/callback', { body: { event_type: 'collection.failed', transaction: { reference: dep2.marzReference, status: 'failed' } } });
   await sleep(250);
   check('failed deposit did NOT credit', userDoc('bob-uid').walletBalance === 5000, userDoc('bob-uid').walletBalance);
@@ -364,6 +365,7 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   const fdep = mockdb.__store.get('pendingDeposits').get(r.body.depositId);
   const fdepId = r.body.depositId;
   // The network dies mid-payment: MarzPay first reports failed…
+  marzTx.set(fdep.marzTxUuid, 'failed');
   await call('POST', '/deposit/callback', { body: { event_type: 'collection.failed', transaction: { reference: fdep.marzReference, status: 'failed' } } });
   await sleep(200);
   check('deposit marked failed after the failure report', mockdb.__store.get('pendingDeposits').get(fdepId).status === 'failed');
@@ -402,6 +404,50 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('POST', '/admin/redemptions/reconcile', { body: { ...ADMIN } });
   check('re-running the healer never double-pays', r.body?.healed === 0 && userDoc('zed-uid').walletBalance === zedBal + 2000,
     { healed: r.body?.healed, bal: userDoc('zed-uid').walletBalance });
+
+  console.log('\n── 13c. Forged FAILURE callbacks cannot move money (attack simulation)');
+  // (a) Deposit: alice's credited deposit — a forged failure must not downgrade
+  // it (a downgrade would re-open it for the rescue pass to credit AGAIN).
+  const aDep = mockdb.__store.get('pendingDeposits').get(depId);
+  const aliceBalNow = userDoc('alice-uid').walletBalance;
+  await call('POST', '/deposit/callback', { body: { event_type: 'collection.failed',
+    transaction: { reference: aDep.marzReference, status: 'failed' } } });
+  await sleep(250);
+  check('credited deposit CANNOT be downgraded by a forged failure',
+    mockdb.__store.get('pendingDeposits').get(depId).status === 'matched',
+    mockdb.__store.get('pendingDeposits').get(depId).status);
+  check('no deposit money moved by the forgery', userDoc('alice-uid').walletBalance === aliceBalNow, userDoc('alice-uid').walletBalance);
+  // (b) Withdrawal: bob was REALLY paid (MarzPay says completed). A forged
+  // "failed" webhook must NOT refund him on top of the payout (double money).
+  const bobBalNow = userDoc('bob-uid').walletBalance;
+  const paidWit = mockdb.__store.get('withdrawals').get(witId);
+  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.failed',
+    transaction: { uuid: paidWit.marzTxUuid, status: 'failed' } } });
+  await sleep(250);
+  check('paid withdrawal NOT refunded by a forged failure (no double money)',
+    userDoc('bob-uid').walletBalance === bobBalNow && mockdb.__store.get('withdrawals').get(witId).status === 'processed',
+    { bal: userDoc('bob-uid').walletBalance, status: mockdb.__store.get('withdrawals').get(witId).status });
+  // (c) A processing withdrawal + forged failure while MarzPay still says
+  // "processing" — the refund must wait for the gateway's real verdict.
+  r = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
+  const wit3 = r.body.withdrawalId;
+  await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: wit3 } });
+  const wit3Doc = mockdb.__store.get('withdrawals').get(wit3); // marz says 'processing'
+  const bobBal3 = userDoc('bob-uid').walletBalance;
+  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.failed',
+    transaction: { uuid: wit3Doc.marzTxUuid, status: 'failed' } } });
+  await sleep(250);
+  check('forged failure while gateway says processing → NO refund',
+    userDoc('bob-uid').walletBalance === bobBal3 && mockdb.__store.get('withdrawals').get(wit3).status === 'processing',
+    { bal: userDoc('bob-uid').walletBalance, status: mockdb.__store.get('withdrawals').get(wit3).status });
+  // …and when MarzPay REALLY reports the failure, the refund flows normally.
+  marzTx.set(wit3Doc.marzTxUuid, 'failed');
+  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.failed',
+    transaction: { uuid: wit3Doc.marzTxUuid, status: 'failed' } } });
+  await sleep(250);
+  check('gateway-confirmed failure refunds exactly once',
+    userDoc('bob-uid').walletBalance === bobBal3 + 10000 && mockdb.__store.get('withdrawals').get(wit3).status === 'failed',
+    { bal: userDoc('bob-uid').walletBalance, status: mockdb.__store.get('withdrawals').get(wit3).status });
 
   console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
   r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });
