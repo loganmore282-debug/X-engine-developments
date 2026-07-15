@@ -1320,9 +1320,10 @@ function renderTeam() {
   });
   const shareBtn = el.querySelector('#shareRef');
   if (shareBtn) shareBtn.addEventListener('click', async () => {
-    const text = `Join me on Furagemz and grow your gems. Use my link: ${link}`;
+    const wb = _publicSettings?.welcomeBonus || 5000;
+    const text = `I am earning on Furagemz and you can too. Sign up with my link and UGX ${Number(wb).toLocaleString('en-UG')} lands in your wallet instantly as a welcome bonus. Activate a gem and it pays you cashback every single day, and when you invite your own friends you earn automatic rewards on three levels. Deposits, cashback and withdrawals are all processed automatically straight to your mobile money. Use my referral code ${code} or simply tap my link to join: ${link}`;
     if (navigator.share) { try { await navigator.share({ title: 'Furagemz', text, url: link }); } catch (_) {} }
-    else navigator.clipboard?.writeText(link).then(() => toast('Referral link copied', 'ok')).catch(() => {});
+    else navigator.clipboard?.writeText(text).then(() => toast('Invite message copied', 'ok')).catch(() => {});
   });
 }
 

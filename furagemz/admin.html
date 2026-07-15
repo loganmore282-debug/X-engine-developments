@@ -583,8 +583,7 @@ async function renderCodes(){
   const r = await api('/admin/codes/list');
   const list = r.codes||[];
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Redemption codes</h2>
-      <button class="btn sm ghost" id="healRedeems" title="Pay any user who redeemed a code but never received the credit">Heal missing credits</button></div>
+    <h2 class="sec">Redemption codes</h2>
     <div class="panel-card">
       <div class="row">
         <div><label>Amount (UGX)</label><input id="cAmt" type="number" placeholder="5000"></div>
@@ -611,12 +610,6 @@ async function renderCodes(){
     else toast(d.message||'Failed','err');
   });
   document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ const d=await api('/admin/codes/deactivate',{codeId:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderCodes(); }));
-  $('healRedeems').addEventListener('click', async()=>{
-    const b=$('healRedeems'); b.disabled=true; b.textContent='Checking…';
-    const d=await api('/admin/redemptions/reconcile');
-    b.disabled=false; b.textContent='Heal missing credits';
-    toast(d.status==='success'?(d.healed?`Paid ${d.healed} missing credit(s)`:'All redemptions already credited'):(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
 }
 
 // ── TRANSACTIONS ──

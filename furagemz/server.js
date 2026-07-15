@@ -636,24 +636,35 @@ async function usernameTaken(lower, exceptUid) {
 // The server issues a short random LETTER code the client renders visually
 // jumbled; the user retypes it and the server verifies. In-memory, 5-min TTL.
 const CAPTCHA_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ'; // letters only, no I/L/O ambiguity
-const _captchas = new Map(); // id -> { answer, expires }
-function sweepCaptchas() { const now = Date.now(); for (const [k, v] of _captchas) if (v.expires < now) _captchas.delete(k); }
-app.post('/auth/captcha', (_req, res) => {
-  sweepCaptchas();
+// Captchas are stored in the DATABASE, not process memory — a server restart or
+// redeploy mid-registration must never invalidate the letters a user is typing.
+// Every registration session's code is globally recognised for 10 minutes.
+app.post('/auth/captcha', async (_req, res) => {
   const len = 5, bytes = crypto.randomBytes(len);
   let code = '';
   for (let i = 0; i < len; i++) code += CAPTCHA_CHARS[bytes[i] % CAPTCHA_CHARS.length];
   const id = uuidv4();
-  _captchas.set(id, { answer: code, expires: Date.now() + 5 * 60 * 1000 });
-  return res.json({ status: 'success', captchaId: id, challenge: code });
+  try {
+    await db.collection('captchas').doc(id).set({
+      answer: code, expires: Date.now() + 10 * 60 * 1000, createdAt: FieldValue.serverTimestamp()
+    });
+    // Opportunistic cleanup of long-expired codes (best effort, never blocks).
+    db.collection('captchas').where('expires', '<', Date.now() - 3600000).limit(40).get()
+      .then(s => s.forEach(d => d.ref.delete().catch(() => {}))).catch(() => {});
+    return res.json({ status: 'success', captchaId: id, challenge: code });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.post('/auth/captcha/verify', (req, res) => {
-  sweepCaptchas();
-  const c = _captchas.get(req.body.captchaId);
-  if (!c) return res.json({ status: 'error', message: 'Verification expired. Refresh and try again.' });
-  const ok = String(req.body.answer || '').toUpperCase().replace(/\s/g, '') === c.answer;
-  if (ok) _captchas.delete(req.body.captchaId);
-  return res.json({ status: ok ? 'success' : 'error', message: ok ? '' : 'Incorrect code, try again.' });
+app.post('/auth/captcha/verify', async (req, res) => {
+  try {
+    const id = String(req.body.captchaId || '');
+    if (!id) return res.json({ status: 'error', message: 'Verification expired. Refresh and try again.' });
+    const snap = await db.collection('captchas').doc(id).get();
+    if (!snap.exists || snap.data().expires < Date.now())
+      return res.json({ status: 'error', message: 'Verification expired. Refresh and try again.' });
+    const ok = String(req.body.answer || '').toUpperCase().replace(/\s/g, '') === snap.data().answer;
+    if (ok) await snap.ref.delete();
+    return res.json({ status: ok ? 'success' : 'error', message: ok ? '' : 'Incorrect code, try again.' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 // ── ACTIVITY FEED — built from REAL user transactions, global (same on every
