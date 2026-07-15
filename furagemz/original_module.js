@@ -1205,29 +1205,56 @@ function openGemDetail(key) {
   const p = _products.find(t => t.key === key);
   if (!p) return;
   const bal = _account?.walletBalance || 0;
+  const daily = Math.round(p.expectedReturn / (p.cycle || 1));
+  const profit = Math.max(0, p.expectedReturn - p.price);
+  const roi = p.price ? Math.round((p.expectedReturn / p.price) * 100) : 0;
+  const swatch = p.color || GEM_COLORS[p.key] || '#7c3aed';
+  const canAfford = bal >= p.price;
   openModal(`
     <div class="modal-head"><h2>${esc(p.label)}</h2><button class="modal-close">${ICN.close}</button></div>
-    ${p.image ? `<img src="${esc(p.image)}" alt="" style="width:100%;height:150px;object-fit:cover;border-radius:16px;margin-bottom:16px">`
-      : `<div class="gem-swatch" style="background:${p.color || GEM_COLORS[p.key] || 'var(--violet)'};width:56px;height:56px;border-radius:16px;margin-bottom:16px"></div>`}
-    <div class="stat-row">
-      <div class="stat-box"><div class="n">${ugx(Math.round(p.expectedReturn / (p.cycle || 1)))}</div><div class="l">Daily cashback</div></div>
-      <div class="stat-box"><div class="n">${ugx(p.expectedReturn)}</div><div class="l">Total payout</div></div>
-      <div class="stat-box"><div class="n">${p.cycle}d</div><div class="l">Runs for</div></div>
+    <div class="gd-hero">
+      ${p.image ? `<img src="${esc(p.image)}" alt="">`
+        : `<div class="gd-hero-fill" style="background:linear-gradient(135deg,${swatch},#4c1d95)"></div>`}
+      <div class="gd-hero-shade"></div>
+      <div class="gd-hero-badges">
+        <span class="gd-roi">${roi}% return</span>
+        <span class="gd-price">${ugx(p.price)}</span>
+      </div>
     </div>
-    <div class="info-note" style="margin:16px 0">
-      <span class="in-ic">${ICN.info}</span>
-      <div class="in-tx">You earn <b>${ugx(Math.round(p.expectedReturn / (p.cycle || 1)))}</b> every 24 hours, starting one day after you buy, for <b>${p.cycle} days</b> — <b>${ugx(p.expectedReturn)}</b> in total, paid straight to your wallet. Your balance: ${ugx(bal)}.</div>
+
+    <div class="gd-payout">
+      <div class="gd-payout-l">Total you receive</div>
+      <div class="gd-payout-n">${ugx(p.expectedReturn)}</div>
+      <div class="gd-payout-s">That is <b>${ugx(profit)}</b> profit on your ${ugx(p.price)}</div>
     </div>
-    <button class="btn" id="mSubmit">Buy for ${ugx(p.price)}</button>
+
+    <div class="gd-metrics">
+      <div class="gd-m"><span class="gd-mi" style="color:${swatch}">${ICN.gem}</span>
+        <div><div class="gd-mn">${ugx(daily)}</div><div class="gd-ml">Every 24 hours</div></div></div>
+      <div class="gd-m"><span class="gd-mi" style="color:${swatch}">${ICN.clock}</span>
+        <div><div class="gd-mn">${p.cycle} days</div><div class="gd-ml">Payout cycle</div></div></div>
+    </div>
+
+    <div class="gd-flow">
+      <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>Activate this gem for <b>${ugx(p.price)}</b></div>
+      <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>Earn <b>${ugx(daily)}</b> automatically every day, starting tomorrow</div>
+      <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>After ${p.cycle} days you have earned <b>${ugx(p.expectedReturn)}</b>, paid to your wallet</div>
+    </div>
+
+    <div class="gd-bal ${canAfford ? '' : 'low'}">
+      <span>Your balance</span><b>${ugx(bal)}</b>
+    </div>
+    <button class="btn gd-cta" id="mSubmit">${canAfford ? `Activate for ${ugx(p.price)}` : `Deposit ${ugx(p.price - bal)} more to activate`}</button>
   `);
   document.getElementById('mSubmit').addEventListener('click', async () => {
-    if (bal < p.price) { closeModal(); return toast(`Need ${ugx(p.price)}, you have ${ugx(bal)}`, 'err'); }
+    if (bal < p.price) { closeModal(); switchTab('home'); openDepositModal(); return; }
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     const r = await api('/invest/create', { method: 'POST', body: { tierKey: key } });
     if (r.status !== 'success') { restore(); return toast(r.message || 'Purchase failed', 'err'); }
     closeModal();
-    toast(r.message || 'Gem purchased', 'ok');
-    await loadAccount(); renderHome();
+    fireConfetti();
+    toast(r.message || 'Gem activated', 'ok');
+    await loadAccount(); await loadTxns(); renderHome();
   });
 }
 
