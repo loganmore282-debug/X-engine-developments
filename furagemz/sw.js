@@ -4,13 +4,15 @@
    API / auth calls are never cached — always live.
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'furagemz-shell-v43';
+const CACHE = 'furagemz-shell-v44';
 const SHELL = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './icon-maskable-192.png',
+  './icon-maskable-512.png'
 ];
 
 // ── INSTALL: pre-cache the app shell ──

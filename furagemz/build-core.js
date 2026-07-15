@@ -132,8 +132,9 @@ log('index.html    :', fs.statSync(HTML).size, 'bytes — IIFE inlined');
 //    EdgeOne's git auto-deploy never exposes source (original_module.js/server.js/etc.)
 const DIST = __dirname + '/dist';
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST);
-['index.html', 'manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png']
+['index.html', 'manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png',
+ 'icon-maskable-192.png', 'icon-maskable-512.png']
   .forEach((f) => fs.copyFileSync(__dirname + '/' + f, DIST + '/' + f));
-log('dist/         : synced (index.html, manifest.json, sw.js, icon-192.png, icon-512.png)');
+log('dist/         : synced (index.html, manifest.json, sw.js, icons incl. maskable)');
 
 log('\nDone. EdgeOne auto-deploys the dist/ folder from git — no manual upload needed.');
