@@ -212,6 +212,7 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   await sleep(300);
   check('bob real deposit credited (5000+100000)', userDoc('bob-uid').walletBalance === 105000, userDoc('bob-uid').walletBalance);
   check('bob totalDeposited counts the REAL deposit (100000)', userDoc('bob-uid').totalDeposited === 100000, userDoc('bob-uid').totalDeposited);
+  check('bob realDeposited also 100000 (real network)', userDoc('bob-uid').realDeposited === 100000, userDoc('bob-uid').realDeposited);
   const aliceMs = userDoc('alice-uid');
   check('L1 real deposits hit 100000 → 60k (3000) AND 100k (10000) paid instantly',
     aliceMs.teamMilestone_60000 === true && aliceMs.teamMilestone_100000 === true && aliceMs.walletBalance === 35000 + 13000,
@@ -224,13 +225,17 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('re-opening team screen NEVER double-pays milestones', countTx('alice-uid', 'team_reward') === 2 && userDoc('alice-uid').walletBalance === 48000,
     { n: countTx('alice-uid', 'team_reward'), bal: userDoc('alice-uid').walletBalance });
 
-  console.log('\n── 4a. Admin manual credit is NOT counted as a deposit');
-  const bobDepBefore = userDoc('bob-uid').totalDeposited;
-  const bobBalBefore = userDoc('bob-uid').walletBalance;
+  console.log('\n── 4a. Admin credit = team volume, but NOT a real deposit');
+  const bobVolBefore  = userDoc('bob-uid').totalDeposited;
+  const bobRealBefore = userDoc('bob-uid').realDeposited || 0;
+  const bobBalBefore  = userDoc('bob-uid').walletBalance;
   await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'bob-uid', amount: 40000, note: 'manual top-up' } });
   check('admin credit adds to the wallet', userDoc('bob-uid').walletBalance === bobBalBefore + 40000, userDoc('bob-uid').walletBalance);
-  check('admin credit does NOT increase totalDeposited (dashboard shows only real deposits)',
-    userDoc('bob-uid').totalDeposited === bobDepBefore, userDoc('bob-uid').totalDeposited);
+  check('admin credit COUNTS toward team volume (totalDeposited)', userDoc('bob-uid').totalDeposited === bobVolBefore + 40000, userDoc('bob-uid').totalDeposited);
+  check('admin credit does NOT count as a real deposit (dashboard = real only)', (userDoc('bob-uid').realDeposited || 0) === bobRealBefore, userDoc('bob-uid').realDeposited);
+  r = await call('POST', '/admin/stats', { body: ADMIN });
+  check('dashboard Total deposits (real) is LESS than team volume (all money)',
+    r.body?.status === 'success' && r.body.totalDeposited < r.body.totalVolume, { real: r.body?.totalDeposited, volume: r.body?.totalVolume });
 
   console.log('\n── 4c. Coming-soon gems are shown but NOT buyable');
   await call('POST', '/admin/products/save', { body: { ...ADMIN, label: 'Ruby', key: 'ruby', price: 200000, expectedReturn: 2600000, cycle: 60, comingSoon: true } });

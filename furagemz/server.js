@@ -516,8 +516,15 @@ async function reconcileCommissions(limit = 800) {
 // reward can never be paid twice no matter how often this runs.
 async function checkTeamMilestones(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
+  // Team volume = ALL money L1 members put in (real deposits + admin credits) —
+  // the same "team deposits" figure as before the dashboard change.
   let l1Total = 0;
   snap.forEach(d => { l1Total += d.data().totalDeposited || 0; });
+  // SAFETY: never pay milestones until the one-time seal migration has run.
+  // The seal marks every already-qualifying team as "paid" WITHOUT crediting,
+  // so switching the metric back to all-money can't back-pay anyone.
+  const sett0 = await getSettings();
+  if (!sett0.milestoneSealDone) return l1Total;
   const uRef = db.collection('users').doc(userId);
   const { date, time } = nowStr();
   // Serialise per referrer so the deposit-hook path and the settle-on-open path
@@ -864,7 +871,7 @@ app.post('/account/create-profile', async (req, res) => {
     } else {
       await ref.set({
         ...base,
-        walletBalance: 0, totalDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
+        walletBalance: 0, totalDeposited: 0, realDeposited: 0, totalInvested: 0, totalWithdrawn: 0,
         totalEarned: 0, commissionEarned: 0, commissionL1Earned: 0,
         commissionL2Earned: 0, commissionL3Earned: 0,
         teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
@@ -1682,7 +1689,8 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
       const uRef = db.collection('users').doc(dep.userId);
       t.update(uRef, {
         walletBalance:  FieldValue.increment(amount),
-        totalDeposited: FieldValue.increment(amount)
+        totalDeposited: FieldValue.increment(amount),  // team volume
+        realDeposited:  FieldValue.increment(amount)   // dashboard (real network only)
       });
       t.update(depDoc.ref, {
         status: 'matched', creditedAmount: amount,
@@ -1759,7 +1767,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         const uRef  = db.collection('users').doc(userId);
         const uSnap2 = await t.get(uRef);
         if (!uSnap2.exists) throw new Error('User not found');
-        t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
+        t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt), realDeposited: FieldValue.increment(amt) });
         t.set(depRef, {
           userId, phone, amount: amt, creditedAmount: amt,
           marzReference: reference, marzTxUuid, status: 'matched', date, time,
@@ -2290,15 +2298,16 @@ app.post('/admin/deposit', async (req, res) => {
       const uRef  = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
-      // Admin credit is a manual balance adjustment, NOT a real deposit — it
-      // only touches the wallet. "Total deposits" on the dashboard must reflect
-      // ONLY real network (MarzPay mobile-money + card) money coming in.
-      t.update(uRef, { walletBalance: FieldValue.increment(amt) });
+      // Admin credit counts toward TEAM VOLUME (all money in) but NOT toward
+      // realDeposited — the dashboard's "Total deposits" stays real-network only.
+      t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'admin_credit', description: note || 'Furagemz credit',
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
+    // Admin credit adds to team volume too, so it can complete a milestone.
+    notifyTeamDeposit(userId).catch(() => {});
     return res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -2381,7 +2390,11 @@ app.post('/admin/deposit/complete', async (req, res) => {
 // never drift from reality (e.g. credits made before a counter existed, or
 // requests lost while the server was down). Safe to re-run any time: it SETS
 // exact recomputed values, so running twice changes nothing.
-const DEP_TYPES  = new Set(['topup']); // ONLY real network deposits (MarzPay MoMo + card); admin credits are NOT deposits
+// totalDeposited = TEAM VOLUME (all money members put in: real deposits + admin
+// credits). realDeposited = ONLY real network deposits (MoMo + card) — that is
+// what the dashboard's "Total deposits" shows. Welcome gift is excluded from both.
+const DEP_TYPES  = new Set(['topup', 'admin_credit']); // all money in → team volume
+const REAL_DEP   = new Set(['topup']);                 // real network only → dashboard
 const EARN_TYPES = new Set(['gem_payout', 'checkin', 'commission', 'redeem', 'team_reward']);
 const OK_STATUS  = new Set(['success', 'processed', 'matched']);
 async function recountUserTotals() {
@@ -2390,7 +2403,7 @@ async function recountUserTotals() {
     db.collection('withdrawals').where('status', '==', 'processed').get(),
     db.collection('users').limit(10000).get(),
   ]);
-  const zero = () => ({ totalDeposited: 0, totalEarned: 0, commissionEarned: 0,
+  const zero = () => ({ totalDeposited: 0, realDeposited: 0, totalEarned: 0, commissionEarned: 0,
     commissionL1Earned: 0, commissionL2Earned: 0, commissionL3Earned: 0,
     checkinEarned: 0, totalWithdrawn: 0 });
   const agg = {};
@@ -2400,8 +2413,10 @@ async function recountUserTotals() {
     if (!t.userId || !(t.amount > 0)) return;
     if (t.status && !OK_STATUS.has(String(t.status).toLowerCase())) return;
     const b = bucket(t.userId);
-    // Welcome gift is a sign-up bonus, not real money in — keep it out of "deposited".
-    if (DEP_TYPES.has(t.type) && t.description !== 'Welcome gift') b.totalDeposited += t.amount;
+    // Welcome gift is a sign-up bonus, not money the member put in — exclude it.
+    const notWelcome = t.description !== 'Welcome gift';
+    if (DEP_TYPES.has(t.type) && notWelcome) b.totalDeposited += t.amount;   // team volume
+    if (REAL_DEP.has(t.type)  && notWelcome) b.realDeposited  += t.amount;   // dashboard
     if (EARN_TYPES.has(t.type)) b.totalEarned += t.amount;
     if (t.type === 'commission') {
       b.commissionEarned += t.amount;
@@ -2422,6 +2437,37 @@ async function recountUserTotals() {
   }
   return updated;
 }
+// ONE-TIME SEAL (owner's call): team milestones switched back to counting ALL
+// money members put in (deposits + admin credits). To avoid back-paying anyone
+// whose team already qualifies, this recomputes every user's totals from the
+// ledger, then marks each already-met milestone as DONE *without crediting*.
+// After it runs, milestones only ever pay on a NEW crossing. Runs exactly once.
+async function sealTeamMilestonesOnce() {
+  try {
+    const s = await getSettings();
+    if (s.milestoneSealDone) return;
+    // 1) Rebuild totals from the ledger so totalDeposited = true team volume.
+    await recountUserTotals();
+    // 2) Sum each referrer's L1 team volume.
+    const usersSnap = await db.collection('users').limit(10000).get();
+    const l1sum = {};
+    usersSnap.forEach(d => {
+      const u = d.data();
+      if (u.referredBy) l1sum[u.referredBy] = (l1sum[u.referredBy] || 0) + (u.totalDeposited || 0);
+    });
+    // 3) Mark every already-reached milestone as paid — WITHOUT crediting money.
+    let sealed = 0;
+    for (const [uid, total] of Object.entries(l1sum)) {
+      const upd = {};
+      for (const m of TEAM_MILESTONES) if (total >= m.target) upd['teamMilestone_' + m.target] = true;
+      if (Object.keys(upd).length) { await db.collection('users').doc(uid).update(upd).catch(() => {}); sealed++; }
+    }
+    await db.collection('settings').doc('main').set({ milestoneSealDone: true }, { merge: true });
+    _settingsCache = null; _settingsCacheTs = 0; // so milestones resume paying at once
+    console.log('Team-milestone seal complete — sealed', sealed, 'referrer(s), no back-pay.');
+  } catch (e) { console.error('sealTeamMilestonesOnce error:', e.message); }
+}
+
 // One-time rate update (owner's call, 2026-07): check-in bonus 500, withdrawal
 // fee 14%. Forced into the settings doc once so an older admin-saved value
 // (300 / 5%) can't override the new defaults; admin can still change them later.
@@ -2533,12 +2579,14 @@ app.post('/admin/stats', async (req, res) => {
       db.collection('withdrawals').where('status', '==', 'pending').get(),
       db.collection('investments').where('status', '==', 'active').get()
     ]);
-    let totalWallet = 0, totalDeposited = 0, totalWithdrawn = 0, totalInvested = 0,
+    let totalWallet = 0, totalDeposited = 0, totalVolume = 0, totalWithdrawn = 0, totalInvested = 0,
         totalEarned = 0, totalCommissions = 0, referredUsers = 0;
     usersSnap.forEach(d => {
       const u = d.data();
       totalWallet      += u.walletBalance   || 0;
-      totalDeposited   += u.totalDeposited  || 0;
+      // Dashboard "Total deposits" = REAL network deposits only (realDeposited).
+      totalDeposited   += u.realDeposited   || 0;
+      totalVolume      += u.totalDeposited  || 0;  // all money in (deposits + admin credits)
       totalWithdrawn   += u.totalWithdrawn  || 0;
       totalInvested    += u.totalInvested   || 0;
       totalEarned      += u.totalEarned     || 0;
@@ -2561,7 +2609,7 @@ app.post('/admin/stats', async (req, res) => {
     return res.json({
       status: 'success',
       userCount: usersSnap.size,
-      totalWallet, totalDeposited, totalWithdrawn,
+      totalWallet, totalDeposited, totalVolume, totalWithdrawn,
       totalInvested, totalEarned, totalCommissions, referredUsers,
       pendingWithdrawals: withdrawalsSnap.size, pendingPayouts,
       activeInvestments: investmentsSnap.size, outstandingPayout,
@@ -2757,7 +2805,9 @@ async function startServer() {
   const tryConnect = async () => {
     try {
       await connectMongo(MONGODB_URI);
-      if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts(); runRecountMigrationOnce(); runRatePatchOnce(); }
+      if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts();
+        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await sealTeamMilestonesOnce(); })().catch(() => {});
+      }
     } catch (e) {
       console.error('MongoDB not reachable yet — retrying in 5s:', e.message);
       setTimeout(tryConnect, 5000);
