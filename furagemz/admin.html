@@ -343,15 +343,32 @@ async function renderUsers(){
   });
   drawUsers();
 }
+// Reduce any phone to its 9-digit national core so 0771…, +256771…, 256771…
+// and 771… all match each other.
+function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('256')) n=n.slice(3); if(n.startsWith('0')&&n.length>=10) n=n.slice(1); return n; }
 function drawUsers(){
-  const q = ($('userSearch')?.value||'').toLowerCase().trim();
-  const list = q ? _users.filter(u=>(u.username||'').toLowerCase().includes(q)||(u.phone||'').includes(q)) : _users.slice(0,300);
-  $('userRows').innerHTML = list.length ? list.map(u=>`
+  const raw = ($('userSearch')?.value||'').trim();
+  const q = raw.toLowerCase();
+  const qCore = phoneCore(raw);
+  let list;
+  if(q){
+    list = _users.filter(u=>
+      (u.username||'').toLowerCase().includes(q) ||
+      (u.referralCode||'').toLowerCase().includes(q) ||
+      (qCore && phoneCore(u.phone).includes(qCore)) ||
+      (u.id||'').toLowerCase()===q
+    );
+  } else {
+    list = _users.slice(0,500);
+  }
+  const note = (!q && _users.length>500)
+    ? `<tr><td colspan="5" class="empty">Showing first 500 of ${_users.length}. Search by name or phone to find anyone.</td></tr>` : '';
+  $('userRows').innerHTML = (list.length ? list.map(u=>`
     <tr class="clickable" data-uid="${esc(u.id)}">
       <td><b>${esc(u.username||'—')}</b></td><td>${esc(u.phone||'')}</td>
       <td>${ugx(u.walletBalance)}</td><td>${ugx(u.totalInvested)}</td>
       <td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td>
-    </tr>`).join('') : '<tr><td colspan="5" class="empty">No users</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No matching users</td></tr>') + note;
   document.querySelectorAll('#userRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 async function openUser(uid){
