@@ -188,7 +188,7 @@ function cleanPhone(raw) {
 // Sends the Firebase ID token so the server can verify the caller. Money
 // endpoints are never retried on failure — a lost response must never be
 // re-sent, or a payment/investment could be applied twice.
-const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/checkin', '/register', '/redeem'];
+const NO_RETRY = ['/deposit', '/invest/', '/withdraw/request', '/checkin', '/register', '/redeem', '/deposit/card'];
 async function api(path, { method = 'GET', body } = {}, _attempt = 0) {
   const headers = { 'Content-Type': 'application/json' };
   if (_user) { try { headers['Authorization'] = 'Bearer ' + await _user.getIdToken(); } catch (_) {} }
@@ -1000,13 +1000,14 @@ function openDepositModal() {
       <span class="in-ic">${ICN.info}</span>
       <div class="in-tx"><b>How to deposit.</b>
         <ol>
-          <li>Enter the amount (minimum <b>${ugx(minDep)}</b>) and the phone number that holds your mobile money.</li>
-          <li>Tap <b>Deposit</b> — a payment prompt is sent to that phone.</li>
-          <li>Approve it with your mobile-money PIN. Your wallet updates here automatically once it clears.</li>
+          <li>Enter the amount (minimum <b>${ugx(minDep)}</b>). For mobile money, add the phone number that holds it.</li>
+          <li>Tap <b>Deposit with mobile money</b> for an MTN/Airtel prompt, or <b>Pay with card</b> to use a Visa/Mastercard.</li>
+          <li>Your wallet updates here automatically once the payment clears.</li>
         </ol>
       </div>
     </div>
-    <button class="btn" id="mSubmit">Deposit</button>
+    <button class="btn" id="mSubmit">Deposit with mobile money</button>
+    <button class="btn" id="mCard" style="margin-top:10px;background:var(--ink)">Pay with card</button>
   `);
   const amtEl = document.getElementById('mAmt');
   document.querySelectorAll('#modalRoot .amt-chip').forEach(c =>
@@ -1020,6 +1021,16 @@ function openDepositModal() {
     const r = await api('/deposit/marzpay', { method: 'POST', body: { amount, phone } });
     if (r.status !== 'success') { restore(); return toast(r.message || 'Could not start deposit', 'err'); }
     openDepositPending(r.depositId, amount);
+  });
+  document.getElementById('mCard').addEventListener('click', async () => {
+    const amount = parseInt(amtEl.value, 10);
+    if (!amount || amount < minDep) return toast('Minimum deposit is ' + ugx(minDep), 'err');
+    const restore = setBusy(document.getElementById('mCard'), 'Opening card page');
+    const r = await api('/deposit/card', { method: 'POST', body: { amount } });
+    if (r.status !== 'success' || !r.redirectUrl) { restore(); return toast(r.message || 'Could not start card payment', 'err'); }
+    // Send the customer to MarzPay's card gateway. The webhook credits the wallet
+    // when they finish, and realtime refresh shows it on return.
+    window.location.href = r.redirectUrl;
   });
 }
 const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';

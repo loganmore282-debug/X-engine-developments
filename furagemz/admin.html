@@ -379,6 +379,11 @@ async function openUser(uid){
       <button class="btn ${u.status==='banned'?'ghost':'danger'} sm" id="banBtn">${u.status==='banned'?'Unban':'Ban'}</button>
       <button class="btn danger sm" id="delBtn" title="Permanently delete this account and ALL its data">Delete account</button>
     </div>
+    <label style="margin-top:14px">Reset password (Firebase)</label>
+    <div class="row">
+      <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (min 6 chars)"></div>
+      <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user via Firebase">Reset password</button>
+    </div>
     <h4 style="margin:18px 0 8px;font-size:14px">Gems (${(r.investments||[]).length})</h4>
     ${(r.investments||[]).length?`<div class="table-scroll" style="max-height:170px"><table><tbody>
       ${r.investments.map(iv=>`<tr><td><b>${esc(iv.tierLabel||'Gem')}</b></td><td>${ugx(iv.amount)}</td>
@@ -399,6 +404,16 @@ async function openUser(uid){
   $('creditBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('debitBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('banBtn').addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
+  $('pwBtn').addEventListener('click', async()=>{
+    const np=$('pwNew').value.trim();
+    if(np.length<6) return toast('New password must be at least 6 characters','err');
+    if(!confirm(`Reset password for ${u.username||u.phone}? They will need to use the new password to log in.`)) return;
+    const b=$('pwBtn'); b.disabled=true; b.textContent='Resetting…';
+    const d=await api('/admin/user/reset-password',{userId:uid,newPassword:np});
+    b.disabled=false; b.textContent='Reset password';
+    toast(d.status==='success'?'Password reset — give it to the user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success') $('pwNew').value='';
+  });
   $('delBtn').addEventListener('click', async()=>{
     const typed = prompt(`This PERMANENTLY deletes ${u.username||u.phone} and ALL their data — deposits, withdrawals, gems, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
     if (typed === null) return;

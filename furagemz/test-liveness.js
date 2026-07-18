@@ -26,6 +26,7 @@ const dbMod = new Module(dbPath); dbMod.exports = mockdb; dbMod.loaded = true;
 require.cache[dbPath] = dbMod;
 
 // ── Stub firebase-admin: token "uid:<x>" verifies as user <x> ──
+const __fbUsers = new Map(); // uid -> last props set via updateUser (proves password reset ran)
 const faPath = require.resolve('firebase-admin');
 const faMod = new Module(faPath);
 faMod.exports = {
@@ -36,6 +37,8 @@ faMod.exports = {
       if (String(tok).startsWith('uid:')) return { uid: tok.slice(4) };
       throw new Error('invalid token');
     },
+    updateUser: async (uid, props) => { __fbUsers.set(uid, { ...(props || {}) }); return { uid }; },
+    createCustomToken: async uid => 'ct:' + uid,
   }),
 };
 faMod.loaded = true;
@@ -50,9 +53,13 @@ global.fetch = async (url, opts = {}) => {
   if (!u.includes('wearemarz.com')) return realFetch(url, opts);
   const json = body => ({ ok: true, status: 200, json: async () => body });
   if (u.endsWith('/collect-money') || u.endsWith('/send-money')) {
+    let body = {}; try { body = JSON.parse(opts.body || '{}'); } catch (_) {}
     const uuid = (u.endsWith('/collect-money') ? 'CTX-' : 'WTX-') + (++marzN);
     marzTx.set(uuid, 'processing');
-    return json({ status: 'success', data: { transaction: { uuid, status: 'processing' } } });
+    const data = { transaction: { uuid, status: 'pending' } };
+    // Card collections return a redirect_url instead of a phone prompt.
+    if (body.method === 'card') data.redirect_url = 'https://wallet.wearemarz.com/pay/card-gateway?reference=' + body.reference;
+    return json({ status: 'success', data });
   }
   const m = u.match(/\/(collect-money|send-money)\/([^/]+)$/);
   if (m) return json({ data: { transaction: { status: marzTx.get(m[2]) || 'processing' } } });
@@ -469,6 +476,34 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('gateway-confirmed failure refunds exactly once',
     userDoc('bob-uid').walletBalance === bobBal3 + 10000 && mockdb.__store.get('withdrawals').get(wit3).status === 'failed',
     { bal: userDoc('bob-uid').walletBalance, status: mockdb.__store.get('withdrawals').get(wit3).status });
+
+  console.log('\n── 13d. Card deposits (global) credit via the same guarded path');
+  const cardBal = userDoc('bob-uid').walletBalance;
+  r = await call('POST', '/deposit/card', { token: B, body: { amount: 40000 } });
+  check('card deposit returns a gateway redirect_url', r.body?.status === 'success' && /card-gateway/.test(r.body?.redirectUrl || ''), r.body);
+  const cardDepId = r.body.depositId;
+  const cardDep = mockdb.__store.get('pendingDeposits').get(cardDepId);
+  check('card deposit stored as method=card, no phone, processing', cardDep.method === 'card' && cardDep.phone === null && cardDep.status === 'processing', cardDep);
+  check('no money credited before the card payment completes', userDoc('bob-uid').walletBalance === cardBal, userDoc('bob-uid').walletBalance);
+  // Customer pays on the gateway → MarzPay confirms → webhook (provider "card payments").
+  marzTx.set(cardDep.marzTxUuid, 'completed');
+  await call('POST', '/deposit/callback', { body: { event_type: 'collection.completed',
+    transaction: { reference: cardDep.marzReference, status: 'completed', amount: { raw: 40000 }, provider: 'card payments', phone_number: null } } });
+  await sleep(250);
+  check('card payment credits the wallet once (40000)', userDoc('bob-uid').walletBalance === cardBal + 40000, userDoc('bob-uid').walletBalance);
+  await call('POST', '/deposit/callback', { body: { event_type: 'collection.completed',
+    transaction: { reference: cardDep.marzReference, status: 'completed', amount: { raw: 40000 }, provider: 'card payments', phone_number: null } } });
+  await sleep(200);
+  check('replayed card webhook never double-credits', userDoc('bob-uid').walletBalance === cardBal + 40000 && countTx('bob-uid', 'topup') >= 1, userDoc('bob-uid').walletBalance);
+
+  console.log('\n── 13e. Admin password reset via Firebase Admin SDK');
+  r = await call('POST', '/admin/user/reset-password', { body: { ...ADMIN, userId: 'bob-uid', newPassword: 'newpass123' } });
+  check('admin resets a user password', r.body?.status === 'success', r.body);
+  check('Firebase updateUser was called with the new password', __fbUsers.get('bob-uid')?.password === 'newpass123', __fbUsers.get('bob-uid'));
+  r = await call('POST', '/admin/user/reset-password', { body: { ...ADMIN, userId: 'bob-uid', newPassword: '123' } });
+  check('password under 6 chars rejected', r.code === 400, r.body);
+  r = await call('POST', '/admin/user/reset-password', { body: { userId: 'bob-uid', newPassword: 'nope123' } });
+  check('reset without admin key rejected (401)', r.code === 401, r.code);
 
   console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
   r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });

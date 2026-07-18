@@ -92,7 +92,7 @@ app.use('/auth/', authLimiter);
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/', adminLimiter);
 // Money/value endpoints added in phase 2 will be registered here as they land:
-['/checkin', '/withdraw/request', '/invest/create', '/invest/boost', '/deposit/marzpay', '/redeem']
+['/checkin', '/withdraw/request', '/invest/create', '/invest/boost', '/deposit/marzpay', '/deposit/card', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── MAINTENANCE GATE ──
@@ -220,6 +220,20 @@ function marzUserMsg(mp, fallback) {
 }
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
+    description: description || 'Deposit' };
+  if (callbackUrl) payload.callback_url = callbackUrl;
+  const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return _marzParse(resp);
+}
+// CARD collection — same /collect-money endpoint, method=card, NO phone number.
+// Returns a redirect_url the customer opens to pay by card. Settles in UGX (the
+// customer's own bank converts their currency), so nothing here is multi-currency.
+async function marzCollectCard({ amount, reference, description, callbackUrl, country }) {
+  const payload = { amount: Number(amount), method: 'card', country: country || 'UG', reference,
     description: description || 'Deposit' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
@@ -1769,6 +1783,60 @@ app.post('/deposit/marzpay', async (req, res) => {
     return res.status(500).json({ status: 'error', message: friendly });
   }
 });
+// CARD DEPOSIT — global. Creates a card collection and returns MarzPay's
+// redirect_url; the app sends the customer there to pay by card. Money settles
+// in UGX (their bank converts), so the wallet credit is identical to mobile
+// money. Crediting happens via the SAME callback + sweep path (matched on the
+// reference), so all the existing double-credit / forgery guards apply.
+app.post('/deposit/card', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const amt = parseInt(req.body.amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  const lastDep = _depCreateDebounce.get(userId) || 0;
+  if (Date.now() - lastDep < 7000)
+    return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+  _depCreateDebounce.set(userId, Date.now());
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    const minDep = sett.minDeposit ?? MIN_DEPOSIT;
+    if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
+    // MarzPay card limits are 500 – 10,000,000 UGX.
+    if (amt > 10000000) return res.status(400).json({ status: 'error', message: 'Maximum card deposit is UGX 10,000,000' });
+
+    const reference = uuidv4();
+    const mpData = await marzCollectCard({
+      amount: amt, reference, description: user.name || userId,
+      country: sett.cardCountry || 'UG',
+      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
+    });
+    if (mpData.status !== 'success')
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the card payment. Please try again.') });
+
+    const redirectUrl = mpData.data?.redirect_url;
+    const marzTxUuid  = mpData.data?.transaction?.uuid || null;
+    if (!redirectUrl)
+      return res.status(400).json({ status: 'error', message: 'Card gateway did not return a payment page. Please try again.' });
+
+    const { date, time } = nowStr();
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId, method: 'card', phone: null, amount: amt,
+      marzReference: reference, marzTxUuid,
+      status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    return res.json({ status: 'success', depositId: depRef.id, amount: amt, redirectUrl });
+  } catch (e) {
+    console.error('Card deposit error:', e.message);
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not start the card payment');
+    return res.status(500).json({ status: 'error', message: friendly });
+  }
+});
+
 // The app polls this fast (~1s) while the pending screen is open. We answer
 // instantly from the DB and only ask MarzPay itself at most once every 2s per
 // deposit — so the user sees the credit the moment it exists without hammering
@@ -2260,6 +2328,29 @@ app.post('/admin/ban', async (req, res) => {
     });
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+// ADMIN PASSWORD RESET — the server queries Firebase via the Admin SDK and sets
+// a new password for the user. The user doc id IS the Firebase uid, so we reset
+// against that. Used when a user is locked out and the self-service SMS reset
+// isn't available.
+app.post('/admin/user/reset-password', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId, newPassword } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  if (!newPassword || String(newPassword).length < 6)
+    return res.status(400).json({ status: 'error', message: 'New password must be at least 6 characters' });
+  try {
+    const snap = await db.collection('users').doc(userId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    // Firebase Auth update — throws if the auth account is missing.
+    await admin.auth().updateUser(userId, { password: String(newPassword) });
+    return res.json({ status: 'success', message: 'Password reset',
+      username: snap.data().username || '', phone: snap.data().phone || '' });
+  } catch (e) {
+    const msg = /no user record|not.*found/i.test(e.message || '')
+      ? 'No Firebase login exists for this account.' : (e.message || 'Could not reset password');
+    return res.status(500).json({ status: 'error', message: msg });
+  }
 });
 app.post('/admin/deposit/complete', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
