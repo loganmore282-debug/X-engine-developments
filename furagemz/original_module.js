@@ -1014,6 +1014,7 @@ function openDepositModal() {
     <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="${minDep}">
     <div class="amt-chips">${DEPOSIT_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`).join('')}</div>
     <div class="field" style="margin-top:16px"><label>Mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
+    <div class="proc-line"><span class="pl-ic">${ICN.clock}</span><span>Processing time <b>Instant – 5 minutes</b></span></div>
     <div class="info-note">
       <span class="in-ic">${ICN.info}</span>
       <div class="in-tx"><b>How to deposit.</b>
@@ -1139,6 +1140,7 @@ function openWithdrawModal() {
       <div class="br"><span class="muted">Service fee (${feePct}%)</span><span id="brFee">${ugx(0)}</span></div>
       <div class="br total"><span>You receive</span><span id="brNet">${ugx(0)}</span></div>
     </div>
+    <div class="proc-line"><span class="pl-ic">${ICN.clock}</span><span>Processing time <b>Instant – 1 hour</b></span></div>
     <div class="info-note">
       <span class="in-ic">${ICN.info}</span>
       <div class="in-tx"><b>How to withdraw.</b>
