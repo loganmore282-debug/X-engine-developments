@@ -185,26 +185,35 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('alice reads own deposit status', r.body?.deposit?.depositStatus === 'matched', r.body);
 
   console.log('\n── 3b. Failed deposits appear in history');
-  r = await call('POST', '/deposit/marzpay', { token: B, body: { amount: 50000, phone: '0771000002' } });
-  check('bob deposit attempt initiated', r.body?.status === 'success', r.body);
+  // Use zed for the failed attempt so bob stays free of the 7s deposit debounce
+  // (bob makes a real deposit in section 4).
+  r = await call('POST', '/deposit/marzpay', { token: Z, body: { amount: 50000, phone: '0771000009' } });
+  check('deposit attempt initiated', r.body?.status === 'success', r.body);
   const dep2Id = r.body.depositId;
   const dep2 = mockdb.__store.get('pendingDeposits').get(dep2Id);
   marzTx.set(dep2.marzTxUuid, 'failed'); // MarzPay itself confirms the failure
   await call('POST', '/deposit/callback', { body: { event_type: 'collection.failed', transaction: { reference: dep2.marzReference, status: 'failed' } } });
   await sleep(250);
-  check('failed deposit did NOT credit', userDoc('bob-uid').walletBalance === 5000, userDoc('bob-uid').walletBalance);
-  r = await call('GET', '/account/transactions', { token: B });
+  check('failed deposit did NOT credit', userDoc('zed-uid').walletBalance === 5000, userDoc('zed-uid').walletBalance);
+  r = await call('GET', '/account/transactions', { token: Z });
   const failedRow = (r.body?.transactions || []).find(t => t.type === 'topup' && t.status === 'failed');
   check('failed deposit shows in history with Failed status', !!failedRow && failedRow.amount === 50000, failedRow);
 
-  console.log('\n── 4. Team task centre: milestones paid INSTANTLY on team deposits');
-  // Bob is alice's L1. His deposits so far: 30000 (below the 60k milestone).
+  console.log('\n── 4. Team task centre: milestones paid INSTANTLY on REAL network deposits');
   check('no milestone before 60k threshold', !userDoc('alice-uid').teamMilestone_60000);
-  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'bob-uid', amount: 100000, note: 'test credit' } });
-  check('admin credit lands (bob 5000+100000)', userDoc('bob-uid').walletBalance === 105000, userDoc('bob-uid').walletBalance);
-  await sleep(300); // milestone hook fires async
+  // Bob (alice's L1) makes a REAL 100000 mobile-money deposit. ONLY real network
+  // deposits count toward "deposits" and team milestones — never admin credits.
+  let bdr = await call('POST', '/deposit/marzpay', { token: B, body: { amount: 100000, phone: '0771000002' } });
+  const bdep = mockdb.__store.get('pendingDeposits').get(bdr.body.depositId);
+  marzTx.set(bdep.marzTxUuid, 'completed');
+  await call('POST', '/deposit/callback', { body: { event_type: 'collection.completed',
+    transaction: { reference: bdep.marzReference, status: 'completed', amount: { raw: 100000 } },
+    collection: { provider_transaction_id: 'MTN999' } } });
+  await sleep(300);
+  check('bob real deposit credited (5000+100000)', userDoc('bob-uid').walletBalance === 105000, userDoc('bob-uid').walletBalance);
+  check('bob totalDeposited counts the REAL deposit (100000)', userDoc('bob-uid').totalDeposited === 100000, userDoc('bob-uid').totalDeposited);
   const aliceMs = userDoc('alice-uid');
-  check('L1 deposits hit 100000 → 60k (3000) AND 100k (10000) paid instantly',
+  check('L1 real deposits hit 100000 → 60k (3000) AND 100k (10000) paid instantly',
     aliceMs.teamMilestone_60000 === true && aliceMs.teamMilestone_100000 === true && aliceMs.walletBalance === 35000 + 13000,
     { bal: aliceMs.walletBalance, m60: aliceMs.teamMilestone_60000, m100: aliceMs.teamMilestone_100000 });
   check('exactly 2 team_reward transactions', countTx('alice-uid', 'team_reward') === 2, countTx('alice-uid', 'team_reward'));
@@ -214,6 +223,14 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   await call('GET', '/team/stats', { token: A });
   check('re-opening team screen NEVER double-pays milestones', countTx('alice-uid', 'team_reward') === 2 && userDoc('alice-uid').walletBalance === 48000,
     { n: countTx('alice-uid', 'team_reward'), bal: userDoc('alice-uid').walletBalance });
+
+  console.log('\n── 4a. Admin manual credit is NOT counted as a deposit');
+  const bobDepBefore = userDoc('bob-uid').totalDeposited;
+  const bobBalBefore = userDoc('bob-uid').walletBalance;
+  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'bob-uid', amount: 40000, note: 'manual top-up' } });
+  check('admin credit adds to the wallet', userDoc('bob-uid').walletBalance === bobBalBefore + 40000, userDoc('bob-uid').walletBalance);
+  check('admin credit does NOT increase totalDeposited (dashboard shows only real deposits)',
+    userDoc('bob-uid').totalDeposited === bobDepBefore, userDoc('bob-uid').totalDeposited);
 
   console.log('\n── 4b. Invest + 3-level commission idempotency');
   r = await call('POST', '/invest/create', { token: B, body: { tierKey: 'quartz' } });
@@ -342,12 +359,13 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('ledger recount matches incremental counters exactly', JSON.stringify(before) === JSON.stringify(after), { before, after });
 
   console.log('\n── 10. Admin force-credit (owner verified payment manually)');
-  const bobBalFc = userDoc('bob-uid').walletBalance;
+  // dep2Id is zed's failed 50000 deposit from section 3b.
+  const zedBalFc = userDoc('zed-uid').walletBalance;
   r = await call('POST', '/admin/deposit/force-credit', { body: { ...ADMIN, depositId: dep2Id } });
-  check('failed-but-verified deposit force-credited once', r.body?.status === 'success' && userDoc('bob-uid').walletBalance === bobBalFc + 50000,
-    { resp: r.body, bal: userDoc('bob-uid').walletBalance });
+  check('failed-but-verified deposit force-credited once', r.body?.status === 'success' && userDoc('zed-uid').walletBalance === zedBalFc + 50000,
+    { resp: r.body, bal: userDoc('zed-uid').walletBalance });
   r = await call('POST', '/admin/deposit/force-credit', { body: { ...ADMIN, depositId: dep2Id } });
-  check('force-credit re-run never double-credits', userDoc('bob-uid').walletBalance === bobBalFc + 50000 && /Already/i.test(r.body?.message || ''), r.body);
+  check('force-credit re-run never double-credits', userDoc('zed-uid').walletBalance === zedBalFc + 50000 && /Already/i.test(r.body?.message || ''), r.body);
 
   console.log('\n── 11. Admin account deletion (full data wipe)');
   const C = 'uid:carol-uid';

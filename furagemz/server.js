@@ -2289,16 +2289,15 @@ app.post('/admin/deposit', async (req, res) => {
       const uRef  = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
-      // Count admin credits toward the user's deposit total so they validate and
-      // show up as a deposit everywhere (history, dashboard, health totals).
-      t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
+      // Admin credit is a manual balance adjustment, NOT a real deposit — it
+      // only touches the wallet. "Total deposits" on the dashboard must reflect
+      // ONLY real network (MarzPay mobile-money + card) money coming in.
+      t.update(uRef, { walletBalance: FieldValue.increment(amt) });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'admin_credit', description: note || 'Furagemz credit',
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
-    // Admin credits count as deposits, so they can complete a team milestone too.
-    notifyTeamDeposit(userId).catch(() => {});
     return res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -2381,7 +2380,7 @@ app.post('/admin/deposit/complete', async (req, res) => {
 // never drift from reality (e.g. credits made before a counter existed, or
 // requests lost while the server was down). Safe to re-run any time: it SETS
 // exact recomputed values, so running twice changes nothing.
-const DEP_TYPES  = new Set(['topup', 'admin_credit']);
+const DEP_TYPES  = new Set(['topup']); // ONLY real network deposits (MarzPay MoMo + card); admin credits are NOT deposits
 const EARN_TYPES = new Set(['gem_payout', 'checkin', 'commission', 'redeem', 'team_reward']);
 const OK_STATUS  = new Set(['success', 'processed', 'matched']);
 async function recountUserTotals() {
