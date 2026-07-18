@@ -1363,15 +1363,19 @@ function renderTeam() {
     <div class="task-intro">Your level 1 team has deposited <b>${ugx(l1Total)}</b> so far. Hit each target below and the reward drops into your wallet instantly.</div>
     ${(ts?.milestones || TEAM_MILESTONES).map(m => {
       const pct = Math.min(100, Math.round((l1Total / m.target) * 100));
+      // A milestone reads as achieved ONLY when the CURRENT real team-deposit
+      // total actually reaches it — never from a stale stored flag. This keeps
+      // the card and the "team deposited X" header always consistent.
+      const hit = l1Total >= m.target;
       return `
-      <div class="task-row${m.paid ? ' done' : ''}">
+      <div class="task-row${hit ? ' done' : ''}">
         <div class="task-ic">${ICN.award}</div>
         <div class="task-body">
           <div class="task-t">Team deposits reach ${ugx(m.target)}</div>
           <div class="task-bar"><i style="width:${pct}%"></i></div>
-          <div class="task-s">${m.paid ? 'Reward paid to your wallet' : pct + '% there'}</div>
+          <div class="task-s">${hit ? 'Reward paid to your wallet' : pct + '% there'}</div>
         </div>
-        <div class="task-reward">${m.paid ? `<span class="task-paid">${CHECK_SVG}</span>` : `<b>${ugx(m.reward)}</b>`}</div>
+        <div class="task-reward">${hit ? `<span class="task-paid">${CHECK_SVG}</span>` : `<b>${ugx(m.reward)}</b>`}</div>
       </div>`;
     }).join('')}
 
