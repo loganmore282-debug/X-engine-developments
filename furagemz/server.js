@@ -1085,6 +1085,7 @@ app.post('/invest/create', async (req, res) => {
   const tier = (await getProductByKeyOrId(tierKey)) || findGemTier(tierKey);
   if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown gem tier' });
   if (tier.active === false) return res.status(400).json({ status: 'error', message: 'This gem is not available right now' });
+  if (tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This gem is coming soon — not on sale yet.' });
   // Ensure derived numbers exist even for a minimally-filled admin product.
   tier.cycle = Number(tier.cycle) || CYCLE_DAYS;
   tier.expectedReturn = Number(tier.expectedReturn) || Math.round((tier.price || 0) * RETURN_MULTIPLE);
@@ -2684,6 +2685,7 @@ app.post('/admin/products/save', async (req, res) => {
     color: String(req.body.color || '#7c3aed').trim().slice(0, 24),
     order: Math.round(parseFloat(req.body.order) || 0),
     active: req.body.active !== false && req.body.active !== 'false',
+    comingSoon: req.body.comingSoon === true || req.body.comingSoon === 'true',
     updatedAt: FieldValue.serverTimestamp(),
   };
   try {

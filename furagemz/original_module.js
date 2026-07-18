@@ -1226,11 +1226,12 @@ function renderGems() {
       const color = p.color || GEM_COLORS[p.key] || '#7c3aed';
       const daily = Math.round(p.expectedReturn / (p.cycle || 1));
       const art = p.image ? `<img src="${esc(p.image)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:16px">` : gemArt(color);
+      const soon = !!p.comingSoon;
       return `
-      <div class="gem-hero" style="--accent:${color}">
-        <div class="gh-head"><span class="gh-name">${esc(p.label)}</span><span class="gh-badge">Daily</span></div>
+      <div class="gem-hero${soon ? ' soon' : ''}" style="--accent:${color}">
+        <div class="gh-head"><span class="gh-name">${esc(p.label)}</span><span class="gh-badge">${soon ? 'Coming soon' : 'Daily'}</span></div>
         <div class="gh-body">
-          <div class="gh-art">${art}</div>
+          <div class="gh-art">${art}${soon ? '<span class="gh-soon">Coming soon</span>' : ''}</div>
           <div class="gh-stats">
             <div class="ghs"><span>Price</span><b>${ugx(p.price)}</b></div>
             <div class="ghs"><span>Matures in</span><b>${p.cycle} days</b></div>
@@ -1238,11 +1239,13 @@ function renderGems() {
             <div class="ghs"><span>Total payout</span><b>${ugx(p.expectedReturn)}</b></div>
           </div>
         </div>
-        <div class="gh-foot"><span class="gh-price">${ugx(p.price)}</span><button class="gh-buy" data-tier="${p.key}">Buy now</button></div>
+        <div class="gh-foot"><span class="gh-price">${ugx(p.price)}</span>${soon
+          ? `<button class="gh-buy" disabled>Coming soon</button>`
+          : `<button class="gh-buy" data-tier="${p.key}">Buy now</button>`}</div>
       </div>`;
     }).join('')}
   `;
-  el.querySelectorAll('.gh-buy').forEach(b => b.addEventListener('click', () => openGemDetail(b.dataset.tier)));
+  el.querySelectorAll('.gh-buy[data-tier]').forEach(b => b.addEventListener('click', () => openGemDetail(b.dataset.tier)));
 }
 function openGemDetail(key) {
   const p = _products.find(t => t.key === key);
@@ -1287,9 +1290,12 @@ function openGemDetail(key) {
     <div class="gd-bal">
       <span>Your balance</span><b>${ugx(bal)}</b>
     </div>
-    <button class="btn gd-cta" id="mSubmit">Buy for ${ugx(p.price)}</button>
+    ${p.comingSoon
+      ? `<button class="btn gd-cta" disabled style="opacity:.6">Coming soon</button>`
+      : `<button class="btn gd-cta" id="mSubmit">Buy for ${ugx(p.price)}</button>`}
   `);
-  document.getElementById('mSubmit').addEventListener('click', async () => {
+  const submitBtn = document.getElementById('mSubmit');
+  if (submitBtn) submitBtn.addEventListener('click', async () => {
     if (bal < p.price) { closeModal(); return toast(`Need ${ugx(p.price)}, you have ${ugx(bal)}`, 'err'); }
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     const r = await api('/invest/create', { method: 'POST', body: { tierKey: key } });

@@ -232,6 +232,16 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('admin credit does NOT increase totalDeposited (dashboard shows only real deposits)',
     userDoc('bob-uid').totalDeposited === bobDepBefore, userDoc('bob-uid').totalDeposited);
 
+  console.log('\n── 4c. Coming-soon gems are shown but NOT buyable');
+  await call('POST', '/admin/products/save', { body: { ...ADMIN, label: 'Ruby', key: 'ruby', price: 200000, expectedReturn: 2600000, cycle: 60, comingSoon: true } });
+  r = await call('GET', '/products');
+  const ruby = (r.body?.products || []).find(p => p.key === 'ruby');
+  check('coming-soon gem still appears in the product list', !!ruby && ruby.comingSoon === true, ruby);
+  const bobBalCS = userDoc('bob-uid').walletBalance;
+  r = await call('POST', '/invest/create', { token: B, body: { tierKey: 'ruby' } });
+  check('buying a coming-soon gem is rejected', r.body?.status !== 'success' && /coming soon/i.test(r.body?.message || ''), r.body);
+  check('no money moved on the blocked purchase', userDoc('bob-uid').walletBalance === bobBalCS, userDoc('bob-uid').walletBalance);
+
   console.log('\n── 4b. Invest + 3-level commission idempotency');
   r = await call('POST', '/invest/create', { token: B, body: { tierKey: 'quartz' } });
   check('bob buys Quartz 30000', r.body?.status === 'success', r.body);
