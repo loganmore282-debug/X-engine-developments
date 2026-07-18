@@ -102,7 +102,7 @@ app.use('/admin/', adminLimiter);
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/checkin', '/redeem', '/team', '/register'];
 // Payment-provider webhooks/callbacks must ALWAYS run, even in maintenance,
 // or deposits/withdrawals in flight would never get confirmed.
-const GUARD_EXEMPT = new Set(['/', '/health', '/callback', '/deposit/callback', '/withdraw/callback']);
+const GUARD_EXEMPT = new Set(['/', '/health', '/callback', '/deposit/callback', '/deposit/return', '/withdraw/callback']);
 app.use(async (req, res, next) => {
   if (GUARD_EXEMPT.has(req.path)) return next();
   if (!MAINTENANCE_BLOCK.some(p => req.path.startsWith(p))) return next();
@@ -144,6 +144,8 @@ const PUBLIC_URL  = (() => {
 
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
+// Where a card customer is bounced back to after paying on the gateway.
+const APP_URL = (process.env.APP_URL || 'https://furagemzplatform.edgeone.app').trim().replace(/\/$/, '');
 
 const APP_VERSION      = '1.7.0';   // shown on the in-app "Download app" screen
 const APP_SIZE         = '2.4 MB';  // approximate installed PWA size
@@ -1811,7 +1813,7 @@ app.post('/deposit/card', async (req, res) => {
     const mpData = await marzCollectCard({
       amount: amt, reference, description: user.name || userId,
       country: sett.cardCountry || 'UG',
-      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
+      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/return' : undefined
     });
     if (mpData.status !== 'success')
       return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the card payment. Please try again.') });
@@ -1916,6 +1918,12 @@ async function handleDepositCallback(req, res) {
 }
 app.post('/callback', handleDepositCallback);
 app.post('/deposit/callback', handleDepositCallback);
+// Card flow: MarzPay uses ONE callback_url for both the server webhook (POST)
+// AND the customer's browser return (GET). POST credits as usual; GET bounces
+// the customer straight back into the app (with ?card=1 so it resumes the fast
+// pending poll on their deposit).
+app.post('/deposit/return', handleDepositCallback);
+app.get('/deposit/return', (_req, res) => res.redirect(302, APP_URL + '/?card=1'));
 
 // ═══════════════════════════════════════════
 // WITHDRAWALS — user requests, admin processes via MarzPay

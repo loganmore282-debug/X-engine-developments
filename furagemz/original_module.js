@@ -455,9 +455,27 @@ onAuthStateChanged(auth, async (user) => {
   showView('main');
   startRealtime();
   maybeShowAnnouncement();
+  resumeCardDeposit();
   // If the 8s cap fired before data was ready, repaint the moment it lands.
   essential.then(() => { if (checkGate()) return; if (!_pageOpen) render(); }).catch(() => {});
 });
+
+// After a card payment the customer is bounced back to the app (?card=1). Resume
+// the SAME fast pending poll used for mobile money so the credit shows instantly.
+function resumeCardDeposit() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('fg_card_dep') || 'null'); } catch (_) {}
+  const returned = /[?&]card=1/.test(location.search);
+  if (!saved || !saved.id) { if (returned) cleanCardUrl(); return; }
+  // Stale (older than 30 min) — drop it silently.
+  if (Date.now() - (saved.ts || 0) > 30 * 60000) { try { localStorage.removeItem('fg_card_dep'); } catch (_) {} cleanCardUrl(); return; }
+  try { localStorage.removeItem('fg_card_dep'); } catch (_) {}
+  cleanCardUrl();
+  openDepositPending(saved.id, saved.amount, true); // fast-polls /deposit/status/:id
+}
+function cleanCardUrl() {
+  try { if (/[?&]card=1/.test(location.search)) history.replaceState(null, '', location.pathname); } catch (_) {}
+}
 // Returns true (and shows a blocker) if the app should be gated off.
 function checkGate() {
   if (_publicSettings?.maintenanceMode) {
@@ -1028,8 +1046,9 @@ function openDepositModal() {
     const restore = setBusy(document.getElementById('mCard'), 'Opening card page');
     const r = await api('/deposit/card', { method: 'POST', body: { amount } });
     if (r.status !== 'success' || !r.redirectUrl) { restore(); return toast(r.message || 'Could not start card payment', 'err'); }
-    // Send the customer to MarzPay's card gateway. The webhook credits the wallet
-    // when they finish, and realtime refresh shows it on return.
+    // Remember this card deposit so that when the customer returns from the
+    // gateway we can resume the fast pending poll and show the credit instantly.
+    try { localStorage.setItem('fg_card_dep', JSON.stringify({ id: r.depositId, amount, ts: Date.now() })); } catch (_) {}
     window.location.href = r.redirectUrl;
   });
 }
@@ -1037,13 +1056,17 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const XMARK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
 // Deposit "polling" experience — a pulsing status while we confirm the payment,
 // resolving in-place to a success or failed state (no blocking spinner).
-function openDepositPending(depositId, amount) {
+function openDepositPending(depositId, amount, isCard) {
   const root = document.getElementById('modalRoot');
+  const title = isCard ? 'Confirming your card payment' : 'Approve on your phone';
+  const sub = isCard
+    ? `We're confirming your card payment of <b>${ugx(amount)}</b>. Your wallet updates the moment it clears.`
+    : `Enter your mobile-money PIN to approve <b>${ugx(amount)}</b>. We'll confirm it here automatically.`;
   root.innerHTML = `<div class="modal-backdrop"></div><div class="modal-card">
     <div class="pay-wait">
-      <div class="pay-orb" id="payOrb">${ICN.phone}</div>
-      <div class="pay-title" id="payTitle">Approve on your phone</div>
-      <div class="pay-sub" id="paySub">Enter your mobile-money PIN to approve <b>${ugx(amount)}</b>. We'll confirm it here automatically.</div>
+      <div class="pay-orb" id="payOrb">${isCard ? ICN.receipt || ICN.phone : ICN.phone}</div>
+      <div class="pay-title" id="payTitle">${title}</div>
+      <div class="pay-sub" id="paySub">${sub}</div>
       <div class="pay-dots" id="payDots"><i></i><i></i><i></i></div>
     </div>
   </div>`;

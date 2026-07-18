@@ -496,6 +496,26 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   await sleep(200);
   check('replayed card webhook never double-credits', userDoc('bob-uid').walletBalance === cardBal + 40000 && countTx('bob-uid', 'topup') >= 1, userDoc('bob-uid').walletBalance);
 
+  // The card gateway uses ONE callback_url for both the webhook (POST) and the
+  // customer's browser return (GET) — the GET must 302 the customer to the app.
+  const retResp = await realFetch(BASE + '/deposit/return', { redirect: 'manual' });
+  check('card GET return 302-redirects the customer to the app',
+    retResp.status === 302 && /card=1/.test(retResp.headers.get('location') || ''),
+    { code: retResp.status, loc: retResp.headers.get('location') });
+  // And the POST on that same path still credits (webhook path). Fresh user to
+  // avoid the 7s per-user deposit debounce hit above.
+  const G = 'uid:gina-uid';
+  await call('POST', '/account/create-profile', { token: G, body: { username: 'gina', phone: '0771000021' } });
+  await call('POST', '/register', { token: G, body: {} });
+  const cr2 = await call('POST', '/deposit/card', { token: G, body: { amount: 35000 } });
+  const cd2 = mockdb.__store.get('pendingDeposits').get(cr2.body.depositId);
+  marzTx.set(cd2.marzTxUuid, 'completed');
+  const preRet = userDoc('gina-uid').walletBalance;
+  await call('POST', '/deposit/return', { body: { event_type: 'collection.completed',
+    transaction: { reference: cd2.marzReference, status: 'completed', amount: { raw: 35000 }, provider: 'card payments', phone_number: null } } });
+  await sleep(250);
+  check('POST /deposit/return webhook credits the card deposit', userDoc('gina-uid').walletBalance === preRet + 35000, userDoc('gina-uid').walletBalance);
+
   console.log('\n── 13e. Admin password reset via Firebase Admin SDK');
   r = await call('POST', '/admin/user/reset-password', { body: { ...ADMIN, userId: 'bob-uid', newPassword: 'newpass123' } });
   check('admin resets a user password', r.body?.status === 'success', r.body);
