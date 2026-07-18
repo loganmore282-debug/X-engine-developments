@@ -152,6 +152,7 @@
           <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
         <b>Furagemz Admin</b>
         <div class="spacer"></div>
+        <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
         <button class="btn ghost sm" id="refreshBtn">Refresh</button>
         <button class="btn ghost sm" id="logoutBtn">Log out</button>
       </div>
@@ -240,7 +241,8 @@ $('loginBtn').addEventListener('click', doLogin);
 $('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 $('logoutBtn').addEventListener('click', ()=>{ ADMIN_KEY=''; try{ sessionStorage.removeItem('fg_admin_key'); }catch(_){} $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden'); $('keyInput').value=''; });
 
-function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); }
+function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); startLive(); }
+$('liveBtn').addEventListener('click', ()=>{ setLive(!_live); if(_live) liveTick(); });
 
 // ── TABS ──
 let _tab='dashboard';
@@ -259,6 +261,27 @@ async function refreshBadges(){
   if(s.status==='success' && s.pendingWithdrawals>0){ $('wBadge').textContent=s.pendingWithdrawals; $('wBadge').classList.remove('hidden'); }
   else $('wBadge').classList.add('hidden');
 }
+
+// ── LIVE AUTO-REFRESH ── re-pulls the active data tab every 12s so new joins,
+// deposits, withdrawals, transactions and referrals appear on their own. Skips
+// edit tabs (products/banners/codes/settings), skips while a modal is open, and
+// leaves the Users search alone while you're typing in it.
+let _live=true, _liveTimer=null;
+const LIVE_TABS=new Set(['dashboard','users','deposits','withdrawals','transactions','referrals']);
+const RENDERERS={ dashboard:()=>renderDashboard(), users:()=>renderUsers(), deposits:()=>renderDeposits(),
+  withdrawals:()=>renderWithdrawals(), transactions:()=>renderTransactions(), referrals:()=>renderReferrals() };
+function modalOpen(){ const m=$('modalRoot'); return m && !m.classList.contains('hidden'); }
+function liveTick(){
+  if(document.hidden) return;
+  refreshBadges().catch(()=>{});
+  if(!_live || modalOpen() || !LIVE_TABS.has(_tab)) return;
+  // Don't wipe the Users search while it's being used.
+  if(_tab==='users'){ const s=$('userSearch'); if(s && (s.value.trim() || document.activeElement===s)) return; }
+  (RENDERERS[_tab]||(()=>{}))();
+}
+function startLive(){ if(_liveTimer) return; _liveTimer=setInterval(liveTick, 12000); }
+function setLive(on){ _live=on; const d=$('liveDot'); if(d) d.style.background = on ? 'var(--ok)' : 'var(--sub)';
+  $('liveBtn').style.opacity = on ? '1' : '.6'; }
 
 // ── DASHBOARD ──
 async function renderDashboard(){
