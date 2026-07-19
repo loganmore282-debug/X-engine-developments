@@ -799,14 +799,18 @@ function openBoostModal(invId) {
   const days = _publicSettings?.boostMatureDays || 5;
   const pct  = Math.round(((_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.30) * 100);
   const cost = boostCost(inv);
+  const remaining = Math.max(0, (inv.expectedReturn || 0) - (inv.paidOut || 0));
+  const perDay    = Math.round(remaining / days);
   openModal(`
     <div class="modal-head"><h2>Boost ${esc(inv.tierLabel || 'gem')}</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="boost-hero">${ICN.boost}</div>
-    <p class="boost-copy">Pay <b>${ugx(cost)}</b> (${pct}% of this gem's total return) to accelerate it. All the cashback still to come is then paid out over the next <b>${days} days</b> instead of the full period — your total payout of <b>${ugx(inv.expectedReturn)}</b> stays the same.</p>
+    <p class="boost-copy">Pay <b>${ugx(cost)}</b> (${pct}% of this gem's total return) and the cashback still owed on it — <b>${ugx(remaining)}</b> — is paid to you over the next <b>${days} days</b> instead of the full period. It does not add extra profit; the same money simply arrives faster, then the gem completes.</p>
     <div class="breakdown">
       <div class="br"><span class="muted">Boost cost (${pct}%)</span><span>${ugx(cost)}</span></div>
+      <div class="br"><span class="muted">You receive over ${days} days</span><span>${ugx(remaining)}</span></div>
+      <div class="br"><span class="muted">That is each day</span><span>${ugx(perDay)}</span></div>
       <div class="br"><span class="muted">Your balance</span><span>${ugx(_account?.walletBalance || 0)}</span></div>
-      <div class="br total"><span>Pays out over</span><span>${days} days</span></div>
+      <div class="br total"><span>After ${days} days this gem</span><span>Completes</span></div>
     </div>
     <button class="btn" id="mSubmit">Boost now</button>
   `);
