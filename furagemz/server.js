@@ -223,8 +223,13 @@ async function _marzParse(resp) {
 }
 function marzUserMsg(mp, fallback) {
   const raw = String((mp && mp.message) || '');
+  // MarzPay's transient provider faults come back with several generic phrasings
+  // ("An unexpected error occurred. Please try again.", "database error",
+  // "internal server error", gateway/timeout). Map them ALL to one friendly
+  // message. Genuinely actionable reasons (insufficient balance, invalid phone,
+  // limits) don't match these patterns, so they're passed through untouched.
   if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
-      /database error|internal server|server error|try again later|temporarily/i.test(raw))
+      /database error|internal server|server error|unexpected error|try again|temporarily|timeout|timed out|gateway|unavailable|bad gateway/i.test(raw))
     return PROVIDER_BUSY_MSG;
   return raw || fallback || PROVIDER_BUSY_MSG;
 }
@@ -2169,8 +2174,17 @@ app.post('/admin/withdraw/process', async (req, res) => {
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
     });
     const witSandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
-    if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox)
-      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Withdrawal could not be sent right now. Please try again.') });
+    if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox) {
+      // The payout never left: status is still 'pending' (nothing was committed
+      // below) and the user's balance is still held, so this is safe to retry.
+      // Attribute the failure to MarzPay so it's clear the panel isn't broken, and
+      // surface any SPECIFIC reason MarzPay gave (e.g. insufficient float) instead
+      // of hiding it behind the generic provider-busy line.
+      const reason = marzUserMsg(mpData, '');
+      const detail = (reason && reason !== PROVIDER_BUSY_MSG) ? ` MarzPay said: ${reason}` : '';
+      return res.status(400).json({ status: 'error',
+        message: `MarzPay could not send this payout right now — this is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your MarzPay disbursement balance).` });
+    }
 
     const { date, time } = nowStr();
     const batch = db.batch();

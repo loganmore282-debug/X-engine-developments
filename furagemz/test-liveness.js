@@ -54,6 +54,9 @@ global.fetch = async (url, opts = {}) => {
   const json = body => ({ ok: true, status: 200, json: async () => body });
   if (u.endsWith('/collect-money') || u.endsWith('/send-money')) {
     let body = {}; try { body = JSON.parse(opts.body || '{}'); } catch (_) {}
+    // Test hook: simulate MarzPay's provider-side disbursement fault.
+    if (u.endsWith('/send-money') && global.__marzSendFail)
+      return json({ status: 'error', message: 'An unexpected error occurred. Please try again.' });
     const uuid = (u.endsWith('/collect-money') ? 'CTX-' : 'WTX-') + (++marzN);
     marzTx.set(uuid, 'processing');
     const data = { transaction: { uuid, status: 'pending' } };
@@ -369,6 +372,22 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('rejected withdrawal shows Failed in history (not Processing)', rejRow && ['failed', 'rejected'].includes(rejRow.status), rejRow && rejRow.status);
   const refundRow = (r.body?.transactions || []).find(t => t.type === 'refund' && t.description.includes('rejected'));
   check('rejection refund appears as a visible record', !!refundRow, refundRow);
+
+  console.log('\n── 7a. MarzPay payout FAULT leaves the withdrawal pending + money untouched');
+  const balPreFail = userDoc('bob-uid').walletBalance;
+  r = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
+  const witFail = r.body.withdrawalId;
+  check('withdrawal held (balance debited on request)', userDoc('bob-uid').walletBalance === balPreFail - 10000, userDoc('bob-uid').walletBalance);
+  global.__marzSendFail = true;
+  r = await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: witFail } });
+  global.__marzSendFail = false;
+  check('provider fault returns a CLEAR error (not a raw MarzPay dump)', r.body?.status === 'error' && /MarzPay could not send|payment provider/i.test(r.body?.message || ''), r.body?.message);
+  check('withdrawal stays PENDING after the fault (retryable)', mockdb.__store.get('withdrawals').get(witFail).status === 'pending', mockdb.__store.get('withdrawals').get(witFail).status);
+  check('money still held — nothing double-moved', userDoc('bob-uid').walletBalance === balPreFail - 10000, userDoc('bob-uid').walletBalance);
+  // Now MarzPay recovers → the SAME withdrawal pays out on retry.
+  r = await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: witFail } });
+  check('retry after recovery succeeds on the same withdrawal', r.body?.status === 'success', r.body);
+  check('withdrawal now processing/processed after retry', ['processing', 'processed'].includes(mockdb.__store.get('withdrawals').get(witFail).status), mockdb.__store.get('withdrawals').get(witFail).status);
 
   console.log('\n── 7b. Background sweep settles payments with NO callback and NO app open');
   await sleep(7100); // clear the per-user deposit debounce
