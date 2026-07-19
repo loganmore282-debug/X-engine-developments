@@ -516,15 +516,10 @@ async function reconcileCommissions(limit = 800) {
 // reward can never be paid twice no matter how often this runs.
 async function checkTeamMilestones(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
-  // Team volume = ALL money L1 members put in (real deposits + admin credits) —
-  // the same "team deposits" figure as before the dashboard change.
+  // Team volume = what your LEVEL-1 team has INVESTED (activated in gems) — the
+  // meaningful team-growth signal, and what the "Invested" badges reflect.
   let l1Total = 0;
-  snap.forEach(d => { l1Total += d.data().totalDeposited || 0; });
-  // SAFETY: never pay milestones until the one-time seal migration has run.
-  // The seal marks every already-qualifying team as "paid" WITHOUT crediting,
-  // so switching the metric back to all-money can't back-pay anyone.
-  const sett0 = await getSettings();
-  if (!sett0.milestoneSealDone) return l1Total;
+  snap.forEach(d => { l1Total += d.data().totalInvested || 0; });
   const uRef = db.collection('users').doc(userId);
   const { date, time } = nowStr();
   // Serialise per referrer so the deposit-hook path and the settle-on-open path
@@ -544,7 +539,7 @@ async function checkTeamMilestones(userId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'team_reward',
-          description: `Team reward — level 1 team deposits reached ${fmtUGX(m.target)}`,
+          description: `Team reward — level 1 team investment reached ${fmtUGX(m.target)}`,
           amount: m.reward, milestone: m.target, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -1141,6 +1136,9 @@ app.post('/invest/create', async (req, res) => {
       });
     }));
     payCommissions(userId, tier.price, invId).catch(e => console.error('Commission err:', e.message));
+    // Team milestones are based on team INVESTMENT, so re-check the investor's
+    // referrer the moment a gem is activated.
+    notifyTeamDeposit(userId).catch(() => {});
     return res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.label} for ${fmtUGX(tier.price)}` });
   } catch (e) {
     console.error('Invest error:', e.message);

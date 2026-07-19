@@ -1360,7 +1360,7 @@ function renderTeam() {
     </div>
 
     <div class="sec-head"><h3>Task centre</h3></div>
-    <div class="task-intro">Your level 1 team has deposited <b>${ugx(l1Total)}</b> so far. Hit each target below and the reward drops into your wallet instantly.</div>
+    <div class="task-intro">Your level 1 team has invested <b>${ugx(l1Total)}</b> so far. Hit each target below and the reward drops into your wallet instantly.</div>
     ${(ts?.milestones || TEAM_MILESTONES).map(m => {
       const pct = Math.min(100, Math.round((l1Total / m.target) * 100));
       // A milestone reads as achieved ONLY when the CURRENT real team-deposit
@@ -1371,7 +1371,7 @@ function renderTeam() {
       <div class="task-row${hit ? ' done' : ''}">
         <div class="task-ic">${ICN.award}</div>
         <div class="task-body">
-          <div class="task-t">Team deposits reach ${ugx(m.target)}</div>
+          <div class="task-t">Team investment reach ${ugx(m.target)}</div>
           <div class="task-bar"><i style="width:${pct}%"></i></div>
           <div class="task-s">${hit ? 'Reward paid to your wallet' : pct + '% there'}</div>
         </div>

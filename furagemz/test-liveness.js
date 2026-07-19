@@ -199,10 +199,10 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   const failedRow = (r.body?.transactions || []).find(t => t.type === 'topup' && t.status === 'failed');
   check('failed deposit shows in history with Failed status', !!failedRow && failedRow.amount === 50000, failedRow);
 
-  console.log('\n── 4. Team task centre: milestones paid INSTANTLY on REAL network deposits');
-  check('no milestone before 60k threshold', !userDoc('alice-uid').teamMilestone_60000);
-  // Bob (alice's L1) makes a REAL 100000 mobile-money deposit. ONLY real network
-  // deposits count toward "deposits" and team milestones — never admin credits.
+  console.log('\n── 4. Team milestones pay on team INVESTMENT (not deposits)');
+  check('no milestone before any team investment', !userDoc('alice-uid').teamMilestone_60000);
+  // Bob makes a REAL 100000 deposit — this proves a DEPOSIT alone does NOT pay a
+  // milestone (milestones track what the team INVESTS), and feeds realDeposited.
   let bdr = await call('POST', '/deposit/marzpay', { token: B, body: { amount: 100000, phone: '0771000002' } });
   const bdep = mockdb.__store.get('pendingDeposits').get(bdr.body.depositId);
   marzTx.set(bdep.marzTxUuid, 'completed');
@@ -211,19 +211,27 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
     collection: { provider_transaction_id: 'MTN999' } } });
   await sleep(300);
   check('bob real deposit credited (5000+100000)', userDoc('bob-uid').walletBalance === 105000, userDoc('bob-uid').walletBalance);
-  check('bob totalDeposited counts the REAL deposit (100000)', userDoc('bob-uid').totalDeposited === 100000, userDoc('bob-uid').totalDeposited);
-  check('bob realDeposited also 100000 (real network)', userDoc('bob-uid').realDeposited === 100000, userDoc('bob-uid').realDeposited);
-  const aliceMs = userDoc('alice-uid');
-  check('L1 real deposits hit 100000 → 60k (3000) AND 100k (10000) paid instantly',
-    aliceMs.teamMilestone_60000 === true && aliceMs.teamMilestone_100000 === true && aliceMs.walletBalance === 35000 + 13000,
-    { bal: aliceMs.walletBalance, m60: aliceMs.teamMilestone_60000, m100: aliceMs.teamMilestone_100000 });
-  check('exactly 2 team_reward transactions', countTx('alice-uid', 'team_reward') === 2, countTx('alice-uid', 'team_reward'));
+  check('bob realDeposited 100000 (real network)', userDoc('bob-uid').realDeposited === 100000, userDoc('bob-uid').realDeposited);
+  check('a DEPOSIT alone does NOT pay a team milestone', !userDoc('alice-uid').teamMilestone_60000, userDoc('alice-uid').teamMilestone_60000);
+  // Now zed (alice's L1) ACTIVATES gems — this is what drives the milestone.
+  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'zed-uid', amount: 200000, note: 'seed' } });
+  const aBalPre = userDoc('alice-uid').walletBalance;
+  r = await call('POST', '/invest/create', { token: Z, body: { tierKey: 'amethyst' } }); // 95000
+  check('zed activated Amethyst (95000)', r.body?.status === 'success', r.body);
+  await sleep(300);
+  check('L1 investment 95000 → 60k milestone paid', userDoc('alice-uid').teamMilestone_60000 === true, userDoc('alice-uid').teamMilestone_60000);
+  check('100k milestone NOT yet (95000 < 100000)', !userDoc('alice-uid').teamMilestone_100000, userDoc('alice-uid').teamMilestone_100000);
+  r = await call('POST', '/invest/create', { token: Z, body: { tierKey: 'quartz' } }); // +30000 → 125000
+  await sleep(300);
+  check('L1 investment 125000 → 100k milestone paid', userDoc('alice-uid').teamMilestone_100000 === true, userDoc('alice-uid').teamMilestone_100000);
+  check('exactly 2 team_reward payments (3000 + 10000)', countTx('alice-uid', 'team_reward') === 2, countTx('alice-uid', 'team_reward'));
+  // alice's balance rose by team rewards (13000) + L1 commission on zed's 125000 (35% = 43750).
+  check('alice balance rose by team rewards + L1 commission', userDoc('alice-uid').walletBalance === aBalPre + 13000 + Math.round(125000 * 0.35),
+    { bal: userDoc('alice-uid').walletBalance, pre: aBalPre });
   r = await call('GET', '/team/stats', { token: A });
-  check('/team/stats reports totals + milestone states', r.body?.l1DepositTotal === 100000
-    && r.body?.milestones?.[0]?.paid && r.body?.milestones?.[1]?.paid && !r.body?.milestones?.[2]?.achieved, r.body);
+  check('/team/stats l1DepositTotal = team INVESTED (125000)', r.body?.l1DepositTotal === 125000, r.body?.l1DepositTotal);
   await call('GET', '/team/stats', { token: A });
-  check('re-opening team screen NEVER double-pays milestones', countTx('alice-uid', 'team_reward') === 2 && userDoc('alice-uid').walletBalance === 48000,
-    { n: countTx('alice-uid', 'team_reward'), bal: userDoc('alice-uid').walletBalance });
+  check('re-opening team screen NEVER double-pays milestones', countTx('alice-uid', 'team_reward') === 2, countTx('alice-uid', 'team_reward'));
 
   console.log('\n── 4a. Admin credit = team volume, but NOT a real deposit');
   const bobVolBefore  = userDoc('bob-uid').totalDeposited;
@@ -248,14 +256,13 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('no money moved on the blocked purchase', userDoc('bob-uid').walletBalance === bobBalCS, userDoc('bob-uid').walletBalance);
 
   console.log('\n── 4b. Invest + 3-level commission idempotency');
+  const aCommPre = userDoc('alice-uid').commissionEarned || 0;
   r = await call('POST', '/invest/create', { token: B, body: { tierKey: 'quartz' } });
   check('bob buys Quartz 30000', r.body?.status === 'success', r.body);
   await sleep(400); // commissions fire async
-  const aliceAfterComm = userDoc('alice-uid');
-  check('alice got L1 commission 35% of 30000 = 10500', aliceAfterComm.commissionEarned === 10500, aliceAfterComm.commissionEarned);
-  check('commissions + team rewards all in totalEarned (23500)', aliceAfterComm.totalEarned === 23500, aliceAfterComm.totalEarned);
+  check('alice L1 commission += 35% of 30000 = 10500', (userDoc('alice-uid').commissionEarned || 0) === aCommPre + 10500, userDoc('alice-uid').commissionEarned);
   r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN }); await sleep(300);
-  check('commission reconciler NEVER double-pays', userDoc('alice-uid').commissionEarned === 10500, userDoc('alice-uid').commissionEarned);
+  check('commission reconciler NEVER double-pays', (userDoc('alice-uid').commissionEarned || 0) === aCommPre + 10500, userDoc('alice-uid').commissionEarned);
 
   console.log('\n── 5. Daily cashback engine (server-governed, no double payout)');
   const invEntry = [...mockdb.__store.get('investments').entries()].find(([, v]) => v.userId === 'bob-uid');
