@@ -167,6 +167,14 @@ const BOOST_UNLOCK_DAYS  = 5;     // boost becomes available 5 days after purcha
 const BOOST_COST_PCT     = 0.30;  // boost fee = 30% of the gem's total return
 const BOOST_MATURE_DAYS  = 5;     // after a boost, the gem finishes paying in 5 days
 const BOOST_MATURE_HOURS = BOOST_MATURE_DAYS * 24;
+// Gateway status buckets. A payment is credited on SUCCESS and only marked failed
+// on a TERMINAL failure. 'error' is deliberately EXCLUDED — MarzPay reports its
+// transient provider outages (e.g. DATABASE_ERROR) as 'error', and treating that
+// as a real failure is what wrongly killed genuine deposits. An 'error' now leaves
+// the payment 'processing' so the background sweep keeps re-checking until MarzPay
+// gives a real verdict.
+const PAY_OK   = ['completed', 'successful', 'success', 'paid'];
+const PAY_FAIL = ['failed', 'cancelled', 'declined'];
 function durPhrase(hours) {
   hours = Number(hours) || 0;
   return hours % 24 === 0 ? `${hours / 24} day${hours / 24 === 1 ? '' : 's'}` : `${hours} hours`;
@@ -516,30 +524,36 @@ async function reconcileCommissions(limit = 800) {
 // reward can never be paid twice no matter how often this runs.
 async function checkTeamMilestones(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
-  // Team volume = what your LEVEL-1 team has INVESTED (activated in gems) — the
-  // meaningful team-growth signal, and what the "Invested" badges reflect.
+  // Team volume = total DEPOSITS by your LEVEL-1 team (all money members put in:
+  // real deposits + admin credits) — as it was set up originally.
   let l1Total = 0;
-  snap.forEach(d => { l1Total += d.data().totalInvested || 0; });
+  snap.forEach(d => { l1Total += d.data().totalDeposited || 0; });
+  // Don't pay until the paid-marker backfill has run, so historical rewards are
+  // never paid twice when the reconciler starts.
+  const sett0 = await getSettings();
+  if (!sett0.milestonePaidBackfillDone) return l1Total;
   const uRef = db.collection('users').doc(userId);
   const { date, time } = nowStr();
-  // Serialise per referrer so the deposit-hook path and the settle-on-open path
-  // can't both pay the same milestone (M0 has no real transaction isolation).
+  // Serialise per referrer so the deposit hook, settle-on-open and reconciler
+  // can't pay the same milestone twice (M0 has no real transaction isolation).
   await withLock('milestone:' + userId, async () => {
   for (const m of TEAM_MILESTONES) {
     if (l1Total < m.target) break;
-    const flag = 'teamMilestone_' + m.target;
+    // Idempotency marker seeded from the ACTUAL ledger (a team_reward tx), so a
+    // reward is paid exactly once and previously-paid ones are never repeated.
+    const paidFlag = 'teamRewardPaidV2_' + m.target;
     try {
       await db.runTransaction(async t => {
         const fresh = await t.get(uRef);
-        if (!fresh.exists || fresh.data()[flag]) return;
+        if (!fresh.exists || fresh.data()[paidFlag]) return;
         t.update(uRef, {
           walletBalance: FieldValue.increment(m.reward),
           totalEarned:   FieldValue.increment(m.reward),
-          [flag]: true
+          [paidFlag]: true, ['teamMilestone_' + m.target]: true
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'team_reward',
-          description: `Team reward — level 1 team investment reached ${fmtUGX(m.target)}`,
+          description: `Team reward — level 1 team deposits reached ${fmtUGX(m.target)}`,
           amount: m.reward, milestone: m.target, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -548,6 +562,19 @@ async function checkTeamMilestones(userId) {
   }
   });
   return l1Total;
+}
+// Self-healing net: pay any referrer who crossed a deposit milestone but never
+// got the reward (missed due to a race, cold start, or the earlier seal). Safe —
+// checkTeamMilestones is idempotent on the ledger-seeded paid marker.
+async function reconcileMilestones() {
+  try {
+    const s = await getSettings();
+    if (!s.milestonePaidBackfillDone) return;
+    const usersSnap = await db.collection('users').limit(10000).get();
+    const referrers = new Set();
+    usersSnap.forEach(d => { const r = d.data().referredBy; if (r) referrers.add(r); });
+    for (const uid of referrers) { await checkTeamMilestones(uid).catch(() => {}); }
+  } catch (e) { console.error('reconcileMilestones error:', e.message); }
 }
 // Fire-and-forget hook: after ANY deposit credit, check the depositor's
 // referrer so their milestone pays out the instant the threshold is crossed.
@@ -1136,9 +1163,6 @@ app.post('/invest/create', async (req, res) => {
       });
     }));
     payCommissions(userId, tier.price, invId).catch(e => console.error('Commission err:', e.message));
-    // Team milestones are based on team INVESTMENT, so re-check the investor's
-    // referrer the moment a gem is activated.
-    notifyTeamDeposit(userId).catch(() => {});
     return res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.label} for ${fmtUGX(tier.price)}` });
   } catch (e) {
     console.error('Invest error:', e.message);
@@ -1328,7 +1352,7 @@ async function pollPendingPayments() {
         if (Date.now() - tsMillis(d.createdAt) > 48 * 3600000) continue;
         try {
           const raw = await marzGetCollectStatus(d.marzTxUuid);
-          if (['completed', 'successful', 'success', 'paid'].includes(raw)) {
+          if (PAY_OK.includes(raw)) {
             if (await creditMarzDeposit(doc, d.amount, null)) { settled++; console.log('RESCUED late deposit', doc.id); }
           }
         } catch (e) { console.warn('deposit rescue:', doc.id, e.message); }
@@ -1341,8 +1365,8 @@ async function pollPendingPayments() {
       if (!w.marzTxUuid && !w.marzReference) continue; // no gateway ref — integrity audit flags these
       try {
         const raw = await marzGetStatus(w.marzTxUuid || w.marzReference);
-        if (['completed', 'successful', 'success', 'paid'].includes(raw)) { await completeWithdrawal(doc); settled++; }
-        else if (['failed', 'cancelled', 'error', 'declined'].includes(raw)) { await failWithdrawal(doc, 'Disbursement failed'); settled++; }
+        if (PAY_OK.includes(raw)) { await completeWithdrawal(doc); settled++; }
+        else if (PAY_FAIL.includes(raw)) { await failWithdrawal(doc, 'Disbursement failed'); settled++; }
       } catch (e) { console.warn('withdraw sweep:', doc.id, e.message); }
     }
   } catch (e) { console.error('Payment sweep error:', e.message); }
@@ -1434,6 +1458,10 @@ function startCrons() {
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
   setTimeout(reconcileCommissions, 90 * 1000);
+  // Team-milestone safety-net: pay anyone whose team crossed a deposit milestone
+  // but never received the reward — automatically, every 10 minutes.
+  setInterval(reconcileMilestones, 10 * 60 * 1000);
+  setTimeout(reconcileMilestones, 2 * 60 * 1000);
   // Hourly ledger audit — balances vs ledger, duplicate credits, stuck payouts.
   setInterval(auditIntegrity, 60 * 60 * 1000);
   setTimeout(auditIntegrity, 3 * 60 * 1000);
@@ -1450,6 +1478,11 @@ app.post('/admin/commissions/reconcile', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const fixed = await reconcileCommissions(2000);
   return res.json({ status: 'success', processed: fixed });
+});
+app.post('/admin/milestones/reconcile', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  await reconcileMilestones();
+  return res.json({ status: 'success' });
 });
 app.post('/admin/check-maturities', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error' });
@@ -1711,8 +1744,8 @@ async function pollMarzDepositStatus(depDoc) {
   const uuid = dep.marzTxUuid;
   if (!uuid || !MARZPAY_KEY) return { credited: false, failed: false };
   const rawStatus = await marzGetCollectStatus(uuid);
-  const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
-  const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+  const isSuccess = PAY_OK.includes(rawStatus);
+  const isFailed  = PAY_FAIL.includes(rawStatus);
   if (isSuccess) {
     const creditAmount = dep.amount;
     await creditMarzDeposit(depDoc, creditAmount, null);
@@ -1891,8 +1924,8 @@ async function handleDepositCallback(req, res) {
         if (body.event_type === 'collection.cancelled') return 'cancelled';
         return '';
       })();
-      const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
-      const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+      const isSuccess = PAY_OK.includes(rawStatus);
+      const isFailed  = PAY_FAIL.includes(rawStatus);
       if (!isSuccess && !isFailed) return;
       const depSnap = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
       if (depSnap.empty) return;
@@ -1900,7 +1933,7 @@ async function handleDepositCallback(req, res) {
       if (isSuccess) {
         if (depDoc.data().marzTxUuid) {
           const realStatus = await marzGetCollectStatus(depDoc.data().marzTxUuid);
-          if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) return;
+          if (realStatus && !PAY_OK.includes(realStatus)) return;
         }
         // SECURITY: credit the amount the SERVER initiated the collection for —
         // never an amount from the (unauthenticated) callback body. A forged
@@ -1912,10 +1945,12 @@ async function handleDepositCallback(req, res) {
         // A settled deposit can NEVER be downgraded — a forged failure on a
         // credited deposit would re-open it for the rescue pass to credit AGAIN.
         if (d.status !== 'processing') return;
-        // And a failure report is only believed when MarzPay itself confirms it.
+        // And a failure report is only believed when MarzPay itself confirms a
+        // TERMINAL failure. A transient 'error' verdict is NOT believed — the
+        // deposit stays processing for the sweep to re-check.
         if (d.marzTxUuid) {
           const realStatus = await marzGetCollectStatus(d.marzTxUuid);
-          if (realStatus && !['failed', 'cancelled', 'error', 'declined'].includes(realStatus)) return;
+          if (realStatus && !PAY_FAIL.includes(realStatus)) return;
         }
         const failReason = body.transaction?.description || body.description || rawStatus || 'Payment declined';
         await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(), failureReason: failReason });
@@ -2055,8 +2090,8 @@ app.get('/withdraw/status/:id', async (req, res) => {
     if (wit.status === 'processing' && (wit.marzTxUuid || wit.marzReference)) {
       try {
         const rawStatus = await marzGetStatus(wit.marzTxUuid || wit.marzReference);
-        const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
-        const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+        const isSuccess = PAY_OK.includes(rawStatus);
+        const isFailed  = PAY_FAIL.includes(rawStatus);
         if (isSuccess) await completeWithdrawal(snap);
         else if (isFailed) await failWithdrawal(snap, 'Disbursement failed');
         if (isSuccess || isFailed) {
@@ -2082,8 +2117,8 @@ app.post('/withdraw/callback', async (req, res) => {
         if (body.event_type === 'disbursement.failed')    return 'failed';
         return '';
       })();
-      const isSuccess = ['completed', 'successful', 'success', 'paid'].includes(rawStatus);
-      const isFailed  = ['failed', 'cancelled', 'error', 'declined'].includes(rawStatus);
+      const isSuccess = PAY_OK.includes(rawStatus);
+      const isFailed  = PAY_FAIL.includes(rawStatus);
       if ((!marzUuid && !reference) || (!isSuccess && !isFailed)) return;
       let witSnap = marzUuid
         ? await db.collection('withdrawals').where('marzTxUuid', '==', marzUuid).limit(1).get()
@@ -2095,7 +2130,7 @@ app.post('/withdraw/callback', async (req, res) => {
       if (isSuccess) {
         if (witDoc.data().marzTxUuid) {
           const realStatus = await marzGetStatus(witDoc.data().marzTxUuid);
-          if (realStatus && !['completed', 'successful', 'success', 'paid'].includes(realStatus)) return;
+          if (realStatus && !PAY_OK.includes(realStatus)) return;
         }
         await completeWithdrawal(witDoc);
       } else if (isFailed) {
@@ -2105,7 +2140,7 @@ app.post('/withdraw/callback', async (req, res) => {
         const uuid = witDoc.data().marzTxUuid;
         if (!uuid) return; // nothing verifiable was ever sent — sweep/admin decides
         const realStatus = await marzGetStatus(uuid);
-        if (!['failed', 'cancelled', 'error', 'declined'].includes(realStatus)) return;
+        if (!PAY_FAIL.includes(realStatus)) return;
         await failWithdrawal(witDoc, body.transaction?.description || body.description || 'Disbursement failed');
       }
     } catch (e) { console.error('Withdraw callback error:', e.message); }
@@ -2435,35 +2470,26 @@ async function recountUserTotals() {
   }
   return updated;
 }
-// ONE-TIME SEAL (owner's call): team milestones switched back to counting ALL
-// money members put in (deposits + admin credits). To avoid back-paying anyone
-// whose team already qualifies, this recomputes every user's totals from the
-// ledger, then marks each already-met milestone as DONE *without crediting*.
-// After it runs, milestones only ever pay on a NEW crossing. Runs exactly once.
-async function sealTeamMilestonesOnce() {
+// ONE-TIME BACKFILL: seed the ledger-based "already paid" markers from the real
+// team_reward transactions, so the milestone reconciler never re-pays a reward
+// that was genuinely paid before — while still paying anyone who legitimately
+// missed theirs. Runs exactly once. (Clears the older seal flag if present.)
+async function backfillMilestonePaidOnce() {
   try {
     const s = await getSettings();
-    if (s.milestoneSealDone) return;
-    // 1) Rebuild totals from the ledger so totalDeposited = true team volume.
-    await recountUserTotals();
-    // 2) Sum each referrer's L1 team volume.
-    const usersSnap = await db.collection('users').limit(10000).get();
-    const l1sum = {};
-    usersSnap.forEach(d => {
-      const u = d.data();
-      if (u.referredBy) l1sum[u.referredBy] = (l1sum[u.referredBy] || 0) + (u.totalDeposited || 0);
+    if (s.milestonePaidBackfillDone) return;
+    const txSnap = await db.collection('transactions').where('type', '==', 'team_reward').get();
+    const byUser = {};
+    txSnap.forEach(d => {
+      const t = d.data();
+      if (t.userId && t.milestone) (byUser[t.userId] = byUser[t.userId] || {})['teamRewardPaidV2_' + t.milestone] = true;
     });
-    // 3) Mark every already-reached milestone as paid — WITHOUT crediting money.
-    let sealed = 0;
-    for (const [uid, total] of Object.entries(l1sum)) {
-      const upd = {};
-      for (const m of TEAM_MILESTONES) if (total >= m.target) upd['teamMilestone_' + m.target] = true;
-      if (Object.keys(upd).length) { await db.collection('users').doc(uid).update(upd).catch(() => {}); sealed++; }
-    }
-    await db.collection('settings').doc('main').set({ milestoneSealDone: true }, { merge: true });
-    _settingsCache = null; _settingsCacheTs = 0; // so milestones resume paying at once
-    console.log('Team-milestone seal complete — sealed', sealed, 'referrer(s), no back-pay.');
-  } catch (e) { console.error('sealTeamMilestonesOnce error:', e.message); }
+    let n = 0;
+    for (const [uid, upd] of Object.entries(byUser)) { await db.collection('users').doc(uid).update(upd).catch(() => {}); n++; }
+    await db.collection('settings').doc('main').set({ milestonePaidBackfillDone: true }, { merge: true });
+    _settingsCache = null; _settingsCacheTs = 0; // so milestone payments resume at once
+    console.log('Milestone paid-marker backfill done for', n, 'user(s); reconciler will now heal missed rewards.');
+  } catch (e) { console.error('backfillMilestonePaidOnce error:', e.message); }
 }
 
 // One-time rate update (owner's call, 2026-07): check-in bonus 500, withdrawal
@@ -2804,7 +2830,7 @@ async function startServer() {
     try {
       await connectMongo(MONGODB_URI);
       if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts();
-        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await sealTeamMilestonesOnce(); })().catch(() => {});
+        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await backfillMilestonePaidOnce(); await reconcileMilestones(); })().catch(() => {});
       }
     } catch (e) {
       console.error('MongoDB not reachable yet — retrying in 5s:', e.message);

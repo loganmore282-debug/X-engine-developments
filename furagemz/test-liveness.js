@@ -199,39 +199,50 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   const failedRow = (r.body?.transactions || []).find(t => t.type === 'topup' && t.status === 'failed');
   check('failed deposit shows in history with Failed status', !!failedRow && failedRow.amount === 50000, failedRow);
 
-  console.log('\n── 4. Team milestones pay on team INVESTMENT (not deposits)');
-  check('no milestone before any team investment', !userDoc('alice-uid').teamMilestone_60000);
-  // Bob makes a REAL 100000 deposit — this proves a DEPOSIT alone does NOT pay a
-  // milestone (milestones track what the team INVESTS), and feeds realDeposited.
-  let bdr = await call('POST', '/deposit/marzpay', { token: B, body: { amount: 100000, phone: '0771000002' } });
+  console.log('\n── 4. Team milestones pay on team DEPOSITS (level-1 money in)');
+  check('no milestone before the team crosses a target', !userDoc('alice-uid').teamMilestone_60000);
+  const aBalPre = userDoc('alice-uid').walletBalance;
+  // alice's level-1 team = bob + zed. Their combined DEPOSITS drive alice's
+  // milestones (as designed originally). Bob makes a REAL 70000 deposit — that
+  // alone takes the L1 team over the 60000 target but not the 100000 one.
+  let bdr = await call('POST', '/deposit/marzpay', { token: B, body: { amount: 70000, phone: '0771000002' } });
   const bdep = mockdb.__store.get('pendingDeposits').get(bdr.body.depositId);
   marzTx.set(bdep.marzTxUuid, 'completed');
   await call('POST', '/deposit/callback', { body: { event_type: 'collection.completed',
-    transaction: { reference: bdep.marzReference, status: 'completed', amount: { raw: 100000 } },
+    transaction: { reference: bdep.marzReference, status: 'completed', amount: { raw: 70000 } },
     collection: { provider_transaction_id: 'MTN999' } } });
   await sleep(300);
-  check('bob real deposit credited (5000+100000)', userDoc('bob-uid').walletBalance === 105000, userDoc('bob-uid').walletBalance);
-  check('bob realDeposited 100000 (real network)', userDoc('bob-uid').realDeposited === 100000, userDoc('bob-uid').realDeposited);
-  check('a DEPOSIT alone does NOT pay a team milestone', !userDoc('alice-uid').teamMilestone_60000, userDoc('alice-uid').teamMilestone_60000);
-  // Now zed (alice's L1) ACTIVATES gems — this is what drives the milestone.
-  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'zed-uid', amount: 200000, note: 'seed' } });
-  const aBalPre = userDoc('alice-uid').walletBalance;
-  r = await call('POST', '/invest/create', { token: Z, body: { tierKey: 'amethyst' } }); // 95000
-  check('zed activated Amethyst (95000)', r.body?.status === 'success', r.body);
+  check('bob real deposit credited (5000+70000)', userDoc('bob-uid').walletBalance === 75000, userDoc('bob-uid').walletBalance);
+  check('bob realDeposited 70000 (real network)', userDoc('bob-uid').realDeposited === 70000, userDoc('bob-uid').realDeposited);
+  check('team deposits 70000 → 60k milestone paid instantly', userDoc('alice-uid').teamMilestone_60000 === true, userDoc('alice-uid').teamMilestone_60000);
+  check('100k milestone NOT yet (70000 < 100000)', !userDoc('alice-uid').teamMilestone_100000, userDoc('alice-uid').teamMilestone_100000);
+  // An ADMIN credit to zed also counts as team money-in (team volume), pushing the
+  // L1 team past 100000 → the 100k milestone pays too.
+  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'zed-uid', amount: 40000, note: 'seed' } });
   await sleep(300);
-  check('L1 investment 95000 → 60k milestone paid', userDoc('alice-uid').teamMilestone_60000 === true, userDoc('alice-uid').teamMilestone_60000);
-  check('100k milestone NOT yet (95000 < 100000)', !userDoc('alice-uid').teamMilestone_100000, userDoc('alice-uid').teamMilestone_100000);
-  r = await call('POST', '/invest/create', { token: Z, body: { tierKey: 'quartz' } }); // +30000 → 125000
-  await sleep(300);
-  check('L1 investment 125000 → 100k milestone paid', userDoc('alice-uid').teamMilestone_100000 === true, userDoc('alice-uid').teamMilestone_100000);
+  check('team deposits 110000 → 100k milestone paid', userDoc('alice-uid').teamMilestone_100000 === true, userDoc('alice-uid').teamMilestone_100000);
   check('exactly 2 team_reward payments (3000 + 10000)', countTx('alice-uid', 'team_reward') === 2, countTx('alice-uid', 'team_reward'));
-  // alice's balance rose by team rewards (13000) + L1 commission on zed's 125000 (35% = 43750).
-  check('alice balance rose by team rewards + L1 commission', userDoc('alice-uid').walletBalance === aBalPre + 13000 + Math.round(125000 * 0.35),
+  // A deposit pays NO referral commission — only team-milestone rewards move alice.
+  check('alice balance rose by team rewards only (3000 + 10000)', userDoc('alice-uid').walletBalance === aBalPre + 13000,
     { bal: userDoc('alice-uid').walletBalance, pre: aBalPre });
   r = await call('GET', '/team/stats', { token: A });
-  check('/team/stats l1DepositTotal = team INVESTED (125000)', r.body?.l1DepositTotal === 125000, r.body?.l1DepositTotal);
+  check('/team/stats l1DepositTotal = team DEPOSITS (110000)', r.body?.l1DepositTotal === 110000, r.body?.l1DepositTotal);
   await call('GET', '/team/stats', { token: A });
   check('re-opening team screen NEVER double-pays milestones', countTx('alice-uid', 'team_reward') === 2, countTx('alice-uid', 'team_reward'));
+
+  console.log('\n── 4r. Server AUTO-reconciles a MISSED milestone reward');
+  // Simulate the real-world failure the owner hit: a deposit landed but its
+  // instant milestone hook never fired (cold start / race), so the reward was
+  // missed. Bump zed's deposit total directly (bypassing the hook) past 250000.
+  const zdoc = userDoc('zed-uid');
+  zdoc.totalDeposited = (zdoc.totalDeposited || 0) + 150000; // L1 team now 260000
+  check('250k milestone unpaid before reconcile (hook was missed)', !userDoc('alice-uid').teamMilestone_250000);
+  r = await call('POST', '/admin/milestones/reconcile', { body: ADMIN });
+  await sleep(300);
+  check('reconciler paid the missed 250k milestone (15000)', userDoc('alice-uid').teamMilestone_250000 === true, userDoc('alice-uid').teamMilestone_250000);
+  check('now exactly 3 team_reward payments', countTx('alice-uid', 'team_reward') === 3, countTx('alice-uid', 'team_reward'));
+  await call('POST', '/admin/milestones/reconcile', { body: ADMIN }); await sleep(200);
+  check('milestone reconciler NEVER double-pays', countTx('alice-uid', 'team_reward') === 3, countTx('alice-uid', 'team_reward'));
 
   console.log('\n── 4a. Admin credit = team volume, but NOT a real deposit');
   const bobVolBefore  = userDoc('bob-uid').totalDeposited;
