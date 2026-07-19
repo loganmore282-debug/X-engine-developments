@@ -326,6 +326,31 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('settle-on-open: cashback lands the instant the app opens at zero', userDoc('bob-uid').walletBalance === balPre2 + 6500,
     userDoc('bob-uid').walletBalance - balPre2);
 
+  console.log('\n── 5b. Boost = EARLY MATURITY (normal daily continues, final day pays the rest)');
+  const bInv = invEntry[1];
+  check('before boost: normal daily 6500, 13000 paid so far (2 payouts)', bInv.dailyPayout === 6500 && bInv.paidOut === 13000, { daily: bInv.dailyPayout, paid: bInv.paidOut });
+  bInv.boostUnlockDate = new Date(Date.now() - 1000);          // unlock the boost
+  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'bob-uid', amount: 200000, note: 'boost funds' } });
+  const balBeforeBoost = userDoc('bob-uid').walletBalance;
+  const boostCost = Math.round(390000 * 0.30);                 // 30% of TOTAL return = 117000
+  r = await call('POST', '/invest/boost', { token: B, body: { investmentId: invEntry[0] } });
+  check('boost accepted', r.body?.status === 'success', r.body);
+  check('boost fee = 30% of total return (117000) debited', userDoc('bob-uid').walletBalance === balBeforeBoost - boostCost, userDoc('bob-uid').walletBalance - balBeforeBoost);
+  check('daily rate STAYS the normal 6500 after boost (NOT remaining/5)', bInv.dailyPayout === 6500, bInv.dailyPayout);
+  check('maturity accelerated: payoutsTotal = made(2) + 5 = 7', bInv.payoutsTotal === 7, bInv.payoutsTotal);
+  // 4 interim boosted days: each pays the NORMAL 6500 (payouts 3,4,5,6).
+  bInv.createdAt = new Date(Date.now() - (6 * 24 + 1) * 3600000);
+  let bp = userDoc('bob-uid').walletBalance;
+  await call('POST', '/admin/check-maturities', { body: ADMIN }); await sleep(200);
+  check('4 interim days each pay the normal 6500 (4×6500 = 26000)', userDoc('bob-uid').walletBalance === bp + 26000, userDoc('bob-uid').walletBalance - bp);
+  // Final (5th) boosted day: pays the ENTIRE remaining balance in one lump.
+  bInv.createdAt = new Date(Date.now() - (7 * 24 + 1) * 3600000);
+  bp = userDoc('bob-uid').walletBalance;
+  await call('POST', '/admin/check-maturities', { body: ADMIN }); await sleep(200);
+  check('final day pays the whole remaining balance at once (351000)', userDoc('bob-uid').walletBalance === bp + 351000, userDoc('bob-uid').walletBalance - bp);
+  check('gem matured after the final lump', bInv.status === 'matured', bInv.status);
+  check('lifetime cashback equals EXACTLY the expected 390000 (boost added no extra)', bInv.paidOut === 390000, bInv.paidOut);
+
   console.log('\n── 6. Check-in + redeem');
   r = await call('POST', '/checkin', { token: B });
   check('check-in pays 500', r.body?.bonus === 500, r.body);

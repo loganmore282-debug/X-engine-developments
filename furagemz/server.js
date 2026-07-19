@@ -1217,15 +1217,18 @@ app.post('/invest/boost', async (req, res) => {
       const freshInv = await t.get(invRef);
       const fd = freshInv.exists ? freshInv.data() : null;
       if (!fd || fd.status !== 'active' || fd.boosted) { err = 'This gem cannot be boosted now'; return; }
-      // Remaining money still to be paid, now spread across `days` daily payouts.
-      const paidOut   = Number(fd.paidOut || 0);
-      const remaining = Math.max(0, (fd.expectedReturn || 0) - paidOut);
-      const made      = Number(fd.payoutsMade || 0);
+      const made        = Number(fd.payoutsMade || 0);
+      // Boost = EARLY MATURITY (owner's design): the gem keeps paying its NORMAL
+      // daily cashback for the interim days, and the accelerated FINAL day pays the
+      // ENTIRE remaining balance in one lump. We do this simply by keeping the
+      // normal daily rate and moving maturity to `days` away — the payout engine's
+      // reachesEnd branch already pays "expectedReturn − paidOut" on the last day.
+      const normalDaily = Number(fd.dailyPayout) || Math.round((fd.expectedReturn || 0) / (Number(fd.cycle) || CYCLE_DAYS));
       t.update(uRef, { walletBalance: FieldValue.increment(-cost) });
       t.update(invRef, {
         boosted: true, boostedAt: FieldValue.serverTimestamp(), boostAmount: cost,
         maturityDate: newMat, payoutsTotal: made + days,
-        dailyPayout: Math.round(remaining / days),
+        dailyPayout: normalDaily,
         nextPayoutAt: new Date(Date.now() + 86400000)
       });
       t.set(db.collection('transactions').doc(), {
