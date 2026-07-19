@@ -1071,6 +1071,11 @@ app.get('/team/members', async (req, res) => {
         joinedAt: d.createdAt ? new Date(tsMillis(d.createdAt)).toISOString() : null,
         hasInvested: (d.totalInvested || 0) > 0,
         totalInvested: d.totalInvested || 0,
+        // Money this member has DEPOSITED (real deposits + admin credit) — this is
+        // exactly what drives your team-deposit milestones, so the app shows it on
+        // each row. A member can have "Gem active" yet 0 deposited (they bought
+        // from a bonus/gift), which is why deposits and gems are shown separately.
+        deposited: d.totalDeposited || 0,
         referralCode: d.referralCode || d.username || null,
       });
     });

@@ -275,6 +275,17 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN }); await sleep(300);
   check('commission reconciler NEVER double-pays', (userDoc('alice-uid').commissionEarned || 0) === aCommPre + 10500, userDoc('alice-uid').commissionEarned);
 
+  console.log('\n── 4d. Team screen exposes each member DEPOSIT (milestone driver) separate from gems');
+  r = await call('GET', '/team/members', { token: A });
+  const mem = (r.body?.members || []);
+  const bobMem = mem.find(m => m.id === 'bob-uid');
+  const zedMem = mem.find(m => m.id === 'zed-uid');
+  check('member row carries the DEPOSIT that drives milestones', bobMem && typeof bobMem.deposited === 'number', bobMem);
+  check('bob member shows deposits AND gem-active (both true)', bobMem?.deposited === userDoc('bob-uid').totalDeposited && bobMem?.hasInvested === true,
+    { deposited: bobMem?.deposited, real: userDoc('bob-uid').totalDeposited, invested: bobMem?.hasInvested });
+  check('zed member shows deposits but NO gem (deposits ≠ investing)', zedMem?.deposited === userDoc('zed-uid').totalDeposited && zedMem?.hasInvested === false,
+    { deposited: zedMem?.deposited, invested: zedMem?.hasInvested });
+
   console.log('\n── 5. Daily cashback engine (server-governed, no double payout)');
   const invEntry = [...mockdb.__store.get('investments').entries()].find(([, v]) => v.userId === 'bob-uid');
   const inv = invEntry[1];

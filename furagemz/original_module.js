@@ -1385,9 +1385,9 @@ function renderTeam() {
         <div class="avatar" style="background:${tickColor(m.name)}">${esc(initials(m.name))}</div>
         <div class="member-info">
           <div class="t">${esc(m.name)}</div>
-          <div class="s">${m.joinedAt ? timeAgo(new Date(m.joinedAt).getTime()) : ''}</div>
+          <div class="s">Deposited <b>${ugx(m.deposited || 0)}</b> · ${m.hasInvested ? 'gem active' : 'no gem yet'}</div>
         </div>
-        <div class="badge ${m.hasInvested ? 'on' : 'off'}">${m.hasInvested ? 'Invested' : 'New'}</div>
+        <div class="badge ${(m.deposited || 0) > 0 ? 'on' : 'off'}">${(m.deposited || 0) > 0 ? 'Counts' : 'No deposit'}</div>
       </div>`).join('') : `<div class="empty-note">Share your code — nobody has joined yet.</div>`}
   `;
   const copyBtn = el.querySelector('#copyRef');
