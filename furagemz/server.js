@@ -1476,6 +1476,41 @@ app.post('/admin/payments/sync', async (req, res) => {
   const settled = await pollPendingPayments();
   return res.json({ status: 'success', settled });
 });
+// Verify ONE withdrawal against MarzPay — ask the gateway what really happened to
+// this payout, so a "Failed" row can be confirmed (or a double-payment caught).
+// READ-ONLY: it never moves money; it only reports MarzPay's verdict + advice.
+app.post('/admin/withdraw/verify', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { withdrawalId } = req.body;
+  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+  try {
+    const snap = await db.collection('withdrawals').doc(withdrawalId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    const w = snap.data();
+    const ref = w.marzTxUuid || w.marzReference;
+    if (!ref)
+      return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference',
+        message: 'This payout never reached MarzPay (no gateway reference) — nothing was sent, so the failure/refund is correct.' });
+    const marz = await marzGetStatus(ref);
+    const sent   = PAY_OK.includes(marz);
+    const failed = PAY_FAIL.includes(marz);
+    let message;
+    if (!marz)
+      message = 'MarzPay did not respond just now — try Verify again in a moment.';
+    else if (sent && w.status !== 'processed')
+      message = `⚠ MarzPay says this payout was SENT, but our record is "${w.status}". The user may have been paid AND refunded — check the recipient before doing anything else.`;
+    else if (sent)
+      message = 'MarzPay confirms the payout was SENT and our record already shows it processed — all good.';
+    else if (failed)
+      message = 'MarzPay confirms this payout FAILED — the refund was correct, no money left your float.';
+    else
+      message = `MarzPay still reports this payout as "${marz}" (not final yet). Check again shortly.`;
+    return res.json({ status: 'success', ourStatus: w.status, marzStatus: marz || 'unknown', sent, failed, message });
+  } catch (e) {
+    console.error('Withdraw verify error:', e.message);
+    return res.status(500).json({ status: 'error', message: 'Could not reach MarzPay to verify right now.' });
+  }
+});
 
 // ═══════════════════════════════════════════
 // INTEGRITY AUDIT — the server's own accountant. Recomputes every user's

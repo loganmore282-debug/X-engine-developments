@@ -670,6 +670,27 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('POST', '/admin/user/set-referrer', { body: { ...ADMIN, userId: 'harry-uid', referrerCode: 'alice' } });
   check('reassigning an already-referred user is REFUSED', r.code === 400, r.body);
 
+  console.log('\n── 13g. Admin can VERIFY a withdrawal against MarzPay (read-only)');
+  let vr = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
+  const vwit = vr.body.withdrawalId;
+  await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: vwit } });
+  const vdoc = mockdb.__store.get('withdrawals').get(vwit);
+  marzTx.set(vdoc.marzTxUuid, 'failed');
+  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.failed', transaction: { uuid: vdoc.marzTxUuid, status: 'failed' } } });
+  await sleep(200);
+  check('withdrawal is now failed (refunded)', mockdb.__store.get('withdrawals').get(vwit).status === 'failed', mockdb.__store.get('withdrawals').get(vwit).status);
+  vr = await call('POST', '/admin/withdraw/verify', { body: { ...ADMIN, withdrawalId: vwit } });
+  check('verify confirms MarzPay FAILED → refund was correct', vr.body?.status === 'success' && vr.body.failed === true && /refund was correct/i.test(vr.body.message || ''), vr.body);
+  // Dangerous case: MarzPay actually SENT it while our record says failed → must WARN.
+  marzTx.set(vdoc.marzTxUuid, 'completed');
+  vr = await call('POST', '/admin/withdraw/verify', { body: { ...ADMIN, withdrawalId: vwit } });
+  check('verify WARNS when MarzPay sent but our record is failed', vr.body?.sent === true && /sent/i.test(vr.body.message || ''), vr.body);
+  check('verify NEVER moves money (still failed + refunded)', mockdb.__store.get('withdrawals').get(vwit).status === 'failed', mockdb.__store.get('withdrawals').get(vwit).status);
+  // A never-processed withdrawal has no gateway reference to check.
+  vr = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
+  vr = await call('POST', '/admin/withdraw/verify', { body: { ...ADMIN, withdrawalId: vr.body.withdrawalId } });
+  check('verify on an unprocessed withdrawal → no gateway reference', vr.body?.marzStatus === 'no_reference', vr.body);
+
   console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
   r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });
   check('audit endpoint runs', r.body?.status === 'success', r.body?.message);
