@@ -703,8 +703,9 @@ async function renderReferrals(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Referrals (${list.length})</h2>
       <button class="btn sm" id="recoLinks">Fix missing links</button>
-      <button class="btn sm" id="recoComm">Pay missing rewards</button></div>
-    <p class="muted" style="margin-top:0"><b>Fix missing links</b>: if people say "I invited someone but they aren't under me", tap this — it records every join that was left unlinked, so the team and its milestone bar update. <b>Pay missing rewards</b>: re-checks every investment and pays any commission still owed. Both are safe and never double-count.</p>
+      <button class="btn sm" id="recoComm">Pay missing rewards</button>
+      <button class="btn sm" id="recoMile">Pay team rewards</button></div>
+    <p class="muted" style="margin-top:0"><b>Fix missing links</b>: records every join that was left unlinked. <b>Pay missing rewards</b>: pays any referral commission still owed on investments. <b>Pay team rewards</b>: pays any team-deposit milestone reward that was reached but never credited (e.g. "I haven't got my 15k"). All three are safe and never double-pay.</p>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Referrer</th><th>New user</th><th>Level</th></tr></thead>
     <tbody>${list.length?list.map(x=>`<tr class="${x.referrerId?'clickable':''}" ${x.referrerId?`data-uid="${esc(x.referrerId)}"`:''}><td>${fdate(x.createdAt)}</td><td><b>${esc(x.referrerName||x.referrerId||'')}</b></td><td>${esc(x.referredName||x.referredUserId||'')}</td><td>${x.level?('L'+x.level):'L1'}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
   document.querySelectorAll('#content tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
@@ -720,6 +721,12 @@ async function renderReferrals(){
     b.disabled=false; b.textContent='Fix missing links';
     toast(d.status==='success'?`Linked ${d.linked} missing referral(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'&&d.linked) renderReferrals();
+  });
+  $('recoMile').addEventListener('click',async()=>{
+    const b=$('recoMile'); b.disabled=true; b.textContent='Paying…';
+    const d=await api('/admin/milestones/reconcile');
+    b.disabled=false; b.textContent='Pay team rewards';
+    toast(d.status==='success'?'Team milestone rewards checked — any owed reward paid':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }
 

@@ -1379,23 +1379,30 @@ function renderTeam() {
     <div class="sec-head"><h3>Task centre</h3></div>
     <div class="task-intro">Your level 1 team has deposited <b>${ugx(l1Total)}</b> so far. Hit each target below and the reward drops into your wallet instantly.</div>
     ${(ts?.milestones || TEAM_MILESTONES).map(m => {
-      const pct = Math.min(100, Math.round((l1Total / m.target) * 100));
-      // A milestone reads as achieved ONLY when the CURRENT real team-deposit
-      // total actually reaches it — never from a stale stored flag. This keeps
-      // the card and the "team deposited X" header always consistent.
-      const hit = l1Total >= m.target;
+      // A milestone shows a green PAID tick ONLY when the reward was ACTUALLY
+      // credited (server flag `paid` = a real team_reward transaction exists).
+      // Reaching the target is not the same as being paid: when the target is hit
+      // but the money hasn't landed yet, we say "reward on its way" — the server
+      // pays it on this very screen-open (and the reconciler heals any it missed),
+      // so it never falsely claims "paid".
+      const reached = (m.achieved != null) ? m.achieved : (l1Total >= m.target);
+      const paid    = !!m.paid;
+      const pct     = (paid || reached) ? 100 : Math.min(100, Math.round((l1Total / m.target) * 100));
+      const status  = paid ? 'Reward paid to your wallet'
+                    : reached ? 'Target reached — reward on its way'
+                    : pct + '% there';
       return `
-      <div class="task-row${hit ? ' done' : ''}">
+      <div class="task-row${paid ? ' done' : ''}">
         <div class="task-ic">${ICN.award}</div>
         <div class="task-body">
           <div class="task-t">Team deposits reach ${ugx(m.target)}</div>
           <div class="task-bar"><i style="width:${pct}%"></i></div>
-          <div class="task-s">${hit ? 'Reward paid to your wallet' : pct + '% there'}</div>
+          <div class="task-s">${status}</div>
         </div>
         <div class="task-reward" style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">
           <span style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;opacity:.7">Reward</span>
           <b>${ugx(m.reward)}</b>
-          ${hit ? `<span class="task-paid" style="color:#16a34a">${CHECK_SVG}</span>` : ''}
+          ${paid ? `<span class="task-paid" style="color:#16a34a">${CHECK_SVG}</span>` : ''}
         </div>
       </div>`;
     }).join('')}
