@@ -56,8 +56,19 @@ html = html
   .replace(/>\s+</g, '><');                    // trim whitespace between tags
 
 fs.writeFileSync(OUT, html);
+
+// Also publish the obfuscated admin into the EdgeOne-served dist/ folder under a
+// long, unguessable filename, so it opens at furagemzplatform.edgeone.app/<name>
+// on ANY device with no file transfer. Safe: every action is gated by the
+// ADMIN_KEY (checked + rate-limited server-side); the hidden URL is a second layer.
+const SECRET = 'panel-9f3k7m2q8x4d.html';
+const DIST = path.join(__dirname, 'dist');
+if (!fs.existsSync(DIST)) fs.mkdirSync(DIST);
+fs.copyFileSync(OUT, path.join(DIST, SECRET));
+
 const kb = (n) => (n / 1024).toFixed(1) + ' KB';
 console.log('admin source :', kb(fs.statSync(SRC).size), '(readable — edit this)');
 console.log('app script   :', kb(Buffer.byteLength(rawJs)), '→ obfuscated', kb(Buffer.byteLength(obf)));
 console.log('admin.dist   :', kb(fs.statSync(OUT).size), '— DEPLOY this file');
+console.log('hosted copy  : dist/' + SECRET + '  → auto-deploys to /' + SECRET);
 console.log('\nDone. Upload admin.dist.html to your admin host (rename to admin.html there if you like).');
