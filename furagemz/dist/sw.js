@@ -4,7 +4,7 @@
    API / auth calls are never cached — always live.
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'furagemz-shell-v59';
+const CACHE = 'furagemz-shell-v60';
 const SHELL = [
   './',
   './index.html',

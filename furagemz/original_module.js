@@ -276,11 +276,18 @@ function authError(msg) {
   box.classList.remove('hidden');
 }
 
-// Prefill a referral username from ?ref= in the link.
+// Capture a referral code from ?ref= the INSTANT the app opens and store it
+// durably. This is what stops "joined by a link but not recorded": if the user
+// installs the PWA or reopens later (when the URL no longer carries ?ref=), the
+// stored code is still applied at sign-up. Prefill the field from the URL or,
+// failing that, from the stored code.
 (() => {
   try {
-    const ref = new URLSearchParams(location.search).get('ref');
-    if (ref) { document.getElementById('rgRef').value = ref; }
+    let ref = new URLSearchParams(location.search).get('ref');
+    if (ref) { ref = ref.trim(); try { localStorage.setItem('fg_pending_ref', ref); } catch (_) {} }
+    if (!ref) { try { ref = (localStorage.getItem('fg_pending_ref') || '').trim(); } catch (_) {} }
+    const el = document.getElementById('rgRef');
+    if (ref && el && !el.value) el.value = ref;
   } catch (_) {}
 })();
 
@@ -349,7 +356,10 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   const pass = document.getElementById('rgPass').value;
   const pass2 = document.getElementById('rgPass2').value;
   const username = document.getElementById('rgUser').value.trim();
-  const ref = document.getElementById('rgRef').value.trim();
+  let ref = document.getElementById('rgRef').value.trim();
+  // If the field was somehow empty (PWA reopen cleared it), fall back to the code
+  // we stored the moment the link was opened — never silently lose the referral.
+  if (!ref) { try { ref = (localStorage.getItem('fg_pending_ref') || '').trim(); } catch (_) {} }
   if (!phone || !pass || !username) return authError('Fill in phone, password and a username.');
   if (pass.length < 6) return authError('Password must be at least 6 characters.');
   if (pass !== pass2) return authError('The two passwords do not match.');
@@ -391,17 +401,19 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     // Register applies the welcome bonus AND records the referral link. It is
     // idempotent server-side (registrationDone guard), so retry it a few times on
     // a network blip — otherwise a referral could be silently lost at sign-up.
-    let regRef = ref;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const reg = await api('/register', { method: 'POST', body: { referralCode: regRef } });
+    // The code was already pre-validated, so a BAD_REFERRAL here is almost always
+    // transient — keep sending the real code for the first tries; only the very
+    // last attempt finishes without it so the account is never left half-created.
+    // We DON'T wipe fg_pending_ref unless the referrer was actually linked, so the
+    // server-side reconciler can still attach it later.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const useCode = attempt < 3 ? ref : '';
+      const reg = await api('/register', { method: 'POST', body: { referralCode: useCode } });
       if (reg.status === 'success' || reg.status === 'already_done') {
-        try { localStorage.removeItem('fg_pending_ref'); } catch (_) {}
+        if (reg.referrerId) { try { localStorage.removeItem('fg_pending_ref'); } catch (_) {} }
         break;
       }
-      // Code vanished between pre-check and now (e.g. referrer deleted): finish
-      // the registration without it rather than leaving a half-created account.
-      if (reg.code === 'BAD_REFERRAL') { regRef = ''; continue; }
-      await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
     }
     _pendingCred = null; // success — onAuthStateChanged takes over
   } catch (err) {
@@ -446,7 +458,7 @@ onAuthStateChanged(auth, async (user) => {
     let backupRef = ''; try { backupRef = localStorage.getItem('fg_pending_ref') || ''; } catch (_) {}
     api('/register', { method: 'POST', body: { referralCode: backupRef } }).then(async (r) => {
       if (r.status === 'success' || r.status === 'already_done') {
-        try { localStorage.removeItem('fg_pending_ref'); } catch (_) {}
+        if (r.referrerId) { try { localStorage.removeItem('fg_pending_ref'); } catch (_) {} }
         await loadAccount(); if (!_pageOpen) render();
       }
     }).catch(() => {});

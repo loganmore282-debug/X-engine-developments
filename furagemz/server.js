@@ -591,6 +591,75 @@ async function notifyTeamDeposit(depositorId) {
   } catch (e) { console.error('Team deposit hook error:', e.message); }
 }
 
+// ── REFERRAL ATTRIBUTION ──
+// Attach `newUserId` to `referrerId` exactly once: set referredBy, bump the
+// L1/L2/L3 team counts up the chain, write the referrals ledger row, and clear
+// the stored pending code. The referredBy gate inside the transaction makes this
+// idempotent — it can NEVER double-count a member, no matter how often it runs.
+async function linkReferral(newUserId, referrerId) {
+  let done = false;
+  await withLock('reflink:' + newUserId, async () => {
+    await db.runTransaction(async t => {
+      const uRef  = db.collection('users').doc(newUserId);
+      const fresh = await t.get(uRef);
+      if (!fresh.exists || fresh.data().referredBy) return; // already linked — stop
+      t.update(uRef, { referredBy: referrerId, pendingReferral: '' });
+      done = true;
+    });
+    if (!done) return;
+    try {
+      await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+      const l1 = await db.collection('users').doc(referrerId).get();
+      const l2Id = l1.exists ? l1.data().referredBy : null;
+      if (l2Id && l2Id !== referrerId) {
+        await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+        const l2 = await db.collection('users').doc(l2Id).get();
+        const l3Id = l2.exists ? l2.data().referredBy : null;
+        if (l3Id && l3Id !== l2Id && l3Id !== referrerId)
+          await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+      }
+      await db.collection('referrals').doc().set({
+        referrerId, referredUserId: newUserId, healed: true, createdAt: FieldValue.serverTimestamp()
+      });
+    } catch (e) { console.warn('linkReferral counts:', e.message); }
+  });
+  return done;
+}
+// Resolve a referral code (username first, legacy referralCode second) → user id.
+async function resolveReferrer(code) {
+  const c = String(code || '').trim();
+  if (!c) return null;
+  let snap = await db.collection('users').where('usernameLower', '==', c.toLowerCase()).limit(1).get();
+  if (snap.empty) snap = await db.collection('users').where('referralCode', '==', c).limit(1).get();
+  return snap.empty ? null : snap.docs[0].id;
+}
+// Self-healing net for referral ATTRIBUTION. A user can finish registration while
+// the referral code is still unresolved — a cold start, a race, or a code that
+// only survived as the stored pendingReferral (the /register call arrived without
+// it). Any registered user who still holds a pendingReferral but no referredBy is
+// linked to their referrer here. Idempotent via linkReferral's referredBy gate.
+let _reconcilingRefs = false;
+async function reconcileReferrals(limit = 10000) {
+  if (_reconcilingRefs) return 0;
+  _reconcilingRefs = true;
+  let linked = 0;
+  try {
+    const usersSnap = await db.collection('users').limit(limit).get();
+    for (const doc of usersSnap.docs) {
+      const u = doc.data();
+      const pend = String(u.pendingReferral || '').trim();
+      if (!pend || u.referredBy) continue;                 // nothing to heal / already linked
+      const referrerId = await resolveReferrer(pend);
+      if (!referrerId) continue;                           // referrer still not visible — try next pass
+      if (referrerId === doc.id) { await doc.ref.update({ pendingReferral: '' }).catch(() => {}); continue; }
+      if (await linkReferral(doc.id, referrerId)) { linked++; await checkTeamMilestones(referrerId).catch(() => {}); }
+    }
+    if (linked) console.log('reconcileReferrals: healed', linked, 'missing referral link(s)');
+  } catch (e) { console.error('reconcileReferrals error:', e.message); }
+  finally { _reconcilingRefs = false; }
+  return linked;
+}
+
 // ── HEALTH ──
 app.get('/health', async (_req, res) => {
   const dbOk = await pingDb().catch(() => false);
@@ -962,7 +1031,12 @@ app.post('/register', async (req, res) => {
     const WELCOME = s.welcomeBonus ?? WELCOME_BONUS;
     const { date, time } = nowStr();
     const batch = db.batch();
-    const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME), pendingReferral: '' };
+    // NOTE: pendingReferral is cleared ONLY when we actually link a referrer (or
+    // there was no code at all). If a code was supplied but didn't resolve yet, we
+    // KEEP it so reconcileReferrals() can link the member once the referrer is
+    // visible — this is what stops "joined by my link but not recorded under me".
+    const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
+    if (!useCode) update.pendingReferral = '';
 
     batch.set(db.collection('transactions').doc(), {
       userId, type: 'admin_credit', description: 'Welcome gift',
@@ -971,6 +1045,7 @@ app.post('/register', async (req, res) => {
 
     if (referrerId) {
       update.referredBy = referrerId;
+      update.pendingReferral = '';   // linked now — safe to clear
       batch.update(db.collection('users').doc(referrerId), { teamL1Count: FieldValue.increment(1) });
       const l1Snap = await db.collection('users').doc(referrerId).get();
       const l2Id   = l1Snap.exists ? l1Snap.data().referredBy : null;
@@ -1475,6 +1550,10 @@ function startCrons() {
   // but never received the reward — automatically, every 10 minutes.
   setInterval(reconcileMilestones, 10 * 60 * 1000);
   setTimeout(reconcileMilestones, 2 * 60 * 1000);
+  // Referral-attribution safety-net: link anyone who joined by a link but was
+  // never recorded under the referrer — automatically, every 10 minutes.
+  setInterval(reconcileReferrals, 10 * 60 * 1000);
+  setTimeout(reconcileReferrals, 2.5 * 60 * 1000);
   // Hourly ledger audit — balances vs ledger, duplicate credits, stuck payouts.
   setInterval(auditIntegrity, 60 * 60 * 1000);
   setTimeout(auditIntegrity, 3 * 60 * 1000);
@@ -1496,6 +1575,30 @@ app.post('/admin/milestones/reconcile', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   await reconcileMilestones();
   return res.json({ status: 'success' });
+});
+// Heal every user who joined by a link but was never recorded under the referrer.
+app.post('/admin/referrals/reconcile', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const linked = await reconcileReferrals();
+  return res.json({ status: 'success', linked });
+});
+// Manual fix for a specific complaint: attach a user to a referrer by code/username.
+// Only fills a MISSING referrer (never reassigns) so team counts stay correct.
+app.post('/admin/user/set-referrer', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId, referrerCode } = req.body;
+  if (!userId || !referrerCode) return res.status(400).json({ status: 'error', message: 'userId and referrerCode required' });
+  try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().referredBy) return res.status(400).json({ status: 'error', message: 'This user already has a referrer — reassigning is not allowed.' });
+    const referrerId = await resolveReferrer(referrerCode);
+    if (!referrerId) return res.status(404).json({ status: 'error', message: 'No user found for that referral code.' });
+    if (referrerId === userId) return res.status(400).json({ status: 'error', message: 'A user cannot refer themselves.' });
+    const ok = await linkReferral(userId, referrerId);
+    if (ok) await checkTeamMilestones(referrerId).catch(() => {});
+    return res.json({ status: ok ? 'success' : 'error', message: ok ? 'Referral linked.' : 'Could not link (already linked).', referrerId });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/check-maturities', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error' });
@@ -2852,7 +2955,7 @@ async function startServer() {
     try {
       await connectMongo(MONGODB_URI);
       if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts();
-        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await backfillMilestonePaidOnce(); await reconcileMilestones(); })().catch(() => {});
+        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await backfillMilestonePaidOnce(); await reconcileReferrals(); await reconcileMilestones(); })().catch(() => {});
       }
     } catch (e) {
       console.error('MongoDB not reachable yet — retrying in 5s:', e.message);

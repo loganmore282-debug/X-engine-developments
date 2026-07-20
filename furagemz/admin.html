@@ -701,8 +701,9 @@ async function renderReferrals(){
   const list = r.referrals||[];
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Referrals (${list.length})</h2>
+      <button class="btn sm" id="recoLinks">Fix missing links</button>
       <button class="btn sm" id="recoComm">Pay missing rewards</button></div>
-    <p class="muted" style="margin-top:0">If anyone reports "I referred someone who invested but didn't get my reward", tap the button — it re-checks every investment and pays any commission still owed (never double-pays).</p>
+    <p class="muted" style="margin-top:0"><b>Fix missing links</b>: if people say "I invited someone but they aren't under me", tap this — it records every join that was left unlinked, so the team and its milestone bar update. <b>Pay missing rewards</b>: re-checks every investment and pays any commission still owed. Both are safe and never double-count.</p>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Referrer</th><th>New user</th><th>Level</th></tr></thead>
     <tbody>${list.length?list.map(x=>`<tr class="${x.referrerId?'clickable':''}" ${x.referrerId?`data-uid="${esc(x.referrerId)}"`:''}><td>${fdate(x.createdAt)}</td><td><b>${esc(x.referrerName||x.referrerId||'')}</b></td><td>${esc(x.referredName||x.referredUserId||'')}</td><td>${x.level?('L'+x.level):'L1'}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
   document.querySelectorAll('#content tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
@@ -711,6 +712,13 @@ async function renderReferrals(){
     const d=await api('/admin/commissions/reconcile');
     b.disabled=false; b.textContent='Pay missing rewards';
     toast(d.status==='success'?`Checked ${d.processed} investment(s) — any owed rewards paid`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('recoLinks').addEventListener('click',async()=>{
+    const b=$('recoLinks'); b.disabled=true; b.textContent='Fixing…';
+    const d=await api('/admin/referrals/reconcile');
+    b.disabled=false; b.textContent='Fix missing links';
+    toast(d.status==='success'?`Linked ${d.linked} missing referral(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'&&d.linked) renderReferrals();
   });
 }
 

@@ -631,6 +631,33 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('POST', '/admin/user/reset-password', { body: { userId: 'bob-uid', newPassword: 'nope123' } });
   check('reset without admin key rejected (401)', r.code === 401, r.code);
 
+  console.log('\n── 13f. Referral attribution self-heal (joined by link but not recorded)');
+  // gina finishes sign-up with NO code (the link param was lost on a PWA reopen),
+  // so she is recorded under nobody.
+  const GINA = 'uid:gina-uid';
+  await call('POST', '/account/create-profile', { token: GINA, body: { username: 'gina', phone: '0771000021' } });
+  await call('POST', '/register', { token: GINA, body: { referralCode: '' } });
+  check('gina registered with NO referrer', !userDoc('gina-uid').referredBy, userDoc('gina-uid').referredBy);
+  const aliceL1Before = userDoc('alice-uid').teamL1Count || 0;
+  // Her intended code survived only as the stored pendingReferral (the durable copy).
+  userDoc('gina-uid').pendingReferral = 'alice';
+  r = await call('POST', '/admin/referrals/reconcile', { body: ADMIN });
+  check('reconciler LINKS gina under alice automatically', userDoc('gina-uid').referredBy === 'alice-uid', userDoc('gina-uid').referredBy);
+  check('alice team L1 count went up by exactly 1', (userDoc('alice-uid').teamL1Count || 0) === aliceL1Before + 1, userDoc('alice-uid').teamL1Count);
+  check('gina pendingReferral cleared after linking', (userDoc('gina-uid').pendingReferral || '') === '');
+  r = await call('POST', '/admin/referrals/reconcile', { body: ADMIN });
+  check('re-running the healer NEVER double-counts', (userDoc('alice-uid').teamL1Count || 0) === aliceL1Before + 1, userDoc('alice-uid').teamL1Count);
+  // Fully-lost case (no pendingReferral at all): admin attaches harry under bob by hand.
+  const HARRY = 'uid:harry-uid';
+  await call('POST', '/account/create-profile', { token: HARRY, body: { username: 'harry', phone: '0771000022' } });
+  await call('POST', '/register', { token: HARRY, body: { referralCode: '' } });
+  const bobL1Before = userDoc('bob-uid').teamL1Count || 0;
+  r = await call('POST', '/admin/user/set-referrer', { body: { ...ADMIN, userId: 'harry-uid', referrerCode: 'bob' } });
+  check('admin manually attaches harry under bob', r.body?.status === 'success' && userDoc('harry-uid').referredBy === 'bob-uid', r.body);
+  check('bob team L1 count went up by exactly 1', (userDoc('bob-uid').teamL1Count || 0) === bobL1Before + 1, userDoc('bob-uid').teamL1Count);
+  r = await call('POST', '/admin/user/set-referrer', { body: { ...ADMIN, userId: 'harry-uid', referrerCode: 'alice' } });
+  check('reassigning an already-referred user is REFUSED', r.code === 400, r.body);
+
   console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
   r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });
   check('audit endpoint runs', r.body?.status === 'success', r.body?.message);
