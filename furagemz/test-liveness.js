@@ -638,13 +638,25 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   await call('POST', '/account/create-profile', { token: GINA, body: { username: 'gina', phone: '0771000021' } });
   await call('POST', '/register', { token: GINA, body: { referralCode: '' } });
   check('gina registered with NO referrer', !userDoc('gina-uid').referredBy, userDoc('gina-uid').referredBy);
+  // gina INVESTS while still unattributed — no referrer exists, so no commission
+  // is paid to anyone at this point (this is the exact complaint scenario).
+  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'gina-uid', amount: 40000, note: 'seed' } });
+  const aliceCommBefore = userDoc('alice-uid').commissionEarned || 0;
+  r = await call('POST', '/invest/create', { token: GINA, body: { tierKey: 'quartz' } }); // 30000
+  check('gina buys a gem while unattributed', r.body?.status === 'success', r.body);
+  await sleep(300);
+  check('no commission paid yet (gina has no referrer)', (userDoc('alice-uid').commissionEarned || 0) === aliceCommBefore, userDoc('alice-uid').commissionEarned);
   const aliceL1Before = userDoc('alice-uid').teamL1Count || 0;
   // Her intended code survived only as the stored pendingReferral (the durable copy).
   userDoc('gina-uid').pendingReferral = 'alice';
   r = await call('POST', '/admin/referrals/reconcile', { body: ADMIN });
+  await sleep(300);
   check('reconciler LINKS gina under alice automatically', userDoc('gina-uid').referredBy === 'alice-uid', userDoc('gina-uid').referredBy);
   check('alice team L1 count went up by exactly 1', (userDoc('alice-uid').teamL1Count || 0) === aliceL1Before + 1, userDoc('alice-uid').teamL1Count);
+  check('linking PAYS the owed 35% on gina\'s earlier gem (10500)', (userDoc('alice-uid').commissionEarned || 0) === aliceCommBefore + 10500, (userDoc('alice-uid').commissionEarned || 0) - aliceCommBefore);
   check('gina pendingReferral cleared after linking', (userDoc('gina-uid').pendingReferral || '') === '');
+  r = await call('POST', '/admin/referrals/reconcile', { body: ADMIN }); await sleep(200);
+  check('re-linking never double-pays the commission', (userDoc('alice-uid').commissionEarned || 0) === aliceCommBefore + 10500, userDoc('alice-uid').commissionEarned);
   r = await call('POST', '/admin/referrals/reconcile', { body: ADMIN });
   check('re-running the healer NEVER double-counts', (userDoc('alice-uid').teamL1Count || 0) === aliceL1Before + 1, userDoc('alice-uid').teamL1Count);
   // Fully-lost case (no pendingReferral at all): admin attaches harry under bob by hand.

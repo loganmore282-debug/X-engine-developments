@@ -622,6 +622,16 @@ async function linkReferral(newUserId, referrerId) {
         referrerId, referredUserId: newUserId, healed: true, createdAt: FieldValue.serverTimestamp()
       });
     } catch (e) { console.warn('linkReferral counts:', e.message); }
+    // CRITICAL: the member may have ALREADY invested while unattributed. At that
+    // time the commission chain found no referrer and marked the investment
+    // commDone — so the plain commission reconciler now SKIPS it. Re-run the chain
+    // for each of their investments here, now that the referrer exists, so the
+    // owed L1/L2/L3 rewards are finally paid. payCommissions is idempotent per
+    // level (commPaid_<invId> flags), so nothing already paid is paid twice.
+    try {
+      const invs = await db.collection('investments').where('userId', '==', newUserId).get();
+      for (const d of invs.docs) await payCommissions(newUserId, d.data().amount || 0, d.id);
+    } catch (e) { console.warn('linkReferral commissions:', e.message); }
   });
   return done;
 }
