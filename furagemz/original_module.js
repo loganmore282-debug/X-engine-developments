@@ -1392,7 +1392,11 @@ function renderTeam() {
           <div class="task-bar"><i style="width:${pct}%"></i></div>
           <div class="task-s">${hit ? 'Reward paid to your wallet' : pct + '% there'}</div>
         </div>
-        <div class="task-reward">${hit ? `<span class="task-paid">${CHECK_SVG}</span>` : `<b>${ugx(m.reward)}</b>`}</div>
+        <div class="task-reward" style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">
+          <span style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;opacity:.7">Reward</span>
+          <b>${ugx(m.reward)}</b>
+          ${hit ? `<span class="task-paid" style="color:#16a34a">${CHECK_SVG}</span>` : ''}
+        </div>
       </div>`;
     }).join('')}
 
