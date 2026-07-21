@@ -61,10 +61,12 @@ fs.writeFileSync(OUT, html);
 // long, unguessable filename, so it opens at furagemzplatform.edgeone.app/<name>
 // on ANY device with no file transfer. Safe: every action is gated by the
 // ADMIN_KEY (checked + rate-limited server-side); the hidden URL is a second layer.
-const SECRET = 'panel-9f3k7m2q8x4d.html';
+const SECRET = 'furahq.html';
 const DIST = path.join(__dirname, 'dist');
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST);
 fs.copyFileSync(OUT, path.join(DIST, SECRET));
+// keep the old long path working too, so any bookmark already made still opens
+fs.copyFileSync(OUT, path.join(DIST, 'panel-9f3k7m2q8x4d.html'));
 
 const kb = (n) => (n / 1024).toFixed(1) + ' KB';
 console.log('admin source :', kb(fs.statSync(SRC).size), '(readable — edit this)');
