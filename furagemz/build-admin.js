@@ -68,6 +68,26 @@ fs.copyFileSync(OUT, path.join(DIST, SECRET));
 // keep the old long path working too, so any bookmark already made still opens
 fs.copyFileSync(OUT, path.join(DIST, 'panel-9f3k7m2q8x4d.html'));
 
+// PWA files so the browser shows an "Install" button in the address bar and the
+// panel installs as a real desktop/phone app. Icons are the ones already in dist.
+fs.writeFileSync(path.join(DIST, 'furahq-manifest.json'), JSON.stringify({
+  name: 'Furagemz Admin', short_name: 'Fura Admin',
+  start_url: '/furahq.html', scope: '/', display: 'standalone',
+  background_color: '#f4f1fb', theme_color: '#7c3aed',
+  icons: [
+    { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+    { src: '/icon-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+    { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+  ]
+}, null, 2));
+// Minimal pass-through service worker: satisfies installability but caches
+// NOTHING, so the admin is always the freshest version (never a stale panel).
+fs.writeFileSync(path.join(DIST, 'furahq-sw.js'),
+  "self.addEventListener('install',function(){self.skipWaiting();});\n" +
+  "self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim());});\n" +
+  "self.addEventListener('fetch',function(){});\n");
+
 const kb = (n) => (n / 1024).toFixed(1) + ' KB';
 console.log('admin source :', kb(fs.statSync(SRC).size), '(readable — edit this)');
 console.log('app script   :', kb(Buffer.byteLength(rawJs)), '→ obfuscated', kb(Buffer.byteLength(obf)));

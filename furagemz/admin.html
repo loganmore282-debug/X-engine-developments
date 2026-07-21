@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Furagemz Admin</title>
+<!-- PWA: makes the "Install" icon appear in the browser address bar -->
+<meta name="theme-color" content="#7c3aed">
+<link rel="manifest" href="/furahq-manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/furahq-sw.js').catch(function(){});}</script>
 <style>
   :root{
     --bg:#f4f1fb; --card:#fff; --ink:#241640; --sub:#7a6a95; --line:#e7defa; --line2:#f2edfc;
