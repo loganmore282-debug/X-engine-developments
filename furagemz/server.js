@@ -102,7 +102,7 @@ app.use('/admin/', adminLimiter);
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/checkin', '/redeem', '/team', '/register'];
 // Payment-provider webhooks/callbacks must ALWAYS run, even in maintenance,
 // or deposits/withdrawals in flight would never get confirmed.
-const GUARD_EXEMPT = new Set(['/', '/health', '/callback', '/deposit/callback', '/deposit/return', '/withdraw/callback']);
+const GUARD_EXEMPT = new Set(['/', '/health', '/callback', '/deposit/callback', '/deposit/return', '/withdraw/callback', '/deposit/obpay-callback', '/obpay/webhook']);
 app.use(async (req, res, next) => {
   if (GUARD_EXEMPT.has(req.path)) return next();
   if (!MAINTENANCE_BLOCK.some(p => req.path.startsWith(p))) return next();
@@ -144,6 +144,13 @@ const PUBLIC_URL  = (() => {
 
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
+// ── ObPay (mobile-money DEPOSITS). Withdrawals stay on MarzPay. ──
+// The API URL + public (anon) key are the same for every ObPay merchant; only the
+// secret key + webhook secret are ours and MUST come from env (never hard-coded).
+const OBPAY_URL        = (process.env.OBPAY_URL || 'https://k5nkqygnd0i42zb1n5c3.helloreaddy.com/functions/v1/obpay-api-no-jwt').trim();
+const OBPAY_PUBLIC_KEY = process.env.OBPAY_PUBLIC_KEY || 'sb_publishable_dFKnLJZfWkXfRVr9l97rEm5s8RweReFt';
+const OBPAY_SECRET_KEY = process.env.OBPAY_SECRET_KEY || '';
+const OBPAY_WEBHOOK_SECRET = process.env.OBPAY_WEBHOOK_SECRET || '';
 // Where a card customer is bounced back to after paying on the gateway.
 const APP_URL = (process.env.APP_URL || 'https://furagemzplatform.edgeone.app').trim().replace(/\/$/, '');
 
@@ -289,6 +296,43 @@ async function marzGetStatus(uuid) {
     return String(d?.data?.transaction?.status || d?.transaction?.status || d?.status || '').toLowerCase();
   } catch (_) { return ''; }
 }
+
+// ── ObPay CLIENT (deposits) ──
+// Direct HTTP: X-API-Key carries our secret; `apikey` carries the public anon key
+// the Supabase gateway needs. Body always has _action. Money-safety NEVER trusts a
+// webhook — success is always re-confirmed with obpayGetStatus (authenticated), so
+// a forged callback is worthless. Credits the user the gross amount THEY paid; the
+// 5% ObPay platform fee is the platform's cost, not the user's.
+async function obpayCall(action, extra = {}) {
+  const resp = await fetch(OBPAY_URL, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': OBPAY_PUBLIC_KEY,
+      'Authorization': `Bearer ${OBPAY_PUBLIC_KEY}`,
+      'X-API-Key': OBPAY_SECRET_KEY
+    },
+    body: JSON.stringify({ _action: action, _api_key: OBPAY_SECRET_KEY, ...extra })
+  });
+  try { return await resp.json(); }
+  catch (_) { return { success: false, error: PROVIDER_BUSY_MSG, providerDown: true }; }
+}
+async function obpayCollect({ amount, phone, reference, description }) {
+  const r = await obpayCall('collect', {
+    phoneNumber: phone, amount: Number(amount), currency: 'UGX',
+    reference: String(reference).slice(0, 30), description: description || 'Deposit'
+  });
+  return r; // { success, data:{ reference, transaction_id, status:'pending' } } | { success:false, error }
+}
+// Returns ObPay's real status for a reference (lowercased): 'success'|'pending'|'failed'|''.
+async function obpayGetStatus(reference) {
+  try {
+    const r = await obpayCall('transaction-status', { reference });
+    return String(r?.data?.status || r?.status || '').toLowerCase();
+  } catch (_) { return ''; }
+}
+// Short, space-free, ≤30-char reference (ObPay rejects long/spaced refs).
+function obpayRef() { return ('FZ-' + Date.now().toString(36) + '-' + randChars(6)).toUpperCase().slice(0, 30); }
 
 // ── SETTINGS CACHE — reads MongoDB `settings/main`, TTL 5 min ──
 // Admin-editable rates live here; hardcoded constants above are fallbacks
@@ -1425,7 +1469,7 @@ async function pollPendingPayments() {
       .where('status', '==', 'processing').orderBy('createdAt', 'asc').limit(60).get();
     for (const doc of depSnap.docs) {
       try {
-        const r = await pollMarzDepositStatus(doc);
+        const r = doc.data().provider === 'obpay' ? await pollObpayDepositStatus(doc) : await pollMarzDepositStatus(doc);
         if (r.credited || r.failed) { settled++; continue; }
         // Abandoned attempt (cancelled prompt, never paid): expire after 6 hours
         // so it shows honestly as failed instead of processing forever. A LATE
@@ -1446,12 +1490,18 @@ async function pollPendingPayments() {
         .where('status', '==', 'failed').orderBy('createdAt', 'desc').limit(150).get();
       for (const doc of failSnap.docs) {
         const d = doc.data();
-        if (!d.marzTxUuid) continue;
         if (Date.now() - tsMillis(d.createdAt) > 48 * 3600000) continue;
         try {
-          const raw = await marzGetCollectStatus(d.marzTxUuid);
-          if (PAY_OK.includes(raw)) {
-            if (await creditMarzDeposit(doc, d.amount, null)) { settled++; console.log('RESCUED late deposit', doc.id); }
+          if (d.provider === 'obpay') {
+            if (!d.marzReference || !OBPAY_SECRET_KEY) continue;
+            if (await obpayGetStatus(d.marzReference) === 'success') {
+              if (await creditMarzDeposit(doc, d.amount, d.obpayTxId || null)) { settled++; console.log('RESCUED late ObPay deposit', doc.id); }
+            }
+          } else {
+            if (!d.marzTxUuid) continue;
+            if (PAY_OK.includes(await marzGetCollectStatus(d.marzTxUuid))) {
+              if (await creditMarzDeposit(doc, d.amount, null)) { settled++; console.log('RESCUED late deposit', doc.id); }
+            }
           }
         } catch (e) { console.warn('deposit rescue:', doc.id, e.message); }
       }
@@ -1986,6 +2036,91 @@ app.post('/deposit/marzpay', async (req, res) => {
     return res.status(500).json({ status: 'error', message: friendly });
   }
 });
+// ═══════════════════════════════════════════
+// DEPOSIT — ObPay collection (mobile money). Same money-safety as MarzPay:
+// in-process lock + atomic increment on credit, and success is ALWAYS re-confirmed
+// with ObPay's authenticated status API (never trusts a webhook body).
+// ═══════════════════════════════════════════
+async function pollObpayDepositStatus(depDoc) {
+  const dep = depDoc.data();
+  const ref = dep.marzReference;                 // shared reference field
+  if (!ref || !OBPAY_SECRET_KEY) return { credited: false, failed: false };
+  const raw = await obpayGetStatus(ref);
+  if (raw === 'success') { await creditMarzDeposit(depDoc, dep.amount, dep.obpayTxId || null); return { credited: true, failed: false, amount: dep.amount }; }
+  if (raw === 'failed') {
+    if (dep.status !== 'failed') await depDoc.ref.update({ status: 'failed',
+      failedAt: FieldValue.serverTimestamp(), failureReason: 'Payment failed or cancelled' });
+    return { credited: false, failed: true };
+  }
+  return { credited: false, failed: false }; // still pending / transient
+}
+app.post('/deposit/obpay', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const { amount, phone: rawPhone } = req.body;
+  const amt = parseInt(amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  const lastDep = _depCreateDebounce.get(userId) || 0;
+  if (Date.now() - lastDep < 7000)
+    return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+  _depCreateDebounce.set(userId, Date.now());
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    const minDep = sett.minDeposit ?? MIN_DEPOSIT;
+    if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
+    const phone = cleanPhone(rawPhone || user.phone || '');
+    if (!phone || phone.length < 10)
+      return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
+
+    const reference = obpayRef();
+    const ob = await obpayCollect({ amount: amt, phone, reference, description: user.name || userId });
+    if (!ob || ob.success !== true) {
+      const rawMsg = String(ob?.error || '');
+      const msg = (ob?.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg))
+        ? PROVIDER_BUSY_MSG : (rawMsg || 'Could not start the payment right now. Please try again.');
+      return res.status(400).json({ status: 'error', message: msg });
+    }
+    const { date, time } = nowStr();
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId, phone, amount: amt, provider: 'obpay',
+      marzReference: reference, obpayTxId: ob.data?.transaction_id || null,
+      status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone });
+  } catch (e) {
+    console.error('ObPay deposit error:', e.message);
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not start the payment');
+    return res.status(500).json({ status: 'error', message: friendly });
+  }
+});
+// ObPay → our server webhook. We ack fast (<10s), then re-confirm with ObPay's
+// authenticated status API before crediting — so a forged/unsigned callback that
+// names a real deposit can only ever trigger a truthful re-check, never a credit.
+async function handleObpayCallback(req, res) {
+  res.status(200).json({ received: true });
+  setImmediate(async () => {
+    try {
+      const body = req.body || {};
+      const reference = body.data?.reference || body.reference || '';
+      if (!reference) return;
+      const depSnap = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
+      if (depSnap.empty) return;
+      const depDoc = depSnap.docs[0];
+      const raw = await obpayGetStatus(reference);
+      if (raw === 'success') await creditMarzDeposit(depDoc, depDoc.data().amount, depDoc.data().obpayTxId || null);
+      else if (raw === 'failed' && depDoc.data().status === 'processing')
+        await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(), failureReason: 'Payment declined' });
+    } catch (e) { console.error('ObPay callback error:', e.message); }
+  });
+}
+app.post('/deposit/obpay-callback', handleObpayCallback);
+app.post('/obpay/webhook', handleObpayCallback);
+
 // CARD DEPOSIT — global. Creates a card collection and returns MarzPay's
 // redirect_url; the app sends the customer there to pay by card. Money settles
 // in UGX (their bank converts), so the wallet credit is identical to mobile
@@ -2056,12 +2191,12 @@ app.get('/deposit/status/:id', async (req, res) => {
     if (dep.status === 'processing' && Date.now() - (_depPollGate.get(snap.id) || 0) > 2000) {
       _depPollGate.set(snap.id, Date.now());
       try {
-        const result = await pollMarzDepositStatus(snap);
+        const result = dep.provider === 'obpay' ? await pollObpayDepositStatus(snap) : await pollMarzDepositStatus(snap);
         if (result.credited || result.failed) {
           const fresh = await db.collection('pendingDeposits').doc(snap.id).get();
           dep = fresh.data();
         }
-      } catch (pollErr) { console.warn('MarzPay poll error:', pollErr.message); }
+      } catch (pollErr) { console.warn('Deposit poll error:', pollErr.message); }
     }
     return res.json({
       status: 'success',
@@ -2580,8 +2715,8 @@ app.post('/admin/deposit/complete', async (req, res) => {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
     if (snap.data().status === 'matched') return res.json({ status: 'success', message: 'Already credited' });
-    const result = await pollMarzDepositStatus(snap);
-    if (result.credited) return res.json({ status: 'success', message: `Credited ${fmtUGX(result.amount)} to user` });
+    const result = snap.data().provider === 'obpay' ? await pollObpayDepositStatus(snap) : await pollMarzDepositStatus(snap);
+    if (result.credited) return res.json({ status: 'success', message: `Credited ${fmtUGX(result.amount || snap.data().amount)} to user` });
     if (result.failed) return res.status(400).json({ status: 'error', message: 'MarzPay confirms payment failed' });
     return res.status(400).json({ status: 'error', message: 'MarzPay status still pending — try again in a moment' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }

@@ -14,6 +14,7 @@ process.env.ADMIN_KEY = 'test-admin-key';
 process.env.FIREBASE_API_KEY = 'test';
 process.env.FIREBASE_SERVICE_ACCOUNT = '{"project_id":"t","private_key":"k","client_email":"e"}';
 process.env.MARZPAY_KEY = 'dGVzdDp0ZXN0';
+process.env.OBPAY_SECRET_KEY = 'sk_live_testkey';
 process.env.PORT = '3997';
 
 const Module = require('module');
@@ -48,10 +49,23 @@ require.cache[faPath] = faMod;
 const realFetch = global.fetch;
 let marzN = 0;
 const marzTx = new Map(); // uuid -> status
+const obTx = new Map();   // ObPay reference -> status ('pending'|'success'|'failed')
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
-  if (!u.includes('wearemarz.com')) return realFetch(url, opts);
   const json = body => ({ ok: true, status: 200, json: async () => body });
+  // ── ObPay stub (deposits) ──
+  if (u.includes('helloreaddy.com')) {
+    let body = {}; try { body = JSON.parse(opts.body || '{}'); } catch (_) {}
+    if (body._action === 'collect') {
+      if (global.__obpayCollectFail) return json({ success: false, error: 'An unexpected error occurred. Please try again.' });
+      obTx.set(body.reference, 'pending');
+      return json({ success: true, data: { reference: body.reference, transaction_id: 'OBTX-' + (++marzN), status: 'pending' } });
+    }
+    if (body._action === 'transaction-status')
+      return json({ success: true, data: { reference: body.reference, status: obTx.get(body.reference) || 'pending' } });
+    return json({ success: false, error: 'unknown obpay action' });
+  }
+  if (!u.includes('wearemarz.com')) return realFetch(url, opts);
   if (u.endsWith('/collect-money') || u.endsWith('/send-money')) {
     let body = {}; try { body = JSON.parse(opts.body || '{}'); } catch (_) {}
     // Test hook: simulate MarzPay's provider-side disbursement fault.
@@ -711,6 +725,30 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('daily trend covers the requested period', Array.isArray(r.body?.byDay) && r.body.byDay.length === 90, r.body?.byDay?.length);
   check('top referrers / depositors / biggest withdrawals returned', Array.isArray(r.body?.topReferrers) && Array.isArray(r.body?.topDepositors) && Array.isArray(r.body?.biggestWithdrawals), r.body);
   check('peak hours + busiest band computed', typeof r.body?.peakDepositHour === 'number' && typeof r.body?.busiestBand === 'string', { h: r.body?.peakDepositHour, band: r.body?.busiestBand });
+
+  console.log('\n── 13i. ObPay deposits (mobile money) credit via the guarded path');
+  const OB = 'uid:obuser-uid';                       // fresh user → no deposit debounce, no referral cascade
+  await call('POST', '/account/create-profile', { token: OB, body: { username: 'obuser', phone: '0771000031' } });
+  await call('POST', '/register', { token: OB, body: { referralCode: '' } });
+  const obBalPre = userDoc('obuser-uid').walletBalance;
+  r = await call('POST', '/deposit/obpay', { token: OB, body: { amount: 50000, phone: '0771000031' } });
+  check('ObPay deposit starts (pending)', r.body?.status === 'success' && !!r.body.depositId, r.body);
+  const obDep = mockdb.__store.get('pendingDeposits').get(r.body.depositId);
+  check('stored as provider=obpay, processing', obDep?.provider === 'obpay' && obDep?.status === 'processing', obDep);
+  check('no money credited before payment confirmed', userDoc('obuser-uid').walletBalance === obBalPre, userDoc('obuser-uid').walletBalance);
+  // Forged webhook while ObPay still says pending → server re-checks ObPay → NO credit.
+  await call('POST', '/deposit/obpay-callback', { body: { event: 'payment.success', data: { reference: obDep.marzReference, status: 'success' } } });
+  await sleep(250);
+  check('forged success (ObPay still pending) does NOT credit', userDoc('obuser-uid').walletBalance === obBalPre, userDoc('obuser-uid').walletBalance);
+  // Customer pays → ObPay status becomes success → webhook credits exactly once.
+  obTx.set(obDep.marzReference, 'success');
+  await call('POST', '/deposit/obpay-callback', { body: { event: 'payment.success', data: { reference: obDep.marzReference, status: 'success' } } });
+  await sleep(250);
+  check('ObPay payment credits the wallet once (+50000)', userDoc('obuser-uid').walletBalance === obBalPre + 50000, userDoc('obuser-uid').walletBalance - obBalPre);
+  check('credited as a real deposit (matched)', mockdb.__store.get('pendingDeposits').get(r.body.depositId).status === 'matched', mockdb.__store.get('pendingDeposits').get(r.body.depositId).status);
+  await call('POST', '/deposit/obpay-callback', { body: { event: 'payment.success', data: { reference: obDep.marzReference, status: 'success' } } });
+  await sleep(250);
+  check('replayed ObPay webhook never double-credits', userDoc('obuser-uid').walletBalance === obBalPre + 50000, userDoc('obuser-uid').walletBalance - obBalPre);
 
   console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
   r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });
