@@ -206,6 +206,16 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+// Friendly day label from a 'YYYY-MM-DD' string in East Africa Time: Today / Yesterday / "21 Jul".
+function dayLabel(iso){
+  const now=new Date(Date.now()+3*3600000);
+  const today=now.toISOString().slice(0,10);
+  const yest=new Date(now.getTime()-86400000).toISOString().slice(0,10);
+  if(iso===today) return 'Today';
+  if(iso===yest) return 'Yesterday';
+  const d=new Date(iso+'T00:00:00Z');
+  return d.getUTCDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+}
 // Read an uploaded image File, downscale it (canvas) and return a compressed
 // JPEG data URI. Keeps the base64 stored in the DB small so uploads don't bloat
 // the M0 database. maxDim caps the longest edge; quality is JPEG compression.
@@ -582,10 +592,13 @@ async function renderWithdrawals(){
   const subs = [['pending','Pending'],['processing','Processing'],['processed','Processed'],['rejected','Rejected'],['failed','Failed'],['all','All']];
   const pbd = r.processedByDay||[];
   const maxP = Math.max(1, ...pbd.map(d=>d.count));
+  const rows = pbd.slice().reverse(); // newest day first
   const procChart = pbd.length ? `<div class="panel-card">
-    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day (last 30 days)</h2>
-    <div class="muted"><b>${counts.processed||0}</b> processed · ${ugx(r.processedAmount||0)} paid out</div></div>
-    <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${d.day}: ${d.count} processed"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div></div>` : '';
+    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
+    <div class="muted"><b>${counts.processed||0}</b> processed all-time · ${ugx(r.processedAmount||0)} paid out</div></div>
+    <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${dayLabel(d.day)}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Withdrawals processed</th><th>Amount paid</th></tr></thead>
+    <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'—'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <h2 class="sec">Withdrawals</h2>
     ${procChart}

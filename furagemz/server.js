@@ -3010,16 +3010,18 @@ app.post('/admin/withdrawals/list', async (req, res) => {
       const w = d.data();
       counts[w.status] = (counts[w.status] || 0) + 1;
       if (w.status === 'processed') {
-        processedAmount += (w.netAmount || w.amount || 0);
+        const amt = (w.netAmount || w.amount || 0);
+        processedAmount += amt;
         const ms = tsMillis(w.processedAt || w.createdAt);
         const day = new Date(ms + EAT_MS).toISOString().slice(0, 10);
-        procByDay[day] = (procByDay[day] || 0) + 1;
+        const e = (procByDay[day] = procByDay[day] || { count: 0, amount: 0 });
+        e.count++; e.amount += amt;
       }
     });
     const processedByDay = [];
     for (let i = 29; i >= 0; i--) {
       const k = new Date(Date.now() + EAT_MS - i * 86400000).toISOString().slice(0, 10);
-      processedByDay.push({ day: k, count: procByDay[k] || 0 });
+      processedByDay.push({ day: k, count: procByDay[k]?.count || 0, amount: procByDay[k]?.amount || 0 });
     }
     return res.json({
       status: 'success',

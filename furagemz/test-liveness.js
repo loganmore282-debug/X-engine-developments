@@ -696,7 +696,8 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('list returns server-computed counts', r.body?.counts && typeof r.body.counts.processed === 'number', r.body?.counts);
   check('counts total ALL withdrawals, not just the page of 2', (r.body?.total || 0) > 2 && r.body?.withdrawals?.length === 2, { total: r.body?.total, page: r.body?.withdrawals?.length });
   check('processed count matches processed rows in the store', r.body?.counts?.processed === [...mockdb.__store.get('withdrawals').values()].filter(w => w.status === 'processed').length, r.body?.counts?.processed);
-  check('processed-per-day series present (30 days)', Array.isArray(r.body?.processedByDay) && r.body.processedByDay.length === 30, r.body?.processedByDay?.length);
+  check('processed-per-day series present (30 days, with count + amount)', Array.isArray(r.body?.processedByDay) && r.body.processedByDay.length === 30 && typeof r.body.processedByDay[0].count === 'number' && typeof r.body.processedByDay[0].amount === 'number', r.body?.processedByDay?.[0]);
+  check('today\'s processed count is a number', typeof r.body?.processedByDay?.[29]?.count === 'number', r.body?.processedByDay?.[29]);
 
   console.log('\n── 13h. Analytics centre aggregates everything from the ledger');
   r = await call('POST', '/admin/analytics', { body: { days: 30 } });
