@@ -2811,6 +2811,119 @@ app.post('/admin/stats', async (req, res) => {
     });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
+
+// ═══════════════════════════════════════════
+// ANALYTICS CENTRE — everything computed server-side from the real ledger:
+// deposit/withdraw volumes, when users transact (by hour + morning/afternoon/
+// evening/night), daily trend, top referrers, top depositors, biggest cash-outs.
+// ═══════════════════════════════════════════
+const EAT_MS = 3 * 3600000;
+function eatParts(ts) {                 // → { hour 0-23, dayKey 'YYYY-MM-DD' } in EAT
+  const d = new Date(tsMillis(ts) + EAT_MS);
+  return { hour: d.getUTCHours(), day: d.toISOString().slice(0, 10) };
+}
+function bandOf(h) {                     // owner's bands
+  if (h >= 5 && h < 12)  return 'morning';
+  if (h >= 12 && h < 17) return 'afternoon';
+  if (h >= 17 && h < 21) return 'evening';
+  return 'night';
+}
+app.post('/admin/analytics', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const days   = Math.min(Math.max(parseInt(req.body.days) || 30, 1), 180);
+  const sinceMs = Date.now() - days * 86400000;
+  try {
+    const [txSnap, witSnap, usersSnap] = await Promise.all([
+      db.collection('transactions').orderBy('createdAt', 'desc').limit(20000).get(),
+      db.collection('withdrawals').orderBy('createdAt', 'desc').limit(20000).get(),
+      db.collection('users').limit(20000).get()
+    ]);
+
+    const byHour = Array.from({ length: 24 }, (_, h) => ({ h, depAmt: 0, depCnt: 0, witAmt: 0, witCnt: 0 }));
+    const bands  = { morning: { dep: 0, wit: 0 }, afternoon: { dep: 0, wit: 0 }, evening: { dep: 0, wit: 0 }, night: { dep: 0, wit: 0 } };
+    const dayMap = {};                  // dayKey → { dep, wit, users }
+    const ensureDay = k => (dayMap[k] = dayMap[k] || { day: k, dep: 0, wit: 0, users: 0 });
+
+    let depAmount = 0, depCount = 0, commissionsPaid = 0, teamRewardsPaid = 0, investedAmount = 0;
+    // DEPOSITS + earnings come from the transactions ledger (real network top-ups).
+    txSnap.forEach(d => {
+      const t = d.data();
+      const ms = tsMillis(t.createdAt);
+      if (ms < sinceMs) return;
+      if (t.type === 'topup') {
+        const a = Math.abs(t.amount || 0);
+        depAmount += a; depCount++;
+        const { hour, day } = eatParts(t.createdAt);
+        byHour[hour].depAmt += a; byHour[hour].depCnt++;
+        bands[bandOf(hour)].dep += a;
+        ensureDay(day).dep += a;
+      } else if (t.type === 'commission') commissionsPaid += Math.abs(t.amount || 0);
+      else if (t.type === 'team_reward') teamRewardsPaid += Math.abs(t.amount || 0);
+      else if (t.type === 'investment')  investedAmount  += Math.abs(t.amount || 0);
+    });
+
+    // WITHDRAWALS come from the withdrawals collection (has status + recipient).
+    let witAmount = 0, witCount = 0;
+    const bigWits = [];
+    witSnap.forEach(d => {
+      const w = d.data();
+      const ms = tsMillis(w.createdAt);
+      if (ms < sinceMs) return;
+      if (w.status === 'rejected') return;            // never actually left → skip
+      const a = Math.abs(w.amount || 0);
+      witAmount += a; witCount++;
+      const { hour, day } = eatParts(w.createdAt);
+      byHour[hour].witAmt += a; byHour[hour].witCnt++;
+      bands[bandOf(hour)].wit += a;
+      ensureDay(day).wit += a;
+      bigWits.push({ name: w.userName || '', phone: w.withdrawalPhone || w.userPhone || '', amount: a, status: w.status || 'pending', when: ms });
+    });
+
+    // USERS: totals, new-in-period, top referrers, top depositors.
+    let totalUsers = 0, newUsers = 0, activeInvestors = 0;
+    const referrers = [], depositors = [];
+    usersSnap.forEach(d => {
+      const u = d.data(); totalUsers++;
+      const ms = tsMillis(u.createdAt);
+      if (ms >= sinceMs) { newUsers++; const { day } = eatParts(u.createdAt); ensureDay(day).users++; }
+      if ((u.totalInvested || 0) > 0) activeInvestors++;
+      if ((u.teamL1Count || 0) > 0 || (u.commissionEarned || 0) > 0)
+        referrers.push({ name: u.username || u.name || '', phone: u.phone || '', team: u.teamL1Count || 0, earned: u.commissionEarned || 0 });
+      if ((u.realDeposited || 0) > 0)
+        depositors.push({ name: u.username || u.name || '', phone: u.phone || '', amount: u.realDeposited || 0 });
+    });
+
+    referrers.sort((a, b) => (b.team - a.team) || (b.earned - a.earned));
+    depositors.sort((a, b) => b.amount - a.amount);
+    bigWits.sort((a, b) => b.amount - a.amount);
+
+    // last `days` days, oldest → newest, gap-filled so the chart is continuous.
+    const byDay = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const k = new Date(Date.now() + EAT_MS - i * 86400000).toISOString().slice(0, 10);
+      byDay.push(dayMap[k] || { day: k, dep: 0, wit: 0, users: 0 });
+    }
+    const peakDepositHour  = byHour.reduce((p, c) => c.depCnt > p.depCnt ? c : p, byHour[0]).h;
+    const peakWithdrawHour = byHour.reduce((p, c) => c.witCnt > p.witCnt ? c : p, byHour[0]).h;
+    const busiestBand = Object.entries(bands).reduce((p, c) => (c[1].dep + c[1].wit) > (p[1].dep + p[1].wit) ? c : p)[0];
+
+    return res.json({
+      status: 'success', period: days,
+      kpis: {
+        depositsAmount: depAmount, depositsCount: depCount,
+        withdrawalsAmount: witAmount, withdrawalsCount: witCount,
+        netFlow: depAmount - witAmount,
+        totalUsers, newUsers, activeInvestors,
+        investedAmount, commissionsPaid, teamRewardsPaid
+      },
+      byHour, bands, byDay,
+      peakDepositHour, peakWithdrawHour, busiestBand,
+      topReferrers: referrers.slice(0, 10),
+      topDepositors: depositors.slice(0, 10),
+      biggestWithdrawals: bigWits.slice(0, 10)
+    });
+  } catch (e) { console.error('Analytics error:', e.message); return res.status(500).json({ status: 'error', message: e.message }); }
+});
 app.post('/admin/settings', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

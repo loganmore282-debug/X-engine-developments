@@ -124,6 +124,18 @@
   .codebox{background:var(--bg);border-radius:10px;padding:12px;margin-top:12px;font-family:monospace;
     font-size:15px;letter-spacing:1px;word-spacing:6px;line-height:1.9}
   .switch-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
+  .seg{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .seg button{padding:6px 14px;border-radius:20px;border:1px solid var(--line);background:var(--card);
+    cursor:pointer;font-size:13px;color:var(--sub);font-weight:600}
+  .seg button.on{background:var(--violet);color:#fff;border-color:var(--violet)}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--sub);margin:2px 0 6px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .chart{display:flex;align-items:flex-end;gap:3px;height:150px;padding:6px 0 2px;overflow-x:auto}
+  .chart-col{flex:1 0 auto;min-width:18px;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%}
+  .chart-bars{flex:1;display:flex;align-items:flex-end;gap:2px;width:100%;justify-content:center}
+  .chart-bars i{display:block;width:7px;border-radius:3px 3px 0 0;min-height:2px}
+  .chart-x{font-size:9px;color:var(--sub);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -164,6 +176,7 @@
       </div>
       <div class="tabs" id="tabs">
         <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="analytics">Analytics</button>
         <button class="tab" data-tab="users">Users</button>
         <button class="tab" data-tab="deposits">Deposits</button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
@@ -258,7 +271,7 @@ function switchTab(name){
   _tab=name;
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
   const c=$('content'); c.innerHTML='<div class="empty">Loading…</div>';
-  ({ dashboard:renderDashboard, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
+  ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, banners:renderBanners, codes:renderCodes, transactions:renderTransactions,
      referrals:renderReferrals, settings:renderSettings }[name])();
 }
@@ -290,6 +303,63 @@ function setLive(on){ _live=on; const d=$('liveDot'); if(d) d.style.background =
   $('liveBtn').style.opacity = on ? '1' : '.6'; }
 
 // ── DASHBOARD ──
+// ── ANALYTICS ──
+let _anPeriod = 30;
+async function renderAnalytics(){
+  $('content').innerHTML='<div class="empty">Crunching numbers…</div>';
+  const a = await api('/admin/analytics', { days:_anPeriod });
+  if(a.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
+  const k=a.kpis||{};
+  const h12=x=>{const ap=x<12?'am':'pm';let h=x%12;if(h===0)h=12;return h+ap;};
+  const maxHour = Math.max(1, ...a.byHour.map(h=>Math.max(h.depAmt,h.witAmt)));
+  const maxDay  = Math.max(1, ...a.byDay.map(d=>Math.max(d.dep,d.wit)));
+  const hourChart = `<div class="chart">${a.byHour.map(h=>`
+     <div class="chart-col" title="${h12(h.h)} — deposits ${ugx(h.depAmt)} (${h.depCnt}), withdrawals ${ugx(h.witAmt)} (${h.witCnt})">
+       <div class="chart-bars"><i style="height:${Math.round(h.depAmt/maxHour*100)}%;background:var(--ok)"></i><i style="height:${Math.round(h.witAmt/maxHour*100)}%;background:var(--danger)"></i></div>
+       <div class="chart-x">${h.h}</div></div>`).join('')}</div>`;
+  const dayChart = `<div class="chart">${a.byDay.map(d=>`
+     <div class="chart-col" title="${d.day} — deposits ${ugx(d.dep)}, withdrawals ${ugx(d.wit)}, new users ${d.users}">
+       <div class="chart-bars"><i style="height:${Math.round(d.dep/maxDay*100)}%;background:var(--ok)"></i><i style="height:${Math.round(d.wit/maxDay*100)}%;background:var(--danger)"></i></div>
+       <div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>`;
+  const bandCard=(key,label)=>{const b=a.bands[key]||{dep:0,wit:0};const on=a.busiestBand===key;
+    return `<div class="stat" style="${on?'outline:2px solid var(--violet);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">deposits</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">withdrawals</div></div>`;};
+  $('content').innerHTML=`
+    <div class="row" style="align-items:center;margin-bottom:6px"><h2 class="sec" style="flex:1;margin:0">Analytics</h2></div>
+    <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
+    <div class="cards">
+      <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Deposits (${k.depositsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Withdrawals (${k.withdrawalsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:${(k.netFlow||0)>=0?'var(--ok)':'var(--danger)'}">${ugx(k.netFlow)}</div><div class="l">Net flow</div></div>
+      <div class="stat"><div class="n">${k.newUsers||0}</div><div class="l">New users</div></div>
+      <div class="stat"><div class="n">${k.activeInvestors||0}</div><div class="l">Active investors</div></div>
+      <div class="stat"><div class="n">${ugx(k.investedAmount)}</div><div class="l">Invested</div></div>
+      <div class="stat"><div class="n">${ugx(k.commissionsPaid)}</div><div class="l">Commissions paid</div></div>
+      <div class="stat"><div class="n">${ugx(k.teamRewardsPaid)}</div><div class="l">Team rewards paid</div></div>
+    </div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin-top:0">When people transact — by hour of day</h2>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Deposits</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
+      ${hourChart}
+      <p class="muted" style="margin:10px 0 0">Busiest deposit time: <b>${h12(a.peakDepositHour)}</b> &nbsp;·&nbsp; busiest withdrawal time: <b>${h12(a.peakWithdrawHour)}</b></p>
+    </div>
+    <h2 class="sec">Time of day (${a.busiestBand} is busiest)</h2>
+    <div class="cards">${bandCard('morning','Morning')}${bandCard('afternoon','Afternoon')}${bandCard('evening','Evening')}${bandCard('night','Night')}</div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin-top:0">Daily trend (last ${a.period} days)</h2>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Deposits</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
+      ${dayChart}
+    </div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Top referrers</h2>
+      <div class="table-scroll"><table><thead><tr><th>User</th><th>Direct team</th><th>Commission earned</th></tr></thead>
+      <tbody>${(a.topReferrers||[]).length?a.topReferrers.map(r=>`<tr><td>${esc(r.name)}<br><span class="muted">${esc(r.phone)}</span></td><td>${r.team}</td><td><b>${ugx(r.earned)}</b></td></tr>`).join(''):'<tr><td colspan="3" class="empty">No referrers yet</td></tr>'}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Top depositors</h2>
+      <div class="table-scroll"><table><thead><tr><th>User</th><th>Total deposited</th></tr></thead>
+      <tbody>${(a.topDepositors||[]).length?a.topDepositors.map(r=>`<tr><td>${esc(r.name)}<br><span class="muted">${esc(r.phone)}</span></td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No deposits yet</td></tr>'}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Biggest withdrawals</h2>
+      <div class="table-scroll"><table><thead><tr><th>User</th><th>Amount</th><th>Status</th><th>When</th></tr></thead>
+      <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.name)}<br><span class="muted">${esc(r.phone)}</span></td><td><b>${ugx(r.amount)}</b></td><td>${statusPill(r.status)}</td><td>${fdate(r.when)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No withdrawals yet</td></tr>'}</tbody></table></div></div>`;
+  document.querySelectorAll('[data-per]').forEach(b=>b.addEventListener('click',()=>{ _anPeriod=parseInt(b.dataset.per); renderAnalytics(); }));
+}
 async function renderDashboard(){
   const s = await api('/admin/stats');
   if(s.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load stats. '+esc(s.message||'')+'</div>'; return; }

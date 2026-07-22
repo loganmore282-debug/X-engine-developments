@@ -691,6 +691,19 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   vr = await call('POST', '/admin/withdraw/verify', { body: { ...ADMIN, withdrawalId: vr.body.withdrawalId } });
   check('verify on an unprocessed withdrawal → no gateway reference', vr.body?.marzStatus === 'no_reference', vr.body);
 
+  console.log('\n── 13h. Analytics centre aggregates everything from the ledger');
+  r = await call('POST', '/admin/analytics', { body: { days: 30 } });
+  check('analytics requires admin key (401)', r.code === 401, r.code);
+  r = await call('POST', '/admin/analytics', { body: { ...ADMIN, days: 90 } });
+  check('analytics endpoint runs', r.body?.status === 'success', r.body?.message);
+  check('KPIs present (deposits + withdrawals amounts)', typeof r.body?.kpis?.depositsAmount === 'number' && typeof r.body?.kpis?.withdrawalsAmount === 'number', r.body?.kpis);
+  check('deposits + withdrawals actually recorded', r.body?.kpis?.depositsAmount > 0 && r.body?.kpis?.withdrawalsAmount > 0, r.body?.kpis);
+  check('by-hour chart has 24 buckets', Array.isArray(r.body?.byHour) && r.body.byHour.length === 24, r.body?.byHour?.length);
+  check('time-of-day bands present (morning..night)', !!(r.body?.bands?.morning && r.body?.bands?.afternoon && r.body?.bands?.evening && r.body?.bands?.night), r.body?.bands);
+  check('daily trend covers the requested period', Array.isArray(r.body?.byDay) && r.body.byDay.length === 90, r.body?.byDay?.length);
+  check('top referrers / depositors / biggest withdrawals returned', Array.isArray(r.body?.topReferrers) && Array.isArray(r.body?.topDepositors) && Array.isArray(r.body?.biggestWithdrawals), r.body);
+  check('peak hours + busiest band computed', typeof r.body?.peakDepositHour === 'number' && typeof r.body?.busiestBand === 'string', { h: r.body?.peakDepositHour, band: r.body?.busiestBand });
+
   console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
   r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });
   check('audit endpoint runs', r.body?.status === 'success', r.body?.message);
