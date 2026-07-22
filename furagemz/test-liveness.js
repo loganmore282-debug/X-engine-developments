@@ -61,6 +61,11 @@ global.fetch = async (url, opts = {}) => {
       obTx.set(body.reference, 'pending');
       return json({ success: true, data: { reference: body.reference, transaction_id: 'OBTX-' + (++marzN), status: 'pending' } });
     }
+    if (body._action === 'payout') {
+      if (global.__obpayPayoutFail) return json({ success: false, error: 'Insufficient balance' });
+      obTx.set(body.reference, 'pending');
+      return json({ success: true, data: { reference: body.reference, transaction_id: 'OBPX-' + (++marzN), status: 'pending' } });
+    }
     if (body._action === 'transaction-status')
       return json({ success: true, data: { reference: body.reference, status: obTx.get(body.reference) || 'pending' } });
     return json({ success: false, error: 'unknown obpay action' });
@@ -387,13 +392,14 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('withdrawal accepted, balance debited once', r.body?.status === 'success' && userDoc('bob-uid').walletBalance === bobBal - 10000, r.body);
   const witId = r.body.withdrawalId;
   r = await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: witId } });
-  check('admin pays it out via MarzPay', r.body?.status === 'success', r.body);
+  check('admin sends the payout via ObPay', r.body?.status === 'success', r.body);
   const witDoc = mockdb.__store.get('withdrawals').get(witId);
-  marzTx.set(witDoc.marzTxUuid, 'completed');
-  const wcb = { event_type: 'disbursement.completed', transaction: { uuid: witDoc.marzTxUuid, status: 'completed' } };
-  await call('POST', '/withdraw/callback', { body: wcb }); await sleep(250);
+  check('withdrawal stored as provider=obpay + processing', witDoc.provider === 'obpay' && witDoc.status === 'processing', witDoc);
+  obTx.set(witDoc.marzReference, 'success');
+  const wcb = { event: 'payout.success', data: { reference: witDoc.marzReference, status: 'success' } };
+  await call('POST', '/obpay/webhook', { body: wcb }); await sleep(250);
   check('withdrawal processed, totalWithdrawn = net 8600 (14% fee)', userDoc('bob-uid').totalWithdrawn === 8600, userDoc('bob-uid').totalWithdrawn);
-  await call('POST', '/withdraw/callback', { body: wcb }); await sleep(250);
+  await call('POST', '/obpay/webhook', { body: wcb }); await sleep(250);
   check('withdraw callback REPLAY does not double-count', userDoc('bob-uid').totalWithdrawn === 8600, userDoc('bob-uid').totalWithdrawn);
   // reject double-refund
   r = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
@@ -412,18 +418,18 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   const refundRow = (r.body?.transactions || []).find(t => t.type === 'refund' && t.description.includes('rejected'));
   check('rejection refund appears as a visible record', !!refundRow, refundRow);
 
-  console.log('\n── 7a. MarzPay payout FAULT leaves the withdrawal pending + money untouched');
+  console.log('\n── 7a. ObPay payout FAULT leaves the withdrawal pending + money untouched');
   const balPreFail = userDoc('bob-uid').walletBalance;
   r = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
   const witFail = r.body.withdrawalId;
   check('withdrawal held (balance debited on request)', userDoc('bob-uid').walletBalance === balPreFail - 10000, userDoc('bob-uid').walletBalance);
-  global.__marzSendFail = true;
+  global.__obpayPayoutFail = true;
   r = await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: witFail } });
-  global.__marzSendFail = false;
-  check('provider fault returns a CLEAR error (not a raw MarzPay dump)', r.body?.status === 'error' && /MarzPay could not send|payment provider/i.test(r.body?.message || ''), r.body?.message);
+  global.__obpayPayoutFail = false;
+  check('provider fault returns a CLEAR error (attributed to ObPay)', r.body?.status === 'error' && /ObPay could not send|payment provider/i.test(r.body?.message || ''), r.body?.message);
   check('withdrawal stays PENDING after the fault (retryable)', mockdb.__store.get('withdrawals').get(witFail).status === 'pending', mockdb.__store.get('withdrawals').get(witFail).status);
   check('money still held — nothing double-moved', userDoc('bob-uid').walletBalance === balPreFail - 10000, userDoc('bob-uid').walletBalance);
-  // Now MarzPay recovers → the SAME withdrawal pays out on retry.
+  // Now ObPay recovers → the SAME withdrawal pays out on retry.
   r = await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: witFail } });
   check('retry after recovery succeeds on the same withdrawal', r.body?.status === 'success', r.body);
   check('withdrawal now processing/processed after retry', ['processing', 'processed'].includes(mockdb.__store.get('withdrawals').get(witFail).status), mockdb.__store.get('withdrawals').get(witFail).status);
@@ -565,33 +571,30 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
     mockdb.__store.get('pendingDeposits').get(depId).status === 'matched',
     mockdb.__store.get('pendingDeposits').get(depId).status);
   check('no deposit money moved by the forgery', userDoc('alice-uid').walletBalance === aliceBalNow, userDoc('alice-uid').walletBalance);
-  // (b) Withdrawal: bob was REALLY paid (MarzPay says completed). A forged
-  // "failed" webhook must NOT refund him on top of the payout (double money).
+  // (b) Withdrawal: bob was REALLY paid (ObPay says success). A forged "failed"
+  // webhook must NOT refund him on top of the payout (double money).
   const bobBalNow = userDoc('bob-uid').walletBalance;
   const paidWit = mockdb.__store.get('withdrawals').get(witId);
-  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.failed',
-    transaction: { uuid: paidWit.marzTxUuid, status: 'failed' } } });
+  await call('POST', '/obpay/webhook', { body: { event: 'payout.failed', data: { reference: paidWit.marzReference, status: 'failed' } } });
   await sleep(250);
   check('paid withdrawal NOT refunded by a forged failure (no double money)',
     userDoc('bob-uid').walletBalance === bobBalNow && mockdb.__store.get('withdrawals').get(witId).status === 'processed',
     { bal: userDoc('bob-uid').walletBalance, status: mockdb.__store.get('withdrawals').get(witId).status });
-  // (c) A processing withdrawal + forged failure while MarzPay still says
-  // "processing" — the refund must wait for the gateway's real verdict.
+  // (c) A processing withdrawal + forged failure while ObPay still says "pending" —
+  // the refund must wait for the gateway's real verdict.
   r = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
   const wit3 = r.body.withdrawalId;
   await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: wit3 } });
-  const wit3Doc = mockdb.__store.get('withdrawals').get(wit3); // marz says 'processing'
+  const wit3Doc = mockdb.__store.get('withdrawals').get(wit3); // ObPay says 'pending'
   const bobBal3 = userDoc('bob-uid').walletBalance;
-  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.failed',
-    transaction: { uuid: wit3Doc.marzTxUuid, status: 'failed' } } });
+  await call('POST', '/obpay/webhook', { body: { event: 'payout.failed', data: { reference: wit3Doc.marzReference, status: 'failed' } } });
   await sleep(250);
   check('forged failure while gateway says processing → NO refund',
     userDoc('bob-uid').walletBalance === bobBal3 && mockdb.__store.get('withdrawals').get(wit3).status === 'processing',
     { bal: userDoc('bob-uid').walletBalance, status: mockdb.__store.get('withdrawals').get(wit3).status });
-  // …and when MarzPay REALLY reports the failure, the refund flows normally.
-  marzTx.set(wit3Doc.marzTxUuid, 'failed');
-  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.failed',
-    transaction: { uuid: wit3Doc.marzTxUuid, status: 'failed' } } });
+  // …and when ObPay REALLY reports the failure, the refund flows normally.
+  obTx.set(wit3Doc.marzReference, 'failed');
+  await call('POST', '/obpay/webhook', { body: { event: 'payout.failed', data: { reference: wit3Doc.marzReference, status: 'failed' } } });
   await sleep(250);
   check('gateway-confirmed failure refunds exactly once',
     userDoc('bob-uid').walletBalance === bobBal3 + 10000 && mockdb.__store.get('withdrawals').get(wit3).status === 'failed',
@@ -684,21 +687,21 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   r = await call('POST', '/admin/user/set-referrer', { body: { ...ADMIN, userId: 'harry-uid', referrerCode: 'alice' } });
   check('reassigning an already-referred user is REFUSED', r.code === 400, r.body);
 
-  console.log('\n── 13g. Admin can VERIFY a withdrawal against MarzPay (read-only)');
+  console.log('\n── 13g. Admin can VERIFY a withdrawal against ObPay (read-only)');
   let vr = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
   const vwit = vr.body.withdrawalId;
   await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: vwit } });
   const vdoc = mockdb.__store.get('withdrawals').get(vwit);
-  marzTx.set(vdoc.marzTxUuid, 'failed');
-  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.failed', transaction: { uuid: vdoc.marzTxUuid, status: 'failed' } } });
+  obTx.set(vdoc.marzReference, 'failed');
+  await call('POST', '/obpay/webhook', { body: { event: 'payout.failed', data: { reference: vdoc.marzReference, status: 'failed' } } });
   await sleep(200);
   check('withdrawal is now failed (refunded)', mockdb.__store.get('withdrawals').get(vwit).status === 'failed', mockdb.__store.get('withdrawals').get(vwit).status);
   vr = await call('POST', '/admin/withdraw/verify', { body: { ...ADMIN, withdrawalId: vwit } });
-  check('verify confirms MarzPay FAILED → refund was correct', vr.body?.status === 'success' && vr.body.failed === true && /refund was correct/i.test(vr.body.message || ''), vr.body);
-  // Dangerous case: MarzPay actually SENT it while our record says failed → must WARN.
-  marzTx.set(vdoc.marzTxUuid, 'completed');
+  check('verify confirms ObPay FAILED → refund was correct', vr.body?.status === 'success' && vr.body.failed === true && /refund was correct/i.test(vr.body.message || ''), vr.body);
+  // Dangerous case: ObPay actually SENT it while our record says failed → must WARN.
+  obTx.set(vdoc.marzReference, 'success');
   vr = await call('POST', '/admin/withdraw/verify', { body: { ...ADMIN, withdrawalId: vwit } });
-  check('verify WARNS when MarzPay sent but our record is failed', vr.body?.sent === true && /sent/i.test(vr.body.message || ''), vr.body);
+  check('verify WARNS when ObPay sent but our record is failed', vr.body?.sent === true && /sent/i.test(vr.body.message || ''), vr.body);
   check('verify NEVER moves money (still failed + refunded)', mockdb.__store.get('withdrawals').get(vwit).status === 'failed', mockdb.__store.get('withdrawals').get(vwit).status);
   // A never-processed withdrawal has no gateway reference to check.
   vr = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
