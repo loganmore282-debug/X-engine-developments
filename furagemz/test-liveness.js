@@ -691,6 +691,13 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   vr = await call('POST', '/admin/withdraw/verify', { body: { ...ADMIN, withdrawalId: vr.body.withdrawalId } });
   check('verify on an unprocessed withdrawal → no gateway reference', vr.body?.marzStatus === 'no_reference', vr.body);
 
+  console.log('\n── 13g2. Withdrawals list returns TRUE status counts (never caps at page size)');
+  r = await call('POST', '/admin/withdrawals/list', { body: { ...ADMIN, limit: 2 } });
+  check('list returns server-computed counts', r.body?.counts && typeof r.body.counts.processed === 'number', r.body?.counts);
+  check('counts total ALL withdrawals, not just the page of 2', (r.body?.total || 0) > 2 && r.body?.withdrawals?.length === 2, { total: r.body?.total, page: r.body?.withdrawals?.length });
+  check('processed count matches processed rows in the store', r.body?.counts?.processed === [...mockdb.__store.get('withdrawals').values()].filter(w => w.status === 'processed').length, r.body?.counts?.processed);
+  check('processed-per-day series present (30 days)', Array.isArray(r.body?.processedByDay) && r.body.processedByDay.length === 30, r.body?.processedByDay?.length);
+
   console.log('\n── 13h. Analytics centre aggregates everything from the ledger');
   r = await call('POST', '/admin/analytics', { body: { days: 30 } });
   check('analytics requires admin key (401)', r.code === 401, r.code);

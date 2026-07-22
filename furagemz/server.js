@@ -2996,8 +2996,36 @@ app.post('/admin/withdrawals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { limit: lim = 200 } = req.body;
   try {
-    const snap = await db.collection('withdrawals').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get();
-    return res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    // The page for display is limited, but the STATUS COUNTS are tallied across
+    // EVERY withdrawal (a light status-only scan) so the tab totals never cap out
+    // at the page size — the "Processed (394)" freeze bug.
+    const [snap, allSnap] = await Promise.all([
+      db.collection('withdrawals').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get(),
+      db.collection('withdrawals').select('status', 'amount', 'netAmount', 'createdAt', 'processedAt').get()
+    ]);
+    const counts = { pending: 0, processing: 0, processed: 0, rejected: 0, failed: 0 };
+    let processedAmount = 0;
+    const procByDay = {};
+    allSnap.forEach(d => {
+      const w = d.data();
+      counts[w.status] = (counts[w.status] || 0) + 1;
+      if (w.status === 'processed') {
+        processedAmount += (w.netAmount || w.amount || 0);
+        const ms = tsMillis(w.processedAt || w.createdAt);
+        const day = new Date(ms + EAT_MS).toISOString().slice(0, 10);
+        procByDay[day] = (procByDay[day] || 0) + 1;
+      }
+    });
+    const processedByDay = [];
+    for (let i = 29; i >= 0; i--) {
+      const k = new Date(Date.now() + EAT_MS - i * 86400000).toISOString().slice(0, 10);
+      processedByDay.push({ day: k, count: procByDay[k] || 0 });
+    }
+    return res.json({
+      status: 'success',
+      withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })),
+      counts, total: allSnap.size, processedAmount, processedByDay
+    });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/referrals/list', async (req, res) => {

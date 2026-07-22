@@ -573,14 +573,23 @@ async function renderDeposits(){
 // ── WITHDRAWALS ──
 let _wits=[], _witFilter='pending';
 async function renderWithdrawals(){
-  const r = await api('/admin/withdrawals/list', { limit: 400 });
+  const r = await api('/admin/withdrawals/list', { limit: 500 });
   _wits = r.withdrawals||[];
-  const counts = { pending:0, processing:0, processed:0, rejected:0, failed:0 };
-  _wits.forEach(w=>{ counts[w.status] = (counts[w.status]||0)+1; });
+  // TRUE counts come from the server (all withdrawals), so they never freeze at
+  // the page size. Fall back to counting the page only if the server is old.
+  let counts = r.counts;
+  if(!counts){ counts={ pending:0, processing:0, processed:0, rejected:0, failed:0 }; _wits.forEach(w=>{ counts[w.status]=(counts[w.status]||0)+1; }); }
   const subs = [['pending','Pending'],['processing','Processing'],['processed','Processed'],['rejected','Rejected'],['failed','Failed'],['all','All']];
+  const pbd = r.processedByDay||[];
+  const maxP = Math.max(1, ...pbd.map(d=>d.count));
+  const procChart = pbd.length ? `<div class="panel-card">
+    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day (last 30 days)</h2>
+    <div class="muted"><b>${counts.processed||0}</b> processed · ${ugx(r.processedAmount||0)} paid out</div></div>
+    <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${d.day}: ${d.count} processed"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div></div>` : '';
   $('content').innerHTML = `
     <h2 class="sec">Withdrawals</h2>
-    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${counts[k]?` (${counts[k]})`:''}</button>`).join('')}</div>
+    ${procChart}
+    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${r.total||_wits.length})`:(counts[k]?` (${counts[k]})`:'')}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody id="witRows"></tbody></table></div>`;
   document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; renderWithdrawals(); }));
   drawWits();
