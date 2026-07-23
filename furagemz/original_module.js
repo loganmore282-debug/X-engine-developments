@@ -1054,7 +1054,9 @@ function openDepositModal() {
     if (!amount || amount < minDep) return toast('Minimum deposit is ' + ugx(minDep), 'err');
     if (!phone) return toast('Enter a mobile-money phone number', 'err');
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
-    const r = await api('/deposit/obpay', { method: 'POST', body: { amount, phone } });
+    // Admin-switchable gateway (default MarzPay); the app just calls the right one.
+    const depEndpoint = _publicSettings?.depositProvider === 'obpay' ? '/deposit/obpay' : '/deposit/marzpay';
+    const r = await api(depEndpoint, { method: 'POST', body: { amount, phone } });
     if (r.status !== 'success') { restore(); return toast(r.message || 'Could not start deposit', 'err'); }
     openDepositPending(r.depositId, amount);
   });

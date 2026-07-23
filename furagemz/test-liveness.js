@@ -387,6 +387,7 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   check('same code cannot be redeemed twice by same user', r.body?.status !== 'success', r.body);
 
   console.log('\n── 7. Withdrawal: process, callback replay, reject double-refund');
+  await call('POST', '/admin/settings/update', { body: { ...ADMIN, payoutProvider: 'obpay' } }); // exercise the ObPay payout path
   const bobBal = userDoc('bob-uid').walletBalance;
   r = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
   check('withdrawal accepted, balance debited once', r.body?.status === 'success' && userDoc('bob-uid').walletBalance === bobBal - 10000, r.body);
@@ -752,6 +753,20 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
   await call('POST', '/deposit/obpay-callback', { body: { event: 'payment.success', data: { reference: obDep.marzReference, status: 'success' } } });
   await sleep(250);
   check('replayed ObPay webhook never double-credits', userDoc('obuser-uid').walletBalance === obBalPre + 50000, userDoc('obuser-uid').walletBalance - obBalPre);
+
+  console.log('\n── 13j. Payment-gateway toggle: MarzPay payout path still works (default)');
+  await call('POST', '/admin/settings/update', { body: { ...ADMIN, payoutProvider: 'marzpay' } });
+  r = await call('POST', '/withdraw/request', { token: B, body: { amount: 10000, phone: '0771000002' } });
+  const mwit = r.body.withdrawalId;
+  r = await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: mwit } });
+  const mwitDoc = mockdb.__store.get('withdrawals').get(mwit);
+  check('toggle=marzpay routes the payout through MarzPay', r.body?.status === 'success' && mwitDoc.provider === 'marzpay' && !!mwitDoc.marzTxUuid, mwitDoc.provider);
+  marzTx.set(mwitDoc.marzTxUuid, 'completed');
+  await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.completed', transaction: { uuid: mwitDoc.marzTxUuid, status: 'completed' } } });
+  await sleep(250);
+  check('MarzPay withdrawal completes via its own callback', mockdb.__store.get('withdrawals').get(mwit).status === 'processed', mockdb.__store.get('withdrawals').get(mwit).status);
+  r = await call('GET', '/settings/public');
+  check('public settings expose the deposit gateway (default marzpay)', r.body?.depositProvider === 'marzpay', r.body?.depositProvider);
 
   console.log('\n── 14. GLOBAL INTEGRITY AUDIT — every balance must equal its ledger');
   r = await call('POST', '/admin/integrity', { body: { ...ADMIN } });

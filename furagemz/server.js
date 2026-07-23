@@ -738,6 +738,7 @@ app.get('/settings/public', async (_req, res) => {
     status: 'success',
     minDeposit: s.minDeposit ?? MIN_DEPOSIT,
     minWithdrawal: s.minWithdrawal ?? MIN_WITHDRAWAL,
+    depositProvider: s.depositProvider === 'obpay' ? 'obpay' : 'marzpay', // which gateway the app deposits through
     welcomeBonus: s.welcomeBonus ?? WELCOME_BONUS,
     checkinBonus: s.checkinBonus ?? CHECKIN_BONUS,
     liquidityFee: s.liquidityFee ?? LIQUIDITY_FEE,
@@ -2485,31 +2486,67 @@ app.post('/admin/withdraw/process', async (req, res) => {
 
     const phone = wit.withdrawalPhone || wit.userPhone || '';
     const netAmount = wit.netAmount || wit.amount;
-    const reference = obpayRef();
-    const ob = await obpayPayout({ amount: netAmount, phone, reference, description: wit.userName || wit.userId });
-    if (!ob || ob.success !== true) {
-      // The payout never left: status is still 'pending' (nothing committed below)
-      // and the user's balance is still held, so this is safe to retry. Surface any
-      // SPECIFIC reason ObPay gave (e.g. insufficient wallet balance).
-      const rawMsg = String(ob?.error || '');
-      const busy = ob?.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg);
-      const detail = (rawMsg && !busy) ? ` ObPay said: ${rawMsg}` : '';
-      return res.status(400).json({ status: 'error',
-        message: `ObPay could not send this payout right now — this is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ObPay wallet balance).` });
+    // Provider is admin-switchable in Settings (default MarzPay). Each in-flight
+    // withdrawal remembers its own provider, so switching never orphans one.
+    const sett = await getSettings();
+    const provider = sett.payoutProvider === 'obpay' ? 'obpay' : 'marzpay';
+
+    if (provider === 'obpay') {
+      const reference = obpayRef();
+      const ob = await obpayPayout({ amount: netAmount, phone, reference, description: wit.userName || wit.userId });
+      if (!ob || ob.success !== true) {
+        const rawMsg = String(ob?.error || '');
+        const busy = ob?.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg);
+        const detail = (rawMsg && !busy) ? ` ObPay said: ${rawMsg}` : '';
+        return res.status(400).json({ status: 'error',
+          message: `ObPay could not send this payout right now — this is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ObPay wallet balance).` });
+      }
+      await db.collection('withdrawals').doc(withdrawalId).update({
+        status: 'processing', provider: 'obpay', marzReference: reference,
+        obpayTxId: ob.data?.transaction_id || '', processedAt: FieldValue.serverTimestamp()
+      });
+      try {
+        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing', marzReference: reference });
+      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+      return res.json({ status: 'success', message: `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}` });
     }
 
+    // ── MarzPay payout (default) ──
+    const reference = uuidv4();
+    const mpData = await marzSendMoney({
+      amount: netAmount, phone, reference, description: wit.userName || wit.userId,
+      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
+    });
+    const witSandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
+    if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox) {
+      const reason = marzUserMsg(mpData, '');
+      const detail = (reason && reason !== PROVIDER_BUSY_MSG) ? ` MarzPay said: ${reason}` : '';
+      return res.status(400).json({ status: 'error',
+        message: `MarzPay could not send this payout right now — this is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your MarzPay disbursement balance).` });
+    }
     const { date, time } = nowStr();
     const batch = db.batch();
-    const obpayTxId = ob.data?.transaction_id || '';
-    batch.update(db.collection('withdrawals').doc(withdrawalId), {
-      status: 'processing', provider: 'obpay', marzReference: reference, obpayTxId, processedAt: FieldValue.serverTimestamp()
-    });
+    const marzTxUuid = mpData.data?.transaction?.uuid || '';
+    if (witSandbox) {
+      batch.update(db.collection('withdrawals').doc(withdrawalId), {
+        status: 'processed', provider: 'marzpay', marzReference: reference, marzTxUuid,
+        processedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp()
+      });
+      batch.update(db.collection('users').doc(wit.userId), { totalWithdrawn: FieldValue.increment(netAmount) });
+    } else {
+      batch.update(db.collection('withdrawals').doc(withdrawalId), {
+        status: 'processing', provider: 'marzpay', marzReference: reference, marzTxUuid, processedAt: FieldValue.serverTimestamp()
+      });
+    }
     await batch.commit();
     try {
       const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing', marzReference: reference });
+      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: witSandbox ? 'success' : 'processing', marzReference: reference });
     } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-    return res.json({ status: 'success', message: `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}` });
+    return res.json({ status: 'success',
+      message: witSandbox ? `Sandbox: withdrawal marked complete — ${fmtUGX(netAmount)} to ${phone}` : `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}`,
+      sandbox: witSandbox });
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
     const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
