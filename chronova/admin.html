@@ -196,7 +196,7 @@
 
 <script>
 // Chronova Admin panel.
-const SERVER = 'https://ugandalove.onrender.com';
+const SERVER = 'https://education-oc44.onrender.com';
 
 let ADMIN_KEY = '';
 try { ADMIN_KEY = sessionStorage.getItem('fg_admin_key') || ''; } catch (_) {}
@@ -553,31 +553,35 @@ async function openUser(uid){
 }
 
 // ── DEPOSITS ──
+function cpLeft(ms){ const s=Math.max(0,Math.floor((ms-Date.now())/1000)); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
 async function renderDeposits(){
-  const r = await api('/admin/deposits/list');
-  const list = r.deposits||[];
+  const r = await api('/admin/deposits/pending');
+  const orders = r.orders||[];
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Deposits (${list.length})</h2>
-      <button class="btn sm ghost" id="paySync" title="Poll MarzPay for every processing deposit and withdrawal and settle them now">Sync with MarzPay</button></div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Amount</th><th>Phone</th><th>Status</th><th></th></tr></thead>
-    <tbody>${list.length?list.map(d=>`
-      <tr><td>${fdate(d.createdAt)}</td><td><b>${ugx(d.amount)}</b></td><td>${esc(d.phone||'')}</td>
-      <td>${statusPill(d.status==='matched'?'success':d.status)}</td>
-      <td style="white-space:nowrap">${d.status==='processing'?`<button class="btn sm" data-done="${esc(d.id)}">Complete</button> `:''}${d.status!=='matched'?`<button class="btn sm ghost" data-force="${esc(d.id)}" title="Credit this deposit after verifying the payment on the MarzPay dashboard">Force credit</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No deposits</td></tr>'}
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Deposit approvals (${orders.length})</h2>
+      <button class="btn sm ghost" id="depRefresh">Refresh</button></div>
+    <p class="muted" style="margin:-6px 0 12px">A user pays one of your recipient numbers, then you confirm the money landed and tap <b>Approve</b> to credit their wallet.</p>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Ref</th><th>User</th><th>Amount</th><th>Pays to</th><th>From</th><th>Left</th><th></th></tr></thead>
+    <tbody>${orders.length?orders.map(o=>`
+      <tr><td><span class="muted">${esc(o.reference||'')}</span></td>
+      <td>${esc(o.userName||'')}<br><span class="muted">${esc(o.userPhone||'')}</span></td>
+      <td><b>${ugx(o.amount)}</b></td>
+      <td>${esc(o.recipientNumber||'')}<br><span class="muted">${esc(o.recipientName||'')} ${esc(o.recipientNetwork||'')}</span></td>
+      <td>${esc(o.senderPhone||'—')}${o.txnId?`<br><span class="muted">txn ${esc(o.txnId)}</span>`:''}</td>
+      <td><span class="muted">${o.status==='claimed'?'claimed · ':''}${cpLeft(o.expiresAtMs||0)}</span></td>
+      <td style="white-space:nowrap"><button class="btn ok sm" data-appr="${esc(o.id)}">Approve</button> <button class="btn danger sm" data-drej="${esc(o.id)}">Reject</button></td></tr>`).join(''):'<tr><td colspan="7" class="empty">No pending deposit orders</td></tr>'}
     </tbody></table></div>`;
-  document.querySelectorAll('[data-done]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/complete',{depositId:b.dataset.done}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); }));
-  document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async()=>{
-    if(!confirm('Force-credit this deposit to the user? Only do this after verifying the payment on the MarzPay dashboard.'))return;
-    b.disabled=true;b.textContent='…';
-    const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
+  $('depRefresh').addEventListener('click', renderDeposits);
+  document.querySelectorAll('[data-appr]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!confirm('Approve this deposit? Only after you have confirmed the money arrived on your number. This credits the user.'))return;
+    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/approve',{orderId:b.dataset.appr});
+    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); refreshBadges&&refreshBadges();
+  }));
+  document.querySelectorAll('[data-drej]').forEach(b=>b.addEventListener('click',async()=>{
+    const reason=prompt('Reason for rejecting? (no money is credited)','Payment not received'); if(reason===null)return;
+    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/reject',{orderId:b.dataset.drej,reason});
     toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
   }));
-  $('paySync').addEventListener('click',async()=>{
-    const b=$('paySync'); b.disabled=true; b.textContent='Syncing…';
-    const d=await api('/admin/payments/sync');
-    toast(d.status==='success'?`Settled ${d.settled} payment(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
-    renderDeposits();
-  });
 }
 
 // ── WITHDRAWALS ──
@@ -613,9 +617,9 @@ function drawWits(){
     <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
     <td>${statusPill(w.status)}</td>
-    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Pay</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:''}<button class="btn sm" data-vrf="${esc(w.id)}">Verify</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
-  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
-  document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection?','Rejected by admin'); if(reason===null)return; const d=await api('/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+    <td>${(w.status==='pending'||w.status==='processing')?`<button class="btn ok sm" data-proc="${esc(w.id)}">Mark paid</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
+  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Mark this withdrawal as PAID? Do this only after you have sent the money to the user.'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/markpaid',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+  document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection? (funds are refunded to the user)','Rejected by admin'); if(reason===null)return; const d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async()=>{ const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ const p=d.provider||'Provider'; alert(`${p} verify\n\nOur record: ${d.ourStatus}\n${p} says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));
 }
 
@@ -857,19 +861,32 @@ async function renderSettings(){
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="Chronova is being upgraded. Please check back shortly.">
-      <h2 class="sec" style="margin:14px 0 4px">Payment gateway</h2>
+      <h2 class="sec" style="margin:14px 0 4px">Payment method</h2>
       <div class="row">
         <div><label>Deposits go through</label><select id="sDepProv">
-          <option value="zengapay" ${((s.depositProvider||'zengapay')==='zengapay')?'selected':''}>ZengaPay</option>
+          <option value="manual" ${((s.depositProvider||'manual')==='manual')?'selected':''}>Manual (recipient numbers)</option>
+          <option value="zengapay" ${(s.depositProvider==='zengapay')?'selected':''}>ZengaPay</option>
           <option value="marzpay" ${(s.depositProvider==='marzpay')?'selected':''}>MarzPay</option>
           <option value="obpay" ${(s.depositProvider==='obpay')?'selected':''}>ObPay</option></select></div>
         <div><label>Withdrawals go through</label><select id="sPayProv">
-          <option value="zengapay" ${((s.payoutProvider||'zengapay')==='zengapay')?'selected':''}>ZengaPay</option>
+          <option value="manual" ${((s.payoutProvider||'manual')==='manual')?'selected':''}>Manual (you pay &amp; mark paid)</option>
+          <option value="zengapay" ${(s.payoutProvider==='zengapay')?'selected':''}>ZengaPay</option>
           <option value="marzpay" ${(s.payoutProvider==='marzpay')?'selected':''}>MarzPay</option>
           <option value="obpay" ${(s.payoutProvider==='obpay')?'selected':''}>ObPay</option></select></div>
       </div>
-      <p class="muted" style="margin:4px 0 0">Switch the gateway anytime. Any payment already in flight finishes on the gateway that started it.</p>
+      <p class="muted" style="margin:4px 0 0">Manual is the default: users pay your recipient numbers and you approve. You can switch to a gateway anytime.</p>
       <button class="btn block" id="saveRates">Save rates</button>
+    </div>
+
+    <h2 class="sec">Recipient numbers &amp; alerts</h2>
+    <div class="panel-card">
+      <label>Your SMS alert number(s) — get texted on every deposit/withdrawal (comma-separated)</label>
+      <input id="sAlertPhones" value="${esc(v('adminAlertPhones',''))}" placeholder="0772000000, 0700000000">
+      <label style="margin-top:12px">Recipient mobile-money numbers users pay to</label>
+      <p class="muted" style="margin:2px 0 8px">The server rotates orders across the active numbers so none gets flooded. Toggle a number off to stop new orders going to it.</p>
+      <div id="rcptList"></div>
+      <button class="btn ghost sm" id="rcptAdd" style="margin-top:8px">+ Add number</button>
+      <button class="btn block" id="saveRcpts" style="margin-top:12px">Save recipients &amp; alerts</button>
     </div>
 
     <h2 class="sec">Announcement dialog</h2>
@@ -904,6 +921,31 @@ async function renderSettings(){
       </div>
       <button class="btn block" id="saveAbout">Save about page</button>
     </div>`;
+  // ── Recipient numbers manager ──
+  let _rcpts = Array.isArray(s.recipients) ? JSON.parse(JSON.stringify(s.recipients)) : [];
+  function rcptRow(r,i){
+    return `<div class="row rcpt-row" data-i="${i}" style="align-items:end;gap:8px;margin-bottom:8px">
+      <div style="flex:1.2"><label>Name</label><input class="rc-name" value="${esc(r.name||'')}" placeholder="Agent name"></div>
+      <div><label>Network</label><select class="rc-net"><option value="MTN" ${r.network==='MTN'?'selected':''}>MTN</option><option value="Airtel" ${r.network==='Airtel'?'selected':''}>Airtel</option></select></div>
+      <div style="flex:1.2"><label>Number</label><input class="rc-num" value="${esc(r.number||'')}" placeholder="0770000000"></div>
+      <label style="width:auto;margin:0 4px 8px">On <input type="checkbox" class="rc-act" ${r.active!==false?'checked':''} style="width:auto"></label>
+      <button class="btn danger sm rc-del" style="margin-bottom:4px">✕</button></div>`;
+  }
+  function renderRcpts(){ $('rcptList').innerHTML = _rcpts.length? _rcpts.map(rcptRow).join('') : '<p class="muted">No numbers yet — add at least one.</p>';
+    document.querySelectorAll('.rc-del').forEach((b,i)=>b.addEventListener('click',()=>{ _rcpts.splice(i,1); renderRcpts(); })); }
+  function collectRcpts(){ return Array.from(document.querySelectorAll('.rcpt-row')).map((row,i)=>({
+    id:(_rcpts[i]&&_rcpts[i].id)||('r'+Math.random().toString(36).slice(2,8)),
+    name:row.querySelector('.rc-name').value.trim(), network:row.querySelector('.rc-net').value,
+    number:row.querySelector('.rc-num').value.trim(), active:row.querySelector('.rc-act').checked
+  })).filter(r=>r.number); }
+  renderRcpts();
+  $('rcptAdd').addEventListener('click',()=>{ _rcpts=collectRcpts(); _rcpts.push({name:'',network:'MTN',number:'',active:true}); renderRcpts(); });
+  $('saveRcpts').addEventListener('click', async()=>{
+    const recipients = collectRcpts();
+    const d = await api('/admin/settings/update', { recipients, adminAlertPhones: $('sAlertPhones').value.trim() });
+    toast(d.status==='success'?'Recipients saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ _rcpts=recipients; renderRcpts(); }
+  });
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdrawal:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
