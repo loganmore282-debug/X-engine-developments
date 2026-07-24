@@ -1,23 +1,24 @@
 (function(){
   "use strict";
   // Canonical site cloned copies get bounced to. Update once the real domain is live.
-  var REAL = "https://furagemz.com/";
-  // DOMAIN LOCK — only these exact hosts (plus any *.edgeone.app preview/prod
-  // subdomain) may run the app. A cloned/rehosted phishing copy on any other
-  // domain wipes itself and bounces to REAL. Fails OPEN on any error so real
+  var REAL = "https://chronovaplatform.com/";
+  // DOMAIN LOCK — only these exact hosts (plus any *.edgeone.app / *.edgeone.dev
+  // preview/prod subdomain) may run the app. A cloned/rehosted phishing copy on any
+  // other domain wipes itself and bounces to REAL. Fails OPEN on any error so real
   // users are never wrongly locked out.
   function hostOk(){
     try {
       var h = (location.hostname || "").toLowerCase();
       if (!h) return true; // installed PWA / file:// — don't wipe
       var ALLOW = [
-        "furagemz.com",
-        "www.furagemz.com",
+        "chronovaplatform.com",
+        "www.chronovaplatform.com",
         "localhost",
         "127.0.0.1"
       ];
       if (ALLOW.indexOf(h) !== -1) return true;
       if (h.slice(-".edgeone.app".length) === ".edgeone.app") return true;
+      if (h.slice(-".edgeone.dev".length) === ".edgeone.dev") return true;
       return false;
     } catch (e) { return true; }
   }
@@ -44,8 +45,8 @@
   // 3. CONSOLE SELF-XSS WARNING
   function warn(){
     try {
-      console.log("%cSTOP", "color:#7c3aed;font-size:48px;font-weight:900;");
-      console.log("%cThis is a browser feature for developers. Do not paste or type anything here — it could give an attacker access to your Furagemz account and funds.",
+      console.log("%cSTOP", "color:#d9ad4e;font-size:48px;font-weight:900;");
+      console.log("%cThis is a browser feature for developers. Do not paste or type anything here — it could give an attacker access to your Chronova account and funds.",
         "color:#dc2626;font-size:14px;");
     } catch(e){}
   }
@@ -83,8 +84,8 @@
     function showShield(){
       if (shield) return;
       shield = document.createElement("div");
-      shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#faf7ff;color:#6d28d9;display:flex;align-items:center;justify-content:center;text-align:center;font-family:sans-serif;font-size:18px;padding:24px;";
-      shield.textContent = "Developer tools detected. Close them to continue using Furagemz.";
+      shield.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#0c0b0e;color:#d9ad4e;display:flex;align-items:center;justify-content:center;text-align:center;font-family:sans-serif;font-size:18px;padding:24px;";
+      shield.textContent = "Developer tools detected. Close them to continue using Chronova.";
       (document.body || document.documentElement).appendChild(shield);
     }
     function hideShield(){ if (shield){ shield.remove(); shield = null; } }
