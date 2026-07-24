@@ -861,10 +861,21 @@ function openHoldingsModal() {
 }
 
 const BANNER_SLIDES = [
-  { bg: 'linear-gradient(120deg,#7c3aed 0%,#c026d3 100%)', art: '#e9d5ff', title: 'Grow your watches', sub: 'Buy a tier, get paid in full at maturity.' },
-  { bg: 'linear-gradient(120deg,#0284c7 0%,#4338ca 100%)', art: '#bae6fd', title: 'Invite &amp; earn', sub: '35% on level 1, plus level 2 and 3.' },
-  { bg: 'linear-gradient(120deg,#059669 0%,#0d9488 100%)', art: '#a7f3d0', title: 'Redeem a code', sub: 'Got a Chronova code? Turn it into cash.' },
+  { bg: 'linear-gradient(120deg,#1a1409 0%,#2a2114 55%,#0f0d0a 100%)', title: 'Own a luxury timepiece', sub: 'Acquire a watch tier and earn every day for 120 days.' },
+  { bg: 'linear-gradient(120deg,#241c0e 0%,#3a2c12 60%,#100d08 100%)', title: 'Invite &amp; earn', sub: '30% on level 1, plus level 2 and 3.' },
+  { bg: 'linear-gradient(120deg,#1a1409 0%,#2a2114 55%,#0f0d0a 100%)', title: 'Redeem a code', sub: 'Got a Chronova code? Turn it into cash.' },
 ];
+// Gold watch-dial art for the home hero (replaces the old gem art).
+function watchArt() {
+  return `<svg viewBox="0 0 120 120" fill="none">
+    <circle cx="60" cy="60" r="46" fill="none" stroke="#d9ad4e" stroke-width="6" opacity="0.85"/>
+    <circle cx="60" cy="60" r="34" fill="none" stroke="#d9ad4e" stroke-width="2" opacity="0.5"/>
+    <rect x="52" y="4" width="16" height="12" rx="3" fill="#d9ad4e"/>
+    <rect x="52" y="104" width="16" height="12" rx="3" fill="#d9ad4e"/>
+    <path d="M60 60 L60 34" stroke="#f4d98a" stroke-width="4" stroke-linecap="round"/>
+    <path d="M60 60 L80 66" stroke="#f4d98a" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="60" cy="60" r="4" fill="#f4d98a"/></svg>`;
+}
 let _bannerTimer = null, _bannerIdx = 0;
 function startBanner() {
   if (_bannerTimer) { clearInterval(_bannerTimer); _bannerTimer = null; }
@@ -897,7 +908,7 @@ function renderHome() {
             <div class="hb-slide" style="background:${s.bg}">
               <div class="hb-title">${s.title}</div>
               <div class="hb-sub">${s.sub}</div>
-              <div class="hb-art">${gemArt(s.art)}</div>
+              <div class="hb-art">${watchArt()}</div>
             </div>`).join('');
         })()}
       </div>
@@ -913,15 +924,15 @@ function renderHome() {
       <div class="wallet-amt" id="balAmt">${_hideBal ? '••••••' : ugx(bal)}</div>
     </div>
     <div class="wallet-stats">
-      <div class="wstat"><div class="wi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalDeposited || 0)}</div><div class="wl">Total deposits</div></div>
-      <div class="wstat"><div class="wi" style="background:var(--danger-bg);color:var(--danger)">${ICN.up}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0)}</div><div class="wl">Total withdrawals</div></div>
-      <div class="wstat"><div class="wi" style="background:#eef2ff;color:var(--sapphire)">${ICN.commission}</div><div class="wn">${_hideBal ? '••••' : ugx((_teamStats?.earned?.commissions ?? _account?.commissionEarned ?? 0) + (_teamStats?.earned?.teamRewards || 0))}</div><div class="wl">Team earnings</div></div>
+      <div class="wstat"><div class="wi gold">${ICN.down}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalDeposited || 0)}</div><div class="wl">Total deposits</div></div>
+      <div class="wstat"><div class="wi gold">${ICN.up}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0)}</div><div class="wl">Total withdrawals</div></div>
+      <div class="wstat"><div class="wi gold">${ICN.commission}</div><div class="wn">${_hideBal ? '••••' : ugx((_teamStats?.earned?.commissions ?? _account?.commissionEarned ?? 0) + (_teamStats?.earned?.teamRewards || 0))}</div><div class="wl">Team earnings</div></div>
     </div>
     <div class="quick-row">
-      <button class="quick-btn" id="qaDeposit"><span class="qi" style="background:var(--ok-bg);color:var(--ok)">${ICN.down}</span>Deposit</button>
-      <button class="quick-btn" id="qaWithdraw"><span class="qi" style="background:var(--danger-bg);color:var(--danger)">${ICN.up}</span>Withdraw</button>
-      <button class="quick-btn" id="qaRedeem"><span class="qi" style="background:#f3e8ff;color:var(--violet)">${ICN.redeem}</span>Redeem</button>
-      <button class="quick-btn${checkedInToday ? ' claimed' : ''}" id="qaCheckin"><span class="qi" style="background:#fef9e7;color:var(--topaz)">${ICN.checkin}</span>${checkedInToday ? 'Claimed' : 'Check in'}</button>
+      <button class="quick-btn" id="qaDeposit"><span class="qi gold">${ICN.down}</span>Deposit</button>
+      <button class="quick-btn" id="qaWithdraw"><span class="qi gold">${ICN.up}</span>Withdraw</button>
+      <button class="quick-btn" id="qaRedeem"><span class="qi gold">${ICN.redeem}</span>Redeem</button>
+      <button class="quick-btn${checkedInToday ? ' claimed' : ''}" id="qaCheckin"><span class="qi gold">${ICN.checkin}</span>${checkedInToday ? 'Claimed' : 'Check in'}</button>
     </div>
     <div class="sec-head"><h3>Your watches</h3>${active.length ? `<button class="link-btn" data-tab-jump="gems">Buy more</button>` : ''}</div>
     ${active.length ? active.map(inv => `
