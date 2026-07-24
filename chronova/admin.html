@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Furagemz Admin</title>
+<!-- PWA: makes the "Install" icon appear in the browser address bar -->
+<meta name="theme-color" content="#7c3aed">
+<link rel="manifest" href="/furahq-manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/furahq-sw.js').catch(function(){});}</script>
+<style>
+  :root{
+    --bg:#f4f1fb; --card:#fff; --ink:#241640; --sub:#7a6a95; --line:#e7defa; --line2:#f2edfc;
+    --violet:#7c3aed; --violet-dk:#5f21d6; --ok:#059669; --ok-bg:#ecfdf5;
+    --danger:#e11d48; --danger-bg:#fef1f3; --warn:#b45309; --warn-bg:#fffbeb; --sky:#0ea5e9;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  button,input,select,textarea{font-family:inherit}
+  .hidden{display:none !important}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 14px}
+
+  /* login */
+  .login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-card{background:var(--card);border-radius:20px;padding:30px 26px;width:100%;max-width:380px;
+    box-shadow:0 10px 40px rgba(76,29,149,.12);text-align:center;}
+  .brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px;}
+  .brand .mk{width:40px;height:40px;border-radius:12px;background:var(--violet);display:flex;align-items:center;justify-content:center;}
+  .brand .mk svg{width:24px;height:24px}
+  .brand b{font-size:20px}
+  .muted{color:var(--sub);font-size:13px}
+
+  input,select,textarea{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:11px;
+    font-size:14px;background:#fff;color:var(--ink);outline:none;margin-top:6px}
+  input:focus,select:focus,textarea:focus{border-color:var(--violet)}
+  label{display:block;font-size:12.5px;color:var(--sub);font-weight:600;margin-top:12px;text-align:left}
+  .btn{background:var(--violet);color:#fff;border:0;border-radius:11px;padding:12px 18px;font-size:14px;
+    font-weight:700;cursor:pointer}
+  .btn:active{opacity:.88}
+  .btn[disabled]{opacity:.55;cursor:default}
+  .btn.block{width:100%;margin-top:16px}
+  .btn.sm{padding:8px 13px;font-size:13px;border-radius:9px}
+  .btn.ok{background:var(--ok)}
+  .btn.danger{background:var(--danger)}
+  .btn.sky{background:var(--sky)}
+  .btn.ghost{background:var(--line);color:var(--ink)}
+
+  /* shell */
+  .topbar{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0}
+  .topbar .mk{width:34px;height:34px;border-radius:10px;background:var(--violet);display:flex;align-items:center;justify-content:center}
+  .topbar .mk svg{width:20px;height:20px}
+  .topbar b{font-size:16px}
+  .spacer{flex:1}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 10px}
+  .tab{background:none;border:0;padding:8px 13px;border-radius:20px;font-size:13px;font-weight:700;
+    color:var(--sub);cursor:pointer}
+  .tab.active{background:var(--violet);color:#fff}
+  .tab .badge-n{display:inline-block;min-width:17px;padding:0 5px;margin-left:5px;background:var(--danger);color:#fff;
+    border-radius:20px;font-size:10px;line-height:16px;}
+  .content{padding:18px 0 70px}
+
+  h2.sec{font-size:17px;margin:4px 0 14px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .stat .n{font-size:20px;font-weight:800}
+  .stat .l{font-size:12px;color:var(--sub);margin-top:3px}
+
+  .panel-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row > div{flex:1;min-width:120px}
+  .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .subtab{background:var(--line2);border:0;color:var(--sub);border-radius:18px;padding:7px 13px;font-size:12.5px;font-weight:700;cursor:pointer}
+  .subtab.active{background:var(--violet);color:#fff}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--sub);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  tr.clickable{cursor:pointer}
+  tr.clickable:hover{background:var(--bg)}
+  .pill-tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800;white-space:nowrap}
+  .t-ok{background:var(--ok-bg);color:var(--ok)}
+  .t-warn{background:var(--warn-bg);color:var(--warn)}
+  .t-bad{background:var(--danger-bg);color:var(--danger)}
+  .t-mut{background:var(--line);color:var(--sub)}
+  .table-scroll{overflow-x:auto}
+  .empty{color:var(--sub);font-size:13px;padding:18px;text-align:center}
+
+  .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .prod{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+  .prod .thumb{height:90px;background:var(--line2) center/cover no-repeat;display:flex;align-items:center;justify-content:center;}
+  .prod .thumb .gemsw{width:44px;height:44px;border-radius:12px}
+  .prod .pb{padding:12px}
+  .prod .pt{font-weight:800}
+  .prod .pp{color:var(--sub);font-size:12.5px;margin-top:2px}
+  .prod .pr{color:var(--ok);font-size:12px;font-weight:700;margin-top:4px}
+  .prod .pa{display:flex;gap:6px;margin-top:10px}
+  .img-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--line2);flex-shrink:0}
+  .img-picker{display:flex;gap:12px;align-items:center;margin:4px 0 8px}
+  .img-prev{width:72px;height:72px;border-radius:12px;background:var(--line2);flex-shrink:0;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;font-size:11px}
+  .img-prev img{width:100%;height:100%;object-fit:cover}
+  .img-picker-actions{display:flex;flex-direction:column;gap:8px}
+  .file-btn{display:inline-flex;align-items:center;justify-content:center;text-align:center}
+  .banner-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2)}
+
+  /* modal */
+  .modal-root{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+  .modal-bg{position:absolute;inset:0;background:rgba(30,15,60,.45)}
+  .modal{position:relative;background:#fff;border-radius:18px;padding:20px;max-width:460px;width:100%;
+    max-height:90vh;overflow-y:auto}
+  .modal h3{margin:0 0 4px;font-size:17px}
+  .kv{display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .kv .k{color:var(--sub)}
+  .modal-close{position:absolute;right:14px;top:14px;background:var(--line);border:0;border-radius:50%;
+    width:30px;height:30px;cursor:pointer;font-size:15px;color:var(--sub)}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:11px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+  .toast.ok{background:var(--ok)} .toast.err{background:var(--danger)}
+  .codebox{background:var(--bg);border-radius:10px;padding:12px;margin-top:12px;font-family:monospace;
+    font-size:15px;letter-spacing:1px;word-spacing:6px;line-height:1.9}
+  .switch-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
+  .seg{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .seg button{padding:6px 14px;border-radius:20px;border:1px solid var(--line);background:var(--card);
+    cursor:pointer;font-size:13px;color:var(--sub);font-weight:600}
+  .seg button.on{background:var(--violet);color:#fff;border-color:var(--violet)}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--sub);margin:2px 0 6px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .chart{display:flex;align-items:flex-end;gap:3px;height:150px;padding:6px 0 2px;overflow-x:auto}
+  .chart-col{flex:1 0 auto;min-width:18px;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%}
+  .chart-bars{flex:1;display:flex;align-items:flex-end;gap:2px;width:100%;justify-content:center}
+  .chart-bars i{display:block;width:7px;border-radius:3px 3px 0 0;min-height:2px}
+  .chart-x{font-size:9px;color:var(--sub);white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login" id="loginView">
+  <div class="login-card">
+    <div class="brand">
+      <div class="mk"><svg viewBox="0 0 100 100" fill="none">
+        <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#fff" opacity=".95"/>
+        <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
+        <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
+        <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
+      <b>Furagemz Admin</b>
+    </div>
+    <p class="muted">Enter the admin key to continue.</p>
+    <input id="keyInput" type="password" placeholder="Admin key" autocomplete="off">
+    <button class="btn block" id="loginBtn">Sign in</button>
+    <p class="muted" id="loginErr" style="color:var(--danger);margin-top:12px"></p>
+  </div>
+</div>
+
+<!-- SHELL -->
+<div class="hidden" id="shell">
+  <div class="topbar">
+    <div class="wrap">
+      <div class="topbar-inner">
+        <div class="mk"><svg viewBox="0 0 100 100" fill="none">
+          <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#fff" opacity=".95"/>
+          <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
+          <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
+          <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
+        <b>Furagemz Admin</b>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
+        <button class="btn ghost sm" id="refreshBtn">Refresh</button>
+        <button class="btn ghost sm" id="logoutBtn">Log out</button>
+      </div>
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="analytics">Analytics</button>
+        <button class="tab" data-tab="users">Users</button>
+        <button class="tab" data-tab="deposits">Deposits</button>
+        <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
+        <button class="tab" data-tab="products">Products</button>
+        <button class="tab" data-tab="banners">Banners</button>
+        <button class="tab" data-tab="codes">Codes</button>
+        <button class="tab" data-tab="transactions">Transactions</button>
+        <button class="tab" data-tab="referrals">Referrals</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </div>
+    </div>
+  </div>
+  <div class="wrap content" id="content"></div>
+</div>
+
+<div class="modal-root hidden" id="modalRoot"></div>
+
+<script>
+// Furagemz Admin panel.
+const SERVER = 'https://ugandalove.onrender.com';
+
+let ADMIN_KEY = '';
+try { ADMIN_KEY = sessionStorage.getItem('fg_admin_key') || ''; } catch (_) {}
+
+const $ = id => document.getElementById(id);
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
+function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
+function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+// Friendly day label from a 'YYYY-MM-DD' string in East Africa Time: Today / Yesterday / "21 Jul".
+function dayLabel(iso){
+  const now=new Date(Date.now()+3*3600000);
+  const today=now.toISOString().slice(0,10);
+  const yest=new Date(now.getTime()-86400000).toISOString().slice(0,10);
+  if(iso===today) return 'Today';
+  if(iso===yest) return 'Yesterday';
+  const d=new Date(iso+'T00:00:00Z');
+  return d.getUTCDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+}
+// Read an uploaded image File, downscale it (canvas) and return a compressed
+// JPEG data URI. Keeps the base64 stored in the DB small so uploads don't bloat
+// the M0 database. maxDim caps the longest edge; quality is JPEG compression.
+function fileToDataUrl(file, maxDim=900, quality=0.82){
+  return new Promise((resolve,reject)=>{
+    if(!file) return reject(new Error('No file'));
+    if(!/^image\//.test(file.type)) return reject(new Error('Please choose an image file'));
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('Could not read the file'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('That image could not be loaded'));
+      img.onload=()=>{
+        let{width:w,height:h}=img;
+        if(w>maxDim||h>maxDim){ const s=maxDim/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+        try{ resolve(c.toDataURL('image/jpeg',quality)); }
+        catch(e){ reject(new Error('Could not process the image')); }
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+let _toastT=null;
+function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('div'); t.id='adToast'; document.body.appendChild(t);} t.className='toast'+(kind?' '+kind:''); t.textContent=msg; clearTimeout(_toastT); _toastT=setTimeout(()=>t.remove(),3000); }
+
+async function api(path, body={}){
+  try{
+    const r = await fetch(SERVER+path, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ...body, adminKey: ADMIN_KEY }), signal:AbortSignal.timeout(30000) });
+    return await r.json();
+  }catch(e){ return { status:'error', message: e.name==='TimeoutError'?'Server is waking up — try again in a moment.':'Network error' }; }
+}
+
+// ── LOGIN ──
+async function doLogin(){
+  const key = $('keyInput').value.trim();
+  if(!key){ $('loginErr').textContent='Enter the admin key.'; return; }
+  const btn=$('loginBtn'); btn.disabled=true; btn.textContent='Checking…'; $('loginErr').textContent='';
+  try{
+    // Timeout so a cold/asleep server can't leave the button stuck on "Checking…".
+    const r = await fetch(SERVER+'/admin/check-key', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key }), signal:AbortSignal.timeout(15000) });
+    const d = await r.json();
+    if(d.status==='success'){ ADMIN_KEY=key; try{ sessionStorage.setItem('fg_admin_key',key);}catch(_){} openShell(); }
+    else { $('loginErr').textContent = d.message || 'Invalid key.'; }
+  }catch(e){ $('loginErr').textContent = 'Network error — try again.'; }
+  btn.disabled=false; btn.textContent='Sign in';
+}
+$('loginBtn').addEventListener('click', doLogin);
+$('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+$('logoutBtn').addEventListener('click', ()=>{ ADMIN_KEY=''; try{ sessionStorage.removeItem('fg_admin_key'); }catch(_){} $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden'); $('keyInput').value=''; });
+
+function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); startLive(); }
+$('liveBtn').addEventListener('click', ()=>{ setLive(!_live); if(_live) liveTick(); });
+
+// ── TABS ──
+let _tab='dashboard';
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+$('refreshBtn').addEventListener('click',()=>{ switchTab(_tab); refreshBadges(); });
+function switchTab(name){
+  _tab=name;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
+  const c=$('content'); c.innerHTML='<div class="empty">Loading…</div>';
+  ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
+     products:renderProducts, banners:renderBanners, codes:renderCodes, transactions:renderTransactions,
+     referrals:renderReferrals, settings:renderSettings }[name])();
+}
+async function refreshBadges(){
+  const s = await api('/admin/stats');
+  if(s.status==='success' && s.pendingWithdrawals>0){ $('wBadge').textContent=s.pendingWithdrawals; $('wBadge').classList.remove('hidden'); }
+  else $('wBadge').classList.add('hidden');
+}
+
+// ── LIVE AUTO-REFRESH ── re-pulls the active data tab every 12s so new joins,
+// deposits, withdrawals, transactions and referrals appear on their own. Skips
+// edit tabs (products/banners/codes/settings), skips while a modal is open, and
+// leaves the Users search alone while you're typing in it.
+let _live=true, _liveTimer=null;
+const LIVE_TABS=new Set(['dashboard','users','deposits','withdrawals','transactions','referrals']);
+const RENDERERS={ dashboard:()=>renderDashboard(), users:()=>renderUsers(), deposits:()=>renderDeposits(),
+  withdrawals:()=>renderWithdrawals(), transactions:()=>renderTransactions(), referrals:()=>renderReferrals() };
+function modalOpen(){ const m=$('modalRoot'); return m && !m.classList.contains('hidden'); }
+function liveTick(){
+  if(document.hidden) return;
+  refreshBadges().catch(()=>{});
+  if(!_live || modalOpen() || !LIVE_TABS.has(_tab)) return;
+  // Don't wipe the Users search while it's being used.
+  if(_tab==='users'){ const s=$('userSearch'); if(s && (s.value.trim() || document.activeElement===s)) return; }
+  (RENDERERS[_tab]||(()=>{}))();
+}
+function startLive(){ if(_liveTimer) return; _liveTimer=setInterval(liveTick, 12000); }
+function setLive(on){ _live=on; const d=$('liveDot'); if(d) d.style.background = on ? 'var(--ok)' : 'var(--sub)';
+  $('liveBtn').style.opacity = on ? '1' : '.6'; }
+
+// ── DASHBOARD ──
+// ── ANALYTICS ──
+let _anPeriod = 30;
+async function renderAnalytics(){
+  $('content').innerHTML='<div class="empty">Crunching numbers…</div>';
+  const a = await api('/admin/analytics', { days:_anPeriod });
+  if(a.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
+  const k=a.kpis||{};
+  const h12=x=>{const ap=x<12?'am':'pm';let h=x%12;if(h===0)h=12;return h+ap;};
+  const maxHour = Math.max(1, ...a.byHour.map(h=>Math.max(h.depAmt,h.witAmt)));
+  const maxDay  = Math.max(1, ...a.byDay.map(d=>Math.max(d.dep,d.wit)));
+  const hourChart = `<div class="chart">${a.byHour.map(h=>`
+     <div class="chart-col" title="${h12(h.h)} — deposits ${ugx(h.depAmt)} (${h.depCnt}), withdrawals ${ugx(h.witAmt)} (${h.witCnt})">
+       <div class="chart-bars"><i style="height:${Math.round(h.depAmt/maxHour*100)}%;background:var(--ok)"></i><i style="height:${Math.round(h.witAmt/maxHour*100)}%;background:var(--danger)"></i></div>
+       <div class="chart-x">${h.h}</div></div>`).join('')}</div>`;
+  const dayChart = `<div class="chart">${a.byDay.map(d=>`
+     <div class="chart-col" title="${d.day} — deposits ${ugx(d.dep)}, withdrawals ${ugx(d.wit)}, new users ${d.users}">
+       <div class="chart-bars"><i style="height:${Math.round(d.dep/maxDay*100)}%;background:var(--ok)"></i><i style="height:${Math.round(d.wit/maxDay*100)}%;background:var(--danger)"></i></div>
+       <div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>`;
+  const bandCard=(key,label)=>{const b=a.bands[key]||{dep:0,wit:0};const on=a.busiestBand===key;
+    return `<div class="stat" style="${on?'outline:2px solid var(--violet);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">deposits</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">withdrawals</div></div>`;};
+  $('content').innerHTML=`
+    <div class="row" style="align-items:center;margin-bottom:6px"><h2 class="sec" style="flex:1;margin:0">Analytics</h2></div>
+    <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
+    <div class="cards">
+      <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Deposits (${k.depositsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Withdrawals (${k.withdrawalsCount||0})</div></div>
+      <div class="stat"><div class="n" style="color:${(k.netFlow||0)>=0?'var(--ok)':'var(--danger)'}">${ugx(k.netFlow)}</div><div class="l">Net flow</div></div>
+      <div class="stat"><div class="n">${k.newUsers||0}</div><div class="l">New users</div></div>
+      <div class="stat"><div class="n">${k.activeInvestors||0}</div><div class="l">Active investors</div></div>
+      <div class="stat"><div class="n">${ugx(k.investedAmount)}</div><div class="l">Invested</div></div>
+      <div class="stat"><div class="n">${ugx(k.commissionsPaid)}</div><div class="l">Commissions paid</div></div>
+      <div class="stat"><div class="n">${ugx(k.teamRewardsPaid)}</div><div class="l">Team rewards paid</div></div>
+    </div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin-top:0">When people transact — by hour of day</h2>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Deposits</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
+      ${hourChart}
+      <p class="muted" style="margin:10px 0 0">Busiest deposit time: <b>${h12(a.peakDepositHour)}</b> &nbsp;·&nbsp; busiest withdrawal time: <b>${h12(a.peakWithdrawHour)}</b></p>
+    </div>
+    <h2 class="sec">Time of day (${a.busiestBand} is busiest)</h2>
+    <div class="cards">${bandCard('morning','Morning')}${bandCard('afternoon','Afternoon')}${bandCard('evening','Evening')}${bandCard('night','Night')}</div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin-top:0">Daily trend (last ${a.period} days)</h2>
+      <div class="legend"><span><i style="background:var(--ok)"></i>Deposits</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
+      ${dayChart}
+    </div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Top referrers</h2>
+      <div class="table-scroll"><table><thead><tr><th>User</th><th>Direct team</th><th>Commission earned</th></tr></thead>
+      <tbody>${(a.topReferrers||[]).length?a.topReferrers.map(r=>`<tr><td>${esc(r.name)}<br><span class="muted">${esc(r.phone)}</span></td><td>${r.team}</td><td><b>${ugx(r.earned)}</b></td></tr>`).join(''):'<tr><td colspan="3" class="empty">No referrers yet</td></tr>'}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Top depositors</h2>
+      <div class="table-scroll"><table><thead><tr><th>User</th><th>Total deposited</th></tr></thead>
+      <tbody>${(a.topDepositors||[]).length?a.topDepositors.map(r=>`<tr><td>${esc(r.name)}<br><span class="muted">${esc(r.phone)}</span></td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No deposits yet</td></tr>'}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Biggest withdrawals</h2>
+      <div class="table-scroll"><table><thead><tr><th>User</th><th>Amount</th><th>Status</th><th>When</th></tr></thead>
+      <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.name)}<br><span class="muted">${esc(r.phone)}</span></td><td><b>${ugx(r.amount)}</b></td><td>${statusPill(r.status)}</td><td>${fdate(r.when)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No withdrawals yet</td></tr>'}</tbody></table></div></div>`;
+  document.querySelectorAll('[data-per]').forEach(b=>b.addEventListener('click',()=>{ _anPeriod=parseInt(b.dataset.per); renderAnalytics(); }));
+}
+async function renderDashboard(){
+  const s = await api('/admin/stats');
+  if(s.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load stats. '+esc(s.message||'')+'</div>'; return; }
+  $('content').innerHTML = `
+    <h2 class="sec">Overview</h2>
+    <div class="cards">
+      <div class="stat"><div class="n">${s.userCount||0}</div><div class="l">Total users</div></div>
+      <div class="stat"><div class="n">${s.referredUsers||0}</div><div class="l">Joined via referral</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalWallet)}</div><div class="l">Wallet balances</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalDeposited)}</div><div class="l">Total deposited</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalWithdrawn)}</div><div class="l">Total withdrawn</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalInvested)}</div><div class="l">Total invested</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalEarned)}</div><div class="l">Cashback paid</div></div>
+      <div class="stat"><div class="n">${ugx(s.totalCommissions)}</div><div class="l">Referral commissions</div></div>
+      <div class="stat"><div class="n">${s.activeInvestments||0}</div><div class="l">Active gems</div></div>
+      <div class="stat"><div class="n">${ugx(s.outstandingPayout)}</div><div class="l">Future cashback owed</div></div>
+      <div class="stat"><div class="n">${s.pendingWithdrawals||0}</div><div class="l">Pending payouts</div></div>
+      <div class="stat"><div class="n">${ugx(s.pendingPayouts)}</div><div class="l">Payout amount due</div></div>
+    </div>
+    <h2 class="sec">Platform health</h2>
+    <div class="cards">
+      <div class="stat"><div class="n">${ugx(s.netCashIn)}</div><div class="l">Net cash in (deposits − withdrawals)</div></div>
+      <div class="stat"><div class="n">${ugx(s.liabilities)}</div><div class="l">Total owed (wallets + payouts + cashback)</div></div>
+      <div class="stat"><div class="n" style="color:${(s.healthBalance||0)>=0?'var(--ok)':'var(--danger)'}">${ugx(s.healthBalance)}</div><div class="l">Health balance ${(s.healthBalance||0)>=0?'(reserve)':'(shortfall)'}</div></div>
+    </div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin-top:0">Recent transactions</h2>
+      <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Status</th></tr></thead><tbody id="dashTx"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
+    </div>`;
+  const r = await api('/admin/transactions/list', { limit: 12 });
+  const list = r.transactions || [];
+  $('dashTx').innerHTML = list.length ? list.map(t=>`
+    <tr><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td>
+    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td>
+    <td>${statusPill(t.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">No transactions</td></tr>';
+}
+function statusPill(s){
+  s=String(s||'success').toLowerCase();
+  if(['success','processed','matched'].includes(s)) return `<span class="pill-tag t-ok">Successful</span>`;
+  if(['pending','processing'].includes(s)) return `<span class="pill-tag t-warn">Processing</span>`;
+  if(['failed','cancelled','rejected'].includes(s)) return `<span class="pill-tag t-bad">Failed</span>`;
+  return `<span class="pill-tag t-mut">${esc(s)}</span>`;
+}
+
+// ── USERS ──
+let _users=[];
+async function renderUsers(){
+  const r = await api('/admin/users');
+  _users = (r.users||[]).sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
+  $('content').innerHTML = `
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Users (${_users.length})</h2>
+      <button class="btn sm ghost" id="auditBtn" title="Recompute every balance from the transaction ledger and flag mismatches, duplicate credits and stuck payouts">Integrity audit</button>
+      <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning totals from the transaction ledger">Recalculate totals</button></div>
+    <div class="panel-card"><input id="userSearch" placeholder="Search username or phone"></div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Username</th><th>Phone</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
+  $('userSearch').addEventListener('input', drawUsers);
+  $('recountBtn').addEventListener('click', async()=>{
+    const b=$('recountBtn'); b.disabled=true; b.textContent='Recalculating…';
+    const d=await api('/admin/users/recount');
+    toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+    renderUsers();
+  });
+  $('auditBtn').addEventListener('click', async()=>{
+    const b=$('auditBtn'); b.disabled=true; b.textContent='Auditing…';
+    const d=await api('/admin/integrity');
+    b.disabled=false; b.textContent='Integrity audit';
+    if(d.status!=='success'){ toast(d.message||'Audit failed','err'); return; }
+    const K={negative_balance:'Negative balance',duplicate_credit:'DUPLICATE CREDIT',balance_mismatch:'Balance ≠ ledger',
+      withdrawal_no_gateway_ref:'Withdrawal has no gateway reference',withdrawal_stuck:'Withdrawal stuck at gateway'};
+    openModal(`<h3>Integrity audit</h3>
+      <div class="muted" style="margin-bottom:10px">${d.usersChecked} user(s) checked · ${fdate(d.ranAt)}</div>
+      ${d.healthy?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear — every balance matches its ledger. No duplicates, no stuck payouts.</div>`
+      :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${d.alertCount} issue(s) found</div>`+
+        d.alerts.map(a=>`<div class="kv"><span class="k">${K[a.kind]||a.kind}${a.username?' · '+esc(a.username):''}</span>
+          <span>${a.kind==='balance_mismatch'?`wallet ${ugx(a.balance)} vs ledger ${ugx(a.ledger)} (diff ${ugx(a.diff)})`
+          : a.kind==='duplicate_credit'?`ref ${esc(String(a.ref))} credited ${a.times}×`
+          : a.kind==='negative_balance'?ugx(a.balance)
+          : `${ugx(a.amount||0)} · ${a.hours}h`}</span></div>`).join('')}
+      <button class="btn block" onclick="closeModal()">Close</button>`);
+  });
+  drawUsers();
+}
+// Reduce any phone to its 9-digit national core so 0771…, +256771…, 256771…
+// and 771… all match each other.
+function phoneCore(p){ let n=String(p||'').replace(/\D/g,''); if(n.startsWith('256')) n=n.slice(3); if(n.startsWith('0')&&n.length>=10) n=n.slice(1); return n; }
+function drawUsers(){
+  const raw = ($('userSearch')?.value||'').trim();
+  const q = raw.toLowerCase();
+  const qCore = phoneCore(raw);
+  let list;
+  if(q){
+    list = _users.filter(u=>
+      (u.username||'').toLowerCase().includes(q) ||
+      (u.referralCode||'').toLowerCase().includes(q) ||
+      (qCore && phoneCore(u.phone).includes(qCore)) ||
+      (u.id||'').toLowerCase()===q
+    );
+  } else {
+    list = _users.slice(0,500);
+  }
+  const note = (!q && _users.length>500)
+    ? `<tr><td colspan="5" class="empty">Showing first 500 of ${_users.length}. Search by name or phone to find anyone.</td></tr>` : '';
+  $('userRows').innerHTML = (list.length ? list.map(u=>`
+    <tr class="clickable" data-uid="${esc(u.id)}">
+      <td><b>${esc(u.username||'—')}</b></td><td>${esc(u.phone||'')}</td>
+      <td>${ugx(u.walletBalance)}</td><td>${ugx(u.totalInvested)}</td>
+      <td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No matching users</td></tr>') + note;
+  document.querySelectorAll('#userRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
+}
+async function openUser(uid){
+  const r = await api('/admin/user/detail',{ userId:uid });
+  if(r.status!=='success'){ toast(r.message||'Not found','err'); return; }
+  const u=r.user;
+  openModal(`
+    <h3>${esc(u.username||u.phone)}</h3>
+    <div class="muted" style="margin-bottom:10px">${esc(u.phone||'')}</div>
+    <div class="kv"><span class="k">Wallet balance</span><b>${ugx(u.walletBalance)}</b></div>
+    <div class="kv"><span class="k">Deposited</span><span>${ugx(u.totalDeposited)}</span></div>
+    <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
+    <div class="kv"><span class="k">Withdrawn</span><span>${ugx(u.totalWithdrawn)}</span></div>
+    <div class="kv"><span class="k">Earned</span><span>${ugx(u.totalEarned)}</span></div>
+    <div class="kv"><span class="k">Commission</span><span>${ugx(u.commissionEarned)}</span></div>
+    <div class="kv"><span class="k">Referral code</span><span>${esc(u.referralCode||u.username||'')}</span></div>
+    <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'—')}</span></div>
+    <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
+    ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned${u.banReason?' — '+esc(u.banReason):''}</div>`:''}
+    <label>Amount (UGX)</label><input id="adjAmt" type="number" placeholder="0">
+    <label>Note (optional)</label><input id="adjNote" placeholder="Reason">
+    <div class="row" style="margin-top:14px">
+      <button class="btn ok sm" id="creditBtn">Credit</button>
+      <button class="btn danger sm" id="debitBtn">Debit</button>
+      <button class="btn ${u.status==='banned'?'ghost':'danger'} sm" id="banBtn">${u.status==='banned'?'Unban':'Ban'}</button>
+      <button class="btn danger sm" id="delBtn" title="Permanently delete this account and ALL its data">Delete account</button>
+    </div>
+    <label style="margin-top:14px">Reset password (Firebase)</label>
+    <div class="row">
+      <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (min 6 chars)"></div>
+      <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user via Firebase">Reset password</button>
+    </div>
+    <h4 style="margin:18px 0 8px;font-size:14px">Gems (${(r.investments||[]).length})</h4>
+    ${(r.investments||[]).length?`<div class="table-scroll" style="max-height:170px"><table><tbody>
+      ${r.investments.map(iv=>`<tr><td><b>${esc(iv.tierLabel||'Gem')}</b></td><td>${ugx(iv.amount)}</td>
+        <td><span class="pill-tag ${iv.status==='active'?'t-warn':iv.status==='matured'?'t-ok':'t-mut'}">${esc(iv.status)}</span></td>
+        <td style="white-space:nowrap">${ugx(iv.paidOut)} / ${ugx(iv.expectedReturn)}</td></tr>`).join('')}
+    </tbody></table></div>`:'<p class="muted" style="margin:0">No gems yet.</p>'}
+    <h4 style="margin:18px 0 8px;font-size:14px">Saved withdrawal accounts</h4>
+    ${(u.bankAccounts||[]).length?(u.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holderName||'Account')}</span><span>${esc(a.network||'')} · 0${esc(a.phone)}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
+    <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
+    <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td class="empty">Loading…</td></tr></tbody></table></div>`);
+  (async()=>{
+    const tr=await api('/admin/transactions/list',{ userId:uid });
+    const tx=(tr.transactions||[]).slice(0,25);
+    $('userTx').innerHTML = tx.length?tx.map(t=>`<tr><td style="white-space:nowrap">${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td>
+      <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap;text-align:right">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td class="empty">No transactions</td></tr>';
+  })();
+  const amt=()=>parseFloat($('adjAmt').value||0), note=()=>$('adjNote').value.trim();
+  $('creditBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
+  $('debitBtn').addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
+  $('banBtn').addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
+  $('pwBtn').addEventListener('click', async()=>{
+    const np=$('pwNew').value.trim();
+    if(np.length<6) return toast('New password must be at least 6 characters','err');
+    if(!confirm(`Reset password for ${u.username||u.phone}? They will need to use the new password to log in.`)) return;
+    const b=$('pwBtn'); b.disabled=true; b.textContent='Resetting…';
+    const d=await api('/admin/user/reset-password',{userId:uid,newPassword:np});
+    b.disabled=false; b.textContent='Reset password';
+    toast(d.status==='success'?'Password reset — give it to the user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success') $('pwNew').value='';
+  });
+  $('delBtn').addEventListener('click', async()=>{
+    const typed = prompt(`This PERMANENTLY deletes ${u.username||u.phone} and ALL their data — deposits, withdrawals, gems, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
+    if (typed === null) return;
+    if (typed.trim() !== 'DELETE') return toast('Not deleted — you must type DELETE exactly','err');
+    const b=$('delBtn'); b.disabled=true; b.textContent='Deleting…';
+    const d=await api('/admin/user/delete',{userId:uid,confirm:'DELETE'});
+    toast(d.status==='success'?'Account and all data deleted':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ closeModal(); renderUsers(); }
+    else { b.disabled=false; b.textContent='Delete account'; }
+  });
+}
+
+// ── DEPOSITS ──
+async function renderDeposits(){
+  const r = await api('/admin/deposits/list');
+  const list = r.deposits||[];
+  $('content').innerHTML = `
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Deposits (${list.length})</h2>
+      <button class="btn sm ghost" id="paySync" title="Poll MarzPay for every processing deposit and withdrawal and settle them now">Sync with MarzPay</button></div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Amount</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(d=>`
+      <tr><td>${fdate(d.createdAt)}</td><td><b>${ugx(d.amount)}</b></td><td>${esc(d.phone||'')}</td>
+      <td>${statusPill(d.status==='matched'?'success':d.status)}</td>
+      <td style="white-space:nowrap">${d.status==='processing'?`<button class="btn sm" data-done="${esc(d.id)}">Complete</button> `:''}${d.status!=='matched'?`<button class="btn sm ghost" data-force="${esc(d.id)}" title="Credit this deposit after verifying the payment on the MarzPay dashboard">Force credit</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No deposits</td></tr>'}
+    </tbody></table></div>`;
+  document.querySelectorAll('[data-done]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/complete',{depositId:b.dataset.done}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits(); }));
+  document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!confirm('Force-credit this deposit to the user? Only do this after verifying the payment on the MarzPay dashboard.'))return;
+    b.disabled=true;b.textContent='…';
+    const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
+    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
+  }));
+  $('paySync').addEventListener('click',async()=>{
+    const b=$('paySync'); b.disabled=true; b.textContent='Syncing…';
+    const d=await api('/admin/payments/sync');
+    toast(d.status==='success'?`Settled ${d.settled} payment(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+    renderDeposits();
+  });
+}
+
+// ── WITHDRAWALS ──
+let _wits=[], _witFilter='pending';
+async function renderWithdrawals(){
+  const r = await api('/admin/withdrawals/list', { limit: 500 });
+  _wits = r.withdrawals||[];
+  // TRUE counts come from the server (all withdrawals), so they never freeze at
+  // the page size. Fall back to counting the page only if the server is old.
+  let counts = r.counts;
+  if(!counts){ counts={ pending:0, processing:0, processed:0, rejected:0, failed:0 }; _wits.forEach(w=>{ counts[w.status]=(counts[w.status]||0)+1; }); }
+  const subs = [['pending','Pending'],['processing','Processing'],['processed','Processed'],['rejected','Rejected'],['failed','Failed'],['all','All']];
+  const pbd = r.processedByDay||[];
+  const maxP = Math.max(1, ...pbd.map(d=>d.count));
+  const rows = pbd.slice().reverse(); // newest day first
+  const procChart = pbd.length ? `<div class="panel-card">
+    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
+    <div class="muted"><b>${counts.processed||0}</b> processed all-time · ${ugx(r.processedAmount||0)} paid out</div></div>
+    <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${dayLabel(d.day)}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Withdrawals processed</th><th>Amount paid</th></tr></thead>
+    <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'—'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+  $('content').innerHTML = `
+    <h2 class="sec">Withdrawals</h2>
+    ${procChart}
+    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${r.total||_wits.length})`:(counts[k]?` (${counts[k]})`:'')}</button>`).join('')}</div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody id="witRows"></tbody></table></div>`;
+  document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; renderWithdrawals(); }));
+  drawWits();
+}
+function drawWits(){
+  const list = _witFilter==='all' ? _wits : _wits.filter(w=>w.status===_witFilter);
+  $('witRows').innerHTML = list.length?list.map(w=>`
+    <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
+    <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
+    <td>${statusPill(w.status)}</td>
+    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Pay</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:''}<button class="btn sm" data-vrf="${esc(w.id)}">Verify</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
+  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+  document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection?','Rejected by admin'); if(reason===null)return; const d=await api('/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+  document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async()=>{ const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ const p=d.provider||'Provider'; alert(`${p} verify\n\nOur record: ${d.ourStatus}\n${p} says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));
+}
+
+// ── PRODUCTS (gems) ──
+function gemSwatch(color){ return `<div class="gemsw" style="background:${esc(color||'#7c3aed')}"></div>`; }
+async function renderProducts(){
+  const r = await api('/admin/products/list');
+  const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
+  $('content').innerHTML = `
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Gem products (${list.length})</h2>
+      <button class="btn sm ghost" id="reseedProd">Reset to defaults</button>
+      <button class="btn sm" id="newProd">+ New gem</button></div>
+    <div class="prod-grid">${list.length?list.map(p=>`
+      <div class="prod">
+        <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':gemSwatch(p.color)}</div>
+        <div class="pb">
+          <div class="pt">${esc(p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Coming soon</span>':''}</div>
+          <div class="pp">${ugx(p.price)} · ${p.cycle||0} days</div>
+          <div class="pr">Pays ${ugx(p.expectedReturn)}</div>
+          <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.id)}">Edit</button><button class="btn sm danger" data-del="${esc(p.id)}">Delete</button></div>
+        </div>
+      </div>`).join(''):'<div class="empty">No products. Tap “New gem”.</div>'}</div>`;
+  $('newProd').addEventListener('click',()=>editProduct(null,list.length));
+  $('reseedProd').addEventListener('click',async()=>{
+    if(!confirm('Reset the six gems to the default price ladder and payouts? Uploaded images are kept.'))return;
+    const b=$('reseedProd'); b.disabled=true; b.textContent='Resetting…';
+    const d=await api('/admin/products/reseed');
+    toast(d.status==='success'?`Done — ${d.updated} updated, ${d.created} added`:(d.message||'Failed'),d.status==='success'?'ok':'err');
+    renderProducts();
+  });
+  document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editProduct(list.find(p=>p.id===b.dataset.edit))));
+  document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Delete this gem?'))return; const d=await api('/admin/products/delete',{id:b.dataset.del}); toast(d.status==='success'?'Deleted':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderProducts(); }));
+}
+function editProduct(p, order){
+  p = p || {};
+  openModal(`
+    <h3>${p.id?'Edit gem':'New gem'}</h3>
+    <label>Name</label><input id="pLabel" value="${esc(p.label||'')}" placeholder="e.g. Emerald">
+    <label>Key (slug, lowercase — leave blank to auto)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="emerald">
+    <div class="row">
+      <div><label>Price (UGX)</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="450000"></div>
+      <div><label>Total payout (UGX)</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1125000"></div>
+    </div>
+    <div class="row">
+      <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||30}"></div>
+      <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
+    </div>
+    <label>Accent colour (hex)</label><input id="pColor" value="${esc(p.color||'#7c3aed')}" placeholder="#10b981">
+    <label>Gem image</label>
+    <div class="img-picker">
+      <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
+      <div class="img-picker-actions">
+        <label class="btn sm file-btn">Upload image<input type="file" id="pFile" accept="image/*" hidden></label>
+        <button class="btn sm danger" id="pImgClear" type="button"${p.image?'':' style="display:none"'}>Remove</button>
+      </div>
+    </div>
+    <label class="muted" style="font-size:11px">…or paste a hosted image URL</label>
+    <input id="pImage" value="${esc(p.image&&!/^data:/.test(p.image)?p.image:'')}" placeholder="https://…/gem.png">
+    <div class="switch-row" style="margin-top:10px"><span><b>Active</b> <span class="muted">(shown in the app)</span></span>
+      <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
+    <div class="switch-row"><span><b>Coming soon</b> <span class="muted">(shown, but not buyable yet)</span></span>
+      <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
+    <button class="btn block" id="pSave">Save gem</button>`);
+  let imgData = p.image||''; // uploaded data URI (takes priority over the URL field)
+  const setPrev = (src)=>{ $('pImgPrev').innerHTML = src?`<img src="${esc(src)}" alt="">`:'<span class="muted">No image</span>'; $('pImgClear').style.display = src?'':'none'; };
+  $('pFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{ imgData = await fileToDataUrl(f); $('pImage').value=''; setPrev(imgData); toast('Image ready — tap Save gem','ok'); }
+    catch(err){ toast(err.message||'Could not read image','err'); }
+  });
+  $('pImgClear').addEventListener('click', ()=>{ imgData=''; $('pImage').value=''; setPrev(''); });
+  $('pImage').addEventListener('input', ()=>{ imgData=''; setPrev($('pImage').value.trim()); });
+  $('pSave').addEventListener('click', async()=>{
+    const image = imgData || $('pImage').value.trim();
+    const body = { id:p.id, label:$('pLabel').value, key:$('pKey').value, price:$('pPrice').value,
+      expectedReturn:$('pRet').value, cycle:$('pCycle').value, order:$('pOrder').value,
+      color:$('pColor').value, image, active:$('pActive').checked, comingSoon:$('pSoon').checked };
+    if(!parseFloat(body.price)) return toast('Enter a price','err');
+    const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';
+    const d=await api('/admin/products/save', body);
+    $('pSave').disabled=false; $('pSave').textContent=restore;
+    toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ closeModal(); renderProducts(); }
+  });
+}
+
+// ── BANNERS / IMAGES ──
+async function renderBanners(){
+  const r = await api('/admin/settings');
+  const s = r.settings||{};
+  const imgs = Array.isArray(s.slideshowImages)?s.slideshowImages:[];
+  $('content').innerHTML = `
+    <h2 class="sec">Home banner images</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">These rotate on the app Home banner. Upload from your device, or paste a hosted URL. Leave empty to use the built-in gradient banners.</p>
+      <div id="bannerList">${imgs.length?imgs.map((u,i)=>`
+        <div class="banner-row"><img class="img-thumb" src="${esc(u)}" onerror="this.style.opacity=.3"><div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${/^data:/.test(u)?'Uploaded image':esc(u)}</div><button class="btn danger sm" data-bi="${i}">Remove</button></div>`).join(''):'<div class="empty">No banner images yet.</div>'}</div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload banner image<input type="file" id="bFile" accept="image/*" hidden></label>
+      <label>…or add a hosted image URL</label>
+      <div class="row" style="align-items:flex-end"><div style="flex:1"><input id="bAdd" placeholder="https://…/banner.jpg"></div><button class="btn sm" id="bAddBtn" style="width:auto">Add</button></div>
+    </div>
+    <h2 class="sec">Announcement background</h2>
+    <div class="panel-card">
+      <label>Announcement dialog background image URL (optional)</label><input id="annBg" value="${esc(s.announcementBg||'')}" placeholder="https://…/notice.jpg">
+      <button class="btn block" id="annBgSave">Save background</button>
+    </div>`;
+  let cur = imgs.slice();
+  const saveImgs = async()=>{ const d=await api('/admin/settings/update',{ slideshowImages: cur }); toast(d.status==='success'?'Saved':(d.message||'Failed'),d.status==='success'?'ok':'err'); if(d.status==='success') renderBanners(); };
+  document.querySelectorAll('[data-bi]').forEach(b=>b.addEventListener('click',()=>{ cur.splice(+b.dataset.bi,1); saveImgs(); }));
+  $('bAddBtn').addEventListener('click',()=>{ const u=$('bAdd').value.trim(); if(!u)return toast('Enter a URL','err'); cur.push(u); saveImgs(); });
+  $('bFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{ const data=await fileToDataUrl(f,1280,0.82); cur.push(data); toast('Uploading…','ok'); saveImgs(); }
+    catch(err){ toast(err.message||'Could not read image','err'); }
+  });
+  $('annBgSave').addEventListener('click',async()=>{ const d=await api('/admin/settings/update',{ announcementBg:$('annBg').value.trim() }); toast(d.status==='success'?'Saved':(d.message||'Failed'),d.status==='success'?'ok':'err'); });
+}
+
+// ── CODES ──
+async function renderCodes(){
+  const r = await api('/admin/codes/list');
+  const list = r.codes||[];
+  $('content').innerHTML = `
+    <h2 class="sec">Redemption codes</h2>
+    <div class="panel-card">
+      <div class="row">
+        <div><label>Amount (UGX)</label><input id="cAmt" type="number" placeholder="5000"></div>
+        <div><label>How many</label><input id="cCount" type="number" value="1" min="1" max="50"></div>
+        <div><label>Expires in days (optional)</label><input id="cExp" type="number" placeholder="—"></div>
+        <div><label>Max users per code (optional)</label><input id="cMax" type="number" placeholder="—"></div>
+      </div>
+      <button class="btn block" id="genBtn">Generate codes</button>
+      <div id="genOut"></div>
+    </div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Amount</th><th>Used</th><th>Status</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(c=>`
+      <tr><td><b>${esc(c.code)}</b></td><td>${ugx(c.amount)}</td><td>${c.usedCount||0}${c.maxUsers?(' / '+c.maxUsers):''}</td>
+      <td><span class="pill-tag ${c.active?'t-ok':'t-mut'}">${c.active?'Active':'Off'}</span></td>
+      <td>${c.active?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No codes yet</td></tr>'}
+    </tbody></table></div>`;
+  $('genBtn').addEventListener('click', async()=>{
+    const amount=parseFloat($('cAmt').value||0); if(!amount)return toast('Enter an amount','err');
+    const count=parseInt($('cCount').value||1), expiresInDays=$('cExp').value||undefined, maxUsers=$('cMax').value||undefined;
+    const b=$('genBtn'); b.disabled=true;b.textContent='Generating…';
+    const d=await api('/admin/codes/generate',{ amount, count, expiresInDays, maxUsers });
+    b.disabled=false;b.textContent='Generate codes';
+    if(d.status==='success'){ $('genOut').innerHTML=`<div class="codebox">${d.codes.map(esc).join('  ')}</div><div class="muted" style="margin-top:6px">${d.count} code(s) worth ${ugx(d.amount)} each</div>`; setTimeout(renderCodes,1200); }
+    else toast(d.message||'Failed','err');
+  });
+  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ const d=await api('/admin/codes/deactivate',{codeId:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderCodes(); }));
+}
+
+// ── TRANSACTIONS ──
+let _txns=[], _txFilter='all';
+async function renderTransactions(){
+  const r = await api('/admin/transactions/list', { limit: 400 });
+  _txns = r.transactions||[];
+  const subs=[['all','All'],['topup','Deposits'],['withdrawal','Withdrawals'],['commission','Commissions'],['investment','Gems'],['boost','Boosts'],['checkin','Check-in'],['redeem','Codes']];
+  $('content').innerHTML = `
+    <h2 class="sec">Transactions</h2>
+    <div class="panel-card"><input id="txSearch" placeholder="Search description, type or user id"></div>
+    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_txFilter===k?' active':''}" data-tf="${k}">${l}</button>`).join('')}</div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Description</th><th>Amount</th><th>Status</th></tr></thead><tbody id="txRows"></tbody></table></div>`;
+  document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>{ _txFilter=b.dataset.tf; drawTxns(); document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x.dataset.tf===_txFilter)); }));
+  $('txSearch').addEventListener('input', drawTxns);
+  drawTxns();
+}
+function drawTxns(){
+  let list=_txFilter==='all'?_txns:_txns.filter(t=>t.type===_txFilter);
+  const q=($('txSearch')?.value||'').toLowerCase().trim();
+  if(q) list=list.filter(t=>(t.description||'').toLowerCase().includes(q)||(t.type||'').includes(q)||(t.userId||'').toLowerCase().includes(q));
+  $('txRows').innerHTML = list.length?list.slice(0,300).map(t=>`
+    <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
+    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td>
+    <td>${statusPill(t.status)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
+  document.querySelectorAll('#txRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
+}
+
+// ── REFERRALS ──
+async function renderReferrals(){
+  const r = await api('/admin/referrals/list');
+  const list = r.referrals||[];
+  $('content').innerHTML = `
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Referrals (${list.length})</h2>
+      <button class="btn sm" id="recoLinks">Fix missing links</button>
+      <button class="btn sm" id="recoComm">Pay missing rewards</button>
+      <button class="btn sm" id="recoMile">Pay team rewards</button></div>
+    <p class="muted" style="margin-top:0"><b>Fix missing links</b>: records every join that was left unlinked. <b>Pay missing rewards</b>: pays any referral commission still owed on investments. <b>Pay team rewards</b>: pays any team-deposit milestone reward that was reached but never credited (e.g. "I haven't got my 15k"). All three are safe and never double-pay.</p>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Referrer</th><th>New user</th><th>Level</th></tr></thead>
+    <tbody>${list.length?list.map(x=>`<tr class="${x.referrerId?'clickable':''}" ${x.referrerId?`data-uid="${esc(x.referrerId)}"`:''}><td>${fdate(x.createdAt)}</td><td><b>${esc(x.referrerName||x.referrerId||'')}</b></td><td>${esc(x.referredName||x.referredUserId||'')}</td><td>${x.level?('L'+x.level):'L1'}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
+  document.querySelectorAll('#content tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
+  $('recoComm').addEventListener('click',async()=>{
+    const b=$('recoComm'); b.disabled=true; b.textContent='Checking…';
+    const d=await api('/admin/commissions/reconcile');
+    b.disabled=false; b.textContent='Pay missing rewards';
+    toast(d.status==='success'?`Checked ${d.processed} investment(s) — any owed rewards paid`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('recoLinks').addEventListener('click',async()=>{
+    const b=$('recoLinks'); b.disabled=true; b.textContent='Fixing…';
+    const d=await api('/admin/referrals/reconcile');
+    b.disabled=false; b.textContent='Fix missing links';
+    toast(d.status==='success'?`Linked ${d.linked} missing referral(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'&&d.linked) renderReferrals();
+  });
+  $('recoMile').addEventListener('click',async()=>{
+    const b=$('recoMile'); b.disabled=true; b.textContent='Paying…';
+    const d=await api('/admin/milestones/reconcile');
+    b.disabled=false; b.textContent='Pay team rewards';
+    toast(d.status==='success'?'Team milestone rewards checked — any owed reward paid':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+}
+
+// ── SETTINGS ──
+async function renderSettings(){
+  const r = await api('/admin/settings');
+  const s = r.settings||{};
+  const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
+  $('content').innerHTML = `
+    <h2 class="sec">Rates &amp; limits</h2>
+    <div class="panel-card">
+      <div class="row">
+        <div><label>Min deposit</label><input id="sMinDep" type="number" value="${v('minDeposit',30000)}"></div>
+        <div><label>Min withdrawal</label><input id="sMinWit" type="number" value="${v('minWithdrawal',10000)}"></div>
+        <div><label>Welcome bonus</label><input id="sWelcome" type="number" value="${v('welcomeBonus',7000)}"></div>
+        <div><label>Check-in bonus</label><input id="sCheckin" type="number" value="${v('checkinBonus',500)}"></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Withdrawal fee (0–1)</label><input id="sFee" type="number" step="0.01" value="${v('liquidityFee',0.14)}"></div>
+        <div><label>L1 commission (0–1)</label><input id="sC1" type="number" step="0.01" value="${v('commL1',0.35)}"></div>
+        <div><label>L2 commission (0–1)</label><input id="sC2" type="number" step="0.01" value="${v('commL2',0.02)}"></div>
+        <div><label>L3 commission (0–1)</label><input id="sC3" type="number" step="0.01" value="${v('commL3',0.01)}"></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Boost unlocks after (days)</label><input id="sBoostDays" type="number" value="${v('boostUnlockDays',5)}"></div>
+        <div><label>Boost matures in (days)</label><input id="sBoostDaysM" type="number" value="${v('boostMatureDays',5)}"></div>
+      </div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Require a gem before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
+      <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
+      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="Furagemz is being upgraded. Please check back shortly.">
+      <h2 class="sec" style="margin:14px 0 4px">Payment gateway</h2>
+      <div class="row">
+        <div><label>Deposits go through</label><select id="sDepProv">
+          <option value="marzpay" ${(s.depositProvider!=='obpay')?'selected':''}>MarzPay</option>
+          <option value="obpay" ${(s.depositProvider==='obpay')?'selected':''}>ObPay</option></select></div>
+        <div><label>Withdrawals go through</label><select id="sPayProv">
+          <option value="marzpay" ${(s.payoutProvider!=='obpay')?'selected':''}>MarzPay</option>
+          <option value="obpay" ${(s.payoutProvider==='obpay')?'selected':''}>ObPay</option></select></div>
+      </div>
+      <p class="muted" style="margin:4px 0 0">Switch the gateway anytime. Any payment already in flight finishes on the gateway that started it.</p>
+      <button class="btn block" id="saveRates">Save rates</button>
+    </div>
+
+    <h2 class="sec">Announcement dialog</h2>
+    <div class="panel-card">
+      <div class="switch-row"><span><b>Show announcement popup</b></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="aEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
+      <label>Title (hero text)</label><input id="aTitle" value="${esc(v('annTitle','Notice'))}">
+      <label>Body</label><textarea id="aBody" rows="7" placeholder="Write the announcement…">${esc(v('annBody',''))}</textarea>
+      <label>Button label (optional)</label><input id="aCtaLabel" value="${esc(v('annCtaLabel',''))}">
+      <label>Button link (optional)</label><input id="aCtaUrl" value="${esc(v('annCtaUrl',''))}">
+      <button class="btn block" id="saveAnn">Save announcement</button>
+      <p class="muted" style="margin-top:10px">Saving re-shows the popup to everyone.</p>
+    </div>
+
+    <h2 class="sec">Support contacts</h2>
+    <div class="panel-card">
+      <label>WhatsApp number or link</label><input id="spWa" value="${esc(v('supportWhatsapp',''))}" placeholder="+256700000000 or https://wa.me/256700000000">
+      <label>Telegram group (username or link)</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="yourgroup or https://t.me/yourgroup">
+      <label>Support hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Every day, 9:00 AM – 9:00 PM">
+      <button class="btn block" id="saveSupport">Save support contacts</button>
+    </div>
+
+    <h2 class="sec">About page</h2>
+    <div class="panel-card">
+      <label>App tagline (shown under the logo)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Grow your money with gems.">
+      <label>About text (shown on the app's About page)</label>
+      <textarea id="abText" rows="8" placeholder="Describe Furagemz for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
+      <div class="row" style="margin-top:6px">
+        <div><label>App version</label><input id="abVer" value="${esc(v('appVersion','1.7.0'))}" placeholder="1.7.0"></div>
+        <div><label>Developer</label><input id="abDev" value="${esc(v('appDeveloper','Furagemz Developers'))}"></div>
+        <div><label>App size</label><input id="abSize" value="${esc(v('appSize','2.4 MB'))}" placeholder="2.4 MB"></div>
+      </div>
+      <button class="btn block" id="saveAbout">Save about page</button>
+    </div>`;
+  $('saveRates').addEventListener('click', async()=>{
+    const upd = {
+      minDeposit:+$('sMinDep').value, minWithdrawal:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
+      checkinBonus:+$('sCheckin').value, liquidityFee:+$('sFee').value,
+      commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
+      boostUnlockDays:+$('sBoostDays').value, boostMatureDays:+$('sBoostDaysM').value,
+      requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
+      maintenanceMsg:$('sMaintMsg').value.trim(),
+      depositProvider:$('sDepProv').value, payoutProvider:$('sPayProv').value
+    };
+    const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveAnn').addEventListener('click', async()=>{
+    const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value,
+      annCtaLabel:$('aCtaLabel').value.trim(), annCtaUrl:$('aCtaUrl').value.trim() };
+    const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveSupport').addEventListener('click', async()=>{
+    const upd = { supportWhatsapp:$('spWa').value.trim(), supportTelegram:$('spTg').value.trim(), supportHours:$('spHours').value.trim() };
+    const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveAbout').addEventListener('click', async()=>{
+    const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value,
+      appVersion:$('abVer').value.trim(), appDeveloper:$('abDev').value.trim(), appSize:$('abSize').value.trim() };
+    const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'About saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+}
+
+// ── MODAL ──
+function openModal(html){ const r=$('modalRoot'); r.innerHTML=`<div class="modal-bg" data-close></div><div class="modal"><button class="modal-close" data-close>&times;</button>${html}</div>`; r.classList.remove('hidden'); r.querySelectorAll('[data-close]').forEach(e=>e.addEventListener('click',closeModal)); }
+function closeModal(){ const r=$('modalRoot'); r.classList.add('hidden'); r.innerHTML=''; }
+
+// ── BOOT ──
+// If we already have a stored key (validated at first login), show the shell
+// IMMEDIATELY — like Voltra — instead of blocking on a check-key round-trip.
+if(ADMIN_KEY){ openShell(); }
+</script>
+</body>
+</html>
