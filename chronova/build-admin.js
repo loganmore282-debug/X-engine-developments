@@ -58,10 +58,10 @@ html = html
 fs.writeFileSync(OUT, html);
 
 // Also publish the obfuscated admin into the EdgeOne-served dist/ folder under a
-// long, unguessable filename, so it opens at furagemzplatform.edgeone.app/<name>
+// long, unguessable filename, so it opens at chronovaplatform.edgeone.app/<name>
 // on ANY device with no file transfer. Safe: every action is gated by the
 // ADMIN_KEY (checked + rate-limited server-side); the hidden URL is a second layer.
-const SECRET = 'furahq.html';
+const SECRET = 'chronohq.html';
 const DIST = path.join(__dirname, 'dist');
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST);
 fs.copyFileSync(OUT, path.join(DIST, SECRET));
@@ -70,10 +70,10 @@ fs.copyFileSync(OUT, path.join(DIST, 'panel-9f3k7m2q8x4d.html'));
 
 // PWA files so the browser shows an "Install" button in the address bar and the
 // panel installs as a real desktop/phone app. Icons are the ones already in dist.
-fs.writeFileSync(path.join(DIST, 'furahq-manifest.json'), JSON.stringify({
-  name: 'Furagemz Admin', short_name: 'Fura Admin',
-  start_url: '/furahq.html', scope: '/', display: 'standalone',
-  background_color: '#f4f1fb', theme_color: '#7c3aed',
+fs.writeFileSync(path.join(DIST, 'chronohq-manifest.json'), JSON.stringify({
+  name: 'Chronova Admin', short_name: 'Chronova Admin',
+  start_url: '/chronohq.html', scope: '/', display: 'standalone',
+  background_color: '#0c0b0e', theme_color: '#0c0b0e',
   icons: [
     { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
     { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
@@ -83,7 +83,7 @@ fs.writeFileSync(path.join(DIST, 'furahq-manifest.json'), JSON.stringify({
 }, null, 2));
 // Minimal pass-through service worker: satisfies installability but caches
 // NOTHING, so the admin is always the freshest version (never a stale panel).
-fs.writeFileSync(path.join(DIST, 'furahq-sw.js'),
+fs.writeFileSync(path.join(DIST, 'chronohq-sw.js'),
   "self.addEventListener('install',function(){self.skipWaiting();});\n" +
   "self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim());});\n" +
   "self.addEventListener('fetch',function(){});\n");

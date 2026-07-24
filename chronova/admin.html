@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Furagemz Admin</title>
+<title>Chronova Admin</title>
 <!-- PWA: makes the "Install" icon appear in the browser address bar -->
 <meta name="theme-color" content="#7c3aed">
 <link rel="manifest" href="/furahq-manifest.json">
@@ -149,7 +149,7 @@
         <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
         <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
         <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
-      <b>Furagemz Admin</b>
+      <b>Chronova Admin</b>
     </div>
     <p class="muted">Enter the admin key to continue.</p>
     <input id="keyInput" type="password" placeholder="Admin key" autocomplete="off">
@@ -168,7 +168,7 @@
           <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
           <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
           <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
-        <b>Furagemz Admin</b>
+        <b>Chronova Admin</b>
         <div class="spacer"></div>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
         <button class="btn ghost sm" id="refreshBtn">Refresh</button>
@@ -195,7 +195,7 @@
 <div class="modal-root hidden" id="modalRoot"></div>
 
 <script>
-// Furagemz Admin panel.
+// Chronova Admin panel.
 const SERVER = 'https://ugandalove.onrender.com';
 
 let ADMIN_KEY = '';
@@ -384,7 +384,7 @@ async function renderDashboard(){
       <div class="stat"><div class="n">${ugx(s.totalInvested)}</div><div class="l">Total invested</div></div>
       <div class="stat"><div class="n">${ugx(s.totalEarned)}</div><div class="l">Cashback paid</div></div>
       <div class="stat"><div class="n">${ugx(s.totalCommissions)}</div><div class="l">Referral commissions</div></div>
-      <div class="stat"><div class="n">${s.activeInvestments||0}</div><div class="l">Active gems</div></div>
+      <div class="stat"><div class="n">${s.activeInvestments||0}</div><div class="l">Active watches</div></div>
       <div class="stat"><div class="n">${ugx(s.outstandingPayout)}</div><div class="l">Future cashback owed</div></div>
       <div class="stat"><div class="n">${s.pendingWithdrawals||0}</div><div class="l">Pending payouts</div></div>
       <div class="stat"><div class="n">${ugx(s.pendingPayouts)}</div><div class="l">Payout amount due</div></div>
@@ -510,12 +510,12 @@ async function openUser(uid){
       <div style="flex:2"><input id="pwNew" type="text" placeholder="New password (min 6 chars)"></div>
       <button class="btn sky sm" id="pwBtn" title="Set a new login password for this user via Firebase">Reset password</button>
     </div>
-    <h4 style="margin:18px 0 8px;font-size:14px">Gems (${(r.investments||[]).length})</h4>
+    <h4 style="margin:18px 0 8px;font-size:14px">Watches (${(r.investments||[]).length})</h4>
     ${(r.investments||[]).length?`<div class="table-scroll" style="max-height:170px"><table><tbody>
-      ${r.investments.map(iv=>`<tr><td><b>${esc(iv.tierLabel||'Gem')}</b></td><td>${ugx(iv.amount)}</td>
+      ${r.investments.map(iv=>`<tr><td><b>${esc(iv.tierLabel||'Watch')}</b></td><td>${ugx(iv.amount)}</td>
         <td><span class="pill-tag ${iv.status==='active'?'t-warn':iv.status==='matured'?'t-ok':'t-mut'}">${esc(iv.status)}</span></td>
         <td style="white-space:nowrap">${ugx(iv.paidOut)} / ${ugx(iv.expectedReturn)}</td></tr>`).join('')}
-    </tbody></table></div>`:'<p class="muted" style="margin:0">No gems yet.</p>'}
+    </tbody></table></div>`:'<p class="muted" style="margin:0">No watches yet.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Saved withdrawal accounts</h4>
     ${(u.bankAccounts||[]).length?(u.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holderName||'Account')}</span><span>${esc(a.network||'')} · 0${esc(a.phone)}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
@@ -541,7 +541,7 @@ async function openUser(uid){
     if(d.status==='success') $('pwNew').value='';
   });
   $('delBtn').addEventListener('click', async()=>{
-    const typed = prompt(`This PERMANENTLY deletes ${u.username||u.phone} and ALL their data — deposits, withdrawals, gems, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
+    const typed = prompt(`This PERMANENTLY deletes ${u.username||u.phone} and ALL their data — deposits, withdrawals, watches, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
     if (typed === null) return;
     if (typed.trim() !== 'DELETE') return toast('Not deleted — you must type DELETE exactly','err');
     const b=$('delBtn'); b.disabled=true; b.textContent='Deleting…';
@@ -625,9 +625,9 @@ async function renderProducts(){
   const r = await api('/admin/products/list');
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Gem products (${list.length})</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Watch products (${list.length})</h2>
       <button class="btn sm ghost" id="reseedProd">Reset to defaults</button>
-      <button class="btn sm" id="newProd">+ New gem</button></div>
+      <button class="btn sm" id="newProd">+ New watch</button></div>
     <div class="prod-grid">${list.length?list.map(p=>`
       <div class="prod">
         <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':gemSwatch(p.color)}</div>
@@ -640,7 +640,7 @@ async function renderProducts(){
       </div>`).join(''):'<div class="empty">No products. Tap “New gem”.</div>'}</div>`;
   $('newProd').addEventListener('click',()=>editProduct(null,list.length));
   $('reseedProd').addEventListener('click',async()=>{
-    if(!confirm('Reset the six gems to the default price ladder and payouts? Uploaded images are kept.'))return;
+    if(!confirm('Reset the six watches to the default price ladder and payouts? Uploaded images are kept.'))return;
     const b=$('reseedProd'); b.disabled=true; b.textContent='Resetting…';
     const d=await api('/admin/products/reseed');
     toast(d.status==='success'?`Done — ${d.updated} updated, ${d.created} added`:(d.message||'Failed'),d.status==='success'?'ok':'err');
@@ -664,7 +664,7 @@ function editProduct(p, order){
       <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
     </div>
     <label>Accent colour (hex)</label><input id="pColor" value="${esc(p.color||'#7c3aed')}" placeholder="#10b981">
-    <label>Gem image</label>
+    <label>Watch image</label>
     <div class="img-picker">
       <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
       <div class="img-picker-actions">
@@ -678,7 +678,7 @@ function editProduct(p, order){
       <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
     <div class="switch-row"><span><b>Coming soon</b> <span class="muted">(shown, but not buyable yet)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
-    <button class="btn block" id="pSave">Save gem</button>`);
+    <button class="btn block" id="pSave">Save watch</button>`);
   let imgData = p.image||''; // uploaded data URI (takes priority over the URL field)
   const setPrev = (src)=>{ $('pImgPrev').innerHTML = src?`<img src="${esc(src)}" alt="">`:'<span class="muted">No image</span>'; $('pImgClear').style.display = src?'':'none'; };
   $('pFile').addEventListener('change', async e=>{
@@ -773,7 +773,7 @@ let _txns=[], _txFilter='all';
 async function renderTransactions(){
   const r = await api('/admin/transactions/list', { limit: 400 });
   _txns = r.transactions||[];
-  const subs=[['all','All'],['topup','Deposits'],['withdrawal','Withdrawals'],['commission','Commissions'],['investment','Gems'],['boost','Boosts'],['checkin','Check-in'],['redeem','Codes']];
+  const subs=[['all','All'],['topup','Deposits'],['withdrawal','Withdrawals'],['commission','Commissions'],['investment','Watches'],['boost','Boosts'],['checkin','Check-in'],['redeem','Codes']];
   $('content').innerHTML = `
     <h2 class="sec">Transactions</h2>
     <div class="panel-card"><input id="txSearch" placeholder="Search description, type or user id"></div>
@@ -852,18 +852,20 @@ async function renderSettings(){
         <div><label>Boost unlocks after (days)</label><input id="sBoostDays" type="number" value="${v('boostUnlockDays',5)}"></div>
         <div><label>Boost matures in (days)</label><input id="sBoostDaysM" type="number" value="${v('boostMatureDays',5)}"></div>
       </div>
-      <div class="switch-row" style="margin-top:8px"><span><b>Require a gem before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
+      <div class="switch-row" style="margin-top:8px"><span><b>Require a watch before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
-      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="Furagemz is being upgraded. Please check back shortly.">
+      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="Chronova is being upgraded. Please check back shortly.">
       <h2 class="sec" style="margin:14px 0 4px">Payment gateway</h2>
       <div class="row">
         <div><label>Deposits go through</label><select id="sDepProv">
-          <option value="marzpay" ${(s.depositProvider!=='obpay')?'selected':''}>MarzPay</option>
+          <option value="zengapay" ${((s.depositProvider||'zengapay')==='zengapay')?'selected':''}>ZengaPay</option>
+          <option value="marzpay" ${(s.depositProvider==='marzpay')?'selected':''}>MarzPay</option>
           <option value="obpay" ${(s.depositProvider==='obpay')?'selected':''}>ObPay</option></select></div>
         <div><label>Withdrawals go through</label><select id="sPayProv">
-          <option value="marzpay" ${(s.payoutProvider!=='obpay')?'selected':''}>MarzPay</option>
+          <option value="zengapay" ${((s.payoutProvider||'zengapay')==='zengapay')?'selected':''}>ZengaPay</option>
+          <option value="marzpay" ${(s.payoutProvider==='marzpay')?'selected':''}>MarzPay</option>
           <option value="obpay" ${(s.payoutProvider==='obpay')?'selected':''}>ObPay</option></select></div>
       </div>
       <p class="muted" style="margin:4px 0 0">Switch the gateway anytime. Any payment already in flight finishes on the gateway that started it.</p>
@@ -892,12 +894,12 @@ async function renderSettings(){
 
     <h2 class="sec">About page</h2>
     <div class="panel-card">
-      <label>App tagline (shown under the logo)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Grow your money with gems.">
+      <label>App tagline (shown under the logo)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Grow your money with watches.">
       <label>About text (shown on the app's About page)</label>
-      <textarea id="abText" rows="8" placeholder="Describe Furagemz for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
+      <textarea id="abText" rows="8" placeholder="Describe Chronova for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
       <div class="row" style="margin-top:6px">
         <div><label>App version</label><input id="abVer" value="${esc(v('appVersion','1.7.0'))}" placeholder="1.7.0"></div>
-        <div><label>Developer</label><input id="abDev" value="${esc(v('appDeveloper','Furagemz Developers'))}"></div>
+        <div><label>Developer</label><input id="abDev" value="${esc(v('appDeveloper','Chronova Developers'))}"></div>
         <div><label>App size</label><input id="abSize" value="${esc(v('appSize','2.4 MB'))}" placeholder="2.4 MB"></div>
       </div>
       <button class="btn block" id="saveAbout">Save about page</button>
