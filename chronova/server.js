@@ -102,7 +102,7 @@ app.use('/admin/', adminLimiter);
 const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/checkin', '/redeem', '/team', '/register'];
 // Payment-provider webhooks/callbacks must ALWAYS run, even in maintenance,
 // or deposits/withdrawals in flight would never get confirmed.
-const GUARD_EXEMPT = new Set(['/', '/health', '/callback', '/deposit/callback', '/deposit/return', '/withdraw/callback', '/deposit/obpay-callback', '/obpay/webhook', '/withdraw/obpay-callback', '/obpay/payout-webhook']);
+const GUARD_EXEMPT = new Set(['/', '/health', '/callback', '/deposit/callback', '/deposit/return', '/withdraw/callback', '/deposit/obpay-callback', '/obpay/webhook', '/withdraw/obpay-callback', '/obpay/payout-webhook', '/zenga/webhook', '/deposit/zenga-callback', '/withdraw/zenga-callback']);
 app.use(async (req, res, next) => {
   if (GUARD_EXEMPT.has(req.path)) return next();
   if (!MAINTENANCE_BLOCK.some(p => req.path.startsWith(p))) return next();
@@ -151,6 +151,10 @@ const OBPAY_URL        = (process.env.OBPAY_URL || 'https://k5nkqygnd0i42zb1n5c3
 const OBPAY_PUBLIC_KEY = process.env.OBPAY_PUBLIC_KEY || 'sb_publishable_dFKnLJZfWkXfRVr9l97rEm5s8RweReFt';
 const OBPAY_SECRET_KEY = process.env.OBPAY_SECRET_KEY || '';
 const OBPAY_WEBHOOK_SECRET = process.env.OBPAY_WEBHOOK_SECRET || '';
+// ── ZengaPay (Chronova's default gateway) ──
+const ZENGA_BASE          = (process.env.ZENGA_BASE || 'https://api.zengapay.com/v1').trim().replace(/\/$/, '');
+const ZENGA_API_KEY       = process.env.ZENGA_API_KEY || '';
+const ZENGA_WEBHOOK_SECRET = process.env.ZENGA_WEBHOOK_SECRET || '';
 // Where a card customer is bounced back to after paying on the gateway.
 const APP_URL = (process.env.APP_URL || 'https://chronovaplatform.edgeone.app').trim().replace(/\/$/, '');
 
@@ -341,8 +345,64 @@ async function obpayGetStatus(reference) {
 }
 // Short, space-free, ≤30-char reference (ObPay rejects long/spaced refs).
 function obpayRef() { return ('FZ-' + Date.now().toString(36) + '-' + randChars(6)).toUpperCase().slice(0, 30); }
+// ── ZengaPay CLIENT (deposits = Collections, withdrawals = Transfers) ──
+// Auth: Bearer <API key>. Money-safety identical to the others: a webhook is NEVER
+// trusted — success is always re-confirmed with ZengaPay's authenticated GET status
+// endpoint before any credit/complete/refund. Requires the server's egress IP to be
+// whitelisted in the ZengaPay dashboard (Settings → Developer Settings).
+async function zengaCall(path, method, body) {
+  const resp = await fetch(ZENGA_BASE + path, {
+    method, signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ZENGA_API_KEY}` },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  let j; try { j = await resp.json(); } catch (_) { j = { providerDown: true, message: PROVIDER_BUSY_MSG }; }
+  j._http = resp.status;
+  return j;
+}
+// ZengaPay wants an international MSISDN with no '+': 2567XXXXXXXX / 2567XXXXXXXX.
+function zengaMsisdn(phone) {
+  let p = String(phone).replace(/\D/g, '');
+  if (p.startsWith('0')) p = '256' + p.slice(1);
+  if (p.length === 9) p = '256' + p;
+  return p;
+}
+// external_reference must be unique per request, short & space-free.
+function zengaRef() { return ('CHR' + Date.now().toString(36) + randChars(6)).toUpperCase().slice(0, 30); }
+async function zengaCollect({ amount, phone, reference, description }) {
+  const r = await zengaCall('/collections', 'POST', {
+    msisdn: zengaMsisdn(phone), amount: Number(amount),
+    external_reference: String(reference), narration: String(description || 'Deposit').slice(0, 60)
+  });
+  const ok = [200, 201, 202].includes(r._http) && (r.transactionReference || r.status);
+  return { success: !!ok, reference: r?.transactionReference || null,
+           error: ok ? null : (r?.message || PROVIDER_BUSY_MSG), providerDown: r?.providerDown };
+}
+async function zengaPayout({ amount, phone, reference, description }) {
+  const r = await zengaCall('/transfers', 'POST', {
+    msisdn: zengaMsisdn(phone), amount: Number(amount),
+    external_reference: String(reference), narration: String(description || 'Payout').slice(0, 60), use_contact: false
+  });
+  const ok = [200, 201, 202].includes(r._http) && (r.transactionReference || r.status === 'accepted');
+  return { success: !!ok, reference: r?.transactionReference || null,
+           error: ok ? null : (r?.message || PROVIDER_BUSY_MSG), providerDown: r?.providerDown };
+}
+// Normalised status for a ZengaPay transaction. kind = 'collections' | 'transfers'.
+// Maps SUCCEEDED→success, FAILED→failed, PENDING/INDETERMINATE→pending.
+async function zengaGetStatus(theirRef, kind) {
+  if (!theirRef) return '';
+  try {
+    const r = await zengaCall('/' + kind + '/' + theirRef, 'GET');
+    const s = String(r?.data?.transactionStatus || r?.transactionStatus || '').toUpperCase();
+    if (s === 'SUCCEEDED') return 'success';
+    if (s === 'FAILED')    return 'failed';
+    if (s === 'PENDING' || s === 'INDETERMINATE') return 'pending';
+    return '';
+  } catch (_) { return ''; }
+}
 // Real payout status for a withdrawal, whichever provider sent it (lowercased).
 async function getPayoutStatus(wit) {
+  if (wit.provider === 'zengapay') return await zengaGetStatus(wit.zengaTxRef || wit.marzReference, 'transfers');
   if (wit.provider === 'obpay') return await obpayGetStatus(wit.marzReference);
   return await marzGetStatus(wit.marzTxUuid || wit.marzReference);
 }
@@ -739,7 +799,7 @@ app.get('/settings/public', async (_req, res) => {
     status: 'success',
     minDeposit: s.minDeposit ?? MIN_DEPOSIT,
     minWithdrawal: s.minWithdrawal ?? MIN_WITHDRAWAL,
-    depositProvider: s.depositProvider === 'obpay' ? 'obpay' : 'marzpay', // which gateway the app deposits through
+    depositProvider: ['obpay','marzpay','zengapay'].includes(s.depositProvider) ? s.depositProvider : 'zengapay', // which gateway the app deposits through
     welcomeBonus: s.welcomeBonus ?? WELCOME_BONUS,
     checkinBonus: s.checkinBonus ?? CHECKIN_BONUS,
     liquidityFee: s.liquidityFee ?? LIQUIDITY_FEE,
@@ -1484,7 +1544,7 @@ async function pollPendingPayments() {
       .where('status', '==', 'processing').orderBy('createdAt', 'asc').limit(60).get();
     for (const doc of depSnap.docs) {
       try {
-        const r = doc.data().provider === 'obpay' ? await pollObpayDepositStatus(doc) : await pollMarzDepositStatus(doc);
+        const r = doc.data().provider === 'zengapay' ? await pollZengaDepositStatus(doc) : doc.data().provider === 'obpay' ? await pollObpayDepositStatus(doc) : await pollMarzDepositStatus(doc);
         if (r.credited || r.failed) { settled++; continue; }
         // Abandoned attempt (cancelled prompt, never paid): expire after 6 hours
         // so it shows honestly as failed instead of processing forever. A LATE
@@ -2151,6 +2211,106 @@ async function handleObpayEvent(req, res) {
 app.post('/obpay/webhook', handleObpayEvent);
 app.post('/deposit/obpay-callback', handleObpayEvent);
 
+// ═══════════════════════════════════════════
+// DEPOSIT — ZengaPay collection (mobile money). Same money-safety: in-process
+// lock + atomic increment on credit, and success is ALWAYS re-confirmed with
+// ZengaPay's authenticated GET status (never trusts a webhook body).
+// ═══════════════════════════════════════════
+async function pollZengaDepositStatus(depDoc) {
+  const dep = depDoc.data();
+  if (!ZENGA_API_KEY) return { credited: false, failed: false };
+  const raw = await zengaGetStatus(dep.zengaTxRef || dep.marzReference, 'collections');
+  if (raw === 'success') { await creditMarzDeposit(depDoc, dep.amount, dep.zengaTxRef || null); return { credited: true, failed: false, amount: dep.amount }; }
+  if (raw === 'failed') {
+    if (dep.status !== 'failed') await depDoc.ref.update({ status: 'failed',
+      failedAt: FieldValue.serverTimestamp(), failureReason: 'Payment failed or cancelled' });
+    return { credited: false, failed: true };
+  }
+  return { credited: false, failed: false };
+}
+app.post('/deposit/zengapay', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const { amount, phone: rawPhone } = req.body;
+  const amt = parseInt(amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  const lastDep = _depCreateDebounce.get(userId) || 0;
+  if (Date.now() - lastDep < 7000)
+    return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+  _depCreateDebounce.set(userId, Date.now());
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    const minDep = sett.minDeposit ?? MIN_DEPOSIT;
+    if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
+    const phone = cleanPhone(rawPhone || user.phone || '');
+    if (!phone || phone.length < 10)
+      return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
+
+    const reference = zengaRef();
+    const z = await zengaCollect({ amount: amt, phone, reference, description: (user.name || userId) });
+    if (!z.success) {
+      const rawMsg = String(z.error || '');
+      const msg = (z.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg))
+        ? PROVIDER_BUSY_MSG : (rawMsg || 'Could not start the payment right now. Please try again.');
+      return res.status(400).json({ status: 'error', message: msg });
+    }
+    const { date, time } = nowStr();
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId, phone, amount: amt, provider: 'zengapay',
+      marzReference: reference, zengaTxRef: z.reference || null,
+      status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone });
+  } catch (e) {
+    console.error('ZengaPay deposit error:', e.message);
+    const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
+      ? PROVIDER_BUSY_MSG : (e.message || 'Could not start the payment');
+    return res.status(500).json({ status: 'error', message: friendly });
+  }
+});
+// ZengaPay webhook (single URL for collections + transfers). Ack fast, then
+// re-confirm with the authenticated status API before moving money — a forged or
+// unsigned callback can only trigger a truthful re-check, never a credit.
+async function handleZengaEvent(req, res) {
+  res.status(202).json({ received: true });
+  setImmediate(async () => {
+    try {
+      const d = (req.body && req.body.data) || {};
+      const extRef = d.transactionExternalReference || '';   // our external_reference
+      const theirRef = d.transactionReference || '';
+      if (!extRef && !theirRef) return;
+      // Deposit? matched on our reference (stored as marzReference)
+      if (extRef) {
+        const depSnap = await db.collection('pendingDeposits').where('marzReference', '==', extRef).limit(1).get();
+        if (!depSnap.empty) {
+          const depDoc = depSnap.docs[0];
+          const raw = await zengaGetStatus(depDoc.data().zengaTxRef || theirRef, 'collections');
+          if (raw === 'success') await creditMarzDeposit(depDoc, depDoc.data().amount, depDoc.data().zengaTxRef || theirRef || null);
+          else if (raw === 'failed' && depDoc.data().status === 'processing')
+            await depDoc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(), failureReason: 'Payment declined' });
+          return;
+        }
+        // Payout (withdrawal)?
+        const witSnap = await db.collection('withdrawals').where('marzReference', '==', extRef).limit(1).get();
+        if (!witSnap.empty) {
+          const witDoc = witSnap.docs[0];
+          if (witDoc.data().status !== 'processing') return;
+          const raw = await zengaGetStatus(witDoc.data().zengaTxRef || theirRef, 'transfers');
+          if (raw === 'success') await completeWithdrawal(witDoc);
+          else if (raw === 'failed') await failWithdrawal(witDoc, d.transactionExternalNarrative || 'Payout failed');
+        }
+      }
+    } catch (e) { console.error('ZengaPay webhook error:', e.message); }
+  });
+}
+app.post('/zenga/webhook', handleZengaEvent);
+app.post('/deposit/zenga-callback', handleZengaEvent);
+app.post('/withdraw/zenga-callback', handleZengaEvent);
+
 // CARD DEPOSIT — global. Creates a card collection and returns MarzPay's
 // redirect_url; the app sends the customer there to pay by card. Money settles
 // in UGX (their bank converts), so the wallet credit is identical to mobile
@@ -2221,7 +2381,7 @@ app.get('/deposit/status/:id', async (req, res) => {
     if (dep.status === 'processing' && Date.now() - (_depPollGate.get(snap.id) || 0) > 2000) {
       _depPollGate.set(snap.id, Date.now());
       try {
-        const result = dep.provider === 'obpay' ? await pollObpayDepositStatus(snap) : await pollMarzDepositStatus(snap);
+        const result = dep.provider === 'zengapay' ? await pollZengaDepositStatus(snap) : dep.provider === 'obpay' ? await pollObpayDepositStatus(snap) : await pollMarzDepositStatus(snap);
         if (result.credited || result.failed) {
           const fresh = await db.collection('pendingDeposits').doc(snap.id).get();
           dep = fresh.data();
@@ -2491,7 +2651,28 @@ app.post('/admin/withdraw/process', async (req, res) => {
     // Provider is admin-switchable in Settings (default MarzPay). Each in-flight
     // withdrawal remembers its own provider, so switching never orphans one.
     const sett = await getSettings();
-    const provider = sett.payoutProvider === 'obpay' ? 'obpay' : 'marzpay';
+    const provider = ['zengapay', 'obpay', 'marzpay'].includes(sett.payoutProvider) ? sett.payoutProvider : 'zengapay';
+
+    if (provider === 'zengapay') {
+      const reference = zengaRef();
+      const z = await zengaPayout({ amount: netAmount, phone, reference, description: wit.userName || wit.userId });
+      if (!z.success) {
+        const rawMsg = String(z.error || '');
+        const busy = z.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg);
+        const detail = (rawMsg && !busy) ? ` ZengaPay said: ${rawMsg}` : '';
+        return res.status(400).json({ status: 'error',
+          message: `ZengaPay could not send this payout right now — this is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ZengaPay wallet balance and IP whitelist).` });
+      }
+      await db.collection('withdrawals').doc(withdrawalId).update({
+        status: 'processing', provider: 'zengapay', marzReference: reference,
+        zengaTxRef: z.reference || '', processedAt: FieldValue.serverTimestamp()
+      });
+      try {
+        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing', marzReference: reference });
+      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+      return res.json({ status: 'success', message: `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}` });
+    }
 
     if (provider === 'obpay') {
       const reference = obpayRef();
@@ -2769,7 +2950,7 @@ app.post('/admin/deposit/complete', async (req, res) => {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
     if (snap.data().status === 'matched') return res.json({ status: 'success', message: 'Already credited' });
-    const result = snap.data().provider === 'obpay' ? await pollObpayDepositStatus(snap) : await pollMarzDepositStatus(snap);
+    const result = snap.data().provider === 'zengapay' ? await pollZengaDepositStatus(snap) : snap.data().provider === 'obpay' ? await pollObpayDepositStatus(snap) : await pollMarzDepositStatus(snap);
     if (result.credited) return res.json({ status: 'success', message: `Credited ${fmtUGX(result.amount || snap.data().amount)} to user` });
     if (result.failed) return res.status(400).json({ status: 'error', message: 'MarzPay confirms payment failed' });
     return res.status(400).json({ status: 'error', message: 'MarzPay status still pending — try again in a moment' });
