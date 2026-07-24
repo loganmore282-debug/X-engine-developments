@@ -15,7 +15,7 @@ const firebaseConfig = {
 };
 
 // Chronova Render backend.
-const SERVER = 'https://ugandalove.onrender.com';
+const SERVER = 'https://education-oc44.onrender.com';
 
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
