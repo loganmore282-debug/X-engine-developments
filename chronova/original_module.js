@@ -3,7 +3,7 @@ import { initializeApp, getApps }
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
-// FURAGEMZ — Firebase web config. Owner: replace with the Furagemz Firebase
+// FURAGEMZ — Firebase web config. Owner: replace with the Chronova Firebase
 // project's own web config once that project is created (separate from Voltra's).
 const firebaseConfig = {
   apiKey:            "AIzaSyBcyftQBgJXPoVhNx0BSSv-ZUz81k2YxZ0",
@@ -14,7 +14,7 @@ const firebaseConfig = {
   appId:             "1:538053506631:web:a388e60009a456befda362"
 };
 
-// Furagemz Render backend.
+// Chronova Render backend.
 const SERVER = 'https://ugandalove.onrender.com';
 
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
@@ -30,7 +30,7 @@ if ('serviceWorker' in navigator) {
 }
 try { if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))); } catch (_) {}
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _installPrompt = e; });
-window.addEventListener('appinstalled', () => { _installPrompt = null; try { toast('Furagemz installed', 'ok'); } catch (_) {} });
+window.addEventListener('appinstalled', () => { _installPrompt = null; try { toast('Chronova installed', 'ok'); } catch (_) {} });
 function isInstalled() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
@@ -83,7 +83,7 @@ const ICN = {
   boost:        _svg('<path d="M13 3 5 13h6l-1 8 9-11h-6z"/>'),
 };
 
-// Faceted emerald-cut gem illustration, tinted to any tier colour. Layered
+// Faceted emerald-cut watch illustration, tinted to any tier colour. Layered
 // polygons + white overlays give facets and shine on a flat brand colour.
 function gemArt(color) {
   return `<svg viewBox="0 0 64 64" fill="none">
@@ -222,7 +222,7 @@ function showView(name) {
   } catch (_) {}
 }
 
-// Paint the gradient watermark gems + floating decorative gems behind auth.
+// Paint the gradient watermark watches + floating decorative watches behind auth.
 document.getElementById('authArt1').innerHTML = gemArt('#ffffff');
 document.getElementById('authArt2').innerHTML = gemArt('#ffffff');
 document.querySelectorAll('.float-gem').forEach(el => { el.innerHTML = gemArt(el.dataset.fgem || '#ffffff'); });
@@ -444,7 +444,7 @@ onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
   // Keep the branded syncing screen up and load the ESSENTIAL data — balance,
-  // gems, transactions AND settings (banner images) — BEFORE revealing the
+  // watches, transactions AND settings (banner images) — BEFORE revealing the
   // dashboard, so it appears already populated: no "UGX 0 → real" flash and no
   // default banners flashing before the admin images. Capped so a slow network
   // can't hang the sync screen; anything still loading finishes in the background.
@@ -491,7 +491,7 @@ function cleanCardUrl() {
 // Returns true (and shows a blocker) if the app should be gated off.
 function checkGate() {
   if (_publicSettings?.maintenanceMode) {
-    showBlocker('Under maintenance', _publicSettings.maintenanceMsg || 'Furagemz is being upgraded. Please check back shortly.', 'Try again', () => location.reload());
+    showBlocker('Under maintenance', _publicSettings.maintenanceMsg || 'Chronova is being upgraded. Please check back shortly.', 'Try again', () => location.reload());
     return true;
   }
   if (_account?.status === 'banned') {
@@ -574,8 +574,8 @@ function tickColor(name) {
 function tickerItemsHtml() {
   if (!_feed.length) return '';
   const one = f => {
-    const label = f.action === 'joined Furagemz'
-      ? `${esc(f.name)} joined Furagemz`
+    const label = f.action === 'joined Chronova'
+      ? `${esc(f.name)} joined Chronova`
       : `${esc(f.name)} ${esc(f.action)}${f.amount ? ` <span class="tk-amt">${ugx(f.amount)}</span>` : ''}`;
     return `<div class="tick-item"><span class="tav" style="background:${tickColor(f.name)}">${esc(initials(f.name))}</span><span>${label} <span class="tk-ago">· ${f.ago}m</span></span></div>`;
   };
@@ -663,7 +663,7 @@ async function switchTab(name) {
   _activeTab = name;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-' + name));
-  document.getElementById('topbarTitle').textContent = { home: 'Home', gems: 'Gems', team: 'Team', account: 'Account' }[name];
+  document.getElementById('topbarTitle').textContent = { home: 'Home', gems: 'Watches', team: 'Team', account: 'Account' }[name];
   // INSTANT tabs: paint whatever is cached NOW, refresh silently in the
   // background and repaint when fresh data lands — never block the switch.
   if (name === 'gems' && !_products.length)
@@ -786,7 +786,7 @@ function boostCost(inv) {
   const pct = (_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.30;
   return Math.round((inv.expectedReturn || 0) * pct);
 }
-// Boost eligibility for an active gem.
+// Boost eligibility for an active watch.
 function boostState(inv) {
   if (inv.status !== 'active') return { kind: 'none' };
   if (inv.boosted) return { kind: 'boosted', ms: tsMs(inv.maturityDate) - Date.now() };
@@ -817,7 +817,7 @@ function openBoostModal(invId) {
   openModal(`
     <div class="modal-head"><h2>Boost ${esc(inv.tierLabel || 'gem')}</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="boost-hero">${ICN.boost}</div>
-    <p class="boost-copy">Pay <b>${ugx(cost)}</b> (${pct}% of this gem's total return) to bring its maturity forward to <b>${days} days</b>. You keep receiving your normal daily cashback of <b>${ugx(normalDaily)}</b> along the way, and on the final day the entire remaining balance is paid to you at once. It does not add extra profit — the same money simply arrives sooner, then the gem completes.</p>
+    <p class="boost-copy">Pay <b>${ugx(cost)}</b> (${pct}% of this gem's total return) to bring its maturity forward to <b>${days} days</b>. You keep receiving your normal daily cashback of <b>${ugx(normalDaily)}</b> along the way, and on the final day the entire remaining balance is paid to you at once. It does not add extra profit — the same money simply arrives sooner, then the watch completes.</p>
     <div class="breakdown">
       <div class="br"><span class="muted">Boost cost (${pct}%)</span><span>${ugx(cost)}</span></div>
       <div class="br"><span class="muted">Daily cashback continues</span><span>${ugx(normalDaily)}</span></div>
@@ -849,20 +849,20 @@ function openHoldingsModal() {
     if (bs.kind === 'ready')   action = `<button class="boost-btn" style="margin-top:10px" data-boost="${esc(inv.id)}">${ICN.boost} Boost ${ugx(bs.cost)}</button>`;
     else if (bs.kind === 'boosted') action = `<div class="bs hot" style="margin-top:8px">Matures in ${fmtCountdown(bs.ms)}</div>`;
     else if (bs.kind === 'locked')  action = `<div class="bs" style="margin-top:8px">Boost unlocks in ${bs.days} day${bs.days === 1 ? '' : 's'}</div>`;
-    return `<div class="hold-row"><div class="hold-top"><b>${esc(inv.tierLabel || 'Gem')}</b>${badge}</div>
+    return `<div class="hold-row"><div class="hold-top"><b>${esc(inv.tierLabel || 'Watch')}</b>${badge}</div>
       <div class="hold-sub">${ugx(inv.amount)} in · pays ${ugx(inv.expectedReturn)}</div>${cashbackLineHtml(inv)}${action}</div>`;
   };
   openModal(`
-    <div class="modal-head"><h2>My gems</h2><button class="modal-close">${ICN.close}</button></div>
-    ${list.length ? list.map(rowHtml).join('') : `<div class="empty-note">You have no gems yet. Buy one from the Gems tab.</div>`}
+    <div class="modal-head"><h2>My watches</h2><button class="modal-close">${ICN.close}</button></div>
+    ${list.length ? list.map(rowHtml).join('') : `<div class="empty-note">You have no watches yet. Buy one from the Watches tab.</div>`}
   `);
   bindBoosts(document.getElementById('modalRoot'));
 }
 
 const BANNER_SLIDES = [
-  { bg: 'linear-gradient(120deg,#7c3aed 0%,#c026d3 100%)', art: '#e9d5ff', title: 'Grow your gems', sub: 'Buy a tier, get paid in full at maturity.' },
+  { bg: 'linear-gradient(120deg,#7c3aed 0%,#c026d3 100%)', art: '#e9d5ff', title: 'Grow your watches', sub: 'Buy a tier, get paid in full at maturity.' },
   { bg: 'linear-gradient(120deg,#0284c7 0%,#4338ca 100%)', art: '#bae6fd', title: 'Invite &amp; earn', sub: '35% on level 1, plus level 2 and 3.' },
-  { bg: 'linear-gradient(120deg,#059669 0%,#0d9488 100%)', art: '#a7f3d0', title: 'Redeem a code', sub: 'Got a Furagemz code? Turn it into cash.' },
+  { bg: 'linear-gradient(120deg,#059669 0%,#0d9488 100%)', art: '#a7f3d0', title: 'Redeem a code', sub: 'Got a Chronova code? Turn it into cash.' },
 ];
 let _bannerTimer = null, _bannerIdx = 0;
 function startBanner() {
@@ -922,20 +922,20 @@ function renderHome() {
       <button class="quick-btn" id="qaRedeem"><span class="qi" style="background:#f3e8ff;color:var(--violet)">${ICN.redeem}</span>Redeem</button>
       <button class="quick-btn${checkedInToday ? ' claimed' : ''}" id="qaCheckin"><span class="qi" style="background:#fef9e7;color:var(--topaz)">${ICN.checkin}</span>${checkedInToday ? 'Claimed' : 'Check in'}</button>
     </div>
-    <div class="sec-head"><h3>Your gems</h3>${active.length ? `<button class="link-btn" data-tab-jump="gems">Buy more</button>` : ''}</div>
+    <div class="sec-head"><h3>Your watches</h3>${active.length ? `<button class="link-btn" data-tab-jump="gems">Buy more</button>` : ''}</div>
     ${active.length ? active.map(inv => `
       <div class="gem-active">
         <div class="ga-main">
           <div class="ring" data-inv="${esc(inv.id)}">${ringSvg(gemProgress(inv), 'var(--violet)')}</div>
           <div class="gem-active-info">
-            <div class="t">${esc(inv.tierLabel || 'Gem')}</div>
+            <div class="t">${esc(inv.tierLabel || 'Watch')}</div>
             <div class="s">${inv.boosted ? 'Accelerating' : daysLeft(inv) + ' day' + (daysLeft(inv) === 1 ? '' : 's') + ' left'} · ${ugx(inv.amount)} in</div>
             <div class="p">Earns ${ugx(Math.round((inv.expectedReturn || 0) / (inv.cycle || 1)))} daily · ${ugx(inv.expectedReturn)} total</div>
           </div>
         </div>
         ${cashbackLineHtml(inv)}
         ${boostRowHtml(inv)}
-      </div>`).join('') : `<div class="empty-note">No active gems yet. Buy your first one from the Gems tab.</div>`}
+      </div>`).join('') : `<div class="empty-note">No active watches yet. Buy your first one from the Watches tab.</div>`}
     <div class="sec-head"><h3>Recent activity</h3>${_txns.length ? `<button class="link-btn" data-tab-jump="account">See all</button>` : ''}</div>
     ${recent.length ? recent.map(txnRowHtml).join('') : `<div class="empty-note">No activity yet.</div>`}
   `;
@@ -962,9 +962,9 @@ const REC_META = {
   commission:    { label: 'Commission',        grad: 'linear-gradient(135deg,#818cf8,#6366f1)' },
   team_reward:   { label: 'Team reward',       grad: 'linear-gradient(135deg,#f472b6,#db2777)' },
   checkin:       { label: 'Daily bonus',       grad: 'linear-gradient(135deg,#fbbf24,#f59e0b)' },
-  gem_payout:    { label: 'Gem payout',        grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
-  investment:    { label: 'Gem purchase',      grad: 'linear-gradient(135deg,#c084fc,#9333ea)' },
-  boost:         { label: 'Gem boost',         grad: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
+  gem_payout:    { label: 'Watch payout',        grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
+  investment:    { label: 'Watch purchase',      grad: 'linear-gradient(135deg,#c084fc,#9333ea)' },
+  boost:         { label: 'Watch boost',         grad: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
   redeem:        { label: 'Code redeemed',     grad: 'linear-gradient(135deg,#a78bfa,#7c3aed)' },
   admin_credit:  { label: 'Credit',            grad: 'linear-gradient(135deg,#38bdf8,#2563eb)' },
   admin_debit:   { label: 'Adjustment',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
@@ -1166,7 +1166,7 @@ function openWithdrawModal() {
         <ol>
           <li>Minimum withdrawal is <b>${ugx(minW)}</b>. A <b>${feePct}%</b> service fee is deducted, so you receive the amount shown above.</li>
           <li>Money is sent to the mobile-money number you enter below. Save an account to reuse it next time.</li>
-          <li>You must have activated at least one gem before you can withdraw. Requests are processed shortly after you submit.</li>
+          <li>You must have activated at least one watch before you can withdraw. Requests are processed shortly after you submit.</li>
         </ol>
       </div>
     </div>
@@ -1175,7 +1175,7 @@ function openWithdrawModal() {
         ${(_account.bankAccounts).map(a => `<button type="button" class="amt-chip bank-pick" data-phone="${esc(a.phone)}">${esc(a.holderName || a.network || 'Account')}</button>`).join('')}
       </div>` : ''}
     <div class="field"><label>Send to mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
-    ${(_account?.totalInvested || 0) <= 0 ? `<div class="err-box" style="margin-bottom:14px">Activate at least one gem before you can withdraw.</div>` : ''}
+    ${(_account?.totalInvested || 0) <= 0 ? `<div class="err-box" style="margin-bottom:14px">Activate at least one watch before you can withdraw.</div>` : ''}
     <button class="btn" id="mSubmit">Request withdrawal</button>
   `);
   document.querySelectorAll('#modalRoot .bank-pick').forEach(b => b.addEventListener('click', () => {
@@ -1238,9 +1238,9 @@ function openRedeemModal() {
 const GEM_COLORS = { quartz: '#64748b', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#334155' };
 function renderGems() {
   const el = document.getElementById('panel-gems');
-  if (!_products.length) { el.innerHTML = `<div class="empty-note" style="margin-top:14px">Gem tiers not loaded yet.</div>`; loadProducts().then(renderGems); return; }
+  if (!_products.length) { el.innerHTML = `<div class="empty-note" style="margin-top:14px">Watch tiers not loaded yet.</div>`; loadProducts().then(renderGems); return; }
   el.innerHTML = `
-    <div class="sec-head" style="margin-top:12px"><h3>Pick a gem to grow</h3></div>
+    <div class="sec-head" style="margin-top:12px"><h3>Pick a watch to grow</h3></div>
     ${_products.map(p => {
       const color = p.color || GEM_COLORS[p.key] || '#7c3aed';
       const daily = Math.round(p.expectedReturn / (p.cycle || 1));
@@ -1301,7 +1301,7 @@ function openGemDetail(key) {
     </div>
 
     <div class="gd-flow">
-      <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>Activate this gem for <b>${ugx(p.price)}</b></div>
+      <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>Activate this watch for <b>${ugx(p.price)}</b></div>
       <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>Earn <b>${ugx(daily)}</b> automatically every day, starting tomorrow</div>
       <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>After ${p.cycle} days you have earned <b>${ugx(p.expectedReturn)}</b>, paid to your wallet</div>
     </div>
@@ -1321,7 +1321,7 @@ function openGemDetail(key) {
     if (r.status !== 'success') { restore(); return toast(r.message || 'Purchase failed', 'err'); }
     closeModal();
     fireConfetti();
-    toast(r.message || 'Gem activated', 'ok');
+    toast(r.message || 'Watch activated', 'ok');
     await loadAccount(); await loadTxns(); renderHome();
   });
 }
@@ -1371,7 +1371,7 @@ function renderTeam() {
         <div class="lvl-row">
           <div class="lvl-badge" style="background:${l.bg};color:${l.tint}">L${l.n}</div>
           <div class="lvl-info">
-            <div class="t">Level ${l.n} · earns ${commPct(l.n)}% of every gem</div>
+            <div class="t">Level ${l.n} · earns ${commPct(l.n)}% of every watch</div>
             <div class="s">${l.count} member${l.count === 1 ? '' : 's'}</div>
           </div>
           <div class="lvl-earn">${ugx(l.earned)}</div>
@@ -1415,7 +1415,7 @@ function renderTeam() {
         <div class="avatar" style="background:${tickColor(m.name)}">${esc(initials(m.name))}</div>
         <div class="member-info">
           <div class="t">${esc(m.name)}</div>
-          <div class="s">Deposited <b>${ugx(m.deposited || 0)}</b> · ${m.hasInvested ? 'gem active' : 'no gem yet'}</div>
+          <div class="s">Deposited <b>${ugx(m.deposited || 0)}</b> · ${m.hasInvested ? 'gem active' : 'no watch yet'}</div>
         </div>
         <div class="badge ${(m.deposited || 0) > 0 ? 'on' : 'off'}">${(m.deposited || 0) > 0 ? 'Counts' : 'No deposit'}</div>
       </div>`).join('') : `<div class="empty-note">Share your code — nobody has joined yet.</div>`}
@@ -1431,8 +1431,8 @@ function renderTeam() {
   const shareBtn = el.querySelector('#shareRef');
   if (shareBtn) shareBtn.addEventListener('click', async () => {
     const wb = _publicSettings?.welcomeBonus || 7000;
-    const text = `I am earning on Furagemz and you can too. Sign up with my link and UGX ${Number(wb).toLocaleString('en-UG')} lands in your wallet instantly as a welcome bonus. Activate a gem and it pays you cashback every single day, and when you invite your own friends you earn automatic rewards on three levels. Deposits, cashback and withdrawals are all processed automatically straight to your mobile money. Use my referral code ${code} or simply tap my link to join: ${link}`;
-    if (navigator.share) { try { await navigator.share({ title: 'Furagemz', text, url: link }); } catch (_) {} }
+    const text = `I am earning on Chronova and you can too. Sign up with my link and UGX ${Number(wb).toLocaleString('en-UG')} lands in your wallet instantly as a welcome bonus. Activate a watch and it pays you cashback every single day, and when you invite your own friends you earn automatic rewards on three levels. Deposits, cashback and withdrawals are all processed automatically straight to your mobile money. Use my referral code ${code} or simply tap my link to join: ${link}`;
+    if (navigator.share) { try { await navigator.share({ title: 'Chronova', text, url: link }); } catch (_) {} }
     else navigator.clipboard?.writeText(text).then(() => toast('Invite message copied', 'ok')).catch(() => {});
   });
 }
@@ -1456,7 +1456,7 @@ function renderAccount() {
       <div class="acc-top">
         <div class="acc-av">${esc(initials(_account?.name))}</div>
         <div>
-          <div class="acc-name">${esc(_account?.name || 'Furagemz user')}</div>
+          <div class="acc-name">${esc(_account?.name || 'Chronova user')}</div>
           <div class="acc-phone">${esc(_account?.phone || '')}</div>
           ${code}
         </div>
@@ -1466,12 +1466,12 @@ function renderAccount() {
         <div class="as"><div class="n">${ugx(_account?.totalEarned || 0)}</div><div class="l">Earned</div></div>
         <div class="as"><div class="n">${ugx(_account?.totalWithdrawn || 0)}</div><div class="l">Withdrawn</div></div>
       </div>
-      <div class="acc-tier">${ICN.gem} Furagemz member</div>
+      <div class="acc-tier">${ICN.gem} Chronova member</div>
     </div>
     <div class="menu-list">
       <button class="menu-row" id="mnRedeem"><span class="mi">${ICN.redeem}</span><span class="ml">Redeem a code</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnHistory"><span class="mi">${ICN.receipt}</span><span class="ml">Transaction history</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnGems"><span class="mi">${ICN.gem}</span><span class="ml">My gems</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnGems"><span class="mi">${ICN.gem}</span><span class="ml">My watches</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnTeam"><span class="mi">${ICN.people}</span><span class="ml">Referrals &amp; team</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
@@ -1479,7 +1479,7 @@ function renderAccount() {
       <button class="menu-row" id="mnPassword"><span class="mi">${ICN.lock}</span><span class="ml">Change password</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnSupport"><span class="mi">${ICN.support}</span><span class="ml">Contact support</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnDownload"><span class="mi">${ICN.download}</span><span class="ml">Download app</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnAbout"><span class="mi">${ICN.about}</span><span class="ml">About Furagemz</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnAbout"><span class="mi">${ICN.about}</span><span class="ml">About Chronova</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
       <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Log out</span></button>
@@ -1508,18 +1508,18 @@ function openDownloadModal() {
     <div class="modal-head"><h2>Download app</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="about-hero">
       <div class="about-logo">${FG_LOGO}</div>
-      <div class="about-name">Furagemz</div>
-      <div class="about-tag">Install Furagemz on your phone</div>
+      <div class="about-name">Chronova</div>
+      <div class="about-tag">Install Chronova on your phone</div>
     </div>
     <div class="dl-meta">
       <div class="dl-row"><span>Version</span><b>${esc(s.appVersion || '1.0.0')}</b></div>
-      <div class="dl-row"><span>Developer</span><b>${esc(s.appDeveloper || 'Furagemz Developers')}</b></div>
+      <div class="dl-row"><span>Developer</span><b>${esc(s.appDeveloper || 'Chronova Developers')}</b></div>
       <div class="dl-row"><span>Size</span><b>${esc(s.appSize || '—')}</b></div>
       <div class="dl-row"><span>Platform</span><b>Android · iPhone · Web</b></div>
     </div>
     ${installed
-      ? `<div class="info-note"><span class="in-ic">${ICN.info}</span><div class="in-tx">Furagemz is already installed on this device. Open it from your home screen.</div></div>`
-      : `<button class="btn" id="dlInstall">${ICN.download} Install Furagemz</button>
+      ? `<div class="info-note"><span class="in-ic">${ICN.info}</span><div class="in-tx">Chronova is already installed on this device. Open it from your home screen.</div></div>`
+      : `<button class="btn" id="dlInstall">${ICN.download} Install Chronova</button>
          <div class="info-note" style="margin-top:14px"><span class="in-ic">${ICN.info}</span><div class="in-tx">If the install button does nothing, open your browser menu and tap <b>Add to Home screen</b> (or <b>Install app</b>).</div></div>`}
   `);
   const btn = document.getElementById('dlInstall');
@@ -1539,16 +1539,16 @@ function openDownloadModal() {
 // short default so the page is never empty before the admin writes their own.
 function openAboutModal() {
   const raw = (_publicSettings?.aboutText || '').trim();
-  const tagline = _publicSettings?.brandTagline || 'Grow your money with gems.';
+  const tagline = _publicSettings?.brandTagline || 'Grow your money with watches.';
   const paras = raw
     ? raw.split(/\n{2,}|\r\n\r\n/).map(p => `<p>${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('')
-    : `<p>Furagemz is a mobile-money savings and rewards platform. You buy a gem tier, and it pays out in full when it matures — a simple, fixed return with no daily claiming.</p>
+    : `<p>Chronova is a mobile-money savings and rewards platform. You buy a watch tier, and it pays out in full when it matures — a simple, fixed return with no daily claiming.</p>
        <p>Invite friends with your referral code to earn rewards across three levels, redeem codes for instant wallet credit, and check in daily for a bonus.</p>`;
   openModal(`
-    <div class="modal-head"><h2>About Furagemz</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="modal-head"><h2>About Chronova</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="about-hero">
       <div class="about-logo">${FG_LOGO}</div>
-      <div class="about-name">Furagemz</div>
+      <div class="about-name">Chronova</div>
       <div class="about-tag">${esc(tagline)}</div>
     </div>
     <div class="about-body">${paras}</div>
