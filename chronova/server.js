@@ -155,6 +155,13 @@ const OBPAY_WEBHOOK_SECRET = process.env.OBPAY_WEBHOOK_SECRET || '';
 const ZENGA_BASE          = (process.env.ZENGA_BASE || 'https://api.zengapay.com/v1').trim().replace(/\/$/, '');
 const ZENGA_API_KEY       = process.env.ZENGA_API_KEY || '';
 const ZENGA_WEBHOOK_SECRET = process.env.ZENGA_WEBHOOK_SECRET || '';
+// ── MarzSMS (admin alerts for the manual deposit/withdrawal flow) ──
+const MARZSMS_BASE   = (process.env.MARZSMS_BASE || 'https://sms.wearemarz.com/api/v1').trim().replace(/\/$/, '');
+const MARZSMS_KEY    = process.env.MARZSMS_KEY    || '';
+const MARZSMS_SECRET = process.env.MARZSMS_SECRET || '';
+// ── Manual (recipient-number) payment flow ──
+const MANUAL_ORDER_TTL_MS           = 15 * 60 * 1000; // escrow window: pay within 15 minutes
+const MANUAL_MAX_PENDING_PER_NUMBER = 3;              // anti-flood: soft cap of live orders per number
 // Where a card customer is bounced back to after paying on the gateway.
 const APP_URL = (process.env.APP_URL || 'https://chronovaplatform.edgeone.app').trim().replace(/\/$/, '');
 
@@ -405,6 +412,39 @@ async function getPayoutStatus(wit) {
   if (wit.provider === 'zengapay') return await zengaGetStatus(wit.zengaTxRef || wit.marzReference, 'transfers');
   if (wit.provider === 'obpay') return await obpayGetStatus(wit.marzReference);
   return await marzGetStatus(wit.marzTxUuid || wit.marzReference);
+}
+
+// ── MarzSMS CLIENT (admin alerts) — HTTP Basic Auth (key:secret) ──
+// Uganda intl format for MarzSMS: +256XXXXXXXXX.
+function toIntlUg(phone) {
+  let p = String(phone || '').replace(/[^\d]/g, '');
+  if (p.startsWith('256')) return '+' + p;
+  if (p.startsWith('0'))   return '+256' + p.slice(1);
+  if (p.length === 9)      return '+256' + p;
+  return p ? '+' + p : '';
+}
+async function sendSms(recipient, message) {
+  if (!MARZSMS_KEY || !MARZSMS_SECRET || !recipient) return { success: false, skipped: true };
+  try {
+    const auth = Buffer.from(MARZSMS_KEY + ':' + MARZSMS_SECRET).toString('base64');
+    const resp = await fetch(MARZSMS_BASE + '/sms/send', {
+      method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+      headers: { 'Authorization': 'Basic ' + auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient, message: String(message).slice(0, 320) })
+    });
+    let j; try { j = await resp.json(); } catch (_) { j = {}; }
+    return { success: !!j.success, data: j };
+  } catch (e) { console.error('sendSms error:', e.message); return { success: false, error: e.message }; }
+}
+// Alert every admin phone configured in settings (comma-separated). Never throws.
+async function notifyAdmins(message) {
+  try {
+    const s = await getSettings();
+    const phones = String(s.adminAlertPhones || '')
+      .split(',').map(x => toIntlUg(x)).filter(Boolean);
+    if (!phones.length) return;
+    await sendSms(phones.join(','), message).catch(() => {});
+  } catch (_) {}
 }
 
 // ── SETTINGS CACHE — reads MongoDB `settings/main`, TTL 5 min ──
@@ -799,7 +839,7 @@ app.get('/settings/public', async (_req, res) => {
     status: 'success',
     minDeposit: s.minDeposit ?? MIN_DEPOSIT,
     minWithdrawal: s.minWithdrawal ?? MIN_WITHDRAWAL,
-    depositProvider: ['obpay','marzpay','zengapay'].includes(s.depositProvider) ? s.depositProvider : 'zengapay', // which gateway the app deposits through
+    depositProvider: ['obpay','marzpay','zengapay','manual'].includes(s.depositProvider) ? s.depositProvider : 'manual', // which gateway the app deposits through
     welcomeBonus: s.welcomeBonus ?? WELCOME_BONUS,
     checkinBonus: s.checkinBonus ?? CHECKIN_BONUS,
     liquidityFee: s.liquidityFee ?? LIQUIDITY_FEE,
@@ -2311,6 +2351,209 @@ app.post('/zenga/webhook', handleZengaEvent);
 app.post('/deposit/zenga-callback', handleZengaEvent);
 app.post('/withdraw/zenga-callback', handleZengaEvent);
 
+// ═══════════════════════════════════════════
+// MANUAL (recipient-number) DEPOSITS — the user is shown one of the admin's
+// mobile-money numbers and must send the money there within 15 minutes; the admin
+// verifies receipt and approves. Security model:
+//   • server assigns the number (user never chooses) and spreads load across numbers
+//   • one live order per user at a time (idempotent) — no order flooding
+//   • amount is server-authoritative; crediting is the SAME idempotent path as the
+//     gateways (creditMarzDeposit → in-process lock + atomic increment + ledger)
+//   • unpaid orders auto-expire at 15 min and free the number's slot
+//   • admins are alerted by SMS the instant an order is created / claimed
+// ═══════════════════════════════════════════
+function orderExpMs(o) { return o.expiresAtMs || (o.createdAtMs ? o.createdAtMs + MANUAL_ORDER_TTL_MS : 0); }
+// Expire any live manual order past its window (frees the recipient slot). Cheap:
+// only ever scans the small set flagged manualPending.
+async function sweepExpiredManualOrders() {
+  try {
+    const snap = await db.collection('pendingDeposits').where('manualPending', '==', true).get();
+    const now = Date.now();
+    for (const d of snap.docs) {
+      const o = d.data();
+      if (o.status === 'awaiting_payment' && orderExpMs(o) && orderExpMs(o) < now) {
+        await d.ref.update({ status: 'expired', manualPending: false, expiredAt: FieldValue.serverTimestamp() }).catch(() => {});
+      }
+    }
+  } catch (e) { console.error('sweepExpiredManualOrders:', e.message); }
+}
+// Pick the least-busy active recipient number (anti-flood rotation).
+async function pickRecipientNumber() {
+  const s = await getSettings();
+  const list = (Array.isArray(s.recipients) ? s.recipients : []).filter(r => r && r.active !== false && r.number);
+  if (!list.length) return null;
+  const snap = await db.collection('pendingDeposits').where('manualPending', '==', true).get();
+  const now = Date.now(), counts = {};
+  snap.forEach(d => {
+    const o = d.data();
+    if (o.status === 'awaiting_payment' && orderExpMs(o) && orderExpMs(o) < now) return; // expired
+    counts[o.recipientId] = (counts[o.recipientId] || 0) + 1;
+  });
+  // Prefer numbers under the per-number cap; otherwise the globally least-loaded.
+  const under = list.filter(r => (counts[r.id] || 0) < MANUAL_MAX_PENDING_PER_NUMBER);
+  const pool = under.length ? under : list;
+  pool.sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0));
+  return pool[0];
+}
+app.post('/deposit/manual/create', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const amt = parseInt(req.body.amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  const last = _depCreateDebounce.get(userId) || 0;
+  if (Date.now() - last < 4000) return res.status(429).json({ status: 'error', message: 'Please wait a moment.' });
+  _depCreateDebounce.set(userId, Date.now());
+  try {
+    await sweepExpiredManualOrders();
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const user = uSnap.data();
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    const minDep = sett.minDeposit ?? MIN_DEPOSIT;
+    if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
+
+    // One live order per user (idempotent) — return the existing one instead of flooding.
+    const mine = await db.collection('pendingDeposits')
+      .where('userId', '==', userId).where('manualPending', '==', true).limit(1).get();
+    if (!mine.empty) {
+      const o = mine.docs[0].data();
+      if (o.status === 'awaiting_payment' && orderExpMs(o) > Date.now()) {
+        return res.json({ status: 'success', orderId: mine.docs[0].id, amount: o.amount,
+          recipient: { name: o.recipientName, network: o.recipientNetwork, number: o.recipientNumber },
+          expiresAtMs: orderExpMs(o), reused: true });
+      }
+    }
+
+    const rcpt = await pickRecipientNumber();
+    if (!rcpt) return res.status(503).json({ status: 'error', message: 'Deposits are briefly unavailable. Please try again shortly.' });
+
+    const reference = ('CHR' + Date.now().toString(36) + randChars(5)).toUpperCase();
+    const nowMs = Date.now();
+    const { date, time } = nowStr();
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId, amount: amt, provider: 'manual', manual: true, manualPending: true,
+      marzReference: reference, status: 'awaiting_payment',
+      recipientId: rcpt.id, recipientNumber: rcpt.number, recipientName: rcpt.name || 'Agent', recipientNetwork: rcpt.network || '',
+      createdAtMs: nowMs, expiresAtMs: nowMs + MANUAL_ORDER_TTL_MS,
+      date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    notifyAdmins(`Chronova deposit order ${reference}: ${user.name || 'User'} (${user.phone || ''}) will send ${fmtUGX(amt)} to ${rcpt.number} (${rcpt.name || 'Agent'} ${rcpt.network || ''}). Approve in panel.`).catch(() => {});
+    return res.json({ status: 'success', orderId: depRef.id, amount: amt,
+      recipient: { name: rcpt.name || 'Agent', network: rcpt.network || '', number: rcpt.number },
+      reference, expiresAtMs: nowMs + MANUAL_ORDER_TTL_MS });
+  } catch (e) {
+    console.error('manual deposit create:', e.message);
+    return res.status(500).json({ status: 'error', message: 'Could not create the deposit order. Please try again.' });
+  }
+});
+// User confirms they have sent the money (optionally with the sending number + MM txn id).
+app.post('/deposit/manual/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const { orderId } = req.body;
+    const ref = db.collection('pendingDeposits').doc(String(orderId || ''));
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Order not found' });
+    const o = snap.data();
+    if (o.status !== 'awaiting_payment') return res.json({ status: 'success', already: true, state: o.status });
+    if (orderExpMs(o) < Date.now()) { await ref.update({ status: 'expired', manualPending: false }); return res.status(410).json({ status: 'error', message: 'This order expired. Please start a new deposit.' }); }
+    const senderPhone = cleanPhone(req.body.senderPhone || '');
+    const txnId = String(req.body.txnId || '').replace(/[^\w-]/g, '').slice(0, 40);
+    await ref.update({ status: 'claimed', claimedAt: FieldValue.serverTimestamp(),
+      senderPhone: senderPhone || null, userTxnId: txnId || null });
+    notifyAdmins(`Chronova ${o.marzReference}: user says SENT ${fmtUGX(o.amount)} to ${o.recipientNumber}${senderPhone ? ' from ' + senderPhone : ''}${txnId ? ' (txn ' + txnId + ')' : ''}. Verify & approve.`).catch(() => {});
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+// App polls this while the pay screen is open.
+app.get('/deposit/manual/status/:id', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const ref = db.collection('pendingDeposits').doc(String(req.params.id));
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Order not found' });
+    const o = snap.data();
+    if (o.status === 'awaiting_payment' && orderExpMs(o) < Date.now()) { await ref.update({ status: 'expired', manualPending: false }); o.status = 'expired'; }
+    const state = o.status === 'matched' ? 'credited' : o.status;
+    return res.json({ status: 'success', state, amount: o.amount, expiresAtMs: orderExpMs(o),
+      recipient: { name: o.recipientName, network: o.recipientNetwork, number: o.recipientNumber } });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+// ── ADMIN: manual deposit approvals ──
+app.post('/admin/deposits/pending', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  try {
+    await sweepExpiredManualOrders();
+    const snap = await db.collection('pendingDeposits').where('manualPending', '==', true).get();
+    const rows = [];
+    for (const d of snap.docs) {
+      const o = d.data();
+      let uName = '', uPhone = '';
+      try { const u = await db.collection('users').doc(o.userId).get(); if (u.exists) { uName = u.data().name || ''; uPhone = u.data().phone || ''; } } catch (_) {}
+      rows.push({ id: d.id, reference: o.marzReference, amount: o.amount, status: o.status,
+        userName: uName, userPhone: uPhone, senderPhone: o.senderPhone || '', txnId: o.userTxnId || '',
+        recipientNumber: o.recipientNumber, recipientName: o.recipientName, recipientNetwork: o.recipientNetwork,
+        expiresAtMs: orderExpMs(o), date: o.date, time: o.time });
+    }
+    rows.sort((a, b) => (b.expiresAtMs || 0) - (a.expiresAtMs || 0));
+    return res.json({ status: 'success', orders: rows, count: rows.length });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/deposit/approve', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  try {
+    const ref = db.collection('pendingDeposits').doc(String(req.body.orderId || ''));
+    const snap = await ref.get();
+    if (!snap.exists || !snap.data().manual) return res.status(404).json({ status: 'error', message: 'Order not found' });
+    const o = snap.data();
+    if (o.status === 'matched') return res.json({ status: 'success', already: true });
+    const credited = await creditMarzDeposit(snap, o.amount, 'manual-approved');
+    await ref.update({ manualPending: false, approvedBy: 'admin', approvedAt: FieldValue.serverTimestamp() });
+    if (!credited) return res.status(409).json({ status: 'error', message: 'Already credited or in progress' });
+    return res.json({ status: 'success', message: `Credited ${fmtUGX(o.amount)}` });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/deposit/reject', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  try {
+    const ref = db.collection('pendingDeposits').doc(String(req.body.orderId || ''));
+    const snap = await ref.get();
+    if (!snap.exists || !snap.data().manual) return res.status(404).json({ status: 'error', message: 'Order not found' });
+    if (snap.data().status === 'matched') return res.status(409).json({ status: 'error', message: 'Already credited — cannot reject' });
+    await ref.update({ status: 'rejected', manualPending: false,
+      rejectReason: String(req.body.reason || 'Payment not received'), rejectedAt: FieldValue.serverTimestamp() });
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+// ── ADMIN: manual withdrawal settlement ──
+// Admin sends the money by hand, then marks it paid (idempotent complete). Reject
+// refunds the held funds (idempotent). Both reuse the proven money-safety helpers.
+app.post('/admin/withdraw/markpaid', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  try {
+    const ref = db.collection('withdrawals').doc(String(req.body.withdrawalId || ''));
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    if (!snap.data().provider) await ref.update({ provider: 'manual' });
+    const ok = await completeWithdrawal(snap);
+    return res.json({ status: 'success', done: ok, message: ok ? 'Marked paid' : 'Already settled' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/withdraw/reject', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  try {
+    const ref = db.collection('withdrawals').doc(String(req.body.withdrawalId || ''));
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    const ok = await failWithdrawal(snap, String(req.body.reason || 'Rejected by admin — refunded'));
+    return res.json({ status: 'success', done: ok, message: ok ? 'Rejected & refunded' : 'Already settled' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+setInterval(() => { sweepExpiredManualOrders().catch(() => {}); }, 2 * 60 * 1000);
+
 // CARD DEPOSIT — global. Creates a card collection and returns MarzPay's
 // redirect_url; the app sends the customer there to pay by card. Money settles
 // in UGX (their bank converts), so the wallet credit is identical to mobile
@@ -2503,6 +2746,7 @@ app.post('/withdraw/request', async (req, res) => {
         status: 'pending', date, time, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
+    notifyAdmins(`Chronova withdrawal: ${user.name || 'User'} wants ${fmtUGX(amt)} (net ${fmtUGX(netAmt)} after fee) to ${fullPhone}. Ref ${witId}. Send & mark paid in panel.`).catch(() => {});
     return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });
   } catch (e) {
     console.error('Withdrawal error:', e.message);
