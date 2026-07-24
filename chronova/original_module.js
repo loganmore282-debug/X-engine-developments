@@ -3,15 +3,15 @@ import { initializeApp, getApps }
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
-// FURAGEMZ — Firebase web config. Owner: replace with the Chronova Firebase
-// project's own web config once that project is created (separate from Voltra's).
+// CHRONOVA — Firebase web config (public client config, safe to embed).
 const firebaseConfig = {
-  apiKey:            "AIzaSyBcyftQBgJXPoVhNx0BSSv-ZUz81k2YxZ0",
-  authDomain:        "furagemz.firebaseapp.com",
-  projectId:         "furagemz",
-  storageBucket:     "furagemz.firebasestorage.app",
-  messagingSenderId: "538053506631",
-  appId:             "1:538053506631:web:a388e60009a456befda362"
+  apiKey:            "AIzaSyDOwA8dGvLGGtj6wkAqh0-7EZ2u5cHSW7k",
+  authDomain:        "chronovaplatform.firebaseapp.com",
+  projectId:         "chronovaplatform",
+  storageBucket:     "chronovaplatform.firebasestorage.app",
+  messagingSenderId: "432567199816",
+  appId:             "1:432567199816:web:64842f35909b1075ad107d",
+  measurementId:     "G-08J2C1Y663"
 };
 
 // Chronova Render backend.
