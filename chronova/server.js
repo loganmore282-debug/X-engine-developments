@@ -2427,6 +2427,8 @@ app.post('/deposit/manual/create', async (req, res) => {
     const rcpt = await pickRecipientNumber();
     if (!rcpt) return res.status(503).json({ status: 'error', message: 'Deposits are briefly unavailable. Please try again shortly.' });
 
+    const senderPhone = cleanPhone(req.body.senderPhone || '');
+    const senderNetwork = String(req.body.senderNetwork || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8);
     const reference = ('CHR' + Date.now().toString(36) + randChars(5)).toUpperCase();
     const nowMs = Date.now();
     const { date, time } = nowStr();
@@ -2434,11 +2436,12 @@ app.post('/deposit/manual/create', async (req, res) => {
     await depRef.set({
       userId, amount: amt, provider: 'manual', manual: true, manualPending: true,
       marzReference: reference, status: 'awaiting_payment',
+      senderPhone: senderPhone || null, senderNetwork: senderNetwork || null,
       recipientId: rcpt.id, recipientNumber: rcpt.number, recipientName: rcpt.name || 'Agent', recipientNetwork: rcpt.network || '',
       createdAtMs: nowMs, expiresAtMs: nowMs + MANUAL_ORDER_TTL_MS,
       date, time, createdAt: FieldValue.serverTimestamp()
     });
-    notifyAdmins(`Chronova deposit order ${reference}: ${user.name || 'User'} (${user.phone || ''}) will send ${fmtUGX(amt)} to ${rcpt.number} (${rcpt.name || 'Agent'} ${rcpt.network || ''}). Approve in panel.`).catch(() => {});
+    notifyAdmins(`Chronova deposit ${reference}: ${user.name || 'User'} (${user.phone || ''}) pays ${fmtUGX(amt)} to ${rcpt.number} (${rcpt.name || 'Agent'} ${rcpt.network || ''})${senderPhone ? ' from ' + senderPhone + (senderNetwork ? ' ' + senderNetwork : '') : ''}. Approve in panel.`).catch(() => {});
     return res.json({ status: 'success', orderId: depRef.id, amount: amt,
       recipient: { name: rcpt.name || 'Agent', network: rcpt.network || '', number: rcpt.number },
       reference, expiresAtMs: nowMs + MANUAL_ORDER_TTL_MS });

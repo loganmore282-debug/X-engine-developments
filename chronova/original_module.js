@@ -164,6 +164,7 @@ function openModal(html) {
   if (!_pageOpen) { _pageOpen = true; try { history.pushState({ fgPage: 1 }, ''); } catch (_) {} }
 }
 function closeModal(fromPop) {
+  if (typeof clearCpTimers === 'function') clearCpTimers();
   const root = document.getElementById('modalRoot');
   root.classList.add('hidden');
   root.innerHTML = '';
@@ -1024,6 +1025,7 @@ const WITHDRAW_CHIPS = [10000, 25000, 50000, 100000];
 const WITHDRAW_FEE = 0.14;
 
 function openDepositModal() {
+  if ((_publicSettings?.depositProvider || 'manual') === 'manual') return openManualDeposit();
   const phone0 = esc((_account?.phone || '').replace('+256', '0'));
   const minDep = _publicSettings?.minDeposit || 30000;
   openModal(`
@@ -1143,6 +1145,123 @@ function depositResult(kind, amount) {
     b.addEventListener('click', closeModal);
     card.appendChild(b);
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+// MANUAL DEPOSIT — 3-step "COPY & PAY" flow (recipient numbers set in admin).
+// Step 1 amount → Step 2 pick network + your paying number → Step 3 copy the
+// assigned account, pay it, refresh to check. Server assigns the number, alerts
+// the admin by SMS, and the admin approves once the money lands.
+// ══════════════════════════════════════════════════════════════
+let _cpTimer = null, _cpPoll = null;
+function clearCpTimers() { if (_cpTimer) clearInterval(_cpTimer); if (_cpPoll) clearTimeout(_cpPoll); _cpTimer = _cpPoll = null; }
+const CP_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+function openManualDeposit() {
+  const minDep = _publicSettings?.minDeposit || 25000;
+  openModal(`
+    <div class="modal-head"><h2>Recharge</h2><button class="modal-close">${ICN.close}</button></div>
+    <label style="font-size:13px;color:var(--sub);font-weight:600">Recharge amount</label>
+    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="${minDep}">
+    <div class="amt-chips">${DEPOSIT_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`).join('')}</div>
+    <div class="info-note" style="margin-top:14px"><span class="in-ic">${ICN.info}</span>
+      <div class="in-tx">Minimum recharge is <b>${ugx(minDep)}</b>. On the next step you pick your network and enter the number you will pay from, then you are shown an account to send the money to.</div></div>
+    <button class="btn" id="mNext" style="margin-top:14px">Confirm Payment</button>
+  `);
+  const amtEl = document.getElementById('mAmt');
+  document.querySelectorAll('#modalRoot .amt-chip').forEach(c => c.addEventListener('click', () => { amtEl.value = c.dataset.amt; amtEl.focus(); }));
+  document.getElementById('mNext').addEventListener('click', () => {
+    const amount = parseInt(amtEl.value, 10);
+    if (!amount || amount < minDep) return toast('Minimum recharge is ' + ugx(minDep), 'err');
+    openManualMethod(amount);
+  });
+}
+function openManualMethod(amount) {
+  const phone0 = esc((_account?.phone || '').replace('+256', '0'));
+  openModal(`
+    <div class="modal-head"><h2>Payment method</h2><button class="modal-close">${ICN.close}</button></div>
+    <p style="font-size:13px;color:var(--sub);line-height:1.5;margin:0 0 12px">Choose your network and the account you will use to make the payment.</p>
+    <div style="font-size:14px;margin-bottom:12px">Payment Amount: <b style="color:var(--violet)">${ugx(amount)}</b></div>
+    <label style="font-size:13px;color:var(--sub);font-weight:600;display:block;margin-bottom:8px">Select a payment method</label>
+    <div class="pm-row" style="display:flex;gap:10px;margin-bottom:14px">
+      <button class="pm-opt on" data-net="MTN" style="flex:1;padding:14px;border-radius:14px;border:1.5px solid var(--violet);background:var(--card);color:var(--ink);font-weight:700">MTN</button>
+      <button class="pm-opt" data-net="AIRTEL" style="flex:1;padding:14px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700">Airtel</button>
+    </div>
+    <div class="field"><label>Your payment account (the number you send from)</label>
+      <input id="mSender" type="tel" placeholder="0771234567" value="${phone0}"></div>
+    <div class="err-box" style="background:var(--danger-bg);color:var(--danger)">Fill in your payment account accurately — an incorrect number can delay or lose your deposit.</div>
+    <button class="btn" id="mGo">Confirm</button>
+  `);
+  let net = 'MTN';
+  document.querySelectorAll('#modalRoot .pm-opt').forEach(b => b.addEventListener('click', () => {
+    net = b.dataset.net;
+    document.querySelectorAll('#modalRoot .pm-opt').forEach(x => { x.classList.remove('on'); x.style.borderColor = 'var(--line)'; });
+    b.classList.add('on'); b.style.borderColor = 'var(--violet)';
+  }));
+  document.getElementById('mGo').addEventListener('click', async () => {
+    const senderPhone = document.getElementById('mSender').value.trim();
+    if (!senderPhone || senderPhone.replace(/\D/g, '').length < 9) return toast('Enter the number you will pay from', 'err');
+    const restore = setBusy(document.getElementById('mGo'), 'Please wait');
+    const r = await api('/deposit/manual/create', { method: 'POST', body: { amount, senderPhone, senderNetwork: net } });
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not create the order', 'err'); }
+    openCopyPay(r, senderPhone);
+  });
+}
+function openCopyPay(order, senderPhone) {
+  const r = order.recipient || {};
+  const net = (r.network || 'MTN').toUpperCase();
+  const copyBtn = (val) => `<button class="cp-copy" data-copy="${esc(val)}" style="background:none;border:0;color:var(--violet);cursor:pointer;padding:4px">${CP_COPY}</button>`;
+  openModal(`
+    <div class="modal-head"><h2>Copy &amp; Pay</h2><button class="modal-close">${ICN.close}</button></div>
+    <div style="text-align:center;font-size:12px;color:var(--sub);margin-bottom:2px">Transaction expires in</div>
+    <div id="cpTime" style="text-align:center;font-size:22px;font-weight:800;color:var(--violet);font-variant-numeric:tabular-nums;margin-bottom:14px">15:00</div>
+    <div style="font-size:13px;color:var(--sub);margin-bottom:8px">Copy this <b style="color:var(--ink)">${esc(net)}</b> account and send the money to it.</div>
+    <div style="background:var(--card-2,var(--line2));border:1.5px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span style="color:var(--sub);font-size:12px">Total amount</span><b style="color:var(--violet);font-size:16px">${ugx(order.amount)}</b></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--line)"><span style="color:var(--sub);font-size:12px">${esc(net)} account</span><span style="display:flex;align-items:center;gap:6px"><b style="font-size:16px">${esc(r.number || '')}</b>${copyBtn(r.number || '')}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--line)"><span style="color:var(--sub);font-size:12px">Account name</span><span style="display:flex;align-items:center;gap:6px"><b style="font-size:14px">${esc(r.name || '')}</b>${copyBtn(r.name || '')}</span></div>
+    </div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:4px">Payment completed?</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px">After sending the money, tap Refresh to check. Approval usually takes 2–10 minutes.</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
+      <div style="font-size:13px;color:var(--sub)">Amount paid: <b id="cpPaid" style="color:var(--ink)">${ugx(0)}</b></div>
+      <button class="btn" id="cpRefresh" style="width:auto;padding:11px 24px">Refresh</button>
+    </div>
+    <div style="font-size:12px;color:var(--sub);border-top:1px solid var(--line);padding-top:10px;margin-top:6px">Your payment account: <b>${esc(senderPhone || '')}</b></div>
+  `);
+  document.querySelectorAll('#modalRoot .cp-copy').forEach(b => b.addEventListener('click', () => {
+    try { navigator.clipboard.writeText(b.dataset.copy); toast('Copied', 'ok'); } catch (_) { toast('Copy failed', 'err'); }
+  }));
+  const endAt = order.expiresAtMs || (Date.now() + 15 * 60 * 1000);
+  const tick = () => {
+    const el = document.getElementById('cpTime'); if (!el) return clearCpTimers();
+    let ms = endAt - Date.now();
+    if (ms <= 0) { el.textContent = '00:00'; el.style.color = 'var(--danger)'; clearCpTimers(); return; }
+    const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
+    el.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  };
+  clearCpTimers(); tick(); _cpTimer = setInterval(tick, 1000);
+  const check = async (fromButton) => {
+    const rs = await api('/deposit/manual/status/' + order.orderId);
+    if (rs.status === 'success' && rs.state === 'credited') {
+      clearCpTimers(); const paid = document.getElementById('cpPaid'); if (paid) paid.textContent = ugx(order.amount);
+      manualDepositDone(order.amount); await loadAccount(); await loadTxns(); renderHome(); renderAccount(); return;
+    }
+    if (rs.state === 'rejected' || rs.state === 'expired') { clearCpTimers(); if (fromButton) toast(rs.state === 'expired' ? 'This order expired — start again' : 'This order was declined', 'err'); return; }
+    if (fromButton) toast('Not received yet — please make sure you have sent the money', 'ok');
+    _cpPoll = setTimeout(() => check(false), 6000);
+  };
+  const rb = document.getElementById('cpRefresh');
+  if (rb) rb.addEventListener('click', () => check(true));
+  _cpPoll = setTimeout(() => check(false), 6000);
+}
+function manualDepositDone(amount) {
+  const card = document.querySelector('#modalRoot .modal-card'); if (!card) return;
+  card.innerHTML = `<div class="pay-wait"><div class="pay-orb ok">${CHECK_SVG}</div>
+    <div class="pay-title">Payment received</div>
+    <div class="pay-sub"><b>${ugx(amount)}</b> has been added to your wallet.</div></div>
+    <button class="btn" id="payDone" style="margin-top:12px">Done</button>`;
+  const b = document.getElementById('payDone'); if (b) b.addEventListener('click', closeModal);
+  fireConfetti();
 }
 
 function openWithdrawModal() {
