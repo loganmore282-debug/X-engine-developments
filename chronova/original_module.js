@@ -254,13 +254,14 @@ function setAuthMode(mode) {
   const login = mode === 'login';
   document.getElementById('loginForm').classList.toggle('active', login);
   document.getElementById('registerForm').classList.toggle('active', !login);
-  document.getElementById('authTitle').textContent = login ? 'Welcome back' : 'Create your account';
   document.getElementById('authErr').classList.add('hidden');
   document.querySelector('.auth-scroll').scrollTop = 0;
   if (!login) loadCaptcha();
 }
 document.getElementById('toRegister').addEventListener('click', () => setAuthMode('register'));
 document.getElementById('toLogin').addEventListener('click', () => setAuthMode('login'));
+{ const _f = document.getElementById('toForgot');
+  if (_f) _f.addEventListener('click', () => toast('To reset your password, contact Customer Service on the account page.', 'ok')); }
 document.querySelectorAll('[data-toggle]').forEach(btn => {
   btn.innerHTML = ICN.eye;
   btn.addEventListener('click', () => {
