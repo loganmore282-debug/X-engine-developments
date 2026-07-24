@@ -88,9 +88,37 @@ fs.writeFileSync(path.join(DIST, 'chronohq-sw.js'),
   "self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim());});\n" +
   "self.addEventListener('fetch',function(){});\n");
 
+// ── DEDICATED ADMIN SITE (its own EdgeOne project → chronoadmin.edgeone.app) ──
+// A standalone folder whose index.html IS the admin, so a second EdgeOne project
+// pointed at chronova/admin-dist serves the panel at the domain root and
+// auto-deploys on every git push — exactly like the user app in dist/.
+const ADIST = path.join(__dirname, 'admin-dist');
+if (!fs.existsSync(ADIST)) fs.mkdirSync(ADIST);
+fs.copyFileSync(OUT, path.join(ADIST, 'index.html'));
+['icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png'].forEach(ic => {
+  const src = path.join(__dirname, ic);
+  if (fs.existsSync(src)) fs.copyFileSync(src, path.join(ADIST, ic));
+});
+fs.writeFileSync(path.join(ADIST, 'manifest.json'), JSON.stringify({
+  id: '/', name: 'Chronova Admin', short_name: 'Chronova Admin',
+  start_url: '/', scope: '/', display: 'standalone',
+  background_color: '#0c0b0e', theme_color: '#0c0b0e',
+  icons: [
+    { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+    { src: '/icon-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+    { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+  ]
+}, null, 2));
+fs.writeFileSync(path.join(ADIST, 'sw.js'),
+  "self.addEventListener('install',function(){self.skipWaiting();});\n" +
+  "self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim());});\n" +
+  "self.addEventListener('fetch',function(){});\n");
+
 const kb = (n) => (n / 1024).toFixed(1) + ' KB';
 console.log('admin source :', kb(fs.statSync(SRC).size), '(readable — edit this)');
 console.log('app script   :', kb(Buffer.byteLength(rawJs)), '→ obfuscated', kb(Buffer.byteLength(obf)));
-console.log('admin.dist   :', kb(fs.statSync(OUT).size), '— DEPLOY this file');
-console.log('hosted copy  : dist/' + SECRET + '  → auto-deploys to /' + SECRET);
-console.log('\nDone. Upload admin.dist.html to your admin host (rename to admin.html there if you like).');
+console.log('admin.dist   :', kb(fs.statSync(OUT).size), '— single-file admin');
+console.log('admin-dist/  : index.html + manifest + sw + icons → EdgeOne project (chronoadmin)');
+console.log('hosted copy  : dist/' + SECRET + '  (also on the user-app host at /' + SECRET + ')');
+console.log('\nDeploy: EdgeOne project A → chronova/dist (user app), project B → chronova/admin-dist (admin). Both auto-deploy on push.');
