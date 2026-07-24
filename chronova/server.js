@@ -490,11 +490,11 @@ function randChars(n) {
 }
 async function generateUniqueRefCode() {
   for (let attempt = 0; attempt < 15; attempt++) {
-    const code = randChars(7);
+    const code = 'CHR' + String(Math.floor(100000000 + Math.random() * 900000000)); // CHR + 9 digits
     const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
     if (exists.empty) return code;
   }
-  return randChars(9);
+  return 'CHR' + Date.now().toString().slice(-9);
 }
 
 // ── PER-KEY MUTEX ──
@@ -1106,22 +1106,27 @@ app.post('/account/create-profile', async (req, res) => {
   if (req.body.userId && req.body.userId !== uid)
     return res.status(403).json({ status: 'error', message: 'Forbidden' });
   const { username, phone } = req.body;
-  if (!username || !phone) return res.status(400).json({ status: 'error', message: 'username and phone required' });
-  const norm = normalizeUsername(username);
-  if (!norm.ok) return res.status(400).json({ status: 'error', message: norm.error, field: 'username' });
+  if (!phone) return res.status(400).json({ status: 'error', message: 'phone required' });
   try {
     const ref  = db.collection('users').doc(uid);
     const snap = await ref.get();
-    // Already provisioned (idempotent retry) — keep the existing username.
-    if (snap.exists && snap.data().username) return res.json({ status: 'success', message: 'Profile ensured', username: snap.data().username });
+    // Already provisioned (idempotent retry) — keep the existing code.
+    if (snap.exists && snap.data().referralCode) return res.json({ status: 'success', message: 'Profile ensured', referralCode: snap.data().referralCode });
 
-    // Authoritative uniqueness check (case-insensitive). A live check runs on the
-    // client first, so this only catches the rare race.
-    if (await usernameTaken(norm.lower, uid))
-      return res.status(409).json({ status: 'error', message: 'That username is taken.', field: 'username' });
-
+    // Chronova: no username at sign-up — the referral CODE (CHR…) is auto-generated
+    // and IS the user's shareable code. (A username is still accepted if supplied,
+    // for backward compatibility.)
+    let codeVal, codeLower;
+    if (username && normalizeUsername(username).ok) {
+      const norm = normalizeUsername(username);
+      if (await usernameTaken(norm.lower, uid))
+        return res.status(409).json({ status: 'error', message: 'That code is taken.', field: 'username' });
+      codeVal = norm.value; codeLower = norm.lower;
+    } else {
+      codeVal = await generateUniqueRefCode(); codeLower = codeVal.toLowerCase();
+    }
     const base = {
-      username: norm.value, usernameLower: norm.lower, referralCode: norm.value,
+      username: codeVal, usernameLower: codeLower, referralCode: codeVal,
       phone: cleanPhone(phone), email: phoneToEmail(phone),
     };
     // DURABLE REFERRAL: persist the entered code on the user doc at profile

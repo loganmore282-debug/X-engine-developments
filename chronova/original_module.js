@@ -256,7 +256,6 @@ function setAuthMode(mode) {
   document.getElementById('registerForm').classList.toggle('active', !login);
   document.getElementById('authErr').classList.add('hidden');
   document.querySelector('.auth-scroll').scrollTop = 0;
-  if (!login) loadCaptcha();
 }
 document.getElementById('toRegister').addEventListener('click', () => setAuthMode('register'));
 document.getElementById('toLogin').addEventListener('click', () => setAuthMode('login'));
@@ -292,37 +291,6 @@ function authError(msg) {
   } catch (_) {}
 })();
 
-// Live username availability check (debounced).
-let _unameTimer = null, _unameOk = false;
-const unameInput = document.getElementById('rgUser');
-const unameHint = document.getElementById('unameHint');
-unameInput.addEventListener('input', () => {
-  _unameOk = false;
-  const v = unameInput.value.trim();
-  unameHint.className = 'uname-hint';
-  unameHint.textContent = '';
-  if (_unameTimer) clearTimeout(_unameTimer);
-  if (!v) return;
-  if (!/^[a-zA-Z0-9_]{3,16}$/.test(v)) {
-    unameHint.className = 'uname-hint bad';
-    unameHint.textContent = '3–16 letters, numbers or underscore.';
-    return;
-  }
-  _unameTimer = setTimeout(async () => {
-    const r = await api('/auth/check-username', { method: 'POST', body: { username: v } });
-    if (unameInput.value.trim() !== v) return; // changed since
-    if (r.status === 'success' && r.available) {
-      _unameOk = true;
-      unameHint.className = 'uname-hint ok';
-      unameHint.textContent = v + ' is available';
-    } else {
-      _unameOk = false;
-      unameHint.className = 'uname-hint bad';
-      unameHint.textContent = r.reason || 'That username is taken.';
-    }
-  }, 450);
-});
-
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const phone = document.getElementById('liPhone').value.trim();
@@ -356,31 +324,21 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   const phone = document.getElementById('rgPhone').value.trim();
   const pass = document.getElementById('rgPass').value;
   const pass2 = document.getElementById('rgPass2').value;
-  const username = document.getElementById('rgUser').value.trim();
   let ref = document.getElementById('rgRef').value.trim();
   // If the field was somehow empty (PWA reopen cleared it), fall back to the code
   // we stored the moment the link was opened — never silently lose the referral.
   if (!ref) { try { ref = (localStorage.getItem('fg_pending_ref') || '').trim(); } catch (_) {} }
-  if (!phone || !pass || !username) return authError('Fill in phone, password and a username.');
+  if (!phone || !pass) return authError('Fill in your phone and password.');
   if (pass.length < 6) return authError('Password must be at least 6 characters.');
   if (pass !== pass2) return authError('The two passwords do not match.');
-  if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) return authError('Username must be 3–16 letters, numbers or underscore.');
-  const captcha = document.getElementById('rgCaptcha').value.trim();
-  if (!captcha) return authError('Type the letters shown in the box.');
   document.getElementById('authErr').classList.add('hidden');
   const restore = setBusy(document.getElementById('rgSubmit'), 'Please wait');
   try {
-    // Anti-bot: verify the jumbled-letter captcha before anything else.
-    const capR = await api('/auth/captcha/verify', { method: 'POST', body: { captchaId: _captchaId, answer: captcha } });
-    if (capR.status !== 'success') { restore(); loadCaptcha(); document.getElementById('rgCaptcha').value = ''; return authError(capR.message || 'Incorrect verification code.'); }
-    // Pre-check availability so we don't create a phone account for a taken name.
-    const chk = await api('/auth/check-username', { method: 'POST', body: { username } });
-    if (chk.status === 'success' && !chk.available) { restore(); return authError(chk.reason || 'That username is taken.'); }
-    // Pre-check the referral code — a code that doesn't belong to a real user
+    // Pre-check the invite code — a code that doesn't belong to a real user
     // stops registration HERE, before any account is created.
     if (ref) {
       const rchk = await api('/auth/check-referral', { method: 'POST', body: { referralCode: ref } });
-      if (rchk.status === 'success' && !rchk.valid) { restore(); return authError(rchk.reason || 'That referral code does not exist.'); }
+      if (rchk.status === 'success' && !rchk.valid) { restore(); return authError(rchk.reason || 'That invite code does not exist.'); }
     }
 
     if (!_pendingCred) {
@@ -397,7 +355,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     // The referral code travels WITH profile creation (stored server-side as
     // pendingReferral), so an interrupted sign-up can never lose the referral.
     try { if (ref) localStorage.setItem('fg_pending_ref', ref); } catch (_) {}
-    const prof = await api('/account/create-profile', { method: 'POST', body: { username, phone: cleanPhone(phone).replace('+', ''), referralCode: ref } });
+    const prof = await api('/account/create-profile', { method: 'POST', body: { phone: cleanPhone(phone).replace('+', ''), referralCode: ref } });
     if (prof.status !== 'success') { restore(); return authError(prof.message || 'Could not create your profile.'); }
     // Register applies the welcome bonus AND records the referral link. It is
     // idempotent server-side (registrationDone guard), so retry it a few times on
