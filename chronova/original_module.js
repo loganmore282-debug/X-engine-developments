@@ -48,7 +48,7 @@ const _svg = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const ICN = {
   topup:        _svg('<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8V6a5 5 0 0 1 10 0v2"/><path d="M12 12v4"/><path d="M9.5 14.5 12 17l2.5-2.5"/>'),
   withdrawal:   _svg('<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8V6a5 5 0 0 1 10 0v2"/><path d="M12 17v-4"/><path d="M9.5 14.5 12 12l2.5 2.5"/>'),
-  investment:   _svg('<path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M9 3l3 6-3 12M15 3l-3 6 3 12"/>'),
+  investment:   _svg('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.6 1.6"/><path d="M9 2h6M9 22h6"/>'),
   gem_payout:   _svg('<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>'),
   commission:   _svg('<circle cx="9" cy="8" r="3"/><path d="M2.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/><circle cx="18" cy="9" r="2.2"/><path d="M15.8 14.7c2.3.4 4.2 2.1 4.2 5.3"/>'),
   checkin:      _svg('<rect x="3" y="4" width="18" height="18" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="m8.5 15 2 2 4-4"/>'),
@@ -69,7 +69,7 @@ const ICN = {
   up:           _svg('<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>'),
   chevron:      _svg('<polyline points="9 6 15 12 9 18"/>'),
   receipt:      _svg('<path d="M5 3v18l2-1.5L9 21l2-1.5L13 21l2-1.5L17 21l2-1.5V3l-2 1.5L15 3l-2 1.5L11 3 9 4.5 7 3z"/><path d="M8 8h8M8 12h8"/>'),
-  gem:          _svg('<path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20"/>'),
+  gem:          _svg('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.6 1.6"/><path d="M9 2h6M9 22h6"/>'),
   people:       _svg('<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/><circle cx="18" cy="9" r="2.4"/>'),
   logout:       _svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
   redeem:       _svg('<path d="M4 8h16a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4V9a1 1 0 0 1 1-1z"/><path d="M13 8v12" stroke-dasharray="2 2"/>'),
@@ -81,6 +81,7 @@ const ICN = {
   bank:         _svg('<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18"/><path d="M7 16h4"/>'),
   trash:        _svg('<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>'),
   boost:        _svg('<path d="M13 3 5 13h6l-1 8 9-11h-6z"/>'),
+  bell:         _svg('<path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/>'),
 };
 
 // Faceted emerald-cut watch illustration, tinted to any tier colour. Layered
@@ -884,13 +885,18 @@ function renderHome() {
       </div>
       <div class="hb-dots" id="hbDots">${((_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length) > 0 ? Array.from({length: (_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length}).map(() => '<i></i>').join('') : ''}</div>
     </div>
-    <div class="dact-row">
-      <button class="dact" id="qaDeposit">${IC.deposit ? `<img src="${IC.deposit}">` : ICN.down}Recharge</button>
-      <button class="dact" id="qaWithdraw">${IC.withdraw ? `<img src="${IC.withdraw}">` : ICN.up}Withdraw</button>
-      <button class="dact" id="qaContact">${IC.contact ? `<img src="${IC.contact}">` : ICN.phone}Contact Us</button>
-      <button class="dact${checkedInToday ? ' claimed' : ''}" id="qaCheckin">${IC.checkin ? `<img src="${IC.checkin}">` : ICN.checkin}${checkedInToday ? 'Claimed' : 'Check-in'}</button>
+    <div class="spec-row">
+      <div class="spec-col"><b>Swiss</b><span>Movement</span></div>
+      <div class="spec-col"><b>120-Day</b><span>Term</span></div>
+      <div class="spec-col"><b>Daily</b><span>Settlement</span></div>
     </div>
-    ${_feed.length ? `<div class="dtick" id="tickerWrap">${IC.records ? `<img src="${IC.records}">` : ''}<div class="ticker-track">${tickerItemsHtml()}</div></div>` : ''}
+    <div class="dact-row">
+      <button class="dact" id="qaDeposit"><span class="dact-ic">${IC.deposit ? `<img src="${IC.deposit}">` : ICN.down}</span>Recharge</button>
+      <button class="dact" id="qaWithdraw"><span class="dact-ic">${IC.withdraw ? `<img src="${IC.withdraw}">` : ICN.up}</span>Withdraw</button>
+      <button class="dact" id="qaContact"><span class="dact-ic">${IC.contact ? `<img src="${IC.contact}">` : ICN.phone}</span>Contact Us</button>
+      <button class="dact${checkedInToday ? ' claimed' : ''}" id="qaCheckin"><span class="dact-ic">${IC.checkin ? `<img src="${IC.checkin}">` : ICN.checkin}</span>${checkedInToday ? 'Claimed' : 'Check-in'}</button>
+    </div>
+    ${_feed.length ? `<div class="dtick" id="tickerWrap">${ICN.bell}<div class="ticker-track">${tickerItemsHtml()}</div></div>` : ''}
     ${photoCard(0, _hideBal ? '••••••' : ugx(bal), 'Account Balance')}
     ${photoCard(1, _hideBal ? '••••' : ugx(_account?.totalEarned || 0), 'Cumulative Income')}
     ${photoCard(2, _hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0), 'Total Withdrawn')}
@@ -947,7 +953,7 @@ function statusInfo(s) {
   return { label: s.charAt(0).toUpperCase() + s.slice(1), cls: 'mut' };
 }
 function recTag(t) {
-  if (t.type === 'commission' && t.level) return `<span class="rec-tag">Level ${t.level} · ${Math.round((t.level === 1 ? 0.35 : t.level === 2 ? 0.02 : 0.01) * 100)}%</span>`;
+  if (t.type === 'commission' && t.level) return `<span class="rec-tag">Level ${t.level} · ${commPct(t.level)}%</span>`;
   if (t.type === 'withdrawal' && (t.netAmount != null)) return `<span class="rec-tag">Received ${ugx(t.netAmount)}</span>`;
   if (t.type === 'redeem' && t.code) return `<span class="rec-tag">${esc(t.code)}</span>`;
   return '';
