@@ -1,10 +1,10 @@
 /* ════════════════════════════════════════════════════════════════
-   FURAGEMZ SERVICE WORKER
+   CHRONOVA SERVICE WORKER
    Offline app-shell caching + faster repeat loads + installability.
    API / auth calls are never cached — always live.
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'chronova-shell-v11';
+const CACHE = 'chronova-shell-v12';
 const SHELL = [
   './',
   './index.html',

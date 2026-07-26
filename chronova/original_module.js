@@ -931,14 +931,14 @@ const REC_META = {
   team_reward:   { label: 'Team reward',       grad: 'linear-gradient(135deg,#f472b6,#db2777)' },
   checkin:       { label: 'Daily bonus',       grad: 'linear-gradient(135deg,#fbbf24,#f59e0b)' },
   gem_payout:    { label: 'Watch payout',        grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
-  investment:    { label: 'Watch purchase',      grad: 'linear-gradient(135deg,#c084fc,#9333ea)' },
+  investment:    { label: 'Watch purchase',      grad: 'linear-gradient(135deg,#e6c473,#a97f22)' },
   boost:         { label: 'Watch boost',         grad: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
-  redeem:        { label: 'Code redeemed',     grad: 'linear-gradient(135deg,#a78bfa,#7c3aed)' },
+  redeem:        { label: 'Code redeemed',     grad: 'linear-gradient(135deg,#d9ad4e,#8a6418)' },
   admin_credit:  { label: 'Credit',            grad: 'linear-gradient(135deg,#38bdf8,#2563eb)' },
   admin_debit:   { label: 'Adjustment',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
   refund:        { label: 'Refund',            grad: 'linear-gradient(135deg,#38bdf8,#0ea5e9)' },
 };
-function recMeta(type) { return REC_META[type] || { label: 'Transaction', grad: 'linear-gradient(135deg,#a78bfa,#7c3aed)' }; }
+function recMeta(type) { return REC_META[type] || { label: 'Transaction', grad: 'linear-gradient(135deg,#c9a86a,#8a7550)' }; }
 function statusInfo(s) {
   s = String(s || 'success').toLowerCase();
   if (['success', 'processed', 'matched'].includes(s)) return { label: 'Successful', cls: 'ok' };
