@@ -1535,10 +1535,13 @@ const TXN_FILTERS = [
   { key: 'commissions', label: 'Commissions',  types: ['commission', 'team_reward'] },
   { key: 'bonuses',     label: 'Bonuses',      types: ['checkin', 'redeem'] },
 ];
+const ICN_WATCH = _svg('<circle cx="12" cy="12" r="7"/><path d="M12 9v3l2 1.2"/><path d="M10 2h4M10 22h4"/>');
 function renderAccount() {
   const el = document.getElementById('panel-account');
   const rc = _account?.referralCode || '';
   const code = rc ? `<span class="acc-code" id="accCode">CODE ${esc(rc)} ${ICN.copy}</span>` : '';
+  const IC = (window.CHRONOVA_ICONS || {});
+  const mi = (key, fallback) => IC[key] ? `<img src="${IC[key]}" style="width:18px;height:18px">` : fallback;
   el.innerHTML = `
     <div class="acc-card">
       <div class="acc-top">
@@ -1554,23 +1557,23 @@ function renderAccount() {
         <div class="as"><div class="n">${ugx(_account?.totalEarned || 0)}</div><div class="l">Earned</div></div>
         <div class="as"><div class="n">${ugx(_account?.totalWithdrawn || 0)}</div><div class="l">Withdrawn</div></div>
       </div>
-      <div class="acc-tier">${ICN.gem} Chronova member</div>
+      <div class="acc-tier">${ICN_WATCH} Chronova member</div>
     </div>
     <div class="menu-list">
-      <button class="menu-row" id="mnRedeem"><span class="mi">${ICN.redeem}</span><span class="ml">Redeem a code</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnHistory"><span class="mi">${ICN.receipt}</span><span class="ml">Transaction history</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnGems"><span class="mi">${ICN.gem}</span><span class="ml">My watches</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnTeam"><span class="mi">${ICN.people}</span><span class="ml">Referrals &amp; team</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnAbout"><span class="mi">${mi('records', ICN.about)}</span><span class="ml">About Us</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnSupport"><span class="mi">${mi('cs', ICN.support)}</span><span class="ml">Customer Service</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnHistory"><span class="mi">${mi('records', ICN.receipt)}</span><span class="ml">Records</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnGems"><span class="mi">${ICN_WATCH}</span><span class="ml">My Watches</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnTeam"><span class="mi">${mi('team', ICN.people)}</span><span class="ml">Referrals &amp; Team</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
-      <button class="menu-row" id="mnBanks"><span class="mi">${ICN.bank}</span><span class="ml">Withdrawal accounts</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnPassword"><span class="mi">${ICN.lock}</span><span class="ml">Change password</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnSupport"><span class="mi">${ICN.support}</span><span class="ml">Contact support</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnDownload"><span class="mi">${ICN.download}</span><span class="ml">Download app</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnAbout"><span class="mi">${ICN.about}</span><span class="ml">About Chronova</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnBanks"><span class="mi">${mi('bindbank', ICN.bank)}</span><span class="ml">Bind Bank Card</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnPassword"><span class="mi">${ICN.lock}</span><span class="ml">Change Password</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnRedeem"><span class="mi">${ICN.redeem}</span><span class="ml">Redeem Gift Code</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnDownload"><span class="mi">${mi('install', ICN.download)}</span><span class="ml">Install App</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
-      <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Log out</span></button>
+      <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Exit</span></button>
     </div>
   `;
   const accCode = el.querySelector('#accCode');

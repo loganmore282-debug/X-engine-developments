@@ -5,16 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chronova Admin</title>
 <!-- PWA: makes the "Install" icon appear in the browser address bar -->
-<meta name="theme-color" content="#7c3aed">
+<meta name="theme-color" content="#0c0b0e">
 <link rel="manifest" href="/furahq-manifest.json">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/furahq-sw.js').catch(function(){});}</script>
 <style>
   :root{
-    --bg:#f4f1fb; --card:#fff; --ink:#241640; --sub:#7a6a95; --line:#e7defa; --line2:#f2edfc;
-    --violet:#7c3aed; --violet-dk:#5f21d6; --ok:#059669; --ok-bg:#ecfdf5;
-    --danger:#e11d48; --danger-bg:#fef1f3; --warn:#b45309; --warn-bg:#fffbeb; --sky:#0ea5e9;
+    --bg:#0c0b0e; --card:#17161c; --ink:#f3efe6; --sub:#a89f8c; --line:#2a2733; --line2:#1f1d25;
+    --violet:#d9ad4e; --violet-dk:#a97f22; --violet-ink:#1c1403; --ok:#57c98a; --ok-bg:#12241a;
+    --danger:#f4708c; --danger-bg:#3a1720; --warn:#e8c468; --warn-bg:#241f14; --sky:#7fc8e8;
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--ink);
@@ -28,37 +28,37 @@
   .login-card{background:var(--card);border-radius:20px;padding:30px 26px;width:100%;max-width:380px;
     box-shadow:0 10px 40px rgba(76,29,149,.12);text-align:center;}
   .brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px;}
-  .brand .mk{width:40px;height:40px;border-radius:12px;background:var(--violet);display:flex;align-items:center;justify-content:center;}
+  .brand .mk{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f7e6b4,var(--violet) 60%,var(--violet-dk));display:flex;align-items:center;justify-content:center;}
   .brand .mk svg{width:24px;height:24px}
   .brand b{font-size:20px}
   .muted{color:var(--sub);font-size:13px}
 
   input,select,textarea{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:11px;
-    font-size:14px;background:#fff;color:var(--ink);outline:none;margin-top:6px}
+    font-size:14px;background:var(--card);color:var(--ink);outline:none;margin-top:6px}
   input:focus,select:focus,textarea:focus{border-color:var(--violet)}
   label{display:block;font-size:12.5px;color:var(--sub);font-weight:600;margin-top:12px;text-align:left}
-  .btn{background:var(--violet);color:#fff;border:0;border-radius:11px;padding:12px 18px;font-size:14px;
-    font-weight:700;cursor:pointer}
+  .btn{background:linear-gradient(180deg,#f4d98a,var(--violet) 60%,var(--violet-dk));color:var(--violet-ink);border:0;border-radius:11px;padding:12px 18px;font-size:14px;
+    font-weight:800;cursor:pointer}
   .btn:active{opacity:.88}
   .btn[disabled]{opacity:.55;cursor:default}
   .btn.block{width:100%;margin-top:16px}
   .btn.sm{padding:8px 13px;font-size:13px;border-radius:9px}
-  .btn.ok{background:var(--ok)}
-  .btn.danger{background:var(--danger)}
-  .btn.sky{background:var(--sky)}
-  .btn.ghost{background:var(--line);color:var(--ink)}
+  .btn.ok{background:var(--ok);color:#0a1a10}
+  .btn.danger{background:var(--danger);color:#2a0a10}
+  .btn.sky{background:var(--sky);color:#0a1a20}
+  .btn.ghost{background:var(--line2);color:var(--ink)}
 
   /* shell */
   .topbar{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
   .topbar-inner{display:flex;align-items:center;gap:12px;padding:12px 0}
-  .topbar .mk{width:34px;height:34px;border-radius:10px;background:var(--violet);display:flex;align-items:center;justify-content:center}
+  .topbar .mk{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f7e6b4,var(--violet) 60%,var(--violet-dk));display:flex;align-items:center;justify-content:center}
   .topbar .mk svg{width:20px;height:20px}
   .topbar b{font-size:16px}
   .spacer{flex:1}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 10px}
   .tab{background:none;border:0;padding:8px 13px;border-radius:20px;font-size:13px;font-weight:700;
     color:var(--sub);cursor:pointer}
-  .tab.active{background:var(--violet);color:#fff}
+  .tab.active{background:var(--violet);color:var(--violet-ink)}
   .tab .badge-n{display:inline-block;min-width:17px;padding:0 5px;margin-left:5px;background:var(--danger);color:#fff;
     border-radius:20px;font-size:10px;line-height:16px;}
   .content{padding:18px 0 70px}
@@ -74,7 +74,7 @@
   .row > div{flex:1;min-width:120px}
   .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
   .subtab{background:var(--line2);border:0;color:var(--sub);border-radius:18px;padding:7px 13px;font-size:12.5px;font-weight:700;cursor:pointer}
-  .subtab.active{background:var(--violet);color:#fff}
+  .subtab.active{background:var(--violet);color:var(--violet-ink)}
 
   table{width:100%;border-collapse:collapse;font-size:13.5px}
   th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -90,7 +90,7 @@
   .empty{color:var(--sub);font-size:13px;padding:18px;text-align:center}
 
   .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-  .prod{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+  .prod{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}
   .prod .thumb{height:90px;background:var(--line2) center/cover no-repeat;display:flex;align-items:center;justify-content:center;}
   .prod .thumb .gemsw{width:44px;height:44px;border-radius:12px}
   .prod .pb{padding:12px}
@@ -110,7 +110,7 @@
   /* modal */
   .modal-root{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
   .modal-bg{position:absolute;inset:0;background:rgba(30,15,60,.45)}
-  .modal{position:relative;background:#fff;border-radius:18px;padding:20px;max-width:460px;width:100%;
+  .modal{position:relative;background:var(--card);border-radius:18px;padding:20px;max-width:460px;width:100%;
     max-height:90vh;overflow-y:auto}
   .modal h3{margin:0 0 4px;font-size:17px}
   .kv{display:flex;justify-content:space-between;font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--line)}
@@ -127,7 +127,7 @@
   .seg{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .seg button{padding:6px 14px;border-radius:20px;border:1px solid var(--line);background:var(--card);
     cursor:pointer;font-size:13px;color:var(--sub);font-weight:600}
-  .seg button.on{background:var(--violet);color:#fff;border-color:var(--violet)}
+  .seg button.on{background:var(--violet);color:var(--violet-ink);border-color:var(--violet)}
   .legend{display:flex;gap:16px;font-size:12px;color:var(--sub);margin:2px 0 6px}
   .legend span{display:inline-flex;align-items:center;gap:6px}
   .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
@@ -144,11 +144,8 @@
 <div class="login" id="loginView">
   <div class="login-card">
     <div class="brand">
-      <div class="mk"><svg viewBox="0 0 100 100" fill="none">
-        <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#fff" opacity=".95"/>
-        <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
-        <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
-        <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
+      <div class="mk"><svg viewBox="0 0 24 24" fill="none" stroke="#1c1403" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.6 1.6"/></svg></div>
       <b>Chronova Admin</b>
     </div>
     <p class="muted">Enter the admin key to continue.</p>
@@ -163,11 +160,8 @@
   <div class="topbar">
     <div class="wrap">
       <div class="topbar-inner">
-        <div class="mk"><svg viewBox="0 0 100 100" fill="none">
-          <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#fff" opacity=".95"/>
-          <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
-          <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
-          <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg></div>
+        <div class="mk"><svg viewBox="0 0 24 24" fill="none" stroke="#1c1403" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.6 1.6"/></svg></div>
         <b>Chronova Admin</b>
         <div class="spacer"></div>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
