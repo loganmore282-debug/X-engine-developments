@@ -255,6 +255,7 @@ function setAuthMode(mode) {
   document.getElementById('loginForm').classList.toggle('active', login);
   document.getElementById('registerForm').classList.toggle('active', !login);
   document.getElementById('authErr').classList.add('hidden');
+  document.querySelector('.auth-view').classList.toggle('mode-register', !login);
   document.querySelector('.auth-scroll').scrollTop = 0;
 }
 document.getElementById('toRegister').addEventListener('click', () => setAuthMode('register'));
@@ -856,6 +857,16 @@ function renderHome() {
   const active = _investments.filter(i => i.status === 'active');
   const recent = _txns.slice(0, 5);
 
+  // Dashboard photo cards reuse the admin's banner/slideshow images (Settings →
+  // Banners) — no separate upload slot needed. Falls back to a plain gold
+  // gradient card when the admin hasn't uploaded any yet.
+  const dimgs = (_publicSettings?.slideshowImages || []).filter(Boolean);
+  const dimg = (i) => dimgs.length ? esc(dimgs[i % dimgs.length]) : '';
+  const IC = (window.CHRONOVA_ICONS || {});
+  const photoCard = (i, n, l) => dimg(i)
+    ? `<div class="dpic"><img class="bgph" src="${dimg(i)}"><div class="sh"></div><div class="c"><div class="n">${n}</div><div class="l">${l}</div></div></div>`
+    : `<div class="dpic" style="background:linear-gradient(120deg,#241d0e,#15130d)"><div class="c"><div class="n">${n}</div><div class="l">${l}</div></div></div>`;
+
   el.innerHTML = `
     <div class="hero-banner">
       <div id="hbTrack">
@@ -872,26 +883,17 @@ function renderHome() {
       </div>
       <div class="hb-dots" id="hbDots">${((_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length) > 0 ? Array.from({length: (_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length}).map(() => '<i></i>').join('') : ''}</div>
     </div>
-    <div class="ticker-head${_feed.length ? '' : ' hidden'}" id="tickerHead"><i class="live"></i><span>Live activity</span></div>
-    <div class="ticker${_feed.length ? '' : ' hidden'}" id="tickerWrap"><div class="ticker-track">${tickerItemsHtml()}</div></div>
-    <div class="wallet-panel">
-      <div class="wallet-top">
-        <span class="wallet-label">Total balance</span>
-        <button class="wallet-eye" id="balEye">${_hideBal ? ICN.eyeOff : ICN.eye}</button>
-      </div>
-      <div class="wallet-amt" id="balAmt">${_hideBal ? '••••••' : ugx(bal)}</div>
+    <div class="dact-row">
+      <button class="dact" id="qaDeposit">${IC.deposit ? `<img src="${IC.deposit}">` : ICN.down}Recharge</button>
+      <button class="dact" id="qaWithdraw">${IC.withdraw ? `<img src="${IC.withdraw}">` : ICN.up}Withdraw</button>
+      <button class="dact" id="qaContact">${IC.contact ? `<img src="${IC.contact}">` : ICN.phone}Contact Us</button>
+      <button class="dact${checkedInToday ? ' claimed' : ''}" id="qaCheckin">${IC.checkin ? `<img src="${IC.checkin}">` : ICN.checkin}${checkedInToday ? 'Claimed' : 'Check-in'}</button>
     </div>
-    <div class="wallet-stats">
-      <div class="wstat"><div class="wi gold">${ICN.down}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalDeposited || 0)}</div><div class="wl">Total deposits</div></div>
-      <div class="wstat"><div class="wi gold">${ICN.up}</div><div class="wn">${_hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0)}</div><div class="wl">Total withdrawals</div></div>
-      <div class="wstat"><div class="wi gold">${ICN.commission}</div><div class="wn">${_hideBal ? '••••' : ugx((_teamStats?.earned?.commissions ?? _account?.commissionEarned ?? 0) + (_teamStats?.earned?.teamRewards || 0))}</div><div class="wl">Team earnings</div></div>
-    </div>
-    <div class="quick-row">
-      <button class="quick-btn" id="qaDeposit"><span class="qi gold">${ICN.down}</span>Deposit</button>
-      <button class="quick-btn" id="qaWithdraw"><span class="qi gold">${ICN.up}</span>Withdraw</button>
-      <button class="quick-btn" id="qaRedeem"><span class="qi gold">${ICN.redeem}</span>Redeem</button>
-      <button class="quick-btn${checkedInToday ? ' claimed' : ''}" id="qaCheckin"><span class="qi gold">${ICN.checkin}</span>${checkedInToday ? 'Claimed' : 'Check in'}</button>
-    </div>
+    ${_feed.length ? `<div class="dtick" id="tickerWrap">${IC.records ? `<img src="${IC.records}">` : ''}<div class="ticker-track">${tickerItemsHtml()}</div></div>` : ''}
+    ${photoCard(0, _hideBal ? '••••••' : ugx(bal), 'Account Balance')}
+    ${photoCard(1, _hideBal ? '••••' : ugx(_account?.totalEarned || 0), 'Cumulative Income')}
+    ${photoCard(2, _hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0), 'Total Withdrawn')}
+    <div class="dpromo">${dimg(3) ? `<img src="${dimg(3)}">` : ''}<div class="sh"></div><div class="c"><b>Chronova Global</b><span>${esc(_publicSettings?.brandTagline || 'The best investment platform')}</span></div></div>
     <div class="sec-head"><h3>Your watches</h3>${active.length ? `<button class="link-btn" data-tab-jump="gems">Buy more</button>` : ''}</div>
     ${active.length ? active.map(inv => `
       <div class="gem-active">
@@ -909,14 +911,9 @@ function renderHome() {
     <div class="sec-head"><h3>Recent activity</h3>${_txns.length ? `<button class="link-btn" data-tab-jump="account">See all</button>` : ''}</div>
     ${recent.length ? recent.map(txnRowHtml).join('') : `<div class="empty-note">No activity yet.</div>`}
   `;
-  el.querySelector('#balEye').addEventListener('click', () => {
-    _hideBal = !_hideBal;
-    try { localStorage.setItem('fg_hide_bal', _hideBal ? '1' : '0'); } catch (_) {}
-    renderHome();
-  });
   el.querySelector('#qaDeposit').addEventListener('click', openDepositModal);
   el.querySelector('#qaWithdraw').addEventListener('click', openWithdrawModal);
-  el.querySelector('#qaRedeem').addEventListener('click', openRedeemModal);
+  el.querySelector('#qaContact').addEventListener('click', openSupportModal);
   if (!checkedInToday) el.querySelector('#qaCheckin').addEventListener('click', doCheckin);
   el.querySelectorAll('[data-tab-jump]').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tabJump)));
   bindBoosts(el);
