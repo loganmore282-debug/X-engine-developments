@@ -1,0 +1,133 @@
+# Chronova — Project Memory (read this first)
+
+**What it is:** Chronova is a Uganda mobile-money **investment platform** themed around
+luxury watches (Casio → Patek Philippe tiers). It descends technically from an earlier
+app called **Furagemz** (reuses its money-safety engine, security patterns, and build
+pipeline) but the owner's #1 rule, repeated many times and still not fully respected in
+past sessions, is: **Chronova must NOT resemble Furagemz** — not in wording, colors, icons,
+layout, or **code structure**. Read the whole "Lesson learned" section below before
+touching any file.
+
+Active dev branch: **`claude/voltra-session-continue-mk95gw`**. All work is committed
+AND pushed there.
+
+## Lesson learned from the last session (do not repeat)
+
+The single biggest recurring failure was **reusing Furagemz's inherited code** —
+variable names, function names, and structural patterns (`GEM_COLORS`, `FG_LOGO`,
+`renderGems`, purple `rgba()` shadows under a "gold" surface, etc.) — and only patching
+them piecemeal each time the owner caught a leftover. That produced repeated rounds of
+"same mistake" complaints. **Do not treat the inherited Furagemz code as a starting
+point to tweak.** When building or fixing a screen, treat the owner's approved mockup as
+the spec and write/rewrite the screen to match it, including renaming Furagemz-derived
+identifiers where they leak old assumptions (colors, milestone logic, domains, etc.).
+Before assuming a past fix is sufficient, verify against what the owner is currently
+showing you (screenshots) — don't argue that the code should be fine on inspection alone.
+
+## Locked-in economics (do not change without asking)
+
+7 watch tiers: Casio 25,000 → Patek 500,000, VIP 1–7. Return **×30** over **120 days**
+(daily = price ÷ 4). Commissions **L1 30% / L2 3% / L3 1%**. Daily check-in bonus **300**.
+Welcome bonus **5,000**. Min deposit **25,000**. Min withdrawal **10,000**. Withdrawal fee
+**17%**. Referral milestones by **ACTIVE referral count** (active = totalInvested > 0):
+3→10,000 / 10→50,000 / 15→75,000 / 20→100,000.
+
+**Payment flow — manual mobile-money, NOT a gateway:** admin configures up to ~7
+recipient mobile-money numbers in the admin panel. On deposit, the server auto-assigns
+the least-busy active number and gives the user a 15-minute "Copy & Pay" window; the
+admin gets an SMS (MarzSMS) to approve after confirming the money landed. Withdrawals:
+admin manually sends the money then marks paid, or rejects (auto-refund).
+
+## Design language (already implemented — preserve, don't regress)
+
+- Dark **charcoal + gold** theme. No purple/violet anywhere — including in `rgba()`
+  box-shadows, gradient overlays, and modal-backdrop tints, not just flat hex fills
+  (this was a real bug found late: surface colors were gold but shadows underneath were
+  still Furagemz-purple `rgba(124,58,237,...)` etc. — always grep for stray
+  purple-toned `rgba()`/hex after editing CSS).
+- Gold circular clock logo (`FG_LOGO` in `original_module.js`, and the admin panel's
+  `.mark`/`.topbar .mk`) — never the old gem/diamond mark.
+- Auth screens: box-cornered fields/buttons (not pills), icon inside each field
+  (phone, lock, lock, `<>` for invite code). Login/Register wording: "Log In" /
+  "Create account ›" / "Forgot password?" and "Register Now" / "Already have an
+  account? Sign In" — no "Welcome back" / "Access my account" wording.
+- Login and Register have **different** full-screen watch-photo backgrounds
+  (`.auth-view` / `.auth-view.mode-register` in `index.html`, toggled in `setAuthMode()`).
+- Radial CSS loader (conic-gradient ring, `.pay-dots`/`.btn-dots` in `index.html`) is
+  used for **every** loading state app-wide — never reintroduce the old bouncing-dot
+  spinner.
+- Home dashboard order: actions row (Recharge/Withdraw/Contact Us/Check-in, plain
+  owner-supplied PNG icons recolored gold via CSS filter, no circle/box background) →
+  slim activity ticker → photo-background cards for Account Balance / Cumulative Income
+  / Total Withdrawn (photo IS the card background) → promo banner. No "CHRONOVA"
+  title/logo bar above the hero image.
+- Owner-supplied PNG icons live as base64 in `window.CHRONOVA_ICONS` (plain `<script>`
+  in `index.html`, placed immediately before `<script data-nx-core>` so it survives
+  `build-core.js` reruns). Referenced via `(window.CHRONOVA_ICONS || {}).keyname`,
+  recolored gold with
+  `filter:invert(75%) sepia(46%) saturate(638%) hue-rotate(358deg) brightness(101%) contrast(94%)`.
+- Account screen menu (in this exact order): About Us, Customer Service, Records,
+  My Watches, Referrals & Team, then Bind Bank Card, Change Password, Redeem Gift Code,
+  Install App, then Exit. About Us is an actual article about the history/craft of
+  watches, not investment marketing copy. Customer Service lists **WhatsApp + Telegram
+  only, no email**.
+- Boxed (not rounded) corners applied consistently across dashboard cards, tiles, and
+  buttons, matching the auth screen treatment.
+- Product tier colors come from `GEM_COLORS` in `original_module.js` — its keys **must**
+  match the real tier keys (`casio, fossil, tissot, longines, omega, rolex, patek`), all
+  gold-family tones. A past key mismatch silently forced Furagemz-purple on every
+  product card — check this after any product/tier change.
+
+## Where the app lives
+
+Everything is in `chronova/` (this directory):
+- `original_module.js` — all app logic/screens (compiled into `index.html`)
+- `index.html` — shell + CSS + compiled core (edit CSS/markup here directly; JS logic
+  lives in `original_module.js` and gets recompiled in)
+- `server.js` — Railway backend (Express + Firebase Auth + MongoDB via `db.js`)
+- `db.js` — Mongo layer. M0 free tier has **no ACID transactions** — money-crediting
+  code uses in-process Sets as single-writer locks (same pattern as the Voltra/Furagemz
+  lineage; see `db.js` comments).
+- `admin.html` — admin panel source (readable; compiles to `admin.dist.html` +
+  `admin-dist/`)
+- `sw.js`, `manifest.json`, icon PNGs — PWA shell
+
+## Build & deploy pipeline
+
+1. Edit `original_module.js` (app logic) and/or `index.html` (CSS/markup).
+2. `cd chronova && node build-core.js` — obfuscates + deflates + base64s
+   `original_module.js` into `index.html`'s `<script data-nx-core>`. Prints
+   "round-trip : OK" when valid. **Always rebuild after editing `original_module.js`.**
+   This also syncs `dist/` (the clean EdgeOne deploy folder for the user app).
+3. `node build-admin.js` for admin panel changes — writes `admin.dist.html` (single-file)
+   and `admin-dist/` (separate EdgeOne project, `chronoadmin.edgeone.app`).
+4. Bump the cache: `sw.js` → `const CACHE = 'chronova-shell-vN'` → `vN+1`, then
+   `cp sw.js dist/sw.js` (do **not** overwrite `admin-dist/sw.js` — it's intentionally a
+   bare no-op service worker so the admin panel never serves stale data).
+5. Zip for handoff:
+   ```
+   (cd dist && zip -q -j ../chronova-userpanel.zip index.html manifest.json sw.js icon-192.png icon-512.png icon-maskable-192.png icon-maskable-512.png)
+   (cd admin-dist && zip -q -j ../chronova-admin.zip index.html manifest.json sw.js icon-192.png icon-512.png icon-maskable-192.png icon-maskable-512.png)
+   ```
+6. Commit + push to `claude/voltra-session-continue-mk95gw`, then deliver zips via
+   `SendUserFile`.
+
+### Deploy targets (owner does this manually)
+- User app → EdgeOne project, upload `dist/` contents (or the zip). URL pattern:
+  `*.edgeone.app` / `*.edgeone.dev` preview domains, plus their own custom domain.
+- Admin panel → separate EdgeOne project from `admin-dist/`.
+- Backend → Railway, from `server.js`.
+- MongoDB Atlas (M0), Firebase Auth, MarzPay/MarzSMS are the external services.
+
+### Secrets — never commit
+Firebase service account, Mongo URI, admin key, MarzPay/MarzSMS keys all live only in
+Railway env vars. Never put secrets or the model identifier in commits/PRs/code.
+
+## Known constraints
+
+- No outbound internet in the sandbox — Firebase's `gstatic.com` module import fails
+  during any Playwright boot test, so click-driven JS behavior can't be verified via
+  automated screenshot here, only static HTML/CSS. Disclose this rather than claiming a
+  behavior is confirmed when it wasn't.
+- PIL (`python3 -c "from PIL import Image"`) is available for icon resizing;
+  ImageMagick/ffmpeg/sharp are not.
