@@ -176,7 +176,7 @@ function closeModal(fromPop) {
 }
 window.addEventListener('popstate', () => { if (_pageOpen) closeModal(true); });
 
-function phoneToEmail(phone) { return String(phone).replace(/\D/g, '') + '@furagemz-app.com'; }
+function phoneToEmail(phone) { return String(phone).replace(/\D/g, '') + '@chronova-app.com'; }
 function cleanPhone(raw) {
   const s = String(raw || '').replace(/\D/g, '');
   if (s.startsWith('256') && s.length >= 12) return '+' + s;
@@ -549,11 +549,12 @@ async function loadPublicSettings() {
   return _publicSettings;
 }
 
-const FG_LOGO = `<svg viewBox="0 0 100 100" fill="none">
-  <polygon points="35,20 65,20 82,42 58,80 42,80 18,42" fill="#7c3aed"/>
-  <polygon points="50,32 35,20 65,20" fill="#10b981"/><polygon points="50,32 65,20 82,42" fill="#38bdf8"/>
-  <polygon points="50,32 82,42 58,80" fill="#f43f5e"/><polygon points="50,32 58,80 42,80" fill="#eab308"/>
-  <polygon points="50,32 42,80 18,42" fill="#c084fc"/></svg>`;
+const FG_LOGO = `<svg viewBox="0 0 100 100"><defs><radialGradient id="fgLogoGrad" cx="35%" cy="30%" r="75%">
+  <stop offset="0%" stop-color="#f7e6b4"/><stop offset="60%" stop-color="#d9ad4e"/><stop offset="100%" stop-color="#a97f22"/>
+  </radialGradient></defs>
+  <circle cx="50" cy="50" r="48" fill="url(#fgLogoGrad)"/>
+  <circle cx="50" cy="50" r="28" fill="none" stroke="#1c1403" stroke-width="6"/>
+  <path d="M50 34v16l11 7" fill="none" stroke="#1c1403" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 function maybeShowAnnouncement() {
   const ann = _publicSettings?.announcement;
@@ -595,13 +596,13 @@ async function loadProducts() {
 let _teamStats = null;
 // Client-side copy of the milestone ladder so the Task centre renders instantly
 // (0% / unpaid) before /team/stats returns — no loader. Server is source of truth
-// for what's actually paid; these fill in the moment stats arrive.
+// for what's actually paid; these fill in the moment stats arrive. Target = a
+// COUNT of active level-1 referrals (not a currency amount).
 const TEAM_MILESTONES = [
-  { target:   60000, reward:  3000 },
-  { target:  100000, reward: 10000 },
-  { target:  250000, reward: 15000 },
-  { target:  500000, reward: 25000 },
-  { target: 1000000, reward: 50000 },
+  { target:  3, reward:  10000 },
+  { target: 10, reward:  50000 },
+  { target: 15, reward:  75000 },
+  { target: 20, reward: 100000 },
 ];
 async function loadTeam() {
   const [r, s] = await Promise.all([api('/team/members'), api('/team/stats')]);
@@ -1323,14 +1324,14 @@ function openRedeemModal() {
 // ══════════════════════════════════════════════
 // GEMS
 // ══════════════════════════════════════════════
-const GEM_COLORS = { quartz: '#64748b', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#334155' };
+const GEM_COLORS = { casio: '#c9a86a', fossil: '#d9ad4e', tissot: '#e0b95a', longines: '#c9932e', omega: '#f4d98a', rolex: '#d9ad4e', patek: '#f0c360' };
 function renderGems() {
   const el = document.getElementById('panel-gems');
   if (!_products.length) { el.innerHTML = `<div class="empty-note" style="margin-top:14px">Watch tiers not loaded yet.</div>`; loadProducts().then(renderGems); return; }
   el.innerHTML = `
     <div class="sec-head" style="margin-top:12px"><h3>Pick a watch to grow</h3></div>
     ${_products.map(p => {
-      const color = p.color || GEM_COLORS[p.key] || '#7c3aed';
+      const color = p.color || GEM_COLORS[p.key] || '#d9ad4e';
       const daily = Math.round(p.expectedReturn / (p.cycle || 1));
       const art = p.image ? `<img src="${esc(p.image)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:16px">` : gemArt(color);
       const soon = !!p.comingSoon;
@@ -1361,13 +1362,13 @@ function openGemDetail(key) {
   const daily = Math.round(p.expectedReturn / (p.cycle || 1));
   const profit = Math.max(0, p.expectedReturn - p.price);
   const roi = p.price ? Math.round((p.expectedReturn / p.price) * 100) : 0;
-  const swatch = p.color || GEM_COLORS[p.key] || '#7c3aed';
+  const swatch = p.color || GEM_COLORS[p.key] || '#d9ad4e';
   const canAfford = bal >= p.price;
   openModal(`
     <div class="modal-head"><h2>${esc(p.label)}</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="gd-hero">
       ${p.image ? `<img src="${esc(p.image)}" alt="">`
-        : `<div class="gd-hero-fill" style="background:linear-gradient(135deg,${swatch},#4c1d95)"></div>`}
+        : `<div class="gd-hero-fill" style="background:linear-gradient(135deg,${swatch},#100d08)"></div>`}
       <div class="gd-hero-shade"></div>
       <div class="gd-hero-badges">
         <span class="gd-roi">${roi}% return</span>
@@ -1419,11 +1420,11 @@ function openGemDetail(key) {
 // ══════════════════════════════════════════════
 function referralLink(code) {
   try { return location.origin + location.pathname.replace(/index\.html$/, '') + '?ref=' + encodeURIComponent(code); }
-  catch (_) { return 'https://furagemz.com/?ref=' + code; }
+  catch (_) { return 'https://chronovaplatform.com/?ref=' + code; }
 }
 function commPct(level) {
   const s = _publicSettings || {};
-  const raw = level === 1 ? (s.commL1 ?? 0.35) : level === 2 ? (s.commL2 ?? 0.02) : (s.commL3 ?? 0.01);
+  const raw = level === 1 ? (s.commL1 ?? 0.30) : level === 2 ? (s.commL2 ?? 0.03) : (s.commL3 ?? 0.01);
   return Math.round(raw * 100);
 }
 function renderTeam() {
@@ -1431,12 +1432,14 @@ function renderTeam() {
   const code = _account?.referralCode || _account?.username || '—';
   const link = code !== '—' ? referralLink(code) : '';
   const ts = _teamStats;
-  const l1Total = ts?.l1DepositTotal || 0;
+  // l1DepositTotal is aliased server-side to the ACTIVE-REFERRAL COUNT (not a
+  // currency amount) — the milestone ladder targets a headcount, not deposits.
+  const l1Active = ts?.l1ActiveCount ?? ts?.l1DepositTotal ?? 0;
   const totalTeamEarn = (ts?.earned?.commissions || _account?.commissionEarned || 0) + (ts?.earned?.teamRewards || 0);
   const LVL = [
-    { n: 1, count: ts?.counts?.l1 ?? _account?.teamL1Count ?? 0, earned: ts?.earned?.l1 || 0, tint: '#7c3aed', bg: '#f3e8ff' },
-    { n: 2, count: ts?.counts?.l2 ?? _account?.teamL2Count ?? 0, earned: ts?.earned?.l2 || 0, tint: '#0ea5e9', bg: '#e0f2fe' },
-    { n: 3, count: ts?.counts?.l3 ?? _account?.teamL3Count ?? 0, earned: ts?.earned?.l3 || 0, tint: '#059669', bg: '#d1fae5' },
+    { n: 1, count: ts?.counts?.l1 ?? _account?.teamL1Count ?? 0, earned: ts?.earned?.l1 || 0 },
+    { n: 2, count: ts?.counts?.l2 ?? _account?.teamL2Count ?? 0, earned: ts?.earned?.l2 || 0 },
+    { n: 3, count: ts?.counts?.l3 ?? _account?.teamL3Count ?? 0, earned: ts?.earned?.l3 || 0 },
   ];
   el.innerHTML = `
     <div class="team-hero">
@@ -1445,7 +1448,6 @@ function renderTeam() {
           <div class="th-label">Team earnings</div>
           <div class="th-amt">${ugx(totalTeamEarn)}</div>
         </div>
-        <div class="th-art">${gemArt('#ffffff')}</div>
       </div>
       <div class="th-code-row">
         <div class="th-code"><span>Code</span><b>${esc(code)}</b></div>
@@ -1457,7 +1459,7 @@ function renderTeam() {
     <div class="lvl-list">
       ${LVL.map(l => `
         <div class="lvl-row">
-          <div class="lvl-badge" style="background:${l.bg};color:${l.tint}">L${l.n}</div>
+          <div class="lvl-badge" style="background:transparent;border:2px solid var(--violet);color:var(--violet)">L${l.n}</div>
           <div class="lvl-info">
             <div class="t">Level ${l.n} · earns ${commPct(l.n)}% of every watch</div>
             <div class="s">${l.count} member${l.count === 1 ? '' : 's'}</div>
@@ -1466,8 +1468,8 @@ function renderTeam() {
         </div>`).join('')}
     </div>
 
-    <div class="sec-head"><h3>Task centre</h3></div>
-    <div class="task-intro">Your level 1 team has deposited <b>${ugx(l1Total)}</b> so far. Hit each target below and the reward drops into your wallet instantly.</div>
+    <div class="sec-head"><h3>Task Center</h3></div>
+    <div class="task-intro">You have <b>${l1Active} active</b> level-1 referral${l1Active === 1 ? '' : 's'} so far. Hit each target below and the reward drops into your wallet instantly.</div>
     ${(ts?.milestones || TEAM_MILESTONES).map(m => {
       // A milestone shows a green PAID tick ONLY when the reward was ACTUALLY
       // credited (server flag `paid` = a real team_reward transaction exists).
@@ -1475,9 +1477,10 @@ function renderTeam() {
       // but the money hasn't landed yet, we say "reward on its way" — the server
       // pays it on this very screen-open (and the reconciler heals any it missed),
       // so it never falsely claims "paid".
-      const reached = (m.achieved != null) ? m.achieved : (l1Total >= m.target);
+      const cur     = (m.current != null) ? m.current : l1Active;
+      const reached = (m.achieved != null) ? m.achieved : (cur >= m.target);
       const paid    = !!m.paid;
-      const pct     = (paid || reached) ? 100 : Math.min(100, Math.round((l1Total / m.target) * 100));
+      const pct     = (paid || reached) ? 100 : Math.min(100, Math.round((cur / m.target) * 100));
       const status  = paid ? 'Reward paid to your wallet'
                     : reached ? 'Target reached — reward on its way'
                     : pct + '% there';
@@ -1485,7 +1488,7 @@ function renderTeam() {
       <div class="task-row${paid ? ' done' : ''}">
         <div class="task-ic">${ICN.award}</div>
         <div class="task-body">
-          <div class="task-t">Team deposits reach ${ugx(m.target)}</div>
+          <div class="task-t">Refer ${m.target} active member${m.target === 1 ? '' : 's'} · ${cur}/${m.target}</div>
           <div class="task-bar"><i style="width:${pct}%"></i></div>
           <div class="task-s">${status}</div>
         </div>
@@ -1503,9 +1506,9 @@ function renderTeam() {
         <div class="avatar" style="background:${tickColor(m.name)}">${esc(initials(m.name))}</div>
         <div class="member-info">
           <div class="t">${esc(m.name)}</div>
-          <div class="s">Deposited <b>${ugx(m.deposited || 0)}</b> · ${m.hasInvested ? 'gem active' : 'no watch yet'}</div>
+          <div class="s">Deposited <b>${ugx(m.deposited || 0)}</b> · ${m.hasInvested ? 'watch active' : 'no watch yet'}</div>
         </div>
-        <div class="badge ${(m.deposited || 0) > 0 ? 'on' : 'off'}">${(m.deposited || 0) > 0 ? 'Counts' : 'No deposit'}</div>
+        <div class="badge ${m.hasInvested ? 'on' : 'off'}">${m.hasInvested ? 'Active' : 'Not active'}</div>
       </div>`).join('') : `<div class="empty-note">Share your code — nobody has joined yet.</div>`}
   `;
   const copyBtn = el.querySelector('#copyRef');
@@ -1742,12 +1745,14 @@ function openSupportModal() {
   const wa = waLink(s.supportWhatsapp || '');
   const tg = tgLink(s.supportTelegram || '');
   const hours = s.supportHours || 'Every day, 9:00 AM – 9:00 PM';
+  const IC = (window.CHRONOVA_ICONS || {});
+  const csIcon = IC.cs ? `<img src="${IC.cs}" style="width:19px;height:19px">` : ICN.support;
   openModal(`
-    <div class="modal-head"><h2>Contact support</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="modal-head"><h2>Customer Service</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="support-body">
-      ${wa ? `<a class="support-row" href="${esc(wa)}" target="_blank" rel="noopener"><span class="mi" style="background:var(--ok-bg);color:var(--ok)">${ICN.support}</span><span><b>WhatsApp</b><br><span class="s">Tap to open</span></span></a>` : ''}
-      ${tg ? `<a class="support-row" href="${esc(tg)}" target="_blank" rel="noopener"><span class="mi" style="background:#eef2ff;color:var(--sapphire)">${ICN.telegram}</span><span><b>Telegram group</b><br><span class="s">Tap to open</span></span></a>` : ''}
-      <div class="support-row" style="cursor:default"><span class="mi" style="background:#fef9e7;color:var(--topaz)">${ICN.clock}</span><span><b>Support hours</b><br><span class="s">${esc(hours)}</span></span></div>
+      ${wa ? `<a class="support-row" href="${esc(wa)}" target="_blank" rel="noopener"><span class="mi" style="background:var(--line2);color:var(--violet)">${csIcon}</span><span><b>WhatsApp Support</b><br><span class="s">Chat with an agent</span></span></a>` : ''}
+      ${tg ? `<a class="support-row" href="${esc(tg)}" target="_blank" rel="noopener"><span class="mi" style="background:var(--line2);color:var(--violet)">${ICN.telegram}</span><span><b>Telegram Channel</b><br><span class="s">News &amp; updates</span></span></a>` : ''}
+      <div class="support-row" style="cursor:default"><span class="mi" style="background:var(--line2);color:var(--violet)">${ICN.clock}</span><span><b>Support hours</b><br><span class="s">${esc(hours)}</span></span></div>
       ${!wa && !tg ? `<div class="empty-note">Support contacts have not been set yet.</div>` : ''}
     </div>
   `);
