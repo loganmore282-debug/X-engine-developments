@@ -468,13 +468,20 @@ const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function randChars(n) {
   return Array.from(crypto.randomBytes(n)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
+// Short mixed-case codes (e.g. oTpi8g). Same ambiguity rules as above applied to
+// both cases: no I/l/O/o-vs-0 confusion. Matching everywhere is case-insensitive,
+// so the casing is presentation only and a user may type it however they like.
+const MIX_CHARS = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function mixedCode(n = 6) {
+  return Array.from(crypto.randomBytes(n)).map(b => MIX_CHARS[b % MIX_CHARS.length]).join('');
+}
 async function generateUniqueRefCode() {
   for (let attempt = 0; attempt < 15; attempt++) {
-    const code = 'CHR' + String(Math.floor(100000000 + Math.random() * 900000000)); // CHR + 9 digits
-    const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+    const code = mixedCode(6);
+    const exists = await db.collection('users').where('usernameLower', '==', code.toLowerCase()).limit(1).get();
     if (exists.empty) return code;
   }
-  return 'CHR' + Date.now().toString().slice(-9);
+  return mixedCode(8);
 }
 
 // ── PER-KEY MUTEX ──
@@ -1258,7 +1265,11 @@ app.post('/account/add-bank', async (req, res) => {
   const holderName = String(req.body.holderName || '').replace(/[<>]/g, '').trim().slice(0, 40);
   if (holderName.length < 2 || !/[a-zA-Z]/.test(holderName))
     return res.status(400).json({ status: 'error', message: 'Enter the full name of the account holder' });
-  const network = detectNetwork(digits);
+  // The user picks the network explicitly; detection is only the fallback.
+  const picked = String(req.body.network || '').trim();
+  const network = /^(mtn|airtel)$/i.test(picked)
+    ? (picked.toUpperCase() === 'MTN' ? 'MTN' : 'Airtel')
+    : detectNetwork(digits);
   try {
     const snap = await db.collection('users').doc(uid).get();
     const existing = (snap.data().bankAccounts || []);
@@ -1639,7 +1650,7 @@ app.post('/checkin', async (req, res) => {
 // redeems it once. Distinct from Voltra's random-range gift codes: a Chronova
 // code carries its own fixed `amount`, set when the admin creates it.
 // ═══════════════════════════════════════════
-function genCode() { return randChars(10); } // 10 alphanumeric chars (unambiguous charset)
+function genCode() { return mixedCode(6); } // e.g. oTpi8g — matched case-insensitively
 const _codeRateMap   = new Map();  // userId -> last attempt ts
 const _redeemingCodes = new Set(); // code doc id -> being redeemed (single-writer)
 
@@ -1648,14 +1659,19 @@ app.post('/redeem', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   // GLOBAL recognition: uppercase + strip every space/dash, so a code pasted
   // from WhatsApp as "AB CD-EF GH23" still matches exactly what was generated.
-  const code = String(req.body.code || '').toUpperCase().replace(/[\s-]/g, '');
+  const typed = String(req.body.code || '').replace(/[\s-]/g, '');
+  const code = typed.toUpperCase();
   if (!code) return res.status(400).json({ status: 'error', message: 'Enter a code' });
   const lastTry = _codeRateMap.get(userId) || 0;
   if (Date.now() - lastTry < 8000)
     return res.status(429).json({ status: 'error', message: 'Too many attempts. Wait a moment.' });
   _codeRateMap.set(userId, Date.now());
   try {
-    const snap = await db.collection('redemptionCodes').where('code', '==', code).limit(1).get();
+    // codeKey is the uppercase form written for every code issued from now on.
+    // Codes created before it existed are still found by their original value.
+    let snap = await db.collection('redemptionCodes').where('codeKey', '==', code).limit(1).get();
+    if (snap.empty) snap = await db.collection('redemptionCodes').where('code', '==', code).limit(1).get();
+    if (snap.empty) snap = await db.collection('redemptionCodes').where('code', '==', typed).limit(1).get();
     if (snap.empty) return res.status(404).json({ status: 'error', message: 'Invalid code' });
     const doc = snap.docs[0], d = doc.data();
     if (!d.active) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
@@ -1758,8 +1774,10 @@ app.post('/admin/codes/generate', async (req, res) => {
   if (!amt) return res.status(400).json({ status: 'error', message: 'amount required' });
   const n = Math.min(Math.max(parseInt(count) || 1, 1), 50);
   try {
+    // Uniqueness is judged case-insensitively so two codes can never differ by
+    // casing alone — they would be indistinguishable when redeemed.
     const existingSnap = await db.collection('redemptionCodes').select('code').get();
-    const existing = new Set(existingSnap.docs.map(d => d.data().code));
+    const existing = new Set(existingSnap.docs.map(d => String(d.data().code || '').toUpperCase()));
     const made = [];
     const batch = db.batch();
     const expiresAt = expiresInDays ? new Date(Date.now() + Number(expiresInDays) * 86400000) : null;
@@ -1767,9 +1785,10 @@ app.post('/admin/codes/generate', async (req, res) => {
     while (made.length < n && attempts < n * 10) {
       attempts++;
       const code = genCode();
-      if (existing.has(code) || made.includes(code)) continue;
-      made.push(code); existing.add(code);
-      const docData = { code, amount: amt, active: true, usedBy: [],
+      const key = code.toUpperCase();
+      if (existing.has(key)) continue;
+      made.push(code); existing.add(key);
+      const docData = { code, codeKey: key, amount: amt, active: true, usedBy: [],
         maxUsers: maxUsers ? Math.max(1, parseInt(maxUsers)) : null, createdAt: FieldValue.serverTimestamp() };
       if (expiresAt) docData.expiresAt = expiresAt;
       batch.set(db.collection('redemptionCodes').doc(), docData);
@@ -3591,6 +3610,18 @@ app.post('/admin/products/delete', async (req, res) => {
   if (!req.body.id) return res.status(400).json({ status: 'error', message: 'id required' });
   try { await db.collection('products').doc(req.body.id).delete(); return res.json({ status: 'success' }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Wipes the catalogue. The seeded tier ladder still lives in the database from
+// before the seed was removed, and only the owner can clear their own data.
+app.post('/admin/products/clear', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('products').get();
+    let removed = 0;
+    for (const d of snap.docs) { await d.ref.delete(); removed++; }
+    return res.json({ status: 'success', removed });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 // ── 404 + ERROR HANDLER ──

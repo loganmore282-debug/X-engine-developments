@@ -32,6 +32,8 @@ const SHOTS = [
   ['contact',  'home',     'contact'],
   ['mine',     'products', 'mine'],
   ['detail',   'products', 'detail'],
+  ['bank',     'account',  'bank'],
+  ['picker',   'account',  'picker'],
 ];
 
 (async () => {
@@ -52,7 +54,7 @@ const SHOTS = [
     await page.evaluate(t => window.__render(t), tab);
     if (overlay) { await page.evaluate(o => window.__open(o), overlay); }
     else { await page.evaluate(() => { const r = document.getElementById('modalRoot'); if (r) { r.classList.add('hidden'); r.innerHTML = ''; } document.body.classList.remove('no-scroll'); }); }
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(450);
     await page.screenshot({ path: `${out}/${name}.png`, fullPage: !overlay });
   }
 

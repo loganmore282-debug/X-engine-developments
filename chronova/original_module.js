@@ -96,9 +96,9 @@ function gemArt(color) {
 function typeIcon(t) { return ICN[t] || ICN.admin_credit; }
 function typeColor(t) {
   const map = {
-    topup: 'var(--emerald)', gem_payout: 'var(--ok)', commission: 'var(--sapphire)',
+    topup: 'var(--emerald)', gem_payout: 'var(--ok)', product_income: 'var(--ok)', commission: 'var(--gold)',
     checkin: 'var(--topaz)', withdrawal: 'var(--ruby)', admin_debit: 'var(--ruby)',
-    investment: 'var(--gold)', refund: 'var(--sapphire)', admin_credit: 'var(--gold)',
+    investment: 'var(--gold)', refund: 'var(--emerald)', admin_credit: 'var(--gold)',
     redeem: 'var(--gold)', team_reward: 'var(--gold-deep)'
   };
   return map[t] || 'var(--gold)';
@@ -854,6 +854,7 @@ async function doCheckin() {
 // ══════════════════════════════════════════════
 const SVG_RECORDS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2h8l5 5v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M15 2v5h5"/><path d="M10 13h6M10 17h4"/></svg>';
 const SVG_TICK    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg>';
+const SVG_CHEV    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>';
 const SVG_CLOSE   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
 function openSheet({ title, body, onRecords }) {
@@ -1021,8 +1022,8 @@ function openWithdrawSheet() {
       ${banks.length
         ? `<div class="pick" id="wdBank">${banks.map((b, i) => `
             <button class="pick-row${i === 0 ? ' on' : ''}" data-i="${i}">
-              <span>${esc(b.network || netOf(b.number))} · ${esc(b.name || '')}</span>
-              <em>${esc(String(b.number || '').replace(/^(\d{4}).*(\d{3})$/, '$1…$2'))}</em>
+              <span>${esc(b.network || netOf(b.phone))} · ${esc(b.holderName || '')}</span>
+              <em>${esc(String(b.phone || '').replace(/^(\d{3}).*(\d{3})$/, '$1…$2'))}</em>
             </button>`).join('')}</div>`
         : `<div class="empty-note">No receiving account bound yet. Add one from Account → Bind Bank.</div>`}
 
@@ -1075,7 +1076,7 @@ function openWithdrawSheet() {
 
     const restore = setBusy(go);
     const r = await api('/withdraw/request', { method: 'POST', body: {
-      amount, phone: bank.number, network: bank.network || netOf(bank.number), accountName: bank.name || ''
+      amount, phone: bank.phone, network: bank.network || netOf(bank.phone), accountName: bank.holderName || ''
     }});
     if (r.status !== 'success') { restore(); return toast(r.message || 'Could not submit', 'err'); }
     closeModal();
@@ -1195,49 +1196,6 @@ function openCheckinPage() {
 // ══════════════════════════════════════════════
 // CONTACT US  (its own page — Telegram group, channel, direct)
 // ══════════════════════════════════════════════
-const SVG_TELEGRAM = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.94 4.3 18.9 19.1c-.23 1.02-.84 1.27-1.7.79l-4.7-3.46-2.27 2.18c-.25.25-.46.46-.94.46l.34-4.77 8.68-7.84c.38-.34-.08-.53-.58-.19L6.99 13.2 2.35 11.75c-1.01-.32-1.03-1.01.21-1.5l18.13-6.99c.84-.31 1.57.19 1.25 3.04z"/></svg>';
-
-function openContactPage() {
-  const S = _publicSettings || {};
-  const row = (label, sub, url) => url
-    ? `<a class="ct-row" href="${esc(url)}" target="_blank" rel="noopener">
-         <span class="ct-ic">${SVG_TELEGRAM}</span>
-         <span class="ct-tx"><b>${label}</b><em>${sub}</em></span>
-         <span class="ct-go">›</span></a>`
-    : '';
-  const rows = [
-    row('Telegram group',   'Join the community', S.telegramGroup),
-    row('Telegram channel', 'Announcements and updates', S.telegramChannel),
-    row('Direct contact',   'Message support privately', S.supportTelegram),
-  ].filter(Boolean).join('');
-  openModal(`
-    <div class="modal-head"><h2>Contact us</h2><button class="modal-close"></button></div>
-    ${bannerUrl('contact') ? `<div class="page-banner"><img src="${esc(bannerUrl('contact'))}" alt=""></div>` : ''}
-    ${rows || `<div class="empty-note">No contact channels published yet.</div>`}
-    ${S.supportHours ? `<p class="ct-hours">${esc(S.supportHours)}</p>` : ''}
-  `);
-}
-function openRedeemModal() {
-  openModal(`
-    <div class="modal-head"><h2>Redeem a code</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="field"><label>Enter your code</label>
-      <input id="mCode" type="text" autocomplete="off" placeholder="XXXXXXXXXX" maxlength="14"
-        style="text-transform:uppercase;letter-spacing:3px;text-align:center;font-weight:800;font-size:18px"></div>
-    <div class="note" style="text-align:left;margin-bottom:14px">A code can be redeemed once per account. The reward lands straight in your wallet.</div>
-    <button class="btn" id="mSubmit">Redeem code</button>
-  `);
-  document.getElementById('mSubmit').addEventListener('click', async () => {
-    const code = document.getElementById('mCode').value.toUpperCase().replace(/[\s-]/g, '');
-    if (!code) return toast('Enter a code', 'err');
-    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
-    const r = await api('/redeem', { method: 'POST', body: { code } });
-    restore();
-    if (r.status !== 'success') return toast(r.message || 'Could not redeem this code', 'err');
-    closeModal();
-    toast(r.message || 'Code redeemed', 'ok');
-    await loadAccount(); await loadTxns(); renderHome(); renderAccount();
-  });
-}
 
 // ══════════════════════════════════════════════
 // PRODUCTS
@@ -1266,7 +1224,11 @@ function renderProducts() {
     </button>`;
 
   if (!_products.length) {
-    el.innerHTML = shortcut + `<div class="empty-note" style="margin-top:14px">No more data</div>`;
+    el.innerHTML = shortcut + `<div class="shop-empty">
+      <span class="shop-empty-ic">${MENU_ICONS.records}</span>
+      <b>No products yet</b>
+      <span>The shop is empty. New products appear here as soon as they are published.</span>
+    </div>`;
     el.querySelector('#pdMine').addEventListener('click', openHoldingsModal);
     loadProducts().then(() => { if (_activeTab === 'products') renderProducts(); }).catch(() => {});
     return;
@@ -1367,108 +1329,242 @@ function commPct(level) {
   const raw = level === 1 ? (s.commL1 ?? 0.30) : level === 2 ? (s.commL2 ?? 0.03) : (s.commL3 ?? 0.01);
   return Math.round(raw * 100);
 }
+// ── Option picker: a sheet that slides up over the page with Cancel / Confirm
+// and a scrollable list. Selection is only committed on Confirm. ──
+function openPicker({ title, options, selected, onConfirm }) {
+  let pick = selected || options[0]?.value;
+  const root = document.getElementById('pickerRoot');
+  root.innerHTML = `
+    <div class="pick-backdrop" data-pc></div>
+    <div class="pick-sheet">
+      <div class="pick-bar">
+        <button class="pick-cancel" data-pc>Cancel</button>
+        <span>${esc(title)}</span>
+        <button class="pick-ok" id="pkOk">Confirm</button>
+      </div>
+      <div class="pick-list">
+        ${options.map(o => `<button class="pick-opt${o.value === pick ? ' on' : ''}" data-v="${esc(o.value)}">${esc(o.label)}</button>`).join('')}
+      </div>
+    </div>`;
+  root.classList.remove('hidden');
+  const close = () => { root.classList.add('hidden'); root.innerHTML = ''; };
+  root.querySelectorAll('[data-pc]').forEach(b => b.addEventListener('click', close));
+  root.querySelectorAll('.pick-opt').forEach(b => b.addEventListener('click', () => {
+    pick = b.dataset.v;
+    root.querySelectorAll('.pick-opt').forEach(x => x.classList.toggle('on', x === b));
+  }));
+  root.querySelector('#pkOk').addEventListener('click', () => { close(); onConfirm(pick); });
+}
+
+function openRedeemModal() {
+  openModal(`
+    <div class="modal-head"><h2>Redeem a code</h2><button class="modal-close">${ICN.close}</button></div>
+    <div class="field"><label>Enter your code</label>
+      <input id="mCode" type="text" autocomplete="off" placeholder="XXXXXXXXXX" maxlength="14"
+        style="text-transform:uppercase;letter-spacing:3px;text-align:center;font-weight:800;font-size:18px"></div>
+    <div class="note" style="text-align:left;margin-bottom:14px">A code can be redeemed once per account. The reward lands straight in your wallet.</div>
+    <button class="btn" id="mSubmit">Redeem code</button>
+  `);
+  document.getElementById('mSubmit').addEventListener('click', async () => {
+    const code = document.getElementById('mCode').value.toUpperCase().replace(/[\s-]/g, '');
+    if (!code) return toast('Enter a code', 'err');
+    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
+    const r = await api('/redeem', { method: 'POST', body: { code } });
+    restore();
+    if (r.status !== 'success') return toast(r.message || 'Could not redeem this code', 'err');
+    closeModal();
+    toast(r.message || 'Code redeemed', 'ok');
+    await loadAccount(); await loadTxns(); renderHome(); renderAccount();
+  });
+}
+
+// ══════════════════════════════════════════════
+// BIND BANK CARD
+// ══════════════════════════════════════════════
+const NETWORKS = [{ value: 'Airtel', label: 'Airtel' }, { value: 'MTN', label: 'MTN' }];
+
+function openBanksModal() {
+  let network = '';
+  const paint = () => {
+    const host = document.getElementById('bankList');
+    if (host) host.innerHTML = bankRowsHtml(_account?.bankAccounts || [], true);
+    bindDeletes();
+  };
+  const bindDeletes = () => {
+    document.querySelectorAll('#bankList [data-del]').forEach(b => b.addEventListener('click', async () => {
+      const r = await api('/account/remove-bank', { method: 'POST', body: { phone: b.dataset.del } });
+      if (r.status !== 'success') return toast(r.message || 'Could not remove', 'err');
+      toast('Account removed', 'ok');
+      await loadAccount(); paint();
+    }));
+  };
+
+  openModal(`
+    <div class="modal-head"><h2>Bind bank card</h2><button class="modal-close"></button></div>
+    <div id="bankList" class="bank-list">${bankRowsHtml(_account?.bankAccounts || [], true)}</div>
+
+    <div class="bind-card">
+      <button class="bind-row" id="bkNet">
+        <span class="bind-l"><i>*</i>Select bank</span>
+        <span class="bind-v" id="bkNetV">Please select</span>
+        <span class="bind-go">${SVG_CHEV}</span>
+      </button>
+      <div class="bind-row is-field">
+        <span class="bind-l"><i>*</i>Account holder name</span>
+        <input id="bkName" type="text" placeholder="Please enter account holder name">
+      </div>
+      <div class="bind-row is-field">
+        <span class="bind-l"><i>*</i>Bank account</span>
+        <input id="bkPhone" type="tel" inputmode="numeric" placeholder="Please enter bank account number">
+      </div>
+    </div>
+
+    <button class="btn" id="bkAdd">Confirm</button>
+  `);
+  bindDeletes();
+
+  document.getElementById('bkNet').addEventListener('click', () => openPicker({
+    title: 'Select bank', options: NETWORKS, selected: network,
+    onConfirm: v => { network = v; document.getElementById('bkNetV').textContent = v;
+                      document.getElementById('bkNetV').classList.add('is-set'); }
+  }));
+
+  document.getElementById('bkAdd').addEventListener('click', async () => {
+    const holderName = document.getElementById('bkName').value.trim();
+    const phone = document.getElementById('bkPhone').value.trim();
+    if (!network)    return toast('Select a bank', 'err');
+    if (!holderName) return toast('Enter the account holder name', 'err');
+    if (!phone)      return toast('Enter the account number', 'err');
+    const btn = document.getElementById('bkAdd');
+    const restore = setBusy(btn);
+    const r = await api('/account/add-bank', { method: 'POST', body: { holderName, phone, network } });
+    restore();
+    if (r.status !== 'success') return toast(r.message || 'Could not save', 'err');
+    document.getElementById('bkName').value = '';
+    document.getElementById('bkPhone').value = '';
+    toast('Account saved', 'ok');
+    await loadAccount(); paint();
+  });
+}
+
+// ══════════════════════════════════════════════
+// CUSTOMER CARE
+// ══════════════════════════════════════════════
+// The real Telegram mark, on its brand-blue disc.
+const TG_MARK = `<svg viewBox="0 0 48 48" aria-hidden="true">
+  <circle cx="24" cy="24" r="24" fill="#2AABEE"/>
+  <path fill="#fff" d="M36.6 14.2 32.4 34c-.3 1.4-1.2 1.7-2.4 1.1l-6.6-4.9-3.2 3.1c-.35.35-.65.65-1.33.65l.47-6.7 12.2-11c.53-.47-.12-.74-.82-.27L15.6 25.6l-6.5-2c-1.42-.45-1.45-1.42.3-2.1l25.4-9.8c1.18-.43 2.2.27 1.8 2.5z"/></svg>`;
+
+function openContactPage() {
+  const S = _publicSettings || {};
+  const tile = (label, url) => url
+    ? `<a class="tg-row" href="${esc(url)}" target="_blank" rel="noopener">
+         <span class="tg-art">${TG_MARK}</span>
+         <span class="tg-tx"><b>${label}</b><button class="tg-jump">Click to jump</button></span>
+       </a>`
+    : '';
+  const rows = [
+    tile('Official service', S.supportTelegram),
+    tile('Official group',   S.telegramGroup),
+    tile('Official channel', S.telegramChannel),
+  ].filter(Boolean).join('');
+
+  openModal(`
+    <div class="modal-head"><h2>Customer care</h2><button class="modal-close"></button></div>
+    ${S.supportHours ? `<div class="cc-hours">Online time: ${esc(S.supportHours)}</div>` : ''}
+    ${bannerUrl('contact') ? `<div class="page-banner"><img src="${esc(bannerUrl('contact'))}" alt=""></div>` : ''}
+    ${rows ? `<div class="cc-label">Telegram</div>${rows}` : `<div class="empty-note">No contact channels published yet.</div>`}
+    <div class="notice">
+      <b>Rule</b>
+      <ol>
+        <li>For any question, reach our online customer service through the links above. We are happy to help.</li>
+        <li>Keep your password to yourself. Official staff will never ask you for it.</li>
+        <li>Only trust links published on this page — anywhere else is not us.</li>
+      </ol>
+    </div>
+  `);
+}
+
+// ══════════════════════════════════════════════
+// TEAM
+// ══════════════════════════════════════════════
 function renderTeam() {
   const el = document.getElementById('panel-team');
   if (!el) return;
   const code = _account?.referralCode || _account?.username || '—';
   const link = code !== '—' ? referralLink(code) : '';
   const ts = _teamStats;
-  // l1DepositTotal is aliased server-side to the ACTIVE-REFERRAL COUNT (not a
-  // currency amount) — the milestone ladder targets a headcount, not deposits.
   const l1Active = ts?.l1ActiveCount ?? ts?.l1DepositTotal ?? 0;
   const LVL = [
-    { n: 1, count: ts?.counts?.l1 ?? _account?.teamL1Count ?? 0, earned: ts?.earned?.l1 || 0, tag: 'Direct' },
-    { n: 2, count: ts?.counts?.l2 ?? _account?.teamL2Count ?? 0, earned: ts?.earned?.l2 || 0, tag: '' },
-    { n: 3, count: ts?.counts?.l3 ?? _account?.teamL3Count ?? 0, earned: ts?.earned?.l3 || 0, tag: '' },
+    { n: 1, count: ts?.counts?.l1 ?? _account?.teamL1Count ?? 0, earned: ts?.earned?.l1 || 0 },
+    { n: 2, count: ts?.counts?.l2 ?? _account?.teamL2Count ?? 0, earned: ts?.earned?.l2 || 0 },
+    { n: 3, count: ts?.counts?.l3 ?? _account?.teamL3Count ?? 0, earned: ts?.earned?.l3 || 0 },
   ];
-  const members    = LVL.reduce((s, l) => s + l.count, 0);
-  const invested   = ts?.teamInvested ?? ts?.investedTotal ?? 0;
-  const commission = (ts?.earned?.commissions || _account?.commissionEarned || 0) + (ts?.earned?.teamRewards || 0);
-
-  // The code and link blocks each sit on their own admin-supplied background.
-  const bgStyle = slot => bannerUrl(slot)
-    ? ` style="background-image:url('${esc(bannerUrl(slot))}')"` : '';
+  const people = LVL.reduce((s, l) => s + l.count, 0);
+  const rewards = (ts?.earned?.commissions || _account?.commissionEarned || 0) + (ts?.earned?.teamRewards || 0);
+  const bg = slot => bannerUrl(slot) ? ` style="background-image:url('${esc(bannerUrl(slot))}')"` : '';
 
   el.innerHTML = `
+    <div class="tm-head">
+      <h2>Invite friends</h2>
+      <p>Build your team and earn on every recharge</p>
+    </div>
+
     ${bannerUrl('team') ? `<div class="page-banner"><img src="${esc(bannerUrl('team'))}" alt=""></div>` : ''}
 
-    <div class="team-title">
-      <h2>My Team</h2>
-      <p>Invite friends and earn commissions</p>
+    <div class="tm-totals">
+      <button class="tm-total" id="tmPeople"><b>${people}</b><span>Total people ›</span></button>
+      <button class="tm-total" id="tmRewards"><b>${ugx(rewards)}</b><span>Total rewards ›</span></button>
     </div>
 
-    <div class="ref-card">
-      <div class="ref-block${bannerUrl('inviteCode') ? ' has-bg' : ''}"${bgStyle('inviteCode')}>
-        <div class="ref-in">
-          <span class="ref-l">Your referral code</span>
-          <div class="ref-row"><b class="ref-v">${esc(code)}</b>
-            <button class="ref-btn" id="copyCode">Copy</button></div>
+    <div class="tm-invites">
+      <div class="tm-inv${bannerUrl('inviteLink') ? ' has-bg' : ''}"${bg('inviteLink')}>
+        <div class="tm-inv-in">
+          <span class="tm-inv-l">Invitation link</span>
+          <span class="tm-inv-v link">${esc(link || '—')}</span>
+          <button class="tm-copy" id="cpLink">Copy</button>
         </div>
       </div>
-      <div class="ref-block${bannerUrl('inviteLink') ? ' has-bg' : ''}"${bgStyle('inviteLink')}>
-        <div class="ref-in">
-          <span class="ref-l">Your link</span>
-          <div class="ref-row"><span class="ref-link">${esc(link || '—')}</span>
-            <button class="ref-btn" id="copyRef">Copy link</button></div>
+      <div class="tm-inv${bannerUrl('inviteCode') ? ' has-bg' : ''}"${bg('inviteCode')}>
+        <div class="tm-inv-in">
+          <span class="tm-inv-l">Invitation code</span>
+          <span class="tm-inv-v code">${esc(code)}</span>
+          <button class="tm-copy" id="cpCode">Copy</button>
         </div>
       </div>
     </div>
 
-    <div class="team-stats">
-      <div class="tstat"><b>${members}</b><span>Members</span></div>
-      <div class="tstat"><b class="gold">${ugx(invested)}</b><span>Invested</span></div>
-      <div class="tstat"><b class="gold">${ugx(commission)}</b><span>Commission</span></div>
-    </div>
-
-    <div class="lvl-card">
+    <div class="tm-card">
+      <div class="tm-card-head"><b>My team</b><button class="tm-task" id="tmTask">Task centre ›</button></div>
       ${LVL.map(l => `
-        <div class="lvl-r">
-          <span class="lvl-o">L${l.n}</span>
-          <div class="lvl-t">
-            <b>${ugx(l.earned)}</b>
-            <span>${l.count} member${l.count === 1 ? '' : 's'}${l.tag ? ' · ' + l.tag : ''}</span>
-          </div>
-          <span class="lvl-p">${commPct(l.n)}%</span>
+        <div class="tm-lvl">
+          <span class="tm-ring">Lv${l.n}</span>
+          <div class="tm-col"><b>${commPct(l.n)}%</b><span>Commission</span></div>
+          <div class="tm-col"><b>${l.count}</b><span>Users</span></div>
+          <div class="tm-col"><b>${ugx(l.earned)}</b><span>Reward</span></div>
         </div>`).join('')}
     </div>
 
-    <div class="team-title sub"><h2>Task centre</h2>
-      <p>${l1Active} active level-1 referral${l1Active === 1 ? '' : 's'} so far</p></div>
-
-    <div class="task-card">
-      ${(ts?.milestones || TEAM_MILESTONES).map(m => {
-        // A milestone shows PAID only when the money actually landed (server flag
-        // `paid` = a real team_reward transaction exists). Hitting the target is
-        // not the same as being paid, so a reached-but-unpaid target says so
-        // rather than falsely claiming payment. No progress bar — the owner's
-        // rule is a plain count, never a bar or graph.
-        const cur     = (m.current != null) ? m.current : l1Active;
-        const reached = (m.achieved != null) ? m.achieved : (cur >= m.target);
-        const paid    = !!m.paid;
-        const status  = paid ? 'Paid to your wallet'
-                      : reached ? 'Reward on its way'
-                      : `${cur} of ${m.target}`;
-        return `
-        <div class="task-r${paid ? ' is-paid' : ''}">
-          <div class="task-t">
-            <b>Refer ${m.target} active member${m.target === 1 ? '' : 's'}</b>
-            <span>${status}</span>
-          </div>
-          <div class="task-rw">
-            <b>${ugx(m.reward)}</b>
-            ${paid ? `<span class="task-tick">${SVG_TICK}</span>` : ''}
-          </div>
-        </div>`;
-      }).join('')}
+    <div class="notice" id="tmTasks">
+      <b>Task centre</b>
+      <ol>
+        ${(ts?.milestones || TEAM_MILESTONES).map(m => {
+          const cur     = (m.current != null) ? m.current : l1Active;
+          const reached = (m.achieved != null) ? m.achieved : (cur >= m.target);
+          const paid    = !!m.paid;
+          const state   = paid ? 'paid' : reached ? 'reward on its way' : `${cur} of ${m.target}`;
+          return `<li>Refer ${m.target} active members — <b>${ugx(m.reward)}</b> · ${state}</li>`;
+        }).join('')}
+      </ol>
     </div>
 
     <div class="notice">
-      <b>How referrals pay</b>
+      <b>How it works</b>
       <ol>
-        <li>Share your code or link. Anyone who signs up with it joins your team.</li>
-        <li>You earn ${commPct(1)}% of every recharge your direct referrals make, ${commPct(2)}% on level 2 and ${commPct(3)}% on level 3.</li>
-        <li>Rewards are credited to your balance automatically as each recharge clears.</li>
-        <li>Task centre rewards land once the referred member has purchased a product.</li>
+        <li>A friend who signs up with your code or link joins your team.</li>
+        <li>When they recharge, you receive ${commPct(1)}% of the amount straight away.</li>
+        <li>Their own referrals earn you ${commPct(2)}%, and the level below that ${commPct(3)}%.</li>
+        <li>Rewards land in your balance as each recharge clears, and can be withdrawn like any other income.</li>
       </ol>
     </div>
   `;
@@ -1477,8 +1573,12 @@ function renderTeam() {
     if (!text || text === '—') return;
     try { navigator.clipboard.writeText(text); toast(msg, 'ok'); } catch (_) {}
   };
-  el.querySelector('#copyCode').addEventListener('click', () => copy(code, 'Code copied'));
-  el.querySelector('#copyRef').addEventListener('click', () => copy(link, 'Link copied'));
+  el.querySelector('#cpCode').addEventListener('click', () => copy(code, 'Code copied'));
+  el.querySelector('#cpLink').addEventListener('click', () => copy(link, 'Link copied'));
+  el.querySelector('#tmTask').addEventListener('click', () =>
+    document.getElementById('tmTasks')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  el.querySelector('#tmPeople').addEventListener('click', () => switchTab('team'));
+  el.querySelector('#tmRewards').addEventListener('click', () => openRecordsPage('income'));
 }
 
 // ══════════════════════════════════════════════
@@ -1658,46 +1758,10 @@ function bankRowsHtml(accounts, withRemove) {
   if (!accounts.length) return `<div class="empty-note">No saved accounts yet.</div>`;
   return accounts.map(a => `
     <div class="bank-row" data-phone="${esc(a.phone)}">
-      <span class="mi" style="background:#eef2ff;color:var(--sapphire)">${ICN.bank}</span>
+      <span class="mi">${ICN.bank}</span>
       <div class="bank-info"><div class="t">${esc(a.holderName || a.label || 'Account')}</div><div class="s">${esc(a.network || '')} · 0${esc(a.phone)}</div></div>
       ${withRemove ? `<button class="bank-del" data-del="${esc(a.phone)}">${ICN.trash}</button>` : ''}
     </div>`).join('');
-}
-function openBanksModal() {
-  const accounts = _account?.bankAccounts || [];
-  openModal(`
-    <div class="modal-head"><h2>Withdrawal accounts</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="support-body" id="bankList">${bankRowsHtml(accounts, true)}</div>
-    <div style="border-top:1px solid var(--line2);margin:16px 0 4px"></div>
-    <div class="field"><label>Account holder full name</label><input id="bkName" type="text" placeholder="Name registered on the SIM"></div>
-    <div class="field"><label>Mobile-money number</label><input id="bkPhone" type="tel" inputmode="numeric" placeholder="0771234567"></div>
-    <button class="btn" id="bkAdd">Save account</button>
-  `);
-  const refresh = async () => {
-    await loadAccount();
-    document.getElementById('bankList').innerHTML = bankRowsHtml(_account?.bankAccounts || [], true);
-    bindBankDeletes();
-  };
-  const bindBankDeletes = () => {
-    document.querySelectorAll('#bankList [data-del]').forEach(b => b.addEventListener('click', async () => {
-      const r = await api('/account/remove-bank', { method: 'POST', body: { phone: b.dataset.del } });
-      if (r.status !== 'success') return toast(r.message || 'Could not remove', 'err');
-      toast('Account removed', 'ok'); refresh();
-    }));
-  };
-  bindBankDeletes();
-  document.getElementById('bkAdd').addEventListener('click', async () => {
-    const holderName = document.getElementById('bkName').value.trim();
-    const phone = document.getElementById('bkPhone').value.trim();
-    if (!holderName) return toast('Enter the account holder full name', 'err');
-    if (!phone) return toast('Enter a mobile-money number', 'err');
-    const restore = setBusy(document.getElementById('bkAdd'), 'Please wait');
-    const r = await api('/account/add-bank', { method: 'POST', body: { holderName, phone } });
-    restore();
-    if (r.status !== 'success') return toast(r.message || 'Could not save', 'err');
-    document.getElementById('bkName').value = ''; document.getElementById('bkPhone').value = '';
-    toast('Account saved', 'ok'); refresh();
-  });
 }
 
 function openPasswordModal() {

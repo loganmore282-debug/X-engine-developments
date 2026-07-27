@@ -62,7 +62,7 @@ _account = {
   name: 'Mangalita N.', phone: '+256771234567', username: 'mangalita',
   walletBalance: 137500, totalEarned: 106600, totalWithdrawn: 24000,
   totalInvested: 75000, totalDeposited: 155000,
-  bankAccounts: [{ network: 'MTN', name: 'MANGALITA N.', number: '0769123158' }],
+  bankAccounts: [{ network: 'MTN', holderName: 'MANGALITA N.', phone: '769123158' }],
   lastCheckinDate: null,
 };
 _investments = [
@@ -90,6 +90,8 @@ window.__open = (what) => {
   if (what === 'contact')  return openContactPage();
   if (what === 'mine')     return openHoldingsModal();
   if (what === 'detail')   return openProductDetail('tissot');
+  if (what === 'bank')     return openBanksModal();
+  if (what === 'picker')   { openBanksModal(); setTimeout(()=>document.getElementById('bkNet').click(), 60); }
 };
 // Simulates the very first frame after launch: signed in, nothing loaded yet.
 window.__empty = () => {
