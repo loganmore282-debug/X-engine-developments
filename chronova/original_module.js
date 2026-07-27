@@ -30,7 +30,7 @@ if ('serviceWorker' in navigator) {
 }
 try { if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))); } catch (_) {}
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _installPrompt = e; });
-window.addEventListener('appinstalled', () => { _installPrompt = null; try { toast('Chronova installed', 'ok'); } catch (_) {} });
+window.addEventListener('appinstalled', () => { _installPrompt = null; try { toast('Chronova installed'); } catch (_) {} });
 function isInstalled() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
@@ -147,11 +147,15 @@ function toast(msg) {
 
 // Disable a button while a request is in flight and show an animated three-dot
 // loader (no "Please wait" / "Loading…" text anywhere).
+// The house loader: twelve spokes fading around a ring. One markup string, used
+// by every busy state so nothing anywhere spins differently.
+const SPINNER = '<span class="spin">' + '<i></i>'.repeat(12) + '</span>';
+
 function setBusy(btn) {
   if (!btn) return () => {};
   const prevHTML = btn.innerHTML, prevDisabled = btn.disabled;
   btn.disabled = true;
-  btn.innerHTML = '<span class="btn-dots"><i></i><i></i><i></i></span>';
+  btn.innerHTML = SPINNER;
   return () => { btn.disabled = prevDisabled; btn.innerHTML = prevHTML; };
 }
 
@@ -265,7 +269,7 @@ function setAuthMode(mode) {
 document.getElementById('toRegister').addEventListener('click', () => setAuthMode('register'));
 document.getElementById('toLogin').addEventListener('click', () => setAuthMode('login'));
 { const _f = document.getElementById('toForgot');
-  if (_f) _f.addEventListener('click', () => toast('To reset your password, contact Customer Service on the account page.', 'ok')); }
+  if (_f) _f.addEventListener('click', () => toast('To reset your password, contact Customer Service on the account page.')); }
 document.querySelectorAll('[data-toggle]').forEach(btn => {
   btn.innerHTML = ICN.eye;
   btn.addEventListener('click', () => {
@@ -579,9 +583,11 @@ async function loadTxns() {
 // ══════════════════════════════════════════════
 // TAB NAVIGATION
 // ══════════════════════════════════════════════
-document.querySelectorAll('[data-tab]').forEach(btn => {
+document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
+// The raised centre button opens what the user already owns, not the shop.
+document.querySelector('.tab-fab')?.addEventListener('click', () => openHoldingsModal());
 async function switchTab(name) {
   _activeTab = name;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
@@ -684,6 +690,8 @@ function maskedMsisdn() {
   return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
 }
 let _wire = [];
+const WIRE_EPOCH = Date.now();   // marquee resumes from here after any re-render
+const WIRE_CYCLE = 30;            // seconds, must match the cvWire keyframes
 function buildWire(n) {
   const rows = [];
   for (let i = 0; i < n; i++) {
@@ -760,7 +768,7 @@ function renderHome() {
 
     <div class="wire">
       <span class="wire-cap left">${FG_LOGO}</span>
-      <div class="wire-view"><div class="wire-track" id="wireTrack">${wireHtml()}</div></div>
+      <div class="wire-view"><div class="wire-track" id="wireTrack" style="animation-delay:-${(((Date.now() - WIRE_EPOCH) / 1000) % WIRE_CYCLE).toFixed(2)}s">${wireHtml()}</div></div>
       <span class="wire-cap right">${ICN.bell}</span>
     </div>
 
@@ -797,20 +805,20 @@ function todayIncome() {
 
 // Premium record card — gradient icon chip, clean title, tag, amount + status pill.
 const REC_META = {
-  topup:         { label: 'Recharge',          grad: 'linear-gradient(135deg,#10b981,#059669)' },
-  withdrawal:    { label: 'Withdrawal',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
-  commission:    { label: 'Commission',        grad: 'linear-gradient(135deg,#e6c473,#a97f22)' },
-  team_reward:   { label: 'Team reward',       grad: 'linear-gradient(135deg,#f0c360,#8a6418)' },
-  checkin:       { label: 'Daily bonus',       grad: 'linear-gradient(135deg,#fbbf24,#f59e0b)' },
-  gem_payout:    { label: 'Product income',    grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
-  product_income:{ label: 'Product income',    grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
-  investment:    { label: 'Product purchase',  grad: 'linear-gradient(135deg,#e6c473,#a97f22)' },
-  redeem:        { label: 'Code redeemed',     grad: 'linear-gradient(135deg,#d9ad4e,#8a6418)' },
-  admin_credit:  { label: 'Credit',            grad: 'linear-gradient(135deg,#38bdf8,#2563eb)' },
-  admin_debit:   { label: 'Adjustment',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
-  refund:        { label: 'Refund',            grad: 'linear-gradient(135deg,#38bdf8,#0ea5e9)' },
+  topup:         { label: 'Recharge' },
+  withdrawal:    { label: 'Withdrawal' },
+  commission:    { label: 'Commission' },
+  team_reward:   { label: 'Team reward' },
+  checkin:       { label: 'Daily bonus' },
+  gem_payout:    { label: 'Product income' },
+  product_income:{ label: 'Product income' },
+  investment:    { label: 'Product purchase' },
+  redeem:        { label: 'Code redeemed' },
+  admin_credit:  { label: 'Credit' },
+  admin_debit:   { label: 'Adjustment' },
+  refund:        { label: 'Refund' },
 };
-function recMeta(type) { return REC_META[type] || { label: 'Transaction', grad: 'linear-gradient(135deg,#c9a86a,#8a7550)' }; }
+function recMeta(type) { return REC_META[type] || { label: 'Transaction' }; }
 function statusInfo(s) {
   s = String(s || 'success').toLowerCase();
   if (['success', 'processed', 'matched'].includes(s)) return { label: 'Successful', cls: 'ok' };
@@ -824,23 +832,6 @@ function recTag(t) {
   if (t.type === 'redeem' && t.code) return `<span class="rec-tag">${esc(t.code)}</span>`;
   return '';
 }
-function txnRowHtml(t) {
-  const amt = t.amount || 0;
-  const sign = amt > 0 ? '+' : (amt < 0 ? '−' : '');
-  const m = recMeta(t.type), st = statusInfo(t.status);
-  return `<div class="rec">
-    <div class="rec-ic" style="background:${m.grad}">${typeIcon(t.type)}</div>
-    <div class="rec-body">
-      <div class="rec-title">${esc(m.label)}</div>
-      <div class="rec-meta">${esc(t.date || '')}${t.time ? ' · ' + esc(t.time) : ''}</div>
-      ${recTag(t)}
-    </div>
-    <div class="rec-right">
-      <div class="rec-amt ${amt >= 0 ? 'pos' : 'neg'}">${sign}${ugx(Math.abs(amt))}</div>
-      <div class="rec-status ${st.cls}">${st.label}</div>
-    </div>
-  </div>`;
-}
 
 async function doCheckin() {
   const btn = document.getElementById('qaCheckin');
@@ -848,11 +839,11 @@ async function doCheckin() {
   const r = await api('/checkin', { method: 'POST' });
   restore();
   if (r.status === 'success') {
-    toast(`${ugx(r.bonus)} credited, day ${r.streak}`, 'ok');
+    toast(`${ugx(r.bonus)} credited, day ${r.streak}`);
     await loadAccount(); await loadTxns();
     renderHome(); renderAccount();
   } else {
-    toast(r.message || 'Could not check in', 'err');
+    toast(r.message || 'Could not check in');
   }
 }
 
@@ -948,10 +939,18 @@ function openRechargeSheet() {
 
   const amtEl = document.getElementById('rcAmt');
   const phEl  = document.getElementById('rcPhone');
-  const paintNet = () => {
+  // Detection only seeds the choice. Once the user taps a network we stop
+  // overriding it, because some numbers have been ported between operators.
+  let netTouched = false;
+  const paintNet = (force) => {
+    if (netTouched && !force) return;
     const n = netOf('0' + phEl.value);
     document.querySelectorAll('#rcNets .net').forEach(b => b.classList.toggle('on', b.dataset.net === n));
   };
+  document.querySelectorAll('#rcNets .net').forEach(b => b.addEventListener('click', () => {
+    netTouched = true;
+    document.querySelectorAll('#rcNets .net').forEach(x => x.classList.toggle('on', x === b));
+  }));
   document.querySelectorAll('#rcChips .chip').forEach(c => c.addEventListener('click', () => {
     document.querySelectorAll('#rcChips .chip').forEach(x => x.classList.remove('on'));
     c.classList.add('on');
@@ -963,26 +962,27 @@ function openRechargeSheet() {
     document.querySelectorAll('#rcChips .chip').forEach(x =>
       x.classList.toggle('on', Number(x.dataset.amt) === Number(raw)));
   });
-  phEl.addEventListener('input', paintNet);
+  phEl.addEventListener('input', () => paintNet());  // never forward the Event as 'force'
   paintNet();
 
   document.getElementById('rcGo').addEventListener('click', async () => {
     const amount = parseInt(amtEl.value.replace(/\D/g, ''), 10);
     const phone  = phEl.value.replace(/\D/g, '');
-    if (!amount || amount <= 0) return toast('Enter an amount', 'err');
-    if (min && amount < min)    return toast(`Minimum recharge is ${ugx(min)}`, 'err');
-    if (phone.length < 9)       return toast('Enter a valid mobile money number', 'err');
+    if (!amount || amount <= 0) return toast('Enter an amount');
+    if (min && amount < min)    return toast(`Minimum recharge is ${ugx(min)}`);
+    if (phone.length < 9)       return toast('Enter a valid mobile money number');
 
     const btn = document.getElementById('rcGo');
     const restore = setBusy(btn);
-    const r = await api('/deposit/marzpay', { method: 'POST', body: { amount, phone: '0' + phone.slice(-9) } });
-    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not start the payment', 'err'); }
+    const network = document.querySelector('#rcNets .net.on')?.dataset.net || netOf('0' + phone);
+    const r = await api('/deposit/marzpay', { method: 'POST', body: { amount, phone: '0' + phone.slice(-9), network } });
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not start the payment'); }
 
     // Straight to the records view — the recharge is already listed there as
     // Processing while the user approves the prompt with their PIN.
     closeModal();
     openRecordsPage('deposits');
-    toast('Approve the prompt on your phone', 'ok');
+    toast('Approve the prompt on your phone');
     watchDeposit(r.depositId);
   });
 }
@@ -997,11 +997,11 @@ async function watchDeposit(depositId, tries = 0) {
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderAccount();
     refreshRecords('deposits');
-    return toast('Recharge successful', 'ok');
+    return toast('Recharge added successfully');
   }
   if (['failed', 'cancelled', 'rejected'].includes(st)) {
     refreshRecords('deposits');
-    return toast('Recharge declined', 'err');
+    return toast('Recharge was declined');
   }
   setTimeout(() => watchDeposit(depositId, tries + 1), 4000);
 }
@@ -1073,10 +1073,10 @@ function openWithdrawSheet() {
   if (!invested) return;
   go.addEventListener('click', async () => {
     const amount = parseInt(amtEl.value.replace(/\D/g, ''), 10);
-    if (!amount || amount <= 0) return toast('Enter an amount', 'err');
-    if (min && amount < min)    return toast(`Minimum withdrawal is ${ugx(min)}`, 'err');
-    if (amount > bal)           return toast('Amount exceeds your balance', 'err');
-    if (!banks.length)          return toast('Bind a receiving account first', 'err');
+    if (!amount || amount <= 0) return toast('Enter an amount');
+    if (min && amount < min)    return toast(`Minimum withdrawal is ${ugx(min)}`);
+    if (amount > bal)           return toast('Amount exceeds your balance');
+    if (!banks.length)          return toast('Bind a receiving account first');
     const sel = document.querySelector('#wdBank .pick-row.on');
     const bank = banks[Number(sel?.dataset.i) || 0];
 
@@ -1084,12 +1084,12 @@ function openWithdrawSheet() {
     const r = await api('/withdraw/request', { method: 'POST', body: {
       amount, phone: bank.phone, network: bank.network || netOf(bank.phone), accountName: bank.holderName || ''
     }});
-    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not submit', 'err'); }
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not submit'); }
     closeModal();
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderAccount();
     openRecordsPage('withdrawals');
-    toast('Withdrawal submitted', 'ok');
+    toast('Withdrawal sent for processing');
   });
 }
 
@@ -1122,14 +1122,37 @@ function openRecordsPage(tab) {
 
 // A record is a boxed card carrying its ID, timestamp and the number it moved
 // on. An empty list says "No more data" — same wording in every tab.
+// One flat row per record: reference on the left, money on the right, timestamp
+// and number underneath. Nothing is boxed or tinted.
 function recordCard(r) {
   const st = statusInfo(r.status);
-  return `<div class="rcard">
-    <div class="rcard-top"><b>${ugx(Math.abs(Number(r.amount) || 0))}</b><span class="rec-status ${st.cls}">${st.label}</span></div>
-    <div class="rcard-grid">
-      <span>ID</span><em>${esc(String(r.id || r.marzReference || 'pending')).slice(0, 18)}</em>
-      <span>Date</span><em>${esc(r.date || '')}${r.time ? ' ' + esc(r.time) : ''}</em>
-      <span>Number</span><em>${esc(r.phone || r.number || 'not recorded')}</em>
+  const net = (r.netAmount != null) ? Number(r.netAmount) : null;
+  return `<div class="rrow">
+    <div class="rrow-top">
+      <span class="rrow-id">${esc(String(r.id || r.marzReference || 'pending')).slice(0, 20)}</span>
+      <b class="rrow-amt">${ugx(Math.abs(Number(r.amount) || 0))}</b>
+    </div>
+    <div class="rrow-bot">
+      <span>${esc(r.date || '')}${r.time ? ' ' + esc(r.time) : ''}${r.phone ? ' · ' + esc(r.phone) : ''}</span>
+      <span class="rrow-st ${st.cls}">${st.label}</span>
+    </div>
+    ${net != null ? `<div class="rrow-bot"><span>Received ${ugx(net)}</span><span></span></div>` : ''}
+  </div>`;
+}
+
+// Income rows use the same shape so all three tabs read alike.
+function incomeRow(t) {
+  const st = statusInfo(t.status);
+  const m  = recMeta(t.type);
+  const amt = Number(t.amount) || 0;
+  return `<div class="rrow">
+    <div class="rrow-top">
+      <span class="rrow-id">${esc(m.label)}</span>
+      <b class="rrow-amt pos">+${ugx(Math.abs(amt))}</b>
+    </div>
+    <div class="rrow-bot">
+      <span>${esc(t.date || '')}${t.time ? ' ' + esc(t.time) : ''}</span>
+      <span class="rrow-st ${st.cls}">${st.label}</span>
     </div>
   </div>`;
 }
@@ -1140,7 +1163,7 @@ function paintRecords() {
   if (!host) return;
   if (_recordsTab === 'income') {
     const rows = _txns.filter(t => INCOME_TYPES.includes(t.type) && (Number(t.amount) || 0) > 0);
-    host.innerHTML = rows.length ? rows.map(txnRowHtml).join('') : `<div class="empty-note">No more data</div>`;
+    host.innerHTML = rows.length ? rows.map(incomeRow).join('') : `<div class="empty-note">No more data</div>`;
     return;
   }
   const rows = _recordsTab === 'deposits' ? _deposits : _withdrawals;
@@ -1203,12 +1226,12 @@ function openCheckinPage() {
     const btn = document.getElementById('ciGo');
     const restore = setBusy(btn);
     const r = await api('/checkin', { method: 'POST' });
-    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not check in', 'err'); }
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not check in'); }
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderAccount();
     closeModal();
     openCheckinPage();
-    toast(`${ugx(r.bonus)} credited`, 'ok');
+    toast(`${ugx(r.bonus)} added successfully`);
   });
 }
 
@@ -1321,13 +1344,13 @@ function openProductDetail(key) {
   `);
 
   document.getElementById('pdBuy').addEventListener('click', async () => {
-    if (bal < p.price) { closeModal(); return toast(`Need ${ugx(p.price)}, you have ${ugx(bal)}`, 'err'); }
+    if (bal < p.price) { closeModal(); return toast(`Need ${ugx(p.price)}, you have ${ugx(bal)}`); }
     const btn = document.getElementById('pdBuy');
     const restore = setBusy(btn);
     const r = await api('/invest/create', { method: 'POST', body: { tierKey: key } });
-    if (r.status !== 'success') { restore(); return toast(r.message || 'Purchase failed', 'err'); }
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Purchase failed'); }
     closeModal();
-    toast(r.message || 'Product activated', 'ok');
+    toast('Product activated successfully');
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderProducts(); renderAccount();
   });
@@ -1383,13 +1406,13 @@ function openRedeemModal() {
   `);
   document.getElementById('mSubmit').addEventListener('click', async () => {
     const code = document.getElementById('mCode').value.toUpperCase().replace(/[\s-]/g, '');
-    if (!code) return toast('Enter a code', 'err');
+    if (!code) return toast('Enter a code');
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     const r = await api('/redeem', { method: 'POST', body: { code } });
     restore();
-    if (r.status !== 'success') return toast(r.message || 'Could not redeem this code', 'err');
+    if (r.status !== 'success') return toast(r.message || 'Could not redeem this code');
     closeModal();
-    toast(r.message || 'Code redeemed', 'ok');
+    toast(r.message || 'Code redeemed');
     await loadAccount(); await loadTxns(); renderHome(); renderAccount();
   });
 }
@@ -1409,8 +1432,8 @@ function openBanksModal() {
   const bindDeletes = () => {
     document.querySelectorAll('#bankList [data-del]').forEach(b => b.addEventListener('click', async () => {
       const r = await api('/account/remove-bank', { method: 'POST', body: { phone: b.dataset.del } });
-      if (r.status !== 'success') return toast(r.message || 'Could not remove', 'err');
-      toast('Account removed', 'ok');
+      if (r.status !== 'success') return toast(r.message || 'Could not remove');
+      toast('Account removed');
       await loadAccount(); paint();
     }));
   };
@@ -1448,17 +1471,17 @@ function openBanksModal() {
   document.getElementById('bkAdd').addEventListener('click', async () => {
     const holderName = document.getElementById('bkName').value.trim();
     const phone = document.getElementById('bkPhone').value.trim();
-    if (!network)    return toast('Select a bank', 'err');
-    if (!holderName) return toast('Enter the account holder name', 'err');
-    if (!phone)      return toast('Enter the account number', 'err');
+    if (!network)    return toast('Select a bank');
+    if (!holderName) return toast('Enter the account holder name');
+    if (!phone)      return toast('Enter the account number');
     const btn = document.getElementById('bkAdd');
     const restore = setBusy(btn);
     const r = await api('/account/add-bank', { method: 'POST', body: { holderName, phone, network } });
     restore();
-    if (r.status !== 'success') return toast(r.message || 'Could not save', 'err');
+    if (r.status !== 'success') return toast(r.message || 'Could not save');
     document.getElementById('bkName').value = '';
     document.getElementById('bkPhone').value = '';
-    toast('Account saved', 'ok');
+    toast('Account saved successfully');
     await loadAccount(); paint();
   });
 }
@@ -1569,7 +1592,7 @@ function renderTeam() {
 
   const copy = (text, msg) => {
     if (!text || text === 'not ready yet') return;
-    try { navigator.clipboard.writeText(text); toast(msg, 'ok'); } catch (_) {}
+    try { navigator.clipboard.writeText(text); toast(msg); } catch (_) {}
   };
   el.querySelector('#cpCode').addEventListener('click', () => copy(code, 'Code copied'));
   el.querySelector('#cpLink').addEventListener('click', () => copy(link, 'Link copied'));
@@ -1782,20 +1805,20 @@ function openPasswordModal() {
     const cur = document.getElementById('pwCur').value;
     const nw = document.getElementById('pwNew').value;
     const nw2 = document.getElementById('pwNew2').value;
-    if (!cur || !nw) return toast('Fill in both password fields', 'err');
-    if (nw.length < 6) return toast('New password must be at least 6 characters', 'err');
-    if (nw !== nw2) return toast('The new passwords do not match', 'err');
+    if (!cur || !nw) return toast('Fill in both password fields');
+    if (nw.length < 6) return toast('New password must be at least 6 characters');
+    if (nw !== nw2) return toast('The new passwords do not match');
     const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
     try {
       const cred = EmailAuthProvider.credential(_user.email, cur);
       await reauthenticateWithCredential(_user, cred);
       await updatePassword(_user, nw);
       closeModal();
-      toast('Password updated', 'ok');
+      toast('Password updated');
     } catch (err) {
       restore();
       const msg = /wrong-password|invalid-credential/.test(err.code || '') ? 'Current password is incorrect' : (err.message || 'Could not update password');
-      toast(msg, 'err');
+      toast(msg);
     }
   });
 }
