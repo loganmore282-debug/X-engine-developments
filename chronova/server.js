@@ -582,15 +582,20 @@ function tsMillis(v) {
 // the per-source dedup flag can never collide between the two.
 async function payCommissions(investorId, amount, sourceId, sourceKind = 'deposit') {
   const investmentId = sourceId;
-  let ok = false;
+  // Only mark the source "handled" when a referrer chain actually existed to
+  // evaluate. If the investor has no referrer YET (a race at sign-up, or the
+  // referral link hasn't been attributed yet), commDone must stay false —
+  // otherwise reconcileCommissions would skip this deposit forever the moment
+  // referredBy is set later, permanently forfeiting the referrer's reward.
+  let handled = false;
   // Serialise per investment so the invest-time call and the reconciler can't
   // both pay the same commission (the per-level flags are re-checked in the
   // transaction, but M0 has no real isolation, so add a true single-writer lock).
   await withLock('comm:' + investmentId, async () => {
-    try { await _payChain(investorId, amount, investmentId); ok = true; }
+    try { handled = await _payChain(investorId, amount, investmentId); }
     catch (e) { console.error('Commission error:', e.message); }
   });
-  if (ok) {
+  if (handled) {
     const coll = sourceKind === 'investment' ? 'investments' : 'pendingDeposits';
     try { await db.collection(coll).doc(sourceId).update({ commDone: true }); } catch (_) {}
   }
@@ -602,11 +607,11 @@ async function _payChain(investorId, amount, investmentId) {
       db.collection('users').doc(investorId).get(),
       getSettings()
     ]);
-    if (!invSnap.exists) return;
+    if (!invSnap.exists) return false;
     const investor = invSnap.data();
     const l1Id = investor.referredBy;
     const seen = new Set([investorId]);
-    if (!l1Id || seen.has(l1Id)) return;
+    if (!l1Id || seen.has(l1Id)) return false; // no referrer (yet) — leave commDone unset so this is retried
     seen.add(l1Id);
 
     const commL1 = sett.commL1 ?? COMM_L1;
@@ -639,10 +644,10 @@ async function _payChain(investorId, amount, investmentId) {
     }
 
     const l2Id = l1Snap.data().referredBy;
-    if (!l2Id || seen.has(l2Id)) return;
+    if (!l2Id || seen.has(l2Id)) return true; // L1 paid; chain terminates here — nothing left owed
     seen.add(l2Id);
     const l2Snap = await db.collection('users').doc(l2Id).get();
-    if (!l2Snap.exists) return;
+    if (!l2Snap.exists) return true;
     const l2Amt = Math.round(amount * commL2);
     if (l2Amt > 0 && !l2Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
@@ -666,9 +671,9 @@ async function _payChain(investorId, amount, investmentId) {
     }
 
     const l3Id = l2Snap.data().referredBy;
-    if (!l3Id || seen.has(l3Id)) return;
+    if (!l3Id || seen.has(l3Id)) return true; // L1+L2 paid; chain terminates here
     const l3Snap = await db.collection('users').doc(l3Id).get();
-    if (!l3Snap.exists) return;
+    if (!l3Snap.exists) return true;
     const l3Amt = Math.round(amount * commL3);
     if (l3Amt > 0 && !l3Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
@@ -690,6 +695,7 @@ async function _payChain(investorId, amount, investmentId) {
         });
       });
     }
+    return true;
   }
 }
 
@@ -794,16 +800,11 @@ async function linkReferral(newUserId, referrerId) {
         referrerId, referredUserId: newUserId, healed: true, createdAt: FieldValue.serverTimestamp()
       });
     } catch (e) { console.warn('linkReferral counts:', e.message); }
-    // CRITICAL: the member may have ALREADY invested while unattributed. At that
-    // time the commission chain found no referrer and marked the investment
-    // commDone — so the plain commission reconciler now SKIPS it. Re-run the chain
-    // for each of their investments here, now that the referrer exists, so the
-    // owed L1/L2/L3 rewards are finally paid. payCommissions is idempotent per
-    // level (commPaid_<invId> flags), so nothing already paid is paid twice.
-    try {
-      const invs = await db.collection('investments').where('userId', '==', newUserId).get();
-      for (const d of invs.docs) await payCommissions(newUserId, d.data().amount || 0, d.id);
-    } catch (e) { console.warn('linkReferral commissions:', e.message); }
+    // Any deposit this member made before being attributed left commDone unset
+    // (payCommissions only marks a deposit done once a referrer chain actually
+    // existed to pay) — so reconcileCommissions picks it up on its own next
+    // pass now that referredBy is set, paying the correct deposit-based amount
+    // with no separate re-run needed here.
   });
   return done;
 }
@@ -1161,7 +1162,7 @@ app.post('/account/create-profile', async (req, res) => {
         bankAccounts: [], createdAt: FieldValue.serverTimestamp()
       });
     }
-    return res.json({ status: 'success', username: norm.value });
+    return res.json({ status: 'success', username: codeVal });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
