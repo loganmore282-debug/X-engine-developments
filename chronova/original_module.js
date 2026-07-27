@@ -645,7 +645,7 @@ function cycleLabel(inv) {
   const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
   const made  = Number(inv.payoutsMade)  || 0;
   if (!total) return 'not started';
-  const day = inv.status === 'active' ? Math.min(made + 1, total) : total;
+  const day = inv.status === 'active' ? Math.min(made, total) : total;
   return `${day}/${total} days`;
 }
 function dailyReturnOf(inv) {
@@ -677,7 +677,8 @@ function openHoldingsModal() {
   };
   openModal(`
     <div class="modal-head"><h2>My products</h2><button class="modal-close">${ICN.close}</button></div>
-    ${list.length ? list.map(rowHtml).join('') : `<div class="empty-note">No more data</div>`}
+    ${list.map(rowHtml).join('')}
+    <div class="empty-note">No more data</div>
   `);
 }
 
@@ -1186,11 +1187,11 @@ function paintRecords() {
   if (!host) return;
   if (_recordsTab === 'income') {
     const rows = _txns.filter(t => INCOME_TYPES.includes(t.type) && (Number(t.amount) || 0) > 0);
-    host.innerHTML = rows.length ? rows.map(incomeRow).join('') : `<div class="empty-note">No more data</div>`;
+    host.innerHTML = rows.map(incomeRow).join('') + `<div class="empty-note">No more data</div>`;
     return;
   }
   const rows = _recordsTab === 'deposits' ? _deposits : _withdrawals;
-  host.innerHTML = rows.length ? rows.map(recordCard).join('') : `<div class="empty-note">No more data</div>`;
+  host.innerHTML = rows.map(recordCard).join('') + `<div class="empty-note">No more data</div>`;
 }
 
 // Fetching is kept OUT of paintRecords: if painting triggers a request and the
@@ -1395,7 +1396,6 @@ function teamMemberRow(m) {
   return `<div class="rec-card">
     <div class="rec-head">
       <span class="rec-ref">${esc(m.name || 'Member')}</span>
-      <span class="rec-st ${m.hasInvested ? 'ok' : 'mut'}">${m.hasInvested ? 'Active' : 'Not active'}</span>
     </div>
     <div class="rec-line"><span>Number</span><b>${esc(maskPhone(m.phone))}</b></div>
     <div class="rec-line"><span>Deposited</span><b>${ugx(m.deposited)}</b></div>
@@ -1404,7 +1404,7 @@ function teamMemberRow(m) {
 function paintTeamMembers() {
   const host = document.getElementById('tmList');
   if (!host) return;
-  host.innerHTML = _members.length ? _members.map(teamMemberRow).join('') : `<div class="empty-note">No more data</div>`;
+  host.innerHTML = _members.map(teamMemberRow).join('') + `<div class="empty-note">No more data</div>`;
 }
 function openTeamMembersModal() {
   openModal(`
