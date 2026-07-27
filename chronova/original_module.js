@@ -38,6 +38,7 @@ function isInstalled() {
 // ── STATE ──
 let _user = null, _account = null, _investments = [], _members = [], _txns = [], _products = [];
 let _deposits = [], _withdrawals = [];
+let _booting = false;   // first load in flight: panels show the loader, not zeros
 let _activeTab = 'home';
 let _hideBal = false;
 try { _hideBal = localStorage.getItem('fg_hide_bal') === '1'; } catch (_) {}
@@ -412,12 +413,18 @@ let _publicSettings = null;
 // Paint the dashboard immediately for a device that was already signed in, before
 // auth or any network call resolves. Empty state is a valid state for every panel.
 try {
-  if (localStorage.getItem('fg_wasAuthed') === '1') render();
+  if (localStorage.getItem('fg_wasAuthed') === '1') {
+    _booting = true;
+    render();
+    // Safety release. If auth never resolves (Firebase blocked, no network) the
+    // loader must not spin forever; the dashboard falls back to its empty state.
+    setTimeout(() => { if (_booting) { _booting = false; if (!_pageOpen) render(); } }, 12000);
+  }
 } catch (_) {}
 
 onAuthStateChanged(auth, async (user) => {
   _user = user;
-  if (!user) { showView('auth'); return; }
+  if (!user) { _booting = false; showView('auth'); return; }
   // Reveal and start ticking at once — the panels already have content.
   showView('main');
   startRealtime();
@@ -428,6 +435,7 @@ onAuthStateChanged(auth, async (user) => {
   // can't hang the sync screen; anything still loading finishes in the background.
   const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadProducts(), loadTeam()]);
   await Promise.race([essential, new Promise(r => setTimeout(r, 8000))]);
+  _booting = false;
   if (checkGate()) return;
   // SELF-HEAL: an interrupted sign-up (app closed / network died between the
   // two registration calls) leaves the account unfinished — no welcome bonus,
@@ -743,6 +751,7 @@ function actionIcon(key, fallback) {
 function renderHome() {
   const el = document.getElementById('panel-home');
   if (!el) return;
+  if (_booting) { el.innerHTML = `<div class="load-wrap">${SPINNER}</div>`; return; }
   const checkedInToday = _account?.lastCheckinDate === todayKey();
 
   const statCard = (slot, label, value) => {
@@ -1122,13 +1131,21 @@ function openRecordsPage(tab) {
 
 // A record is a boxed card carrying its ID, timestamp and the number it moved
 // on. An empty list says "No more data" — same wording in every tab.
+// One timestamp rule for every record. createdAt is authoritative and always
+// present; the stored strings are only a fallback for rows that predate it.
+function recStamp(r) {
+  const ms = tsMs(r.createdAt);
+  if (ms) return fmtStamp(ms);
+  return `${esc(r.date || '')}${r.time ? ' ' + esc(r.time) : ''}`.trim();
+}
+
 // A record reads as a small statement: reference and status on the top line,
 // then one labelled line per fact. Deposits carry the number they came from,
 // withdrawals carry what actually landed after the charge.
 function recordCard(r) {
   const st  = statusInfo(r.status);
   const net = (r.netAmount != null) ? Number(r.netAmount) : null;
-  const stamp = `${esc(r.date || '')}${r.time ? ' ' + esc(r.time) : ''}`.trim();
+  const stamp = recStamp(r);
   const line = (k, v) => v ? `<div class="rec-line"><span>${k}</span><b>${v}</b></div>` : '';
   return `<div class="rec-card">
     <div class="rec-head">
@@ -1145,7 +1162,7 @@ function recordCard(r) {
 // Income uses the same statement shape so every tab reads alike.
 function incomeRow(t) {
   const st = statusInfo(t.status);
-  const stamp = `${esc(t.date || '')}${t.time ? ' ' + esc(t.time) : ''}`.trim();
+  const stamp = recStamp(t);
   const line = (k, v) => v ? `<div class="rec-line"><span>${k}</span><b>${v}</b></div>` : '';
   return `<div class="rec-card">
     <div class="rec-head">
@@ -1258,6 +1275,7 @@ function tierTint(_p, i) {
 function renderProducts() {
   const el = document.getElementById('panel-products');
   if (!el) return;
+  if (_booting) { el.innerHTML = `<div class="load-wrap">${SPINNER}</div>`; return; }
   const owned = _investments.length;
 
   const shortcut = `
@@ -1539,6 +1557,7 @@ function openContactPage() {
 function renderTeam() {
   const el = document.getElementById('panel-team');
   if (!el) return;
+  if (_booting) { el.innerHTML = `<div class="load-wrap">${SPINNER}</div>`; return; }
   const code = _account?.referralCode || _account?.username || 'not ready yet';
   const link = code !== 'not ready yet' ? referralLink(code) : '';
   const ts = _teamStats;
@@ -1631,24 +1650,17 @@ const MENU_ICONS = {
   logout:   _mi('<path d="M12 3a9 9 0 1 0 6.5 2.8"/><path d="M12 2v9"/>'),
 };
 
-// VIP rank is simply how far up the admin's price ladder the member has bought:
-// the highest-priced product they own decides it. No product, no badge.
-function vipLevel() {
-  if (!_investments.length || !_products.length) return 0;
-  const ladder = _products.slice().sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
-  let best = 0;
-  for (const inv of _investments) {
-    const i = ladder.findIndex(p => p.key === inv.tierKey);
-    if (i >= 0 && i + 1 > best) best = i + 1;
-  }
-  return best;
+// Level counts purchases, nothing more: first product is level 1, second is
+// level 2, and so on. No product, no badge.
+function memberLevel() {
+  return _investments.length;
 }
 
 function renderAccount() {
   const el = document.getElementById('panel-account');
   if (!el) return;
-  const rc   = _account?.referralCode || _account?.username || '';
-  const vip  = vipLevel();
+  if (_booting) { el.innerHTML = `<div class="load-wrap">${SPINNER}</div>`; return; }
+  const level = memberLevel();
   const bal  = Number(_account?.walletBalance) || 0;
   const done = _account?.lastCheckinDate === todayKey();
 
@@ -1663,8 +1675,7 @@ function renderAccount() {
       <div class="acc-id">
         <div class="acc-num">${esc(_account?.phone || '')}</div>
         <div class="acc-badges">
-          ${vip ? `<span class="vip">VIP ${vip}</span>` : ''}
-          ${rc ? `<span class="acc-code" id="accCode">${esc(rc)} ${ICN.copy}</span>` : ''}
+          ${level ? `<span class="vip">Level ${level}</span>` : ''}
         </div>
       </div>
     </div>
@@ -1699,10 +1710,6 @@ function renderAccount() {
     <button class="aflat is-exit" id="logoutBtn"><span class="ati">${MENU_ICONS.logout}</span><span>Logout</span></button>
   `;
 
-  const accCode = el.querySelector('#accCode');
-  if (accCode) accCode.addEventListener('click', () => {
-    try { navigator.clipboard.writeText(rc); toast('Code copied'); } catch (_) {}
-  });
   el.querySelector('#acRecharge').addEventListener('click', openRechargeSheet);
   el.querySelector('#acWithdraw').addEventListener('click', openWithdrawSheet);
   el.querySelector('#acCheckin').addEventListener('click', openCheckinPage);

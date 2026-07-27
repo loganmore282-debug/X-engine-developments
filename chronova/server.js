@@ -445,14 +445,14 @@ async function getSettings() {
 function fmtUGX(n)   { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
 function eatNow()    { return new Date(Date.now() + 3 * 3600000); }
 function phoneToEmail(phone) { return String(phone).replace(/\D/g,'') + '@chronova-app.com'; }
+// MM/DD/YYYY and HH:MM:SS on a 24 hour clock. The app shows these two joined,
+// so anything written here reads the same as a transaction reference does.
 function nowStr() {
   const d = eatNow();
   const pad = n => String(n).padStart(2, '0');
-  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const days   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   return {
-    date: days[d.getUTCDay()] + ', ' + d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear(),
-    time: pad(d.getUTCHours() % 12 || 12) + ':' + pad(d.getUTCMinutes()) + ' ' + (d.getUTCHours() >= 12 ? 'PM' : 'AM')
+    date: pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()) + '/' + d.getUTCFullYear(),
+    time: pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds())
   };
 }
 function cleanPhone(raw) {
@@ -478,7 +478,7 @@ function mixedCode(n = 6) {
 // Transaction reference in the owner's format: a type letter, the timestamp to
 // the second, then four digits. Uniqueness is confirmed against the collection
 // rather than assumed, so two records created in the same second can never share
-// one. 'C' marks a recharge, 'W' a withdrawal.
+// one. Every reference carries the same B prefix.
 function stampRef(letter) {
   const d = new Date(Date.now() + 3 * 3600000);   // Kampala
   const p = n => String(n).padStart(2, '0');
@@ -1927,7 +1927,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
 
     const reference = uuidv4();
-    const ref = await uniqueRef('pendingDeposits', 'C');
+    const ref = await uniqueRef('pendingDeposits', 'B');
     const mpData = await marzCollect({
       amount: amt, phone, reference, description: user.name || userId,
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
@@ -2555,7 +2555,7 @@ app.post('/withdraw/request', async (req, res) => {
     const fee = Math.round(amt * feeRate);
     const netAmt = amt - fee;
     const { date, time } = nowStr();
-    const ref = await uniqueRef('withdrawals', 'W');
+    const ref = await uniqueRef('withdrawals', 'B');
     let witId;
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);

@@ -36,6 +36,7 @@ api = async (path) => {
   if (path === '/products')        return { status: 'success', products: window.__PV.products };
   if (path === '/account/deposits')    return { status: 'success', deposits: window.__PV.deposits };
   if (path === '/account/withdrawals') return { status: 'success', withdrawals: window.__PV.withdrawals };
+  if (path === '/account/transactions') return { status: 'success', transactions: window.__PV.txns };
   return { status: 'success' };
 };
 window.__PV = {
@@ -48,13 +49,13 @@ window.__PV = {
   },
   products: ${JSON.stringify(PRODUCTS)},
   deposits: [
-    { id: 'd1', ref: 'C2607261402110841', amount: 50000, status: 'success',    date: '07/26/2026', time: '14:02:11', phone: '0771234567' },
-    { id: 'd2', ref: 'C2607261348520117', amount: 25000, status: 'processing', date: '07/26/2026', time: '13:48:52', phone: '0771234567' },
-    { id: 'd3', ref: 'C2607250911040396', amount: 80000, status: 'failed',     date: '07/25/2026', time: '09:11:04', phone: '0700998877' },
+    { id: 'd1', ref: 'B2607261402110841', amount: 50000, status: 'success',    date: '07/26/2026', time: '14:02:11', phone: '0771234567', createdAt: Date.now()-3600000 },
+    { id: 'd2', ref: 'B2607261348520117', amount: 25000, status: 'processing', date: '07/26/2026', time: '13:48:52', phone: '0771234567', createdAt: Date.now()-7200000 },
+    { id: 'd3', ref: 'B2607250911040396', amount: 80000, status: 'failed',     date: '07/25/2026', time: '09:11:04', phone: '0700998877', createdAt: Date.now()-90000000 },
   ],
   withdrawals: [
-    { id: 'w1', ref: 'W2607251820330574', amount: 100000, netAmount: 83000, status: 'success',    date: '07/25/2026', time: '18:20:33', phone: '0771234567' },
-    { id: 'w2', ref: 'W2607261105190238', amount: 20000,  netAmount: 16600, status: 'processing', date: '07/26/2026', time: '11:05:19', phone: '0771234567' },
+    { id: 'w1', ref: 'B2607251820330574', amount: 100000, netAmount: 83000, status: 'success',    date: '07/25/2026', time: '18:20:33', phone: '0771234567', createdAt: Date.now()-100000000 },
+    { id: 'w2', ref: 'B2607261105190238', amount: 20000,  netAmount: 16600, status: 'processing', date: '07/26/2026', time: '11:05:19', phone: '0771234567', createdAt: Date.now()-50000000 },
   ],
 };
 _publicSettings = window.__PV.settings;
@@ -73,11 +74,12 @@ _investments = [
     dailyPayout: 20000, payoutsMade: 3, payoutsTotal: 120, paidOut: 60000, status: 'active',
     createdAt: Date.now() - 3 * 86400000 },
 ];
-_txns = [
+window.__PV.txns = [
   { type: 'commission',  amount: 15000, status: 'success', date: '07/26/2026', time: '14:02', level: 1, createdAt: Date.now() - 3600000 },
   { type: 'checkin',     amount: 500,   status: 'success', date: '07/26/2026', time: '08:15', createdAt: Date.now() - 7200000 },
   { type: 'gem_payout',  amount: 20000, status: 'success', date: '07/26/2026', time: '09:55', createdAt: Date.now() - 9000000 },
 ];
+_txns = window.__PV.txns;
 window.__render = (tab) => {
   showView('main');
   _activeTab = tab || 'home';
@@ -98,10 +100,12 @@ window.__open = (what) => {
   if (what === 'picker')   { openBanksModal(); setTimeout(()=>document.getElementById('bkNet').click(), 60); }
   if (what === 'toast')    return toast('Coming soon');
   if (what === 'gift')     return openRedeemModal();
+  if (what === 'booting')  { _booting = true; render(); }
+  if (what === 'income')   return openRecordsPage('income');
 };
 // Simulates the very first frame after launch: signed in, nothing loaded yet.
 window.__empty = () => {
-  _account = null; _investments = []; _txns = []; _products = [];
+  _account = null; _investments = []; window.__PV.txns = []; _products = [];
   _teamStats = null; _deposits = []; _withdrawals = []; _publicSettings = null;
   showView('main');
   render();

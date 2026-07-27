@@ -37,6 +37,7 @@ const SHOTS = [
   ['picker',   'account',  'picker'],
   ['toast',    'home',     'toast'],
   ['gift',     'account',  'gift'],
+  ['booting',  'home',     'booting'],
 ];
 
 (async () => {
