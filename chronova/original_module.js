@@ -1065,7 +1065,7 @@ function openWithdrawSheet() {
         <li>Minimum withdrawal is ${min ? ugx(min) : 'not set'}.</li>
         <li>The ${Math.round(rate * 100)}% charge is already taken off the figure above.</li>
         <li>You need at least one product before you can withdraw.</li>
-        <li>Money is released within minutes and shows under Records.</li>
+        <li>Withdrawals are processed between 7:00 AM and 6:00 PM. A request placed in that window is sent within 15 minutes if it isn't already handled sooner; outside those hours it waits until 7:00 AM.</li>
       </ol>
 
       <button class="btn" id="wdGo"${invested ? '' : ' disabled'}>${invested ? 'Process' : 'Buy a product first'}</button>
@@ -1685,16 +1685,17 @@ function renderTaskCenterPage() {
     const current  = Math.min(s?.current ?? 0, m.target);
     const claimed  = !!s?.claimed;
     const achieved = !!s?.achieved;
-    const pct = Math.round((current / m.target) * 100);
-    const btnLabel = claimed ? 'Claimed' : 'Claim';
+    const pillClass = claimed ? 'is-done' : (achieved ? 'is-ready' : '');
+    const pillLabel = claimed ? 'Received' : (achieved ? 'Claim' : 'In Progress');
     return `
       <div class="tk-row">
-        <div class="tk-top"><b>${m.target} active referrals</b><span>${ugx(m.reward)}</span></div>
-        <div class="tk-bar"><i style="width:${pct}%"></i></div>
-        <div class="tk-bot">
-          <span>${current}/${m.target}</span>
-          <button class="tk-claim" data-target="${m.target}"${(claimed || !achieved) ? ' disabled' : ''}>${btnLabel}</button>
+        <div class="tk-desc">Invite <b>${m.target}</b> Level 1 investors to get: <em>${ugx(m.reward)}</em></div>
+        <div class="tk-stats">
+          <div><b>${current}</b><span>Current</span></div>
+          <div><b>${m.target}</b><span>Target</span></div>
+          <div><b>${current}/${m.target}</b><span>Progress</span></div>
         </div>
+        <button class="tk-pill ${pillClass}" data-target="${m.target}"${(claimed || !achieved) ? ' disabled' : ''}>${pillLabel}</button>
       </div>`;
   }).join('');
 
@@ -1704,8 +1705,9 @@ function renderTaskCenterPage() {
     ${rows}
   `);
 
-  document.querySelectorAll('.tk-claim[data-target]').forEach(b => {
+  document.querySelectorAll('.tk-pill[data-target]').forEach(b => {
     b.addEventListener('click', async () => {
+      if (b.disabled) return;
       const target = Number(b.dataset.target);
       const restore = setBusy(b);
       const r = await api('/team/milestone/claim', { method: 'POST', body: { target } });

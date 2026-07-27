@@ -1440,6 +1440,72 @@ app.post('/invest/create', async (req, res) => {
   }
 });
 
+// ── DAILY CASHBACK ENGINE ──
+// Credits every active investment's due payout(s). "Due" is computed
+// deterministically from elapsed days since purchase (never from stored
+// nextPayoutAt drifting), so a cron that was down for a while catches an
+// investment up in one shot rather than losing days. The final payout that
+// completes a cycle absorbs any rounding remainder so paidOut lands exactly
+// on expectedReturn.
+const _creditingPayouts = new Set();
+async function runDailyPayouts() {
+  let credited = 0;
+  try {
+    const snap = await db.collection('investments').where('status', '==', 'active').limit(2000).get();
+    for (const doc of snap.docs) {
+      const inv = doc.data();
+      const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
+      const made  = Number(inv.payoutsMade) || 0;
+      if (!total || made >= total) continue;
+      const createdMs = tsMillis(inv.createdAt) || Date.now();
+      const elapsedDays = Math.floor((Date.now() - createdMs) / 86400000);
+      const dueCount = Math.min(total, elapsedDays) - made;
+      if (dueCount <= 0) continue;
+      if (_creditingPayouts.has(doc.id)) continue;
+      _creditingPayouts.add(doc.id);
+      try {
+        await withLock('payout:' + doc.id, async () => {
+          const invRef = doc.ref;
+          let didCredit = false, amount = 0, newMade = 0, willComplete = false;
+          await db.runTransaction(async t => {
+            const fresh = await t.get(invRef);
+            if (!fresh.exists || fresh.data().status !== 'active') return;
+            const f = fresh.data();
+            const fMade = Number(f.payoutsMade) || 0;
+            const fTotal = Number(f.payoutsTotal) || Number(f.cycle) || 0;
+            const fElapsed = Math.floor((Date.now() - (tsMillis(f.createdAt) || Date.now())) / 86400000);
+            const fDue = Math.min(fTotal, fElapsed) - fMade;
+            if (fDue <= 0) return;
+            newMade = fMade + fDue;
+            willComplete = newMade >= fTotal;
+            const dailyPayout = Number(f.dailyPayout) || 0;
+            amount = willComplete
+              ? Math.max(0, (Number(f.expectedReturn) || 0) - (Number(f.paidOut) || 0))
+              : dailyPayout * fDue;
+            if (amount <= 0) return;
+            const uRef = db.collection('users').doc(f.userId);
+            t.update(uRef, { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount) });
+            t.update(invRef, {
+              payoutsMade: newMade, paidOut: FieldValue.increment(amount),
+              nextPayoutAt: new Date(Date.now() + 86400000),
+              status: willComplete ? 'completed' : 'active'
+            });
+            const { date, time } = nowStr();
+            t.set(db.collection('transactions').doc(), {
+              userId: f.userId, type: 'gem_payout',
+              description: `Cashback — ${f.tierLabel || 'watch'} (day ${newMade}/${fTotal})`,
+              amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
+            });
+            didCredit = true;
+          });
+          if (didCredit) credited++;
+        });
+      } finally { _creditingPayouts.delete(doc.id); }
+    }
+  } catch (e) { console.error('runDailyPayouts error:', e.message); }
+  return credited;
+}
+
 app.post('/admin/payments/sync', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const settled = await pollPendingPayments();
@@ -2726,14 +2792,27 @@ app.post('/withdraw/obpay-callback', handleObpayEvent);
 app.post('/obpay/payout-webhook', handleObpayEvent);
 // ══════════════════════════════════════════════
 // AUTOMATIC WITHDRAWAL RELEASE
-// The admin owns a fresh request for its first five minutes (0s .. 4m59s).
-// Past that the server releases it itself, so a payout never sits waiting on a
-// human. A gateway fault does NOT fail the withdrawal — the request stays
-// pending with the user's money still debited and in flight, and the next sweep
-// retries it, up to WITHDRAW_MAX_AUTO_TRIES.
+// The admin owns a fresh request for its first fifteen minutes. Past that the
+// server releases it itself, so a payout never sits waiting on a human. A
+// gateway fault does NOT fail the withdrawal — the request stays pending with
+// the user's money still debited and in flight, and the next sweep retries
+// it, up to WITHDRAW_MAX_AUTO_TRIES.
+//
+// Withdrawals are only actively worked between 07:00 and 18:00 Kampala time.
+// Outside that window the sweep takes NO action at all on anything, however
+// old — it neither auto-releases nor burns retry attempts. The moment the
+// window reopens, any request already past its 15-minute mark is released
+// right away (the 15-minute clock runs from submission, not from window-open).
+// The admin's own manual "Send via MarzPay" button is unaffected either way.
 // ══════════════════════════════════════════════
-const WITHDRAW_ADMIN_WINDOW_MS = 5 * 60 * 1000;
+const WITHDRAW_ADMIN_WINDOW_MS = 15 * 60 * 1000;
 const WITHDRAW_MAX_AUTO_TRIES  = 8;
+const WITHDRAW_WINDOW_START_H  = 7;   // 07:00 Kampala
+const WITHDRAW_WINDOW_END_H    = 18;  // 18:00 Kampala
+function inWithdrawWindow() {
+  const h = eatNow().getUTCHours(); // eatNow() is already shifted to Kampala time
+  return h >= WITHDRAW_WINDOW_START_H && h < WITHDRAW_WINDOW_END_H;
+}
 const _autoReleasing = new Set();
 
 async function autoReleaseWithdrawal(witDoc) {
@@ -2794,6 +2873,7 @@ async function autoReleaseWithdrawal(witDoc) {
 
 let _sweepingWithdrawals = false;
 async function sweepPendingWithdrawals() {
+  if (!inWithdrawWindow()) return 0; // outside 7am-6pm Kampala — the server takes no action
   if (_sweepingWithdrawals) return 0;
   _sweepingWithdrawals = true;
   let released = 0;
