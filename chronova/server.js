@@ -193,15 +193,19 @@ function durPhrase(hours) {
 }
 
 
-// TEAM TASK CENTRE — milestone rewards on the COUNT of a user's ACTIVE level-1
+// TASK CENTER — milestone rewards on the COUNT of a user's ACTIVE level-1
 // referrals (an active referral = one who has deposited and activated at least
-// one watch tier). Paid once when the count threshold is crossed, and re-checked
-// whenever the user opens the Team screen. `target` is a member COUNT, not money.
+// one watch tier). Each tier is claimed manually once its target is reached —
+// the server always recomputes the live count at claim time, it never trusts
+// the client. `target` is a member COUNT, not money.
 const TEAM_MILESTONES = [
-  { target:  3, reward:  10000 },
-  { target: 10, reward:  50000 },
-  { target: 15, reward:  75000 },
-  { target: 20, reward: 100000 },
+  { target:   5, reward:   10000 },
+  { target:  10, reward:   25000 },
+  { target:  20, reward:   50000 },
+  { target:  50, reward:  120000 },
+  { target: 100, reward:  250000 },
+  { target: 200, reward:  600000 },
+  { target: 500, reward: 2000000 },
 ];
 
 // ── UUID v4 generator ──
@@ -712,75 +716,53 @@ async function reconcileCommissions(limit = 800) {
   return fixed;
 }
 
-// ── TEAM MILESTONE ENGINE ──
-// Sums the caller's level-1 team deposits and pays every milestone that is
-// reached but not yet paid. Idempotent: each milestone sets a flag inside a
-// transaction with a fresh recheck (same proven pattern as commissions), so a
-// reward can never be paid twice no matter how often this runs.
-async function checkTeamMilestones(userId) {
+// ── TASK CENTER: ACTIVE REFERRAL COUNT ──
+// Milestone metric = COUNT of ACTIVE level-1 referrals. An active referral is a
+// member who has activated at least one watch tier (totalInvested > 0). Pure
+// read, no crediting — rewards are claimed explicitly via /team/milestone/claim,
+// which recomputes this same count itself so a claim can never be forged.
+async function activeL1Count(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
-  // Milestone metric = COUNT of ACTIVE level-1 referrals. An active referral is a
-  // member who has activated at least one watch tier (totalInvested > 0).
   let l1Total = 0;
   snap.forEach(d => { if ((d.data().totalInvested || 0) > 0) l1Total += 1; });
-  // Don't pay until the paid-marker backfill has run, so historical rewards are
-  // never paid twice when the reconciler starts.
-  const sett0 = await getSettings();
-  if (!sett0.milestonePaidBackfillDone) return l1Total;
-  const uRef = db.collection('users').doc(userId);
-  const { date, time } = nowStr();
-  // Serialise per referrer so the deposit hook, settle-on-open and reconciler
-  // can't pay the same milestone twice (M0 has no real transaction isolation).
-  await withLock('milestone:' + userId, async () => {
-  for (const m of TEAM_MILESTONES) {
-    if (l1Total < m.target) break;
-    // Idempotency marker seeded from the ACTUAL ledger (a team_reward tx), so a
-    // reward is paid exactly once and previously-paid ones are never repeated.
-    const paidFlag = 'teamRewardPaidV2_' + m.target;
-    try {
+  return l1Total;
+}
+app.post('/team/milestone/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const target = Number(req.body.target);
+  const m = TEAM_MILESTONES.find(x => x.target === target);
+  if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
+  try {
+    const l1Total = await activeL1Count(userId);
+    if (l1Total < m.target)
+      return res.status(400).json({ status: 'error', message: `You need ${m.target} active referrals to claim this — you have ${l1Total}.` });
+    const claimFlag = 'milestoneClaimed_' + m.target;
+    let done = false;
+    await withLock('milestoneclaim:' + userId + ':' + m.target, async () => {
       await db.runTransaction(async t => {
+        const uRef  = db.collection('users').doc(userId);
         const fresh = await t.get(uRef);
-        if (!fresh.exists || fresh.data()[paidFlag]) return;
+        if (!fresh.exists || fresh.data()[claimFlag]) return;
+        const { date, time } = nowStr();
         t.update(uRef, {
           walletBalance: FieldValue.increment(m.reward),
           totalEarned:   FieldValue.increment(m.reward),
-          [paidFlag]: true, ['teamMilestone_' + m.target]: true
+          [claimFlag]: true
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'team_reward',
-          description: `Team reward — referred ${m.target} active members`,
+          description: `Task Center — ${m.target} active referrals`,
           amount: m.reward, milestone: m.target, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
+        done = true;
       });
-    } catch (e) { console.error('Milestone pay error:', userId, m.target, e.message); }
-  }
-  });
-  return l1Total;
-}
-// Self-healing net: pay any referrer who crossed a deposit milestone but never
-// got the reward (missed due to a race, cold start, or the earlier seal). Safe —
-// checkTeamMilestones is idempotent on the ledger-seeded paid marker.
-async function reconcileMilestones() {
-  try {
-    const s = await getSettings();
-    if (!s.milestonePaidBackfillDone) return;
-    const usersSnap = await db.collection('users').limit(10000).get();
-    const referrers = new Set();
-    usersSnap.forEach(d => { const r = d.data().referredBy; if (r) referrers.add(r); });
-    for (const uid of referrers) { await checkTeamMilestones(uid).catch(() => {}); }
-  } catch (e) { console.error('reconcileMilestones error:', e.message); }
-}
-// Fire-and-forget hook: after ANY deposit credit, check the depositor's
-// referrer so their milestone pays out the instant the threshold is crossed.
-async function notifyTeamDeposit(depositorId) {
-  try {
-    const u = await db.collection('users').doc(depositorId).get();
-    const refId = u.exists ? u.data().referredBy : null;
-    if (refId) await checkTeamMilestones(refId);
-  } catch (e) { console.error('Team deposit hook error:', e.message); }
-}
-
+    });
+    if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
+    return res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
 // ── REFERRAL ATTRIBUTION ──
 // Attach `newUserId` to `referrerId` exactly once: set referredBy, bump the
 // L1/L2/L3 team counts up the chain, write the referrals ledger row, and clear
@@ -852,7 +834,7 @@ async function reconcileReferrals(limit = 10000) {
       const referrerId = await resolveReferrer(pend);
       if (!referrerId) continue;                           // referrer still not visible — try next pass
       if (referrerId === doc.id) { await doc.ref.update({ pendingReferral: '' }).catch(() => {}); continue; }
-      if (await linkReferral(doc.id, referrerId)) { linked++; await checkTeamMilestones(referrerId).catch(() => {}); }
+      if (await linkReferral(doc.id, referrerId)) linked++;
     }
     if (linked) console.log('reconcileReferrals: healed', linked, 'missing referral link(s)');
   } catch (e) { console.error('reconcileReferrals error:', e.message); }
@@ -1371,28 +1353,27 @@ app.get('/team/members', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// Team task-centre stats. Calling this ALSO settles any milestone that is due
-// (idempotent), so a user opening the Team screen is paid instantly if a
-// threshold was crossed while the deposit hook couldn't reach them.
+// Team + Task Center stats. Milestones are informational here — claiming
+// itself only happens via /team/milestone/claim (server-recomputed there too).
 app.get('/team/stats', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const l1ActiveCount = await checkTeamMilestones(userId);
+    const l1ActiveCount = await activeL1Count(userId);
     const uSnap = await db.collection('users').doc(userId).get();
     const u = uSnap.exists ? uSnap.data() : {};
     const milestones = TEAM_MILESTONES.map(m => ({
       target: m.target, reward: m.reward,
       current: l1ActiveCount,
       achieved: l1ActiveCount >= m.target,
-      paid: !!u['teamMilestone_' + m.target],
+      claimed: !!u['milestoneClaimed_' + m.target],
     }));
     return res.json({
       status: 'success', l1ActiveCount, l1DepositTotal: l1ActiveCount, milestones,
       counts:  { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
       earned:  { l1: u.commissionL1Earned || 0, l2: u.commissionL2Earned || 0, l3: u.commissionL3Earned || 0,
                  commissions: u.commissionEarned || 0,
-                 teamRewards: TEAM_MILESTONES.reduce((s, m) => s + (u['teamMilestone_' + m.target] ? m.reward : 0), 0) },
+                 teamRewards: TEAM_MILESTONES.reduce((s, m) => s + (u['milestoneClaimed_' + m.target] ? m.reward : 0), 0) },
     });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -1407,7 +1388,7 @@ app.post('/invest/create', async (req, res) => {
   const tier = await getProductByKeyOrId(tierKey);
   if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown product' });
   if (tier.active === false) return res.status(400).json({ status: 'error', message: 'This product is not available right now' });
-  if (tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This product is not on sale yet.' });
+  if (tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This product is sold out.' });
   // Ensure derived numbers exist even for a minimally-filled admin product.
   tier.cycle = Number(tier.cycle) || CYCLE_DAYS;
   tier.expectedReturn = Number(tier.expectedReturn) || Math.round((tier.price || 0) * RETURN_MULTIPLE);
@@ -1582,10 +1563,6 @@ function startCrons() {
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
   setTimeout(reconcileCommissions, 90 * 1000);
-  // Team-milestone safety-net: pay anyone whose team crossed a deposit milestone
-  // but never received the reward — automatically, every 10 minutes.
-  setInterval(reconcileMilestones, 10 * 60 * 1000);
-  setTimeout(reconcileMilestones, 2 * 60 * 1000);
   // Referral-attribution safety-net: link anyone who joined by a link but was
   // never recorded under the referrer — automatically, every 10 minutes.
   setInterval(reconcileReferrals, 10 * 60 * 1000);
@@ -1607,11 +1584,6 @@ app.post('/admin/commissions/reconcile', async (req, res) => {
   const fixed = await reconcileCommissions(2000);
   return res.json({ status: 'success', processed: fixed });
 });
-app.post('/admin/milestones/reconcile', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  await reconcileMilestones();
-  return res.json({ status: 'success' });
-});
 // Heal every user who joined by a link but was never recorded under the referrer.
 app.post('/admin/referrals/reconcile', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -1632,7 +1604,6 @@ app.post('/admin/user/set-referrer', async (req, res) => {
     if (!referrerId) return res.status(404).json({ status: 'error', message: 'No user found for that referral code.' });
     if (referrerId === userId) return res.status(400).json({ status: 'error', message: 'A user cannot refer themselves.' });
     const ok = await linkReferral(userId, referrerId);
-    if (ok) await checkTeamMilestones(referrerId).catch(() => {});
     return res.json({ status: ok ? 'success' : 'error', message: ok ? 'Referral linked.' : 'Could not link (already linked).', referrerId });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -1908,10 +1879,10 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
       });
       didCredit = true;
     });
-    // Instant team-milestone check for the depositor's referrer, and the L1/L2/L3
-    // rewards — Chronova pays the upline on a credited RECHARGE, not on a purchase.
+    // L1/L2/L3 commissions — Chronova pays the upline on a credited RECHARGE,
+    // not on a purchase. (Task Center milestones are claimed by the user, not
+    // auto-paid, so there's no hook to fire here.)
     if (didCredit) {
-      notifyTeamDeposit(dep.userId).catch(() => {});
       payCommissions(dep.userId, amount, depDoc.id, 'deposit')
         .catch(e => console.error('Commission err:', e.message));
     }
@@ -1997,7 +1968,6 @@ app.post('/deposit/marzpay', async (req, res) => {
       });
     }
     if (isSandbox) {
-      notifyTeamDeposit(userId).catch(() => {});
       // the sandbox branch credits inline, so it must trigger the upline reward
       // itself — creditMarzDeposit (the live path) is never reached here.
       payCommissions(userId, amt, depRef.id, 'deposit')
@@ -3057,8 +3027,6 @@ app.post('/admin/deposit', async (req, res) => {
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
-    // Admin credit adds to team volume too, so it can complete a milestone.
-    notifyTeamDeposit(userId).catch(() => {});
     return res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -3188,28 +3156,6 @@ async function recountUserTotals() {
   }
   return updated;
 }
-// ONE-TIME BACKFILL: seed the ledger-based "already paid" markers from the real
-// team_reward transactions, so the milestone reconciler never re-pays a reward
-// that was genuinely paid before — while still paying anyone who legitimately
-// missed theirs. Runs exactly once. (Clears the older seal flag if present.)
-async function backfillMilestonePaidOnce() {
-  try {
-    const s = await getSettings();
-    if (s.milestonePaidBackfillDone) return;
-    const txSnap = await db.collection('transactions').where('type', '==', 'team_reward').get();
-    const byUser = {};
-    txSnap.forEach(d => {
-      const t = d.data();
-      if (t.userId && t.milestone) (byUser[t.userId] = byUser[t.userId] || {})['teamRewardPaidV2_' + t.milestone] = true;
-    });
-    let n = 0;
-    for (const [uid, upd] of Object.entries(byUser)) { await db.collection('users').doc(uid).update(upd).catch(() => {}); n++; }
-    await db.collection('settings').doc('main').set({ milestonePaidBackfillDone: true }, { merge: true });
-    _settingsCache = null; _settingsCacheTs = 0; // so milestone payments resume at once
-    console.log('Milestone paid-marker backfill done for', n, 'user(s); reconciler will now heal missed rewards.');
-  } catch (e) { console.error('backfillMilestonePaidOnce error:', e.message); }
-}
-
 // One-time rate update (owner's call, 2026-07): check-in bonus 500, withdrawal
 // fee 14%. Forced into the settings doc once so an older admin-saved value
 // (300 / 5%) can't override the new defaults; admin can still change them later.
@@ -3697,7 +3643,7 @@ async function startServer() {
     try {
       await connectMongo(MONGODB_URI);
       if (!cronsStarted) { cronsStarted = true; startCrons();
-        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await backfillMilestonePaidOnce(); await reconcileReferrals(); await reconcileMilestones(); })().catch(() => {});
+        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await reconcileReferrals(); })().catch(() => {});
       }
     } catch (e) {
       console.error('MongoDB not reachable yet — retrying in 5s:', e.message);

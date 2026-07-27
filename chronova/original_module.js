@@ -573,15 +573,18 @@ async function loadProducts() {
   if (r.status === 'success') _products = r.products || [];
 }
 let _teamStats = null;
-// Client-side copy of the milestone ladder so the Task centre renders instantly
-// (0% / unpaid) before /team/stats returns — no loader. Server is source of truth
-// for what's actually paid; these fill in the moment stats arrive. Target = a
-// COUNT of active level-1 referrals (not a currency amount).
+// Client-side copy of the milestone ladder so the Task Center renders instantly
+// (0% / unclaimed) before /team/stats returns — no loader. Server is source of
+// truth for what's actually claimable; these fill in the moment stats arrive.
+// Target = a COUNT of active level-1 referrals (not a currency amount).
 const TEAM_MILESTONES = [
-  { target:  3, reward:  10000 },
-  { target: 10, reward:  50000 },
-  { target: 15, reward:  75000 },
-  { target: 20, reward: 100000 },
+  { target:   5, reward:   10000 },
+  { target:  10, reward:   25000 },
+  { target:  20, reward:   50000 },
+  { target:  50, reward:  120000 },
+  { target: 100, reward:  250000 },
+  { target: 200, reward:  600000 },
+  { target: 500, reward: 2000000 },
 ];
 async function loadTeam() {
   const [r, s] = await Promise.all([api('/team/members'), api('/team/stats')]);
@@ -1316,7 +1319,7 @@ function renderProducts() {
       <div class="pcard${soon ? ' is-soon' : ''}" style="--tint:${tint}">
         <div class="pcard-art">
           ${p.image ? `<img src="${esc(p.image)}" alt="">` : '<span class="pcard-noimg"></span>'}
-          ${soon ? '<span class="pcard-soon">Coming soon</span>' : ''}
+          ${soon ? '<span class="pcard-soon">Sold out</span>' : ''}
         </div>
         <div class="pcard-in">
           <div class="pcard-name">${esc(p.label || '')}</div>
@@ -1327,7 +1330,7 @@ function renderProducts() {
             <span>Total revenue</span><b>${ugx(p.expectedReturn)}</b>
           </div>
           ${soon
-            ? `<button class="pcard-cta" disabled>Coming soon</button>`
+            ? `<button class="pcard-cta" disabled>Sold out</button>`
             : `<button class="pcard-cta" data-tier="${esc(p.key)}">Purchase</button>`}
         </div>
       </div>`;
@@ -1668,6 +1671,53 @@ function renderTeam() {
   el.querySelector('#tmRewards').addEventListener('click', () => openRecordsPage('income'));
 }
 
+// Task Center — one row per milestone: a target, a box progress bar, a claim
+// button. Deliberately no extra design. Server governs every number here:
+// current count, whether it's reached, and whether it's already claimed.
+async function openTaskCenterPage() {
+  await loadTeam();
+  renderTaskCenterPage();
+}
+function renderTaskCenterPage() {
+  const ts = _teamStats;
+  const rows = TEAM_MILESTONES.map(m => {
+    const s = ts?.milestones?.find(x => x.target === m.target);
+    const current  = Math.min(s?.current ?? 0, m.target);
+    const claimed  = !!s?.claimed;
+    const achieved = !!s?.achieved;
+    const pct = Math.round((current / m.target) * 100);
+    const btnLabel = claimed ? 'Claimed' : 'Claim';
+    return `
+      <div class="tk-row">
+        <div class="tk-top"><b>${m.target} active referrals</b><span>${ugx(m.reward)}</span></div>
+        <div class="tk-bar"><i style="width:${pct}%"></i></div>
+        <div class="tk-bot">
+          <span>${current}/${m.target}</span>
+          <button class="tk-claim" data-target="${m.target}"${(claimed || !achieved) ? ' disabled' : ''}>${btnLabel}</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  openModal(`
+    <div class="modal-head"><h2>Task Center</h2><button class="modal-close">${ICN.close}</button></div>
+    <p class="tk-lead">Invite friends with your referral code. Once enough of them activate a watch tier, claim the reward for that milestone.</p>
+    ${rows}
+  `);
+
+  document.querySelectorAll('.tk-claim[data-target]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const target = Number(b.dataset.target);
+      const restore = setBusy(b);
+      const r = await api('/team/milestone/claim', { method: 'POST', body: { target } });
+      if (r.status !== 'success') { restore(); return toast(r.message || 'Could not claim'); }
+      await loadTeam();
+      renderTeam();
+      renderTaskCenterPage();
+      toast(`${ugx(r.amount)} added to your wallet`);
+    });
+  });
+}
+
 // ══════════════════════════════════════════════
 // ACCOUNT
 // Laid out from the approved mockup: gold disc avatar, phone, VIP badge, one
@@ -1730,7 +1780,7 @@ function renderAccount() {
     </div>
 
     <button class="mission" id="acMission">
-      <b>Mission centre</b>
+      <b>Task Center</b>
       <span>Claim your referral rewards</span>
     </button>
 
@@ -1751,7 +1801,7 @@ function renderAccount() {
   el.querySelector('#acWithdraw').addEventListener('click', openWithdrawSheet);
   el.querySelector('#acCheckin').addEventListener('click', openCheckinPage);
   el.querySelector('#acContact').addEventListener('click', openContactPage);
-  el.querySelector('#acMission').addEventListener('click', () => switchTab('team'));
+  el.querySelector('#acMission').addEventListener('click', openTaskCenterPage);
   el.querySelector('#mnRedeem').addEventListener('click', openRedeemModal);
   el.querySelector('#mnHistory').addEventListener('click', () => openRecordsPage('income'));
   el.querySelector('#mnBanks').addEventListener('click', openBanksModal);

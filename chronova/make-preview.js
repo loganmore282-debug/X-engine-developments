@@ -38,7 +38,8 @@ api = async (path) => {
   if (path === '/account/withdrawals') return { status: 'success', withdrawals: window.__PV.withdrawals };
   if (path === '/account/transactions') return { status: 'success', transactions: window.__PV.txns };
   if (path === '/team/members') return { status: 'success', members: window.__PV.members };
-  if (path === '/team/stats') return { status: 'success' };
+  if (path === '/team/stats') return { status: 'success', ...window.__PV.teamStats };
+  if (path === '/team/milestone/claim') return { status: 'success', amount: 25000, message: 'UGX 25,000 added to your wallet' };
   return { status: 'success' };
 };
 window.__PV = {
@@ -87,6 +88,22 @@ window.__PV.members = [
   { name: 'k9Rmzc', phone: '256700998877', hasInvested: false, deposited: 0 },
 ];
 _members = window.__PV.members;
+// 12 active referrals: the 5-target is claimed, the 10-target is reached but
+// not yet claimed (shows an active Claim button), everything past that is locked.
+window.__PV.teamStats = {
+  l1ActiveCount: 12, l1DepositTotal: 12,
+  milestones: [
+    { target: 5,   reward: 10000,   current: 12, achieved: true,  claimed: true  },
+    { target: 10,  reward: 25000,   current: 12, achieved: true,  claimed: false },
+    { target: 20,  reward: 50000,   current: 12, achieved: false, claimed: false },
+    { target: 50,  reward: 120000,  current: 12, achieved: false, claimed: false },
+    { target: 100, reward: 250000,  current: 12, achieved: false, claimed: false },
+    { target: 200, reward: 600000,  current: 12, achieved: false, claimed: false },
+    { target: 500, reward: 2000000, current: 12, achieved: false, claimed: false },
+  ],
+  counts: { l1: 12, l2: 3, l3: 1 },
+  earned: { l1: 45000, l2: 6000, l3: 500, commissions: 51500, teamRewards: 10000 },
+};
 window.__render = (tab) => {
   _booting = false;
   showView('main');
@@ -112,6 +129,7 @@ window.__open = (what) => {
   if (what === 'income')   return openRecordsPage('income');
   if (what === 'teammembers') return openTeamMembersModal();
   if (what === 'loginok') return toast('Login successful', true);
+  if (what === 'taskcenter') return openTaskCenterPage();
 };
 // Simulates the very first frame after launch: signed in, nothing loaded yet.
 window.__empty = () => {
