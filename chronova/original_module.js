@@ -866,7 +866,7 @@ const SVG_CLOSE   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 
 function openSheet({ title, body, onRecords }) {
   const root = document.getElementById('modalRoot');
-  root.style.alignItems = 'flex-end';
+  root.style.alignItems = 'center';
   root.innerHTML = `
     <div class="modal-backdrop" data-close></div>
     <div class="sheet">
@@ -929,16 +929,12 @@ function openRechargeSheet() {
         <button class="net" data-net="Airtel">Airtel</button>
       </div>
 
-      <div class="notice">
-        <b>How a recharge works</b>
-        <ol>
-          <li>Choose your amount and confirm the mobile money number holding the funds.</li>
-          <li>Tap <b>Process</b>. A payment prompt is pushed to that number within seconds.</li>
-          <li>Enter your mobile money <b>PIN</b> on the prompt to approve.</li>
-          <li>Your recharge appears under Records as <b>Processing</b>, then turns <b>Successful</b> once the network confirms it. The balance is credited automatically, with no manual approval.</li>
-        </ol>
-        ${min ? `<p class="notice-min">Minimum recharge: ${ugx(min)}</p>` : ''}
-      </div>
+      <ol class="ci-rules">
+        <li>Minimum recharge is ${min ? ugx(min) : 'not set'}.</li>
+        <li>A prompt reaches your number seconds after you tap Process.</li>
+        <li>Approve it with your mobile money PIN.</li>
+        <li>Your balance updates on its own once the network confirms.</li>
+      </ol>
 
       <button class="btn" id="rcGo">Process</button>
     `
@@ -1041,15 +1037,12 @@ function openWithdrawSheet() {
         <span class="calc-fee">Fee ${Math.round(rate * 100)}%</span>
       </div>
 
-      <div class="notice">
-        <b>Before you withdraw</b>
-        <ol>
-          <li>Minimum withdrawal: ${min ? ugx(min) : 'not set'}.</li>
-          <li>A ${Math.round(rate * 100)}% charge is deducted automatically; the figure above is what lands on your number.</li>
-          <li>You must own at least one product before withdrawing.</li>
-          <li>Requests are released within minutes. You will see the result under Records.</li>
-        </ol>
-      </div>
+      <ol class="ci-rules">
+        <li>Minimum withdrawal is ${min ? ugx(min) : 'not set'}.</li>
+        <li>The ${Math.round(rate * 100)}% charge is already taken off the figure above.</li>
+        <li>You need at least one product before you can withdraw.</li>
+        <li>Money is released within minutes and shows under Records.</li>
+      </ol>
 
       <button class="btn" id="wdGo"${invested ? '' : ' disabled'}>${invested ? 'Process' : 'Buy a product first'}</button>
     `
@@ -1170,22 +1163,32 @@ function refreshRecords(kind) {
 // ══════════════════════════════════════════════
 function openCheckinPage() {
   const bonus = Number(_publicSettings?.checkinBonus) || 0;
-  const done  = _account?.lastCheckinDate === todayKey();
-  const bnr   = bannerUrl('checkin');
+  const earned = Number(_account?.checkinEarned) || 0;
+  const days   = Number(_account?.checkinDays) || 0;
+  const done   = _account?.lastCheckinDate === todayKey();
+  const bnr    = bannerUrl('checkin');
+
   openModal(`
-    <div class="modal-head"><h2>Daily check-in</h2><button class="modal-close"></button></div>
+    <div class="modal-head"><h2>Check-in</h2><button class="modal-close"></button></div>
     ${bnr ? `<div class="page-banner"><img src="${esc(bnr)}" alt=""></div>` : ''}
-    <div class="ci-amount"><span>Today's reward</span><b>${ugx(bonus)}</b></div>
-    <div class="notice">
-      <b>How check-in works</b>
-      <ol>
-        <li>Check in once every day to claim ${ugx(bonus)}.</li>
-        <li>The reward is credited to your balance immediately.</li>
-        <li>The day resets at midnight, Kampala time.</li>
-        <li>Miss a day and you lose only that day's reward. You can check in again tomorrow.</li>
-      </ol>
+
+    <div class="ci-total">
+      <b>${ugx(earned)}</b>
+      <span>Cumulative bonus</span>
     </div>
-    <button class="btn" id="ciGo"${done ? ' disabled' : ''}>${done ? 'Already checked in today' : 'Check in'}</button>
+
+    <div class="ci-pair">
+      <div class="ci-cell"><b>${ugx(bonus)}</b><span>Daily reward</span></div>
+      <div class="ci-cell"><b>${days}</b><span>Check-in days</span></div>
+    </div>
+
+    <button class="btn" id="ciGo"${done ? ' disabled' : ''}>${done ? 'Checked in today' : 'Check in'}</button>
+
+    <ol class="ci-rules">
+      <li>Your daily reward is ${ugx(bonus)}.</li>
+      <li>Check in once a day.</li>
+      <li>The next one opens after midnight.</li>
+    </ol>
   `);
   if (done) return;
   document.getElementById('ciGo').addEventListener('click', async () => {
@@ -1193,9 +1196,10 @@ function openCheckinPage() {
     const restore = setBusy(btn);
     const r = await api('/checkin', { method: 'POST' });
     if (r.status !== 'success') { restore(); return toast(r.message || 'Could not check in', 'err'); }
-    btn.disabled = true; btn.textContent = 'Already checked in today';
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderAccount();
+    closeModal();
+    openCheckinPage();
     toast(`${ugx(r.bonus)} credited`, 'ok');
   });
 }
@@ -1297,15 +1301,12 @@ function openProductDetail(key) {
       <span>Cycle</span><b>${cycle} days</b>
     </div>
 
-    <div class="notice">
-      <b>How this product pays</b>
-      <ol>
-        <li>Purchase for ${ugx(p.price)} from your balance.</li>
-        <li>${ugx(daily)} is credited every 24 hours, timed from the exact moment of purchase.</li>
-        <li>The cycle runs for ${cycle} days, returning ${ugx(p.expectedReturn)} in total.</li>
-        <li>Payouts are released by the server. There is nothing to claim by hand.</li>
-      </ol>
-    </div>
+    <ol class="ci-rules">
+      <li>It costs ${ugx(p.price)} from your balance.</li>
+      <li>${ugx(daily)} reaches you every 24 hours from the moment you buy.</li>
+      <li>After ${cycle} days you have received ${ugx(p.expectedReturn)}.</li>
+      <li>Nothing to claim, payouts arrive on their own.</li>
+    </ol>
 
     <div class="pd-bal"><span>Your balance</span><b>${ugx(bal)}</b></div>
     <button class="btn" id="pdBuy">Purchase for ${ugx(p.price)}</button>
@@ -1481,14 +1482,11 @@ function openContactPage() {
     ${S.supportHours ? `<div class="cc-hours"><span>Support hours</span><b>${esc(S.supportHours)}</b></div>` : ''}
     ${bannerUrl('contact') ? `<div class="page-banner"><img src="${esc(bannerUrl('contact'))}" alt=""></div>` : ''}
     ${rows ? `<div class="cc-label">Reach us on Telegram</div>${rows}` : `<div class="empty-note">No contact channels published yet.</div>`}
-    <div class="notice">
-      <b>Before you message us</b>
-      <ol>
-        <li>Any question at all, use one of the links above and a Chronova agent will pick it up.</li>
-        <li>Your password is yours alone. Nobody from Chronova will ever ask for it.</li>
-        <li>These links are the only ones we publish. Anything else is not us.</li>
-      </ol>
-    </div>
+    <ol class="ci-rules">
+      <li>Use any link above and an agent will pick it up.</li>
+      <li>Nobody from Chronova will ever ask for your password.</li>
+      <li>These are the only links we publish.</li>
+    </ol>
   `);
 }
 
@@ -1501,79 +1499,64 @@ function renderTeam() {
   const code = _account?.referralCode || _account?.username || 'not ready yet';
   const link = code !== 'not ready yet' ? referralLink(code) : '';
   const ts = _teamStats;
-  const l1Active = ts?.l1ActiveCount ?? ts?.l1DepositTotal ?? 0;
   const LVL = [
     { n: 1, count: ts?.counts?.l1 ?? _account?.teamL1Count ?? 0, earned: ts?.earned?.l1 || 0 },
     { n: 2, count: ts?.counts?.l2 ?? _account?.teamL2Count ?? 0, earned: ts?.earned?.l2 || 0 },
     { n: 3, count: ts?.counts?.l3 ?? _account?.teamL3Count ?? 0, earned: ts?.earned?.l3 || 0 },
   ];
-  const people = LVL.reduce((s, l) => s + l.count, 0);
+  const people  = LVL.reduce((s, l) => s + l.count, 0);
   const rewards = (ts?.earned?.commissions || _account?.commissionEarned || 0) + (ts?.earned?.teamRewards || 0);
   const bg = slot => bannerUrl(slot) ? ` style="background-image:url('${esc(bannerUrl(slot))}')"` : '';
 
   el.innerHTML = `
-    <div class="tm-head">
-      <h2>Grow your team</h2>
-      <p>Every recharge below you pays you</p>
-    </div>
-
-    ${bannerUrl('team') ? `<div class="page-banner"><img src="${esc(bannerUrl('team'))}" alt=""></div>` : ''}
-
-    <div class="tm-totals">
-      <button class="tm-total" id="tmPeople"><b>${people}</b><span>Team size</span></button>
-      <button class="tm-total" id="tmRewards"><b>${ugx(rewards)}</b><span>Earned from team</span></button>
-    </div>
-
-    <div class="tm-invites">
-      <div class="tm-inv${bannerUrl('inviteLink') ? ' has-bg' : ''}"${bg('inviteLink')}>
-        <div class="tm-inv-in">
-          <span class="tm-inv-l">Invitation link</span>
-          <span class="tm-inv-v link">${esc(link || 'not ready yet')}</span>
-          <button class="tm-copy" id="cpLink">Copy</button>
+    <div class="tm-share">
+      <div class="tm-slab${bannerUrl('inviteCode') ? ' has-bg' : ''}"${bg('inviteCode')}>
+        <div class="tm-slab-in">
+          <b class="tm-code">${esc(code)}</b>
+          <span>Invitation code</span>
         </div>
       </div>
-      <div class="tm-inv${bannerUrl('inviteCode') ? ' has-bg' : ''}"${bg('inviteCode')}>
-        <div class="tm-inv-in">
-          <span class="tm-inv-l">Invitation code</span>
-          <span class="tm-inv-v code">${esc(code)}</span>
-          <button class="tm-copy" id="cpCode">Copy</button>
+      <div class="tm-slab${bannerUrl('inviteLink') ? ' has-bg' : ''}"${bg('inviteLink')}>
+        <div class="tm-slab-in">
+          <b class="tm-link">${esc(link || 'not ready yet')}</b>
+          <span>Invitation link</span>
         </div>
       </div>
+      <button class="tm-cp" id="cpCode">Copy code</button>
+      <button class="tm-cp" id="cpLink">Copy link</button>
+    </div>
+
+    <div class="tm-title">
+      <h3>Team levels</h3>
+      <span>Grow your team, earn more</span>
     </div>
 
     <div class="tm-card">
-      <div class="tm-card-head"><b>Level breakdown</b><button class="tm-task" id="tmTask">See tasks</button></div>
       ${LVL.map(l => `
         <div class="tm-lvl">
-          <span class="tm-ring">Lv${l.n}</span>
-          <div class="tm-col"><b>${commPct(l.n)}%</b><span>Rate</span></div>
-          <div class="tm-col"><b>${l.count}</b><span>Members</span></div>
-          <div class="tm-col"><b>${ugx(l.earned)}</b><span>Earned</span></div>
+          <span class="tm-tag">LV${l.n}</span>
+          <div class="tm-grid">
+            <div class="tm-col"><b>${commPct(l.n)}%</b><span>Commission</span></div>
+            <div class="tm-col"><b>${l.count}</b><span>Members</span></div>
+            <div class="tm-col"><b>${ugx(l.earned)}</b><span>Rewards</span></div>
+          </div>
         </div>`).join('')}
     </div>
 
-    <div class="notice" id="tmTasks">
-      <b>Team targets</b>
-      <ol>
-        ${(ts?.milestones || TEAM_MILESTONES).map(m => {
-          const cur     = (m.current != null) ? m.current : l1Active;
-          const reached = (m.achieved != null) ? m.achieved : (cur >= m.target);
-          const paid    = !!m.paid;
-          const state   = paid ? 'paid' : reached ? 'reward on its way' : `${cur} of ${m.target}`;
-          return `<li>Reach ${m.target} active members for <b>${ugx(m.reward)}</b>. ${state}</li>`;
-        }).join('')}
-      </ol>
+    <div class="tm-totals">
+      <button class="tm-total${bannerUrl('team') ? ' has-bg' : ''}"${bg('team')} id="tmPeople">
+        <span class="tm-total-in"><b>${people}</b><em>Total members</em></span>
+      </button>
+      <button class="tm-total${bannerUrl('hero') ? ' has-bg' : ''}"${bg('hero')} id="tmRewards">
+        <span class="tm-total-in"><b>${ugx(rewards)}</b><em>Total rewards</em></span>
+      </button>
     </div>
 
-    <div class="notice">
-      <b>How team earnings work</b>
-      <ol>
-        <li>Anyone who signs up on your code or link joins your team.</li>
-        <li>Each time they recharge, ${commPct(1)}% of it reaches you straight away.</li>
-        <li>The people they bring in pay you ${commPct(2)}%, and the level under those ${commPct(3)}%.</li>
-        <li>It lands in your balance the moment a recharge clears, ready to withdraw like any other income.</li>
-      </ol>
-    </div>
+    <ol class="ci-rules">
+      <li>Anyone joining on your code becomes level one, and pays you ${commPct(1)}% of every recharge.</li>
+      <li>Level two pays ${commPct(2)}% and level three pays ${commPct(3)}%.</li>
+      <li>Rewards reach your balance the moment a recharge clears.</li>
+    </ol>
   `;
 
   const copy = (text, msg) => {
@@ -1582,9 +1565,7 @@ function renderTeam() {
   };
   el.querySelector('#cpCode').addEventListener('click', () => copy(code, 'Code copied'));
   el.querySelector('#cpLink').addEventListener('click', () => copy(link, 'Link copied'));
-  el.querySelector('#tmTask').addEventListener('click', () =>
-    document.getElementById('tmTasks')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  el.querySelector('#tmPeople').addEventListener('click', () => switchTab('team'));
+  el.querySelector('#tmPeople').addEventListener('click', () => openRecordsPage('income'));
   el.querySelector('#tmRewards').addEventListener('click', () => openRecordsPage('income'));
 }
 

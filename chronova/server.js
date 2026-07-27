@@ -1633,7 +1633,7 @@ app.post('/checkin', async (req, res) => {
         totalEarned:     FieldValue.increment(bonus)
       });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'checkin', description: `Daily bonus — Day ${newStreak}`,
+        userId, type: 'checkin', description: `Daily bonus, day ${newStreak}`,
         amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
