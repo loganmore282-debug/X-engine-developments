@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * build-core.js — secure the Furagemz user app (index.html).
+ * build-core.js — secure the Chronova user app (index.html).
  *
  * Pipeline:
  *   - FIRST RUN: extract the inline <script type="module"> app code into

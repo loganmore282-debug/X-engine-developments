@@ -1,4 +1,4 @@
-/* FURAGEMZ LIVENESS SUITE
+/* CHRONOVA LIVENESS SUITE
    Boots the REAL server.js against an in-memory database (test-mockdb.js) with
    Firebase auth and MarzPay stubbed, then drives every money flow end-to-end
    over real HTTP: registration + referral graph, deposits (incl. webhook

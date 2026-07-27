@@ -192,20 +192,6 @@ function durPhrase(hours) {
   return hours % 24 === 0 ? `${hours / 24} day${hours / 24 === 1 ? '' : 's'}` : `${hours} hours`;
 }
 
-// Chronova watch tier ladder — VIP 1..7, price x30 over 120 days.
-const GEM_TIERS = [
-  { key: 'casio',    label: 'Casio',    price:  25000 },
-  { key: 'fossil',   label: 'Fossil',   price:  50000 },
-  { key: 'tissot',   label: 'Tissot',   price:  80000 },
-  { key: 'longines', label: 'Longines', price: 150000 },
-  { key: 'omega',    label: 'Omega',    price: 200000 },
-  { key: 'rolex',    label: 'Rolex',    price: 350000 },
-  { key: 'patek',    label: 'Patek',    price: 500000 },
-].map(t => {
-  const expectedReturn = Math.round(t.price * RETURN_MULTIPLE);
-  return { ...t, cycle: CYCLE_DAYS, expectedReturn, dailyReturn: expectedReturn / CYCLE_DAYS };
-});
-function findGemTier(key) { return GEM_TIERS.find(t => t.key === key) || null; }
 
 // TEAM TASK CENTRE — milestone rewards on the COUNT of a user's ACTIVE level-1
 // referrals (an active referral = one who has deposited and activated at least
@@ -848,7 +834,6 @@ app.get('/settings/public', async (_req, res) => {
     commL2: s.commL2 ?? COMM_L2,
     commL3: s.commL3 ?? COMM_L3,
     aboutText: s.aboutText || '',
-    gemTiers: GEM_TIERS,
     maintenanceMode:  !!s.maintenanceMode,
     maintenanceMsg:   s.maintenanceMsg || 'Chronova is under maintenance. Please check back shortly.',
     appVersion:       s.appVersion || APP_VERSION,
@@ -890,25 +875,7 @@ app.get('/settings/public', async (_req, res) => {
   });
 });
 
-// Gem products live in the `products` collection (admin-managed, not hardcoded).
-// GEM_TIERS is only the seed + a safety fallback.
-// Colours match each gem's real appearance: Quartz = clear/silver, Diamond = bright platinum.
-const GEM_COLORS = { quartz: '#64748b', amethyst: '#c084fc', topaz: '#eab308', emerald: '#10b981', sapphire: '#0ea5e9', diamond: '#334155' };
-async function seedProducts() {
-  try {
-    const snap = await db.collection('products').limit(1).get();
-    if (!snap.empty) return;
-    let order = 0;
-    for (const t of GEM_TIERS) {
-      await db.collection('products').add({
-        key: t.key, label: t.label, price: t.price, expectedReturn: t.expectedReturn,
-        cycle: t.cycle, dailyReturn: t.dailyReturn, image: '', color: GEM_COLORS[t.key] || '#7c3aed',
-        order: order++, active: true, createdAt: FieldValue.serverTimestamp()
-      });
-    }
-    console.log('Seeded default gem products');
-  } catch (e) { console.error('seedProducts error:', e.message); }
-}
+// Products live in the `products` collection — admin-managed, never hardcoded.
 async function fetchProducts(includeInactive) {
   const snap = await db.collection('products').get();
   let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1385,9 +1352,9 @@ app.post('/invest/create', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const { tierKey } = req.body;
-  const tier = (await getProductByKeyOrId(tierKey)) || findGemTier(tierKey);
-  if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown gem tier' });
-  if (tier.active === false) return res.status(400).json({ status: 'error', message: 'This gem is not available right now' });
+  const tier = await getProductByKeyOrId(tierKey);
+  if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown product' });
+  if (tier.active === false) return res.status(400).json({ status: 'error', message: 'This product is not available right now' });
   if (tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This gem is coming soon — not on sale yet.' });
   // Ensure derived numbers exist even for a minimally-filled admin product.
   tier.cycle = Number(tier.cycle) || CYCLE_DAYS;
@@ -3606,7 +3573,7 @@ app.post('/admin/products/save', async (req, res) => {
     // Allow both short hosted URLs and full base64 data-URI uploads (the admin
     // downscales images before sending, so this stays well under the 8mb body cap).
     image: String(req.body.image || '').trim().slice(0, 4000000),
-    color: String(req.body.color || '#7c3aed').trim().slice(0, 24),
+    color: String(req.body.color || '#d9ad4e').trim().slice(0, 24),
     order: Math.round(parseFloat(req.body.order) || 0),
     active: req.body.active !== false && req.body.active !== 'false',
     comingSoon: req.body.comingSoon === true || req.body.comingSoon === 'true',
@@ -3625,33 +3592,6 @@ app.post('/admin/products/delete', async (req, res) => {
   if (!req.body.id) return res.status(400).json({ status: 'error', message: 'id required' });
   try { await db.collection('products').doc(req.body.id).delete(); return res.json({ status: 'success' }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
-});
-// One-click reset: push the default GEM_TIERS ladder (current prices, ×RETURN_MULTIPLE
-// payout, fixed cycle) into the DB. Matches existing gems by key and updates their
-// price/cycle/payout/label; any uploaded image, colour, order and active flag are
-// kept. Missing tiers are created. Use after changing the ladder in code.
-app.post('/admin/products/reseed', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('products').get();
-    const byKey = {};
-    snap.docs.forEach(d => { const k = (d.data().key || '').toLowerCase(); if (k) byKey[k] = { id: d.id, ...d.data() }; });
-    let updated = 0, created = 0;
-    for (let i = 0; i < GEM_TIERS.length; i++) {
-      const t = GEM_TIERS[i];
-      const core = { key: t.key, label: t.label, price: t.price, cycle: t.cycle,
-        expectedReturn: t.expectedReturn, dailyReturn: t.dailyReturn,
-        color: GEM_COLORS[t.key] || '#7c3aed', updatedAt: FieldValue.serverTimestamp() };
-      const existing = byKey[t.key];
-      if (existing) { await db.collection('products').doc(existing.id).update(core); updated++; }
-      else {
-        await db.collection('products').add({ ...core, image: '', color: GEM_COLORS[t.key] || '#7c3aed',
-          order: i, active: true, createdAt: FieldValue.serverTimestamp() });
-        created++;
-      }
-    }
-    return res.json({ status: 'success', updated, created, tiers: GEM_TIERS.map(t => ({ label: t.label, price: t.price, expectedReturn: t.expectedReturn, cycle: t.cycle })) });
-  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 // ── 404 + ERROR HANDLER ──

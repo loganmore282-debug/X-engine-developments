@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════
-   FURAGEMZ ADMIN BUILD
+   CHRONOVA ADMIN BUILD
    Source (readable, EDIT THIS)   : admin.html
    Output (obfuscated, DEPLOY THIS): admin.dist.html
    Obfuscates the inline app <script> (renameGlobals:false so inline

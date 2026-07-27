@@ -24,7 +24,7 @@ async function connectMongo(uri) {
     waitQueueTimeoutMS:       10000
   });
   await _client.connect();
-  const dbName = new URL(uri).pathname.slice(1) || 'furagemz';
+  const dbName = new URL(uri).pathname.slice(1) || 'chronova';
   _mdb = _client.db(dbName);
   // Surface pool/topology problems in the logs instead of failing silently.
   _client.on('serverHeartbeatFailed', e => console.warn('Mongo heartbeat failed:', e && e.failure && e.failure.message));
