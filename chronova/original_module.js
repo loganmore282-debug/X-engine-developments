@@ -236,7 +236,7 @@ async function loadCaptcha() {
   if (!box) return;
   box.innerHTML = '<span style="color:#b9a9d6">…</span>';
   const r = await api('/auth/captcha', { method: 'POST' });
-  if (r.status !== 'success') { box.innerHTML = '<span style="color:#b9a9d6">—</span>'; return; }
+  if (r.status !== 'success') { box.innerHTML = '<span style="color:var(--sub)">try again</span>'; return; }
   _captchaId = r.captchaId;
   const cols = ['#8a6418', '#a97f22', '#c9932e', '#b8862b', '#96701d', '#d9ad4e'];
   const letters = String(r.challenge).split('').map(ch => {
@@ -614,7 +614,7 @@ function render() {
 
 // Purchase stamp, owner's format: 07/24/2026 09:55:24
 function fmtStamp(ms) {
-  if (!ms) return '—';
+  if (!ms) return 'not started';
   const d = new Date(ms), p = n => String(n).padStart(2, '0');
   return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
@@ -623,7 +623,7 @@ function fmtStamp(ms) {
 function cycleLabel(inv) {
   const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
   const made  = Number(inv.payoutsMade)  || 0;
-  if (!total) return '—';
+  if (!total) return 'not started';
   const day = inv.status === 'active' ? Math.min(made + 1, total) : total;
   return `${day}/${total} days`;
 }
@@ -722,10 +722,17 @@ function bannerUrl(slot) {
   return (b && b[slot]) ? String(b[slot]) : '';
 }
 
+// Action glyphs live in ONE place. The dashboard and the account screen must
+// never drift apart: whatever the owner uploads is what both show, and the
+// inline fallback is only used when nothing has been uploaded.
+function actionIcon(key, fallback) {
+  const src = (window.CHRONOVA_ICONS || {})[key];
+  return src ? `<img src="${src}" alt="">` : fallback;
+}
+
 function renderHome() {
   const el = document.getElementById('panel-home');
   if (!el) return;
-  const IC = (window.CHRONOVA_ICONS || {});
   const checkedInToday = _account?.lastCheckinDate === todayKey();
 
   const statCard = (slot, label, value) => {
@@ -743,10 +750,10 @@ function renderHome() {
     <div class="hero-static${hero ? '' : ' is-empty'}">${hero ? `<img src="${esc(hero)}" alt="">` : ''}</div>
 
     <div class="act-row">
-      <button class="act" id="qaRecharge"><span class="act-ic">${IC.deposit ? `<img src="${IC.deposit}" alt="">` : ICN.down}</span><span class="act-t">Recharge</span></button>
-      <button class="act" id="qaWithdraw"><span class="act-ic">${IC.withdraw ? `<img src="${IC.withdraw}" alt="">` : ICN.up}</span><span class="act-t">Withdrawal</span></button>
-      <button class="act${checkedInToday ? ' is-done' : ''}" id="qaCheckin"><span class="act-ic">${IC.checkin ? `<img src="${IC.checkin}" alt="">` : ICN.checkin}</span><span class="act-t">Check-in</span></button>
-      <button class="act" id="qaContact"><span class="act-ic">${IC.contact ? `<img src="${IC.contact}" alt="">` : ICN.phone}</span><span class="act-t">Contact Us</span></button>
+      <button class="act" id="qaRecharge"><span class="act-ic">${actionIcon('deposit', ICN.down)}</span><span class="act-t">Recharge</span></button>
+      <button class="act" id="qaWithdraw"><span class="act-ic">${actionIcon('withdraw', ICN.up)}</span><span class="act-t">Withdrawal</span></button>
+      <button class="act${checkedInToday ? ' is-done' : ''}" id="qaCheckin"><span class="act-ic">${actionIcon('checkin', ICN.checkin)}</span><span class="act-t">Check-in</span></button>
+      <button class="act" id="qaContact"><span class="act-ic">${actionIcon('contact', ICN.phone)}</span><span class="act-t">Contact Us</span></button>
     </div>
 
     <div class="wire"><div class="wire-track" id="wireTrack">${wireHtml()}</div></div>
@@ -835,7 +842,7 @@ async function doCheckin() {
   const r = await api('/checkin', { method: 'POST' });
   restore();
   if (r.status === 'success') {
-    toast(`${ugx(r.bonus)} credited — day ${r.streak}`, 'ok');
+    toast(`${ugx(r.bonus)} credited, day ${r.streak}`, 'ok');
     await loadAccount(); await loadTxns();
     renderHome(); renderAccount();
   } else {
@@ -928,7 +935,7 @@ function openRechargeSheet() {
           <li>Choose your amount and confirm the mobile money number holding the funds.</li>
           <li>Tap <b>Process</b>. A payment prompt is pushed to that number within seconds.</li>
           <li>Enter your mobile money <b>PIN</b> on the prompt to approve.</li>
-          <li>Your recharge appears under Records as <b>Processing</b>, then turns <b>Successful</b> once the network confirms it. The balance is credited automatically — there is no manual approval.</li>
+          <li>Your recharge appears under Records as <b>Processing</b>, then turns <b>Successful</b> once the network confirms it. The balance is credited automatically, with no manual approval.</li>
         </ol>
         ${min ? `<p class="notice-min">Minimum recharge: ${ugx(min)}</p>` : ''}
       </div>
@@ -1037,10 +1044,10 @@ function openWithdrawSheet() {
       <div class="notice">
         <b>Before you withdraw</b>
         <ol>
-          <li>Minimum withdrawal: ${min ? ugx(min) : '—'}.</li>
+          <li>Minimum withdrawal: ${min ? ugx(min) : 'not set'}.</li>
           <li>A ${Math.round(rate * 100)}% charge is deducted automatically; the figure above is what lands on your number.</li>
           <li>You must own at least one product before withdrawing.</li>
-          <li>Requests are released within minutes — you will see the result under Records.</li>
+          <li>Requests are released within minutes. You will see the result under Records.</li>
         </ol>
       </div>
 
@@ -1121,9 +1128,9 @@ function recordCard(r) {
   return `<div class="rcard">
     <div class="rcard-top"><b>${ugx(Math.abs(Number(r.amount) || 0))}</b><span class="rec-status ${st.cls}">${st.label}</span></div>
     <div class="rcard-grid">
-      <span>ID</span><em>${esc(String(r.id || r.marzReference || '—')).slice(0, 18)}</em>
+      <span>ID</span><em>${esc(String(r.id || r.marzReference || 'pending')).slice(0, 18)}</em>
       <span>Date</span><em>${esc(r.date || '')}${r.time ? ' ' + esc(r.time) : ''}</em>
-      <span>Number</span><em>${esc(r.phone || r.number || '—')}</em>
+      <span>Number</span><em>${esc(r.phone || r.number || 'not recorded')}</em>
     </div>
   </div>`;
 }
@@ -1175,7 +1182,7 @@ function openCheckinPage() {
         <li>Check in once every day to claim ${ugx(bonus)}.</li>
         <li>The reward is credited to your balance immediately.</li>
         <li>The day resets at midnight, Kampala time.</li>
-        <li>Missing a day costs you that day's reward only — you can check in again the next day.</li>
+        <li>Miss a day and you lose only that day's reward. You can check in again tomorrow.</li>
       </ol>
     </div>
     <button class="btn" id="ciGo"${done ? ' disabled' : ''}>${done ? 'Already checked in today' : 'Check in'}</button>
@@ -1296,7 +1303,7 @@ function openProductDetail(key) {
         <li>Purchase for ${ugx(p.price)} from your balance.</li>
         <li>${ugx(daily)} is credited every 24 hours, timed from the exact moment of purchase.</li>
         <li>The cycle runs for ${cycle} days, returning ${ugx(p.expectedReturn)} in total.</li>
-        <li>Payouts are released by the server — nothing to claim by hand.</li>
+        <li>Payouts are released by the server. There is nothing to claim by hand.</li>
       </ol>
     </div>
 
@@ -1405,17 +1412,17 @@ function openBanksModal() {
 
     <div class="bind-card">
       <button class="bind-row" id="bkNet">
-        <span class="bind-l"><i>*</i>Select bank</span>
-        <span class="bind-v" id="bkNetV">Please select</span>
+        <span class="bind-l"><i>*</i>Network</span>
+        <span class="bind-v" id="bkNetV">Tap to choose</span>
         <span class="bind-go">${SVG_CHEV}</span>
       </button>
       <div class="bind-row is-field">
-        <span class="bind-l"><i>*</i>Account holder name</span>
-        <input id="bkName" type="text" placeholder="Please enter account holder name">
+        <span class="bind-l"><i>*</i>Account name</span>
+        <input id="bkName" type="text" placeholder="Name registered on the SIM">
       </div>
       <div class="bind-row is-field">
-        <span class="bind-l"><i>*</i>Bank account</span>
-        <input id="bkPhone" type="tel" inputmode="numeric" placeholder="Please enter bank account number">
+        <span class="bind-l"><i>*</i>Number</span>
+        <input id="bkPhone" type="tel" inputmode="numeric" placeholder="Mobile money number">
       </div>
     </div>
 
@@ -1424,7 +1431,7 @@ function openBanksModal() {
   bindDeletes();
 
   document.getElementById('bkNet').addEventListener('click', () => openPicker({
-    title: 'Select bank', options: NETWORKS, selected: network,
+    title: 'Choose network', options: NETWORKS, selected: network,
     onConfirm: v => { network = v; document.getElementById('bkNetV').textContent = v;
                       document.getElementById('bkNetV').classList.add('is-set'); }
   }));
@@ -1460,26 +1467,26 @@ function openContactPage() {
   const tile = (label, url) => url
     ? `<a class="tg-row" href="${esc(url)}" target="_blank" rel="noopener">
          <span class="tg-art">${TG_MARK}</span>
-         <span class="tg-tx"><b>${label}</b><button class="tg-jump">Click to jump</button></span>
+         <span class="tg-tx"><b>${label}</b><button class="tg-jump">Open</button></span>
        </a>`
     : '';
   const rows = [
-    tile('Official service', S.supportTelegram),
-    tile('Official group',   S.telegramGroup),
-    tile('Official channel', S.telegramChannel),
+    tile('Support desk', S.supportTelegram),
+    tile('Community group', S.telegramGroup),
+    tile('News channel', S.telegramChannel),
   ].filter(Boolean).join('');
 
   openModal(`
     <div class="modal-head"><h2>Customer care</h2><button class="modal-close"></button></div>
-    ${S.supportHours ? `<div class="cc-hours">Online time: ${esc(S.supportHours)}</div>` : ''}
+    ${S.supportHours ? `<div class="cc-hours"><span>Support hours</span><b>${esc(S.supportHours)}</b></div>` : ''}
     ${bannerUrl('contact') ? `<div class="page-banner"><img src="${esc(bannerUrl('contact'))}" alt=""></div>` : ''}
-    ${rows ? `<div class="cc-label">Telegram</div>${rows}` : `<div class="empty-note">No contact channels published yet.</div>`}
+    ${rows ? `<div class="cc-label">Reach us on Telegram</div>${rows}` : `<div class="empty-note">No contact channels published yet.</div>`}
     <div class="notice">
-      <b>Rule</b>
+      <b>Before you message us</b>
       <ol>
-        <li>For any question, reach our online customer service through the links above. We are happy to help.</li>
-        <li>Keep your password to yourself. Official staff will never ask you for it.</li>
-        <li>Only trust links published on this page — anywhere else is not us.</li>
+        <li>Any question at all, use one of the links above and a Chronova agent will pick it up.</li>
+        <li>Your password is yours alone. Nobody from Chronova will ever ask for it.</li>
+        <li>These links are the only ones we publish. Anything else is not us.</li>
       </ol>
     </div>
   `);
@@ -1491,8 +1498,8 @@ function openContactPage() {
 function renderTeam() {
   const el = document.getElementById('panel-team');
   if (!el) return;
-  const code = _account?.referralCode || _account?.username || '—';
-  const link = code !== '—' ? referralLink(code) : '';
+  const code = _account?.referralCode || _account?.username || 'not ready yet';
+  const link = code !== 'not ready yet' ? referralLink(code) : '';
   const ts = _teamStats;
   const l1Active = ts?.l1ActiveCount ?? ts?.l1DepositTotal ?? 0;
   const LVL = [
@@ -1506,22 +1513,22 @@ function renderTeam() {
 
   el.innerHTML = `
     <div class="tm-head">
-      <h2>Invite friends</h2>
-      <p>Build your team and earn on every recharge</p>
+      <h2>Grow your team</h2>
+      <p>Every recharge below you pays you</p>
     </div>
 
     ${bannerUrl('team') ? `<div class="page-banner"><img src="${esc(bannerUrl('team'))}" alt=""></div>` : ''}
 
     <div class="tm-totals">
-      <button class="tm-total" id="tmPeople"><b>${people}</b><span>Total people ›</span></button>
-      <button class="tm-total" id="tmRewards"><b>${ugx(rewards)}</b><span>Total rewards ›</span></button>
+      <button class="tm-total" id="tmPeople"><b>${people}</b><span>Team size</span></button>
+      <button class="tm-total" id="tmRewards"><b>${ugx(rewards)}</b><span>Earned from team</span></button>
     </div>
 
     <div class="tm-invites">
       <div class="tm-inv${bannerUrl('inviteLink') ? ' has-bg' : ''}"${bg('inviteLink')}>
         <div class="tm-inv-in">
           <span class="tm-inv-l">Invitation link</span>
-          <span class="tm-inv-v link">${esc(link || '—')}</span>
+          <span class="tm-inv-v link">${esc(link || 'not ready yet')}</span>
           <button class="tm-copy" id="cpLink">Copy</button>
         </div>
       </div>
@@ -1535,42 +1542,42 @@ function renderTeam() {
     </div>
 
     <div class="tm-card">
-      <div class="tm-card-head"><b>My team</b><button class="tm-task" id="tmTask">Task centre ›</button></div>
+      <div class="tm-card-head"><b>Level breakdown</b><button class="tm-task" id="tmTask">See tasks</button></div>
       ${LVL.map(l => `
         <div class="tm-lvl">
           <span class="tm-ring">Lv${l.n}</span>
-          <div class="tm-col"><b>${commPct(l.n)}%</b><span>Commission</span></div>
-          <div class="tm-col"><b>${l.count}</b><span>Users</span></div>
-          <div class="tm-col"><b>${ugx(l.earned)}</b><span>Reward</span></div>
+          <div class="tm-col"><b>${commPct(l.n)}%</b><span>Rate</span></div>
+          <div class="tm-col"><b>${l.count}</b><span>Members</span></div>
+          <div class="tm-col"><b>${ugx(l.earned)}</b><span>Earned</span></div>
         </div>`).join('')}
     </div>
 
     <div class="notice" id="tmTasks">
-      <b>Task centre</b>
+      <b>Team targets</b>
       <ol>
         ${(ts?.milestones || TEAM_MILESTONES).map(m => {
           const cur     = (m.current != null) ? m.current : l1Active;
           const reached = (m.achieved != null) ? m.achieved : (cur >= m.target);
           const paid    = !!m.paid;
           const state   = paid ? 'paid' : reached ? 'reward on its way' : `${cur} of ${m.target}`;
-          return `<li>Refer ${m.target} active members — <b>${ugx(m.reward)}</b> · ${state}</li>`;
+          return `<li>Reach ${m.target} active members for <b>${ugx(m.reward)}</b>. ${state}</li>`;
         }).join('')}
       </ol>
     </div>
 
     <div class="notice">
-      <b>How it works</b>
+      <b>How team earnings work</b>
       <ol>
-        <li>A friend who signs up with your code or link joins your team.</li>
-        <li>When they recharge, you receive ${commPct(1)}% of the amount straight away.</li>
-        <li>Their own referrals earn you ${commPct(2)}%, and the level below that ${commPct(3)}%.</li>
-        <li>Rewards land in your balance as each recharge clears, and can be withdrawn like any other income.</li>
+        <li>Anyone who signs up on your code or link joins your team.</li>
+        <li>Each time they recharge, ${commPct(1)}% of it reaches you straight away.</li>
+        <li>The people they bring in pay you ${commPct(2)}%, and the level under those ${commPct(3)}%.</li>
+        <li>It lands in your balance the moment a recharge clears, ready to withdraw like any other income.</li>
       </ol>
     </div>
   `;
 
   const copy = (text, msg) => {
-    if (!text || text === '—') return;
+    if (!text || text === 'not ready yet') return;
     try { navigator.clipboard.writeText(text); toast(msg, 'ok'); } catch (_) {}
   };
   el.querySelector('#cpCode').addEventListener('click', () => copy(code, 'Code copied'));
@@ -1644,10 +1651,10 @@ function renderAccount() {
     </div>
 
     <div class="acc-acts">
-      <button class="aact" id="acRecharge"><span class="aact-ic">${ICN.down}</span><span>Recharge</span></button>
-      <button class="aact" id="acWithdraw"><span class="aact-ic">${ICN.up}</span><span>Withdrawal</span></button>
-      <button class="aact${done ? ' is-done' : ''}" id="acCheckin"><span class="aact-ic">${ICN.checkin}</span><span>Check-in</span></button>
-      <button class="aact" id="acContact"><span class="aact-ic">${ICN.phone}</span><span>Contact Us</span></button>
+      <button class="aact" id="acRecharge"><span class="aact-ic">${actionIcon('deposit', ICN.down)}</span><span>Recharge</span></button>
+      <button class="aact" id="acWithdraw"><span class="aact-ic">${actionIcon('withdraw', ICN.up)}</span><span>Withdrawal</span></button>
+      <button class="aact${done ? ' is-done' : ''}" id="acCheckin"><span class="aact-ic">${actionIcon('checkin', ICN.checkin)}</span><span>Check-in</span></button>
+      <button class="aact" id="acContact"><span class="aact-ic">${actionIcon('contact', ICN.phone)}</span><span>Contact Us</span></button>
     </div>
 
     <button class="mission" id="acMission">
@@ -1700,7 +1707,7 @@ function openDownloadModal() {
     <div class="dl-meta">
       <div class="dl-row"><span>Version</span><b>${esc(s.appVersion || '1.0.0')}</b></div>
       <div class="dl-row"><span>Developer</span><b>${esc(s.appDeveloper || 'Chronova Developers')}</b></div>
-      <div class="dl-row"><span>Size</span><b>${esc(s.appSize || '—')}</b></div>
+      <div class="dl-row"><span>Size</span><b>${esc(s.appSize || 'unknown')}</b></div>
       <div class="dl-row"><span>Platform</span><b>Android · iPhone · Web</b></div>
     </div>
     ${installed
@@ -1728,7 +1735,7 @@ function openAboutModal() {
   const tagline = _publicSettings?.brandTagline || 'Grow your money with watches.';
   const paras = raw
     ? raw.split(/\n{2,}|\r\n\r\n/).map(p => `<p>${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('')
-    : `<p>Chronova is a mobile-money savings and rewards platform. You buy a watch tier, and it pays out in full when it matures — a simple, fixed return with no daily claiming.</p>
+    : `<p>Chronova is a mobile-money savings and rewards platform. You buy a watch tier, and it pays out in full when it matures. A simple, fixed return with no daily claiming.</p>
        <p>Invite friends with your referral code to earn rewards across three levels, redeem codes for instant wallet credit, and check in daily for a bonus.</p>`;
   openModal(`
     <div class="modal-head"><h2>About Chronova</h2><button class="modal-close">${ICN.close}</button></div>

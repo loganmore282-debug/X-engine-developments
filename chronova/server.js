@@ -177,7 +177,7 @@ const COMM_L3          = 0.01;    // level 3
 const LIQUIDITY_FEE    = 0.17;    // withdrawal fee
 const RETURN_MULTIPLE  = 30;      // payout = price * RETURN_MULTIPLE
 const CYCLE_DAYS       = 120;     // investment period (days), fixed for every watch tier
-// EARNINGS: each gem pays daily cashback (expectedReturn / cycle) every 24 hours
+// EARNINGS: each product pays daily cashback (expectedReturn / cycle) every 24 hours
 // from the exact purchase time, for `cycle` days, totalling expectedReturn.
 // Gateway status buckets. A payment is credited on SUCCESS and only marked failed
 // on a TERMINAL failure. 'error' is deliberately EXCLUDED — MarzPay reports its
@@ -962,7 +962,7 @@ const _FEED_ACTIONS = {
   admin_credit: 'topped up',
   withdrawal:   'withdrew',
   gem_payout:   'earned cashback of',
-  investment:   'activated a gem worth',
+  investment:   'activated a product worth',
   commission:   'earned a referral reward of',
   team_reward:  'earned a team reward of',
   redeem:       'redeemed a code for',
@@ -1319,8 +1319,8 @@ app.get('/team/members', async (req, res) => {
         totalInvested: d.totalInvested || 0,
         // Money this member has DEPOSITED (real deposits + admin credit) — this is
         // exactly what drives your team-deposit milestones, so the app shows it on
-        // each row. A member can have "Gem active" yet 0 deposited (they bought
-        // from a bonus/gift), which is why deposits and gems are shown separately.
+        // each row. A member can hold a product yet have 0 deposited (they bought
+        // from a bonus or gift), which is why deposits and holdings are separate.
         deposited: d.totalDeposited || 0,
         referralCode: d.referralCode || d.username || null,
       });
@@ -1357,7 +1357,7 @@ app.get('/team/stats', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// INVESTMENTS — buy a gem tier, paid out in full at maturity (no daily drip)
+// INVESTMENTS: buy a product, paid out daily across its cycle
 // ═══════════════════════════════════════════
 app.post('/invest/create', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -1366,7 +1366,7 @@ app.post('/invest/create', async (req, res) => {
   const tier = await getProductByKeyOrId(tierKey);
   if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown product' });
   if (tier.active === false) return res.status(400).json({ status: 'error', message: 'This product is not available right now' });
-  if (tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This gem is coming soon — not on sale yet.' });
+  if (tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This product is not on sale yet.' });
   // Ensure derived numbers exist even for a minimally-filled admin product.
   tier.cycle = Number(tier.cycle) || CYCLE_DAYS;
   tier.expectedReturn = Number(tier.expectedReturn) || Math.round((tier.price || 0) * RETURN_MULTIPLE);
@@ -1438,7 +1438,7 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     const ref = w.provider === 'obpay' ? w.marzReference : (w.marzTxUuid || w.marzReference);
     if (!ref)
       return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference',
-        message: `This payout never reached ${provName} (no gateway reference) — nothing was sent, so the failure/refund is correct.` });
+        message: `This payout never reached ${provName} (no gateway reference), so nothing was sent and the failure or refund is correct.` });
     const real = await getPayoutStatus(w);
     const sent   = PAY_OK.includes(real);
     const failed = PAY_FAIL.includes(real);
@@ -1586,7 +1586,7 @@ app.post('/admin/user/set-referrer', async (req, res) => {
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().referredBy) return res.status(400).json({ status: 'error', message: 'This user already has a referrer — reassigning is not allowed.' });
+    if (uSnap.data().referredBy) return res.status(400).json({ status: 'error', message: 'This user already has a referrer, so reassigning is not allowed.' });
     const referrerId = await resolveReferrer(referrerCode);
     if (!referrerId) return res.status(404).json({ status: 'error', message: 'No user found for that referral code.' });
     if (referrerId === userId) return res.status(400).json({ status: 'error', message: 'A user cannot refer themselves.' });
@@ -1679,7 +1679,7 @@ app.post('/redeem', async (req, res) => {
     if (d.maxUsers && (d.usedBy || []).length >= d.maxUsers) return res.status(400).json({ status: 'error', message: 'This code has reached its usage limit' });
     if (d.expiresAt && new Date(tsMillis(d.expiresAt)) < new Date()) return res.status(400).json({ status: 'error', message: 'This code has expired' });
     if (_redeemingCodes.has(doc.id))
-      return res.status(429).json({ status: 'error', message: 'This code is being processed — try again in a moment.' });
+      return res.status(429).json({ status: 'error', message: 'This code is being processed. Try again in a moment.' });
     _redeemingCodes.add(doc.id);
     try {
       const amount = Math.max(0, Math.round(d.amount || 0));
@@ -2328,7 +2328,7 @@ app.post('/admin/deposit/reject', async (req, res) => {
     const ref = db.collection('pendingDeposits').doc(String(req.body.orderId || ''));
     const snap = await ref.get();
     if (!snap.exists || !snap.data().manual) return res.status(404).json({ status: 'error', message: 'Order not found' });
-    if (snap.data().status === 'matched') return res.status(409).json({ status: 'error', message: 'Already credited — cannot reject' });
+    if (snap.data().status === 'matched') return res.status(409).json({ status: 'error', message: 'Already credited, so it cannot be rejected' });
     await ref.update({ status: 'rejected', manualPending: false,
       rejectReason: String(req.body.reason || 'Payment not received'), rejectedAt: FieldValue.serverTimestamp() });
     return res.json({ status: 'success' });
@@ -2520,7 +2520,7 @@ app.post('/withdraw/request', async (req, res) => {
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
     if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
-    // Anti-abuse: a user must have activated at least one gem before withdrawing
+    // Anti-abuse: a user must own at least one product before withdrawing
     // (stops someone registering, taking the welcome bonus, and cashing out).
     // Admin-toggleable via settings.requireInvestToWithdraw (default: required).
     const mustInvest = sett.requireInvestToWithdraw !== false;
@@ -2782,7 +2782,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const witSnap = await db.collection('withdrawals').doc(withdrawalId).get();
     if (!witSnap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const wit = witSnap.data();
-    if (wit.status !== 'pending') return res.status(400).json({ status: 'error', message: `Cannot process — status is '${wit.status}'` });
+    if (wit.status !== 'pending') return res.status(400).json({ status: 'error', message: `Cannot process, the status is '${wit.status}'` });
 
     const phone = wit.withdrawalPhone || wit.userPhone || '';
     const netAmount = wit.netAmount || wit.amount;
@@ -2799,7 +2799,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
         const busy = z.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg);
         const detail = (rawMsg && !busy) ? ` ZengaPay said: ${rawMsg}` : '';
         return res.status(400).json({ status: 'error',
-          message: `ZengaPay could not send this payout right now — this is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ZengaPay wallet balance and IP whitelist).` });
+          message: `ZengaPay could not send this payout right now. That is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ZengaPay wallet balance and IP whitelist).` });
       }
       await db.collection('withdrawals').doc(withdrawalId).update({
         status: 'processing', provider: 'zengapay', marzReference: reference,
@@ -2809,7 +2809,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
         const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
         if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing', marzReference: reference });
       } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-      return res.json({ status: 'success', message: `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}` });
+      return res.json({ status: 'success', message: `Withdrawal processing. ${fmtUGX(netAmount)} is being sent to ${phone}` });
     }
 
     if (provider === 'obpay') {
@@ -2820,7 +2820,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
         const busy = ob?.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg);
         const detail = (rawMsg && !busy) ? ` ObPay said: ${rawMsg}` : '';
         return res.status(400).json({ status: 'error',
-          message: `ObPay could not send this payout right now — this is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ObPay wallet balance).` });
+          message: `ObPay could not send this payout right now. That is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ObPay wallet balance).` });
       }
       await db.collection('withdrawals').doc(withdrawalId).update({
         status: 'processing', provider: 'obpay', marzReference: reference,
@@ -2830,7 +2830,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
         const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
         if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing', marzReference: reference });
       } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-      return res.json({ status: 'success', message: `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}` });
+      return res.json({ status: 'success', message: `Withdrawal processing. ${fmtUGX(netAmount)} is being sent to ${phone}` });
     }
 
     // ── MarzPay payout (default) ──
@@ -2844,7 +2844,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
       const reason = marzUserMsg(mpData, '');
       const detail = (reason && reason !== PROVIDER_BUSY_MSG) ? ` MarzPay said: ${reason}` : '';
       return res.status(400).json({ status: 'error',
-        message: `MarzPay could not send this payout right now — this is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your MarzPay disbursement balance).` });
+        message: `MarzPay could not send this payout right now. That is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your MarzPay disbursement balance).` });
     }
     const { date, time } = nowStr();
     const batch = db.batch();
@@ -2866,7 +2866,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
       if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: witSandbox ? 'success' : 'processing', marzReference: reference });
     } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
     return res.json({ status: 'success',
-      message: witSandbox ? `Sandbox: withdrawal marked complete — ${fmtUGX(netAmount)} to ${phone}` : `Withdrawal processing — ${fmtUGX(netAmount)} being sent to ${phone}`,
+      message: witSandbox ? `Sandbox: withdrawal marked complete — ${fmtUGX(netAmount)} to ${phone}` : `Withdrawal processing. ${fmtUGX(netAmount)} is being sent to ${phone}`,
       sandbox: witSandbox });
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
@@ -2899,7 +2899,7 @@ app.post('/withdraw/reject', async (req, res) => {
       });
       refunded = true;
     });
-    if (!refunded) return res.status(400).json({ status: 'error', message: 'Already finalised — nothing refunded' });
+    if (!refunded) return res.status(400).json({ status: 'error', message: 'Already finalised, nothing refunded' });
     // Reflect the rejection in the user's history: flip the original withdrawal
     // record off "Processing" and add a visible refund record.
     try {
@@ -3058,7 +3058,7 @@ app.post('/admin/debit', async (req, res) => {
         amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     });
-    return res.json({ status: 'success', message: `Removed ${fmtUGX(amt)} — new balance ${fmtUGX(newBal)}`, newBalance: newBal });
+    return res.json({ status: 'success', message: `Removed ${fmtUGX(amt)}. New balance ${fmtUGX(newBal)}`, newBalance: newBal });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/ban', async (req, res) => {
@@ -3108,7 +3108,7 @@ app.post('/admin/deposit/complete', async (req, res) => {
     const result = snap.data().provider === 'zengapay' ? await pollZengaDepositStatus(snap) : snap.data().provider === 'obpay' ? await pollObpayDepositStatus(snap) : await pollMarzDepositStatus(snap);
     if (result.credited) return res.json({ status: 'success', message: `Credited ${fmtUGX(result.amount || snap.data().amount)} to user` });
     if (result.failed) return res.status(400).json({ status: 'error', message: 'MarzPay confirms payment failed' });
-    return res.status(400).json({ status: 'error', message: 'MarzPay status still pending — try again in a moment' });
+    return res.status(400).json({ status: 'error', message: 'MarzPay status is still pending. Try again in a moment' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 // ── USER-TOTALS RECOUNT ──
@@ -3285,7 +3285,7 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
       snap = await db.collection('pendingDeposits').doc(depositId).get();
     }
     const ok = await creditMarzDeposit(snap, snap.data().amount, 'ADMIN-FORCED');
-    if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit — try again' });
+    if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit. Try again' });
     return res.json({ status: 'success', message: `Force-credited ${fmtUGX(snap.data().amount)} to the user` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -3312,7 +3312,7 @@ app.post('/admin/stats', async (req, res) => {
       totalCommissions += u.commissionEarned || 0;
       if (u.referredBy) referredUsers += 1;
     });
-    // Cashback still owed on active gems (expectedReturn minus what's been paid).
+    // Income still owed on active products (expectedReturn minus what's been paid).
     let outstandingPayout = 0;
     investmentsSnap.forEach(d => {
       const inv = d.data();
@@ -3321,7 +3321,7 @@ app.post('/admin/stats', async (req, res) => {
     let pendingPayouts = 0;
     withdrawalsSnap.forEach(d => pendingPayouts += (d.data().netAmount || d.data().amount || 0));
     // Overall health: real money that came in vs everything the platform still owes
-    // (current wallet balances + pending withdrawals + future gem cashback).
+    // (current wallet balances + pending withdrawals + future product income).
     const netCashIn    = totalDeposited - totalWithdrawn;
     const liabilities  = totalWallet + pendingPayouts + outstandingPayout;
     const healthBalance = netCashIn - liabilities;
@@ -3572,7 +3572,7 @@ app.post('/admin/referrals/list', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// ── ADMIN: GEM PRODUCTS (create/edit/delete) ──
+// ── ADMIN: PRODUCTS (create/edit/delete) ──
 app.post('/admin/products/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { return res.json({ status: 'success', products: await fetchProducts(true) }); }
@@ -3585,8 +3585,8 @@ app.post('/admin/products/save', async (req, res) => {
   if (price <= 0) return res.status(400).json({ status: 'error', message: 'Price is required' });
   const cycle = Math.max(1, Math.round(parseFloat(req.body.cycle) || CYCLE_DAYS));
   const expectedReturn = Math.round(parseFloat(req.body.expectedReturn) || price * RETURN_MULTIPLE);
-  const label = String(req.body.label || '').replace(/[<>]/g, '').trim().slice(0, 40) || 'Gem';
-  const key = String(req.body.key || label).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24) || ('gem' + Date.now());
+  const label = String(req.body.label || '').replace(/[<>]/g, '').trim().slice(0, 40) || 'Product';
+  const key = String(req.body.key || label).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24) || ('item' + Date.now());
   const data = {
     key, label, price, cycle, expectedReturn, dailyReturn: expectedReturn / cycle,
     // Allow both short hosted URLs and full base64 data-URI uploads (the admin
