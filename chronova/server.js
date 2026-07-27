@@ -92,7 +92,7 @@ app.use('/auth/', authLimiter);
 app.use('/admin/check-key', adminLoginLimiter);
 app.use('/admin/', adminLimiter);
 // Money/value endpoints added in phase 2 will be registered here as they land:
-['/checkin', '/withdraw/request', '/invest/create', '/invest/boost', '/deposit/marzpay', '/deposit/card', '/redeem']
+['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/card', '/redeem']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── MAINTENANCE GATE ──
@@ -170,7 +170,7 @@ const APP_SIZE         = '2.4 MB';  // approximate installed PWA size
 const MIN_DEPOSIT      = 25000;
 const MIN_WITHDRAWAL   = 10000;   // no multiples restriction
 const WELCOME_BONUS    = 5000;
-const CHECKIN_BONUS    = 300;
+const CHECKIN_BONUS    = 500;
 const COMM_L1          = 0.30;    // referral bonus, level 1
 const COMM_L2          = 0.03;    // level 2
 const COMM_L3          = 0.01;    // level 3
@@ -179,12 +179,6 @@ const RETURN_MULTIPLE  = 30;      // payout = price * RETURN_MULTIPLE
 const CYCLE_DAYS       = 120;     // investment period (days), fixed for every watch tier
 // EARNINGS: each gem pays daily cashback (expectedReturn / cycle) every 24 hours
 // from the exact purchase time, for `cycle` days, totalling expectedReturn.
-// BOOST / ACCELERATE — after BOOST_UNLOCK_DAYS the holder may pay BOOST_COST_PCT of
-// the gem's total return to compress all remaining payouts into BOOST_MATURE_DAYS.
-const BOOST_UNLOCK_DAYS  = 5;     // boost becomes available 5 days after purchase
-const BOOST_COST_PCT     = 0.30;  // boost fee = 30% of the gem's total return
-const BOOST_MATURE_DAYS  = 5;     // after a boost, the gem finishes paying in 5 days
-const BOOST_MATURE_HOURS = BOOST_MATURE_DAYS * 24;
 // Gateway status buckets. A payment is credited on SUCCESS and only marked failed
 // on a TERMINAL failure. 'error' is deliberately EXCLUDED — MarzPay reports its
 // transient provider outages (e.g. DATABASE_ERROR) as 'error', and treating that
@@ -547,7 +541,11 @@ function tsMillis(v) {
 // marks the investment `commDone` so the reconciler skips it. On ANY failure it
 // leaves commDone unset, so reconcileCommissions() retries it later — a referral
 // reward is therefore never permanently lost, even if this call fails mid-way.
-async function payCommissions(investorId, amount, investmentId) {
+// sourceId is whatever the reward hangs off — a deposit id now, an investment id
+// for the legacy records the reconciler still sweeps. Both are Mongo doc ids, so
+// the per-source dedup flag can never collide between the two.
+async function payCommissions(investorId, amount, sourceId, sourceKind = 'deposit') {
+  const investmentId = sourceId;
   let ok = false;
   // Serialise per investment so the invest-time call and the reconciler can't
   // both pay the same commission (the per-level flags are re-checked in the
@@ -556,7 +554,10 @@ async function payCommissions(investorId, amount, investmentId) {
     try { await _payChain(investorId, amount, investmentId); ok = true; }
     catch (e) { console.error('Commission error:', e.message); }
   });
-  if (ok) { try { await db.collection('investments').doc(investmentId).update({ commDone: true }); } catch (_) {} }
+  if (ok) {
+    const coll = sourceKind === 'investment' ? 'investments' : 'pendingDeposits';
+    try { await db.collection(coll).doc(sourceId).update({ commDone: true }); } catch (_) {}
+  }
 }
 async function _payChain(investorId, amount, investmentId) {
   const { date, time } = nowStr();
@@ -594,7 +595,7 @@ async function _payChain(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l1Id, type: 'commission',
-          description: `Level 1 referral bonus (${Math.round(commL1*100)}%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          description: `Level 1 referral bonus (${Math.round(commL1*100)}%) — ${investor.name || investor.phone} recharged ${fmtUGX(amount)}`,
           amount: l1Amt, level: 1, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -621,7 +622,7 @@ async function _payChain(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l2Id, type: 'commission',
-          description: `Level 2 referral bonus (${Math.round(commL2*100)}%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          description: `Level 2 referral bonus (${Math.round(commL2*100)}%) — ${investor.name || investor.phone} recharged ${fmtUGX(amount)}`,
           amount: l2Amt, level: 2, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -647,7 +648,7 @@ async function _payChain(investorId, amount, investmentId) {
         });
         t.set(db.collection('transactions').doc(), {
           userId: l3Id, type: 'commission',
-          description: `Level 3 referral bonus (${Math.round(commL3*100)}%) — ${investor.name || investor.phone} bought ${fmtUGX(amount)}`,
+          description: `Level 3 referral bonus (${Math.round(commL3*100)}%) — ${investor.name || investor.phone} recharged ${fmtUGX(amount)}`,
           amount: l3Amt, level: 3, fromUserId: investorId, investmentId, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -658,20 +659,20 @@ async function _payChain(investorId, amount, investmentId) {
 
 // ── COMMISSION RECONCILER ──
 // Safety net so a referrer NEVER loses a reward: re-runs payCommissions for any
-// investment not yet marked commDone (a call that failed, or an older record).
-// payCommissions is idempotent (per-level commPaid_<invId> flags + transactions),
-// so re-running can only pay what's still owed — never double-pay.
+// credited recharge not yet marked commDone (a call that failed, or an older
+// record). payCommissions is idempotent (per-level commPaid_<id> flags +
+// transactions), so re-running can only pay what's still owed — never double-pay.
 let _reconcilingComm = false;
 async function reconcileCommissions(limit = 800) {
   if (_reconcilingComm) return 0;
   _reconcilingComm = true;
   let fixed = 0;
   try {
-    const snap = await db.collection('investments').orderBy('createdAt', 'desc').limit(limit).get();
+    const snap = await db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(limit).get();
     for (const doc of snap.docs) {
-      const inv = doc.data();
-      if (inv.commDone) continue;
-      await payCommissions(inv.userId, inv.amount, doc.id);
+      const dep = doc.data();
+      if (dep.commDone || dep.status !== 'matched') continue;
+      await payCommissions(dep.userId, dep.creditedAmount || dep.amount, doc.id, 'deposit');
       fixed++;
     }
   } catch (e) { console.error('reconcileCommissions error:', e.message); }
@@ -848,15 +849,28 @@ app.get('/settings/public', async (_req, res) => {
     commL3: s.commL3 ?? COMM_L3,
     aboutText: s.aboutText || '',
     gemTiers: GEM_TIERS,
-    boostUnlockDays:  s.boostUnlockDays  ?? BOOST_UNLOCK_DAYS,
-    boostMatureHours: s.boostMatureHours ?? BOOST_MATURE_HOURS,
-    boostMatureDays:  s.boostMatureDays  ?? BOOST_MATURE_DAYS,
-    boostCostPct:     s.boostCostPct     ?? BOOST_COST_PCT,
     maintenanceMode:  !!s.maintenanceMode,
     maintenanceMsg:   s.maintenanceMsg || 'Chronova is under maintenance. Please check back shortly.',
     appVersion:       s.appVersion || APP_VERSION,
     appDeveloper:     s.appDeveloper || 'Chronova Developers',
     appSize:          s.appSize || APP_SIZE,
+    // Every image the app renders comes from here. There are deliberately no
+    // built-in banners: an unset slot stays empty rather than falling back.
+    banners: {
+      hero:       s.bannerHero       || '',
+      checkin:    s.bannerCheckin    || '',
+      contact:    s.bannerContact    || '',
+      team:       s.bannerTeam       || '',
+      inviteCode: s.bannerInviteCode || '',
+      inviteLink: s.bannerInviteLink || '',
+      balance:    s.bannerBalance    || '',
+      income:     s.bannerIncome     || '',
+      cumulative: s.bannerCumulative || '',
+      withdrawn:  s.bannerWithdrawn  || '',
+    },
+    rulesText:       s.rulesText       || '',
+    telegramGroup:   s.telegramGroup   || '',
+    telegramChannel: s.telegramChannel || '',
     slideshowImages: Array.isArray(s.slideshowImages) ? s.slideshowImages : [],
     announcementBg:  s.announcementBg || '',
     brandTagline:    s.brandTagline || '',
@@ -909,11 +923,12 @@ async function getProductByKeyOrId(idOrKey) {
   if (byId.exists) return { id: byId.id, ...byId.data() };
   return null;
 }
+// The catalogue is EXACTLY what the admin has published. No seed list, no
+// fallback: if the panel is empty the app shows an empty catalogue.
 app.get('/products', async (_req, res) => {
   try {
-    const list = await fetchProducts(false);
-    res.json({ status: 'success', products: list.length ? list : GEM_TIERS });
-  } catch (e) { res.json({ status: 'success', products: GEM_TIERS }); }
+    res.json({ status: 'success', products: await fetchProducts(false) });
+  } catch (e) { res.json({ status: 'success', products: [] }); }
 });
 
 // ── USERNAMES ──
@@ -1386,10 +1401,8 @@ app.post('/invest/create', async (req, res) => {
       return res.status(400).json({ status: 'error', message: `Need ${fmtUGX(tier.price)}, have ${fmtUGX(user.walletBalance || 0)}` });
 
     const sett = await getSettings();
-    const unlockDays = Number(sett.boostUnlockDays ?? BOOST_UNLOCK_DAYS);
     const now = Date.now();
     const matDate = new Date(now + tier.cycle * 86400000);
-    const boostUnlockDate = new Date(now + unlockDays * 86400000);
     // Daily cashback schedule: first payout is exactly 24 hours after purchase,
     // then every 24 hours, for `cycle` days. dailyPayout × cycle === expectedReturn
     // (the final payout absorbs any rounding remainder so the total is exact).
@@ -1411,7 +1424,6 @@ app.post('/invest/create', async (req, res) => {
         userId, tierKey: tier.key, tierLabel: tier.label,
         amount: tier.price, cycle: tier.cycle, expectedReturn: tier.expectedReturn,
         status: 'active', maturityDate: matDate,
-        boosted: false, boostUnlockDate,
         dailyPayout, payoutsTotal: tier.cycle, payoutsMade: 0, paidOut: 0, nextPayoutAt,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
@@ -1421,7 +1433,6 @@ app.post('/invest/create', async (req, res) => {
         investmentId: invRef.id, tierKey: tier.key, createdAt: FieldValue.serverTimestamp()
       });
     }));
-    payCommissions(userId, tier.price, invId).catch(e => console.error('Commission err:', e.message));
     return res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.label} for ${fmtUGX(tier.price)}` });
   } catch (e) {
     console.error('Invest error:', e.message);
@@ -1429,218 +1440,6 @@ app.post('/invest/create', async (req, res) => {
   }
 });
 
-// BOOST — after the unlock window, pay BOOST_COST_PCT of the gem's total return
-// to compress every remaining daily payout into BOOST_MATURE_DAYS. The gem's total
-// payout is unchanged; the remaining balance is just paid out over 5 days instead.
-app.post('/invest/boost', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const { investmentId } = req.body;
-  if (!investmentId) return res.status(400).json({ status: 'error', message: 'investmentId required' });
-  try {
-    const invRef  = db.collection('investments').doc(investmentId);
-    const invSnap = await invRef.get();
-    if (!invSnap.exists) return res.status(404).json({ status: 'error', message: 'Investment not found' });
-    const inv = invSnap.data();
-    if (inv.userId !== userId) return res.status(403).json({ status: 'error', message: 'Not your investment' });
-    if (inv.status !== 'active') return res.status(400).json({ status: 'error', message: 'This gem is no longer active' });
-    if (inv.boosted) return res.status(400).json({ status: 'error', message: 'This gem is already boosted' });
-    const unlockMs = tsMillis(inv.boostUnlockDate);
-    if (unlockMs && Date.now() < unlockMs) {
-      const daysLeft = Math.ceil((unlockMs - Date.now()) / 86400000);
-      return res.status(400).json({ status: 'error', message: `Boost unlocks in ${daysLeft} day${daysLeft === 1 ? '' : 's'}` });
-    }
-    const sett = await getSettings();
-    const costPct = Number(sett.boostCostPct ?? BOOST_COST_PCT);
-    const days    = Number(sett.boostMatureDays ?? BOOST_MATURE_DAYS);
-    const cost    = Math.round((inv.expectedReturn || 0) * costPct);
-    const newMat  = new Date(Date.now() + days * 86400000);
-    const { date, time } = nowStr();
-    let err = null, ok = false;
-    await withLock('bal:' + userId, () => db.runTransaction(async t => {
-      const uRef  = db.collection('users').doc(userId);
-      const uSnap = await t.get(uRef);
-      if (!uSnap.exists) { err = 'User not found'; return; }
-      const bal = uSnap.data().walletBalance || 0;
-      if (bal < cost) { err = `Need ${fmtUGX(cost)} to boost, have ${fmtUGX(bal)}`; return; }
-      const freshInv = await t.get(invRef);
-      const fd = freshInv.exists ? freshInv.data() : null;
-      if (!fd || fd.status !== 'active' || fd.boosted) { err = 'This gem cannot be boosted now'; return; }
-      const made        = Number(fd.payoutsMade || 0);
-      // Boost = EARLY MATURITY (owner's design): the gem keeps paying its NORMAL
-      // daily cashback for the interim days, and the accelerated FINAL day pays the
-      // ENTIRE remaining balance in one lump. We do this simply by keeping the
-      // normal daily rate and moving maturity to `days` away — the payout engine's
-      // reachesEnd branch already pays "expectedReturn − paidOut" on the last day.
-      const normalDaily = Number(fd.dailyPayout) || Math.round((fd.expectedReturn || 0) / (Number(fd.cycle) || CYCLE_DAYS));
-      t.update(uRef, { walletBalance: FieldValue.increment(-cost) });
-      t.update(invRef, {
-        boosted: true, boostedAt: FieldValue.serverTimestamp(), boostAmount: cost,
-        maturityDate: newMat, payoutsTotal: made + days,
-        dailyPayout: normalDaily,
-        nextPayoutAt: new Date(Date.now() + 86400000)
-      });
-      t.set(db.collection('transactions').doc(), {
-        userId, type: 'boost', description: `Boosted ${inv.tierLabel || 'gem'} — pays out over ${days} days`,
-        amount: -cost, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
-      });
-      ok = true;
-    }));
-    if (!ok) return res.status(400).json({ status: 'error', message: err || 'Could not boost' });
-    return res.json({ status: 'success', maturesInDays: days, cost, message: `Boosted — pays out over ${days} days` });
-  } catch (e) {
-    console.error('Boost error:', e.message);
-    return res.status(400).json({ status: 'error', message: e.message });
-  }
-});
-
-// ── DAILY-CASHBACK CRON ──
-// Credits each active gem's daily cashback every 24 hours from the exact purchase
-// time. Any payouts missed while the server was asleep are caught up in one pass,
-// and the final payout pays the exact remaining balance so the total always equals
-// expectedReturn. Guarded by a single-run flag + per-gem transaction (M0 has no
-// real locks, so we never let two passes credit the same gem twice).
-let _payoutRunning = false;
-async function runDailyPayouts() {
-  if (_payoutRunning) return 0;
-  _payoutRunning = true;
-  try {
-    const snap = await db.collection('investments').where('status', '==', 'active').get();
-    if (snap.empty) return 0;
-    const now = Date.now();
-    let credited = 0;
-    for (const doc of snap.docs) {
-      try {
-        await db.runTransaction(async t => {
-          const fresh = await t.get(doc.ref);
-          if (!fresh.exists || fresh.data().status !== 'active') return;
-          const inv = fresh.data();
-          // Lazily migrate gems created before the daily-cashback schedule existed.
-          const cycle       = Number(inv.cycle) || CYCLE_DAYS;
-          const expected    = Number(inv.expectedReturn) || 0;
-          const total       = Number(inv.payoutsTotal) || cycle;
-          let   made         = Number(inv.payoutsMade || 0);
-          let   paidOut      = Number(inv.paidOut || 0);
-          const dailyPayout  = Number(inv.dailyPayout) || Math.round(expected / cycle);
-          const createdMs    = tsMillis(inv.createdAt) || now;
-          if (made >= total) { t.update(doc.ref, { status: 'matured', maturedAt: FieldValue.serverTimestamp() }); return; }
-
-          // DETERMINISTIC schedule anchored on the PURCHASE time: payout N is due
-          // at createdAt + N×24h. This is immune to drift and SELF-HEALS any gem
-          // whose stored nextPayoutAt wandered — the countdown always points at
-          // the true next 24h mark from purchase, never a shifted minute.
-          const elapsedDays = Math.floor((now - createdMs) / 86400000);
-          const targetMade  = Math.min(total, Math.max(made, elapsedDays));
-          const due         = targetMade - made;
-          // nextPayoutAt is ALWAYS recomputed to the exact schedule point, even
-          // when nothing is due yet — this is what repairs a drifted value.
-          if (due <= 0) {
-            t.update(doc.ref, { payoutsTotal: total, payoutsMade: made, paidOut, dailyPayout,
-              nextPayoutAt: new Date(createdMs + Math.min(total, made + 1) * 86400000) });
-            return;
-          }
-          const reachesEnd = (made + due) >= total;
-          // Final batch pays the exact remaining balance (absorbs any rounding).
-          const credit = reachesEnd ? Math.max(0, expected - paidOut) : dailyPayout * due;
-          const newMade    = made + due;
-          const newPaidOut = paidOut + credit;
-          const newNextMs  = createdMs + Math.min(total, newMade + 1) * 86400000;
-          const { date, time } = nowStr();
-          const upd = { payoutsTotal: total, payoutsMade: newMade, paidOut: newPaidOut,
-            dailyPayout, nextPayoutAt: new Date(newNextMs) };
-          if (newMade >= total) { upd.status = 'matured'; upd.maturedAt = FieldValue.serverTimestamp(); }
-          t.update(doc.ref, upd);
-          if (credit > 0) {
-            t.update(db.collection('users').doc(inv.userId), {
-              walletBalance: FieldValue.increment(credit),
-              totalEarned:   FieldValue.increment(credit)
-            });
-            t.set(db.collection('transactions').doc(), {
-              userId: inv.userId, type: 'gem_payout',
-              description: `Daily cashback — ${inv.tierLabel || 'Gem'}`,
-              amount: credit, status: 'success', date, time, investmentId: doc.id,
-              createdAt: FieldValue.serverTimestamp()
-            });
-          }
-        });
-        credited++;
-      } catch (e) { console.error('Daily payout error:', doc.id, e.message); }
-    }
-    return credited;
-  } catch (e) { console.error('Daily payout check error:', e.message); return 0; }
-  finally { _payoutRunning = false; }
-}
-// ── BACKGROUND PAYMENT SWEEP ──
-// Settles every in-flight payment WITHOUT needing the app open or a callback to
-// arrive: polls MarzPay directly for all processing deposits and withdrawals,
-// credits/fails them, and expires deposit attempts that were abandoned (e.g. a
-// user cancelled the PIN prompt and started a new one). This is what keeps
-// statuses truthful in near-real-time and stops "stuck on Processing" rows.
-let _paySweepRunning = false;
-let _sweepN = 0;
-async function pollPendingPayments() {
-  if (_paySweepRunning || !MARZPAY_KEY) return 0;
-  _paySweepRunning = true;
-  _sweepN++;
-  let settled = 0;
-  try {
-    // OLDEST first — a busy day can never starve older pending deposits.
-    const depSnap = await db.collection('pendingDeposits')
-      .where('status', '==', 'processing').orderBy('createdAt', 'asc').limit(60).get();
-    for (const doc of depSnap.docs) {
-      try {
-        const r = doc.data().provider === 'zengapay' ? await pollZengaDepositStatus(doc) : doc.data().provider === 'obpay' ? await pollObpayDepositStatus(doc) : await pollMarzDepositStatus(doc);
-        if (r.credited || r.failed) { settled++; continue; }
-        // Abandoned attempt (cancelled prompt, never paid): expire after 6 hours
-        // so it shows honestly as failed instead of processing forever. A LATE
-        // success at MarzPay still credits — the rescue pass below re-checks.
-        if (Date.now() - tsMillis(doc.data().createdAt) > 6 * 3600000) {
-          await doc.ref.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(),
-            failureReason: 'Payment window expired' });
-          settled++;
-        }
-      } catch (e) { console.warn('deposit sweep:', doc.id, e.message); }
-    }
-    // RESCUE PASS (every ~10th sweep ≈ 5 min): deposits we expired or MarzPay
-    // reported failed in the last 48h are re-checked — if the gateway NOW says
-    // the money arrived (late confirmation after an outage), credit it. This is
-    // the "I paid, my carrier SMS proves it, but the app says failed" healer.
-    if (_sweepN % 10 === 0) {
-      const failSnap = await db.collection('pendingDeposits')
-        .where('status', '==', 'failed').orderBy('createdAt', 'desc').limit(150).get();
-      for (const doc of failSnap.docs) {
-        const d = doc.data();
-        if (Date.now() - tsMillis(d.createdAt) > 48 * 3600000) continue;
-        try {
-          if (d.provider === 'obpay') {
-            if (!d.marzReference || !OBPAY_SECRET_KEY) continue;
-            if (await obpayGetStatus(d.marzReference) === 'success') {
-              if (await creditMarzDeposit(doc, d.amount, d.obpayTxId || null)) { settled++; console.log('RESCUED late ObPay deposit', doc.id); }
-            }
-          } else {
-            if (!d.marzTxUuid) continue;
-            if (PAY_OK.includes(await marzGetCollectStatus(d.marzTxUuid))) {
-              if (await creditMarzDeposit(doc, d.amount, null)) { settled++; console.log('RESCUED late deposit', doc.id); }
-            }
-          }
-        } catch (e) { console.warn('deposit rescue:', doc.id, e.message); }
-      }
-    }
-    const witSnap = await db.collection('withdrawals')
-      .where('status', '==', 'processing').orderBy('createdAt', 'asc').limit(60).get();
-    for (const doc of witSnap.docs) {
-      const w = doc.data();
-      if (!w.marzTxUuid && !w.marzReference) continue; // no gateway ref — integrity audit flags these
-      try {
-        const raw = await getPayoutStatus(w);
-        if (PAY_OK.includes(raw)) { await completeWithdrawal(doc); settled++; }
-        else if (PAY_FAIL.includes(raw)) { await failWithdrawal(doc, 'Disbursement failed'); settled++; }
-      } catch (e) { console.warn('withdraw sweep:', doc.id, e.message); }
-    }
-  } catch (e) { console.error('Payment sweep error:', e.message); }
-  finally { _paySweepRunning = false; }
-  return settled;
-}
 app.post('/admin/payments/sync', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const settled = await pollPendingPayments();
@@ -1758,6 +1557,8 @@ function startCrons() {
   // Background payment settlement — every 45s, so a paid deposit lands even if
   // the user closed the app and the callback never arrived.
   setInterval(pollPendingPayments, 30 * 1000);
+  // release any withdrawal the admin has left sitting past their 5-minute window
+  setInterval(sweepPendingWithdrawals, 60 * 1000);
   setTimeout(pollPendingPayments, 15 * 1000);
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
@@ -2066,8 +1867,13 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
       });
       didCredit = true;
     });
-    // Instant team-milestone check for the depositor's referrer.
-    if (didCredit) notifyTeamDeposit(dep.userId).catch(() => {});
+    // Instant team-milestone check for the depositor's referrer, and the L1/L2/L3
+    // rewards — Chronova pays the upline on a credited RECHARGE, not on a purchase.
+    if (didCredit) {
+      notifyTeamDeposit(dep.userId).catch(() => {});
+      payCommissions(dep.userId, amount, depDoc.id, 'deposit')
+        .catch(e => console.error('Commission err:', e.message));
+    }
     return didCredit;
   } finally { _creditingDeposits.delete(depDoc.id); }
 }
@@ -2148,7 +1954,13 @@ app.post('/deposit/marzpay', async (req, res) => {
         status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
       });
     }
-    if (isSandbox) notifyTeamDeposit(userId).catch(() => {});
+    if (isSandbox) {
+      notifyTeamDeposit(userId).catch(() => {});
+      // the sandbox branch credits inline, so it must trigger the upline reward
+      // itself — creditMarzDeposit (the live path) is never reached here.
+      payCommissions(userId, amt, depRef.id, 'deposit')
+        .catch(e => console.error('Commission err:', e.message));
+    }
     return res.json({ status: 'success', depositId: depRef.id, amount: amt, phone, sandbox: isSandbox });
   } catch (e) {
     console.error('Deposit error:', e.message);
@@ -2727,7 +2539,7 @@ app.post('/withdraw/request', async (req, res) => {
     // Admin-toggleable via settings.requireInvestToWithdraw (default: required).
     const mustInvest = sett.requireInvestToWithdraw !== false;
     if (mustInvest && (user.totalInvested || 0) <= 0)
-      return res.status(400).json({ status: 'error', message: 'You need to activate at least one gem before you can withdraw.' });
+      return res.status(400).json({ status: 'error', message: 'You need to purchase at least one product before you can withdraw.' });
     if ((user.walletBalance || 0) < amt)
       return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });
 
@@ -2888,6 +2700,94 @@ app.post('/withdraw/callback', async (req, res) => {
 // point at the one handler in case a separate URL is configured for payouts.
 app.post('/withdraw/obpay-callback', handleObpayEvent);
 app.post('/obpay/payout-webhook', handleObpayEvent);
+// ══════════════════════════════════════════════
+// AUTOMATIC WITHDRAWAL RELEASE
+// The admin owns a fresh request for its first five minutes (0s .. 4m59s).
+// Past that the server releases it itself, so a payout never sits waiting on a
+// human. A gateway fault does NOT fail the withdrawal — the request stays
+// pending with the user's money still debited and in flight, and the next sweep
+// retries it, up to WITHDRAW_MAX_AUTO_TRIES.
+// ══════════════════════════════════════════════
+const WITHDRAW_ADMIN_WINDOW_MS = 5 * 60 * 1000;
+const WITHDRAW_MAX_AUTO_TRIES  = 8;
+const _autoReleasing = new Set();
+
+async function autoReleaseWithdrawal(witDoc) {
+  const id = witDoc.id, wit = witDoc.data();
+  if (wit.status !== 'pending') return false;
+  if (_autoReleasing.has(id)) return false;   // single writer per withdrawal
+  _autoReleasing.add(id);
+  try {
+    const phone     = wit.withdrawalPhone || wit.userPhone || '';
+    const netAmount = wit.netAmount || wit.amount;
+    if (!phone || !(netAmount > 0)) return false;
+
+    const reference = uuidv4();
+    const mpData = await marzSendMoney({
+      amount: netAmount, phone, reference, description: wit.userName || wit.userId,
+      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
+    });
+    const sandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
+    if (mpData.status !== 'success' && mpData.status !== 'pending' && !sandbox) {
+      await witDoc.ref.update({
+        autoTries:     FieldValue.increment(1),
+        lastAutoError: marzUserMsg(mpData, 'Gateway did not accept the payout'),
+        lastAutoAt:    FieldValue.serverTimestamp()
+      });
+      return false;                            // stays pending; retried next sweep
+    }
+
+    const marzTxUuid = mpData.data?.transaction?.uuid || '';
+    const batch = db.batch();
+    if (sandbox) {
+      batch.update(witDoc.ref, {
+        status: 'processed', provider: 'marzpay', marzReference: reference, marzTxUuid,
+        releasedBy: 'server', processedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp()
+      });
+      batch.update(db.collection('users').doc(wit.userId), { totalWithdrawn: FieldValue.increment(netAmount) });
+    } else {
+      batch.update(witDoc.ref, {
+        status: 'processing', provider: 'marzpay', marzReference: reference, marzTxUuid,
+        releasedBy: 'server', processedAt: FieldValue.serverTimestamp()
+      });
+    }
+    await batch.commit();
+    try {
+      const txSnap = await db.collection('transactions').where('withdrawalId', '==', id).limit(1).get();
+      if (!txSnap.empty) await txSnap.docs[0].ref.update({
+        status: sandbox ? 'success' : 'processing', marzReference: reference });
+    } catch (txErr) { console.warn('Auto-release tx update (non-critical):', txErr.message); }
+    console.log(`Auto-released withdrawal ${id} — ${fmtUGX(netAmount)} to ${phone}`);
+    return true;
+  } catch (e) {
+    console.error('autoReleaseWithdrawal error:', e.message);
+    try { await witDoc.ref.update({
+      autoTries: FieldValue.increment(1), lastAutoError: e.message,
+      lastAutoAt: FieldValue.serverTimestamp() }); } catch (_) {}
+    return false;
+  } finally { _autoReleasing.delete(id); }
+}
+
+let _sweepingWithdrawals = false;
+async function sweepPendingWithdrawals() {
+  if (_sweepingWithdrawals) return 0;
+  _sweepingWithdrawals = true;
+  let released = 0;
+  try {
+    const snap = await db.collection('withdrawals').where('status', '==', 'pending').limit(50).get();
+    const now = Date.now();
+    for (const doc of snap.docs) {
+      const w = doc.data();
+      const created = tsMillis(w.createdAt);
+      if (!created || now - created < WITHDRAW_ADMIN_WINDOW_MS) continue; // still the admin's
+      if ((w.autoTries || 0) >= WITHDRAW_MAX_AUTO_TRIES) continue;
+      if (await autoReleaseWithdrawal(doc)) released++;
+    }
+  } catch (e) { console.error('sweepPendingWithdrawals error:', e.message); }
+  finally { _sweepingWithdrawals = false; }
+  return released;
+}
+
 app.post('/admin/withdraw/process', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { withdrawalId } = req.body;
@@ -3057,6 +2957,23 @@ app.get('/account/investments', async (req, res) => {
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
     return res.json({ status: 'success', investments: list });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.get('/account/deposits', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('pendingDeposits').where('userId', '==', userId).get();
+    const list = snap.docs.map(d => {
+      const x = d.data();
+      return {
+        id: d.id, amount: x.creditedAmount || x.amount || 0, status: x.status || 'processing',
+        date: x.date || '', time: x.time || '', phone: x.phone || '',
+        marzReference: x.marzReference || '', createdAt: x.createdAt || null,
+      };
+    });
+    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    return res.json({ status: 'success', deposits: list });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/account/withdrawals', async (req, res) => {
@@ -3764,7 +3681,7 @@ async function startServer() {
   const tryConnect = async () => {
     try {
       await connectMongo(MONGODB_URI);
-      if (!cronsStarted) { cronsStarted = true; startCrons(); seedProducts();
+      if (!cronsStarted) { cronsStarted = true; startCrons();
         (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await backfillMilestonePaidOnce(); await reconcileReferrals(); await reconcileMilestones(); })().catch(() => {});
       }
     } catch (e) {
