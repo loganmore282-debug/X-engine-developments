@@ -91,6 +91,15 @@ window.__open = (what) => {
   if (what === 'mine')     return openHoldingsModal();
   if (what === 'detail')   return openProductDetail('tissot');
 };
+// Simulates the very first frame after launch: signed in, nothing loaded yet.
+window.__empty = () => {
+  _account = null; _investments = []; _txns = []; _products = [];
+  _teamStats = null; _deposits = []; _withdrawals = []; _publicSettings = null;
+  showView('main');
+  render();
+  _activeTab = 'home';
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-home'));
+};
 document.dispatchEvent(new Event('preview-ready'));
 `;
 

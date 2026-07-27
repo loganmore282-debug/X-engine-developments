@@ -108,8 +108,14 @@ function typeColor(t) {
 function ugx(n) { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 function initials(name) {
-  const parts = String(name || 'F').trim().split(/\s+/);
-  return ((parts[0]?.[0] || 'F') + (parts[1]?.[0] || '')).toUpperCase();
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    // No name on the account — fall back to the last two digits of the phone
+    // rather than a hardcoded letter.
+    const d = String(_account?.phone || '').replace(/\D/g, '');
+    return d ? d.slice(-2) : 'CH';
+  }
+  return ((parts[0][0] || '') + (parts[1]?.[0] || '')).toUpperCase();
 }
 function timeAgo(ms) {
   if (!ms) return '';
@@ -396,9 +402,19 @@ async function doLogout() {
 // BOOT / DATA LOAD
 // ══════════════════════════════════════════════
 let _publicSettings = null;
+
+// Paint the dashboard immediately for a device that was already signed in, before
+// auth or any network call resolves. Empty state is a valid state for every panel.
+try {
+  if (localStorage.getItem('fg_wasAuthed') === '1') render();
+} catch (_) {}
+
 onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { showView('auth'); return; }
+  // Reveal and start ticking at once — the panels already have content.
+  showView('main');
+  startRealtime();
   // Keep the branded syncing screen up and load the ESSENTIAL data — balance,
   // watches, transactions AND settings (banner images) — BEFORE revealing the
   // dashboard, so it appears already populated: no "UGX 0 → real" flash and no
@@ -420,8 +436,6 @@ onAuthStateChanged(auth, async (user) => {
     }).catch(() => {});
   }
   render();
-  showView('main');
-  startRealtime();
   maybeShowAnnouncement();
   // If the 8s cap fired before data was ready, repaint the moment it lands.
   essential.then(() => { if (checkGate()) return; if (!_pageOpen) render(); }).catch(() => {});
@@ -710,6 +724,7 @@ function bannerUrl(slot) {
 
 function renderHome() {
   const el = document.getElementById('panel-home');
+  if (!el) return;
   const IC = (window.CHRONOVA_ICONS || {});
   const checkedInToday = _account?.lastCheckinDate === todayKey();
 
@@ -1352,6 +1367,7 @@ function commPct(level) {
 }
 function renderTeam() {
   const el = document.getElementById('panel-team');
+  if (!el) return;
   const code = _account?.referralCode || _account?.username || '—';
   const link = code !== '—' ? referralLink(code) : '';
   const ts = _teamStats;
@@ -1501,6 +1517,7 @@ function vipLevel() {
 
 function renderAccount() {
   const el = document.getElementById('panel-account');
+  if (!el) return;
   const rc   = _account?.referralCode || _account?.username || '';
   const vip  = vipLevel();
   const bal  = Number(_account?.walletBalance) || 0;
