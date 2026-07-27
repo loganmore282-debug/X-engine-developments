@@ -1687,11 +1687,17 @@ app.post('/checkin', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// REDEMPTION CODES — admin generates a code worth a fixed amount; each user
-// redeems it once. Distinct from Voltra's random-range gift codes: a Chronova
-// code carries its own fixed `amount`, set when the admin creates it.
+// REDEMPTION CODES — server auto-generates the code; each user redeems it
+// once. The admin sets a min/max reward range at generation time, and each
+// redemption pays a fresh random amount inside that range, so two users
+// (or the same code used by several people) don't all get an identical sum.
 // ═══════════════════════════════════════════
-function genCode() { return mixedCode(6); } // e.g. oTpi8g — matched case-insensitively
+function genCode() { return mixedCode(6); } // e.g. dgT573 — matched case-insensitively
+function randomAmountIn(min, max) {
+  const lo = Math.min(min, max), hi = Math.max(min, max);
+  const raw = lo + Math.random() * (hi - lo);
+  return Math.max(lo, Math.round(raw / 100) * 100); // clean multiple of 100
+}
 const _codeRateMap   = new Map();  // userId -> last attempt ts
 const _redeemingCodes = new Set(); // code doc id -> being redeemed (single-writer)
 
@@ -1723,9 +1729,8 @@ app.post('/redeem', async (req, res) => {
       return res.status(429).json({ status: 'error', message: 'This code is being processed. Try again in a moment.' });
     _redeemingCodes.add(doc.id);
     try {
-      const amount = Math.max(0, Math.round(d.amount || 0));
       const { date, time } = nowStr();
-      let err = null, ok = false;
+      let err = null, ok = false, amount = 0;
       await db.runTransaction(async t => {
         const fresh = await t.get(doc.ref);
         if (!fresh.exists) { err = 'Invalid code'; return; }
@@ -1736,6 +1741,10 @@ app.post('/redeem', async (req, res) => {
         const uRef = db.collection('users').doc(userId);
         const uSnap = await t.get(uRef);
         if (!uSnap.exists) { err = 'User not found'; return; }
+        // Random per redemption — inside the range the admin set on this code,
+        // decided fresh here (not read from the outer snapshot) so it's rolled
+        // exactly once per user even under concurrent attempts.
+        amount = randomAmountIn(fd.minAmount || fd.amount || 0, fd.maxAmount || fd.amount || 0);
         // ORDER MATTERS on M0 (ops apply sequentially, no rollback): mark the
         // code used FIRST, ledger row second, wallet credit LAST. If the
         // process dies mid-way, reconcileRedemptions() sees "marked but no
@@ -1776,8 +1785,7 @@ async function reconcileRedemptions() {
       txSnap.forEach(d => { const t = d.data(); if (t.type === 'redeem') credited.add(t.userId); });
       for (const uid of used) {
         if (credited.has(uid)) continue;
-        const amount = Math.max(0, Math.round(c.amount || 0));
-        if (!amount) continue;
+        if (!(c.minAmount || c.maxAmount || c.amount)) continue;
         await withLock('redeemfix:' + cDoc.id + ':' + uid, async () => {
           // Re-check inside the lock so two overlapping sweeps can't both pay.
           const again = await db.collection('transactions').where('code', '==', c.code).get();
@@ -1786,6 +1794,10 @@ async function reconcileRedemptions() {
           if (has) return;
           const uSnap = await db.collection('users').doc(uid).get();
           if (!uSnap.exists) return; // account deleted since
+          // The original redemption never got to roll an amount (it died before
+          // that point) — roll one now from the same range, so the user is
+          // still made whole with a fair random amount, just decided at heal time.
+          const amount = randomAmountIn(c.minAmount || c.amount || 0, c.maxAmount || c.amount || 0);
           const { date, time } = nowStr();
           await db.runTransaction(async t => {
             t.set(db.collection('transactions').doc(), {
@@ -1810,9 +1822,11 @@ app.post('/admin/redemptions/reconcile', async (req, res) => {
 
 app.post('/admin/codes/generate', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { count = 1, amount, expiresInDays, maxUsers } = req.body;
-  const amt = Math.max(0, Math.round(parseFloat(amount) || 0));
-  if (!amt) return res.status(400).json({ status: 'error', message: 'amount required' });
+  const { count = 1, minAmount, maxAmount, expiresInDays, maxUsers } = req.body;
+  const min = Math.max(0, Math.round(parseFloat(minAmount) || 0));
+  const max = Math.max(0, Math.round(parseFloat(maxAmount) || 0));
+  if (!min || !max) return res.status(400).json({ status: 'error', message: 'minAmount and maxAmount required' });
+  if (min > max) return res.status(400).json({ status: 'error', message: 'minAmount cannot exceed maxAmount' });
   const n = Math.min(Math.max(parseInt(count) || 1, 1), 50);
   try {
     // Uniqueness is judged case-insensitively so two codes can never differ by
@@ -1829,13 +1843,13 @@ app.post('/admin/codes/generate', async (req, res) => {
       const key = code.toUpperCase();
       if (existing.has(key)) continue;
       made.push(code); existing.add(key);
-      const docData = { code, codeKey: key, amount: amt, active: true, usedBy: [],
+      const docData = { code, codeKey: key, minAmount: min, maxAmount: max, active: true, usedBy: [],
         maxUsers: maxUsers ? Math.max(1, parseInt(maxUsers)) : null, createdAt: FieldValue.serverTimestamp() };
       if (expiresAt) docData.expiresAt = expiresAt;
       batch.set(db.collection('redemptionCodes').doc(), docData);
     }
     await batch.commit();
-    return res.json({ status: 'success', codes: made, count: made.length, amount: amt });
+    return res.json({ status: 'success', codes: made, count: made.length, minAmount: min, maxAmount: max });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/codes/list', async (req, res) => {
@@ -2196,6 +2210,30 @@ app.post('/zenga/webhook', handleZengaEvent);
 app.post('/deposit/zenga-callback', handleZengaEvent);
 app.post('/withdraw/zenga-callback', handleZengaEvent);
 
+// Background safety-net: re-check every deposit still stuck on "processing"
+// against its real gateway, so a webhook that never arrived (dropped, or the
+// user closed the app before /deposit/status/:id polled it) still settles.
+let _sweepingDeposits = false;
+async function pollPendingPayments() {
+  if (_sweepingDeposits) return 0;
+  _sweepingDeposits = true;
+  let settled = 0;
+  try {
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'processing').limit(50).get();
+    for (const doc of snap.docs) {
+      const dep = doc.data();
+      try {
+        const result = dep.provider === 'zengapay' ? await pollZengaDepositStatus(doc)
+                     : dep.provider === 'obpay'    ? await pollObpayDepositStatus(doc)
+                     : await pollMarzDepositStatus(doc);
+        if (result && (result.credited || result.failed)) settled++;
+      } catch (e) { console.warn('pollPendingPayments item error:', e.message); }
+    }
+  } catch (e) { console.error('pollPendingPayments error:', e.message); }
+  finally { _sweepingDeposits = false; }
+  return settled;
+}
+
 // ═══════════════════════════════════════════
 // MANUAL (recipient-number) DEPOSITS — the user is shown one of the admin's
 // mobile-money numbers and must send the money there within 15 minutes; the admin
@@ -2376,20 +2414,7 @@ app.post('/admin/deposit/reject', async (req, res) => {
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
-// ── ADMIN: manual withdrawal settlement ──
-// Admin sends the money by hand, then marks it paid (idempotent complete). Reject
-// refunds the held funds (idempotent). Both reuse the proven money-safety helpers.
-app.post('/admin/withdraw/markpaid', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
-  try {
-    const ref = db.collection('withdrawals').doc(String(req.body.withdrawalId || ''));
-    const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
-    if (!snap.data().provider) await ref.update({ provider: 'manual' });
-    const ok = await completeWithdrawal(snap);
-    return res.json({ status: 'success', done: ok, message: ok ? 'Marked paid' : 'Already settled' });
-  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
-});
+// ── ADMIN: reject a withdrawal (refunds the held funds, idempotent) ──
 app.post('/admin/withdraw/reject', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
   try {
@@ -2595,7 +2620,7 @@ app.post('/withdraw/request', async (req, res) => {
         status: 'pending', date, time, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
-    notifyAdmins(`Chronova withdrawal: ${user.name || 'User'} wants ${fmtUGX(amt)} (net ${fmtUGX(netAmt)} after fee) to ${fullPhone}. Ref ${witId}. Send & mark paid in panel.`).catch(() => {});
+    notifyAdmins(`Chronova withdrawal: ${user.name || 'User'} wants ${fmtUGX(amt)} (net ${fmtUGX(netAmt)} after fee) to ${fullPhone}. Ref ${witId}. Tap "Send via MarzPay" in the panel, or it auto-releases through the gateway in 5 min.`).catch(() => {});
     return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });
   } catch (e) {
     console.error('Withdrawal error:', e.message);

@@ -611,8 +611,8 @@ function drawWits(){
     <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
     <td>${statusPill(w.status)}</td>
-    <td>${(w.status==='pending'||w.status==='processing')?`<button class="btn ok sm" data-proc="${esc(w.id)}">Mark paid</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
-  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Mark this withdrawal as PAID? Do this only after you have sent the money to the user.'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/markpaid',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
+    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:w.status==='processing'?`<button class="btn sm" data-vrf="${esc(w.id)}">Verify</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
+  document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Send this payout through MarzPay now?'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection? (funds are refunded to the user)','Rejected by admin'); if(reason===null)return; const d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async()=>{ const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ const p=d.provider||'Provider'; alert(`${p} verify\n\nOur record: ${d.ourStatus}\n${p} says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));
 }
@@ -772,30 +772,34 @@ async function renderCodes(){
   const r = await api('/admin/codes/list');
   const list = r.codes||[];
   $('content').innerHTML = `
-    <h2 class="sec">Redemption codes</h2>
+    <h2 class="sec">Gift codes</h2>
     <div class="panel-card">
       <div class="row">
-        <div><label>Amount (UGX)</label><input id="cAmt" type="number" placeholder="5000"></div>
+        <div><label>Min reward (UGX)</label><input id="cMin" type="number" placeholder="2000"></div>
+        <div><label>Max reward (UGX)</label><input id="cMax2" type="number" placeholder="10000"></div>
         <div><label>How many</label><input id="cCount" type="number" value="1" min="1" max="50"></div>
         <div><label>Expires in days (optional)</label><input id="cExp" type="number" placeholder="—"></div>
         <div><label>Max users per code (optional)</label><input id="cMax" type="number" placeholder="—"></div>
       </div>
+      <div class="muted" style="margin:4px 0 10px">Each redemption pays a random amount in this range — not the same for every user.</div>
       <button class="btn block" id="genBtn">Generate codes</button>
       <div id="genOut"></div>
     </div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Amount</th><th>Used</th><th>Status</th><th></th></tr></thead>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward range</th><th>Used</th><th>Status</th><th></th></tr></thead>
     <tbody>${list.length?list.map(c=>`
-      <tr><td><b>${esc(c.code)}</b></td><td>${ugx(c.amount)}</td><td>${c.usedCount||0}${c.maxUsers?(' / '+c.maxUsers):''}</td>
+      <tr><td><b>${esc(c.code)}</b></td><td>${c.minAmount!=null?`${ugx(c.minAmount)} – ${ugx(c.maxAmount)}`:ugx(c.amount)}</td><td>${c.usedCount||0}${c.maxUsers?(' / '+c.maxUsers):''}</td>
       <td><span class="pill-tag ${c.active?'t-ok':'t-mut'}">${c.active?'Active':'Off'}</span></td>
       <td>${c.active?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No codes yet</td></tr>'}
     </tbody></table></div>`;
   $('genBtn').addEventListener('click', async()=>{
-    const amount=parseFloat($('cAmt').value||0); if(!amount)return toast('Enter an amount','err');
+    const minAmount=parseFloat($('cMin').value||0), maxAmount=parseFloat($('cMax2').value||0);
+    if(!minAmount||!maxAmount)return toast('Enter a min and max reward','err');
+    if(minAmount>maxAmount)return toast('Min cannot exceed max','err');
     const count=parseInt($('cCount').value||1), expiresInDays=$('cExp').value||undefined, maxUsers=$('cMax').value||undefined;
     const b=$('genBtn'); b.disabled=true;b.textContent='Generating…';
-    const d=await api('/admin/codes/generate',{ amount, count, expiresInDays, maxUsers });
+    const d=await api('/admin/codes/generate',{ minAmount, maxAmount, count, expiresInDays, maxUsers });
     b.disabled=false;b.textContent='Generate codes';
-    if(d.status==='success'){ $('genOut').innerHTML=`<div class="codebox">${d.codes.map(esc).join('  ')}</div><div class="muted" style="margin-top:6px">${d.count} code(s) worth ${ugx(d.amount)} each</div>`; setTimeout(renderCodes,1200); }
+    if(d.status==='success'){ $('genOut').innerHTML=`<div class="codebox">${d.codes.map(esc).join('  ')}</div><div class="muted" style="margin-top:6px">${d.count} code(s), each paying ${ugx(d.minAmount)} – ${ugx(d.maxAmount)} at random</div>`; setTimeout(renderCodes,1200); }
     else toast(d.message||'Failed','err');
   });
   document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ const d=await api('/admin/codes/deactivate',{codeId:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderCodes(); }));
