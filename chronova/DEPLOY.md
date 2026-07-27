@@ -10,18 +10,30 @@ EdgeOne's **Production** environment deploys from the repository's **default
 branch**. Right now that default is an old branch with none of the Chronova
 work, which is why Production looks stuck/stale.
 
-Point it at our branch in whichever way your console allows:
+Point it at our branch, preferring the scoped, reversible option:
 
-- **Preferred — set the GitHub default branch.** GitHub → the repo → Settings →
-  Branches → change the default branch to
-  **`claude/voltra-session-continue-mk95gw`**. EdgeOne Production and Render then
-  track it automatically. Nothing else to pick.
-- **Or — choose the branch inside EdgeOne.** Project Settings → Git Management /
-  Build Deployment Configuration → set the deploy branch to
-  `claude/voltra-session-continue-mk95gw`.
+1. **First choice — set the branch per project inside EdgeOne.** Project
+   Settings → Git Management / Build Deployment Configuration → set the deploy
+   branch to **`claude/voltra-session-continue-mk95gw`**. Scoped to each project
+   and easy to undo.
+2. **Fallback — only if Production is locked to the default.** Change the GitHub
+   default branch (repo → Settings → Branches) to
+   `claude/voltra-session-continue-mk95gw`. EdgeOne Production and Render then
+   track it automatically.
 
 The **Edit environment** dialog (name / domain / variables) is *not* where the
 branch lives — the greyed-out "Production" name is normal; just close it.
+
+Safety notes (verified):
+
+- `furagemz/` exists **only** on `claude/voltra-session-continue-mk95gw` — it is
+  absent from the default branch (`claude/new-session-nagian`) and from
+  `claude/voltra-continue-kks4l0`. So changing the default branch cannot disturb
+  Furagemz. Do **not** delete or rewrite `claude/new-session-nagian`, and do
+  **not** touch `furagemz/`.
+- If the Furagemz EdgeOne project is git-connected to
+  `claude/voltra-session-continue-mk95gw`, our Chronova pushes will trigger a
+  harmless Furagemz redeploy of identical content. Expected, not a fault.
 
 ## Connect both EdgeOne projects to the same repo + branch
 
