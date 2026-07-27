@@ -209,8 +209,6 @@ async function api(path, { method = 'GET', body } = {}, _attempt = 0) {
 // AUTH
 // ══════════════════════════════════════════════
 function showView(name) {
-  const boot = document.getElementById('bootView');
-  if (boot) boot.classList.add('hidden');
   document.getElementById('authView').classList.toggle('hidden', name !== 'auth');
   document.getElementById('mainView').classList.toggle('hidden', name !== 'main');
   // Remember on THIS device that the user reached the dashboard, so next launch
@@ -1360,148 +1358,216 @@ function renderTeam() {
   // l1DepositTotal is aliased server-side to the ACTIVE-REFERRAL COUNT (not a
   // currency amount) — the milestone ladder targets a headcount, not deposits.
   const l1Active = ts?.l1ActiveCount ?? ts?.l1DepositTotal ?? 0;
-  const totalTeamEarn = (ts?.earned?.commissions || _account?.commissionEarned || 0) + (ts?.earned?.teamRewards || 0);
   const LVL = [
-    { n: 1, count: ts?.counts?.l1 ?? _account?.teamL1Count ?? 0, earned: ts?.earned?.l1 || 0 },
-    { n: 2, count: ts?.counts?.l2 ?? _account?.teamL2Count ?? 0, earned: ts?.earned?.l2 || 0 },
-    { n: 3, count: ts?.counts?.l3 ?? _account?.teamL3Count ?? 0, earned: ts?.earned?.l3 || 0 },
+    { n: 1, count: ts?.counts?.l1 ?? _account?.teamL1Count ?? 0, earned: ts?.earned?.l1 || 0, tag: 'Direct' },
+    { n: 2, count: ts?.counts?.l2 ?? _account?.teamL2Count ?? 0, earned: ts?.earned?.l2 || 0, tag: '' },
+    { n: 3, count: ts?.counts?.l3 ?? _account?.teamL3Count ?? 0, earned: ts?.earned?.l3 || 0, tag: '' },
   ];
+  const members    = LVL.reduce((s, l) => s + l.count, 0);
+  const invested   = ts?.teamInvested ?? ts?.investedTotal ?? 0;
+  const commission = (ts?.earned?.commissions || _account?.commissionEarned || 0) + (ts?.earned?.teamRewards || 0);
+
+  // The code and link blocks each sit on their own admin-supplied background.
+  const bgStyle = slot => bannerUrl(slot)
+    ? ` style="background-image:url('${esc(bannerUrl(slot))}')"` : '';
+
   el.innerHTML = `
-    <div class="team-hero">
-      <div class="th-top">
-        <div>
-          <div class="th-label">Team earnings</div>
-          <div class="th-amt">${ugx(totalTeamEarn)}</div>
+    ${bannerUrl('team') ? `<div class="page-banner"><img src="${esc(bannerUrl('team'))}" alt=""></div>` : ''}
+
+    <div class="team-title">
+      <h2>My Team</h2>
+      <p>Invite friends and earn commissions</p>
+    </div>
+
+    <div class="ref-card">
+      <div class="ref-block${bannerUrl('inviteCode') ? ' has-bg' : ''}"${bgStyle('inviteCode')}>
+        <div class="ref-in">
+          <span class="ref-l">Your referral code</span>
+          <div class="ref-row"><b class="ref-v">${esc(code)}</b>
+            <button class="ref-btn" id="copyCode">Copy</button></div>
         </div>
       </div>
-      <div class="th-code-row">
-        <div class="th-code"><span>Code</span><b>${esc(code)}</b></div>
-        <button class="th-btn" id="copyRef">${ICN.copy} Copy link</button>
-        <button class="th-btn solid" id="shareRef">Share</button>
+      <div class="ref-block${bannerUrl('inviteLink') ? ' has-bg' : ''}"${bgStyle('inviteLink')}>
+        <div class="ref-in">
+          <span class="ref-l">Your link</span>
+          <div class="ref-row"><span class="ref-link">${esc(link || '—')}</span>
+            <button class="ref-btn" id="copyRef">Copy link</button></div>
+        </div>
       </div>
     </div>
 
-    <div class="lvl-list">
+    <div class="team-stats">
+      <div class="tstat"><b>${members}</b><span>Members</span></div>
+      <div class="tstat"><b class="gold">${ugx(invested)}</b><span>Invested</span></div>
+      <div class="tstat"><b class="gold">${ugx(commission)}</b><span>Commission</span></div>
+    </div>
+
+    <div class="lvl-card">
       ${LVL.map(l => `
-        <div class="lvl-row">
-          <div class="lvl-badge" style="background:transparent;border:2px solid var(--gold);color:var(--gold)">L${l.n}</div>
-          <div class="lvl-info">
-            <div class="t">Level ${l.n} · earns ${commPct(l.n)}% of every watch</div>
-            <div class="s">${l.count} member${l.count === 1 ? '' : 's'}</div>
+        <div class="lvl-r">
+          <span class="lvl-o">L${l.n}</span>
+          <div class="lvl-t">
+            <b>${ugx(l.earned)}</b>
+            <span>${l.count} member${l.count === 1 ? '' : 's'}${l.tag ? ' · ' + l.tag : ''}</span>
           </div>
-          <div class="lvl-earn">${ugx(l.earned)}</div>
+          <span class="lvl-p">${commPct(l.n)}%</span>
         </div>`).join('')}
     </div>
 
-    <div class="sec-head"><h3>Task Center</h3></div>
-    <div class="task-intro">You have <b>${l1Active} active</b> level-1 referral${l1Active === 1 ? '' : 's'} so far. Hit each target below and the reward drops into your wallet instantly.</div>
-    ${(ts?.milestones || TEAM_MILESTONES).map(m => {
-      // A milestone shows a green PAID tick ONLY when the reward was ACTUALLY
-      // credited (server flag `paid` = a real team_reward transaction exists).
-      // Reaching the target is not the same as being paid: when the target is hit
-      // but the money hasn't landed yet, we say "reward on its way" — the server
-      // pays it on this very screen-open (and the reconciler heals any it missed),
-      // so it never falsely claims "paid".
-      const cur     = (m.current != null) ? m.current : l1Active;
-      const reached = (m.achieved != null) ? m.achieved : (cur >= m.target);
-      const paid    = !!m.paid;
-      const pct     = (paid || reached) ? 100 : Math.min(100, Math.round((cur / m.target) * 100));
-      const status  = paid ? 'Reward paid to your wallet'
-                    : reached ? 'Target reached — reward on its way'
-                    : pct + '% there';
-      return `
-      <div class="task-row${paid ? ' done' : ''}">
-        <div class="task-ic">${ICN.award}</div>
-        <div class="task-body">
-          <div class="task-t">Refer ${m.target} active member${m.target === 1 ? '' : 's'} · ${cur}/${m.target}</div>
-          <div class="task-bar"><i style="width:${pct}%"></i></div>
-          <div class="task-s">${status}</div>
-        </div>
-        <div class="task-reward" style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">
-          <span style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;opacity:.7">Reward</span>
-          <b>${ugx(m.reward)}</b>
-          ${paid ? `<span class="task-paid" style="color:#16a34a">${SVG_TICK}</span>` : ''}
-        </div>
-      </div>`;
-    }).join('')}
+    <div class="team-title sub"><h2>Task centre</h2>
+      <p>${l1Active} active level-1 referral${l1Active === 1 ? '' : 's'} so far</p></div>
 
-    <div class="sec-head"><h3>Direct referrals</h3></div>
-    ${_members.length ? _members.map(m => `
-      <div class="member-row">
-        <div class="avatar" style="background:${avatarTint(m.name)}">${esc(initials(m.name))}</div>
-        <div class="member-info">
-          <div class="t">${esc(m.name)}</div>
-          <div class="s">Deposited <b>${ugx(m.deposited || 0)}</b> · ${m.hasInvested ? 'watch active' : 'no watch yet'}</div>
-        </div>
-        <div class="badge ${m.hasInvested ? 'on' : 'off'}">${m.hasInvested ? 'Active' : 'Not active'}</div>
-      </div>`).join('') : `<div class="empty-note">Share your code — nobody has joined yet.</div>`}
+    <div class="task-card">
+      ${(ts?.milestones || TEAM_MILESTONES).map(m => {
+        // A milestone shows PAID only when the money actually landed (server flag
+        // `paid` = a real team_reward transaction exists). Hitting the target is
+        // not the same as being paid, so a reached-but-unpaid target says so
+        // rather than falsely claiming payment. No progress bar — the owner's
+        // rule is a plain count, never a bar or graph.
+        const cur     = (m.current != null) ? m.current : l1Active;
+        const reached = (m.achieved != null) ? m.achieved : (cur >= m.target);
+        const paid    = !!m.paid;
+        const status  = paid ? 'Paid to your wallet'
+                      : reached ? 'Reward on its way'
+                      : `${cur} of ${m.target}`;
+        return `
+        <div class="task-r${paid ? ' is-paid' : ''}">
+          <div class="task-t">
+            <b>Refer ${m.target} active member${m.target === 1 ? '' : 's'}</b>
+            <span>${status}</span>
+          </div>
+          <div class="task-rw">
+            <b>${ugx(m.reward)}</b>
+            ${paid ? `<span class="task-tick">${SVG_TICK}</span>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="notice">
+      <b>How referrals pay</b>
+      <ol>
+        <li>Share your code or link. Anyone who signs up with it joins your team.</li>
+        <li>You earn ${commPct(1)}% of every recharge your direct referrals make, ${commPct(2)}% on level 2 and ${commPct(3)}% on level 3.</li>
+        <li>Rewards are credited to your balance automatically as each recharge clears.</li>
+        <li>Task centre rewards land once the referred member has purchased a product.</li>
+      </ol>
+    </div>
   `;
-  const copyBtn = el.querySelector('#copyRef');
-  if (copyBtn) copyBtn.addEventListener('click', () => {
-    navigator.clipboard?.writeText(link).then(() => toast('Referral link copied', 'ok')).catch(() => toast(link));
-  });
-  const linkEl = el.querySelector('#refLink');
-  if (linkEl) linkEl.addEventListener('click', () => {
-    navigator.clipboard?.writeText(link).then(() => toast('Referral link copied', 'ok')).catch(() => {});
-  });
-  const shareBtn = el.querySelector('#shareRef');
-  if (shareBtn) shareBtn.addEventListener('click', async () => {
-    const wb = _publicSettings?.welcomeBonus || 7000;
-    const text = `I am earning on Chronova and you can too. Sign up with my link and UGX ${Number(wb).toLocaleString('en-UG')} lands in your wallet instantly as a welcome bonus. Activate a watch and it pays you cashback every single day, and when you invite your own friends you earn automatic rewards on three levels. Deposits, cashback and withdrawals are all processed automatically straight to your mobile money. Use my referral code ${code} or simply tap my link to join: ${link}`;
-    if (navigator.share) { try { await navigator.share({ title: 'Chronova', text, url: link }); } catch (_) {} }
-    else navigator.clipboard?.writeText(text).then(() => toast('Invite message copied', 'ok')).catch(() => {});
-  });
+
+  const copy = (text, msg) => {
+    if (!text || text === '—') return;
+    try { navigator.clipboard.writeText(text); toast(msg, 'ok'); } catch (_) {}
+  };
+  el.querySelector('#copyCode').addEventListener('click', () => copy(code, 'Code copied'));
+  el.querySelector('#copyRef').addEventListener('click', () => copy(link, 'Link copied'));
 }
 
 // ══════════════════════════════════════════════
 // ACCOUNT
+// Laid out from the approved mockup: gold disc avatar, phone, VIP badge, one
+// balance card, four actions, mission centre, then a flat menu. The menu icons
+// are gold outlines on nothing — no tinted chips behind them, and every row has
+// its own glyph.
 // ══════════════════════════════════════════════
-const ICN_WATCH = _svg('<circle cx="12" cy="12" r="7"/><path d="M12 9v3l2 1.2"/><path d="M10 2h4M10 22h4"/>');
+const _mi = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const MENU_ICONS = {
+  about:    _mi('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
+  care:     _mi('<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>'),
+  rules:    _mi('<path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/><path d="M9 12h7M9 16h5"/>'),
+  records:  _mi('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6M7 13h10M7 17h4"/>'),
+  mine:     _mi('<circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 1.3"/><path d="M9 2h6"/>'),
+  team:     _mi('<circle cx="9" cy="8" r="3.4"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 5.5a3 3 0 0 1 0 5.6"/><path d="M18.5 20a5.6 5.6 0 0 0-2.4-4.4"/>'),
+  bank:     _mi('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/>'),
+  password: _mi('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+  gift:     _mi('<rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/><path d="M12 8c-2.5 0-4-1-4-2.5S9.5 3 12 8zM12 8c2.5 0 4-1 4-2.5S14.5 3 12 8z"/>'),
+  install:  _mi('<path d="M12 3v12"/><path d="M7.5 11 12 15.5 16.5 11"/><path d="M4 19h16"/>'),
+  exit:     _mi('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 8 6 12l4 4"/><path d="M6 12h9"/>'),
+  chev:     _mi('<path d="m9 5 7 7-7 7"/>'),
+};
+
+// VIP rank is simply how far up the admin's price ladder the member has bought:
+// the highest-priced product they own decides it. No product, no badge.
+function vipLevel() {
+  if (!_investments.length || !_products.length) return 0;
+  const ladder = _products.slice().sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+  let best = 0;
+  for (const inv of _investments) {
+    const i = ladder.findIndex(p => p.key === inv.tierKey);
+    if (i >= 0 && i + 1 > best) best = i + 1;
+  }
+  return best;
+}
+
 function renderAccount() {
   const el = document.getElementById('panel-account');
-  const rc = _account?.referralCode || '';
-  const code = rc ? `<span class="acc-code" id="accCode">CODE ${esc(rc)} ${ICN.copy}</span>` : '';
-  const IC = (window.CHRONOVA_ICONS || {});
-  const mi = (key, fallback) => IC[key] ? `<img src="${IC[key]}" style="width:18px;height:18px">` : fallback;
+  const rc   = _account?.referralCode || _account?.username || '';
+  const vip  = vipLevel();
+  const bal  = Number(_account?.walletBalance) || 0;
+  const done = _account?.lastCheckinDate === todayKey();
+
+  const row = (id, icon, label) =>
+    `<button class="amrow" id="${id}"><span class="ami">${MENU_ICONS[icon]}</span><span class="aml">${label}</span><span class="amc">${MENU_ICONS.chev}</span></button>`;
+
   el.innerHTML = `
-    <div class="acc-card">
-      <div class="acc-top">
-        <div class="acc-av">${esc(initials(_account?.name))}</div>
-        <div>
-          <div class="acc-name">${esc(_account?.name || 'Chronova user')}</div>
-          <div class="acc-phone">${esc(_account?.phone || '')}</div>
-          ${code}
+    <div class="acc-head">
+      <div class="acc-disc">${esc(initials(_account?.name))}</div>
+      <div class="acc-id">
+        <div class="acc-num">${esc(_account?.phone || '')}</div>
+        <div class="acc-badges">
+          ${vip ? `<span class="vip">VIP ${vip}</span>` : ''}
+          ${rc ? `<span class="acc-code" id="accCode">${esc(rc)} ${ICN.copy}</span>` : ''}
         </div>
       </div>
-      <div class="acc-stats">
-        <div class="as"><div class="n">${ugx(_account?.totalDeposited || 0)}</div><div class="l">Deposited</div></div>
-        <div class="as"><div class="n">${ugx(_account?.totalEarned || 0)}</div><div class="l">Earned</div></div>
-        <div class="as"><div class="n">${ugx(_account?.totalWithdrawn || 0)}</div><div class="l">Withdrawn</div></div>
-      </div>
-      <div class="acc-tier">${ICN_WATCH} Chronova member</div>
     </div>
-    <div class="menu-list">
-      <button class="menu-row" id="mnAbout"><span class="mi">${mi('records', ICN.about)}</span><span class="ml">About Us</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnSupport"><span class="mi">${mi('cs', ICN.support)}</span><span class="ml">Customer Care</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnRules"><span class="mi">${ICN.about}</span><span class="ml">Regulation</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnHistory"><span class="mi">${mi('records', ICN.receipt)}</span><span class="ml">Records</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnMine"><span class="mi">${ICN_WATCH}</span><span class="ml">My Products</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnTeam"><span class="mi">${mi('team', ICN.people)}</span><span class="ml">Referrals &amp; Team</span><span class="mr">${ICN.chevron}</span></button>
+
+    <div class="acc-bal">
+      <span>My balance</span>
+      <b>${_hideBal ? '••••••' : ugx(bal)}</b>
     </div>
-    <div class="menu-list">
-      <button class="menu-row" id="mnBanks"><span class="mi">${mi('bindbank', ICN.bank)}</span><span class="ml">Bind Bank Card</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnPassword"><span class="mi">${ICN.lock}</span><span class="ml">Change Password</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnRedeem"><span class="mi">${ICN.redeem}</span><span class="ml">Redeem Gift Code</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnDownload"><span class="mi">${mi('install', ICN.download)}</span><span class="ml">Install App</span><span class="mr">${ICN.chevron}</span></button>
+
+    <div class="acc-acts">
+      <button class="aact" id="acRecharge"><span class="aact-ic">${ICN.down}</span><span>Recharge</span></button>
+      <button class="aact" id="acWithdraw"><span class="aact-ic">${ICN.up}</span><span>Withdrawal</span></button>
+      <button class="aact${done ? ' is-done' : ''}" id="acCheckin"><span class="aact-ic">${ICN.checkin}</span><span>Check-in</span></button>
+      <button class="aact" id="acContact"><span class="aact-ic">${ICN.phone}</span><span>Contact Us</span></button>
     </div>
-    <div class="menu-list">
-      <button class="menu-row danger" id="logoutBtn"><span class="mi">${ICN.logout}</span><span class="ml">Exit</span></button>
+
+    <button class="mission" id="acMission">
+      <b>Mission centre</b>
+      <span>Claim your referral rewards</span>
+    </button>
+
+    <div class="amenu">
+      ${row('mnAbout',    'about',    'About Us')}
+      ${row('mnSupport',  'care',     'Customer Care')}
+      ${row('mnRules',    'rules',    'Regulation')}
+      ${row('mnHistory',  'records',  'Records')}
+      ${row('mnMine',     'mine',     'My Products')}
+      ${row('mnTeam',     'team',     'Referrals &amp; Team')}
+    </div>
+
+    <div class="amenu">
+      ${row('mnBanks',    'bank',     'Bind Bank Card')}
+      ${row('mnPassword', 'password', 'Change Password')}
+      ${row('mnRedeem',   'gift',     'Redeem Gift Code')}
+      ${row('mnDownload', 'install',  'Install App')}
+    </div>
+
+    <div class="amenu">
+      <button class="amrow is-exit" id="logoutBtn"><span class="ami">${MENU_ICONS.exit}</span><span class="aml">Exit</span></button>
     </div>
   `;
+
   const accCode = el.querySelector('#accCode');
   if (accCode) accCode.addEventListener('click', () => {
-    try { navigator.clipboard.writeText(rc); toast('Code copied'); } catch (e) {}
+    try { navigator.clipboard.writeText(rc); toast('Code copied'); } catch (_) {}
   });
+  el.querySelector('#acRecharge').addEventListener('click', openRechargeSheet);
+  el.querySelector('#acWithdraw').addEventListener('click', openWithdrawSheet);
+  el.querySelector('#acCheckin').addEventListener('click', openCheckinPage);
+  el.querySelector('#acContact').addEventListener('click', openContactPage);
+  el.querySelector('#acMission').addEventListener('click', () => switchTab('team'));
   el.querySelector('#mnRedeem').addEventListener('click', openRedeemModal);
   el.querySelector('#mnHistory').addEventListener('click', () => openRecordsPage('income'));
   el.querySelector('#mnMine').addEventListener('click', openHoldingsModal);
