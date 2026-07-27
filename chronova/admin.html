@@ -12,7 +12,7 @@
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/furahq-sw.js').catch(function(){});}</script>
 <style>
   :root{
-    --bg:#0c0b0e; --card:#17161c; --ink:#f3efe6; --sub:#a89f8c; --line:#2a2733; --line2:#1f1d25;
+    --bg:#0b0a07; --card:#17150f; --ink:#f3efe6; --sub:#a89f8c; --line:#2b2619; --line2:#1f1c13;
     --gold:#d9ad4e; --gold-deep:#a97f22; --gold-ink:#1c1403; --ok:#57c98a; --ok-bg:#12241a;
     --danger:#f4708c; --danger-bg:#3a1720; --warn:#e8c468; --warn-bg:#241f14; --sky:#7fc8e8;
   }
@@ -92,7 +92,7 @@
   .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
   .prod{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}
   .prod .thumb{height:90px;background:var(--line2) center/cover no-repeat;display:flex;align-items:center;justify-content:center;}
-  .prod .thumb .tint-sw{width:44px;height:44px;border-radius:12px}
+  .prod .thumb .tint-sw{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#e6c473,#a97f22)}
   .prod .pb{padding:12px}
   .prod .pt{font-weight:800}
   .prod .pp{color:var(--sub);font-size:12.5px;margin-top:2px}
@@ -618,7 +618,7 @@ function drawWits(){
 }
 
 // ── PRODUCTS ──
-function tintSwatch(color){ return `<div class="tint-sw" style="background:${esc(color||'#d9ad4e')}"></div>`; }
+function tintSwatch(){ return '<div class="tint-sw"></div>'; }
 async function renderProducts(){
   const r = await api('/admin/products/list');
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
@@ -627,7 +627,7 @@ async function renderProducts(){
       <button class="btn sm" id="newProd">+ New product</button></div>
     <div class="prod-grid">${list.length?list.map(p=>`
       <div class="prod">
-        <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch(p.color)}</div>
+        <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch()}</div>
         <div class="pb">
           <div class="pt">${esc(p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Coming soon</span>':''}</div>
           <div class="pp">${ugx(p.price)} · ${p.cycle||0} days</div>
@@ -653,7 +653,6 @@ function editProduct(p, order){
       <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||30}"></div>
       <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
     </div>
-    <label>Accent colour (hex)</label><input id="pColor" value="${esc(p.color||'#d9ad4e')}" placeholder="#d9ad4e">
     <label>Watch image</label>
     <div class="img-picker">
       <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
@@ -682,7 +681,7 @@ function editProduct(p, order){
     const image = imgData || $('pImage').value.trim();
     const body = { id:p.id, label:$('pLabel').value, key:$('pKey').value, price:$('pPrice').value,
       expectedReturn:$('pRet').value, cycle:$('pCycle').value, order:$('pOrder').value,
-      color:$('pColor').value, image, active:$('pActive').checked, comingSoon:$('pSoon').checked };
+      image, active:$('pActive').checked, comingSoon:$('pSoon').checked };
     if(!parseFloat(body.price)) return toast('Enter a price','err');
     const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';
     const d=await api('/admin/products/save', body);

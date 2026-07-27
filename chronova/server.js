@@ -3573,7 +3573,6 @@ app.post('/admin/products/save', async (req, res) => {
     // Allow both short hosted URLs and full base64 data-URI uploads (the admin
     // downscales images before sending, so this stays well under the 8mb body cap).
     image: String(req.body.image || '').trim().slice(0, 4000000),
-    color: String(req.body.color || '#d9ad4e').trim().slice(0, 24),
     order: Math.round(parseFloat(req.body.order) || 0),
     active: req.body.active !== false && req.body.active !== 'false',
     comingSoon: req.body.comingSoon === true || req.body.comingSoon === 'true',

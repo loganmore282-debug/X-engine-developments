@@ -1245,11 +1245,13 @@ function openRedeemModal() {
 // list and no fallback. An empty catalogue renders as an empty catalogue.
 // ══════════════════════════════════════════════
 
-// Only a tint for the card edge when the admin has not uploaded an image yet.
-// Gold family throughout; nothing here keys off a tier name.
+// Card-edge tint, gold family, chosen by position in the catalogue. A stored
+// per-product colour is deliberately IGNORED: rows seeded before the palette was
+// fixed still carry purple hexes, and one of those would put a violet edge on a
+// gold card. Position is the only input.
 const TIER_TINTS = ['#c9a86a', '#d9ad4e', '#e0b95a', '#c9932e', '#f4d98a', '#b8862b', '#f0c360'];
-function tierTint(p, i) {
-  return p.color || TIER_TINTS[i % TIER_TINTS.length];
+function tierTint(_p, i) {
+  return TIER_TINTS[i % TIER_TINTS.length];
 }
 
 function renderProducts() {
@@ -1490,16 +1492,12 @@ const _mi = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const MENU_ICONS = {
   about:    _mi('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
   care:     _mi('<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>'),
-  rules:    _mi('<path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/><path d="M9 12h7M9 16h5"/>'),
   records:  _mi('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6M7 13h10M7 17h4"/>'),
-  mine:     _mi('<circle cx="12" cy="13" r="7"/><path d="M12 10v3l2 1.3"/><path d="M9 2h6"/>'),
-  team:     _mi('<circle cx="9" cy="8" r="3.4"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 5.5a3 3 0 0 1 0 5.6"/><path d="M18.5 20a5.6 5.6 0 0 0-2.4-4.4"/>'),
   bank:     _mi('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/>'),
   password: _mi('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
   gift:     _mi('<rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/><path d="M12 8c-2.5 0-4-1-4-2.5S9.5 3 12 8zM12 8c2.5 0 4-1 4-2.5S14.5 3 12 8z"/>'),
   install:  _mi('<path d="M12 3v12"/><path d="M7.5 11 12 15.5 16.5 11"/><path d="M4 19h16"/>'),
   exit:     _mi('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 8 6 12l4 4"/><path d="M6 12h9"/>'),
-  chev:     _mi('<path d="m9 5 7 7-7 7"/>'),
 };
 
 // VIP rank is simply how far up the admin's price ladder the member has bought:
@@ -1523,8 +1521,10 @@ function renderAccount() {
   const bal  = Number(_account?.walletBalance) || 0;
   const done = _account?.lastCheckinDate === todayKey();
 
-  const row = (id, icon, label) =>
-    `<button class="amrow" id="${id}"><span class="ami">${MENU_ICONS[icon]}</span><span class="aml">${label}</span><span class="amc">${MENU_ICONS.chev}</span></button>`;
+  // A tile grid, not a stack of chevron rows — the row list is exactly the
+  // pattern the owner is moving away from. Six tiles, then the two utilities.
+  const tile = (id, icon, label) =>
+    `<button class="atile" id="${id}"><span class="ati">${MENU_ICONS[icon]}</span><span class="atl">${label}</span></button>`;
 
   el.innerHTML = `
     <div class="acc-head">
@@ -1555,25 +1555,17 @@ function renderAccount() {
       <span>Claim your referral rewards</span>
     </button>
 
-    <div class="amenu">
-      ${row('mnAbout',    'about',    'About Us')}
-      ${row('mnSupport',  'care',     'Customer Care')}
-      ${row('mnRules',    'rules',    'Regulation')}
-      ${row('mnHistory',  'records',  'Records')}
-      ${row('mnMine',     'mine',     'My Products')}
-      ${row('mnTeam',     'team',     'Referrals &amp; Team')}
+    <div class="atiles">
+      ${tile('mnAbout',    'about',    'About Us')}
+      ${tile('mnSupport',  'care',     'Customer Care')}
+      ${tile('mnHistory',  'records',  'Records')}
+      ${tile('mnBanks',    'bank',     'Bind Bank Card')}
+      ${tile('mnPassword', 'password', 'Change Password')}
+      ${tile('mnRedeem',   'gift',     'Redeem Gift Code')}
     </div>
 
-    <div class="amenu">
-      ${row('mnBanks',    'bank',     'Bind Bank Card')}
-      ${row('mnPassword', 'password', 'Change Password')}
-      ${row('mnRedeem',   'gift',     'Redeem Gift Code')}
-      ${row('mnDownload', 'install',  'Install App')}
-    </div>
-
-    <div class="amenu">
-      <button class="amrow is-exit" id="logoutBtn"><span class="ami">${MENU_ICONS.exit}</span><span class="aml">Exit</span></button>
-    </div>
+    <button class="aflat" id="mnDownload"><span class="ati">${MENU_ICONS.install}</span><span>Install App</span></button>
+    <button class="aflat is-exit" id="logoutBtn"><span class="ati">${MENU_ICONS.exit}</span><span>Exit</span></button>
   `;
 
   const accCode = el.querySelector('#accCode');
@@ -1587,14 +1579,11 @@ function renderAccount() {
   el.querySelector('#acMission').addEventListener('click', () => switchTab('team'));
   el.querySelector('#mnRedeem').addEventListener('click', openRedeemModal);
   el.querySelector('#mnHistory').addEventListener('click', () => openRecordsPage('income'));
-  el.querySelector('#mnMine').addEventListener('click', openHoldingsModal);
-  el.querySelector('#mnTeam').addEventListener('click', () => switchTab('team'));
   el.querySelector('#mnBanks').addEventListener('click', openBanksModal);
   el.querySelector('#mnPassword').addEventListener('click', openPasswordModal);
   el.querySelector('#mnSupport').addEventListener('click', openContactPage);
   el.querySelector('#mnDownload').addEventListener('click', openDownloadModal);
   el.querySelector('#mnAbout').addEventListener('click', openAboutModal);
-  el.querySelector('#mnRules').addEventListener('click', openRulesPage);
 }
 
 // Download / install screen — app details are server-driven (settings/public).
@@ -1649,7 +1638,9 @@ function openAboutModal() {
       <div class="about-tag">${esc(tagline)}</div>
     </div>
     <div class="about-body">${paras}</div>
+    <button class="btn outline" id="aboutRules" style="margin-top:14px">Read the regulation</button>
   `);
+  document.getElementById('aboutRules').addEventListener('click', openRulesPage);
 }
 
 function openRulesPage() {
