@@ -851,6 +851,7 @@ app.get('/settings/public', async (_req, res) => {
     banners: {
       hero:       s.bannerHero       || '',
       checkin:    s.bannerCheckin    || '',
+      checkinBg:  s.bannerCheckinBg  || '',
       contact:    s.bannerContact    || '',
       team:       s.bannerTeam       || '',
       inviteCode: s.bannerInviteCode || '',

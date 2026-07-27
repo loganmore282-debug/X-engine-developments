@@ -17,6 +17,9 @@ const reauthenticateWithCredential = async () => {};
 const EmailAuthProvider = { credential: () => ({}) };
 `;
 
+// 1x1 solid PNGs stand in for uploaded banners; object-fit stretches them.
+const PNG_GOLD = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mM4rc/wHwAFRQKPGZOTAwAAAABJRU5ErkJggg==';
+
 const PRODUCTS = [
   { key: 'casio',    label: 'Casio Edifice',      price: 25000,  expectedReturn: 750000,   cycle: 120, image: '' },
   { key: 'fossil',   label: 'Fossil Grant',       price: 50000,  expectedReturn: 1500000,  cycle: 120, image: '' },
@@ -41,7 +44,7 @@ window.__PV = {
     commL1: 0.30, commL2: 0.03, commL3: 0.01,
     telegramGroup: 'https://t.me/chronova', telegramChannel: 'https://t.me/chronova_news',
     supportTelegram: 'https://t.me/chronova_help', supportHours: 'Every day, 9:00 AM – 9:00 PM',
-    banners: {}
+    banners: { checkin: '${PNG_GOLD}', checkinBg: '${PNG_GOLD}' }
   },
   products: ${JSON.stringify(PRODUCTS)},
   deposits: [
@@ -92,6 +95,7 @@ window.__open = (what) => {
   if (what === 'detail')   return openProductDetail('tissot');
   if (what === 'bank')     return openBanksModal();
   if (what === 'picker')   { openBanksModal(); setTimeout(()=>document.getElementById('bkNet').click(), 60); }
+  if (what === 'toast')    return toast('UGX 500 credited');
 };
 // Simulates the very first frame after launch: signed in, nothing loaded yet.
 window.__empty = () => {

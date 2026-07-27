@@ -34,6 +34,7 @@ const SHOTS = [
   ['detail',   'products', 'detail'],
   ['bank',     'account',  'bank'],
   ['picker',   'account',  'picker'],
+  ['toast',    'home',     'toast'],
 ];
 
 (async () => {
@@ -52,6 +53,9 @@ const SHOTS = [
 
   for (const [name, tab, overlay] of SHOTS) {
     await page.evaluate(t => window.__render(t), tab);
+    await page.evaluate(() => { const r = document.getElementById('modalRoot'); if (r) { r.classList.add('hidden'); r.innerHTML = ''; }
+      const k = document.getElementById('pickerRoot'); if (k) { k.classList.add('hidden'); k.innerHTML = ''; }
+      const t = document.getElementById('toastRoot'); if (t) t.innerHTML = ''; document.body.classList.remove('no-scroll'); });
     if (overlay) { await page.evaluate(o => window.__open(o), overlay); }
     else { await page.evaluate(() => { const r = document.getElementById('modalRoot'); if (r) { r.classList.add('hidden'); r.innerHTML = ''; } document.body.classList.remove('no-scroll'); }); }
     await page.waitForTimeout(450);

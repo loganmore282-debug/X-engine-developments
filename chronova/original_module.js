@@ -132,15 +132,17 @@ function tsMs(v) {
   return isNaN(t) ? 0 : t;
 }
 
-function toast(msg, kind = '') {
+// A single dark slab that opens out of the centre of the screen, holds, then
+// folds away. Deliberately colourless: the message carries the meaning, not a
+// green or red background.
+function toast(msg) {
   const root = document.getElementById('toastRoot');
+  root.querySelectorAll('.toast').forEach(t => t.remove());
   const el = document.createElement('div');
-  el.className = 'toast' + (kind ? ' ' + kind : '');
-  // Rises from the bottom and spreads open, holds, then collapses back down the
-  // same way it came in (CSS handles enter; the 'out' class reverses it).
+  el.className = 'toast';
   el.innerHTML = `<span class="toast-in">${esc(msg)}</span>`;
   root.appendChild(el);
-  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 380); }, 2800);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, 2400);
 }
 
 // Disable a button while a request is in flight and show an animated three-dot
@@ -165,7 +167,7 @@ function openModal(html) {
   document.body.classList.add('no-scroll'); // freeze the dashboard behind the dialog
   root.querySelector('[data-close]').addEventListener('click', () => closeModal());
   const closeBtn = root.querySelector('.modal-close');
-  if (closeBtn) { closeBtn.innerHTML = ICN.back; closeBtn.addEventListener('click', () => closeModal()); }
+  if (closeBtn) { closeBtn.innerHTML = SVG_CLOSE; closeBtn.addEventListener('click', () => closeModal()); }
   if (!_pageOpen) { _pageOpen = true; try { history.pushState({ fgPage: 1 }, ''); } catch (_) {} }
 }
 function closeModal(fromPop) {
@@ -577,7 +579,7 @@ async function loadTxns() {
 // ══════════════════════════════════════════════
 // TAB NAVIGATION
 // ══════════════════════════════════════════════
-document.querySelectorAll('.tab-btn').forEach(btn => {
+document.querySelectorAll('[data-tab]').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
 async function switchTab(name) {
@@ -756,7 +758,11 @@ function renderHome() {
       <button class="act" id="qaContact"><span class="act-ic">${actionIcon('contact', ICN.phone)}</span><span class="act-t">Contact Us</span></button>
     </div>
 
-    <div class="wire"><div class="wire-track" id="wireTrack">${wireHtml()}</div></div>
+    <div class="wire">
+      <span class="wire-cap left">${FG_LOGO}</span>
+      <div class="wire-view"><div class="wire-track" id="wireTrack">${wireHtml()}</div></div>
+      <span class="wire-cap right">${ICN.bell}</span>
+    </div>
 
     <div class="stat-grid">
       ${statCard('balance',    'Account Balance',   money(_account?.walletBalance || 0))}
@@ -1166,11 +1172,13 @@ function openCheckinPage() {
   const earned = Number(_account?.checkinEarned) || 0;
   const days   = Number(_account?.checkinDays) || 0;
   const done   = _account?.lastCheckinDate === todayKey();
-  const bnr    = bannerUrl('checkin');
+  const title  = bannerUrl('checkin');
+  const back   = bannerUrl('checkinBg');
 
   openModal(`
     <div class="modal-head"><h2>Check-in</h2><button class="modal-close"></button></div>
-    ${bnr ? `<div class="page-banner"><img src="${esc(bnr)}" alt=""></div>` : ''}
+    ${back ? `<div class="page-bg"><img src="${esc(back)}" alt=""></div>` : ''}
+    ${title ? `<div class="page-banner"><img src="${esc(title)}" alt=""></div>` : ''}
 
     <div class="ci-total">
       <b>${ugx(earned)}</b>
@@ -1578,14 +1586,14 @@ function renderTeam() {
 // ══════════════════════════════════════════════
 const _mi = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const MENU_ICONS = {
-  about:    _mi('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
+  about:    _mi('<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v18h5.5a2.5 2.5 0 0 0 2.5-2.5z"/>'),
   care:     _mi('<path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>'),
   records:  _mi('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6M7 13h10M7 17h4"/>'),
   bank:     _mi('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/>'),
   password: _mi('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
   gift:     _mi('<rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/><path d="M12 8c-2.5 0-4-1-4-2.5S9.5 3 12 8zM12 8c2.5 0 4-1 4-2.5S14.5 3 12 8z"/>'),
   install:  _mi('<path d="M12 3v12"/><path d="M7.5 11 12 15.5 16.5 11"/><path d="M4 19h16"/>'),
-  exit:     _mi('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 8 6 12l4 4"/><path d="M6 12h9"/>'),
+  logout:   _mi('<path d="M12 3a9 9 0 1 0 6.5 2.8"/><path d="M12 2v9"/>'),
 };
 
 // VIP rank is simply how far up the admin's price ladder the member has bought:
@@ -1616,7 +1624,7 @@ function renderAccount() {
 
   el.innerHTML = `
     <div class="acc-head">
-      <div class="acc-disc">${esc(initials(_account?.name))}</div>
+      <div class="acc-disc">${FG_LOGO}</div>
       <div class="acc-id">
         <div class="acc-num">${esc(_account?.phone || '')}</div>
         <div class="acc-badges">
@@ -1653,7 +1661,7 @@ function renderAccount() {
     </div>
 
     <button class="aflat" id="mnDownload"><span class="ati">${MENU_ICONS.install}</span><span>Install App</span></button>
-    <button class="aflat is-exit" id="logoutBtn"><span class="ati">${MENU_ICONS.exit}</span><span>Exit</span></button>
+    <button class="aflat is-exit" id="logoutBtn"><span class="ati">${MENU_ICONS.logout}</span><span>Logout</span></button>
   `;
 
   const accCode = el.querySelector('#accCode');
@@ -1670,11 +1678,21 @@ function renderAccount() {
   el.querySelector('#mnBanks').addEventListener('click', openBanksModal);
   el.querySelector('#mnPassword').addEventListener('click', openPasswordModal);
   el.querySelector('#mnSupport').addEventListener('click', openContactPage);
-  el.querySelector('#mnDownload').addEventListener('click', openDownloadModal);
+  el.querySelector('#mnDownload').addEventListener('click', installApp);
   el.querySelector('#mnAbout').addEventListener('click', openAboutModal);
 }
 
 // Download / install screen — app details are server-driven (settings/public).
+// Tapping Install runs the browser's own install flow. No intermediate page:
+// if the prompt is not available the user is told why in one line.
+async function installApp() {
+  if (isInstalled()) return toast('Chronova is already installed');
+  if (!_installPrompt) return toast('Open the browser menu and choose Install app');
+  _installPrompt.prompt();
+  try { await _installPrompt.userChoice; } catch (_) {}
+  _installPrompt = null;
+}
+
 function openDownloadModal() {
   const s = _publicSettings || {};
   const installed = isInstalled();
