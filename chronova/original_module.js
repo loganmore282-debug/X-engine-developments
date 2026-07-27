@@ -1122,38 +1122,39 @@ function openRecordsPage(tab) {
 
 // A record is a boxed card carrying its ID, timestamp and the number it moved
 // on. An empty list says "No more data" — same wording in every tab.
-// One flat row per record: reference on the left, money on the right, timestamp
-// and number underneath. Nothing is boxed or tinted.
+// A record reads as a small statement: reference and status on the top line,
+// then one labelled line per fact. Deposits carry the number they came from,
+// withdrawals carry what actually landed after the charge.
 function recordCard(r) {
-  const st = statusInfo(r.status);
+  const st  = statusInfo(r.status);
   const net = (r.netAmount != null) ? Number(r.netAmount) : null;
-  return `<div class="rrow">
-    <div class="rrow-top">
-      <span class="rrow-id">${esc(String(r.id || r.marzReference || 'pending')).slice(0, 20)}</span>
-      <b class="rrow-amt">${ugx(Math.abs(Number(r.amount) || 0))}</b>
+  const stamp = `${esc(r.date || '')}${r.time ? ' ' + esc(r.time) : ''}`.trim();
+  const line = (k, v) => v ? `<div class="rec-line"><span>${k}</span><b>${v}</b></div>` : '';
+  return `<div class="rec-card">
+    <div class="rec-head">
+      <span class="rec-ref">${esc(String(r.id || r.marzReference || 'pending'))}</span>
+      <span class="rec-st ${st.cls}">${st.label}</span>
     </div>
-    <div class="rrow-bot">
-      <span>${esc(r.date || '')}${r.time ? ' ' + esc(r.time) : ''}${r.phone ? ' · ' + esc(r.phone) : ''}</span>
-      <span class="rrow-st ${st.cls}">${st.label}</span>
-    </div>
-    ${net != null ? `<div class="rrow-bot"><span>Received ${ugx(net)}</span><span></span></div>` : ''}
+    ${line('Amount',   ugx(Math.abs(Number(r.amount) || 0)))}
+    ${net != null ? line('Received', ugx(net)) : ''}
+    ${line('Number',   esc(r.phone || r.withdrawalPhone || ''))}
+    ${line('Date',     stamp)}
   </div>`;
 }
 
-// Income rows use the same shape so all three tabs read alike.
+// Income uses the same statement shape so every tab reads alike.
 function incomeRow(t) {
   const st = statusInfo(t.status);
-  const m  = recMeta(t.type);
-  const amt = Number(t.amount) || 0;
-  return `<div class="rrow">
-    <div class="rrow-top">
-      <span class="rrow-id">${esc(m.label)}</span>
-      <b class="rrow-amt pos">+${ugx(Math.abs(amt))}</b>
+  const stamp = `${esc(t.date || '')}${t.time ? ' ' + esc(t.time) : ''}`.trim();
+  const line = (k, v) => v ? `<div class="rec-line"><span>${k}</span><b>${v}</b></div>` : '';
+  return `<div class="rec-card">
+    <div class="rec-head">
+      <span class="rec-ref">${esc(recMeta(t.type).label)}</span>
+      <span class="rec-st ${st.cls}">${st.label}</span>
     </div>
-    <div class="rrow-bot">
-      <span>${esc(t.date || '')}${t.time ? ' ' + esc(t.time) : ''}</span>
-      <span class="rrow-st ${st.cls}">${st.label}</span>
-    </div>
+    ${line('Amount', '+' + ugx(Math.abs(Number(t.amount) || 0)))}
+    ${t.level ? line('Level', 'Level ' + t.level) : ''}
+    ${line('Date', stamp)}
   </div>`;
 }
 

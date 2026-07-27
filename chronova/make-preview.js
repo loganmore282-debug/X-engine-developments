@@ -53,8 +53,8 @@ window.__PV = {
     { id: 'CHV8230A118', amount: 80000, status: 'failed',     date: '07/25/2026', time: '09:11:04', phone: '0700998877' },
   ],
   withdrawals: [
-    { id: 'WDR551208',  amount: 100000, status: 'success',    date: '07/25/2026', time: '18:20:33', phone: '0771234567' },
-    { id: 'WDR551133',  amount: 20000,  status: 'processing', date: '07/26/2026', time: '11:05:19', phone: '0771234567' },
+    { id: 'WDR551208',  amount: 100000, netAmount: 83000, status: 'success',    date: '07/25/2026', time: '18:20:33', phone: '0771234567' },
+    { id: 'WDR551133',  amount: 20000,  netAmount: 16600, status: 'processing', date: '07/26/2026', time: '11:05:19', phone: '0771234567' },
   ],
 };
 _publicSettings = window.__PV.settings;
@@ -89,6 +89,7 @@ window.__open = (what) => {
   if (what === 'recharge') return openRechargeSheet();
   if (what === 'withdraw') return openWithdrawSheet();
   if (what === 'records')  return openRecordsPage('deposits');
+  if (what === 'wrecords') return openRecordsPage('withdrawals');
   if (what === 'checkin')  return openCheckinPage();
   if (what === 'contact')  return openContactPage();
   if (what === 'mine')     return openHoldingsModal();

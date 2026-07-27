@@ -28,6 +28,7 @@ const SHOTS = [
   ['recharge', 'home',     'recharge'],
   ['withdraw', 'home',     'withdraw'],
   ['records',  'home',     'records'],
+  ['wrecords', 'home',     'wrecords'],
   ['checkin',  'home',     'checkin'],
   ['contact',  'home',     'contact'],
   ['mine',     'products', 'mine'],
