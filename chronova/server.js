@@ -431,6 +431,25 @@ async function notifyAdmins(message) {
 // Admin-editable rates live here; hardcoded constants above are fallbacks
 // only, so a bad DB value never breaks the server.
 let _settingsCache = null, _settingsCacheTs = 0;
+let _bannersCache = null, _bannersCacheTs = 0;
+// Each banner is its own document (id = slot key, e.g. bannerHero) so a save is
+// physically incapable of affecting another slot, and no single document grows
+// with every image. Legacy banners still sitting in settings/main are folded in
+// as a fallback so nothing already uploaded disappears.
+async function getBanners() {
+  if (_bannersCache && Date.now() - _bannersCacheTs < 5 * 60 * 1000) return _bannersCache;
+  const out = {};
+  try {
+    const snap = await db.collection('banners').get();
+    snap.docs.forEach(d => { const v = d.data(); if (v && v.url) out[d.id] = v.url; });
+  } catch (_) {}
+  try {
+    const s = await getSettings();
+    for (const k of Object.keys(s)) if (k.startsWith('banner') && s[k] && !out[k]) out[k] = s[k];
+  } catch (_) {}
+  _bannersCache = out; _bannersCacheTs = Date.now();
+  return out;
+}
 async function getSettings() {
   if (Date.now() - _settingsCacheTs < 5 * 60 * 1000) return _settingsCache || {};
   try {
@@ -848,7 +867,7 @@ app.get('/health', async (_req, res) => {
 });
 
 app.get('/settings/public', async (_req, res) => {
-  const s = await getSettings();
+  const [s, B] = await Promise.all([getSettings(), getBanners()]);
   res.json({
     status: 'success',
     minDeposit: s.minDeposit ?? MIN_DEPOSIT,
@@ -869,18 +888,18 @@ app.get('/settings/public', async (_req, res) => {
     // Every image the app renders comes from here. There are deliberately no
     // built-in banners: an unset slot stays empty rather than falling back.
     banners: {
-      hero:       s.bannerHero       || '',
-      checkin:    s.bannerCheckin    || '',
-      checkinBg:  s.bannerCheckinBg  || '',
-      contact:    s.bannerContact    || '',
-      gift:       s.bannerGift       || '',
-      team:       s.bannerTeam       || '',
-      inviteCode: s.bannerInviteCode || '',
-      inviteLink: s.bannerInviteLink || '',
-      balance:    s.bannerBalance    || '',
-      income:     s.bannerIncome     || '',
-      cumulative: s.bannerCumulative || '',
-      withdrawn:  s.bannerWithdrawn  || '',
+      hero:       B.bannerHero       || '',
+      checkin:    B.bannerCheckin    || '',
+      checkinBg:  B.bannerCheckinBg  || '',
+      contact:    B.bannerContact    || '',
+      gift:       B.bannerGift       || '',
+      team:       B.bannerTeam       || '',
+      inviteCode: B.bannerInviteCode || '',
+      inviteLink: B.bannerInviteLink || '',
+      balance:    B.bannerBalance    || '',
+      income:     B.bannerIncome     || '',
+      cumulative: B.bannerCumulative || '',
+      withdrawn:  B.bannerWithdrawn  || '',
     },
     rulesText:       s.rulesText       || '',
     telegramGroup:   s.telegramGroup   || '',
@@ -3472,6 +3491,28 @@ app.post('/admin/analytics', async (req, res) => {
       biggestWithdrawals: bigWits.slice(0, 10)
     });
   } catch (e) { console.error('Analytics error:', e.message); return res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Every banner slot, read from its own document (with the legacy fallback).
+app.post('/admin/banners', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { return res.json({ status: 'success', banners: await getBanners() }); }
+  catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Write ONE slot. Its own document, so it cannot disturb any other slot. An
+// empty value deletes the slot. The legacy settings copy is cleared too, so a
+// re-saved slot never resurrects from the fallback.
+app.post('/admin/banners/set', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const key = String(req.body.key || '');
+  if (!/^banner[A-Za-z]+$/.test(key)) return res.status(400).json({ status: 'error', message: 'Bad banner key' });
+  const url = String(req.body.url || '').trim();
+  try {
+    if (url) await db.collection('banners').doc(key).set({ url, updatedAt: FieldValue.serverTimestamp() });
+    else     await db.collection('banners').doc(key).delete();
+    try { await db.collection('settings').doc('main').set({ [key]: FieldValue.delete() }, { merge: true }); } catch (_) {}
+    _bannersCache = null; _bannersCacheTs = 0;
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/settings', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

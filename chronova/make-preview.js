@@ -95,7 +95,7 @@ window.__open = (what) => {
   if (what === 'checkin')  return openCheckinPage();
   if (what === 'contact')  return openContactPage();
   if (what === 'mine')     return openHoldingsModal();
-  if (what === 'detail')   return openProductDetail('tissot');
+  if (what === 'detail')   return confirmBuy('tissot');
   if (what === 'bank')     return openBanksModal();
   if (what === 'picker')   { openBanksModal(); setTimeout(()=>document.getElementById('bkNet').click(), 60); }
   if (what === 'toast')    return toast('Coming soon');

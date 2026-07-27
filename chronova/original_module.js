@@ -1322,53 +1322,47 @@ function renderProducts() {
 
   el.querySelector('#pdMine').addEventListener('click', openHoldingsModal);
   el.querySelectorAll('.pcard-cta[data-tier]').forEach(b =>
-    b.addEventListener('click', () => openProductDetail(b.dataset.tier)));
+    b.addEventListener('click', () => confirmBuy(b.dataset.tier)));
 }
 
-function openProductDetail(key) {
+// Tapping Purchase on a card buys straight away. A compact centred confirm sits
+// over the list so an accidental tap never spends money, but there is no detail
+// page to step into.
+function confirmBuy(key) {
   const idx = _products.findIndex(t => t.key === key);
   const p = _products[idx];
   if (!p) return;
   const bal   = Number(_account?.walletBalance) || 0;
   const daily = Math.round((Number(p.expectedReturn) || 0) / (Number(p.cycle) || 1));
   const tint  = tierTint(p, idx);
-  const cycle = Number(p.cycle) || 0;
-
-  openModal(`
-    <div class="modal-head"><h2>${esc(p.label || '')}</h2><button class="modal-close"></button></div>
-    <div class="pd-art">
-      ${p.image ? `<img src="${esc(p.image)}" alt="">` : `<div class="pd-fill" style="background:linear-gradient(135deg,${tint},#100d08)"></div>`}
-    </div>
-
-    <div class="pd-total">
-      <span>Total revenue</span>
-      <b>${ugx(p.expectedReturn)}</b>
-    </div>
-
-    <div class="pd-grid">
-      <span>Price</span><b>${ugx(p.price)}</b>
-      <span>Daily return</span><b>${ugx(daily)}</b>
-      <span>Cycle</span><b>${cycle} days</b>
-    </div>
-
-    <ol class="ci-rules">
-      <li>It costs ${ugx(p.price)} from your balance.</li>
-      <li>${ugx(daily)} reaches you every 24 hours from the moment you buy.</li>
-      <li>After ${cycle} days you have received ${ugx(p.expectedReturn)}.</li>
-      <li>Nothing to claim, payouts arrive on their own.</li>
-    </ol>
-
-    <div class="pd-bal"><span>Your balance</span><b>${ugx(bal)}</b></div>
-    <button class="btn" id="pdBuy">Purchase for ${ugx(p.price)}</button>
-  `);
-
-  document.getElementById('pdBuy').addEventListener('click', async () => {
-    if (bal < p.price) { closeModal(); return toast(`Need ${ugx(p.price)}, you have ${ugx(bal)}`); }
-    const btn = document.getElementById('pdBuy');
+  const root  = document.getElementById('pickerRoot');
+  root.innerHTML = `
+    <div class="pick-backdrop" data-pc></div>
+    <div class="buy-card">
+      <div class="buy-art">${p.image ? `<img src="${esc(p.image)}" alt="">` : `<div class="buy-fill" style="background:linear-gradient(135deg,${tint},#100d08)"></div>`}</div>
+      <h3 class="buy-name">${esc(p.label || '')}</h3>
+      <div class="buy-grid">
+        <span>Price</span><b>${ugx(p.price)}</b>
+        <span>Daily return</span><b>${ugx(daily)}</b>
+        <span>Cycle</span><b>${Number(p.cycle) || 0} days</b>
+        <span>Total revenue</span><b>${ugx(p.expectedReturn)}</b>
+      </div>
+      <div class="buy-bal"><span>Your balance</span><b>${ugx(bal)}</b></div>
+      <div class="buy-actions">
+        <button class="buy-cancel" data-pc>Cancel</button>
+        <button class="btn" id="buyGo">Purchase</button>
+      </div>
+    </div>`;
+  root.classList.remove('hidden');
+  const close = () => { root.classList.add('hidden'); root.innerHTML = ''; };
+  root.querySelectorAll('[data-pc]').forEach(b => b.addEventListener('click', close));
+  document.getElementById('buyGo').addEventListener('click', async () => {
+    if (bal < p.price) { close(); return toast(`You need ${ugx(p.price)} to buy this`); }
+    const btn = document.getElementById('buyGo');
     const restore = setBusy(btn);
     const r = await api('/invest/create', { method: 'POST', body: { tierKey: key } });
     if (r.status !== 'success') { restore(); return toast(r.message || 'Purchase failed'); }
-    closeModal();
+    close();
     toast('Product activated successfully');
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderProducts(); renderAccount();

@@ -719,8 +719,8 @@ const BANNER_SLOTS = [
 ];
 
 async function renderBanners(){
-  const r = await api('/admin/settings');
-  const s = r.settings||{};
+  const r = await api('/admin/banners');
+  const s = r.banners||{};
   $('content').innerHTML = `
     <h2 class="sec">App banners</h2>
     <div class="panel-card">
@@ -750,8 +750,8 @@ async function renderBanners(){
     </div>`;
 
   const put = async (key, value) => {
-    const d = await api('/admin/settings/update', { [key]: value });
-    toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    const d = await api('/admin/banners/set', { key, url: value });
+    toast(d.status==='success'?(value?'Saved':'Cleared'):(d.message||'Failed'), d.status==='success'?'ok':'err');
     if (d.status==='success') renderBanners();
   };
   document.querySelectorAll('[data-clear]').forEach(b=>b.addEventListener('click',()=>put(b.dataset.clear,'')));
