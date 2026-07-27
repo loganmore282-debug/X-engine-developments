@@ -792,7 +792,7 @@ function renderHome() {
 
     <div class="stat-grid">
       ${statCard('balance',    'Account Balance',   money(_account?.walletBalance || 0))}
-      ${statCard('income',     'Total Income',      money(todayIncome()))}
+      ${statCard('income',     "Today's Income",    money(todayIncome()))}
       ${statCard('cumulative', 'Cumulative Income', money(_account?.totalEarned || 0))}
       ${statCard('withdrawn',  'Total Withdrawals', money(_account?.totalWithdrawn || 0))}
     </div>

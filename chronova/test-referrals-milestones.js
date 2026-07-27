@@ -240,7 +240,7 @@ async function realDeposit(token, amount, phone) {
   await call('POST', '/admin/check-maturities', { body: ADMIN }); await sleep(300);
   check('paidOut lands EXACTLY on expectedReturn (999990), not a drifted flat sum', remInv.paidOut === 999990, remInv.paidOut);
   check('wallet received exactly the expectedReturn total in this one settlement', userDoc('dave-uid').walletBalance === daveBalPre4 + 999990, userDoc('dave-uid').walletBalance - daveBalPre4);
-  check('investment marked completed, not left active forever', remInv.status === 'completed', remInv.status);
+  check('investment marked matured, not left active forever', remInv.status === 'matured', remInv.status);
   await call('POST', '/admin/check-maturities', { body: ADMIN }); await sleep(200);
   check('a completed investment is never paid again', remInv.paidOut === 999990 && userDoc('dave-uid').walletBalance === daveBalPre4 + 999990, remInv.paidOut);
 
@@ -281,6 +281,31 @@ async function realDeposit(token, amount, phone) {
   r = await call('GET', '/team/stats', { token: A });
   const m5b = (r.body?.milestones || []).find(m => m.target === 5);
   check('/team/stats now reflects the claim (claimed:true)', m5b?.claimed === true, m5b);
+
+  console.log('\n── 12. Balance-tab capstone: the ledger recount matches the live counters EXACTLY');
+  // Everything above moved money through commissions, cashback, milestones and
+  // deposits via their normal incremental updates. Independently rebuilding
+  // every counter from the raw transactions ledger (the same rebuild the admin
+  // panel's "Users" recount button runs) must land on IDENTICAL numbers — any
+  // mismatch here means some code path is updating a counter incorrectly.
+  const before = {};
+  for (const uid of ['alice-uid', 'bob-uid', 'carol-uid', 'dave-uid', 'eve-uid']) {
+    const u = userDoc(uid);
+    before[uid] = { totalEarned: u.totalEarned || 0, commissionEarned: u.commissionEarned || 0,
+      commissionL1Earned: u.commissionL1Earned || 0, commissionL2Earned: u.commissionL2Earned || 0,
+      commissionL3Earned: u.commissionL3Earned || 0, totalDeposited: u.totalDeposited || 0 };
+  }
+  r = await call('POST', '/admin/users/recount', { body: ADMIN });
+  check('recount endpoint runs successfully', r.body?.status === 'success', r.body);
+  let allMatch = true; const mismatches = [];
+  for (const uid of ['alice-uid', 'bob-uid', 'carol-uid', 'dave-uid', 'eve-uid']) {
+    const u = userDoc(uid);
+    const after = { totalEarned: u.totalEarned || 0, commissionEarned: u.commissionEarned || 0,
+      commissionL1Earned: u.commissionL1Earned || 0, commissionL2Earned: u.commissionL2Earned || 0,
+      commissionL3Earned: u.commissionL3Earned || 0, totalDeposited: u.totalDeposited || 0 };
+    if (JSON.stringify(before[uid]) !== JSON.stringify(after)) { allMatch = false; mismatches.push({ uid, before: before[uid], after }); }
+  }
+  check('every counter matches its ledger-rebuilt value exactly (zero drift)', allMatch, mismatches);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

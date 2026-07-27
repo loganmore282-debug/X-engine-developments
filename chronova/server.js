@@ -1489,7 +1489,7 @@ async function runDailyPayouts() {
             t.update(invRef, {
               payoutsMade: newMade, paidOut: FieldValue.increment(amount),
               nextPayoutAt: new Date(Date.now() + 86400000),
-              status: willComplete ? 'completed' : 'active'
+              status: willComplete ? 'matured' : 'active'
             });
             const { date, time } = nowStr();
             t.set(db.collection('transactions').doc(), {
@@ -1640,6 +1640,13 @@ function startCrons() {
   // Redemption healer — a marked-but-uncredited code redemption always pays out.
   setInterval(reconcileRedemptions, 10 * 60 * 1000);
   setTimeout(reconcileRedemptions, 2 * 60 * 1000);
+  // Totals recount — rebuilds every user's running counters (totalEarned,
+  // totalDeposited, commissionEarned, totalWithdrawn...) from the transactions
+  // ledger, so the balance tabs can never silently drift from reality. Every
+  // other reconciler here self-heals its own slice every 10 minutes; this is
+  // the broadest one of all, so it runs on the same cadence as the hourly audit.
+  setInterval(() => { recountUserTotals().catch(e => console.error('recount cron error:', e.message)); }, 60 * 60 * 1000);
+  setTimeout(() => { recountUserTotals().catch(e => console.error('recount cron error:', e.message)); }, 4 * 60 * 1000);
   // KEEP-WARM: ping Mongo every 4 min so the free M0 connection never goes cold —
   // this is what makes login / admin / check-in feel instant instead of laggy on
   // the first request after a quiet spell.
