@@ -2829,54 +2829,9 @@ app.post('/admin/withdraw/process', async (req, res) => {
 
     const phone = wit.withdrawalPhone || wit.userPhone || '';
     const netAmount = wit.netAmount || wit.amount;
-    // Provider is admin-switchable in Settings (default MarzPay). Each in-flight
-    // withdrawal remembers its own provider, so switching never orphans one.
-    const sett = await getSettings();
-    const provider = ['zengapay', 'obpay', 'marzpay'].includes(sett.payoutProvider) ? sett.payoutProvider : 'zengapay';
-
-    if (provider === 'zengapay') {
-      const reference = zengaRef();
-      const z = await zengaPayout({ amount: netAmount, phone, reference, description: wit.userName || wit.userId });
-      if (!z.success) {
-        const rawMsg = String(z.error || '');
-        const busy = z.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg);
-        const detail = (rawMsg && !busy) ? ` ZengaPay said: ${rawMsg}` : '';
-        return res.status(400).json({ status: 'error',
-          message: `ZengaPay could not send this payout right now. That is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ZengaPay wallet balance and IP whitelist).` });
-      }
-      await db.collection('withdrawals').doc(withdrawalId).update({
-        status: 'processing', provider: 'zengapay', marzReference: reference,
-        zengaTxRef: z.reference || '', processedAt: FieldValue.serverTimestamp()
-      });
-      try {
-        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing', marzReference: reference });
-      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-      return res.json({ status: 'success', message: `Withdrawal processing. ${fmtUGX(netAmount)} is being sent to ${phone}` });
-    }
-
-    if (provider === 'obpay') {
-      const reference = obpayRef();
-      const ob = await obpayPayout({ amount: netAmount, phone, reference, description: wit.userName || wit.userId });
-      if (!ob || ob.success !== true) {
-        const rawMsg = String(ob?.error || '');
-        const busy = ob?.providerDown || /internal|server error|timeout|timed out|temporarily|try again|gateway|unavailable/i.test(rawMsg);
-        const detail = (rawMsg && !busy) ? ` ObPay said: ${rawMsg}` : '';
-        return res.status(400).json({ status: 'error',
-          message: `ObPay could not send this payout right now. That is on the payment provider's side, not the panel.${detail} The withdrawal stays pending and the money is untouched, so just try again in a moment (or check your ObPay wallet balance).` });
-      }
-      await db.collection('withdrawals').doc(withdrawalId).update({
-        status: 'processing', provider: 'obpay', marzReference: reference,
-        obpayTxId: ob.data?.transaction_id || '', processedAt: FieldValue.serverTimestamp()
-      });
-      try {
-        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing', marzReference: reference });
-      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-      return res.json({ status: 'success', message: `Withdrawal processing. ${fmtUGX(netAmount)} is being sent to ${phone}` });
-    }
-
-    // ── MarzPay payout (default) ──
+    // MarzPay is the only payout path — deposits and withdrawals both run through
+    // it exclusively, so there is no provider to pick.
+    // ── MarzPay payout ──
     const reference = uuidv4();
     const mpData = await marzSendMoney({
       amount: netAmount, phone, reference, description: wit.userName || wit.userId,

@@ -88,6 +88,7 @@ window.__PV.members = [
 ];
 _members = window.__PV.members;
 window.__render = (tab) => {
+  _booting = false;
   showView('main');
   _activeTab = tab || 'home';
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-' + _activeTab));
@@ -110,6 +111,7 @@ window.__open = (what) => {
   if (what === 'booting')  { _booting = true; render(); }
   if (what === 'income')   return openRecordsPage('income');
   if (what === 'teammembers') return openTeamMembersModal();
+  if (what === 'loginok') return toast('Login successful', true);
 };
 // Simulates the very first frame after launch: signed in, nothing loaded yet.
 window.__empty = () => {

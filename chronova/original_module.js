@@ -136,12 +136,16 @@ function tsMs(v) {
 // A single dark slab that opens out of the centre of the screen, holds, then
 // folds away. Deliberately colourless: the message carries the meaning, not a
 // green or red background.
-function toast(msg) {
+const SVG_TOAST_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg>';
+// ok=true adds the small checkmark above the message, for a clear confirmation
+// like a successful login — everything else stays the plain colourless slab.
+function toast(msg, ok) {
   const root = document.getElementById('toastRoot');
   root.querySelectorAll('.toast').forEach(t => t.remove());
   const el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = `<span class="toast-in">${esc(msg)}</span>`;
+  el.className = 'toast' + (ok ? ' has-check' : '');
+  el.innerHTML = (ok ? `<span class="toast-check">${SVG_TOAST_CHECK}</span>` : '') +
+                 `<span class="toast-in">${esc(msg)}</span>`;
   root.appendChild(el);
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, 2400);
 }
@@ -318,6 +322,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         await signInWithCustomToken(auth, r.customToken);
       } else throw primaryErr;
     }
+    toast('Login successful', true);
   } catch (err) {
     restore();
     const msg = /user-not-found|wrong-password|invalid-credential/.test(err.code || '')
@@ -699,7 +704,7 @@ function maskedMsisdn() {
 }
 let _wire = [];
 const WIRE_EPOCH = Date.now();   // marquee resumes from here after any re-render
-const WIRE_CYCLE = 60;            // seconds, must match the cvWire keyframes
+const WIRE_CYCLE = 120;           // seconds, must match the cvWire keyframes
 function buildWire(n) {
   const rows = [];
   for (let i = 0; i < n; i++) {
@@ -1278,11 +1283,17 @@ function renderProducts() {
   if (_booting) { el.innerHTML = `<div class="load-wrap">${SPINNER}</div>`; return; }
   const owned = _investments.length;
 
+  const cumIncome = Number(_account?.totalEarned) || 0;
+  const bg = slot => bannerUrl(slot) ? ` style="background-image:url('${esc(bannerUrl(slot))}')"` : '';
   const shortcut = `
-    <button class="mine-bar" id="pdMine">
-      <span class="mine-l">My products</span>
-      <span class="mine-r">${owned ? owned + (owned === 1 ? ' held' : ' held') : 'None yet'} ›</span>
-    </button>`;
+    <div class="pstat-row${bannerUrl('hero') ? ' has-bg' : ''}"${bg('hero')} id="pdMine">
+      <div class="pstat-txt"><span class="pstat-l">My products</span><b class="pstat-v">${owned}</b></div>
+      <span class="pstat-go">${SVG_CHEV}</span>
+    </div>
+    <div class="pstat-row${bannerUrl('cumulative') ? ' has-bg' : ''}"${bg('cumulative')} id="pdCumulative">
+      <div class="pstat-txt"><span class="pstat-l">Cumulative income</span><b class="pstat-v">${ugx(cumIncome)}</b></div>
+      <span class="pstat-go">${SVG_CHEV}</span>
+    </div>`;
 
   if (!_products.length) {
     el.innerHTML = shortcut + `<div class="shop-empty">
@@ -1291,6 +1302,7 @@ function renderProducts() {
       <span>The shop is empty. New products appear here as soon as they are published.</span>
     </div>`;
     el.querySelector('#pdMine').addEventListener('click', openHoldingsModal);
+    el.querySelector('#pdCumulative').addEventListener('click', () => openRecordsPage('income'));
     loadProducts().then(() => { if (_activeTab === 'products') renderProducts(); }).catch(() => {});
     return;
   }
@@ -1321,6 +1333,7 @@ function renderProducts() {
   }).join('');
 
   el.querySelector('#pdMine').addEventListener('click', openHoldingsModal);
+  el.querySelector('#pdCumulative').addEventListener('click', () => openRecordsPage('income'));
   el.querySelectorAll('.pcard-cta[data-tier]').forEach(b =>
     b.addEventListener('click', () => confirmBuy(b.dataset.tier)));
 }

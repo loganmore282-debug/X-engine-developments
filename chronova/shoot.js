@@ -39,6 +39,7 @@ const SHOTS = [
   ['gift',     'account',  'gift'],
   ['booting',  'home',     'booting'],
   ['teammembers', 'team', 'teammembers'],
+  ['loginok', 'home', 'loginok'],
 ];
 
 (async () => {

@@ -888,32 +888,9 @@ async function renderSettings(){
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="Chronova is being upgraded. Please check back shortly.">
-      <h2 class="sec" style="margin:14px 0 4px">Payment method</h2>
-      <div class="row">
-        <div><label>Deposits go through</label><select id="sDepProv">
-          <option value="manual" ${((s.depositProvider||'manual')==='manual')?'selected':''}>Manual (recipient numbers)</option>
-          <option value="zengapay" ${(s.depositProvider==='zengapay')?'selected':''}>ZengaPay</option>
-          <option value="marzpay" ${(s.depositProvider==='marzpay')?'selected':''}>MarzPay</option>
-          <option value="obpay" ${(s.depositProvider==='obpay')?'selected':''}>ObPay</option></select></div>
-        <div><label>Withdrawals go through</label><select id="sPayProv">
-          <option value="manual" ${((s.payoutProvider||'manual')==='manual')?'selected':''}>Manual (you pay &amp; mark paid)</option>
-          <option value="zengapay" ${(s.payoutProvider==='zengapay')?'selected':''}>ZengaPay</option>
-          <option value="marzpay" ${(s.payoutProvider==='marzpay')?'selected':''}>MarzPay</option>
-          <option value="obpay" ${(s.payoutProvider==='obpay')?'selected':''}>ObPay</option></select></div>
-      </div>
-      <p class="muted" style="margin:4px 0 0">Manual is the default: users pay your recipient numbers and you approve. You can switch to a gateway anytime.</p>
+      <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
+      <p class="muted" style="margin:0 0 4px">Chronova runs on MarzPay only — recharges are collected and withdrawals are released through it automatically. Nothing to configure here.</p>
       <button class="btn block" id="saveRates">Save rates</button>
-    </div>
-
-    <h2 class="sec">Recipient numbers &amp; alerts</h2>
-    <div class="panel-card">
-      <label>Your SMS alert number(s) — get texted on every deposit/withdrawal (comma-separated)</label>
-      <input id="sAlertPhones" value="${esc(v('adminAlertPhones',''))}" placeholder="0772000000, 0700000000">
-      <label style="margin-top:12px">Recipient mobile-money numbers users pay to</label>
-      <p class="muted" style="margin:2px 0 8px">The server rotates orders across the active numbers so none gets flooded. Toggle a number off to stop new orders going to it.</p>
-      <div id="rcptList"></div>
-      <button class="btn ghost sm" id="rcptAdd" style="margin-top:8px">+ Add number</button>
-      <button class="btn block" id="saveRcpts" style="margin-top:12px">Save recipients &amp; alerts</button>
     </div>
 
     <h2 class="sec">Announcement dialog</h2>
@@ -950,46 +927,15 @@ async function renderSettings(){
       <label>App tagline (shown under the logo)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Grow your money with watches.">
       <label>About text (shown on the app's About page)</label>
       <textarea id="abText" rows="8" placeholder="Describe Chronova for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
-      <div class="row" style="margin-top:6px">
-        <div><label>App version</label><input id="abVer" value="${esc(v('appVersion','1.7.0'))}" placeholder="1.7.0"></div>
-        <div><label>Developer</label><input id="abDev" value="${esc(v('appDeveloper','Chronova Developers'))}"></div>
-        <div><label>App size</label><input id="abSize" value="${esc(v('appSize','2.4 MB'))}" placeholder="2.4 MB"></div>
-      </div>
       <button class="btn block" id="saveAbout">Save about page</button>
     </div>`;
-  // ── Recipient numbers manager ──
-  let _rcpts = Array.isArray(s.recipients) ? JSON.parse(JSON.stringify(s.recipients)) : [];
-  function rcptRow(r,i){
-    return `<div class="row rcpt-row" data-i="${i}" style="align-items:end;gap:8px;margin-bottom:8px">
-      <div style="flex:1.2"><label>Name</label><input class="rc-name" value="${esc(r.name||'')}" placeholder="Agent name"></div>
-      <div><label>Network</label><select class="rc-net"><option value="MTN" ${r.network==='MTN'?'selected':''}>MTN</option><option value="Airtel" ${r.network==='Airtel'?'selected':''}>Airtel</option></select></div>
-      <div style="flex:1.2"><label>Number</label><input class="rc-num" value="${esc(r.number||'')}" placeholder="0770000000"></div>
-      <label style="width:auto;margin:0 4px 8px">On <input type="checkbox" class="rc-act" ${r.active!==false?'checked':''} style="width:auto"></label>
-      <button class="btn danger sm rc-del" style="margin-bottom:4px">✕</button></div>`;
-  }
-  function renderRcpts(){ $('rcptList').innerHTML = _rcpts.length? _rcpts.map(rcptRow).join('') : '<p class="muted">No numbers yet — add at least one.</p>';
-    document.querySelectorAll('.rc-del').forEach((b,i)=>b.addEventListener('click',()=>{ _rcpts.splice(i,1); renderRcpts(); })); }
-  function collectRcpts(){ return Array.from(document.querySelectorAll('.rcpt-row')).map((row,i)=>({
-    id:(_rcpts[i]&&_rcpts[i].id)||('r'+Math.random().toString(36).slice(2,8)),
-    name:row.querySelector('.rc-name').value.trim(), network:row.querySelector('.rc-net').value,
-    number:row.querySelector('.rc-num').value.trim(), active:row.querySelector('.rc-act').checked
-  })).filter(r=>r.number); }
-  renderRcpts();
-  $('rcptAdd').addEventListener('click',()=>{ _rcpts=collectRcpts(); _rcpts.push({name:'',network:'MTN',number:'',active:true}); renderRcpts(); });
-  $('saveRcpts').addEventListener('click', async()=>{
-    const recipients = collectRcpts();
-    const d = await api('/admin/settings/update', { recipients, adminAlertPhones: $('sAlertPhones').value.trim() });
-    toast(d.status==='success'?'Recipients saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if(d.status==='success'){ _rcpts=recipients; renderRcpts(); }
-  });
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdrawal:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       checkinBonus:+$('sCheckin').value, liquidityFee:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
       requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
-      maintenanceMsg:$('sMaintMsg').value.trim(),
-      depositProvider:$('sDepProv').value, payoutProvider:$('sPayProv').value
+      maintenanceMsg:$('sMaintMsg').value.trim()
     };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
@@ -1009,8 +955,7 @@ async function renderSettings(){
     toast(d.status==='success'?'Regulation saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveAbout').addEventListener('click', async()=>{
-    const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value,
-      appVersion:$('abVer').value.trim(), appDeveloper:$('abDev').value.trim(), appSize:$('abSize').value.trim() };
+    const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'About saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }
