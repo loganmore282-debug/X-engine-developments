@@ -4,3 +4,8 @@ node_modules/
 # delivery artifacts
 x-engine-update.zip
 *.zip
+
+# dev-only preview harness output
+chronova/preview.html
+chronova/preview-core.js
+chronova/shots/

@@ -37,9 +37,8 @@ function isInstalled() {
 
 // ── STATE ──
 let _user = null, _account = null, _investments = [], _members = [], _txns = [], _products = [];
+let _deposits = [], _withdrawals = [];
 let _activeTab = 'home';
-let _txnFilter = 'all';
-let _feed = [];
 let _hideBal = false;
 try { _hideBal = localStorage.getItem('fg_hide_bal') === '1'; } catch (_) {}
 
@@ -80,7 +79,6 @@ const ICN = {
   clock:        _svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   bank:         _svg('<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M3 12h18"/><path d="M7 16h4"/>'),
   trash:        _svg('<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>'),
-  boost:        _svg('<path d="M13 3 5 13h6l-1 8 9-11h-6z"/>'),
   bell:         _svg('<path d="M6 8a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/>'),
 };
 
@@ -100,10 +98,10 @@ function typeColor(t) {
   const map = {
     topup: 'var(--emerald)', gem_payout: 'var(--ok)', commission: 'var(--sapphire)',
     checkin: 'var(--topaz)', withdrawal: 'var(--ruby)', admin_debit: 'var(--ruby)',
-    investment: 'var(--amethyst)', refund: 'var(--sapphire)', admin_credit: 'var(--violet)',
-    redeem: 'var(--violet)', boost: '#ef4444', team_reward: '#db2777'
+    investment: 'var(--gold)', refund: 'var(--sapphire)', admin_credit: 'var(--gold)',
+    redeem: 'var(--gold)', team_reward: 'var(--gold-deep)'
   };
-  return map[t] || 'var(--violet)';
+  return map[t] || 'var(--gold)';
 }
 
 // ── UTILS ──
@@ -165,7 +163,6 @@ function openModal(html) {
   if (!_pageOpen) { _pageOpen = true; try { history.pushState({ fgPage: 1 }, ''); } catch (_) {} }
 }
 function closeModal(fromPop) {
-  if (typeof clearCpTimers === 'function') clearCpTimers();
   const root = document.getElementById('modalRoot');
   root.classList.add('hidden');
   root.innerHTML = '';
@@ -237,7 +234,7 @@ async function loadCaptcha() {
   const r = await api('/auth/captcha', { method: 'POST' });
   if (r.status !== 'success') { box.innerHTML = '<span style="color:#b9a9d6">—</span>'; return; }
   _captchaId = r.captchaId;
-  const cols = ['#7c3aed', '#0ea5e9', '#e11d48', '#059669', '#c026d3', '#eab308'];
+  const cols = ['#8a6418', '#a97f22', '#c9932e', '#b8862b', '#96701d', '#d9ad4e'];
   const letters = String(r.challenge).split('').map(ch => {
     const rot = (Math.random() * 40 - 20).toFixed(1);
     const dy = (Math.random() * 10 - 5).toFixed(1);
@@ -409,7 +406,7 @@ onAuthStateChanged(auth, async (user) => {
   // dashboard, so it appears already populated: no "UGX 0 → real" flash and no
   // default banners flashing before the admin images. Capped so a slow network
   // can't hang the sync screen; anything still loading finishes in the background.
-  const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadActivityFeed(), loadProducts(), loadTeam()]);
+  const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadProducts(), loadTeam()]);
   await Promise.race([essential, new Promise(r => setTimeout(r, 8000))]);
   if (checkGate()) return;
   // SELF-HEAL: an interrupted sign-up (app closed / network died between the
@@ -428,27 +425,10 @@ onAuthStateChanged(auth, async (user) => {
   showView('main');
   startRealtime();
   maybeShowAnnouncement();
-  resumeCardDeposit();
   // If the 8s cap fired before data was ready, repaint the moment it lands.
   essential.then(() => { if (checkGate()) return; if (!_pageOpen) render(); }).catch(() => {});
 });
 
-// After a card payment the customer is bounced back to the app (?card=1). Resume
-// the SAME fast pending poll used for mobile money so the credit shows instantly.
-function resumeCardDeposit() {
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem('fg_card_dep') || 'null'); } catch (_) {}
-  const returned = /[?&]card=1/.test(location.search);
-  if (!saved || !saved.id) { if (returned) cleanCardUrl(); return; }
-  // Stale (older than 30 min) — drop it silently.
-  if (Date.now() - (saved.ts || 0) > 30 * 60000) { try { localStorage.removeItem('fg_card_dep'); } catch (_) {} cleanCardUrl(); return; }
-  try { localStorage.removeItem('fg_card_dep'); } catch (_) {}
-  cleanCardUrl();
-  openDepositPending(saved.id, saved.amount, true); // fast-polls /deposit/status/:id
-}
-function cleanCardUrl() {
-  try { if (/[?&]card=1/.test(location.search)) history.replaceState(null, '', location.pathname); } catch (_) {}
-}
 // Returns true (and shows a blocker) if the app should be gated off.
 function checkGate() {
   if (_publicSettings?.maintenanceMode) {
@@ -479,22 +459,11 @@ function dataSig() {
 async function realtimeTick() {
   if (document.hidden || !_user || _pageOpen) return;
   _tickN++;
-  // Refresh the live ticker every ~60s — but RETRY EVERY TICK while it's empty
-  // (a cold server may serve an empty feed right after a deploy; without the
-  // retry the ticker stayed invisible until a manual reload).
-  const wantFeed = _tickN % 15 === 0 || !_feed.length;
   try {
     await Promise.all([loadAccount(), loadTxns(),
-      (_activeTab === 'team' ? loadTeam() : Promise.resolve()),
-      (wantFeed ? loadActivityFeed() : Promise.resolve())]);
+      (_activeTab === 'team' ? loadTeam() : Promise.resolve())]);
   } catch (_) { return; }
   if (_pageOpen || document.hidden) return; // state changed during the await
-  if (wantFeed && _feed.length) {
-    const track = document.querySelector('#panel-home .ticker-track');
-    if (track) track.innerHTML = tickerItemsHtml();
-    document.getElementById('tickerHead')?.classList.remove('hidden');
-    document.getElementById('tickerWrap')?.classList.remove('hidden');
-  }
   // Only re-render when something actually changed — no needless flicker.
   const sig = dataSig();
   if (sig === _realtimeSig) return;
@@ -507,7 +476,6 @@ function startRealtime() {
   if (_realtimeTimer) return;
   _realtimeTimer = setInterval(realtimeTick, 4000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) realtimeTick(); });
-  startCountdownTick();
 }
 
 // Full-screen blocker (maintenance / banned) — replaces the app entirely.
@@ -521,27 +489,6 @@ function showBlocker(title, msg, actionLabel, action) {
     <h2>${esc(title)}</h2><p>${esc(msg)}</p><button class="btn" id="blockerBtn">${esc(actionLabel)}</button></div>`;
   document.body.appendChild(el);
   document.getElementById('blockerBtn').addEventListener('click', action);
-}
-
-async function loadActivityFeed() {
-  const r = await api('/public/activity-feed');
-  if (r.status === 'success') _feed = r.feed || [];
-}
-const TICK_COLORS = ['#7c3aed', '#0ea5e9', '#f43f5e', '#10b981', '#eab308', '#c084fc'];
-function tickColor(name) {
-  let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return TICK_COLORS[h % TICK_COLORS.length];
-}
-function tickerItemsHtml() {
-  if (!_feed.length) return '';
-  const one = f => {
-    const label = f.action === 'joined Chronova'
-      ? `${esc(f.name)} joined Chronova`
-      : `${esc(f.name)} ${esc(f.action)}${f.amount ? ` <span class="tk-amt">${ugx(f.amount)}</span>` : ''}`;
-    return `<div class="tick-item"><span class="tav" style="background:${tickColor(f.name)}">${esc(initials(f.name))}</span><span>${label} <span class="tk-ago">· ${f.ago}m</span></span></div>`;
-  };
-  const items = _feed.map(one).join('');
-  return items + items; // duplicated so the -50% marquee loops seamlessly
 }
 
 async function loadPublicSettings() {
@@ -625,11 +572,11 @@ async function switchTab(name) {
   _activeTab = name;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-' + name));
-  document.getElementById('topbarTitle').textContent = { home: 'Home', gems: 'Watches', team: 'Team', account: 'Account' }[name];
+  document.getElementById('topbarTitle').textContent = { home: 'Home', products: 'Products', team: 'Team', account: 'Account' }[name];
   // INSTANT tabs: paint whatever is cached NOW, refresh silently in the
   // background and repaint when fresh data lands — never block the switch.
-  if (name === 'gems' && !_products.length)
-    loadProducts().then(() => { if (_activeTab === 'gems') renderGems(); }).catch(() => {});
+  if (name === 'products' && !_products.length)
+    loadProducts().then(() => { if (_activeTab === 'products') renderProducts(); }).catch(() => {});
   if (name === 'team')
     loadTeam().then(() => { if (_activeTab === 'team') renderTeam(); }).catch(() => {});
   if (name === 'account' && !_txns.length)
@@ -638,7 +585,7 @@ async function switchTab(name) {
 
 function render() {
   renderHome();
-  renderGems();
+  renderProducts();
   renderTeam();
   renderAccount();
 }
@@ -646,299 +593,192 @@ function render() {
 // ══════════════════════════════════════════════
 // HOME
 // ══════════════════════════════════════════════
-function ringSvg(pct, color) {
-  const r = 22, c = 2 * Math.PI * r;
-  const off = c * (1 - Math.min(1, Math.max(0, pct)));
-  // Start empty (offset = full circumference) and store the target; animateRings()
-  // sweeps each ring to its real value on render, so progress is visibly "moving".
-  return `<svg viewBox="0 0 54 54"><circle class="ring-track" cx="27" cy="27" r="${r}" fill="none" stroke-width="5"/>
-    <circle class="ring-prog" cx="27" cy="27" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round"
-      stroke-dasharray="${c}" stroke-dashoffset="${c}" data-off="${off.toFixed(2)}"/></svg>`;
+// ══════════════════════════════════════════════
+// HOLDING HELPERS
+// No bars, no rings, no graphs, no countdowns anywhere in Chronova. A holding
+// pays every 24h from its own purchase instant and the SERVER decides when —
+// the app only ever states what has already been settled.
+// ══════════════════════════════════════════════
+
+// Purchase stamp, owner's format: 07/24/2026 09:55:24
+function fmtStamp(ms) {
+  if (!ms) return '—';
+  const d = new Date(ms), p = n => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
-// Sweep every progress ring from empty to its real value, then keep them updated.
-function animateRings() {
-  requestAnimationFrame(() => {
-    document.querySelectorAll('#panel-home .ring-prog').forEach(circ => {
-      const off = parseFloat(circ.getAttribute('data-off'));
-      if (!isNaN(off)) circ.style.strokeDashoffset = off;
-    });
-  });
-}
-let _ringTimer = null;
-function startRingTick() {
-  if (_ringTimer) return;
-  // Recompute progress every 30s (no network) so a gem's ring keeps creeping
-  // forward while the user watches the home screen.
-  _ringTimer = setInterval(() => {
-    if (_activeTab !== 'home') return;
-    document.querySelectorAll('#panel-home .ring[data-inv]').forEach(el => {
-      const inv = _investments.find(i => i.id === el.dataset.inv);
-      const circ = el.querySelector('.ring-prog');
-      if (!inv || !circ) return;
-      const c = 2 * Math.PI * 22;
-      circ.style.strokeDashoffset = c * (1 - gemProgress(inv));
-    });
-  }, 30000);
-}
-function gemProgress(inv) {
-  const start = tsMs(inv.createdAt), mat = tsMs(inv.maturityDate);
-  if (!start || !mat || mat <= start) return 1;
-  return Math.min(1, Math.max(0, (Date.now() - start) / (mat - start)));
-}
-function daysLeft(inv) {
-  const mat = tsMs(inv.maturityDate);
-  const d = Math.ceil((mat - Date.now()) / 86400000);
-  return d > 0 ? d : 0;
-}
-function fmtCountdown(ms) {
-  if (ms <= 0) return 'moments';
-  const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), m = Math.floor((ms % 3600000) / 60000);
-  if (d > 0) return `${d}d ${h}h`;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-// ── LIVE NEXT-CASHBACK COUNTDOWN ──
-// The payout moment is set by the SERVER (investment.nextPayoutAt, advanced by
-// the payout cron); the app only displays the remaining time, ticking locally.
-function nextPayoutMs(inv) {
-  // DETERMINISTIC, drift-proof: the next payout is always exactly
-  // purchase-time + (payouts already made + 1) × 24h — the SAME formula the
-  // server settles on. Computing it here means the countdown is correct the
-  // instant data loads, even if a gem's stored nextPayoutAt drifted before the
-  // server healed it. Fall back to the stored value only if createdAt is missing.
-  const start = tsMs(inv.createdAt);
+// "1/120 days" — the day of the cycle, taken from payouts the server has
+// actually settled, never estimated from the local clock.
+function cycleLabel(inv) {
   const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
-  if (start) {
-    const madeNext = (inv.payoutsMade || 0) + 1;
-    const n = total ? Math.min(madeNext, total) : madeNext;
-    return start + n * 86400000;
-  }
-  return tsMs(inv.nextPayoutAt);
+  const made  = Number(inv.payoutsMade)  || 0;
+  if (!total) return '—';
+  const day = inv.status === 'active' ? Math.min(made + 1, total) : total;
+  return `${day}/${total} days`;
 }
-function fmtHMS(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  const pad = n => String(n).padStart(2, '0');
-  return (d > 0 ? d + 'd ' : '') + pad(h) + 'h ' + pad(m) + 'm ' + pad(sec) + 's';
+function dailyReturnOf(inv) {
+  return Number(inv.dailyPayout) || Math.round((Number(inv.expectedReturn) || 0) / (Number(inv.cycle) || 1));
 }
-function cashbackLineHtml(inv) {
-  if (inv.status !== 'active') return '';
-  const next = nextPayoutMs(inv);
-  if (!next) return '';
-  const daily = inv.dailyPayout || Math.round((inv.expectedReturn || 0) / (inv.cycle || 1));
-  return `<div class="cd-line">Next cashback of <b>${ugx(daily)}</b> in <span class="cd" data-cdnext="${next}">${fmtHMS(next - Date.now())}</span></div>`;
+// Income this holding has actually paid out so far.
+function accruedOf(inv) {
+  return Number(inv.paidOut) || (Number(inv.payoutsMade) || 0) * dailyReturnOf(inv);
 }
-let _cdTimer = null;
-function startCountdownTick() {
-  if (_cdTimer) return;
-  _cdTimer = setInterval(() => {
-    document.querySelectorAll('[data-cdnext]').forEach(el => {
-      const t = parseInt(el.dataset.cdnext, 10);
-      if (!t) return;
-      const left = t - Date.now();
-      el.textContent = left > 0 ? fmtHMS(left) : 'any moment now';
-    });
-  }, 1000);
+function todayKey() {
+  return new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10); // UTC+3, Kampala
 }
-function durPhrase(hours) {
-  hours = Number(hours) || 0;
-  return hours % 24 === 0 ? `${hours / 24} day${hours / 24 === 1 ? '' : 's'}` : `${hours} hours`;
-}
-// Boost cost = a percentage of the gem's total return (default 30%).
-function boostCost(inv) {
-  const pct = (_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.30;
-  return Math.round((inv.expectedReturn || 0) * pct);
-}
-// Boost eligibility for an active watch.
-function boostState(inv) {
-  if (inv.status !== 'active') return { kind: 'none' };
-  if (inv.boosted) return { kind: 'boosted', ms: tsMs(inv.maturityDate) - Date.now() };
-  const unlock = tsMs(inv.boostUnlockDate);
-  if (unlock && Date.now() < unlock) return { kind: 'locked', days: Math.ceil((unlock - Date.now()) / 86400000) };
-  return { kind: 'ready', cost: boostCost(inv) };
-}
-function boostRowHtml(inv) {
-  const bs = boostState(inv);
-  if (bs.kind === 'none') return '';
-  if (bs.kind === 'ready')   return `<div class="ga-boost"><span class="bs hot">Ready to accelerate</span><button class="boost-btn" data-boost="${esc(inv.id)}">${ICN.boost} Boost ${ugx(bs.cost)}</button></div>`;
-  if (bs.kind === 'boosted') return `<div class="ga-boost"><span class="bs hot">Boosted · matures in ${fmtCountdown(bs.ms)}</span></div>`;
-  return `<div class="ga-boost"><span class="bs">Boost unlocks in ${bs.days} day${bs.days === 1 ? '' : 's'}</span></div>`;
-}
-function bindBoosts(scope) {
-  (scope || document).querySelectorAll('[data-boost]').forEach(b =>
-    b.addEventListener('click', () => openBoostModal(b.dataset.boost)));
-}
-function openBoostModal(invId) {
-  const inv = _investments.find(i => i.id === invId);
-  if (!inv) return;
-  const days = _publicSettings?.boostMatureDays || 5;
-  const pct  = Math.round(((_publicSettings?.boostCostPct != null) ? _publicSettings.boostCostPct : 0.30) * 100);
-  const cost = boostCost(inv);
-  const remaining   = Math.max(0, (inv.expectedReturn || 0) - (inv.paidOut || 0));
-  const normalDaily = Number(inv.dailyPayout) || Math.round((inv.expectedReturn || 0) / (Number(inv.cycle) || 60));
-  const finalLump   = Math.max(0, remaining - normalDaily * (days - 1));
-  openModal(`
-    <div class="modal-head"><h2>Boost ${esc(inv.tierLabel || 'gem')}</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="boost-hero">${ICN.boost}</div>
-    <p class="boost-copy">Pay <b>${ugx(cost)}</b> (${pct}% of this gem's total return) to bring its maturity forward to <b>${days} days</b>. You keep receiving your normal daily cashback of <b>${ugx(normalDaily)}</b> along the way, and on the final day the entire remaining balance is paid to you at once. It does not add extra profit — the same money simply arrives sooner, then the watch completes.</p>
-    <div class="breakdown">
-      <div class="br"><span class="muted">Boost cost (${pct}%)</span><span>${ugx(cost)}</span></div>
-      <div class="br"><span class="muted">Daily cashback continues</span><span>${ugx(normalDaily)}</span></div>
-      <div class="br"><span class="muted">Final day pays the rest</span><span>${ugx(finalLump)}</span></div>
-      <div class="br"><span class="muted">Total still to receive</span><span>${ugx(remaining)}</span></div>
-      <div class="br total"><span>Matures in</span><span>${days} days</span></div>
-    </div>
-    <button class="btn" id="mSubmit">Boost now</button>
-  `);
-  document.getElementById('mSubmit').addEventListener('click', async () => {
-    if ((_account?.walletBalance || 0) < cost) { closeModal(); return toast(`Need ${ugx(cost)} to boost`, 'err'); }
-    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
-    const r = await api('/invest/boost', { method: 'POST', body: { investmentId: invId } });
-    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not boost', 'err'); }
-    closeModal();
-    toast(r.message || 'Boosted', 'ok');
-    await loadAccount(); await loadTxns(); renderHome(); renderAccount();
-  });
-}
+
 function openHoldingsModal() {
   const list = _investments.slice().sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
   const rowHtml = inv => {
-    const bs = boostState(inv);
-    const matured = inv.status === 'matured' || inv.status === 'claimed';
-    const badge = matured ? `<span class="badge on">Matured</span>`
-      : inv.boosted ? `<span class="badge" style="background:#fff3e6;color:#c2410c">Boosted</span>`
-      : `<span class="badge off">Active</span>`;
-    let action = '';
-    if (bs.kind === 'ready')   action = `<button class="boost-btn" style="margin-top:10px" data-boost="${esc(inv.id)}">${ICN.boost} Boost ${ugx(bs.cost)}</button>`;
-    else if (bs.kind === 'boosted') action = `<div class="bs hot" style="margin-top:8px">Matures in ${fmtCountdown(bs.ms)}</div>`;
-    else if (bs.kind === 'locked')  action = `<div class="bs" style="margin-top:8px">Boost unlocks in ${bs.days} day${bs.days === 1 ? '' : 's'}</div>`;
-    return `<div class="hold-row"><div class="hold-top"><b>${esc(inv.tierLabel || 'Watch')}</b>${badge}</div>
-      <div class="hold-sub">${ugx(inv.amount)} in · pays ${ugx(inv.expectedReturn)}</div>${cashbackLineHtml(inv)}${action}</div>`;
+    const done = inv.status === 'matured' || inv.status === 'claimed';
+    return `<div class="hold-row">
+      <div class="hold-top"><b>${esc(inv.tierLabel || 'Timepiece')}</b>
+        <span class="badge ${done ? 'on' : 'off'}">${done ? 'Completed' : 'Running'}</span></div>
+      <div class="hold-grid">
+        <span>Price</span><b>${ugx(inv.amount)}</b>
+        <span>Daily return</span><b>${ugx(dailyReturnOf(inv))}</b>
+        <span>Accumulated income</span><b>${ugx(accruedOf(inv))}</b>
+        <span>Total revenue</span><b>${ugx(inv.expectedReturn)}</b>
+        <span>Purchase date</span><b>${fmtStamp(tsMs(inv.createdAt))}</b>
+        <span>Cycle</span><b>${cycleLabel(inv)}</b>
+      </div></div>`;
   };
   openModal(`
-    <div class="modal-head"><h2>My watches</h2><button class="modal-close">${ICN.close}</button></div>
-    ${list.length ? list.map(rowHtml).join('') : `<div class="empty-note">You have no watches yet. Buy one from the Watches tab.</div>`}
+    <div class="modal-head"><h2>My products</h2><button class="modal-close">${ICN.close}</button></div>
+    ${list.length ? list.map(rowHtml).join('') : `<div class="empty-note">No more data</div>`}
   `);
-  bindBoosts(document.getElementById('modalRoot'));
 }
 
-const BANNER_SLIDES = [
-  { bg: 'linear-gradient(120deg,#1a1409 0%,#2a2114 55%,#0f0d0a 100%)', title: 'Own a luxury timepiece', sub: 'Acquire a watch tier and earn every day for 120 days.' },
-  { bg: 'linear-gradient(120deg,#241c0e 0%,#3a2c12 60%,#100d08 100%)', title: 'Invite &amp; earn', sub: '30% on level 1, plus level 2 and 3.' },
-  { bg: 'linear-gradient(120deg,#1a1409 0%,#2a2114 55%,#0f0d0a 100%)', title: 'Redeem a code', sub: 'Got a Chronova code? Turn it into cash.' },
-];
-// Gold watch-dial art for the home hero (replaces the old gem art).
-function watchArt() {
-  return `<svg viewBox="0 0 120 120" fill="none">
-    <circle cx="60" cy="60" r="46" fill="none" stroke="#d9ad4e" stroke-width="6" opacity="0.85"/>
-    <circle cx="60" cy="60" r="34" fill="none" stroke="#d9ad4e" stroke-width="2" opacity="0.5"/>
-    <rect x="52" y="4" width="16" height="12" rx="3" fill="#d9ad4e"/>
-    <rect x="52" y="104" width="16" height="12" rx="3" fill="#d9ad4e"/>
-    <path d="M60 60 L60 34" stroke="#f4d98a" stroke-width="4" stroke-linecap="round"/>
-    <path d="M60 60 L80 66" stroke="#f4d98a" stroke-width="4" stroke-linecap="round"/>
-    <circle cx="60" cy="60" r="4" fill="#f4d98a"/></svg>`;
+// ══════════════════════════════════════════════
+// LIVE ACTIVITY WIRE
+// Deliberately synthetic movement, not anyone's real history: masked MSISDNs
+// against plausible amounts. Recharges follow the admin's real price list so
+// the wire never advertises an amount the Products tab does not sell;
+// withdrawals step in 10,000s. Both stop at 1,000,000.
+// ══════════════════════════════════════════════
+const WIRE_CAP = 1000000;
+const WIRE_STEP = 10000;
+function wirePool(kind) {
+  if (kind === 'recharge') {
+    const prices = _products.map(p => Number(p.price)).filter(n => n > 0 && n <= WIRE_CAP);
+    if (prices.length) return prices;
+  }
+  const out = [];
+  for (let a = WIRE_STEP; a <= WIRE_CAP; a += WIRE_STEP) out.push(a);
+  return out;
 }
-let _bannerTimer = null, _bannerIdx = 0;
-function startBanner() {
-  if (_bannerTimer) { clearInterval(_bannerTimer); _bannerTimer = null; }
-  const track = document.getElementById('hbTrack');
-  if (!track) return;
-  const go = (i) => {
-    _bannerIdx = (i + BANNER_SLIDES.length) % BANNER_SLIDES.length;
-    track.querySelectorAll('.hb-slide').forEach((s, k) => s.classList.toggle('on', k === _bannerIdx));
-    document.querySelectorAll('#hbDots i').forEach((d, k) => d.classList.toggle('on', k === _bannerIdx));
-  };
-  go(_bannerIdx % BANNER_SLIDES.length);  // resume position (real-time refresh re-renders home)
-  _bannerTimer = setInterval(() => go(_bannerIdx + 1), 4500);
-  document.querySelectorAll('#hbDots i').forEach((d, k) => d.addEventListener('click', () => go(k)));
+function maskedMsisdn() {
+  return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+}
+let _wire = [];
+function buildWire(n) {
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const kind = Math.random() < 0.6 ? 'recharge' : 'withdrawal';
+    const pool = wirePool(kind);
+    rows.push({ kind, phone: maskedMsisdn(), amount: pool[Math.floor(Math.random() * pool.length)] });
+  }
+  return rows;
+}
+function wireHtml() {
+  if (!_wire.length) _wire = buildWire(18);
+  const one = w => `<span class="wire-item"><i class="wire-dot ${w.kind === 'recharge' ? 'in' : 'out'}"></i>${esc(w.phone)} <em>${w.kind}</em> ${ugx(w.amount)}</span>`;
+  const s = _wire.map(one).join('');
+  return s + s; // doubled so the -50% marquee loops seamlessly
+}
+let _wireTimer = null;
+function startWire() {
+  if (_wireTimer) return;
+  _wireTimer = setInterval(() => {
+    if (_activeTab !== 'home' || document.hidden) return;
+    _wire = buildWire(18);
+    const track = document.getElementById('wireTrack');
+    if (track) track.innerHTML = wireHtml();
+  }, 25000);
+}
+
+// ══════════════════════════════════════════════
+// HOME
+// Order is fixed by the owner: hero banner → actions → activity wire →
+// balance cards. Nothing else belongs on this screen.
+// ══════════════════════════════════════════════
+
+// Every image on this screen is admin-supplied. There are deliberately NO
+// built-in fallback banners — an empty slot renders as an empty frame so a
+// missing upload is obvious in the panel instead of being papered over.
+function bannerUrl(slot) {
+  const b = _publicSettings?.banners;
+  return (b && b[slot]) ? String(b[slot]) : '';
 }
 
 function renderHome() {
   const el = document.getElementById('panel-home');
-  const bal = _account?.walletBalance || 0;
-  const checkedInToday = _account?.lastCheckinDate === new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
-  const active = _investments.filter(i => i.status === 'active');
-  const recent = _txns.slice(0, 5);
-
-  // Dashboard photo cards reuse the admin's banner/slideshow images (Settings →
-  // Banners) — no separate upload slot needed. Falls back to a plain gold
-  // gradient card when the admin hasn't uploaded any yet.
-  const dimgs = (_publicSettings?.slideshowImages || []).filter(Boolean);
-  const dimg = (i) => dimgs.length ? esc(dimgs[i % dimgs.length]) : '';
   const IC = (window.CHRONOVA_ICONS || {});
-  const photoCard = (i, n, l) => dimg(i)
-    ? `<div class="dpic"><img class="bgph" src="${dimg(i)}"><div class="sh"></div><div class="c"><div class="n">${n}</div><div class="l">${l}</div></div></div>`
-    : `<div class="dpic" style="background:linear-gradient(120deg,#241d0e,#15130d)"><div class="c"><div class="n">${n}</div><div class="l">${l}</div></div></div>`;
+  const checkedInToday = _account?.lastCheckinDate === todayKey();
+
+  const statCard = (slot, label, value) => {
+    const img = bannerUrl(slot);
+    return `<div class="stat-card">
+      ${img ? `<img class="stat-bg" src="${esc(img)}" alt="">` : ''}
+      <div class="stat-veil"></div>
+      <div class="stat-in"><span class="stat-l">${label}</span><b class="stat-v">${value}</b></div>
+    </div>`;
+  };
+  const money = v => _hideBal ? '••••••' : ugx(v);
+  const hero = bannerUrl('hero');
 
   el.innerHTML = `
-    <div class="hero-banner">
-      <div id="hbTrack">
-        ${(() => {
-          const imgs = (_publicSettings?.slideshowImages || []).filter(Boolean);
-          if (imgs.length) return imgs.map(u => `<div class="hb-slide" style="background:#241640 center/cover no-repeat;background-image:url('${esc(u)}')"></div>`).join('');
-          return BANNER_SLIDES.map(s => `
-            <div class="hb-slide" style="background:${s.bg}">
-              <div class="hb-title">${s.title}</div>
-              <div class="hb-sub">${s.sub}</div>
-              <div class="hb-art">${watchArt()}</div>
-            </div>`).join('');
-        })()}
-      </div>
-      <div class="hb-dots" id="hbDots">${((_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length) > 0 ? Array.from({length: (_publicSettings?.slideshowImages || []).filter(Boolean).length || BANNER_SLIDES.length}).map(() => '<i></i>').join('') : ''}</div>
+    <div class="hero-static${hero ? '' : ' is-empty'}">${hero ? `<img src="${esc(hero)}" alt="">` : ''}</div>
+
+    <div class="act-row">
+      <button class="act" id="qaRecharge"><span class="act-ic">${IC.deposit ? `<img src="${IC.deposit}" alt="">` : ICN.down}</span><span class="act-t">Recharge</span></button>
+      <button class="act" id="qaWithdraw"><span class="act-ic">${IC.withdraw ? `<img src="${IC.withdraw}" alt="">` : ICN.up}</span><span class="act-t">Withdrawal</span></button>
+      <button class="act${checkedInToday ? ' is-done' : ''}" id="qaCheckin"><span class="act-ic">${IC.checkin ? `<img src="${IC.checkin}" alt="">` : ICN.checkin}</span><span class="act-t">Check-in</span></button>
+      <button class="act" id="qaContact"><span class="act-ic">${IC.contact ? `<img src="${IC.contact}" alt="">` : ICN.phone}</span><span class="act-t">Contact Us</span></button>
     </div>
-    <div class="spec-row">
-      <div class="spec-col"><b>Swiss</b><span>Movement</span></div>
-      <div class="spec-col"><b>120-Day</b><span>Term</span></div>
-      <div class="spec-col"><b>Daily</b><span>Settlement</span></div>
+
+    <div class="wire"><div class="wire-track" id="wireTrack">${wireHtml()}</div></div>
+
+    <div class="stat-grid">
+      ${statCard('balance',    'Account Balance',   money(_account?.walletBalance || 0))}
+      ${statCard('income',     'Total Income',      money(todayIncome()))}
+      ${statCard('cumulative', 'Cumulative Income', money(_account?.totalEarned || 0))}
+      ${statCard('withdrawn',  'Total Withdrawals', money(_account?.totalWithdrawn || 0))}
     </div>
-    <div class="dact-row">
-      <button class="dact" id="qaDeposit"><span class="dact-ic">${IC.deposit ? `<img src="${IC.deposit}">` : ICN.down}</span>Recharge</button>
-      <button class="dact" id="qaWithdraw"><span class="dact-ic">${IC.withdraw ? `<img src="${IC.withdraw}">` : ICN.up}</span>Withdraw</button>
-      <button class="dact" id="qaContact"><span class="dact-ic">${IC.contact ? `<img src="${IC.contact}">` : ICN.phone}</span>Contact Us</button>
-      <button class="dact${checkedInToday ? ' claimed' : ''}" id="qaCheckin"><span class="dact-ic">${IC.checkin ? `<img src="${IC.checkin}">` : ICN.checkin}</span>${checkedInToday ? 'Claimed' : 'Check-in'}</button>
-    </div>
-    ${_feed.length ? `<div class="dtick" id="tickerWrap">${ICN.bell}<div class="ticker-track">${tickerItemsHtml()}</div></div>` : ''}
-    ${photoCard(0, _hideBal ? '••••••' : ugx(bal), 'Account Balance')}
-    ${photoCard(1, _hideBal ? '••••' : ugx(_account?.totalEarned || 0), 'Cumulative Income')}
-    ${photoCard(2, _hideBal ? '••••' : ugx(_account?.totalWithdrawn || 0), 'Total Withdrawn')}
-    <div class="dpromo">${dimg(3) ? `<img src="${dimg(3)}">` : ''}<div class="sh"></div><div class="c"><b>Chronova Global</b><span>${esc(_publicSettings?.brandTagline || 'The best investment platform')}</span></div></div>
-    <div class="sec-head"><h3>Your watches</h3>${active.length ? `<button class="link-btn" data-tab-jump="gems">Buy more</button>` : ''}</div>
-    ${active.length ? active.map(inv => `
-      <div class="gem-active">
-        <div class="ga-main">
-          <div class="ring" data-inv="${esc(inv.id)}">${ringSvg(gemProgress(inv), 'var(--violet)')}</div>
-          <div class="gem-active-info">
-            <div class="t">${esc(inv.tierLabel || 'Watch')}</div>
-            <div class="s">${inv.boosted ? 'Accelerating' : daysLeft(inv) + ' day' + (daysLeft(inv) === 1 ? '' : 's') + ' left'} · ${ugx(inv.amount)} in</div>
-            <div class="p">Earns ${ugx(Math.round((inv.expectedReturn || 0) / (inv.cycle || 1)))} daily · ${ugx(inv.expectedReturn)} total</div>
-          </div>
-        </div>
-        ${cashbackLineHtml(inv)}
-        ${boostRowHtml(inv)}
-      </div>`).join('') : `<div class="empty-note">No active watches yet. Buy your first one from the Watches tab.</div>`}
-    <div class="sec-head"><h3>Recent activity</h3>${_txns.length ? `<button class="link-btn" data-tab-jump="account">See all</button>` : ''}</div>
-    ${recent.length ? recent.map(txnRowHtml).join('') : `<div class="empty-note">No activity yet.</div>`}
   `;
-  el.querySelector('#qaDeposit').addEventListener('click', openDepositModal);
-  el.querySelector('#qaWithdraw').addEventListener('click', openWithdrawModal);
-  el.querySelector('#qaContact').addEventListener('click', openSupportModal);
-  if (!checkedInToday) el.querySelector('#qaCheckin').addEventListener('click', doCheckin);
-  el.querySelectorAll('[data-tab-jump]').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tabJump)));
-  bindBoosts(el);
-  startBanner();
-  animateRings();
-  startRingTick();
+
+  el.querySelector('#qaRecharge').addEventListener('click', openRechargeSheet);
+  el.querySelector('#qaWithdraw').addEventListener('click', openWithdrawSheet);
+  el.querySelector('#qaContact').addEventListener('click', openContactPage);
+  el.querySelector('#qaCheckin').addEventListener('click', openCheckinPage);
+  startWire();
+}
+
+// Income credited today, from settled transactions (server is the source of
+// truth for the all-time figure; this is only the day slice).
+function todayIncome() {
+  const EARN = ['gem_payout', 'product_income', 'commission', 'checkin', 'team_reward', 'redeem'];
+  const key = todayKey();
+  return _txns.reduce((sum, t) => {
+    if (!EARN.includes(t.type)) return sum;
+    const amt = Number(t.amount) || 0;
+    if (amt <= 0) return sum;
+    const ms = tsMs(t.createdAt);
+    if (!ms) return sum;
+    const k = new Date(ms + 3 * 3600000).toISOString().slice(0, 10);
+    return k === key ? sum + amt : sum;
+  }, 0);
 }
 
 // Premium record card — gradient icon chip, clean title, tag, amount + status pill.
 const REC_META = {
-  topup:         { label: 'Deposit',          grad: 'linear-gradient(135deg,#10b981,#059669)' },
+  topup:         { label: 'Recharge',          grad: 'linear-gradient(135deg,#10b981,#059669)' },
   withdrawal:    { label: 'Withdrawal',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
-  commission:    { label: 'Commission',        grad: 'linear-gradient(135deg,#818cf8,#6366f1)' },
-  team_reward:   { label: 'Team reward',       grad: 'linear-gradient(135deg,#f472b6,#db2777)' },
+  commission:    { label: 'Commission',        grad: 'linear-gradient(135deg,#e6c473,#a97f22)' },
+  team_reward:   { label: 'Team reward',       grad: 'linear-gradient(135deg,#f0c360,#8a6418)' },
   checkin:       { label: 'Daily bonus',       grad: 'linear-gradient(135deg,#fbbf24,#f59e0b)' },
-  gem_payout:    { label: 'Watch payout',        grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
-  investment:    { label: 'Watch purchase',      grad: 'linear-gradient(135deg,#e6c473,#a97f22)' },
-  boost:         { label: 'Watch boost',         grad: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
+  gem_payout:    { label: 'Product income',    grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
+  product_income:{ label: 'Product income',    grad: 'linear-gradient(135deg,#34d399,#0d9488)' },
+  investment:    { label: 'Product purchase',  grad: 'linear-gradient(135deg,#e6c473,#a97f22)' },
   redeem:        { label: 'Code redeemed',     grad: 'linear-gradient(135deg,#d9ad4e,#8a6418)' },
   admin_credit:  { label: 'Credit',            grad: 'linear-gradient(135deg,#38bdf8,#2563eb)' },
   admin_debit:   { label: 'Adjustment',        grad: 'linear-gradient(135deg,#fb7185,#e11d48)' },
@@ -993,318 +833,377 @@ async function doCheckin() {
 // ══════════════════════════════════════════════
 // DEPOSIT / WITHDRAW MODALS
 // ══════════════════════════════════════════════
-const DEPOSIT_CHIPS = [30000, 50000, 100000, 200000, 500000];
-const WITHDRAW_CHIPS = [10000, 25000, 50000, 100000];
-const WITHDRAW_FEE = 0.14;
+// ══════════════════════════════════════════════
+// THREE-QUARTER SHEET
+// Recharge and Withdrawal are dialogs, not pages: they rise from the bottom
+// and cover three quarters of the viewport, leaving the dashboard visible
+// behind. openModal() stays for full-screen pages.
+// ══════════════════════════════════════════════
+const SVG_RECORDS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2h8l5 5v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M15 2v5h5"/><path d="M10 13h6M10 17h4"/></svg>';
+const SVG_TICK    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg>';
+const SVG_CLOSE   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
-function openDepositModal() {
-  if ((_publicSettings?.depositProvider || 'manual') === 'manual') return openManualDeposit();
-  const phone0 = esc((_account?.phone || '').replace('+256', '0'));
-  const minDep = _publicSettings?.minDeposit || 30000;
-  openModal(`
-    <div class="modal-head"><h2>Deposit</h2><button class="modal-close">${ICN.close}</button></div>
-    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="${minDep}">
-    <div class="amt-chips">${DEPOSIT_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`).join('')}</div>
-    <div class="field" style="margin-top:16px"><label>Mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
-    <div class="proc-line"><span class="pl-ic">${ICN.clock}</span><span>Processing time <b>Instant – 5 minutes</b></span></div>
-    <div class="info-note">
-      <span class="in-ic">${ICN.info}</span>
-      <div class="in-tx"><b>How to deposit.</b>
-        <ol>
-          <li>Enter the amount (minimum <b>${ugx(minDep)}</b>). For mobile money, add the phone number that holds it.</li>
-          <li>Tap <b>Deposit with mobile money</b> for an MTN/Airtel prompt, or <b>Pay with card</b> to use a Visa/Mastercard.</li>
-          <li>Your wallet updates here automatically once the payment clears.</li>
-        </ol>
-      </div>
-    </div>
-    <button class="btn" id="mSubmit">Deposit with mobile money</button>
-    <button class="btn" id="mCard" style="margin-top:10px;background:var(--ink)">Pay with card</button>
-  `);
-  const amtEl = document.getElementById('mAmt');
-  document.querySelectorAll('#modalRoot .amt-chip').forEach(c =>
-    c.addEventListener('click', () => { amtEl.value = c.dataset.amt; amtEl.focus(); }));
-  document.getElementById('mSubmit').addEventListener('click', async () => {
-    const amount = parseInt(amtEl.value, 10);
-    const phone = document.getElementById('mPhone').value.trim();
-    if (!amount || amount < minDep) return toast('Minimum deposit is ' + ugx(minDep), 'err');
-    if (!phone) return toast('Enter a mobile-money phone number', 'err');
-    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
-    // Admin-switchable gateway (default MarzPay); the app just calls the right one.
-    const depProvider = _publicSettings?.depositProvider || 'zengapay';
-    const depEndpoint = depProvider === 'zengapay' ? '/deposit/zengapay'
-                      : depProvider === 'obpay'    ? '/deposit/obpay'
-                      : '/deposit/marzpay';
-    const r = await api(depEndpoint, { method: 'POST', body: { amount, phone } });
-    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not start deposit', 'err'); }
-    openDepositPending(r.depositId, amount);
-  });
-  document.getElementById('mCard').addEventListener('click', async () => {
-    const amount = parseInt(amtEl.value, 10);
-    if (!amount || amount < minDep) return toast('Minimum deposit is ' + ugx(minDep), 'err');
-    const restore = setBusy(document.getElementById('mCard'), 'Opening card page');
-    const r = await api('/deposit/card', { method: 'POST', body: { amount } });
-    if (r.status !== 'success' || !r.redirectUrl) { restore(); return toast(r.message || 'Could not start card payment', 'err'); }
-    // Remember this card deposit so that when the customer returns from the
-    // gateway we can resume the fast pending poll and show the credit instantly.
-    try { localStorage.setItem('fg_card_dep', JSON.stringify({ id: r.depositId, amount, ts: Date.now() })); } catch (_) {}
-    window.location.href = r.redirectUrl;
-  });
-}
-const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-const XMARK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
-// Deposit "polling" experience — a pulsing status while we confirm the payment,
-// resolving in-place to a success or failed state (no blocking spinner).
-function openDepositPending(depositId, amount, isCard) {
+function openSheet({ title, body, onRecords }) {
   const root = document.getElementById('modalRoot');
-  const title = isCard ? 'Confirming your card payment' : 'Approve on your phone';
-  const sub = isCard
-    ? `We're confirming your card payment of <b>${ugx(amount)}</b>. Your wallet updates the moment it clears.`
-    : `Enter your mobile-money PIN to approve <b>${ugx(amount)}</b>. We'll confirm it here automatically.`;
-  root.innerHTML = `<div class="modal-backdrop"></div><div class="modal-card">
-    <div class="pay-wait">
-      <div class="pay-orb" id="payOrb">${isCard ? ICN.receipt || ICN.phone : ICN.phone}</div>
-      <div class="pay-title" id="payTitle">${title}</div>
-      <div class="pay-sub" id="paySub">${sub}</div>
-      <div class="pay-dots" id="payDots"><i></i><i></i><i></i></div>
-    </div>
-  </div>`;
+  root.style.alignItems = 'flex-end';
+  root.innerHTML = `
+    <div class="modal-backdrop" data-close></div>
+    <div class="sheet">
+      <div class="sheet-head">
+        <button class="sheet-x" data-close-sheet aria-label="Close">${SVG_CLOSE}</button>
+        <h2>${esc(title)}</h2>
+        ${onRecords ? `<button class="sheet-rec" id="sheetRecords" aria-label="Records">${SVG_RECORDS}</button>` : '<span class="sheet-rec-sp"></span>'}
+      </div>
+      <div class="sheet-body">${body}</div>
+    </div>`;
   root.classList.remove('hidden');
   document.body.classList.add('no-scroll');
-  pollDepositUI(depositId, amount, 0);
-}
-async function pollDepositUI(depositId, amount, tries) {
-  const r = await api('/deposit/status/' + depositId);
-  const s = r.deposit?.depositStatus;
-  if (s === 'matched') { depositResult('ok', r.deposit.creditedAmount || amount); await loadAccount(); await loadTxns(); renderHome(); renderAccount(); return; }
-  if (s === 'failed')  { depositResult('bad', amount); return; }
-  if (tries > 100)     { depositResult('slow', amount); return; }
-  setTimeout(() => pollDepositUI(depositId, amount, tries + 1), 1200);
-}
-// Full-screen celebratory confetti: pieces rain from the top of the SCREEN,
-// fluttering side-to-side with varied sizes, shapes, spin and speed — like real
-// confetti falling — then clear on their own. Pure CSS particles, no emoji.
-function fireConfetti() {
-  const colors = ['#7c3aed', '#10b981', '#38bdf8', '#f43f5e', '#eab308', '#c084fc', '#fb7185', '#34d399'];
-  const wrap = document.createElement('div'); wrap.className = 'confetti-sky';
-  for (let i = 0; i < 100; i++) {
-    const p = document.createElement('i');
-    const w = 6 + Math.random() * 7;
-    p.style.left = (Math.random() * 100) + 'vw';
-    p.style.width = w + 'px';
-    p.style.height = (i % 4 === 0 ? w : 4 + Math.random() * 8) + 'px';
-    if (i % 4 === 0) p.style.borderRadius = '50%';           // some round pieces
-    p.style.background = colors[i % colors.length];
-    p.style.setProperty('--sway', (Math.random() * 180 - 90) + 'px');
-    p.style.setProperty('--rot', (Math.random() * 1000 - 500) + 'deg');
-    p.style.animationDuration = (2.4 + Math.random() * 1.8) + 's';
-    p.style.animationDelay = (Math.random() * 0.8) + 's';
-    wrap.appendChild(p);
-  }
-  document.body.appendChild(wrap);
-  setTimeout(() => wrap.remove(), 5200);
+  root.querySelector('[data-close]').addEventListener('click', () => closeModal());
+  root.querySelector('[data-close-sheet]').addEventListener('click', () => closeModal());
+  if (onRecords) root.querySelector('#sheetRecords').addEventListener('click', onRecords);
+  if (!_pageOpen) { _pageOpen = true; try { history.pushState({ fgPage: 1 }, ''); } catch (_) {} }
+  return root;
 }
 
-function depositResult(kind, amount) {
-  const orb = document.getElementById('payOrb'); if (!orb) return;
-  const title = document.getElementById('payTitle'), sub = document.getElementById('paySub'), dots = document.getElementById('payDots');
-  if (dots) dots.style.display = 'none';
-  if (kind === 'ok')  { orb.className = 'pay-orb ok';  orb.innerHTML = CHECK_SVG; title.textContent = 'Successful!'; sub.innerHTML = `<b>${ugx(amount)}</b> has been added to your wallet.`; fireConfetti(); }
-  else if (kind === 'bad') { orb.className = 'pay-orb bad'; orb.innerHTML = XMARK_SVG; title.textContent = 'Deposit not completed'; sub.textContent = 'The payment was not confirmed. If money left your account, contact support.'; }
-  else { title.textContent = 'Still processing'; sub.textContent = 'This is taking a little longer. It will update on its own once confirmed.'; }
-  const card = document.querySelector('#modalRoot .modal-card');
-  if (card && !card.querySelector('#payDone')) {
-    const b = document.createElement('button');
-    b.className = 'btn'; b.id = 'payDone'; b.textContent = 'Done'; b.style.marginTop = '10px';
-    b.addEventListener('click', closeModal);
-    card.appendChild(b);
-  }
+// ══════════════════════════════════════════════
+// RECHARGE  (MarzPay collection — no admin approval step)
+// ══════════════════════════════════════════════
+
+// Quick-select amounts are the admin's real product prices, so a shortcut can
+// never offer a figure that buys nothing. No hardcoded ladder.
+function rechargeChips() {
+  const min = Number(_publicSettings?.minDeposit) || 0;
+  return [...new Set(_products.map(p => Number(p.price)).filter(n => n > 0 && n >= min))]
+    .sort((a, b) => a - b).slice(0, 6);
+}
+function netOf(phone) {
+  const n = String(phone || '').replace(/\D/g, '').replace(/^256/, '').replace(/^0/, '');
+  return ['70', '74', '75', '71'].includes(n.slice(0, 2)) ? 'Airtel' : 'MTN';
 }
 
-// ══════════════════════════════════════════════════════════════
-// MANUAL DEPOSIT — 3-step "COPY & PAY" flow (recipient numbers set in admin).
-// Step 1 amount → Step 2 pick network + your paying number → Step 3 copy the
-// assigned account, pay it, refresh to check. Server assigns the number, alerts
-// the admin by SMS, and the admin approves once the money lands.
-// ══════════════════════════════════════════════════════════════
-let _cpTimer = null, _cpPoll = null;
-function clearCpTimers() { if (_cpTimer) clearInterval(_cpTimer); if (_cpPoll) clearTimeout(_cpPoll); _cpTimer = _cpPoll = null; }
-const CP_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
-function openManualDeposit() {
-  const minDep = _publicSettings?.minDeposit || 25000;
-  openModal(`
-    <div class="modal-head"><h2>Recharge</h2><button class="modal-close">${ICN.close}</button></div>
-    <label style="font-size:13px;color:var(--sub);font-weight:600">Recharge amount</label>
-    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="${minDep}">
-    <div class="amt-chips">${DEPOSIT_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`).join('')}</div>
-    <div class="info-note" style="margin-top:14px"><span class="in-ic">${ICN.info}</span>
-      <div class="in-tx">Minimum recharge is <b>${ugx(minDep)}</b>. On the next step you pick your network and enter the number you will pay from, then you are shown an account to send the money to.</div></div>
-    <button class="btn" id="mNext" style="margin-top:14px">Confirm Payment</button>
-  `);
-  const amtEl = document.getElementById('mAmt');
-  document.querySelectorAll('#modalRoot .amt-chip').forEach(c => c.addEventListener('click', () => { amtEl.value = c.dataset.amt; amtEl.focus(); }));
-  document.getElementById('mNext').addEventListener('click', () => {
-    const amount = parseInt(amtEl.value, 10);
-    if (!amount || amount < minDep) return toast('Minimum recharge is ' + ugx(minDep), 'err');
-    openManualMethod(amount);
-  });
-}
-function openManualMethod(amount) {
-  const phone0 = esc((_account?.phone || '').replace('+256', '0'));
-  openModal(`
-    <div class="modal-head"><h2>Payment method</h2><button class="modal-close">${ICN.close}</button></div>
-    <p style="font-size:13px;color:var(--sub);line-height:1.5;margin:0 0 12px">Choose your network and the account you will use to make the payment.</p>
-    <div style="font-size:14px;margin-bottom:12px">Payment Amount: <b style="color:var(--violet)">${ugx(amount)}</b></div>
-    <label style="font-size:13px;color:var(--sub);font-weight:600;display:block;margin-bottom:8px">Select a payment method</label>
-    <div class="pm-row" style="display:flex;gap:10px;margin-bottom:14px">
-      <button class="pm-opt on" data-net="MTN" style="flex:1;padding:14px;border-radius:14px;border:1.5px solid var(--violet);background:var(--card);color:var(--ink);font-weight:700">MTN</button>
-      <button class="pm-opt" data-net="AIRTEL" style="flex:1;padding:14px;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700">Airtel</button>
-    </div>
-    <div class="field"><label>Your payment account (the number you send from)</label>
-      <input id="mSender" type="tel" placeholder="0771234567" value="${phone0}"></div>
-    <div class="err-box" style="background:var(--danger-bg);color:var(--danger)">Fill in your payment account accurately — an incorrect number can delay or lose your deposit.</div>
-    <button class="btn" id="mGo">Confirm</button>
-  `);
-  let net = 'MTN';
-  document.querySelectorAll('#modalRoot .pm-opt').forEach(b => b.addEventListener('click', () => {
-    net = b.dataset.net;
-    document.querySelectorAll('#modalRoot .pm-opt').forEach(x => { x.classList.remove('on'); x.style.borderColor = 'var(--line)'; });
-    b.classList.add('on'); b.style.borderColor = 'var(--violet)';
-  }));
-  document.getElementById('mGo').addEventListener('click', async () => {
-    const senderPhone = document.getElementById('mSender').value.trim();
-    if (!senderPhone || senderPhone.replace(/\D/g, '').length < 9) return toast('Enter the number you will pay from', 'err');
-    const restore = setBusy(document.getElementById('mGo'), 'Please wait');
-    const r = await api('/deposit/manual/create', { method: 'POST', body: { amount, senderPhone, senderNetwork: net } });
-    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not create the order', 'err'); }
-    openCopyPay(r, senderPhone);
-  });
-}
-function openCopyPay(order, senderPhone) {
-  const r = order.recipient || {};
-  const net = (r.network || 'MTN').toUpperCase();
-  const copyBtn = (val) => `<button class="cp-copy" data-copy="${esc(val)}" style="background:none;border:0;color:var(--violet);cursor:pointer;padding:4px">${CP_COPY}</button>`;
-  openModal(`
-    <div class="modal-head"><h2>Copy &amp; Pay</h2><button class="modal-close">${ICN.close}</button></div>
-    <div style="text-align:center;font-size:12px;color:var(--sub);margin-bottom:2px">Transaction expires in</div>
-    <div id="cpTime" style="text-align:center;font-size:22px;font-weight:800;color:var(--violet);font-variant-numeric:tabular-nums;margin-bottom:14px">15:00</div>
-    <div style="font-size:13px;color:var(--sub);margin-bottom:8px">Copy this <b style="color:var(--ink)">${esc(net)}</b> account and send the money to it.</div>
-    <div style="background:var(--card-2,var(--line2));border:1.5px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span style="color:var(--sub);font-size:12px">Total amount</span><b style="color:var(--violet);font-size:16px">${ugx(order.amount)}</b></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--line)"><span style="color:var(--sub);font-size:12px">${esc(net)} account</span><span style="display:flex;align-items:center;gap:6px"><b style="font-size:16px">${esc(r.number || '')}</b>${copyBtn(r.number || '')}</span></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--line)"><span style="color:var(--sub);font-size:12px">Account name</span><span style="display:flex;align-items:center;gap:6px"><b style="font-size:14px">${esc(r.name || '')}</b>${copyBtn(r.name || '')}</span></div>
-    </div>
-    <div style="font-size:13px;font-weight:700;margin-bottom:4px">Payment completed?</div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:10px">After sending the money, tap Refresh to check. Approval usually takes 2–10 minutes.</div>
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
-      <div style="font-size:13px;color:var(--sub)">Amount paid: <b id="cpPaid" style="color:var(--ink)">${ugx(0)}</b></div>
-      <button class="btn" id="cpRefresh" style="width:auto;padding:11px 24px">Refresh</button>
-    </div>
-    <div style="font-size:12px;color:var(--sub);border-top:1px solid var(--line);padding-top:10px;margin-top:6px">Your payment account: <b>${esc(senderPhone || '')}</b></div>
-  `);
-  document.querySelectorAll('#modalRoot .cp-copy').forEach(b => b.addEventListener('click', () => {
-    try { navigator.clipboard.writeText(b.dataset.copy); toast('Copied', 'ok'); } catch (_) { toast('Copy failed', 'err'); }
-  }));
-  const endAt = order.expiresAtMs || (Date.now() + 15 * 60 * 1000);
-  const tick = () => {
-    const el = document.getElementById('cpTime'); if (!el) return clearCpTimers();
-    let ms = endAt - Date.now();
-    if (ms <= 0) { el.textContent = '00:00'; el.style.color = 'var(--danger)'; clearCpTimers(); return; }
-    const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
-    el.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-  };
-  clearCpTimers(); tick(); _cpTimer = setInterval(tick, 1000);
-  const check = async (fromButton) => {
-    const rs = await api('/deposit/manual/status/' + order.orderId);
-    if (rs.status === 'success' && rs.state === 'credited') {
-      clearCpTimers(); const paid = document.getElementById('cpPaid'); if (paid) paid.textContent = ugx(order.amount);
-      manualDepositDone(order.amount); await loadAccount(); await loadTxns(); renderHome(); renderAccount(); return;
-    }
-    if (rs.state === 'rejected' || rs.state === 'expired') { clearCpTimers(); if (fromButton) toast(rs.state === 'expired' ? 'This order expired — start again' : 'This order was declined', 'err'); return; }
-    if (fromButton) toast('Not received yet — please make sure you have sent the money', 'ok');
-    _cpPoll = setTimeout(() => check(false), 6000);
-  };
-  const rb = document.getElementById('cpRefresh');
-  if (rb) rb.addEventListener('click', () => check(true));
-  _cpPoll = setTimeout(() => check(false), 6000);
-}
-function manualDepositDone(amount) {
-  const card = document.querySelector('#modalRoot .modal-card'); if (!card) return;
-  card.innerHTML = `<div class="pay-wait"><div class="pay-orb ok">${CHECK_SVG}</div>
-    <div class="pay-title">Payment received</div>
-    <div class="pay-sub"><b>${ugx(amount)}</b> has been added to your wallet.</div></div>
-    <button class="btn" id="payDone" style="margin-top:12px">Done</button>`;
-  const b = document.getElementById('payDone'); if (b) b.addEventListener('click', closeModal);
-  fireConfetti();
-}
+function openRechargeSheet() {
+  const chips = rechargeChips();
+  const min = Number(_publicSettings?.minDeposit) || 0;
+  const myPhone = String(_account?.phone || '').replace(/^\+/, '');
 
-function openWithdrawModal() {
-  const bal = _account?.walletBalance || 0;
-  const phone0 = esc((_account?.phone || '').replace('+256', '0'));
-  const minW = _publicSettings?.minWithdrawal || 10000;
-  const feeRate = (_publicSettings?.liquidityFee != null) ? _publicSettings.liquidityFee : WITHDRAW_FEE;
-  const feePct = Math.round(feeRate * 100);
-  openModal(`
-    <div class="modal-head"><h2>Withdraw</h2><button class="modal-close">${ICN.close}</button></div>
-    <div style="text-align:center;color:var(--sub);font-size:12.5px;margin-bottom:6px">Available ${ugx(bal)}</div>
-    <input id="mAmt" class="amt-big" type="number" inputmode="numeric" placeholder="0" min="${minW}">
-    <div class="amt-chips">${WITHDRAW_CHIPS.map(v => `<button class="amt-chip" data-amt="${v}">${Number(v).toLocaleString('en-UG')}</button>`)
-      .join('')}<button class="amt-chip" data-amt="${bal}">All</button></div>
-    <div class="breakdown" id="mBreak">
-      <div class="br"><span class="muted">Amount</span><span id="brAmt">${ugx(0)}</span></div>
-      <div class="br"><span class="muted">Service fee (${feePct}%)</span><span id="brFee">${ugx(0)}</span></div>
-      <div class="br total"><span>You receive</span><span id="brNet">${ugx(0)}</span></div>
-    </div>
-    <div class="proc-line"><span class="pl-ic">${ICN.clock}</span><span>Processing time <b>Instant – 1 hour</b></span></div>
-    <div class="info-note">
-      <span class="in-ic">${ICN.info}</span>
-      <div class="in-tx"><b>How to withdraw.</b>
+  openSheet({
+    title: 'Recharge',
+    onRecords: () => openRecordsPage('deposits'),
+    body: `
+      <label class="fld-l">Select amount</label>
+      <div class="chip-grid" id="rcChips">
+        ${chips.length
+          ? chips.map(a => `<button class="chip" data-amt="${a}">${Number(a).toLocaleString('en-UG')}</button>`).join('')
+          : '<div class="empty-note" style="grid-column:1/-1">No products available yet.</div>'}
+      </div>
+
+      <label class="fld-l">Amount</label>
+      <div class="fld"><span class="fld-pre">UGX</span><input id="rcAmt" type="tel" inputmode="numeric" placeholder="${min ? Number(min).toLocaleString('en-UG') : '0'}"></div>
+
+      <label class="fld-l">Mobile money number</label>
+      <div class="fld"><span class="fld-pre">+256</span><input id="rcPhone" type="tel" inputmode="numeric" placeholder="7XXXXXXXX" value="${esc(myPhone.replace(/^256/, ''))}"></div>
+
+      <div class="net-row" id="rcNets">
+        <button class="net" data-net="MTN">MTN</button>
+        <button class="net" data-net="Airtel">Airtel</button>
+      </div>
+
+      <div class="notice">
+        <b>How a recharge works</b>
         <ol>
-          <li>Minimum withdrawal is <b>${ugx(minW)}</b>. A <b>${feePct}%</b> service fee is deducted, so you receive the amount shown above.</li>
-          <li>Money is sent to the mobile-money number you enter below. Save an account to reuse it next time.</li>
-          <li>You must have activated at least one watch before you can withdraw. Requests are processed shortly after you submit.</li>
+          <li>Choose your amount and confirm the mobile money number holding the funds.</li>
+          <li>Tap <b>Process</b>. A payment prompt is pushed to that number within seconds.</li>
+          <li>Enter your mobile money <b>PIN</b> on the prompt to approve.</li>
+          <li>Your recharge appears under Records as <b>Processing</b>, then turns <b>Successful</b> once the network confirms it. The balance is credited automatically — there is no manual approval.</li>
+        </ol>
+        ${min ? `<p class="notice-min">Minimum recharge: ${ugx(min)}</p>` : ''}
+      </div>
+
+      <button class="btn" id="rcGo">Process</button>
+    `
+  });
+
+  const amtEl = document.getElementById('rcAmt');
+  const phEl  = document.getElementById('rcPhone');
+  const paintNet = () => {
+    const n = netOf('0' + phEl.value);
+    document.querySelectorAll('#rcNets .net').forEach(b => b.classList.toggle('on', b.dataset.net === n));
+  };
+  document.querySelectorAll('#rcChips .chip').forEach(c => c.addEventListener('click', () => {
+    document.querySelectorAll('#rcChips .chip').forEach(x => x.classList.remove('on'));
+    c.classList.add('on');
+    amtEl.value = Number(c.dataset.amt).toLocaleString('en-UG');
+  }));
+  amtEl.addEventListener('input', () => {
+    const raw = amtEl.value.replace(/\D/g, '');
+    amtEl.value = raw ? Number(raw).toLocaleString('en-UG') : '';
+    document.querySelectorAll('#rcChips .chip').forEach(x =>
+      x.classList.toggle('on', Number(x.dataset.amt) === Number(raw)));
+  });
+  phEl.addEventListener('input', paintNet);
+  paintNet();
+
+  document.getElementById('rcGo').addEventListener('click', async () => {
+    const amount = parseInt(amtEl.value.replace(/\D/g, ''), 10);
+    const phone  = phEl.value.replace(/\D/g, '');
+    if (!amount || amount <= 0) return toast('Enter an amount', 'err');
+    if (min && amount < min)    return toast(`Minimum recharge is ${ugx(min)}`, 'err');
+    if (phone.length < 9)       return toast('Enter a valid mobile money number', 'err');
+
+    const btn = document.getElementById('rcGo');
+    const restore = setBusy(btn);
+    const r = await api('/deposit/marzpay', { method: 'POST', body: { amount, phone: '0' + phone.slice(-9) } });
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not start the payment', 'err'); }
+
+    // Straight to the records view — the recharge is already listed there as
+    // Processing while the user approves the prompt with their PIN.
+    closeModal();
+    openRecordsPage('deposits');
+    toast('Approve the prompt on your phone', 'ok');
+    watchDeposit(r.depositId);
+  });
+}
+
+// Poll a single recharge until the server resolves it, then refresh the list
+// in place. The server is the only thing that credits money.
+async function watchDeposit(depositId, tries = 0) {
+  if (!depositId || tries > 40) return;
+  const r = await api(`/deposit/status/${encodeURIComponent(depositId)}`);
+  const st = String(r?.deposit?.status || r?.status2 || '').toLowerCase();
+  if (['matched', 'success', 'credited'].includes(st)) {
+    await Promise.all([loadAccount(), loadTxns()]);
+    renderHome(); renderAccount();
+    refreshRecords('deposits');
+    return toast('Recharge successful', 'ok');
+  }
+  if (['failed', 'cancelled', 'rejected'].includes(st)) {
+    refreshRecords('deposits');
+    return toast('Recharge declined', 'err');
+  }
+  setTimeout(() => watchDeposit(depositId, tries + 1), 4000);
+}
+
+// ══════════════════════════════════════════════
+// WITHDRAWAL
+// ══════════════════════════════════════════════
+function feeRate() {
+  const f = Number(_publicSettings?.liquidityFee);
+  return (f > 0 && f < 1) ? f : 0.17;
+}
+
+function openWithdrawSheet() {
+  const bal  = Number(_account?.walletBalance) || 0;
+  const min  = Number(_publicSettings?.minWithdrawal) || 0;
+  const rate = feeRate();
+  const banks = _account?.bankAccounts || [];
+  const invested = (Number(_account?.totalInvested) || 0) > 0 || _investments.length > 0;
+
+  openSheet({
+    title: 'Withdrawal',
+    onRecords: () => openRecordsPage('withdrawals'),
+    body: `
+      <div class="wd-bal"><span>Available balance</span><b>${ugx(bal)}</b></div>
+
+      <label class="fld-l">Receiving account</label>
+      ${banks.length
+        ? `<div class="pick" id="wdBank">${banks.map((b, i) => `
+            <button class="pick-row${i === 0 ? ' on' : ''}" data-i="${i}">
+              <span>${esc(b.network || netOf(b.number))} · ${esc(b.name || '')}</span>
+              <em>${esc(String(b.number || '').replace(/^(\d{4}).*(\d{3})$/, '$1…$2'))}</em>
+            </button>`).join('')}</div>`
+        : `<div class="empty-note">No receiving account bound yet. Add one from Account → Bind Bank.</div>`}
+
+      <label class="fld-l">Withdrawal amount</label>
+      <div class="fld"><span class="fld-pre">UGX</span><input id="wdAmt" type="tel" inputmode="numeric" placeholder="${min ? Number(min).toLocaleString('en-UG') : '0'}"></div>
+      <div class="calc" id="wdCalc">
+        <span>You receive <b id="wdNet">${ugx(0)}</b></span>
+        <span class="calc-fee">Fee ${Math.round(rate * 100)}%</span>
+      </div>
+
+      <div class="notice">
+        <b>Before you withdraw</b>
+        <ol>
+          <li>Minimum withdrawal: ${min ? ugx(min) : '—'}.</li>
+          <li>A ${Math.round(rate * 100)}% charge is deducted automatically; the figure above is what lands on your number.</li>
+          <li>You must own at least one product before withdrawing.</li>
+          <li>Requests are released within minutes — you will see the result under Records.</li>
         </ol>
       </div>
-    </div>
-    ${(_account?.bankAccounts || []).length ? `<label style="font-size:13px;color:var(--sub);font-weight:600;display:block;margin-bottom:7px">Saved accounts</label>
-      <div class="amt-chips" style="justify-content:flex-start;margin:0 0 12px">
-        ${(_account.bankAccounts).map(a => `<button type="button" class="amt-chip bank-pick" data-phone="${esc(a.phone)}">${esc(a.holderName || a.network || 'Account')}</button>`).join('')}
-      </div>` : ''}
-    <div class="field"><label>Send to mobile-money phone</label><input id="mPhone" type="tel" placeholder="0771234567" value="${phone0}"></div>
-    ${(_account?.totalInvested || 0) <= 0 ? `<div class="err-box" style="margin-bottom:14px">Activate at least one watch before you can withdraw.</div>` : ''}
-    <button class="btn" id="mSubmit">Request withdrawal</button>
-  `);
-  document.querySelectorAll('#modalRoot .bank-pick').forEach(b => b.addEventListener('click', () => {
-    document.getElementById('mPhone').value = '0' + b.dataset.phone;
-  }));
-  const amtEl = document.getElementById('mAmt');
-  const recompute = () => {
-    const a = parseInt(amtEl.value, 10) || 0;
-    const fee = Math.round(a * feeRate);
-    document.getElementById('brAmt').textContent = ugx(a);
-    document.getElementById('brFee').textContent = '− ' + ugx(fee);
-    document.getElementById('brNet').textContent = ugx(Math.max(0, a - fee));
+
+      <button class="btn" id="wdGo"${invested ? '' : ' disabled'}>${invested ? 'Process' : 'Buy a product first'}</button>
+    `
+  });
+
+  const amtEl = document.getElementById('wdAmt');
+  const paint = () => {
+    const v = parseInt(amtEl.value.replace(/\D/g, ''), 10) || 0;
+    document.getElementById('wdNet').textContent = ugx(Math.max(0, Math.round(v * (1 - rate))));
   };
-  amtEl.addEventListener('input', recompute);
-  // NOT .bank-pick: saved-account buttons share the chip styling but must only
-  // fill the phone — binding them here wiped the typed amount back to 0.
-  document.querySelectorAll('#modalRoot .amt-chip:not(.bank-pick)').forEach(c =>
-    c.addEventListener('click', () => { amtEl.value = c.dataset.amt; recompute(); }));
-  document.getElementById('mSubmit').addEventListener('click', async () => {
-    const amount = parseInt(amtEl.value, 10);
-    const phone = document.getElementById('mPhone').value.trim();
-    if (!amount || amount < minW) return toast('Minimum withdrawal is ' + ugx(minW), 'err');
-    if (amount > bal) return toast('That is more than your balance', 'err');
-    if (!phone) return toast('Enter a mobile-money phone number', 'err');
-    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
-    const r = await api('/withdraw/request', { method: 'POST', body: { amount, phone } });
-    restore();
-    if (r.status !== 'success') return toast(r.message || 'Could not submit withdrawal', 'err');
+  amtEl.addEventListener('input', () => {
+    const raw = amtEl.value.replace(/\D/g, '');
+    amtEl.value = raw ? Number(raw).toLocaleString('en-UG') : '';
+    paint();
+  });
+  document.querySelectorAll('#wdBank .pick-row').forEach(r => r.addEventListener('click', () => {
+    document.querySelectorAll('#wdBank .pick-row').forEach(x => x.classList.remove('on'));
+    r.classList.add('on');
+  }));
+
+  const go = document.getElementById('wdGo');
+  if (!invested) return;
+  go.addEventListener('click', async () => {
+    const amount = parseInt(amtEl.value.replace(/\D/g, ''), 10);
+    if (!amount || amount <= 0) return toast('Enter an amount', 'err');
+    if (min && amount < min)    return toast(`Minimum withdrawal is ${ugx(min)}`, 'err');
+    if (amount > bal)           return toast('Amount exceeds your balance', 'err');
+    if (!banks.length)          return toast('Bind a receiving account first', 'err');
+    const sel = document.querySelector('#wdBank .pick-row.on');
+    const bank = banks[Number(sel?.dataset.i) || 0];
+
+    const restore = setBusy(go);
+    const r = await api('/withdraw/request', { method: 'POST', body: {
+      amount, phone: bank.number, network: bank.network || netOf(bank.number), accountName: bank.name || ''
+    }});
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not submit', 'err'); }
     closeModal();
-    toast('Withdrawal submitted. Processing soon.', 'ok');
-    await loadAccount(); await loadTxns(); renderHome(); renderAccount();
+    await Promise.all([loadAccount(), loadTxns()]);
+    renderHome(); renderAccount();
+    openRecordsPage('withdrawals');
+    toast('Withdrawal submitted', 'ok');
   });
 }
 
+// ══════════════════════════════════════════════
+// RECORDS  — Income · Recharges · Withdrawals
+// ══════════════════════════════════════════════
+let _recordsTab = 'income';
+const RECORD_TABS = [
+  { key: 'income',      label: 'Income' },
+  { key: 'deposits',    label: 'Recharges' },
+  { key: 'withdrawals', label: 'Withdrawals' },
+];
+const INCOME_TYPES = ['gem_payout', 'product_income', 'commission', 'checkin', 'team_reward', 'redeem', 'admin_credit'];
+
+function openRecordsPage(tab) {
+  _recordsTab = tab || 'income';
+  openModal(`
+    <div class="modal-head"><h2>Records</h2><button class="modal-close"></button></div>
+    <div class="rtabs" id="rTabs">
+      ${RECORD_TABS.map(t => `<button class="rtab" data-rt="${t.key}">${t.label}</button>`).join('')}
+    </div>
+    <div id="rList"></div>
+  `);
+  document.querySelectorAll('#rTabs .rtab').forEach(b => b.addEventListener('click', () => {
+    _recordsTab = b.dataset.rt; paintRecords(); refreshRecords(_recordsTab);
+  }));
+  paintRecords();
+  refreshRecords(_recordsTab);
+}
+
+// A record is a boxed card carrying its ID, timestamp and the number it moved
+// on. An empty list says "No more data" — same wording in every tab.
+function recordCard(r) {
+  const st = statusInfo(r.status);
+  return `<div class="rcard">
+    <div class="rcard-top"><b>${ugx(Math.abs(Number(r.amount) || 0))}</b><span class="rec-status ${st.cls}">${st.label}</span></div>
+    <div class="rcard-grid">
+      <span>ID</span><em>${esc(String(r.id || r.marzReference || '—')).slice(0, 18)}</em>
+      <span>Date</span><em>${esc(r.date || '')}${r.time ? ' ' + esc(r.time) : ''}</em>
+      <span>Number</span><em>${esc(r.phone || r.number || '—')}</em>
+    </div>
+  </div>`;
+}
+
+function paintRecords() {
+  document.querySelectorAll('#rTabs .rtab').forEach(b => b.classList.toggle('on', b.dataset.rt === _recordsTab));
+  const host = document.getElementById('rList');
+  if (!host) return;
+  if (_recordsTab === 'income') {
+    const rows = _txns.filter(t => INCOME_TYPES.includes(t.type) && (Number(t.amount) || 0) > 0);
+    host.innerHTML = rows.length ? rows.map(txnRowHtml).join('') : `<div class="empty-note">No more data</div>`;
+    return;
+  }
+  const rows = _recordsTab === 'deposits' ? _deposits : _withdrawals;
+  host.innerHTML = rows.length ? rows.map(recordCard).join('') : `<div class="empty-note">No more data</div>`;
+}
+
+// Fetching is kept OUT of paintRecords: if painting triggers a request and the
+// response repaints, the two call each other forever. Fetch once per tab entry
+// and once more when a recharge resolves.
+async function loadRecords(kind) {
+  if (kind === 'income') return loadTxns();
+  const path = kind === 'deposits' ? '/account/deposits' : '/account/withdrawals';
+  const r = await api(path);
+  if (r.status !== 'success') return;
+  if (kind === 'deposits') _deposits = r.deposits || [];
+  else _withdrawals = r.withdrawals || [];
+}
+function refreshRecords(kind) {
+  loadRecords(kind)
+    .then(() => { if (_recordsTab === kind && document.getElementById('rList')) paintRecords(); })
+    .catch(() => {});
+}
+
+// ══════════════════════════════════════════════
+// CHECK-IN  (its own page, opened from Home)
+// ══════════════════════════════════════════════
+function openCheckinPage() {
+  const bonus = Number(_publicSettings?.checkinBonus) || 0;
+  const done  = _account?.lastCheckinDate === todayKey();
+  const bnr   = bannerUrl('checkin');
+  openModal(`
+    <div class="modal-head"><h2>Daily check-in</h2><button class="modal-close"></button></div>
+    ${bnr ? `<div class="page-banner"><img src="${esc(bnr)}" alt=""></div>` : ''}
+    <div class="ci-amount"><span>Today's reward</span><b>${ugx(bonus)}</b></div>
+    <div class="notice">
+      <b>How check-in works</b>
+      <ol>
+        <li>Check in once every day to claim ${ugx(bonus)}.</li>
+        <li>The reward is credited to your balance immediately.</li>
+        <li>The day resets at midnight, Kampala time.</li>
+        <li>Missing a day costs you that day's reward only — you can check in again the next day.</li>
+      </ol>
+    </div>
+    <button class="btn" id="ciGo"${done ? ' disabled' : ''}>${done ? 'Already checked in today' : 'Check in'}</button>
+  `);
+  if (done) return;
+  document.getElementById('ciGo').addEventListener('click', async () => {
+    const btn = document.getElementById('ciGo');
+    const restore = setBusy(btn);
+    const r = await api('/checkin', { method: 'POST' });
+    if (r.status !== 'success') { restore(); return toast(r.message || 'Could not check in', 'err'); }
+    btn.disabled = true; btn.textContent = 'Already checked in today';
+    await Promise.all([loadAccount(), loadTxns()]);
+    renderHome(); renderAccount();
+    toast(`${ugx(r.bonus)} credited`, 'ok');
+  });
+}
+
+// ══════════════════════════════════════════════
+// CONTACT US  (its own page — Telegram group, channel, direct)
+// ══════════════════════════════════════════════
+const SVG_TELEGRAM = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.94 4.3 18.9 19.1c-.23 1.02-.84 1.27-1.7.79l-4.7-3.46-2.27 2.18c-.25.25-.46.46-.94.46l.34-4.77 8.68-7.84c.38-.34-.08-.53-.58-.19L6.99 13.2 2.35 11.75c-1.01-.32-1.03-1.01.21-1.5l18.13-6.99c.84-.31 1.57.19 1.25 3.04z"/></svg>';
+
+function openContactPage() {
+  const S = _publicSettings || {};
+  const row = (label, sub, url) => url
+    ? `<a class="ct-row" href="${esc(url)}" target="_blank" rel="noopener">
+         <span class="ct-ic">${SVG_TELEGRAM}</span>
+         <span class="ct-tx"><b>${label}</b><em>${sub}</em></span>
+         <span class="ct-go">›</span></a>`
+    : '';
+  const rows = [
+    row('Telegram group',   'Join the community', S.telegramGroup),
+    row('Telegram channel', 'Announcements and updates', S.telegramChannel),
+    row('Direct contact',   'Message support privately', S.supportTelegram),
+  ].filter(Boolean).join('');
+  openModal(`
+    <div class="modal-head"><h2>Contact us</h2><button class="modal-close"></button></div>
+    ${bannerUrl('contact') ? `<div class="page-banner"><img src="${esc(bannerUrl('contact'))}" alt=""></div>` : ''}
+    ${rows || `<div class="empty-note">No contact channels published yet.</div>`}
+    ${S.supportHours ? `<p class="ct-hours">${esc(S.supportHours)}</p>` : ''}
+  `);
+}
 function openRedeemModal() {
   openModal(`
     <div class="modal-head"><h2>Redeem a code</h2><button class="modal-close">${ICN.close}</button></div>
@@ -1328,96 +1227,116 @@ function openRedeemModal() {
 }
 
 // ══════════════════════════════════════════════
-// GEMS
+// PRODUCTS
+// The catalogue is whatever the admin publishes — there is no built-in tier
+// list and no fallback. An empty catalogue renders as an empty catalogue.
 // ══════════════════════════════════════════════
-const GEM_COLORS = { casio: '#c9a86a', fossil: '#d9ad4e', tissot: '#e0b95a', longines: '#c9932e', omega: '#f4d98a', rolex: '#d9ad4e', patek: '#f0c360' };
-function renderGems() {
-  const el = document.getElementById('panel-gems');
-  if (!_products.length) { el.innerHTML = `<div class="empty-note" style="margin-top:14px">Watch tiers not loaded yet.</div>`; loadProducts().then(renderGems); return; }
-  el.innerHTML = `
-    <div class="sec-head" style="margin-top:12px"><h3>Pick a watch to grow</h3></div>
-    ${_products.map(p => {
-      const color = p.color || GEM_COLORS[p.key] || '#d9ad4e';
-      const daily = Math.round(p.expectedReturn / (p.cycle || 1));
-      const art = p.image ? `<img src="${esc(p.image)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:16px">` : gemArt(color);
-      const soon = !!p.comingSoon;
-      return `
-      <div class="gem-hero${soon ? ' soon' : ''}" style="--accent:${color}">
-        <div class="gh-head"><span class="gh-name">${esc(p.label)}</span><span class="gh-badge">${soon ? 'Coming soon' : 'Daily'}</span></div>
-        <div class="gh-body">
-          <div class="gh-art">${art}${soon ? '<span class="gh-soon">Coming soon</span>' : ''}</div>
-          <div class="gh-stats">
-            <div class="ghs"><span>Price</span><b>${ugx(p.price)}</b></div>
-            <div class="ghs"><span>Matures in</span><b>${p.cycle} days</b></div>
-            <div class="ghs"><span>Daily value</span><b>${ugx(daily)}</b></div>
-            <div class="ghs"><span>Total payout</span><b>${ugx(p.expectedReturn)}</b></div>
-          </div>
-        </div>
-        <div class="gh-foot"><span class="gh-price">${ugx(p.price)}</span>${soon
-          ? `<button class="gh-buy" disabled>Coming soon</button>`
-          : `<button class="gh-buy" data-tier="${p.key}">Buy now</button>`}</div>
-      </div>`;
-    }).join('')}
-  `;
-  el.querySelectorAll('.gh-buy[data-tier]').forEach(b => b.addEventListener('click', () => openGemDetail(b.dataset.tier)));
+
+// Only a tint for the card edge when the admin has not uploaded an image yet.
+// Gold family throughout; nothing here keys off a tier name.
+const TIER_TINTS = ['#c9a86a', '#d9ad4e', '#e0b95a', '#c9932e', '#f4d98a', '#b8862b', '#f0c360'];
+function tierTint(p, i) {
+  return p.color || TIER_TINTS[i % TIER_TINTS.length];
 }
-function openGemDetail(key) {
-  const p = _products.find(t => t.key === key);
+
+function renderProducts() {
+  const el = document.getElementById('panel-products');
+  if (!el) return;
+  const owned = _investments.length;
+
+  const shortcut = `
+    <button class="mine-bar" id="pdMine">
+      <span class="mine-l">My products</span>
+      <span class="mine-r">${owned ? owned + (owned === 1 ? ' held' : ' held') : 'None yet'} ›</span>
+    </button>`;
+
+  if (!_products.length) {
+    el.innerHTML = shortcut + `<div class="empty-note" style="margin-top:14px">No more data</div>`;
+    el.querySelector('#pdMine').addEventListener('click', openHoldingsModal);
+    loadProducts().then(() => { if (_activeTab === 'products') renderProducts(); }).catch(() => {});
+    return;
+  }
+
+  el.innerHTML = shortcut + _products.map((p, i) => {
+    const tint  = tierTint(p, i);
+    const daily = Math.round((Number(p.expectedReturn) || 0) / (Number(p.cycle) || 1));
+    const soon  = !!p.comingSoon;
+    return `
+      <div class="pcard${soon ? ' is-soon' : ''}" style="--tint:${tint}">
+        <div class="pcard-art">
+          ${p.image ? `<img src="${esc(p.image)}" alt="">` : '<span class="pcard-noimg"></span>'}
+          ${soon ? '<span class="pcard-soon">Coming soon</span>' : ''}
+        </div>
+        <div class="pcard-in">
+          <div class="pcard-name">${esc(p.label || '')}</div>
+          <div class="pcard-grid">
+            <span>Price</span><b>${ugx(p.price)}</b>
+            <span>Daily return</span><b>${ugx(daily)}</b>
+            <span>Cycle</span><b>${Number(p.cycle) || 0} days</b>
+            <span>Total revenue</span><b>${ugx(p.expectedReturn)}</b>
+          </div>
+          ${soon
+            ? `<button class="pcard-cta" disabled>Coming soon</button>`
+            : `<button class="pcard-cta" data-tier="${esc(p.key)}">Purchase</button>`}
+        </div>
+      </div>`;
+  }).join('');
+
+  el.querySelector('#pdMine').addEventListener('click', openHoldingsModal);
+  el.querySelectorAll('.pcard-cta[data-tier]').forEach(b =>
+    b.addEventListener('click', () => openProductDetail(b.dataset.tier)));
+}
+
+function openProductDetail(key) {
+  const idx = _products.findIndex(t => t.key === key);
+  const p = _products[idx];
   if (!p) return;
-  const bal = _account?.walletBalance || 0;
-  const daily = Math.round(p.expectedReturn / (p.cycle || 1));
-  const profit = Math.max(0, p.expectedReturn - p.price);
-  const roi = p.price ? Math.round((p.expectedReturn / p.price) * 100) : 0;
-  const swatch = p.color || GEM_COLORS[p.key] || '#d9ad4e';
-  const canAfford = bal >= p.price;
+  const bal   = Number(_account?.walletBalance) || 0;
+  const daily = Math.round((Number(p.expectedReturn) || 0) / (Number(p.cycle) || 1));
+  const tint  = tierTint(p, idx);
+  const cycle = Number(p.cycle) || 0;
+
   openModal(`
-    <div class="modal-head"><h2>${esc(p.label)}</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="gd-hero">
-      ${p.image ? `<img src="${esc(p.image)}" alt="">`
-        : `<div class="gd-hero-fill" style="background:linear-gradient(135deg,${swatch},#100d08)"></div>`}
-      <div class="gd-hero-shade"></div>
-      <div class="gd-hero-badges">
-        <span class="gd-roi">${roi}% return</span>
-        <span class="gd-price">${ugx(p.price)}</span>
-      </div>
+    <div class="modal-head"><h2>${esc(p.label || '')}</h2><button class="modal-close"></button></div>
+    <div class="pd-art">
+      ${p.image ? `<img src="${esc(p.image)}" alt="">` : `<div class="pd-fill" style="background:linear-gradient(135deg,${tint},#100d08)"></div>`}
     </div>
 
-    <div class="gd-payout">
-      <div class="gd-payout-l">Total you receive</div>
-      <div class="gd-payout-n">${ugx(p.expectedReturn)}</div>
-      <div class="gd-payout-s">That is <b>${ugx(profit)}</b> profit on your ${ugx(p.price)}</div>
+    <div class="pd-total">
+      <span>Total revenue</span>
+      <b>${ugx(p.expectedReturn)}</b>
     </div>
 
-    <div class="gd-metrics">
-      <div class="gd-m"><span class="gd-mi" style="color:${swatch}">${ICN.gem}</span>
-        <div><div class="gd-mn">${ugx(daily)}</div><div class="gd-ml">Every 24 hours</div></div></div>
-      <div class="gd-m"><span class="gd-mi" style="color:${swatch}">${ICN.clock}</span>
-        <div><div class="gd-mn">${p.cycle} days</div><div class="gd-ml">Payout cycle</div></div></div>
+    <div class="pd-grid">
+      <span>Price</span><b>${ugx(p.price)}</b>
+      <span>Daily return</span><b>${ugx(daily)}</b>
+      <span>Cycle</span><b>${cycle} days</b>
     </div>
 
-    <div class="gd-flow">
-      <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>Activate this watch for <b>${ugx(p.price)}</b></div>
-      <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>Earn <b>${ugx(daily)}</b> automatically every day, starting tomorrow</div>
-      <div class="gd-step"><span class="gd-dot" style="background:${swatch}"></span>After ${p.cycle} days you have earned <b>${ugx(p.expectedReturn)}</b>, paid to your wallet</div>
+    <div class="notice">
+      <b>How this product pays</b>
+      <ol>
+        <li>Purchase for ${ugx(p.price)} from your balance.</li>
+        <li>${ugx(daily)} is credited every 24 hours, timed from the exact moment of purchase.</li>
+        <li>The cycle runs for ${cycle} days, returning ${ugx(p.expectedReturn)} in total.</li>
+        <li>Payouts are released by the server — nothing to claim by hand.</li>
+      </ol>
     </div>
 
-    <div class="gd-bal">
-      <span>Your balance</span><b>${ugx(bal)}</b>
-    </div>
-    ${p.comingSoon
-      ? `<button class="btn gd-cta" disabled style="opacity:.6">Coming soon</button>`
-      : `<button class="btn gd-cta" id="mSubmit">Buy for ${ugx(p.price)}</button>`}
+    <div class="pd-bal"><span>Your balance</span><b>${ugx(bal)}</b></div>
+    <button class="btn" id="pdBuy">Purchase for ${ugx(p.price)}</button>
   `);
-  const submitBtn = document.getElementById('mSubmit');
-  if (submitBtn) submitBtn.addEventListener('click', async () => {
+
+  document.getElementById('pdBuy').addEventListener('click', async () => {
     if (bal < p.price) { closeModal(); return toast(`Need ${ugx(p.price)}, you have ${ugx(bal)}`, 'err'); }
-    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
+    const btn = document.getElementById('pdBuy');
+    const restore = setBusy(btn);
     const r = await api('/invest/create', { method: 'POST', body: { tierKey: key } });
     if (r.status !== 'success') { restore(); return toast(r.message || 'Purchase failed', 'err'); }
     closeModal();
-    fireConfetti();
-    toast(r.message || 'Watch activated', 'ok');
-    await loadAccount(); await loadTxns(); renderHome();
+    toast(r.message || 'Product activated', 'ok');
+    await Promise.all([loadAccount(), loadTxns()]);
+    renderHome(); renderProducts(); renderAccount();
   });
 }
 
@@ -1465,7 +1384,7 @@ function renderTeam() {
     <div class="lvl-list">
       ${LVL.map(l => `
         <div class="lvl-row">
-          <div class="lvl-badge" style="background:transparent;border:2px solid var(--violet);color:var(--violet)">L${l.n}</div>
+          <div class="lvl-badge" style="background:transparent;border:2px solid var(--gold);color:var(--gold)">L${l.n}</div>
           <div class="lvl-info">
             <div class="t">Level ${l.n} · earns ${commPct(l.n)}% of every watch</div>
             <div class="s">${l.count} member${l.count === 1 ? '' : 's'}</div>
@@ -1501,7 +1420,7 @@ function renderTeam() {
         <div class="task-reward" style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">
           <span style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;opacity:.7">Reward</span>
           <b>${ugx(m.reward)}</b>
-          ${paid ? `<span class="task-paid" style="color:#16a34a">${CHECK_SVG}</span>` : ''}
+          ${paid ? `<span class="task-paid" style="color:#16a34a">${SVG_TICK}</span>` : ''}
         </div>
       </div>`;
     }).join('')}
@@ -1509,7 +1428,7 @@ function renderTeam() {
     <div class="sec-head"><h3>Direct referrals</h3></div>
     ${_members.length ? _members.map(m => `
       <div class="member-row">
-        <div class="avatar" style="background:${tickColor(m.name)}">${esc(initials(m.name))}</div>
+        <div class="avatar" style="background:${avatarTint(m.name)}">${esc(initials(m.name))}</div>
         <div class="member-info">
           <div class="t">${esc(m.name)}</div>
           <div class="s">Deposited <b>${ugx(m.deposited || 0)}</b> · ${m.hasInvested ? 'watch active' : 'no watch yet'}</div>
@@ -1537,13 +1456,6 @@ function renderTeam() {
 // ══════════════════════════════════════════════
 // ACCOUNT
 // ══════════════════════════════════════════════
-const TXN_FILTERS = [
-  { key: 'all',         label: 'All',          types: null },
-  { key: 'deposits',    label: 'Deposits',     types: ['topup', 'admin_credit'] },
-  { key: 'withdrawals', label: 'Withdrawals',  types: ['withdrawal', 'refund'] },
-  { key: 'commissions', label: 'Commissions',  types: ['commission', 'team_reward'] },
-  { key: 'bonuses',     label: 'Bonuses',      types: ['checkin', 'redeem'] },
-];
 const ICN_WATCH = _svg('<circle cx="12" cy="12" r="7"/><path d="M12 9v3l2 1.2"/><path d="M10 2h4M10 22h4"/>');
 function renderAccount() {
   const el = document.getElementById('panel-account');
@@ -1570,9 +1482,10 @@ function renderAccount() {
     </div>
     <div class="menu-list">
       <button class="menu-row" id="mnAbout"><span class="mi">${mi('records', ICN.about)}</span><span class="ml">About Us</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnSupport"><span class="mi">${mi('cs', ICN.support)}</span><span class="ml">Customer Service</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnSupport"><span class="mi">${mi('cs', ICN.support)}</span><span class="ml">Customer Care</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnRules"><span class="mi">${ICN.about}</span><span class="ml">Regulation</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnHistory"><span class="mi">${mi('records', ICN.receipt)}</span><span class="ml">Records</span><span class="mr">${ICN.chevron}</span></button>
-      <button class="menu-row" id="mnGems"><span class="mi">${ICN_WATCH}</span><span class="ml">My Watches</span><span class="mr">${ICN.chevron}</span></button>
+      <button class="menu-row" id="mnMine"><span class="mi">${ICN_WATCH}</span><span class="ml">My Products</span><span class="mr">${ICN.chevron}</span></button>
       <button class="menu-row" id="mnTeam"><span class="mi">${mi('team', ICN.people)}</span><span class="ml">Referrals &amp; Team</span><span class="mr">${ICN.chevron}</span></button>
     </div>
     <div class="menu-list">
@@ -1590,14 +1503,15 @@ function renderAccount() {
     try { navigator.clipboard.writeText(rc); toast('Code copied'); } catch (e) {}
   });
   el.querySelector('#mnRedeem').addEventListener('click', openRedeemModal);
-  el.querySelector('#mnHistory').addEventListener('click', openHistoryModal);
-  el.querySelector('#mnGems').addEventListener('click', openHoldingsModal);
+  el.querySelector('#mnHistory').addEventListener('click', () => openRecordsPage('income'));
+  el.querySelector('#mnMine').addEventListener('click', openHoldingsModal);
   el.querySelector('#mnTeam').addEventListener('click', () => switchTab('team'));
   el.querySelector('#mnBanks').addEventListener('click', openBanksModal);
   el.querySelector('#mnPassword').addEventListener('click', openPasswordModal);
-  el.querySelector('#mnSupport').addEventListener('click', openSupportModal);
+  el.querySelector('#mnSupport').addEventListener('click', openContactPage);
   el.querySelector('#mnDownload').addEventListener('click', openDownloadModal);
   el.querySelector('#mnAbout').addEventListener('click', openAboutModal);
+  el.querySelector('#mnRules').addEventListener('click', openRulesPage);
 }
 
 // Download / install screen — app details are server-driven (settings/public).
@@ -1652,6 +1566,17 @@ function openAboutModal() {
       <div class="about-tag">${esc(tagline)}</div>
     </div>
     <div class="about-body">${paras}</div>
+  `);
+}
+
+function openRulesPage() {
+  const raw = (_publicSettings?.rulesText || '').trim();
+  const body = raw
+    ? raw.split(/\n{2,}|\r\n\r\n/).map(t => `<p>${esc(t.trim()).replace(/\n/g, '<br>')}</p>`).join('')
+    : `<div class="empty-note">No regulation published yet.</div>`;
+  openModal(`
+    <div class="modal-head"><h2>Regulation</h2><button class="modal-close"></button></div>
+    <div class="about-body">${body}</div>
   `);
 }
 
@@ -1746,58 +1671,3 @@ function tgLink(v) {
   return `https://t.me/${v.replace(/^@/, '')}`;
 }
 
-function openSupportModal() {
-  const s = _publicSettings || {};
-  const wa = waLink(s.supportWhatsapp || '');
-  const tg = tgLink(s.supportTelegram || '');
-  const hours = s.supportHours || 'Every day, 9:00 AM – 9:00 PM';
-  const IC = (window.CHRONOVA_ICONS || {});
-  const csIcon = IC.cs ? `<img src="${IC.cs}" style="width:19px;height:19px">` : ICN.support;
-  openModal(`
-    <div class="modal-head"><h2>Customer Service</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="support-body">
-      ${wa ? `<a class="support-row" href="${esc(wa)}" target="_blank" rel="noopener"><span class="mi" style="background:var(--line2);color:var(--violet)">${csIcon}</span><span><b>WhatsApp Support</b><br><span class="s">Chat with an agent</span></span></a>` : ''}
-      ${tg ? `<a class="support-row" href="${esc(tg)}" target="_blank" rel="noopener"><span class="mi" style="background:var(--line2);color:var(--violet)">${ICN.telegram}</span><span><b>Telegram Channel</b><br><span class="s">News &amp; updates</span></span></a>` : ''}
-      <div class="support-row" style="cursor:default"><span class="mi" style="background:var(--line2);color:var(--violet)">${ICN.clock}</span><span><b>Support hours</b><br><span class="s">${esc(hours)}</span></span></div>
-      ${!wa && !tg ? `<div class="empty-note">Support contacts have not been set yet.</div>` : ''}
-    </div>
-  `);
-}
-
-function openHistoryModal() {
-  if (!TXN_FILTERS.some(x => x.key === _txnFilter)) _txnFilter = 'all';
-  // Money in / Money out are lifetime totals across ALL SUCCESSFUL transactions —
-  // failed/pending attempts (e.g. a declined deposit) appear in the list with
-  // their status but never count into the totals.
-  let inSum = 0, outSum = 0;
-  _txns.forEach(t => {
-    const st = String(t.status || 'success').toLowerCase();
-    if (!['success', 'processed', 'matched'].includes(st)) return;
-    const a = t.amount || 0; if (a >= 0) inSum += a; else outSum += -a;
-  });
-  // Build the page ONCE. Tapping a filter chip only re-renders the list + chip
-  // state below — the page never re-mounts, so there's no reload/flash.
-  openModal(`
-    <div class="modal-head"><h2>Records</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="rec-summary">
-      <div class="rs in"><div class="rs-l">Money in</div><div class="rs-n">${ugx(inSum)}</div></div>
-      <div class="rs out"><div class="rs-l">Money out</div><div class="rs-n">${ugx(outSum)}</div></div>
-    </div>
-    <div class="chips rec-chips" id="recChips">${TXN_FILTERS.map(x => `<button class="chip${_txnFilter === x.key ? ' active' : ''}" data-filter="${x.key}">${x.label}</button>`).join('')}</div>
-    <div class="rec-list" id="recList"></div>
-  `);
-  const listEl = document.getElementById('recList');
-  const drawList = () => {
-    const f = TXN_FILTERS.find(x => x.key === _txnFilter) || TXN_FILTERS[0];
-    const filtered = f.types ? _txns.filter(t => f.types.includes(t.type)) : _txns;
-    listEl.innerHTML = filtered.length ? filtered.map(txnRowHtml).join('') : `<div class="empty-note">No records here yet.</div>`;
-  };
-  document.querySelectorAll('#recChips [data-filter]').forEach(chip => {
-    chip.addEventListener('click', () => {
-      _txnFilter = chip.dataset.filter;
-      document.querySelectorAll('#recChips [data-filter]').forEach(c => c.classList.toggle('active', c.dataset.filter === _txnFilter));
-      drawList();
-    });
-  });
-  drawList();
-}

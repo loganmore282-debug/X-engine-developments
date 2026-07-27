@@ -1,7 +1,7 @@
 {
-  "name": "furagemz-investment-server",
+  "name": "chronova-platform-server",
   "version": "1.0.0",
-  "description": "Furagemz Investment Platform — Backend Server",
+  "description": "Chronova Platform — Backend Server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -16,8 +16,9 @@
     "mongodb": "^6.3.0"
   },
   "devDependencies": {
-    "javascript-obfuscator": "^5.4.7",
-    "nodemon": "^3.1.0"
+    "javascript-obfuscator": "^5.5.0",
+    "nodemon": "^3.1.0",
+    "playwright": "^1.62.0"
   },
   "engines": {
     "node": ">=18.0.0"
