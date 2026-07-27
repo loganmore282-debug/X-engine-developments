@@ -37,6 +37,8 @@ api = async (path) => {
   if (path === '/account/deposits')    return { status: 'success', deposits: window.__PV.deposits };
   if (path === '/account/withdrawals') return { status: 'success', withdrawals: window.__PV.withdrawals };
   if (path === '/account/transactions') return { status: 'success', transactions: window.__PV.txns };
+  if (path === '/team/members') return { status: 'success', members: window.__PV.members };
+  if (path === '/team/stats') return { status: 'success' };
   return { status: 'success' };
 };
 window.__PV = {
@@ -80,6 +82,11 @@ window.__PV.txns = [
   { type: 'gem_payout',  amount: 20000, status: 'success', date: '07/26/2026', time: '09:55', createdAt: Date.now() - 9000000 },
 ];
 _txns = window.__PV.txns;
+window.__PV.members = [
+  { name: 'oTpi8g', phone: '256771234567', hasInvested: true,  deposited: 150000 },
+  { name: 'k9Rmzc', phone: '256700998877', hasInvested: false, deposited: 0 },
+];
+_members = window.__PV.members;
 window.__render = (tab) => {
   showView('main');
   _activeTab = tab || 'home';
@@ -102,6 +109,7 @@ window.__open = (what) => {
   if (what === 'gift')     return openRedeemModal();
   if (what === 'booting')  { _booting = true; render(); }
   if (what === 'income')   return openRecordsPage('income');
+  if (what === 'teammembers') return openTeamMembersModal();
 };
 // Simulates the very first frame after launch: signed in, nothing loaded yet.
 window.__empty = () => {

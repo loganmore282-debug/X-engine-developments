@@ -699,7 +699,7 @@ function maskedMsisdn() {
 }
 let _wire = [];
 const WIRE_EPOCH = Date.now();   // marquee resumes from here after any re-render
-const WIRE_CYCLE = 30;            // seconds, must match the cvWire keyframes
+const WIRE_CYCLE = 60;            // seconds, must match the cvWire keyframes
 function buildWire(n) {
   const rows = [];
   for (let i = 0; i < n; i++) {
@@ -1372,6 +1372,36 @@ function confirmBuy(key) {
 // ══════════════════════════════════════════════
 // TEAM
 // ══════════════════════════════════════════════
+// Masks a phone the same visual way the activity wire does: keep enough of it
+// to recognise, hide the middle.
+function maskPhone(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  return d.length >= 7 ? d.slice(0, 3) + '****' + d.slice(-3) : d;
+}
+function teamMemberRow(m) {
+  return `<div class="rec-card">
+    <div class="rec-head">
+      <span class="rec-ref">${esc(m.name || 'Member')}</span>
+      <span class="rec-st ${m.hasInvested ? 'ok' : 'mut'}">${m.hasInvested ? 'Active' : 'Not active'}</span>
+    </div>
+    <div class="rec-line"><span>Number</span><b>${esc(maskPhone(m.phone))}</b></div>
+    <div class="rec-line"><span>Deposited</span><b>${ugx(m.deposited)}</b></div>
+  </div>`;
+}
+function paintTeamMembers() {
+  const host = document.getElementById('tmList');
+  if (!host) return;
+  host.innerHTML = _members.length ? _members.map(teamMemberRow).join('') : `<div class="empty-note">No more data</div>`;
+}
+function openTeamMembersModal() {
+  openModal(`
+    <div class="modal-head"><h2>My team</h2><button class="modal-close"></button></div>
+    <div id="tmList"></div>
+  `);
+  paintTeamMembers();
+  loadTeam().then(() => { if (document.getElementById('tmList')) paintTeamMembers(); }).catch(() => {});
+}
+
 function referralLink(code) {
   try { return location.origin + location.pathname.replace(/index\.html$/, '') + '?ref=' + encodeURIComponent(code); }
   catch (_) { return 'https://chronovaplatform.com/?ref=' + code; }
@@ -1621,7 +1651,7 @@ function renderTeam() {
   };
   el.querySelector('#cpCode').addEventListener('click', () => copy(code, 'Code copied'));
   el.querySelector('#cpLink').addEventListener('click', () => copy(link, 'Link copied'));
-  el.querySelector('#tmPeople').addEventListener('click', () => openRecordsPage('income'));
+  el.querySelector('#tmPeople').addEventListener('click', () => openTeamMembersModal());
   el.querySelector('#tmRewards').addEventListener('click', () => openRecordsPage('income'));
 }
 
