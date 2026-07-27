@@ -475,6 +475,26 @@ const MIX_CHARS = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function mixedCode(n = 6) {
   return Array.from(crypto.randomBytes(n)).map(b => MIX_CHARS[b % MIX_CHARS.length]).join('');
 }
+// Transaction reference in the owner's format: a type letter, the timestamp to
+// the second, then four digits. Uniqueness is confirmed against the collection
+// rather than assumed, so two records created in the same second can never share
+// one. 'C' marks a recharge, 'W' a withdrawal.
+function stampRef(letter) {
+  const d = new Date(Date.now() + 3 * 3600000);   // Kampala
+  const p = n => String(n).padStart(2, '0');
+  const stamp = String(d.getUTCFullYear()).slice(2) + p(d.getUTCMonth() + 1) + p(d.getUTCDate())
+              + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds());
+  return letter + stamp + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+}
+async function uniqueRef(collection, letter) {
+  for (let i = 0; i < 12; i++) {
+    const ref = stampRef(letter);
+    const hit = await db.collection(collection).where('ref', '==', ref).limit(1).get();
+    if (hit.empty) return ref;
+  }
+  return stampRef(letter) + String(Math.floor(Math.random() * 100)).padStart(2, '0');
+}
+
 async function generateUniqueRefCode() {
   for (let attempt = 0; attempt < 15; attempt++) {
     const code = mixedCode(6);
@@ -853,6 +873,7 @@ app.get('/settings/public', async (_req, res) => {
       checkin:    s.bannerCheckin    || '',
       checkinBg:  s.bannerCheckinBg  || '',
       contact:    s.bannerContact    || '',
+      gift:       s.bannerGift       || '',
       team:       s.bannerTeam       || '',
       inviteCode: s.bannerInviteCode || '',
       inviteLink: s.bannerInviteLink || '',
@@ -1906,6 +1927,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
 
     const reference = uuidv4();
+    const ref = await uniqueRef('pendingDeposits', 'C');
     const mpData = await marzCollect({
       amount: amt, phone, reference, description: user.name || userId,
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
@@ -1925,7 +1947,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         if (!uSnap2.exists) throw new Error('User not found');
         t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt), realDeposited: FieldValue.increment(amt) });
         t.set(depRef, {
-          userId, phone, amount: amt, creditedAmount: amt,
+          userId, phone, amount: amt, creditedAmount: amt, ref,
           marzReference: reference, marzTxUuid, status: 'matched', date, time,
           matchedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp()
         });
@@ -1937,7 +1959,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       });
     } else {
       await depRef.set({
-        userId, phone, amount: amt, marzReference: reference, marzTxUuid,
+        userId, phone, amount: amt, ref, marzReference: reference, marzTxUuid,
         status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
       });
     }
@@ -2533,6 +2555,7 @@ app.post('/withdraw/request', async (req, res) => {
     const fee = Math.round(amt * feeRate);
     const netAmt = amt - fee;
     const { date, time } = nowStr();
+    const ref = await uniqueRef('withdrawals', 'W');
     let witId;
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
@@ -2544,7 +2567,7 @@ app.post('/withdraw/request', async (req, res) => {
       witId = witRef.id;
       t.set(witRef, {
         userId, userName: user.name || '', userPhone: user.phone || '',
-        withdrawalPhone: fullPhone, amount: amt, fee, netAmount: netAmt,
+        withdrawalPhone: fullPhone, amount: amt, fee, netAmount: netAmt, ref,
         status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
@@ -2954,7 +2977,7 @@ app.get('/account/deposits', async (req, res) => {
     const list = snap.docs.map(d => {
       const x = d.data();
       return {
-        id: d.id, amount: x.creditedAmount || x.amount || 0, status: x.status || 'processing',
+        id: d.id, ref: x.ref || '', amount: x.creditedAmount || x.amount || 0, status: x.status || 'processing',
         date: x.date || '', time: x.time || '', phone: x.phone || '',
         marzReference: x.marzReference || '', createdAt: x.createdAt || null,
       };

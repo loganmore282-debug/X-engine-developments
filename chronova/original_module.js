@@ -1132,7 +1132,7 @@ function recordCard(r) {
   const line = (k, v) => v ? `<div class="rec-line"><span>${k}</span><b>${v}</b></div>` : '';
   return `<div class="rec-card">
     <div class="rec-head">
-      <span class="rec-ref">${esc(String(r.id || r.marzReference || 'pending'))}</span>
+      <span class="rec-ref">${esc(String(r.ref || r.id || 'pending'))}</span>
       <span class="rec-st ${st.cls}">${st.label}</span>
     </div>
     ${line('Amount',   ugx(Math.abs(Number(r.amount) || 0)))}
@@ -1397,24 +1397,35 @@ function openPicker({ title, options, selected, onConfirm }) {
 }
 
 function openRedeemModal() {
+  const group = (_publicSettings || {}).telegramGroup || '';
   openModal(`
-    <div class="modal-head"><h2>Redeem a code</h2><button class="modal-close">${ICN.close}</button></div>
-    <div class="field"><label>Enter your code</label>
-      <input id="mCode" type="text" autocomplete="off" placeholder="XXXXXXXXXX" maxlength="14"
-        style="text-transform:uppercase;letter-spacing:3px;text-align:center;font-weight:800;font-size:18px"></div>
-    <div class="note" style="text-align:left;margin-bottom:14px">A code can be redeemed once per account. The reward lands straight in your wallet.</div>
-    <button class="btn" id="mSubmit">Redeem code</button>
+    <div class="modal-head"><h2>Redeem gift</h2><button class="modal-close"></button></div>
+    ${bannerUrl('gift') ? `<div class="page-banner"><img src="${esc(bannerUrl('gift'))}" alt=""></div>` : ''}
+
+    <p class="gift-lead">Gift codes are posted in our Telegram group.</p>
+    ${group ? `<a class="gift-group" href="${esc(group)}" target="_blank" rel="noopener">
+        <span class="gift-tg">${TG_MARK}</span>
+        <span class="gift-name">Chronova group</span>
+        <span class="gift-go">${SVG_CHEV}</span>
+      </a>` : ''}
+
+    <label class="gift-label"><i>*</i>Gift code</label>
+    <input id="mCode" class="gift-input" type="text" autocomplete="off" placeholder="Enter your gift code">
+
+    <button class="btn" id="mSubmit">Claim</button>
   `);
   document.getElementById('mSubmit').addEventListener('click', async () => {
-    const code = document.getElementById('mCode').value.toUpperCase().replace(/[\s-]/g, '');
-    if (!code) return toast('Enter a code');
-    const restore = setBusy(document.getElementById('mSubmit'), 'Please wait');
+    const code = document.getElementById('mCode').value.replace(/[\s-]/g, '');
+    if (!code) return toast('Enter a gift code');
+    const btn = document.getElementById('mSubmit');
+    const restore = setBusy(btn);
     const r = await api('/redeem', { method: 'POST', body: { code } });
     restore();
-    if (r.status !== 'success') return toast(r.message || 'Could not redeem this code');
+    if (r.status !== 'success') return toast(r.message || 'That code could not be claimed');
     closeModal();
-    toast(r.message || 'Code redeemed');
-    await loadAccount(); await loadTxns(); renderHome(); renderAccount();
+    toast(`${ugx(r.amount)} added successfully`);
+    await Promise.all([loadAccount(), loadTxns()]);
+    renderHome(); renderAccount();
   });
 }
 

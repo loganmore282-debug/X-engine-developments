@@ -44,17 +44,17 @@ window.__PV = {
     commL1: 0.30, commL2: 0.03, commL3: 0.01,
     telegramGroup: 'https://t.me/chronova', telegramChannel: 'https://t.me/chronova_news',
     supportTelegram: 'https://t.me/chronova_help', supportHours: 'Every day, 9:00 AM – 9:00 PM',
-    banners: { checkin: '${PNG_GOLD}', checkinBg: '${PNG_GOLD}' }
+    banners: { checkin: '${PNG_GOLD}', checkinBg: '${PNG_GOLD}', gift: '${PNG_GOLD}' }
   },
   products: ${JSON.stringify(PRODUCTS)},
   deposits: [
-    { id: 'CHV8241X093', amount: 50000, status: 'success',    date: '07/26/2026', time: '14:02:11', phone: '0771234567' },
-    { id: 'CHV8239K771', amount: 25000, status: 'processing', date: '07/26/2026', time: '13:48:52', phone: '0771234567' },
-    { id: 'CHV8230A118', amount: 80000, status: 'failed',     date: '07/25/2026', time: '09:11:04', phone: '0700998877' },
+    { id: 'd1', ref: 'C2607261402110841', amount: 50000, status: 'success',    date: '07/26/2026', time: '14:02:11', phone: '0771234567' },
+    { id: 'd2', ref: 'C2607261348520117', amount: 25000, status: 'processing', date: '07/26/2026', time: '13:48:52', phone: '0771234567' },
+    { id: 'd3', ref: 'C2607250911040396', amount: 80000, status: 'failed',     date: '07/25/2026', time: '09:11:04', phone: '0700998877' },
   ],
   withdrawals: [
-    { id: 'WDR551208',  amount: 100000, netAmount: 83000, status: 'success',    date: '07/25/2026', time: '18:20:33', phone: '0771234567' },
-    { id: 'WDR551133',  amount: 20000,  netAmount: 16600, status: 'processing', date: '07/26/2026', time: '11:05:19', phone: '0771234567' },
+    { id: 'w1', ref: 'W2607251820330574', amount: 100000, netAmount: 83000, status: 'success',    date: '07/25/2026', time: '18:20:33', phone: '0771234567' },
+    { id: 'w2', ref: 'W2607261105190238', amount: 20000,  netAmount: 16600, status: 'processing', date: '07/26/2026', time: '11:05:19', phone: '0771234567' },
   ],
 };
 _publicSettings = window.__PV.settings;
@@ -96,7 +96,8 @@ window.__open = (what) => {
   if (what === 'detail')   return openProductDetail('tissot');
   if (what === 'bank')     return openBanksModal();
   if (what === 'picker')   { openBanksModal(); setTimeout(()=>document.getElementById('bkNet').click(), 60); }
-  if (what === 'toast')    return toast('UGX 500 credited');
+  if (what === 'toast')    return toast('Coming soon');
+  if (what === 'gift')     return openRedeemModal();
 };
 // Simulates the very first frame after launch: signed in, nothing loaded yet.
 window.__empty = () => {
