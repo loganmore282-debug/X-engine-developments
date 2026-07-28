@@ -4,7 +4,7 @@
    API / auth calls are never cached — always live.
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'chronova-shell-v47';
+const CACHE = 'chronova-shell-v48';
 const SHELL = [
   './',
   './index.html',
@@ -42,7 +42,7 @@ self.addEventListener('fetch', (event) => {
 
   // Never cache backend / auth — always live
   if (
-    url.hostname.includes('railway.app') ||
+    url.hostname.includes('onrender.com') ||
     url.hostname.includes('firestore') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('identitytoolkit') ||

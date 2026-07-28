@@ -520,7 +520,7 @@ function showBlocker(title, msg, actionLabel, action) {
   const old = document.getElementById('blockerView'); if (old) old.remove();
   const el = document.createElement('div');
   el.id = 'blockerView'; el.className = 'blocker';
-  el.innerHTML = `<div class="blocker-card"><div class="blocker-logo">${FG_LOGO}</div>
+  el.innerHTML = `<div class="blocker-card"><div class="blocker-logo">${WATCH_LOGO}</div>
     <h2>${esc(title)}</h2><p>${esc(msg)}</p><button class="btn" id="blockerBtn">${esc(actionLabel)}</button></div>`;
   document.body.appendChild(el);
   document.getElementById('blockerBtn').addEventListener('click', action);
@@ -532,10 +532,10 @@ async function loadPublicSettings() {
   return _publicSettings;
 }
 
-const FG_LOGO = `<svg viewBox="0 0 100 100"><defs><radialGradient id="fgLogoGrad" cx="35%" cy="30%" r="75%">
+const WATCH_LOGO = `<svg viewBox="0 0 100 100"><defs><radialGradient id="watchLogoGrad" cx="35%" cy="30%" r="75%">
   <stop offset="0%" stop-color="#f7e6b4"/><stop offset="60%" stop-color="#d9ad4e"/><stop offset="100%" stop-color="#a97f22"/>
   </radialGradient></defs>
-  <circle cx="50" cy="50" r="48" fill="url(#fgLogoGrad)"/>
+  <circle cx="50" cy="50" r="48" fill="url(#watchLogoGrad)"/>
   <circle cx="50" cy="50" r="28" fill="none" stroke="#1c1403" stroke-width="6"/>
   <path d="M50 34v16l11 7" fill="none" stroke="#1c1403" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -572,7 +572,7 @@ function maybeShowAnnouncement() {
       <button class="ann-x" id="annClose" aria-label="Close">${SVG_CLOSE}</button>
       <div class="ann-hero"${bg ? ` style="background-image:url('${esc(bg)}')"` : ''}>
         <span class="ann-htitle">${esc(ann.title || 'Notice')}</span>
-        ${bg ? '' : `<div class="ann-logo">${FG_LOGO}</div>`}
+        ${bg ? '' : `<div class="ann-logo">${WATCH_LOGO}</div>`}
       </div>
       <div class="ann-body">
         ${announcementBodyHtml(ann.body)}
@@ -815,7 +815,7 @@ function renderHome() {
     </div>
 
     <div class="wire">
-      <span class="wire-cap left">${FG_LOGO}</span>
+      <span class="wire-cap left">${WATCH_LOGO}</span>
       <div class="wire-view"><div class="wire-track" id="wireTrack" style="animation-delay:-${(((Date.now() - WIRE_EPOCH) / 1000) % WIRE_CYCLE).toFixed(2)}s">${wireHtml()}</div></div>
       <span class="wire-cap right">${ICN.bell}</span>
     </div>
@@ -1875,7 +1875,7 @@ function renderAccount() {
 
   el.innerHTML = `
     <div class="acc-head">
-      <div class="acc-disc">${FG_LOGO}</div>
+      <div class="acc-disc">${WATCH_LOGO}</div>
       <div class="acc-id">
         <div class="acc-num">${esc(_account?.phone || '')}</div>
         <div class="acc-badges">
@@ -1945,7 +1945,7 @@ function openDownloadModal() {
   openModal(`
     <div class="modal-head"><h2>Download app</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="about-hero">
-      <div class="about-logo">${FG_LOGO}</div>
+      <div class="about-logo">${WATCH_LOGO}</div>
       <div class="about-name">Chronova</div>
       <div class="about-tag">Install Chronova on your phone</div>
     </div>
@@ -1985,7 +1985,7 @@ function openAboutModal() {
   openModal(`
     <div class="modal-head"><h2>About Chronova</h2><button class="modal-close">${ICN.close}</button></div>
     <div class="about-hero">
-      <div class="about-logo">${FG_LOGO}</div>
+      <div class="about-logo">${WATCH_LOGO}</div>
       <div class="about-name">Chronova</div>
       <div class="about-tag">${esc(tagline)}</div>
     </div>
