@@ -218,6 +218,24 @@ device gets both.
 Firebase service account, Mongo URI, admin key, MarzPay/MarzSMS keys all live only in
 Render env vars. Never put secrets or the model identifier in commits/PRs/code.
 
+## Referral links and the home activity ticker
+
+- Referral links use `?reg=` now, not `?ref=` (`referralLink()` in `original_module.js`).
+  Old links already shared with `?ref=` still work — the capture code reads `reg` first,
+  falls back to `ref`. Referral code resolution itself (`resolveReferrer` in server.js,
+  plus the matching logic in `/auth/check-referral` and `/register`) is fully global —
+  unscoped query across the whole `users` collection, case-insensitive on `usernameLower`
+  first with an exact-match `referralCode` fallback for legacy accounts. All three call
+  sites use the identical two-step lookup — keep them in sync if this ever changes.
+- The home screen's activity wire ticker (`wireHtml()`) used to fabricate random
+  activity client-side (`Math.random()` on masked phone numbers/amounts) — different,
+  fake, and inconsistent per device. It's now wired to the real, already-existing
+  `/public/activity-feed` endpoint (`_activityFeed` in original_module.js,
+  `loadActivityFeed()`), which the server caches ONCE and shares with every client
+  (25s refresh) — genuinely global, everyone sees the same feed, built from real recent
+  transactions. The ticker hides itself entirely when the feed is empty rather than
+  showing a half-empty bar.
+
 ## Known constraints
 
 - No outbound internet in the sandbox — Firebase's `gstatic.com` module import fails

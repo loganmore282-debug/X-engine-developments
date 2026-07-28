@@ -92,6 +92,13 @@ window.__PV.txns = [
   { type: 'gem_payout',  amount: 20000, status: 'success', date: '07/26/2026', time: '09:55', createdAt: Date.now() - 9000000 },
 ];
 _txns = window.__PV.txns;
+_activityFeed = [
+  { name: 'John',   action: 'deposited',                      amount: 80000,  ago: 3 },
+  { name: 'Mary',   action: 'withdrew',                        amount: 50000,  ago: 8 },
+  { name: 'Peter',  action: 'earned a referral reward of',     amount: 15000,  ago: 12 },
+  { name: 'Grace',  action: 'activated a product worth',       amount: 150000, ago: 20 },
+  { name: 'David',  action: 'claimed a daily bonus of',        amount: 500,    ago: 25 },
+];
 _recordsLoaded.income = true;
 window.__PV.members = [
   { name: 'oTpi8g', phone: '256771234567', hasInvested: true,  deposited: 150000 },

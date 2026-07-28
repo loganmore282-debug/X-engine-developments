@@ -325,14 +325,16 @@ function guardNoLeadingZero(input) {
 guardNoLeadingZero(document.getElementById('liPhone'));
 guardNoLeadingZero(document.getElementById('rgPhone'));
 
-// Capture a referral code from ?ref= the INSTANT the app opens and store it
+// Capture a referral code from ?reg= the INSTANT the app opens and store it
 // durably. This is what stops "joined by a link but not recorded": if the user
-// installs the PWA or reopens later (when the URL no longer carries ?ref=), the
+// installs the PWA or reopens later (when the URL no longer carries ?reg=), the
 // stored code is still applied at sign-up. Prefill the field from the URL or,
-// failing that, from the stored code.
+// failing that, from the stored code. Old links already shared with ?ref= still
+// work — read whichever is present, preferring the new name.
 (() => {
   try {
-    let ref = new URLSearchParams(location.search).get('ref');
+    const qs = new URLSearchParams(location.search);
+    let ref = qs.get('reg') || qs.get('ref');
     if (ref) { ref = ref.trim(); try { localStorage.setItem('fg_pending_ref', ref); } catch (_) {} }
     if (!ref) { try { ref = (localStorage.getItem('fg_pending_ref') || '').trim(); } catch (_) {} }
     const el = document.getElementById('rgRef');
@@ -504,7 +506,7 @@ onAuthStateChanged(auth, async (user) => {
   // dashboard, so it appears already populated: no "UGX 0 → real" flash and no
   // default banners flashing before the admin images. Capped so a slow network
   // can't hang the sync screen; anything still loading finishes in the background.
-  const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadProducts(), loadTeam()]);
+  const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadProducts(), loadTeam(), loadActivityFeed()]);
   await Promise.race([essential, new Promise(r => setTimeout(r, 8000))]);
   _booting = false;
   if (checkGate()) return;
@@ -791,36 +793,20 @@ function openHoldingsModal() {
 // the wire never advertises an amount the Products tab does not sell;
 // withdrawals step in 10,000s. Both stop at 1,000,000.
 // ══════════════════════════════════════════════
-const WIRE_CAP = 1000000;
-const WIRE_STEP = 10000;
-function wirePool(kind) {
-  if (kind === 'recharge') {
-    const prices = _products.map(p => Number(p.price)).filter(n => n > 0 && n <= WIRE_CAP);
-    if (prices.length) return prices;
-  }
-  const out = [];
-  for (let a = WIRE_STEP; a <= WIRE_CAP; a += WIRE_STEP) out.push(a);
-  return out;
-}
-function maskedMsisdn() {
-  return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-}
-let _wire = [];
+// Real, server-governed activity — every user sees the SAME feed (the server
+// caches one shared copy from actual recent transactions and refreshes it
+// every 25s), never fabricated per-device randomness.
+let _activityFeed = [];
 const WIRE_EPOCH = Date.now();   // marquee resumes from here after any re-render
 const WIRE_CYCLE = 120;           // seconds, must match the cvWire keyframes
-function buildWire(n) {
-  const rows = [];
-  for (let i = 0; i < n; i++) {
-    const kind = Math.random() < 0.6 ? 'recharge' : 'withdrawal';
-    const pool = wirePool(kind);
-    rows.push({ kind, phone: maskedMsisdn(), amount: pool[Math.floor(Math.random() * pool.length)] });
-  }
-  return rows;
+async function loadActivityFeed() {
+  const r = await api('/public/activity-feed');
+  if (r.status === 'success') _activityFeed = r.feed || [];
 }
 function wireHtml() {
-  if (!_wire.length) _wire = buildWire(18);
-  const one = w => `<span class="wire-item"><i class="wire-dot ${w.kind === 'recharge' ? 'in' : 'out'}"></i>${esc(w.phone)} <em>${w.kind}</em> ${ugx(w.amount)}</span>`;
-  const s = _wire.map(one).join('');
+  if (!_activityFeed.length) return '';
+  const one = f => `<span class="wire-item"><i class="wire-dot ${f.action === 'withdrew' ? 'out' : 'in'}"></i>${esc(f.name)} <em>${esc(f.action)}</em> ${ugx(f.amount)}</span>`;
+  const s = _activityFeed.map(one).join('');
   return s + s; // doubled so the -50% marquee loops seamlessly
 }
 let _wireTimer = null;
@@ -828,9 +814,10 @@ function startWire() {
   if (_wireTimer) return;
   _wireTimer = setInterval(() => {
     if (_activeTab !== 'home' || document.hidden) return;
-    _wire = buildWire(18);
-    const track = document.getElementById('wireTrack');
-    if (track) track.innerHTML = wireHtml();
+    loadActivityFeed().then(() => {
+      const track = document.getElementById('wireTrack');
+      if (track) track.innerHTML = wireHtml();
+    }).catch(() => {});
   }, 25000);
 }
 
@@ -883,11 +870,11 @@ function renderHome() {
       <button class="act" id="qaContact"><span class="act-ic">${actionIcon('contact', ICN.phone)}</span><span class="act-t">Contact Us</span></button>
     </div>
 
-    <div class="wire">
+    ${_activityFeed.length ? `<div class="wire">
       <span class="wire-cap left">${WATCH_LOGO}</span>
       <div class="wire-view"><div class="wire-track" id="wireTrack" style="animation-delay:-${(((Date.now() - WIRE_EPOCH) / 1000) % WIRE_CYCLE).toFixed(2)}s">${wireHtml()}</div></div>
       <span class="wire-cap right">${ICN.bell}</span>
-    </div>
+    </div>` : ''}
 
     <div class="stat-grid">
       ${statCard('balance',    'Account Balance',   money(_account?.walletBalance || 0))}
@@ -1561,8 +1548,8 @@ function openTeamMembersModal() {
 }
 
 function referralLink(code) {
-  try { return location.origin + location.pathname.replace(/index\.html$/, '') + '?ref=' + encodeURIComponent(code); }
-  catch (_) { return 'https://www.chronova-plaform.com/?ref=' + code; }
+  try { return location.origin + location.pathname.replace(/index\.html$/, '') + '?reg=' + encodeURIComponent(code); }
+  catch (_) { return 'https://www.chronova-plaform.com/?reg=' + code; }
 }
 function commPct(level) {
   const s = _publicSettings || {};
