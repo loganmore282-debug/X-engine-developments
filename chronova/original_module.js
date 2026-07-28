@@ -1484,7 +1484,7 @@ function openTeamMembersModal() {
 
 function referralLink(code) {
   try { return location.origin + location.pathname.replace(/index\.html$/, '') + '?ref=' + encodeURIComponent(code); }
-  catch (_) { return 'https://chronovaplatform.com/?ref=' + code; }
+  catch (_) { return 'https://www.chronova-plaform.com/?ref=' + code; }
 }
 function commPct(level) {
   const s = _publicSettings || {};

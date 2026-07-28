@@ -172,7 +172,7 @@ const MARZSMS_SECRET = process.env.MARZSMS_SECRET || '';
 const MANUAL_ORDER_TTL_MS           = 15 * 60 * 1000; // escrow window: pay within 15 minutes
 const MANUAL_MAX_PENDING_PER_NUMBER = 3;              // anti-flood: soft cap of live orders per number
 // Where a card customer is bounced back to after paying on the gateway.
-const APP_URL = (process.env.APP_URL || 'https://chronovaplatform.edgeone.app').trim().replace(/\/$/, '');
+const APP_URL = (process.env.APP_URL || 'https://www.chronova-plaform.com').trim().replace(/\/$/, '');
 
 const APP_VERSION      = '1.7.0';   // shown on the in-app "Download app" screen
 const APP_SIZE         = '2.4 MB';  // approximate installed PWA size
