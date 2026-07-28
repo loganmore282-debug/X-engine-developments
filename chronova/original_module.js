@@ -366,6 +366,12 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     if (err && /user-not-found|invalid-credential/.test(err.code || '')) {
       const altErr = await signInEmailPass(phoneToEmail('0' + phone), pass);
       if (!altErr) err = null;
+      // A network hiccup DURING the retry is a real connectivity problem, not
+      // proof the account doesn't exist — surface that, not the stale
+      // user-not-found from the first attempt, so it still falls through to
+      // the server-side fallback below instead of a misleading "incorrect
+      // phone or password".
+      else if (altErr.code === 'auth/network-request-failed') err = altErr;
     }
     if (err && err.code === 'auth/network-request-failed') {
       const r = await api('/auth/login', { method: 'POST', body: { phone, password: pass } });

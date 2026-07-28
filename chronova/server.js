@@ -183,7 +183,8 @@ const CHECKIN_BONUS    = 500;
 const COMM_L1          = 0.30;    // referral bonus, level 1
 const COMM_L2          = 0.03;    // level 2
 const COMM_L3          = 0.01;    // level 3
-const LIQUIDITY_FEE    = 0.17;    // withdrawal fee
+const LIQUIDITY_FEE    = 0.14;    // withdrawal fee — matches runRatePatchOnce()'s
+                                   // migrated live value; keep these in sync
 const RETURN_MULTIPLE  = 30;      // payout = price * RETURN_MULTIPLE
 const CYCLE_DAYS       = 120;     // investment period (days), fixed for every watch tier
 // EARNINGS: each product pays daily cashback (expectedReturn / cycle) every 24 hours

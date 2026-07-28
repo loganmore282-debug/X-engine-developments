@@ -26,11 +26,21 @@ showing you (screenshots) — don't argue that the code should be fine on inspec
 
 ## Locked-in economics (do not change without asking)
 
-7 watch tiers: Casio 25,000 → Patek 500,000, VIP 1–7. Return **×30** over **120 days**
-(daily = price ÷ 4). Commissions **L1 30% / L2 3% / L3 1%**. Daily check-in bonus **300**.
-Welcome bonus **5,000**. Min deposit **25,000**. Min withdrawal **10,000**. Withdrawal fee
-**17%**. Referral milestones by **ACTIVE referral count** (active = totalInvested > 0):
-3→10,000 / 10→50,000 / 15→75,000 / 20→100,000.
+7 watch tiers: Casio 25,000 → Patek 500,000, VIP 1–7 (the product catalogue itself is
+fully admin-driven now — no hardcoded tier list ships in the client — so treat this as
+the intended default naming/pricing, not a guarantee of what's live). Return **×30** over
+**120 days** (daily = price ÷ 4). Commissions **L1 30% / L2 3% / L3 1%**. Welcome bonus
+**5,000**. Min deposit **25,000**. Min withdrawal **10,000**. Referral milestones by
+**ACTIVE referral count** (active = totalInvested > 0): 3→10,000 / 10→50,000 / 15→75,000 /
+20→100,000.
+
+**Check-in bonus is 500, withdrawal fee is 14%** — `runRatePatchOnce()` in server.js
+force-applied this once (`ratePatchV2Done` guard) to override any older saved value
+(300 / 17%), per an owner-authorized change. `CHECKIN_BONUS`/`LIQUIDITY_FEE` in
+server.js are the fallback defaults used only when the settings doc doesn't have a
+value yet — `LIQUIDITY_FEE` was still 0.17 (a real mismatch, found and fixed in a
+debugging pass) until it was brought in line with the migrated 0.14. Don't "fix"
+either of these back to 300/17%, that would be undoing an intentional change.
 
 **Payment flow — manual mobile-money, NOT a gateway:** admin configures up to ~7
 recipient mobile-money numbers in the admin panel. On deposit, the server auto-assigns
@@ -73,10 +83,10 @@ admin manually sends the money then marks paid, or rejects (auto-refund).
   only, no email**.
 - Boxed (not rounded) corners applied consistently across dashboard cards, tiles, and
   buttons, matching the auth screen treatment.
-- Product tier colors come from `GEM_COLORS` in `original_module.js` — its keys **must**
-  match the real tier keys (`casio, fossil, tissot, longines, omega, rolex, patek`), all
-  gold-family tones. A past key mismatch silently forced Furagemz-purple on every
-  product card — check this after any product/tier change.
+- Product tier colors come from `TIER_TINTS` in `original_module.js` (7 gold-family hex
+  values) via `tierTint(product, index)` — assigned by **position** in the admin-driven
+  product list, not by a tier key lookup, so there's no key-matching failure mode left to
+  regress (the old `GEM_COLORS`-by-key design this replaced is gone; don't reintroduce it).
 
 ## Where the app lives
 
