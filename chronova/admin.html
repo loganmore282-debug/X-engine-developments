@@ -403,8 +403,8 @@ async function renderDashboard(){
 function statusPill(s){
   s=String(s||'success').toLowerCase();
   if(['success','processed','matched'].includes(s)) return `<span class="pill-tag t-ok">Successful</span>`;
-  if(['pending','processing'].includes(s)) return `<span class="pill-tag t-warn">Processing</span>`;
-  if(['failed','cancelled','rejected'].includes(s)) return `<span class="pill-tag t-bad">Failed</span>`;
+  if(['pending','processing','claimed','awaiting_payment'].includes(s)) return `<span class="pill-tag t-warn">Processing</span>`;
+  if(['failed','cancelled','rejected','expired'].includes(s)) return `<span class="pill-tag t-bad">Failed</span>`;
   return `<span class="pill-tag t-mut">${esc(s)}</span>`;
 }
 

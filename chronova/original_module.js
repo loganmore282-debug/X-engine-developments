@@ -840,8 +840,8 @@ function recMeta(type) { return REC_META[type] || { label: 'Transaction' }; }
 function statusInfo(s) {
   s = String(s || 'success').toLowerCase();
   if (['success', 'processed', 'matched'].includes(s)) return { label: 'Successful', cls: 'ok' };
-  if (['pending', 'processing'].includes(s))           return { label: 'Processing', cls: 'proc' };
-  if (['failed', 'cancelled', 'rejected'].includes(s)) return { label: 'Failed',     cls: 'bad' };
+  if (['pending', 'processing', 'claimed', 'awaiting_payment'].includes(s)) return { label: 'Processing', cls: 'proc' };
+  if (['failed', 'cancelled', 'rejected', 'expired'].includes(s)) return { label: 'Failed', cls: 'bad' };
   return { label: s.charAt(0).toUpperCase() + s.slice(1), cls: 'mut' };
 }
 function recTag(t) {

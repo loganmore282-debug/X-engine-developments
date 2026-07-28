@@ -2664,7 +2664,7 @@ app.post('/withdraw/request', async (req, res) => {
         status: 'pending', date, time, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
-    notifyAdmins(`Chronova withdrawal: ${user.name || 'User'} wants ${fmtUGX(amt)} (net ${fmtUGX(netAmt)} after fee) to ${fullPhone}. Ref ${witId}. Tap "Send via MarzPay" in the panel, or it auto-releases through the gateway in 5 min.`).catch(() => {});
+    notifyAdmins(`Chronova withdrawal: ${user.name || 'User'} wants ${fmtUGX(amt)} (net ${fmtUGX(netAmt)} after fee) to ${fullPhone}. Ref ${witId}. Tap "Send via MarzPay" in the panel, or it auto-releases through the gateway in 15 min (7am-6pm only).`).catch(() => {});
     return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });
   } catch (e) {
     console.error('Withdrawal error:', e.message);
@@ -2716,7 +2716,7 @@ async function failWithdrawal(witDoc, reason) {
     t.update(uRef, { walletBalance: FieldValue.increment(wit.amount), withdrawalCount: FieldValue.increment(-1) });
     t.update(witDoc.ref, { status: 'failed', failureReason: reason, failedAt: FieldValue.serverTimestamp() });
     t.set(db.collection('transactions').doc(), {
-      userId: wit.userId, type: 'refund', description: 'Withdrawal refund — disbursement failed',
+      userId: wit.userId, type: 'refund', description: `Withdrawal refund — ${reason || 'disbursement failed'}`,
       amount: wit.amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
     });
   });
@@ -2956,46 +2956,6 @@ app.post('/admin/withdraw/process', async (req, res) => {
     return res.status(500).json({ status: 'error', message: friendly });
   }
 });
-app.post('/withdraw/reject', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { withdrawalId, reason } = req.body;
-  try {
-    const snap = await db.collection('withdrawals').doc(withdrawalId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Not found' });
-    const wit = snap.data();
-    if (['processed', 'rejected', 'failed'].includes(wit.status))
-      return res.status(400).json({ status: 'error', message: 'Already ' + wit.status });
-    // Transaction with a fresh status recheck so a concurrent reject / failure
-    // callback can never refund the same withdrawal twice.
-    let refunded = false;
-    await db.runTransaction(async t => {
-      const fresh = await t.get(snap.ref);
-      const fs = fresh.exists ? fresh.data() : null;
-      if (!fs || ['processed', 'rejected', 'failed'].includes(fs.status)) return;
-      t.update(snap.ref, {
-        status: 'rejected', rejectionReason: reason || 'Rejected by admin', rejectedAt: FieldValue.serverTimestamp()
-      });
-      t.update(db.collection('users').doc(wit.userId), {
-        walletBalance: FieldValue.increment(wit.amount), withdrawalCount: FieldValue.increment(-1)
-      });
-      refunded = true;
-    });
-    if (!refunded) return res.status(400).json({ status: 'error', message: 'Already finalised, nothing refunded' });
-    // Reflect the rejection in the user's history: flip the original withdrawal
-    // record off "Processing" and add a visible refund record.
-    try {
-      const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'rejected' });
-    } catch (txErr) { console.warn('reject tx update:', txErr.message); }
-    const { date, time } = nowStr();
-    await db.collection('transactions').add({
-      userId: wit.userId, type: 'refund', description: 'Withdrawal refund — request rejected',
-      amount: wit.amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-    });
-    return res.json({ status: 'success', message: `Rejected. ${fmtUGX(wit.amount)} refunded.` });
-  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
-});
-
 // ═══════════════════════════════════════════
 // ACCOUNT — own investments / withdrawals / transactions
 // ═══════════════════════════════════════════
@@ -3077,14 +3037,22 @@ app.get('/account/transactions', async (req, res) => {
     // "I deposited but never saw it": failed / still-processing deposit attempts
     // appear in history too, with their real status, so nothing seems to vanish.
     // (Credited ones already exist as real 'topup' transactions — skip those.)
+    const DEP_STATE_MSG = {
+      failed:           { text: 'Deposit failed — money was not taken', status: 'failed' },
+      expired:          { text: 'Deposit expired — please start a new one', status: 'failed' },
+      rejected:         { text: 'Deposit rejected — payment was not confirmed', status: 'failed' },
+      claimed:          { text: 'Deposit — waiting for approval', status: 'pending' },
+      awaiting_payment: { text: 'Deposit — waiting for your payment', status: 'pending' },
+      processing:       { text: 'Deposit — waiting for confirmation', status: 'pending' },
+    };
     depSnap.forEach(d => {
       const dep = d.data();
       if (dep.status === 'matched') return;
+      const st = DEP_STATE_MSG[dep.status] || { text: 'Deposit — waiting for approval', status: 'pending' };
       list.push({
         id: 'dep_' + d.id, type: 'topup',
-        description: dep.status === 'failed'
-          ? 'Deposit failed — money was not taken' : 'Deposit — waiting for approval',
-        amount: dep.amount, status: dep.status === 'failed' ? 'failed' : 'pending',
+        description: st.text,
+        amount: dep.amount, status: st.status,
         date: dep.date, time: dep.time, createdAt: dep.createdAt,
       });
     });
