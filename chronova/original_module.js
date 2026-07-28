@@ -615,8 +615,8 @@ async function switchTab(name) {
     loadProducts().then(() => { if (_activeTab === 'products') renderProducts(); }).catch(() => {});
   if (name === 'team')
     loadTeam().then(() => { if (_activeTab === 'team') renderTeam(); }).catch(() => {});
-  if (name === 'account' && !_txns.length)
-    loadTxns().then(() => { if (_activeTab === 'account') renderAccount(); }).catch(() => {});
+  if (name === 'account')
+    Promise.all([loadAccount(), loadTxns()]).then(() => { if (_activeTab === 'account') renderAccount(); }).catch(() => {});
 }
 
 function render() {
@@ -1650,6 +1650,7 @@ function renderTeam() {
       <h3>Team levels</h3>
       <span>Grow your team, earn more</span>
     </div>
+    <button class="tm-task-link" id="tmTaskLink">Task Center <span class="tm-task-chev">›</span></button>
 
     <div class="tm-card">
       ${LVL.map(l => `
@@ -1687,14 +1688,17 @@ function renderTeam() {
   el.querySelector('#cpLink').addEventListener('click', () => copy(link, 'Link copied'));
   el.querySelector('#tmPeople').addEventListener('click', () => openTeamMembersModal());
   el.querySelector('#tmRewards').addEventListener('click', () => openRecordsPage('income'));
+  el.querySelector('#tmTaskLink').addEventListener('click', openTaskCenterPage);
 }
 
 // Task Center — one row per milestone: a target, a box progress bar, a claim
 // button. Deliberately no extra design. Server governs every number here:
 // current count, whether it's reached, and whether it's already claimed.
-async function openTaskCenterPage() {
-  await loadTeam();
+function openTaskCenterPage() {
+  // Instant open on whatever's cached — never make the tap wait on a network
+  // round trip. Silently refresh in the background and repaint in place.
   renderTaskCenterPage();
+  loadTeam().then(() => { if (document.getElementById('tkList')) renderTaskCenterPage(); }).catch(() => {});
 }
 function renderTaskCenterPage() {
   const ts = _teamStats;
@@ -1720,7 +1724,7 @@ function renderTaskCenterPage() {
   openModal(`
     <div class="modal-head"><h2>Task Center</h2><button class="modal-close">${ICN.close}</button></div>
     <p class="tk-lead">Invite friends with your referral code. Once enough of them activate a watch tier, claim the reward for that milestone.</p>
-    ${rows}
+    <div id="tkList">${rows}</div>
   `);
 
   document.querySelectorAll('.tk-pill[data-target]').forEach(b => {
@@ -1800,8 +1804,8 @@ function renderAccount() {
     </div>
 
     <button class="mission" id="acMission">
-      <b>Task Center</b>
-      <span>Claim your referral rewards</span>
+      <span class="mission-txt"><b>Task Center</b><span>Claim your referral rewards</span></span>
+      <span class="mission-go">${SVG_CHEV}</span>
     </button>
 
     <div class="atiles">
