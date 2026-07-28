@@ -1,7 +1,7 @@
 (function(){
   "use strict";
   // Canonical site cloned copies get bounced to. Update once the real domain is live.
-  var REAL = "https://chronovaplatform.com/";
+  var REAL = "https://www.chronova-plaform.com/";
   // DOMAIN LOCK — only these exact hosts (plus any *.edgeone.app / *.edgeone.dev
   // preview/prod subdomain) may run the app. A cloned/rehosted phishing copy on any
   // other domain wipes itself and bounces to REAL. Fails OPEN on any error so real
@@ -11,8 +11,8 @@
       var h = (location.hostname || "").toLowerCase();
       if (!h) return true; // installed PWA / file:// — don't wipe
       var ALLOW = [
-        "chronovaplatform.com",
-        "www.chronovaplatform.com",
+        "chronova-plaform.com",
+        "www.chronova-plaform.com",
         "localhost",
         "127.0.0.1"
       ];
