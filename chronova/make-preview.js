@@ -50,7 +50,8 @@ window.__PV = {
     supportTelegram: 'https://t.me/chronova_help', supportHours: 'Every day, 9:00 AM – 9:00 PM',
     banners: { checkin: '${PNG_GOLD}', checkinBg: '${PNG_GOLD}', gift: '${PNG_GOLD}' },
     announcement: { enabled: true, title: 'Notice',
-      body: 'Withdrawals now process automatically 7am-6pm.\\nMinimum recharge is UGX 25,000.\\nInvite friends to unlock Task Center rewards.\\nGift codes now pay a random amount.\\nContact support via WhatsApp for any issue.\\nThis sixth line should never appear.' }
+      body: 'Withdrawals now process automatically 7am-6pm.\\nMinimum recharge is UGX 25,000.\\nJoin https://t.me/chronova_news for updates.\\nGift codes now pay a random amount.\\nContact support via WhatsApp for any issue.\\nThis sixth line should never appear.',
+      ctaUrl: 'https://t.me/chronova_news', ctaLabel: 'Open Telegram channel' }
   },
   products: ${JSON.stringify(PRODUCTS)},
   deposits: [
@@ -117,6 +118,7 @@ window.__render = (tab) => {
 window.__open = (what) => {
   if (what === 'recharge') return openRechargeSheet();
   if (what === 'withdraw') return openWithdrawSheet();
+  if (what === 'bankselect') { openWithdrawSheet(); setTimeout(()=>document.getElementById('wdBankPick')?.click(), 60); }
   if (what === 'records')  return openRecordsPage('deposits');
   if (what === 'wrecords') return openRecordsPage('withdrawals');
   if (what === 'checkin')  return openCheckinPage();

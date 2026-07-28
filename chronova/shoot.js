@@ -27,6 +27,7 @@ const SHOTS = [
   ['account',  'account',  null],
   ['recharge', 'home',     'recharge'],
   ['withdraw', 'home',     'withdraw'],
+  ['bankselect', 'home',   'bankselect'],
   ['records',  'home',     'records'],
   ['wrecords', 'home',     'wrecords'],
   ['checkin',  'home',     'checkin'],

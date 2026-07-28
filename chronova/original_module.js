@@ -535,13 +535,23 @@ const FG_LOGO = `<svg viewBox="0 0 100 100"><defs><radialGradient id="fgLogoGrad
   <circle cx="50" cy="50" r="28" fill="none" stroke="#1c1403" stroke-width="6"/>
   <path d="M50 34v16l11 7" fill="none" stroke="#1c1403" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
+// Turns bare URLs inside already-escaped text into live inline links, so a
+// link the admin pastes into the body reads in line with the sentence
+// instead of only working via the separate CTA button below.
+function linkifyEscaped(escapedText) {
+  return escapedText.replace(/(https?:\/\/[^\s<]+)/g, (m) => {
+    const clean = m.replace(/[.,!?)]+$/, '');
+    const trail = m.slice(clean.length);
+    return `<a class="ann-inline-link" href="${clean}" target="_blank" rel="noopener">${clean}</a>${trail}`;
+  });
+}
 // Multi-line announcements read as a plain numbered list — items 1 through
 // 5 at most, so a long admin post never turns into a wall of text. A single
 // line (no breaks) stays as plain text; nothing to number.
 function announcementBodyHtml(text) {
   const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean).slice(0, 5);
-  if (lines.length > 1) return `<ol class="ci-rules ann-list">${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ol>`;
-  return `<div class="ann-text">${esc(text)}</div>`;
+  if (lines.length > 1) return `<ol class="ci-rules ann-list">${lines.map(l => `<li>${linkifyEscaped(esc(l))}</li>`).join('')}</ol>`;
+  return `<div class="ann-text">${linkifyEscaped(esc(text))}</div>`;
 }
 function maybeShowAnnouncement() {
   const ann = _publicSettings?.announcement;
@@ -550,6 +560,7 @@ function maybeShowAnnouncement() {
   const root = document.getElementById('modalRoot');
   document.body.classList.add('no-scroll'); // freeze the dashboard while the dialog is up
   root.style.alignItems = 'center';
+  const ctaIsTelegram = /(?:^|\/\/)(?:t\.me|telegram\.me|telegram\.org)\//i.test(ann.ctaUrl || '');
   root.innerHTML = `
     <div class="modal-backdrop" data-close></div>
     <div class="ann-card">
@@ -557,7 +568,7 @@ function maybeShowAnnouncement() {
         <div class="ann-logo">${FG_LOGO}</div></div>
       <div class="ann-body">
         ${announcementBodyHtml(ann.body)}
-        ${ann.ctaUrl && ann.ctaLabel ? `<a class="ann-cta" href="${esc(ann.ctaUrl)}" target="_blank" rel="noopener">${esc(ann.ctaLabel)}</a>` : ''}
+        ${ann.ctaUrl && ann.ctaLabel ? `<a class="ann-cta" href="${esc(ann.ctaUrl)}" target="_blank" rel="noopener">${ctaIsTelegram ? `<span class="ann-cta-ic">${TG_MARK}</span>` : ''}${esc(ann.ctaLabel)}</a>` : ''}
         <button class="ann-ok" id="annOk">OK</button>
       </div>
     </div>`;
@@ -619,6 +630,7 @@ async function switchTab(name) {
   document.getElementById('topbarTitle').textContent = { home: 'Home', products: 'Products', team: 'Team', account: 'Account' }[name];
   // INSTANT tabs: paint whatever is cached NOW, refresh silently in the
   // background and repaint when fresh data lands — never block the switch.
+  if (name === 'home') maybeShowAnnouncement();
   if (name === 'products' && !_products.length)
     loadProducts().then(() => { if (_activeTab === 'products') renderProducts(); }).catch(() => {});
   if (name === 'team')
@@ -865,7 +877,7 @@ async function doCheckin() {
   const r = await api('/checkin', { method: 'POST' });
   restore();
   if (r.status === 'success') {
-    toast(`${ugx(r.bonus)} credited, day ${r.streak}`);
+    toast('Checked in successfully ✔️');
     await loadAccount(); await loadTxns();
     renderHome(); renderAccount();
   } else {
@@ -1039,7 +1051,7 @@ async function watchDeposit(depositId, tries = 0) {
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderAccount();
     refreshRecords('deposits');
-    return toast('Recharge added successfully');
+    return toast('Deposit successfully ✔️');
   }
   if (['failed', 'cancelled', 'rejected'].includes(st)) {
     refreshRecords('deposits');
@@ -1056,12 +1068,22 @@ function feeRate() {
   return (f > 0 && f < 1) ? f : 0.17;
 }
 
+// Which bank card is picked persists across the trip out to the dedicated
+// selection screen and back — reset only when Withdrawal is opened fresh.
+let _wdDraft = { amount: '', bankIdx: 0 };
+
 function openWithdrawSheet() {
+  _wdDraft = { amount: '', bankIdx: 0 };
+  renderWithdrawSheet();
+}
+
+function renderWithdrawSheet() {
   const bal  = Number(_account?.walletBalance) || 0;
   const min  = Number(_publicSettings?.minWithdrawal) || 0;
   const rate = feeRate();
   const banks = _account?.bankAccounts || [];
   const invested = (Number(_account?.totalInvested) || 0) > 0 || _investments.length > 0;
+  const picked = banks[_wdDraft.bankIdx] || banks[0];
 
   openSheet({
     title: 'Withdrawal',
@@ -1071,15 +1093,16 @@ function openWithdrawSheet() {
 
       <label class="fld-l">Receiving account</label>
       ${banks.length
-        ? `<div class="pick" id="wdBank">${banks.map((b, i) => `
-            <button class="pick-row${i === 0 ? ' on' : ''}" data-i="${i}">
-              <span>${esc(b.network || netOf(b.phone))} · ${esc(b.holderName || '')}</span>
-              <em>${esc(String(b.phone || '').replace(/^(\d{3}).*(\d{3})$/, '$1…$2'))}</em>
-            </button>`).join('')}</div>`
+        ? `<button class="pick-nav" id="wdBankPick" type="button">
+             <span class="pick-nav-tx">${picked
+               ? `${esc(picked.network || netOf(picked.phone))} · ${esc(String(picked.phone || '').replace(/^(\d{3}).*(\d{3})$/, '$1…$2'))}`
+               : 'Please select your bank card'}</span>
+             ${SVG_CHEV}
+           </button>`
         : `<div class="empty-note">No receiving account bound yet. Add one from Account → Bind Bank.</div>`}
 
       <label class="fld-l">Withdrawal amount</label>
-      <div class="fld"><span class="fld-pre">UGX</span><input id="wdAmt" type="tel" inputmode="numeric" placeholder="${min ? Number(min).toLocaleString('en-UG') : '0'}"></div>
+      <div class="fld"><span class="fld-pre">UGX</span><input id="wdAmt" type="tel" inputmode="numeric" placeholder="${min ? Number(min).toLocaleString('en-UG') : '0'}" value="${esc(_wdDraft.amount)}"></div>
       <div class="calc" id="wdCalc">
         <span>You receive <b id="wdNet">${ugx(0)}</b></span>
         <span class="calc-fee">Fee ${Math.round(rate * 100)}%</span>
@@ -1101,17 +1124,20 @@ function openWithdrawSheet() {
     const v = parseInt(amtEl.value.replace(/\D/g, ''), 10) || 0;
     document.getElementById('wdNet').textContent = ugx(Math.max(0, Math.round(v * (1 - rate))));
   };
+  paint();
   amtEl.addEventListener('input', () => {
     const raw = amtEl.value.replace(/\D/g, '');
     amtEl.value = raw ? Number(raw).toLocaleString('en-UG') : '';
+    _wdDraft.amount = amtEl.value;
     paint();
     revealBtn('wdGo');
   });
-  document.querySelectorAll('#wdBank .pick-row').forEach(r => r.addEventListener('click', () => {
-    document.querySelectorAll('#wdBank .pick-row').forEach(x => x.classList.remove('on'));
-    r.classList.add('on');
-    revealBtn('wdGo');
-  }));
+
+  const pickBtn = document.getElementById('wdBankPick');
+  if (pickBtn) pickBtn.addEventListener('click', () => {
+    _wdDraft.amount = amtEl.value;
+    openBankSelectPage(banks);
+  });
 
   const go = document.getElementById('wdGo');
   if (!invested) return;
@@ -1121,8 +1147,7 @@ function openWithdrawSheet() {
     if (min && amount < min)    return toast(`Minimum withdrawal is ${ugx(min)}`);
     if (amount > bal)           return toast('Amount exceeds your balance');
     if (!banks.length)          return toast('Bind a receiving account first');
-    const sel = document.querySelector('#wdBank .pick-row.on');
-    const bank = banks[Number(sel?.dataset.i) || 0];
+    const bank = banks[_wdDraft.bankIdx] || banks[0];
 
     const restore = setBusy(go);
     const r = await api('/withdraw/request', { method: 'POST', body: {
@@ -1133,8 +1158,25 @@ function openWithdrawSheet() {
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderAccount();
     openRecordsPage('withdrawals');
-    toast('Withdrawal sent for processing');
+    toast('Withdrawal request submitted successfully ✔️');
   });
+}
+
+// Its own screen (per the reference design) rather than an inline list —
+// picking a card returns straight to the Withdrawal screen with it applied.
+function openBankSelectPage(banks) {
+  openModal(`
+    <div class="modal-head"><h2>Select bank card</h2><button class="modal-close"></button></div>
+    <div class="pick" id="wdBankList">${banks.map((b, i) => `
+      <button class="pick-row${i === _wdDraft.bankIdx ? ' on' : ''}" data-i="${i}">
+        <span>${esc(b.network || netOf(b.phone))} · ${esc(b.holderName || '')}</span>
+        <em>${esc(String(b.phone || '').replace(/^(\d{3}).*(\d{3})$/, '$1…$2'))}</em>
+      </button>`).join('')}</div>
+  `);
+  document.querySelectorAll('#wdBankList .pick-row').forEach(r => r.addEventListener('click', () => {
+    _wdDraft.bankIdx = Number(r.dataset.i) || 0;
+    renderWithdrawSheet();
+  }));
 }
 
 // ══════════════════════════════════════════════
@@ -1284,7 +1326,7 @@ function openCheckinPage() {
     renderHome(); renderAccount();
     closeModal();
     openCheckinPage();
-    toast(`${ugx(r.bonus)} added successfully`);
+    toast('Checked in successfully ✔️');
   });
 }
 
@@ -1507,7 +1549,7 @@ function openRedeemModal() {
     restore();
     if (r.status !== 'success') return toast(r.message || 'That code could not be claimed');
     closeModal();
-    toast(`${ugx(r.amount)} added successfully`);
+    toast('Gift code claimed successfully ✔️');
     await Promise.all([loadAccount(), loadTxns()]);
     renderHome(); renderAccount();
   });
@@ -1703,12 +1745,27 @@ function renderTeam() {
 // button. Deliberately no extra design. Server governs every number here:
 // current count, whether it's reached, and whether it's already claimed.
 function openTaskCenterPage() {
-  // Instant open on whatever's cached — never make the tap wait on a network
-  // round trip. Silently refresh in the background and repaint in place.
-  renderTaskCenterPage();
-  loadTeam().then(() => { if (document.getElementById('tkList')) renderTaskCenterPage(); }).catch(() => {});
+  if (_teamStats) {
+    // Already-cached numbers are current enough to paint instantly — this is
+    // the normal path since Team tab refreshes _teamStats on every visit.
+    renderTaskCenterPage();
+    loadTeam().then(() => { if (document.getElementById('tkList')) renderTaskCenterPage(); }).catch(() => {});
+    return;
+  }
+  // Nothing cached yet (a cold open before Team has ever loaded): show a
+  // loading state instead of zeroed rows, so the screen doesn't visibly
+  // paint once and then get overwritten a moment later.
+  renderTaskCenterPage(true);
+  loadTeam().then(() => { if (document.querySelector('.tk-loading')) renderTaskCenterPage(); }).catch(() => {});
 }
-function renderTaskCenterPage() {
+function renderTaskCenterPage(loading) {
+  if (loading) {
+    openModal(`
+      <div class="modal-head"><h2>Task Center</h2><button class="modal-close">${ICN.close}</button></div>
+      <div class="load-wrap tk-loading">${SPINNER}</div>
+    `);
+    return;
+  }
   const ts = _teamStats;
   const rows = TEAM_MILESTONES.map(m => {
     const s = ts?.milestones?.find(x => x.target === m.target);
