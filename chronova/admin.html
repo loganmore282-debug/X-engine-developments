@@ -6,10 +6,15 @@
 <title>Chronova Admin</title>
 <!-- PWA: makes the "Install" icon appear in the browser address bar -->
 <meta name="theme-color" content="#0c0b0e">
-<link rel="manifest" href="/furahq-manifest.json">
+<link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/furahq-sw.js').catch(function(){});}</script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
+window._adminInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); window._adminInstallPrompt = e;
+  var b = document.getElementById('installBtn'); if (b) b.classList.remove('hidden'); });
+window.addEventListener('appinstalled', function(){ window._adminInstallPrompt = null;
+  var b = document.getElementById('installBtn'); if (b) b.classList.add('hidden'); });</script>
 <style>
   :root{
     --bg:#0b0a07; --card:#17150f; --ink:#f3efe6; --sub:#a89f8c; --line:#2b2619; --line2:#1f1c13;
@@ -165,6 +170,7 @@
         <b>Chronova Admin</b>
         <div class="spacer"></div>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
+        <button class="btn ghost sm hidden" id="installBtn">Install</button>
         <button class="btn ghost sm" id="refreshBtn">Refresh</button>
         <button class="btn ghost sm" id="logoutBtn">Log out</button>
       </div>
@@ -264,8 +270,16 @@ $('loginBtn').addEventListener('click', doLogin);
 $('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 $('logoutBtn').addEventListener('click', ()=>{ ADMIN_KEY=''; try{ sessionStorage.removeItem('fg_admin_key'); }catch(_){} $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden'); $('keyInput').value=''; });
 
-function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); startLive(); }
+function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); startLive();
+  if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden'); }
 $('liveBtn').addEventListener('click', ()=>{ setLive(!_live); if(_live) liveTick(); });
+$('installBtn').addEventListener('click', async ()=>{
+  if (!window._adminInstallPrompt) return toast('Open the browser menu and choose Install app', 'ok');
+  window._adminInstallPrompt.prompt();
+  try { await window._adminInstallPrompt.userChoice; } catch(_){}
+  window._adminInstallPrompt = null;
+  $('installBtn').classList.add('hidden');
+});
 
 // ── TABS ──
 let _tab='dashboard';
