@@ -474,9 +474,10 @@ function checkGate() {
 }
 
 // ── REAL-TIME REFRESH ──
-// Silently re-pulls balance, transactions and team every 15s (and the moment the
-// app regains focus) and re-renders the visible tab — so a commission landing,
-// a deposit clearing or a daily payout shows up on its own, no manual reload.
+// Silently re-pulls balance, transactions, team and public settings every 4s
+// (and the moment the app regains focus) and re-renders the visible tab — so
+// a commission landing, a deposit clearing, a daily payout, or maintenance
+// mode being switched on all show up on their own, no manual reload.
 // Pauses while the tab is hidden or a full-page/modal is open (M0-friendly).
 let _realtimeTimer = null, _realtimeSig = '', _tickN = 0;
 function dataSig() {
@@ -491,10 +492,13 @@ async function realtimeTick() {
   if (document.hidden || !_user || _pageOpen) return;
   _tickN++;
   try {
-    await Promise.all([loadAccount(), loadTxns(),
+    await Promise.all([loadPublicSettings(), loadAccount(), loadTxns(),
       (_activeTab === 'team' ? loadTeam() : Promise.resolve())]);
   } catch (_) { return; }
   if (_pageOpen || document.hidden) return; // state changed during the await
+  // Maintenance mode (or a ban) flipped on the server while this tab sat open
+  // must take effect right away — not only for someone opening the app fresh.
+  if (checkGate()) return;
   // Only re-render when something actually changed — no needless flicker.
   const sig = dataSig();
   if (sig === _realtimeSig) return;

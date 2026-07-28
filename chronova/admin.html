@@ -630,7 +630,7 @@ async function renderProducts(){
       <div class="prod">
         <div class="thumb" style="${p.image?`background-image:url('${esc(p.image)}')`:''}">${p.image?'':tintSwatch()}</div>
         <div class="pb">
-          <div class="pt">${esc(p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Coming soon</span>':''}</div>
+          <div class="pt">${esc(p.label)} ${p.active===false?'<span class="pill-tag t-mut">Off</span>':''}${p.comingSoon?'<span class="pill-tag t-warn">Sold out</span>':''}</div>
           <div class="pp">${ugx(p.price)} · ${p.cycle||0} days</div>
           <div class="pr">Pays ${ugx(p.expectedReturn)}</div>
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.id)}">Edit</button><button class="btn sm danger" data-del="${esc(p.id)}">Delete</button></div>
@@ -673,7 +673,7 @@ function editProduct(p, order){
     <input id="pImage" value="${esc(p.image&&!/^data:/.test(p.image)?p.image:'')}" placeholder="https://…/product.png">
     <div class="switch-row" style="margin-top:10px"><span><b>Active</b> <span class="muted">(shown in the app)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
-    <div class="switch-row"><span><b>Coming soon</b> <span class="muted">(shown, but not buyable yet)</span></span>
+    <div class="switch-row"><span><b>Sold out</b> <span class="muted">(shown, but not buyable)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
     <button class="btn block" id="pSave">Save watch</button>`);
   let imgData = p.image||''; // uploaded data URI (takes priority over the URL field)
@@ -894,7 +894,11 @@ async function renderSettings(){
       <label>Button link (optional)</label><input id="aCtaUrl" value="${esc(v('annCtaUrl',''))}">
       <button class="btn block" id="saveAnn">Save announcement</button>
       <p class="muted" style="margin-top:10px">Saving re-shows the popup to everyone.</p>
-      <label style="margin-top:14px;display:block">Banner image (optional)</label>
+    </div>
+
+    <h2 class="sec">Announcement banner image</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Shown at the top of the announcement popup, above the title. Leave unset to keep the plain gold mark instead.</p>
       <div class="banner-row">
         ${s.announcementBg?`<img class="img-thumb" src="${esc(s.announcementBg)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${s.announcementBg?'Uploaded image':'<span class="muted">Not set</span>'}</div>

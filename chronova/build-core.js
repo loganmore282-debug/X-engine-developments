@@ -76,6 +76,8 @@ const obf = JavaScriptObfuscator.obfuscate(source, {
   stringArray: true,
   stringArrayThreshold: 1,         // encode EVERY string literal (guarantees the server URL & all endpoints are never a plain, grep-able string in the shipped file)
   stringArrayEncoding: ['base64'],
+  controlFlowFlattening: true,     // raises the bar on static reverse-engineering
+  controlFlowFlatteningThreshold: 0.3, // kept low — flattening everything bloats size and slows low-end phones
   selfDefending: false,            // breaks when wrapped/injected
   disableConsoleOutput: true,
 }).getObfuscatedCode();

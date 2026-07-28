@@ -555,11 +555,21 @@ async function verifyAuth(req) {
     return decoded.uid;
   } catch (_) { return null; }
 }
+// Constant-time secret comparison — a plain === leaks how many leading
+// characters matched through response timing. Length is compared first
+// (still technically observable, but this is the standard accepted
+// trade-off; timingSafeEqual itself requires equal-length buffers).
+function safeEqual(a, b) {
+  const bufA = Buffer.from(String(a || ''));
+  const bufB = Buffer.from(String(b || ''));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 function verifyAdmin(req) {
   if (!ADMIN_KEY) return false;
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (header && header === ADMIN_KEY) return true;
-  return req.body?.adminKey === ADMIN_KEY;
+  if (header && safeEqual(header, ADMIN_KEY)) return true;
+  return safeEqual(req.body?.adminKey, ADMIN_KEY);
 }
 
 // Milliseconds from any timestamp shape (Date, ISO string, {seconds}).
@@ -1319,7 +1329,7 @@ app.post('/account/remove-bank', async (req, res) => {
 app.post('/admin/check-key', (req, res) => {
   const { key } = req.body;
   if (!ADMIN_KEY) return res.status(500).json({ status: 'error', message: 'Admin key not configured' });
-  if (key !== ADMIN_KEY) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  if (!safeEqual(key, ADMIN_KEY)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
   return res.json({ status: 'success' });
 });
 

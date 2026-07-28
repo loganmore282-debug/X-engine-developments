@@ -66,6 +66,9 @@ window.__PV = {
   ],
 };
 _publicSettings = window.__PV.settings;
+_user = { uid: 'preview-user' };
+window.__tickNow = () => realtimeTick();
+window.__setMaintenance = (on) => { _publicSettings.maintenanceMode = on; };
 _products = window.__PV.products;
 _deposits = window.__PV.deposits;
 _withdrawals = window.__PV.withdrawals;

@@ -37,7 +37,8 @@ const obf = JavaScriptObfuscator.obfuscate(rawJs, {
   splitStringsChunkLength: 8,
   transformObjectKeys: false,    // object keys are used as API field names — keep
   deadCodeInjection: false,      // keep size sane for an admin file
-  controlFlowFlattening: false,
+  controlFlowFlattening: true,   // owner-only tool, desktop-grade hardware — size matters less than on the user app
+  controlFlowFlatteningThreshold: 0.5,
   selfDefending: false,
 }).getObfuscatedCode();
 

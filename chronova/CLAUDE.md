@@ -84,7 +84,7 @@ Everything is in `chronova/` (this directory):
 - `original_module.js` — all app logic/screens (compiled into `index.html`)
 - `index.html` — shell + CSS + compiled core (edit CSS/markup here directly; JS logic
   lives in `original_module.js` and gets recompiled in)
-- `server.js` — Railway backend (Express + Firebase Auth + MongoDB via `db.js`)
+- `server.js` — Render backend (Express + Firebase Auth + MongoDB via `db.js`)
 - `db.js` — Mongo layer. M0 free tier has **no ACID transactions** — money-crediting
   code uses in-process Sets as single-writer locks (same pattern as the Voltra/Furagemz
   lineage; see `db.js` comments).
@@ -116,12 +116,12 @@ Everything is in `chronova/` (this directory):
 - User app → EdgeOne project, upload `dist/` contents (or the zip). URL pattern:
   `*.edgeone.app` / `*.edgeone.dev` preview domains, plus their own custom domain.
 - Admin panel → separate EdgeOne project from `admin-dist/`.
-- Backend → Railway, from `server.js`.
+- Backend → **Render** (not Railway), from `server.js`.
 - MongoDB Atlas (M0), Firebase Auth, MarzPay/MarzSMS are the external services.
 
 ### Secrets — never commit
 Firebase service account, Mongo URI, admin key, MarzPay/MarzSMS keys all live only in
-Railway env vars. Never put secrets or the model identifier in commits/PRs/code.
+Render env vars. Never put secrets or the model identifier in commits/PRs/code.
 
 ## Known constraints
 
