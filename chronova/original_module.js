@@ -879,6 +879,14 @@ const SVG_TICK    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const SVG_CHEV    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>';
 const SVG_CLOSE   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
+// Bring a bottom button into view once its sheet has grown too tall for the
+// screen (a chip pick or a typed amount can push it below the fold, and on a
+// phone the keyboard covers the rest) — 'nearest' is a no-op if it's already
+// visible, so this is safe to call on every keystroke.
+function revealBtn(id) {
+  const el = document.getElementById(id);
+  if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+}
 function openSheet({ title, body, onRecords }) {
   const root = document.getElementById('modalRoot');
   root.style.alignItems = 'center';
@@ -979,12 +987,14 @@ function openRechargeSheet() {
     document.querySelectorAll('#rcChips .chip').forEach(x => x.classList.remove('on'));
     c.classList.add('on');
     amtEl.value = Number(c.dataset.amt).toLocaleString('en-UG');
+    revealBtn('rcGo');
   }));
   amtEl.addEventListener('input', () => {
     const raw = amtEl.value.replace(/\D/g, '');
     amtEl.value = raw ? Number(raw).toLocaleString('en-UG') : '';
     document.querySelectorAll('#rcChips .chip').forEach(x =>
       x.classList.toggle('on', Number(x.dataset.amt) === Number(raw)));
+    revealBtn('rcGo');
   });
   phEl.addEventListener('input', () => paintNet());  // never forward the Event as 'force'
   paintNet();
@@ -1087,10 +1097,12 @@ function openWithdrawSheet() {
     const raw = amtEl.value.replace(/\D/g, '');
     amtEl.value = raw ? Number(raw).toLocaleString('en-UG') : '';
     paint();
+    revealBtn('wdGo');
   });
   document.querySelectorAll('#wdBank .pick-row').forEach(r => r.addEventListener('click', () => {
     document.querySelectorAll('#wdBank .pick-row').forEach(x => x.classList.remove('on'));
     r.classList.add('on');
+    revealBtn('wdGo');
   }));
 
   const go = document.getElementById('wdGo');
