@@ -92,7 +92,20 @@ fs.writeFileSync(path.join(ADIST, 'manifest.json'), JSON.stringify({
 fs.writeFileSync(path.join(ADIST, 'sw.js'),
   "self.addEventListener('install',function(){self.skipWaiting();});\n" +
   "self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim());});\n" +
-  "self.addEventListener('fetch',function(){});\n");
+  "self.addEventListener('fetch',function(){});\n" +
+  // Push notifications (pending withdrawals, completed deposits) still need
+  // to show up while the admin panel tab isn't open/focused — this is the
+  // only part of the SW that does anything beyond skip-waiting/claim, it
+  // adds no caching so the no-stale-data guarantee above is untouched.
+  "self.addEventListener('push',function(e){\n" +
+  "  var d={}; try{ d=e.data.json(); }catch(_){}\n" +
+  "  var n=d.notification||d||{};\n" +
+  "  e.waitUntil(self.registration.showNotification(n.title||'Chronova Admin',{body:n.body||'',icon:'/icon-192.png',data:d.data||{}}));\n" +
+  "});\n" +
+  "self.addEventListener('notificationclick',function(e){\n" +
+  "  e.notification.close();\n" +
+  "  e.waitUntil(clients.openWindow('/'));\n" +
+  "});\n");
 
 const kb = (n) => (n / 1024).toFixed(1) + ' KB';
 console.log('admin source :', kb(fs.statSync(SRC).size), '(readable — edit this)');

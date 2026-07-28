@@ -138,6 +138,38 @@ handed to staff. Each staff member gets an individual account instead:
   owner-only endpoints, per-username lockout, logout invalidates server-side,
   audit log records the right actor. Run it after touching any of this.
 
+## Admin push notifications (every admin/owner equally)
+
+Browser push (Firebase Cloud Messaging), fired on exactly two events: a new
+withdrawal request (`/withdraw/request`) and a deposit completing
+(`creditMarzDeposit` — the one shared crediting function every provider/admin
+path funnels through). No owner-vs-staff distinction — every registered
+device gets both.
+- Reuses the SAME Firebase project as user login (`FIREBASE_CONFIG` in
+  `admin.html`, duplicated from `original_module.js` — it's public client
+  config, safe to embed). No new Firebase project needed.
+- **Still needed from the owner**: a Web Push certificate (VAPID key) —
+  Firebase Console → Project Settings → Cloud Messaging → Web Push
+  certificates → generate, then paste into `VAPID_KEY` in `admin.html` (near
+  `FIREBASE_CONFIG`) and rebuild. Until that's filled in, the Notify button
+  tells the admin it isn't configured yet rather than failing silently.
+- `adminPushTokens` (Mongo): `{token, username, createdAt, updatedAt}` —
+  one doc per subscribed device. `/admin/push/register` and
+  `/admin/push/unregister` (any verified admin, not owner-only) manage it;
+  `sendAdminPush(title, body, data)` in server.js fans out to every token via
+  `admin.messaging().sendEachForMulticast()` and prunes dead tokens from the
+  response (never throws — a push failure must never break the money flow
+  that triggered it).
+- `admin-dist/sw.js` (generated in `build-admin.js`, NOT the readable
+  `admin.html` source) has `push`/`notificationclick` listeners added on top
+  of its otherwise-intentional no-op/no-cache behavior — don't add caching
+  logic here, only notification display.
+- Not verified end-to-end in this sandbox (no outbound internet to Firebase,
+  and no real deployed backend to register a token against) — code is
+  defensively guarded (`typeof firebase === 'undefined'` etc.) and syntax
+  checked, but the actual enable → receive flow needs a real device test
+  after the VAPID key is in place.
+
 ## Build & deploy pipeline
 
 1. Edit `original_module.js` (app logic) and/or `index.html` (CSS/markup).

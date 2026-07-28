@@ -440,6 +440,33 @@ async function notifyAdmins(message) {
   } catch (_) {}
 }
 
+// Browser push (FCM) to every registered admin/owner device, equally — one
+// pending withdrawal or completed deposit reaches all of them at once. Dead
+// tokens (uninstalled, permission revoked) are pruned from the response so
+// the token list never grows unbounded. Never throws — a push failure must
+// never break the money flow that triggered it.
+async function sendAdminPush(title, body, data) {
+  try {
+    const snap = await db.collection('adminPushTokens').get();
+    const tokens = snap.docs.map(d => d.data().token).filter(Boolean);
+    if (!tokens.length) return;
+    const resp = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      data: Object.fromEntries(Object.entries(data || {}).map(([k, v]) => [k, String(v)])),
+      webpush: { fcmOptions: { link: '/' } }
+    });
+    const dead = [];
+    resp.responses.forEach((r, i) => {
+      if (!r.success && /registration-token-not-registered|invalid-argument/.test(r.error?.code || '')) dead.push(tokens[i]);
+    });
+    if (dead.length) {
+      const doomed = await db.collection('adminPushTokens').where('token', 'in', dead).get();
+      await Promise.all(doomed.docs.map(d => d.ref.delete()));
+    }
+  } catch (e) { console.warn('sendAdminPush error:', e.message); }
+}
+
 // ── SETTINGS CACHE — reads MongoDB `settings/main`, TTL 5 min ──
 // Admin-editable rates live here; hardcoded constants above are fallbacks
 // only, so a bad DB value never breaks the server.
@@ -1456,6 +1483,35 @@ app.post('/admin/logout', async (req, res) => {
   return res.json({ status: 'success' });
 });
 
+// ── ADMIN PUSH NOTIFICATIONS — every admin/owner is equal here, so both
+// registration and the events that fire (pending withdrawal, deposit
+// completed) are open to any verified admin, not owner-only. ──
+app.post('/admin/push/register', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const token = String(req.body.token || '').trim();
+  if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
+  const username = req.adminUser?.username || 'owner';
+  try {
+    const existing = await db.collection('adminPushTokens').where('token', '==', token).limit(1).get();
+    if (!existing.empty) {
+      await existing.docs[0].ref.update({ username, updatedAt: FieldValue.serverTimestamp() });
+    } else {
+      await db.collection('adminPushTokens').add({ token, username, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    }
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/push/unregister', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const token = String(req.body.token || '').trim();
+  if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
+  try {
+    const existing = await db.collection('adminPushTokens').where('token', '==', token).limit(1).get();
+    if (!existing.empty) await existing.docs[0].ref.delete();
+    return res.json({ status: 'success' });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 // ── ADMIN ACCOUNT MANAGEMENT (owner only) ──
 app.post('/admin/admins/list', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -2165,6 +2221,7 @@ async function creditMarzDeposit(depDoc, amount, provTxId) {
     if (didCredit) {
       payCommissions(dep.userId, amount, depDoc.id, 'deposit')
         .catch(e => console.error('Commission err:', e.message));
+      sendAdminPush('Deposit completed', `${fmtUGX(amount)} credited to ${dep.phone || 'a user'}'s wallet.`, { type: 'deposit', id: depDoc.id }).catch(() => {});
     }
     return didCredit;
   } finally { _creditingDeposits.delete(depDoc.id); }
@@ -2874,6 +2931,7 @@ app.post('/withdraw/request', async (req, res) => {
       });
     }));
     notifyAdmins(`Chronova withdrawal: ${user.name || 'User'} wants ${fmtUGX(amt)} (net ${fmtUGX(netAmt)} after fee) to ${fullPhone}. Ref ${witId}. Tap "Send via MarzPay" in the panel, or it auto-releases through the gateway in 15 min (7am-6pm only).`).catch(() => {});
+    sendAdminPush('New withdrawal request', `${user.name || 'A user'} requested ${fmtUGX(netAmt)} to ${fullPhone}.`, { type: 'withdrawal', id: witId }).catch(() => {});
     return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });
   } catch (e) {
     console.error('Withdrawal error:', e.message);

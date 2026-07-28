@@ -171,6 +171,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <b>Chronova Admin</b>
         <div class="spacer"></div>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
+        <button class="btn ghost sm" id="pushBtn" title="Enable push notifications">Notify</button>
         <button class="btn ghost sm hidden" id="installBtn">Install</button>
         <button class="btn ghost sm" id="refreshBtn">Refresh</button>
         <button class="btn ghost sm" id="logoutBtn">Log out</button>
@@ -197,6 +198,8 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 
 <div class="modal-root hidden" id="modalRoot"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <script>
 // Chronova Admin panel.
 const SERVER = 'https://education-oc44.onrender.com';
@@ -339,6 +342,73 @@ $('installBtn').addEventListener('click', async ()=>{
   window._adminInstallPrompt = null;
   $('installBtn').classList.add('hidden');
 });
+
+// ── PUSH NOTIFICATIONS — every admin/owner equally, on pending withdrawals
+// and completed deposits. Reuses the SAME Firebase project already used for
+// user login (client SDK config is public, safe to embed) — the one piece
+// that has to be pasted in by hand is the Web Push certificate (VAPID key)
+// from Firebase Console → Project Settings → Cloud Messaging.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDOwA8dGvLGGtj6wkAqh0-7EZ2u5cHSW7k",
+  authDomain: "chronovaplatform.firebaseapp.com",
+  projectId: "chronovaplatform",
+  storageBucket: "chronovaplatform.firebasestorage.app",
+  messagingSenderId: "432567199816",
+  appId: "1:432567199816:web:64842f35909b1075ad107d"
+};
+// TODO(owner): paste the Web Push certificate key pair here. Until this is
+// set, the Notify button tells you it isn't configured yet instead of
+// silently failing.
+const VAPID_KEY = '';
+
+function firebaseMessagingReady(){
+  if (typeof firebase === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return null;
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    return firebase.messaging();
+  } catch(_) { return null; }
+}
+function setPushUIState(on){
+  const btn = $('pushBtn'); if (!btn) return;
+  btn.classList.toggle('ok', on); btn.classList.toggle('ghost', !on);
+  btn.textContent = on ? 'Notify: on' : 'Notify';
+  btn.title = on ? 'Push notifications on — click to disable' : 'Enable push notifications';
+}
+async function enablePush(){
+  if (!VAPID_KEY) return toast('Push notifications are not configured yet', 'err');
+  const messaging = firebaseMessagingReady();
+  if (!messaging) return toast('Push notifications are not supported on this device/browser', 'err');
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return toast('Notification permission was not granted', 'err');
+    const reg = await navigator.serviceWorker.ready;
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+    if (!token) return toast('Could not get a push token', 'err');
+    const r = await api('/admin/push/register', { token });
+    if (r.status !== 'success') return toast(r.message || 'Could not enable notifications', 'err');
+    try { localStorage.setItem('chr_admin_push_token', token); } catch(_){}
+    setPushUIState(true);
+    toast('Push notifications enabled', 'ok');
+  } catch(e) { toast('Could not enable notifications', 'err'); }
+}
+async function disablePush(){
+  let token = ''; try { token = localStorage.getItem('chr_admin_push_token') || ''; } catch(_){}
+  if (token) { await api('/admin/push/unregister', { token }).catch(()=>{}); try { localStorage.removeItem('chr_admin_push_token'); } catch(_){} }
+  setPushUIState(false);
+  toast('Push notifications disabled', 'ok');
+}
+$('pushBtn').addEventListener('click', ()=>{
+  ($('pushBtn').classList.contains('ok') ? disablePush : enablePush)();
+});
+// Reflect whether THIS device already has a token registered, without
+// re-registering — actual enabling only ever happens from the button click.
+try { setPushUIState(!!localStorage.getItem('chr_admin_push_token')); } catch(_){}
+// Foreground messages (tab open and focused) surface as a toast; background
+// ones are handled by the service worker's own 'push' listener instead.
+(() => { const m = firebaseMessagingReady(); if (m) m.onMessage((payload) => {
+  const n = payload.notification || {};
+  toast((n.title ? n.title + ': ' : '') + (n.body || 'New activity'), 'ok');
+}); })();
 
 // ── TABS ──
 let _tab='dashboard';
