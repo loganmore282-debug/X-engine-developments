@@ -561,20 +561,23 @@ function maybeShowAnnouncement() {
   document.body.classList.add('no-scroll'); // freeze the dashboard while the dialog is up
   root.style.alignItems = 'center';
   const ctaIsTelegram = /(?:^|\/\/)(?:t\.me|telegram\.me|telegram\.org)\//i.test(ann.ctaUrl || '');
+  const bg = _publicSettings?.announcementBg || '';
   root.innerHTML = `
     <div class="modal-backdrop" data-close></div>
     <div class="ann-card">
-      <div class="ann-hero"><span class="ann-htitle">${esc(ann.title || 'Notice')}</span>
-        <div class="ann-logo">${FG_LOGO}</div></div>
+      <button class="ann-x" id="annClose" aria-label="Close">${SVG_CLOSE}</button>
+      <div class="ann-hero"${bg ? ` style="background-image:url('${esc(bg)}')"` : ''}>
+        <span class="ann-htitle">${esc(ann.title || 'Notice')}</span>
+        ${bg ? '' : `<div class="ann-logo">${FG_LOGO}</div>`}
+      </div>
       <div class="ann-body">
         ${announcementBodyHtml(ann.body)}
         ${ann.ctaUrl && ann.ctaLabel ? `<a class="ann-cta" href="${esc(ann.ctaUrl)}" target="_blank" rel="noopener">${ctaIsTelegram ? `<span class="ann-cta-ic">${TG_MARK}</span>` : ''}${esc(ann.ctaLabel)}</a>` : ''}
-        <button class="ann-ok" id="annOk">OK</button>
       </div>
     </div>`;
   root.classList.remove('hidden');
   const dismiss = () => { root.style.alignItems = ''; closeModal(); };
-  root.querySelector('#annOk').addEventListener('click', dismiss);
+  root.querySelector('#annClose').addEventListener('click', dismiss);
   root.querySelector('[data-close]').addEventListener('click', dismiss);
 }
 
@@ -624,13 +627,16 @@ document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
 // The raised centre button opens what the user already owns, not the shop.
 document.querySelector('.tab-fab')?.addEventListener('click', () => openHoldingsModal());
 async function switchTab(name) {
+  const prevTab = _activeTab;
   _activeTab = name;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-' + name));
   document.getElementById('topbarTitle').textContent = { home: 'Home', products: 'Products', team: 'Team', account: 'Account' }[name];
   // INSTANT tabs: paint whatever is cached NOW, refresh silently in the
   // background and repaint when fresh data lands — never block the switch.
-  if (name === 'home') maybeShowAnnouncement();
+  // Only re-show the announcement on an actual arrival at Home from another
+  // tab — tapping Home while already there must not retrigger it.
+  if (name === 'home' && prevTab !== 'home') maybeShowAnnouncement();
   if (name === 'products' && !_products.length)
     loadProducts().then(() => { if (_activeTab === 'products') renderProducts(); }).catch(() => {});
   if (name === 'team')
@@ -1068,12 +1074,14 @@ function feeRate() {
   return (f > 0 && f < 1) ? f : 0.17;
 }
 
-// Which bank card is picked persists across the trip out to the dedicated
-// selection screen and back — reset only when Withdrawal is opened fresh.
-let _wdDraft = { amount: '', bankIdx: 0 };
+// The bank pick is deliberately NOT remembered — bankIdx stays null until the
+// user actually taps a card this trip, on every fresh Withdrawal, even if
+// only one account is on file. It only survives the round trip to the Bind
+// Bank Card screen and back within the SAME open sheet.
+let _wdDraft = { amount: '', bankIdx: null };
 
 function openWithdrawSheet() {
-  _wdDraft = { amount: '', bankIdx: 0 };
+  _wdDraft = { amount: '', bankIdx: null };
   renderWithdrawSheet();
 }
 
@@ -1083,7 +1091,7 @@ function renderWithdrawSheet() {
   const rate = feeRate();
   const banks = _account?.bankAccounts || [];
   const invested = (Number(_account?.totalInvested) || 0) > 0 || _investments.length > 0;
-  const picked = banks[_wdDraft.bankIdx] || banks[0];
+  const picked = _wdDraft.bankIdx != null ? banks[_wdDraft.bankIdx] : null;
 
   openSheet({
     title: 'Withdrawal',
@@ -1147,7 +1155,8 @@ function renderWithdrawSheet() {
     if (min && amount < min)    return toast(`Minimum withdrawal is ${ugx(min)}`);
     if (amount > bal)           return toast('Amount exceeds your balance');
     if (!banks.length)          return toast('Bind a receiving account first');
-    const bank = banks[_wdDraft.bankIdx] || banks[0];
+    if (_wdDraft.bankIdx == null) return toast('Select a receiving account');
+    const bank = banks[_wdDraft.bankIdx];
 
     const restore = setBusy(go);
     const r = await api('/withdraw/request', { method: 'POST', body: {

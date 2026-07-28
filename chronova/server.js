@@ -1743,7 +1743,6 @@ function randomAmountIn(min, max) {
   const raw = lo + Math.random() * (hi - lo);
   return Math.max(lo, Math.round(raw / 100) * 100); // clean multiple of 100
 }
-const _codeRateMap   = new Map();  // userId -> last attempt ts
 const _redeemingCodes = new Set(); // code doc id -> being redeemed (single-writer)
 
 app.post('/redeem', async (req, res) => {
@@ -1754,10 +1753,6 @@ app.post('/redeem', async (req, res) => {
   const typed = String(req.body.code || '').replace(/[\s-]/g, '');
   const code = typed.toUpperCase();
   if (!code) return res.status(400).json({ status: 'error', message: 'Enter a code' });
-  const lastTry = _codeRateMap.get(userId) || 0;
-  if (Date.now() - lastTry < 8000)
-    return res.status(429).json({ status: 'error', message: 'Too many attempts. Wait a moment.' });
-  _codeRateMap.set(userId, Date.now());
   try {
     // codeKey is the uppercase form written for every code issued from now on.
     // Codes created before it existed are still found by their original value.

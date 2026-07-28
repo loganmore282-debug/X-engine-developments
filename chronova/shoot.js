@@ -43,6 +43,7 @@ const SHOTS = [
   ['loginok', 'home', 'loginok'],
   ['taskcenter', 'account', 'taskcenter'],
   ['announcement', 'home', 'announcement'],
+  ['announcement-nobg', 'home', 'announcement-nobg'],
 ];
 
 (async () => {

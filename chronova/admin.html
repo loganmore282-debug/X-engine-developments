@@ -742,12 +742,7 @@ async function renderBanners(){
           <button class="btn sm" data-save="${key}" style="width:auto">Save</button>
         </div>
       </div>`;
-    }).join('')}
-    <h2 class="sec">Announcement background</h2>
-    <div class="panel-card">
-      <label>Announcement dialog background image URL (optional)</label><input id="annBg" value="${esc(s.announcementBg||'')}" placeholder="https://…/notice.jpg">
-      <button class="btn block" id="annBgSave">Save background</button>
-    </div>`;
+    }).join('')}`;
 
   const put = async (key, value) => {
     const d = await api('/admin/banners/set', { key, url: value });
@@ -764,7 +759,6 @@ async function renderBanners(){
     try { toast('Uploading…','ok'); await put(inp.dataset.file, await fileToDataUrl(f,1280,0.82)); }
     catch(err){ toast(err.message||'Could not read image','err'); }
   }));
-  $('annBgSave').addEventListener('click',()=>put('announcementBg', $('annBg').value.trim()));
 }
 
 // ── CODES ──
@@ -900,6 +894,13 @@ async function renderSettings(){
       <label>Button link (optional)</label><input id="aCtaUrl" value="${esc(v('annCtaUrl',''))}">
       <button class="btn block" id="saveAnn">Save announcement</button>
       <p class="muted" style="margin-top:10px">Saving re-shows the popup to everyone.</p>
+      <label style="margin-top:14px;display:block">Banner image (optional)</label>
+      <div class="banner-row">
+        ${s.announcementBg?`<img class="img-thumb" src="${esc(s.announcementBg)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${s.announcementBg?'Uploaded image':'<span class="muted">Not set</span>'}</div>
+        ${s.announcementBg?`<button class="btn danger sm" id="annBgClear">Clear</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="annBgFile" accept="image/*" hidden></label>
     </div>
 
     <h2 class="sec">Support contacts</h2>
@@ -940,6 +941,22 @@ async function renderSettings(){
     const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value,
       annCtaLabel:$('aCtaLabel').value.trim(), annCtaUrl:$('aCtaUrl').value.trim() };
     const d=await api('/admin/settings/update', upd); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('annBgFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try {
+      toast('Uploading…','ok');
+      const dataUri = await fileToDataUrl(f,1280,0.82);
+      const d = await api('/admin/settings/update', { announcementBg: dataUri });
+      toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    } catch(err){ toast(err.message||'Could not read image','err'); }
+  });
+  const annBgClear = document.getElementById('annBgClear');
+  if (annBgClear) annBgClear.addEventListener('click', async()=>{
+    const d = await api('/admin/settings/update', { announcementBg: '' });
+    toast(d.status==='success'?'Cleared':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if (d.status==='success') renderSettings();
   });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportWhatsapp:$('spWa').value.trim(), supportTelegram:$('spTg').value.trim(),

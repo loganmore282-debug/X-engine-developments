@@ -49,6 +49,7 @@ window.__PV = {
     telegramGroup: 'https://t.me/chronova', telegramChannel: 'https://t.me/chronova_news',
     supportTelegram: 'https://t.me/chronova_help', supportHours: 'Every day, 9:00 AM – 9:00 PM',
     banners: { checkin: '${PNG_GOLD}', checkinBg: '${PNG_GOLD}', gift: '${PNG_GOLD}' },
+    announcementBg: '${PNG_GOLD}',
     announcement: { enabled: true, title: 'Notice',
       body: 'Withdrawals now process automatically 7am-6pm.\\nMinimum recharge is UGX 25,000.\\nJoin https://t.me/chronova_news for updates.\\nGift codes now pay a random amount.\\nContact support via WhatsApp for any issue.\\nThis sixth line should never appear.',
       ctaUrl: 'https://t.me/chronova_news', ctaLabel: 'Open Telegram channel' }
@@ -136,6 +137,7 @@ window.__open = (what) => {
   if (what === 'loginok') return toast('Login successful', true);
   if (what === 'taskcenter') return openTaskCenterPage();
   if (what === 'announcement') return maybeShowAnnouncement();
+  if (what === 'announcement-nobg') { const bg = _publicSettings.announcementBg; _publicSettings.announcementBg = ''; maybeShowAnnouncement(); _publicSettings.announcementBg = bg; }
 };
 // Simulates the very first frame after launch: signed in, nothing loaded yet.
 window.__empty = () => {
