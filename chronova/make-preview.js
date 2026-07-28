@@ -119,6 +119,7 @@ window.__open = (what) => {
   if (what === 'recharge') return openRechargeSheet();
   if (what === 'withdraw') return openWithdrawSheet();
   if (what === 'bankselect') { openWithdrawSheet(); setTimeout(()=>document.getElementById('wdBankPick')?.click(), 60); }
+  if (what === 'bankselect-empty') { _account.bankAccounts = []; openWithdrawSheet(); setTimeout(()=>document.getElementById('wdBankPick')?.click(), 60); }
   if (what === 'records')  return openRecordsPage('deposits');
   if (what === 'wrecords') return openRecordsPage('withdrawals');
   if (what === 'checkin')  return openCheckinPage();

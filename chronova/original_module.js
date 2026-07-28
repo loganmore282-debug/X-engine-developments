@@ -1092,14 +1092,12 @@ function renderWithdrawSheet() {
       <div class="wd-bal"><span>Available balance</span><b>${ugx(bal)}</b></div>
 
       <label class="fld-l">Receiving account</label>
-      ${banks.length
-        ? `<button class="pick-nav" id="wdBankPick" type="button">
-             <span class="pick-nav-tx">${picked
-               ? `${esc(picked.network || netOf(picked.phone))} · ${esc(String(picked.phone || '').replace(/^(\d{3}).*(\d{3})$/, '$1…$2'))}`
-               : 'Please select your bank card'}</span>
-             ${SVG_CHEV}
-           </button>`
-        : `<div class="empty-note">No receiving account bound yet. Add one from Account → Bind Bank.</div>`}
+      <button class="pick-nav" id="wdBankPick" type="button">
+        <span class="pick-nav-tx">${picked
+          ? `${esc(picked.network || netOf(picked.phone))} · ${esc(String(picked.phone || '').replace(/^(\d{3}).*(\d{3})$/, '$1…$2'))}`
+          : 'Please select your bank card'}</span>
+        ${SVG_CHEV}
+      </button>
 
       <label class="fld-l">Withdrawal amount</label>
       <div class="fld"><span class="fld-pre">UGX</span><input id="wdAmt" type="tel" inputmode="numeric" placeholder="${min ? Number(min).toLocaleString('en-UG') : '0'}" value="${esc(_wdDraft.amount)}"></div>
@@ -1133,10 +1131,12 @@ function renderWithdrawSheet() {
     revealBtn('wdGo');
   });
 
-  const pickBtn = document.getElementById('wdBankPick');
-  if (pickBtn) pickBtn.addEventListener('click', () => {
+  document.getElementById('wdBankPick').addEventListener('click', () => {
     _wdDraft.amount = amtEl.value;
-    openBankSelectPage(banks);
+    // Same Bind Bank Card screen used from Account — picking a saved card
+    // returns straight to Withdrawal; with none saved yet, that screen's own
+    // add-card form is right there, so there's nowhere else to be sent.
+    openBanksModal((idx) => { _wdDraft.bankIdx = idx; renderWithdrawSheet(); });
   });
 
   const go = document.getElementById('wdGo');
@@ -1160,23 +1160,6 @@ function renderWithdrawSheet() {
     openRecordsPage('withdrawals');
     toast('Withdrawal request submitted successfully ✔️');
   });
-}
-
-// Its own screen (per the reference design) rather than an inline list —
-// picking a card returns straight to the Withdrawal screen with it applied.
-function openBankSelectPage(banks) {
-  openModal(`
-    <div class="modal-head"><h2>Select bank card</h2><button class="modal-close"></button></div>
-    <div class="pick" id="wdBankList">${banks.map((b, i) => `
-      <button class="pick-row${i === _wdDraft.bankIdx ? ' on' : ''}" data-i="${i}">
-        <span>${esc(b.network || netOf(b.phone))} · ${esc(b.holderName || '')}</span>
-        <em>${esc(String(b.phone || '').replace(/^(\d{3}).*(\d{3})$/, '$1…$2'))}</em>
-      </button>`).join('')}</div>
-  `);
-  document.querySelectorAll('#wdBankList .pick-row').forEach(r => r.addEventListener('click', () => {
-    _wdDraft.bankIdx = Number(r.dataset.i) || 0;
-    renderWithdrawSheet();
-  }));
 }
 
 // ══════════════════════════════════════════════
@@ -1560,25 +1543,37 @@ function openRedeemModal() {
 // ══════════════════════════════════════════════
 const NETWORKS = [{ value: 'Airtel', label: 'Airtel' }, { value: 'MTN', label: 'MTN' }];
 
-function openBanksModal() {
+// onPick is only ever a function when this is opened as a picker (from
+// Withdrawal); the Account-menu entry point wires this straight to a click
+// listener, so it must never be treated as a picker just for being truthy.
+function openBanksModal(onPick) {
+  const picking = typeof onPick === 'function';
   let network = '';
   const paint = () => {
     const host = document.getElementById('bankList');
-    if (host) host.innerHTML = bankRowsHtml(_account?.bankAccounts || [], true);
+    if (host) host.innerHTML = bankRowsHtml(_account?.bankAccounts || [], !picking, picking);
     bindDeletes();
+    bindPicks();
   };
   const bindDeletes = () => {
-    document.querySelectorAll('#bankList [data-del]').forEach(b => b.addEventListener('click', async () => {
+    document.querySelectorAll('#bankList [data-del]').forEach(b => b.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const r = await api('/account/remove-bank', { method: 'POST', body: { phone: b.dataset.del } });
       if (r.status !== 'success') return toast(r.message || 'Could not remove');
       toast('Account removed');
       await loadAccount(); paint();
     }));
   };
+  const bindPicks = () => {
+    if (!picking) return;
+    document.querySelectorAll('#bankList [data-pick]').forEach(row => row.addEventListener('click', () => {
+      onPick(Number(row.dataset.pick));
+    }));
+  };
 
   openModal(`
-    <div class="modal-head"><h2>Bind bank card</h2><button class="modal-close"></button></div>
-    <div id="bankList" class="bank-list">${bankRowsHtml(_account?.bankAccounts || [], true)}</div>
+    <div class="modal-head"><h2>${picking ? 'Select bank card' : 'Bind bank card'}</h2><button class="modal-close"></button></div>
+    <div id="bankList" class="bank-list">${bankRowsHtml(_account?.bankAccounts || [], !picking, picking)}</div>
 
     <div class="bind-card">
       <button class="bind-row" id="bkNet">
@@ -1599,6 +1594,7 @@ function openBanksModal() {
     <button class="btn" id="bkAdd">Confirm</button>
   `);
   bindDeletes();
+  bindPicks();
 
   document.getElementById('bkNet').addEventListener('click', () => openPicker({
     title: 'Choose network', options: NETWORKS, selected: network,
@@ -1617,10 +1613,14 @@ function openBanksModal() {
     const r = await api('/account/add-bank', { method: 'POST', body: { holderName, phone, network } });
     restore();
     if (r.status !== 'success') return toast(r.message || 'Could not save');
+    toast('Account saved successfully');
+    await loadAccount();
+    // Picking mode: the freshly-added card is the obvious choice — apply it
+    // and go straight back to Withdrawal instead of waiting for another tap.
+    if (picking) return onPick((_account.bankAccounts || []).length - 1);
     document.getElementById('bkName').value = '';
     document.getElementById('bkPhone').value = '';
-    toast('Account saved successfully');
-    await loadAccount(); paint();
+    paint();
   });
 }
 
@@ -1749,7 +1749,22 @@ function openTaskCenterPage() {
     // Already-cached numbers are current enough to paint instantly — this is
     // the normal path since Team tab refreshes _teamStats on every visit.
     renderTaskCenterPage();
-    loadTeam().then(() => { if (document.getElementById('tkList')) renderTaskCenterPage(); }).catch(() => {});
+    // The background refresh below rebuilds the whole screen, which resets
+    // scroll to the top — with nothing actually changed that reads as the
+    // screen randomly "reshowing" a moment after it opened. Only repaint if
+    // the numbers genuinely moved, and keep the reader's scroll position
+    // when it does.
+    const before = JSON.stringify(_teamStats?.milestones || []);
+    loadTeam().then(() => {
+      if (!document.getElementById('tkList')) return;
+      const after = JSON.stringify(_teamStats?.milestones || []);
+      if (after === before) return;
+      const scroller = document.querySelector('.modal-card');
+      const y = scroller ? scroller.scrollTop : 0;
+      renderTaskCenterPage();
+      const scroller2 = document.querySelector('.modal-card');
+      if (scroller2) scroller2.scrollTop = y;
+    }).catch(() => {});
     return;
   }
   // Nothing cached yet (a cold open before Team has ever loaded): show a
@@ -1978,13 +1993,14 @@ function openRulesPage() {
   `);
 }
 
-function bankRowsHtml(accounts, withRemove) {
-  if (!accounts.length) return `<div class="empty-note">No saved accounts yet.</div>`;
-  return accounts.map(a => `
-    <div class="bank-row" data-phone="${esc(a.phone)}">
+function bankRowsHtml(accounts, withRemove, pickable) {
+  if (!accounts.length) return `<div class="empty-note">No saved accounts yet — add one below.</div>`;
+  return accounts.map((a, i) => `
+    <div class="bank-row${pickable ? ' is-pick' : ''}" data-phone="${esc(a.phone)}"${pickable ? ` data-pick="${i}"` : ''}>
       <span class="mi">${ICN.bank}</span>
       <div class="bank-info"><div class="t">${esc(a.holderName || a.label || 'Account')}</div><div class="s">${esc(a.network || '')} · 0${esc(a.phone)}</div></div>
       ${withRemove ? `<button class="bank-del" data-del="${esc(a.phone)}">${ICN.trash}</button>` : ''}
+      ${pickable ? `<span class="bank-go">${SVG_CHEV}</span>` : ''}
     </div>`).join('');
 }
 
