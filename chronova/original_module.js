@@ -920,7 +920,6 @@ function netOf(phone) {
 function openRechargeSheet() {
   const chips = rechargeChips();
   const min = Number(_publicSettings?.minDeposit) || 0;
-  const myPhone = String(_account?.phone || '').replace(/^\+/, '');
 
   openSheet({
     title: 'Recharge',
@@ -937,11 +936,18 @@ function openRechargeSheet() {
       <div class="fld"><span class="fld-pre">UGX</span><input id="rcAmt" type="tel" inputmode="numeric" placeholder="${min ? Number(min).toLocaleString('en-UG') : '0'}"></div>
 
       <label class="fld-l">Mobile money number</label>
-      <div class="fld"><span class="fld-pre">+256</span><input id="rcPhone" type="tel" inputmode="numeric" placeholder="7XXXXXXXX" value="${esc(myPhone.replace(/^256/, ''))}"></div>
+      <div class="fld"><span class="fld-pre">+256</span><input id="rcPhone" type="tel" inputmode="numeric" placeholder="7XXXXXXXX"></div>
 
       <div class="net-row" id="rcNets">
         <button class="net" data-net="MTN">MTN</button>
         <button class="net" data-net="Airtel">Airtel</button>
+      </div>
+
+      <label class="fld-l">Payment method</label>
+      <div class="pm-row">
+        <span class="pm-ic">${_svg('<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>')}</span>
+        <span class="pm-label">Mobile Money</span>
+        <span class="pm-check">${SVG_TOAST_CHECK}</span>
       </div>
 
       <ol class="ci-rules">
