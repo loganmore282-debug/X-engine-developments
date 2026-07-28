@@ -236,10 +236,6 @@ function showView(name) {
   } catch (_) {}
 }
 
-// Auth screen now uses the clean centered clock logo (no decorative art).
-const _a1 = document.getElementById('authArt1'); if (_a1) _a1.innerHTML = '';
-const _a2 = document.getElementById('authArt2'); if (_a2) _a2.innerHTML = '';
-
 // ── Jumbled-letter captcha ──
 let _captchaId = null;
 async function loadCaptcha() {
