@@ -181,12 +181,12 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="tab" data-tab="users">Users</button>
         <button class="tab" data-tab="deposits">Deposits</button>
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
-        <button class="tab" data-tab="products">Products</button>
-        <button class="tab" data-tab="banners">Banners</button>
+        <button class="tab" data-tab="products" id="productsTab">Products</button>
+        <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
         <button class="tab" data-tab="codes">Codes</button>
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
-        <button class="tab" data-tab="settings">Settings</button>
+        <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
         <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
         <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
@@ -311,11 +311,15 @@ $('logoutBtn').addEventListener('click', async ()=>{
 
 function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); startLive();
   if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
-  // Managing other admin accounts and reading the activity log are owner-only —
-  // a staff login (even a compromised one) never even sees these tabs exist.
+  // Admin accounts, the activity log, products, banners, and settings are all
+  // owner-only — a staff login (even a compromised one) never even sees these
+  // tabs exist, and the matching endpoints reject them server-side too.
   const isOwner = SESSION_ROLE === 'owner';
-  $('adminsTab').classList.toggle('hidden', !isOwner);
-  $('auditLogTab').classList.toggle('hidden', !isOwner);
+  ['adminsTab', 'auditLogTab', 'productsTab', 'bannersTab', 'settingsTab']
+    .forEach(id => $(id).classList.toggle('hidden', !isOwner));
+  // If a staff session somehow lands on one of these tabs (e.g. a stale
+  // deep-link), bounce back to the dashboard instead of showing a dead screen.
+  if (!isOwner && ['products', 'banners', 'settings'].includes(_tab)) switchTab('dashboard');
 }
 $('liveBtn').addEventListener('click', ()=>{ setLive(!_live); if(_live) liveTick(); });
 $('installBtn').addEventListener('click', async ()=>{

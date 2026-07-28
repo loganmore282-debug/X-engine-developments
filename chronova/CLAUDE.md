@@ -115,6 +115,10 @@ handed to staff. Each staff member gets an individual account instead:
   no `req.adminUser` at all) — used to gate the `/admin/admins/*` and
   `/admin/audit-log` endpoints so a staff account (even a compromised one)
   can never create more admins, see the log, or touch anyone else's account.
+  Same gate on `/admin/settings`, `/admin/settings/update`, `/admin/banners`,
+  `/admin/banners/set`, and `/admin/products/{list,save,delete,clear}` — staff
+  never see or touch platform rates/announcement/maintenance mode, banners,
+  or the product catalogue, only the owner can.
 - Deactivating or resetting one account (`/admin/admins/deactivate`,
   `/admin/admins/reset-password`) calls `invalidateSessionsFor(username)`,
   which deletes that person's `adminSessions` docs — their access dies
@@ -127,8 +131,9 @@ handed to staff. Each staff member gets an individual account instead:
   "I'm the owner, this is the master key"; filled in means a staff username +
   password via `/admin/login`. `SESSION_TOKEN`/`SESSION_USER`/`SESSION_ROLE`
   live in `sessionStorage` (not the raw secret). `openShell()` hides the
-  Admins/Activity Log tabs entirely for `SESSION_ROLE !== 'owner'`.
-- Test coverage: `test-admin-accounts.js` (29 checks) — login for both roles,
+  Admins/Activity Log/Products/Banners/Settings tabs entirely for
+  `SESSION_ROLE !== 'owner'` — staff never even see these exist.
+- Test coverage: `test-admin-accounts.js` (38 checks) — login for both roles,
   deactivation/reset kills existing sessions instantly, staff can't reach
   owner-only endpoints, per-username lockout, logout invalidates server-side,
   audit log records the right actor. Run it after touching any of this.

@@ -3714,8 +3714,9 @@ app.post('/admin/analytics', async (req, res) => {
   } catch (e) { console.error('Analytics error:', e.message); return res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Every banner slot, read from its own document (with the legacy fallback).
+// Owner-only: staff logins never see or touch banners.
 app.post('/admin/banners', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { return res.json({ status: 'success', banners: await getBanners() }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -3723,7 +3724,7 @@ app.post('/admin/banners', async (req, res) => {
 // empty value deletes the slot. The legacy settings copy is cleared too, so a
 // re-saved slot never resurrects from the fallback.
 app.post('/admin/banners/set', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const key = String(req.body.key || '');
   if (!/^banner[A-Za-z]+$/.test(key)) return res.status(400).json({ status: 'error', message: 'Bad banner key' });
   const url = String(req.body.url || '').trim();
@@ -3736,15 +3737,17 @@ app.post('/admin/banners/set', async (req, res) => {
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Owner-only: platform rates, the announcement dialog, support contacts,
+// maintenance mode etc. are all in here — staff logins never reach any of it.
 app.post('/admin/settings', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('settings').doc('main').get();
     return res.json({ status: 'success', settings: snap.exists ? snap.data() : {} });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/settings/update', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { adminKey, ...updates } = req.body;
   if (!Object.keys(updates).length) return res.status(400).json({ status: 'error', message: 'No fields to update' });
   try {
@@ -3860,14 +3863,15 @@ app.post('/admin/referrals/list', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// ── ADMIN: PRODUCTS (create/edit/delete) ──
+// ── ADMIN: PRODUCTS (create/edit/delete) ── Owner-only: staff logins never
+// see or touch the product catalogue.
 app.post('/admin/products/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { return res.json({ status: 'success', products: await fetchProducts(true) }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/products/save', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { id } = req.body;
   const price = Math.round(parseFloat(req.body.price) || 0);
   if (price <= 0) return res.status(400).json({ status: 'error', message: 'Price is required' });
@@ -3895,7 +3899,7 @@ app.post('/admin/products/save', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/products/delete', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   if (!req.body.id) return res.status(400).json({ status: 'error', message: 'id required' });
   try { await db.collection('products').doc(req.body.id).delete(); logAdminAction(req, 'product_deleted', { id: req.body.id }); return res.json({ status: 'success' }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
@@ -3904,7 +3908,7 @@ app.post('/admin/products/delete', async (req, res) => {
 // Wipes the catalogue. The seeded tier ladder still lives in the database from
 // before the seed was removed, and only the owner can clear their own data.
 app.post('/admin/products/clear', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('products').get();
     let removed = 0;

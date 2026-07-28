@@ -136,6 +136,26 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/audit-log', { token: bobToken, body: {} });
   check('staff CANNOT read the audit log (owner-only)', r.code === 401, r.body);
 
+  console.log('\n── 8. Settings, Products and Banners are owner-only too');
+  r = await call('POST', '/admin/settings', { token: ownerToken, body: {} });
+  check('owner CAN read settings', r.body?.status === 'success', r.body);
+  r = await call('POST', '/admin/settings', { token: bobToken, body: {} });
+  check('staff CANNOT read settings', r.code === 401, r.body);
+  r = await call('POST', '/admin/settings/update', { token: bobToken, body: { maintenanceMode: true } });
+  check('staff CANNOT write settings', r.code === 401, r.body);
+  r = await call('POST', '/admin/banners', { token: bobToken, body: {} });
+  check('staff CANNOT read banners', r.code === 401, r.body);
+  r = await call('POST', '/admin/banners/set', { token: bobToken, body: { key: 'bannerHero', url: 'https://evil.example/x.png' } });
+  check('staff CANNOT write banners', r.code === 401, r.body);
+  r = await call('POST', '/admin/products/list', { token: bobToken, body: {} });
+  check('staff CANNOT list products', r.code === 401, r.body);
+  r = await call('POST', '/admin/products/save', { token: bobToken, body: { label: 'Hijacked', price: 1 } });
+  check('staff CANNOT create/edit products', r.code === 401, r.body);
+  r = await call('POST', '/admin/products/clear', { token: bobToken, body: {} });
+  check('staff CANNOT clear the product catalogue', r.code === 401, r.body);
+  r = await call('POST', '/admin/products/list', { token: ownerToken, body: {} });
+  check('owner CAN still list products', r.body?.status === 'success', r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
