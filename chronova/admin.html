@@ -1038,7 +1038,7 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
-      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="Chronova is being upgraded. Please check back shortly.">
+      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="Every fine watch needs servicing now and then. We’ll be back shortly — thank you for your patience.">
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Chronova runs on MarzPay only — recharges are collected and withdrawals are released through it automatically. Nothing to configure here.</p>
       <button class="btn block" id="saveRates">Save rates</button>

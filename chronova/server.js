@@ -1608,7 +1608,7 @@ app.post('/invest/create', async (req, res) => {
     const uSnap = await db.collection('users').doc(userId).get();
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
-    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     if ((user.walletBalance || 0) < tier.price)
       return res.status(400).json({ status: 'error', message: `Need ${fmtUGX(tier.price)}, have ${fmtUGX(user.walletBalance || 0)}` });
 
@@ -1911,7 +1911,7 @@ app.post('/checkin', async (req, res) => {
     const uSnap = await uRef.get();
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
-    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     const today = eatNow();
     const todayKey = today.toISOString().slice(0, 10);
     const yesterdayKey = new Date(today.getTime() - 86400000).toISOString().slice(0, 10);
@@ -2202,7 +2202,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
-    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     const minDep = sett.minDeposit ?? MIN_DEPOSIT;
     if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
 
@@ -2293,7 +2293,7 @@ app.post('/deposit/obpay', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
-    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     const minDep = sett.minDeposit ?? MIN_DEPOSIT;
     if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
     const phone = cleanPhone(rawPhone || user.phone || '');
@@ -2391,7 +2391,7 @@ app.post('/deposit/zengapay', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
-    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     const minDep = sett.minDeposit ?? MIN_DEPOSIT;
     if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
     const phone = cleanPhone(rawPhone || user.phone || '');
@@ -2541,7 +2541,7 @@ app.post('/deposit/manual/create', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
-    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     const minDep = sett.minDeposit ?? MIN_DEPOSIT;
     if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
 
@@ -2698,7 +2698,7 @@ app.post('/deposit/card', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
-    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     const minDep = sett.minDeposit ?? MIN_DEPOSIT;
     if (amt < minDep) return res.status(400).json({ status: 'error', message: `Minimum deposit is ${fmtUGX(minDep)}` });
     // MarzPay card limits are 500 – 10,000,000 UGX.
@@ -2839,7 +2839,7 @@ app.post('/withdraw/request', async (req, res) => {
     if (amt < minWit) return res.status(400).json({ status: 'error', message: `Minimum withdrawal is ${fmtUGX(minWit)}` });
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const user = uSnap.data();
-    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account suspended' });
+    if (user.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     // Anti-abuse: a user must own at least one product before withdrawing
     // (stops someone registering, taking the welcome bonus, and cashing out).
     // Admin-toggleable via settings.requireInvestToWithdraw (default: required).

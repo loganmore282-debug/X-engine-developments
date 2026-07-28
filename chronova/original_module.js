@@ -286,15 +286,42 @@ function authError(msg) {
   box.classList.remove('hidden');
 }
 
+// Field-level validation reads as a small callout anchored right above the
+// offending input (caret pointing down at it) instead of a banner at the
+// top of the form — one shared element, repositioned per field.
+let _fieldTipEl = null, _fieldTipTimer = null;
+function fieldTip(input, msg) {
+  if (!input) return;
+  if (!_fieldTipEl) {
+    _fieldTipEl = document.createElement('div');
+    _fieldTipEl.className = 'field-tip';
+    document.body.appendChild(_fieldTipEl);
+  }
+  _fieldTipEl.textContent = msg;
+  const r = input.getBoundingClientRect();
+  _fieldTipEl.style.left = r.left + 'px';
+  _fieldTipEl.style.top = (r.top - 8) + 'px';
+  _fieldTipEl.classList.add('show');
+  clearTimeout(_fieldTipTimer);
+  _fieldTipTimer = setTimeout(hideFieldTip, 3200);
+}
+function hideFieldTip() {
+  if (_fieldTipEl) _fieldTipEl.classList.remove('show');
+  clearTimeout(_fieldTipTimer);
+}
+
 // The +256 prefix is already shown beside the field, so a leading 0 is
 // almost always the local "0771..." habit typed on top of it. Warn the
 // instant it happens instead of waiting for submit.
 function guardNoLeadingZero(input) {
   input.addEventListener('input', () => {
-    if (input.value.trim().startsWith('0')) authError('Phone number cannot start with 0');
-    else document.getElementById('authErr').classList.add('hidden');
+    if (input.value.trim().startsWith('0')) fieldTip(input, 'Phone number cannot start with 0');
+    else hideFieldTip();
   });
 }
+['liPhone', 'liPass', 'rgPhone', 'rgPass', 'rgPass2'].forEach((id) => {
+  document.getElementById(id)?.addEventListener('input', hideFieldTip);
+});
 guardNoLeadingZero(document.getElementById('liPhone'));
 guardNoLeadingZero(document.getElementById('rgPhone'));
 
@@ -313,24 +340,40 @@ guardNoLeadingZero(document.getElementById('rgPhone'));
   } catch (_) {}
 })();
 
+// Resolves to null on success, or the caught error on failure — lets the
+// caller chain attempts without nested try/catch.
+async function signInEmailPass(email, pass) {
+  try { await signInWithEmailAndPassword(auth, email, pass); return null; }
+  catch (e) { return e; }
+}
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const phone = document.getElementById('liPhone').value.trim();
-  const pass = document.getElementById('liPass').value;
-  if (!phone || !pass) return authError('Enter your phone number and password.');
-  if (phone.startsWith('0')) return authError('Phone number cannot start with 0');
+  const phoneInput = document.getElementById('liPhone');
+  const passInput = document.getElementById('liPass');
+  const phone = phoneInput.value.trim();
+  const pass = passInput.value;
+  if (!phone) return fieldTip(phoneInput, 'Please fill out this field.');
+  if (!pass) return fieldTip(passInput, 'Please fill out this field.');
+  if (phone.startsWith('0')) return fieldTip(phoneInput, 'Phone number cannot start with 0');
   document.getElementById('authErr').classList.add('hidden');
   const restore = setBusy(document.getElementById('liSubmit'), 'Please wait');
   try {
-    try {
-      await signInWithEmailAndPassword(auth, phoneToEmail(phone), pass);
-    } catch (primaryErr) {
-      if (primaryErr.code === 'auth/network-request-failed') {
-        const r = await api('/auth/login', { method: 'POST', body: { phone, password: pass } });
-        if (r.status !== 'success') throw new Error(r.message || 'Login failed');
-        await signInWithCustomToken(auth, r.customToken);
-      } else throw primaryErr;
+    let err = await signInEmailPass(phoneToEmail(phone), pass);
+    // Backward-compat: accounts created before "no leading 0" existed were
+    // stored under the phone WITH the 0 — retry once against that identity
+    // before failing, so those users can still log in typing it either way.
+    if (err && /user-not-found|invalid-credential/.test(err.code || '')) {
+      const altErr = await signInEmailPass(phoneToEmail('0' + phone), pass);
+      if (!altErr) err = null;
     }
+    if (err && err.code === 'auth/network-request-failed') {
+      const r = await api('/auth/login', { method: 'POST', body: { phone, password: pass } });
+      if (r.status !== 'success') throw new Error(r.message || 'Login failed');
+      await signInWithCustomToken(auth, r.customToken);
+      err = null;
+    }
+    if (err) throw err;
     toast('Login successful', true);
   } catch (err) {
     restore();
@@ -345,17 +388,21 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 let _pendingCred = null;
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const phone = document.getElementById('rgPhone').value.trim();
-  const pass = document.getElementById('rgPass').value;
-  const pass2 = document.getElementById('rgPass2').value;
+  const phoneInput = document.getElementById('rgPhone');
+  const passInput = document.getElementById('rgPass');
+  const pass2Input = document.getElementById('rgPass2');
+  const phone = phoneInput.value.trim();
+  const pass = passInput.value;
+  const pass2 = pass2Input.value;
   let ref = document.getElementById('rgRef').value.trim();
   // If the field was somehow empty (PWA reopen cleared it), fall back to the code
   // we stored the moment the link was opened — never silently lose the referral.
   if (!ref) { try { ref = (localStorage.getItem('fg_pending_ref') || '').trim(); } catch (_) {} }
-  if (!phone || !pass) return authError('Fill in your phone and password.');
-  if (phone.startsWith('0')) return authError('Phone number cannot start with 0');
-  if (pass.length < 6) return authError('Password must be at least 6 characters.');
-  if (pass !== pass2) return authError('The two passwords do not match.');
+  if (!phone) return fieldTip(phoneInput, 'Please fill out this field.');
+  if (!pass) return fieldTip(passInput, 'Please fill out this field.');
+  if (phone.startsWith('0')) return fieldTip(phoneInput, 'Phone number cannot start with 0');
+  if (pass.length < 6) return fieldTip(passInput, 'Password must be at least 6 characters.');
+  if (pass !== pass2) return fieldTip(pass2Input, 'The two passwords do not match.');
   document.getElementById('authErr').classList.add('hidden');
   const restore = setBusy(document.getElementById('rgSubmit'), 'Please wait');
   try {
@@ -476,11 +523,12 @@ onAuthStateChanged(auth, async (user) => {
 // Returns true (and shows a blocker) if the app should be gated off.
 function checkGate() {
   if (_publicSettings?.maintenanceMode) {
-    showBlocker('Under maintenance', _publicSettings.maintenanceMsg || 'Chronova is being upgraded. Please check back shortly.', 'Try again', () => location.reload());
+    showBlocker('Chronova is being serviced',
+      _publicSettings.maintenanceMsg || 'Every fine watch needs servicing now and then. We’ll be back shortly — thank you for your patience.');
     return true;
   }
   if (_account?.status === 'banned') {
-    showBlocker('Account suspended', 'Your account has been suspended. Contact support if you believe this is a mistake.', 'Log out', doLogout);
+    showBlocker('Account access paused', 'Your account access has been paused. Reach out to Customer Service if you believe this isn’t right.', 'Log out', doLogout);
     return true;
   }
   return false;
@@ -527,6 +575,8 @@ function startRealtime() {
 }
 
 // Full-screen blocker (maintenance / banned) — replaces the app entirely.
+// actionLabel/action are optional — omit both for a blocker with no button
+// (maintenance: there's nothing useful to tap, it just needs to pass).
 function showBlocker(title, msg, actionLabel, action) {
   document.getElementById('authView')?.classList.add('hidden');
   document.getElementById('mainView')?.classList.add('hidden');
@@ -534,9 +584,9 @@ function showBlocker(title, msg, actionLabel, action) {
   const el = document.createElement('div');
   el.id = 'blockerView'; el.className = 'blocker';
   el.innerHTML = `<div class="blocker-card"><div class="blocker-logo">${WATCH_LOGO}</div>
-    <h2>${esc(title)}</h2><p>${esc(msg)}</p><button class="btn" id="blockerBtn">${esc(actionLabel)}</button></div>`;
+    <h2>${esc(title)}</h2><p>${esc(msg)}</p>${actionLabel ? `<button class="btn" id="blockerBtn">${esc(actionLabel)}</button>` : ''}</div>`;
   document.body.appendChild(el);
-  document.getElementById('blockerBtn').addEventListener('click', action);
+  if (actionLabel) document.getElementById('blockerBtn').addEventListener('click', action);
 }
 
 async function loadPublicSettings() {
@@ -1067,7 +1117,7 @@ function openRechargeSheet() {
 // Poll a single recharge until the server resolves it, then refresh the list
 // in place. The server is the only thing that credits money.
 async function watchDeposit(depositId, tries = 0) {
-  if (!depositId || tries > 40) return;
+  if (!depositId || tries > 80) return;
   const r = await api(`/deposit/status/${encodeURIComponent(depositId)}`);
   const st = String(r?.deposit?.status || r?.status2 || '').toLowerCase();
   if (['matched', 'success', 'credited'].includes(st)) {
@@ -1080,7 +1130,10 @@ async function watchDeposit(depositId, tries = 0) {
     refreshRecords('deposits');
     return toast('Recharge was declined');
   }
-  setTimeout(() => watchDeposit(depositId, tries + 1), 4000);
+  // 2s matches the server's own re-check gate (_depPollGate) — polling any
+  // faster wouldn't see fresher data, any slower would sit on a webhook's
+  // result longer than necessary before the UI catches up.
+  setTimeout(() => watchDeposit(depositId, tries + 1), 2000);
 }
 
 // ══════════════════════════════════════════════
