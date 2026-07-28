@@ -535,6 +535,14 @@ const FG_LOGO = `<svg viewBox="0 0 100 100"><defs><radialGradient id="fgLogoGrad
   <circle cx="50" cy="50" r="28" fill="none" stroke="#1c1403" stroke-width="6"/>
   <path d="M50 34v16l11 7" fill="none" stroke="#1c1403" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
+// Multi-line announcements read as a plain numbered list — items 1 through
+// 5 at most, so a long admin post never turns into a wall of text. A single
+// line (no breaks) stays as plain text; nothing to number.
+function announcementBodyHtml(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean).slice(0, 5);
+  if (lines.length > 1) return `<ol class="ci-rules ann-list">${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ol>`;
+  return `<div class="ann-text">${esc(text)}</div>`;
+}
 function maybeShowAnnouncement() {
   const ann = _publicSettings?.announcement;
   if (!ann || !ann.enabled || !ann.body) return;
@@ -548,7 +556,7 @@ function maybeShowAnnouncement() {
       <div class="ann-hero"><span class="ann-htitle">${esc(ann.title || 'Notice')}</span>
         <div class="ann-logo">${FG_LOGO}</div></div>
       <div class="ann-body">
-        <div class="ann-text">${esc(ann.body)}</div>
+        ${announcementBodyHtml(ann.body)}
         ${ann.ctaUrl && ann.ctaLabel ? `<a class="ann-cta" href="${esc(ann.ctaUrl)}" target="_blank" rel="noopener">${esc(ann.ctaLabel)}</a>` : ''}
         <button class="ann-ok" id="annOk">OK</button>
       </div>
