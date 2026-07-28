@@ -426,8 +426,11 @@ try {
 onAuthStateChanged(auth, async (user) => {
   _user = user;
   if (!user) { _booting = false; showView('auth'); return; }
-  // Reveal and start ticking at once — the panels already have content.
+  // Reveal at once. If this is a fresh login (not the localStorage fast path
+  // above) the panels have no content yet — show the loader immediately so
+  // there's no dark, empty-looking gap while essential data is in flight.
   showView('main');
+  _booting = true; render();
   startRealtime();
   // Keep the branded syncing screen up and load the ESSENTIAL data — balance,
   // watches, transactions AND settings (banner images) — BEFORE revealing the
@@ -615,7 +618,7 @@ async function loadTeam() {
 }
 async function loadTxns() {
   const r = await api('/account/transactions');
-  if (r.status === 'success') _txns = r.transactions || [];
+  if (r.status === 'success') { _txns = r.transactions || []; _recordsLoaded.income = true; }
 }
 
 // ══════════════════════════════════════════════
@@ -1181,6 +1184,10 @@ const RECORD_TABS = [
   { key: 'withdrawals', label: 'Withdrawals' },
 ];
 const INCOME_TYPES = ['gem_payout', 'product_income', 'commission', 'checkin', 'team_reward', 'redeem', 'admin_credit'];
+// Tracks whether each tab's data has ever landed this session, so paintRecords
+// knows to show the loader instead of a premature (empty-looking) list on
+// first entry, but never re-flashes it once real data is already cached.
+let _recordsLoaded = { income: false, deposits: false, withdrawals: false };
 
 function openRecordsPage(tab) {
   _recordsTab = tab || 'income';
@@ -1248,6 +1255,7 @@ function paintRecords() {
   document.querySelectorAll('#rTabs .rtab').forEach(b => b.classList.toggle('on', b.dataset.rt === _recordsTab));
   const host = document.getElementById('rList');
   if (!host) return;
+  if (!_recordsLoaded[_recordsTab]) { host.innerHTML = `<div class="load-wrap">${SPINNER}</div>`; return; }
   if (_recordsTab === 'income') {
     const rows = _txns.filter(t => INCOME_TYPES.includes(t.type) && (Number(t.amount) || 0) > 0);
     host.innerHTML = rows.map(incomeRow).join('') + `<div class="empty-note">No more data</div>`;
@@ -1267,6 +1275,7 @@ async function loadRecords(kind) {
   if (r.status !== 'success') return;
   if (kind === 'deposits') _deposits = r.deposits || [];
   else _withdrawals = r.withdrawals || [];
+  _recordsLoaded[kind] = true;
 }
 function refreshRecords(kind) {
   loadRecords(kind)

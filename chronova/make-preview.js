@@ -72,6 +72,8 @@ window.__setMaintenance = (on) => { _publicSettings.maintenanceMode = on; };
 _products = window.__PV.products;
 _deposits = window.__PV.deposits;
 _withdrawals = window.__PV.withdrawals;
+_recordsLoaded.deposits = true;
+_recordsLoaded.withdrawals = true;
 _account = {
   name: 'Mangalita N.', phone: '+256771234567', username: 'mangalita',
   walletBalance: 137500, totalEarned: 106600, totalWithdrawn: 24000,
@@ -90,6 +92,7 @@ window.__PV.txns = [
   { type: 'gem_payout',  amount: 20000, status: 'success', date: '07/26/2026', time: '09:55', createdAt: Date.now() - 9000000 },
 ];
 _txns = window.__PV.txns;
+_recordsLoaded.income = true;
 window.__PV.members = [
   { name: 'oTpi8g', phone: '256771234567', hasInvested: true,  deposited: 150000 },
   { name: 'k9Rmzc', phone: '256700998877', hasInvested: false, deposited: 0 },
