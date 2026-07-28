@@ -286,6 +286,18 @@ function authError(msg) {
   box.classList.remove('hidden');
 }
 
+// The +256 prefix is already shown beside the field, so a leading 0 is
+// almost always the local "0771..." habit typed on top of it. Warn the
+// instant it happens instead of waiting for submit.
+function guardNoLeadingZero(input) {
+  input.addEventListener('input', () => {
+    if (input.value.trim().startsWith('0')) authError('Phone number cannot start with 0');
+    else document.getElementById('authErr').classList.add('hidden');
+  });
+}
+guardNoLeadingZero(document.getElementById('liPhone'));
+guardNoLeadingZero(document.getElementById('rgPhone'));
+
 // Capture a referral code from ?ref= the INSTANT the app opens and store it
 // durably. This is what stops "joined by a link but not recorded": if the user
 // installs the PWA or reopens later (when the URL no longer carries ?ref=), the
@@ -306,6 +318,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   const phone = document.getElementById('liPhone').value.trim();
   const pass = document.getElementById('liPass').value;
   if (!phone || !pass) return authError('Enter your phone number and password.');
+  if (phone.startsWith('0')) return authError('Phone number cannot start with 0');
   document.getElementById('authErr').classList.add('hidden');
   const restore = setBusy(document.getElementById('liSubmit'), 'Please wait');
   try {
@@ -340,6 +353,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   // we stored the moment the link was opened — never silently lose the referral.
   if (!ref) { try { ref = (localStorage.getItem('fg_pending_ref') || '').trim(); } catch (_) {} }
   if (!phone || !pass) return authError('Fill in your phone and password.');
+  if (phone.startsWith('0')) return authError('Phone number cannot start with 0');
   if (pass.length < 6) return authError('Password must be at least 6 characters.');
   if (pass !== pass2) return authError('The two passwords do not match.');
   document.getElementById('authErr').classList.add('hidden');

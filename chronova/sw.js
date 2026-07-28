@@ -4,7 +4,7 @@
    API / auth calls are never cached — always live.
    ════════════════════════════════════════════════════════════════ */
 
-const CACHE = 'chronova-shell-v50';
+const CACHE = 'chronova-shell-v51';
 const SHELL = [
   './',
   './index.html',
