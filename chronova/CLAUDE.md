@@ -148,11 +148,10 @@ device gets both.
 - Reuses the SAME Firebase project as user login (`FIREBASE_CONFIG` in
   `admin.html`, duplicated from `original_module.js` — it's public client
   config, safe to embed). No new Firebase project needed.
-- **Still needed from the owner**: a Web Push certificate (VAPID key) —
-  Firebase Console → Project Settings → Cloud Messaging → Web Push
-  certificates → generate, then paste into `VAPID_KEY` in `admin.html` (near
-  `FIREBASE_CONFIG`) and rebuild. Until that's filled in, the Notify button
-  tells the admin it isn't configured yet rather than failing silently.
+- The Web Push certificate (VAPID key) is set — owner generated it in
+  Firebase Console and it's in `VAPID_KEY` in `admin.html` (near
+  `FIREBASE_CONFIG`). If it ever needs rotating, regenerate there and update
+  the same constant, then rebuild.
 - `adminPushTokens` (Mongo): `{token, username, createdAt, updatedAt}` —
   one doc per subscribed device. `/admin/push/register` and
   `/admin/push/unregister` (any verified admin, not owner-only) manage it;
