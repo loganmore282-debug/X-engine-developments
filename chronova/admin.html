@@ -224,6 +224,16 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+// Same clean wording the user app shows — the admin panel must never leak raw
+// internal type strings like "gem_payout" (a leftover from the old Furagemz
+// naming) into a screen a real person reads.
+const TX_LABELS = {
+  topup: 'Recharge', withdrawal: 'Withdrawal', commission: 'Commission',
+  team_reward: 'Team reward', checkin: 'Daily bonus', gem_payout: 'Product income',
+  product_income: 'Product income', investment: 'Product purchase',
+  redeem: 'Code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment', refund: 'Refund',
+};
+function txLabel(type){ return TX_LABELS[type] || (type ? type.replace(/_/g,' ') : ''); }
 // Friendly day label from a 'YYYY-MM-DD' string in East Africa Time: Today / Yesterday / "21 Jul".
 function dayLabel(iso){
   const now=new Date(Date.now()+3*3600000);
@@ -459,7 +469,7 @@ async function renderDashboard(){
   const r = await api('/admin/transactions/list', { limit: 12 });
   const list = r.transactions || [];
   $('dashTx').innerHTML = list.length ? list.map(t=>`
-    <tr><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td>
+    <tr><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td>
     <td>${statusPill(t.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">No transactions</td></tr>';
 }
@@ -580,7 +590,7 @@ async function openUser(uid){
   (async()=>{
     const tr=await api('/admin/transactions/list',{ userId:uid });
     const tx=(tr.transactions||[]).slice(0,25);
-    $('userTx').innerHTML = tx.length?tx.map(t=>`<tr><td style="white-space:nowrap">${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td>
+    $('userTx').innerHTML = tx.length?tx.map(t=>`<tr><td style="white-space:nowrap">${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
       <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap;text-align:right">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td class="empty">No transactions</td></tr>';
   })();
   const amt=()=>parseFloat($('adjAmt').value||0), note=()=>$('adjNote').value.trim();
@@ -969,7 +979,7 @@ function drawTxns(){
   const q=($('txSearch')?.value||'').toLowerCase().trim();
   if(q) list=list.filter(t=>(t.description||'').toLowerCase().includes(q)||(t.type||'').includes(q)||(t.userId||'').toLowerCase().includes(q));
   $('txRows').innerHTML = list.length?list.slice(0,300).map(t=>`
-    <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(t.type||'')}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
+    <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td>
     <td>${statusPill(t.status)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
   document.querySelectorAll('#txRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
