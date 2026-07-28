@@ -227,14 +227,17 @@ Render env vars. Never put secrets or the model identifier in commits/PRs/code.
   unscoped query across the whole `users` collection, case-insensitive on `usernameLower`
   first with an exact-match `referralCode` fallback for legacy accounts. All three call
   sites use the identical two-step lookup — keep them in sync if this ever changes.
-- The home screen's activity wire ticker (`wireHtml()`) used to fabricate random
-  activity client-side (`Math.random()` on masked phone numbers/amounts) — different,
-  fake, and inconsistent per device. It's now wired to the real, already-existing
-  `/public/activity-feed` endpoint (`_activityFeed` in original_module.js,
-  `loadActivityFeed()`), which the server caches ONCE and shares with every client
-  (25s refresh) — genuinely global, everyone sees the same feed, built from real recent
-  transactions. The ticker hides itself entirely when the feed is empty rather than
-  showing a half-empty bar.
+- The home screen's activity wire ticker (`wireHtml()`) is simulated — masked phone
+  numbers, a recharge/withdrawal split, amounts from the real product-price pool —
+  **not real transactions, and it's not supposed to be.** The point is that it used to
+  be fabricated independently by each device (`Math.random()` client-side), so no two
+  users ever saw the same feed at the same moment. `buildActivityFeed()` now generates
+  it ONCE server-side and caches it (`_activityFeed`/`_activityTs` in server.js, 25s
+  refresh) so every client fetching `/public/activity-feed` sees the identical
+  simulated feed at the same time — global/synchronized, not authentic. Don't swap
+  this back to real transaction data without being asked; that was explicitly rejected.
+  The ticker hides itself entirely when the feed is empty rather than showing a
+  half-empty bar.
 
 ## Known constraints
 

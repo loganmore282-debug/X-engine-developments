@@ -1105,39 +1105,31 @@ app.post('/auth/captcha/verify', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
-// ── ACTIVITY FEED — built from REAL user transactions, global (same on every
-// device), cached ~25s. Names are shown first-name only for privacy. ──
-const _FEED_ACTIONS = {
-  topup:        'deposited',
-  admin_credit: 'topped up',
-  withdrawal:   'withdrew',
-  gem_payout:   'earned cashback of',
-  investment:   'activated a product worth',
-  commission:   'earned a referral reward of',
-  team_reward:  'earned a team reward of',
-  redeem:       'redeemed a code for',
-  checkin:      'claimed a daily bonus of',
-};
-function _firstName(nm) {
-  const first = String(nm || '').trim().split(/\s+/)[0] || 'Member';
-  return first.charAt(0).toUpperCase() + first.slice(1);
+// ── ACTIVITY FEED — simulated, NOT real transactions. Generated ONCE here,
+// server-side, and shared by every client (cached ~25s) so everyone watching
+// at the same moment sees the exact same feed — global/synchronized is the
+// point, not authenticity. (Previously this was fabricated independently by
+// each device via Math.random(), so no two users ever saw the same thing.)
+const _WIRE_CAP = 1000000, _WIRE_STEP = 10000;
+function _maskedMsisdn() {
+  return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
 }
 async function buildActivityFeed() {
-  const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(60).get();
-  const rows = snap.docs.map(d => d.data())
-    .filter(t => _FEED_ACTIONS[t.type] && t.amount != null && Math.abs(t.amount) > 0);
-  const ids = [...new Set(rows.map(t => t.userId).filter(Boolean))].slice(0, 40);
-  const nameMap = {};
-  await Promise.all(ids.map(async id => {
-    try { const u = await db.collection('users').doc(id).get(); if (u.exists) nameMap[id] = u.data().name || u.data().username || 'Member'; }
-    catch (_) {}
-  }));
-  return rows.slice(0, 30).map(t => ({
-    name:   _firstName(nameMap[t.userId] || 'Member'),
-    action: _FEED_ACTIONS[t.type],
-    amount: Math.abs(t.amount || 0),
-    ago:    Math.max(1, Math.round((Date.now() - tsMillis(t.createdAt)) / 60000)),
-  }));
+  let rechargePool = [];
+  try {
+    const products = await fetchProducts(false);
+    rechargePool = products.map(p => Number(p.price)).filter(n => n > 0 && n <= _WIRE_CAP);
+  } catch (_) {}
+  if (!rechargePool.length) for (let a = _WIRE_STEP; a <= _WIRE_CAP; a += _WIRE_STEP) rechargePool.push(a);
+  const withdrawPool = [];
+  for (let a = _WIRE_STEP; a <= _WIRE_CAP; a += _WIRE_STEP) withdrawPool.push(a);
+  const rows = [];
+  for (let i = 0; i < 18; i++) {
+    const kind = Math.random() < 0.6 ? 'recharge' : 'withdrawal';
+    const pool = kind === 'recharge' ? rechargePool : withdrawPool;
+    rows.push({ kind, phone: _maskedMsisdn(), amount: pool[Math.floor(Math.random() * pool.length)] });
+  }
+  return rows;
 }
 let _activityFeed = [], _activityTs = 0, _activityBuilding = false;
 app.get('/public/activity-feed', async (_req, res) => {

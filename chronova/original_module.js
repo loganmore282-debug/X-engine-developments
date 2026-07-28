@@ -793,9 +793,9 @@ function openHoldingsModal() {
 // the wire never advertises an amount the Products tab does not sell;
 // withdrawals step in 10,000s. Both stop at 1,000,000.
 // ══════════════════════════════════════════════
-// Real, server-governed activity — every user sees the SAME feed (the server
-// caches one shared copy from actual recent transactions and refreshes it
-// every 25s), never fabricated per-device randomness.
+// Simulated activity — NOT real transactions — but generated once server-side
+// and cached there, so every user sees the exact SAME feed at the same time
+// (refreshed every 25s), never fabricated independently per device.
 let _activityFeed = [];
 const WIRE_EPOCH = Date.now();   // marquee resumes from here after any re-render
 const WIRE_CYCLE = 120;           // seconds, must match the cvWire keyframes
@@ -805,7 +805,7 @@ async function loadActivityFeed() {
 }
 function wireHtml() {
   if (!_activityFeed.length) return '';
-  const one = f => `<span class="wire-item"><i class="wire-dot ${f.action === 'withdrew' ? 'out' : 'in'}"></i>${esc(f.name)} <em>${esc(f.action)}</em> ${ugx(f.amount)}</span>`;
+  const one = f => `<span class="wire-item"><i class="wire-dot ${f.kind === 'recharge' ? 'in' : 'out'}"></i>${esc(f.phone)} <em>${esc(f.kind)}</em> ${ugx(f.amount)}</span>`;
   const s = _activityFeed.map(one).join('');
   return s + s; // doubled so the -50% marquee loops seamlessly
 }

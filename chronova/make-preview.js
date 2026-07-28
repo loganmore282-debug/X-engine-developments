@@ -93,11 +93,11 @@ window.__PV.txns = [
 ];
 _txns = window.__PV.txns;
 _activityFeed = [
-  { name: 'John',   action: 'deposited',                      amount: 80000,  ago: 3 },
-  { name: 'Mary',   action: 'withdrew',                        amount: 50000,  ago: 8 },
-  { name: 'Peter',  action: 'earned a referral reward of',     amount: 15000,  ago: 12 },
-  { name: 'Grace',  action: 'activated a product worth',       amount: 150000, ago: 20 },
-  { name: 'David',  action: 'claimed a daily bonus of',        amount: 500,    ago: 25 },
+  { kind: 'recharge',   phone: '256****4821', amount: 80000 },
+  { kind: 'withdrawal', phone: '256****1937', amount: 50000 },
+  { kind: 'recharge',   phone: '256****6650', amount: 150000 },
+  { kind: 'withdrawal', phone: '256****0284', amount: 20000 },
+  { kind: 'recharge',   phone: '256****7712', amount: 500000 },
 ];
 _recordsLoaded.income = true;
 window.__PV.members = [
