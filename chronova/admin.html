@@ -153,8 +153,9 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.6 1.6"/></svg></div>
       <b>Chronova Admin</b>
     </div>
-    <p class="muted">Enter the admin key to continue.</p>
-    <input id="keyInput" type="password" placeholder="Admin key" autocomplete="off">
+    <p class="muted">Owner: leave username blank and enter your admin key. Staff: enter the username and password you were given.</p>
+    <input id="userInput" type="text" placeholder="Username (leave blank if you're the owner)" autocomplete="off">
+    <input id="keyInput" type="password" placeholder="Admin key / password" autocomplete="off">
     <button class="btn block" id="loginBtn">Sign in</button>
     <p class="muted" id="loginErr" style="color:var(--danger);margin-top:12px"></p>
   </div>
@@ -186,6 +187,8 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings">Settings</button>
+        <button class="tab hidden" data-tab="admins" id="adminsTab">Admins</button>
+        <button class="tab hidden" data-tab="auditlog" id="auditLogTab">Activity Log</button>
       </div>
     </div>
   </div>
@@ -198,8 +201,23 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 // Chronova Admin panel.
 const SERVER = 'https://education-oc44.onrender.com';
 
-let ADMIN_KEY = '';
-try { ADMIN_KEY = sessionStorage.getItem('fg_admin_key') || ''; } catch (_) {}
+// A short-lived SESSION TOKEN, never the raw admin key/password itself, is
+// what actually rides on every request from here on — issued by the server
+// at login (owner via the master key, staff via their own username/password).
+let SESSION_TOKEN = '', SESSION_USER = '', SESSION_ROLE = '';
+try {
+  SESSION_TOKEN = sessionStorage.getItem('fg_admin_token') || '';
+  SESSION_USER  = sessionStorage.getItem('fg_admin_user')  || '';
+  SESSION_ROLE  = sessionStorage.getItem('fg_admin_role')  || '';
+} catch (_) {}
+function storeSession(token, username, role){
+  SESSION_TOKEN = token; SESSION_USER = username; SESSION_ROLE = role;
+  try { sessionStorage.setItem('fg_admin_token', token); sessionStorage.setItem('fg_admin_user', username); sessionStorage.setItem('fg_admin_role', role); } catch (_) {}
+}
+function clearSession(){
+  SESSION_TOKEN = ''; SESSION_USER = ''; SESSION_ROLE = '';
+  try { sessionStorage.removeItem('fg_admin_token'); sessionStorage.removeItem('fg_admin_user'); sessionStorage.removeItem('fg_admin_role'); } catch (_) {}
+}
 
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -246,32 +264,59 @@ function toast(msg,kind){ let t=$('adToast'); if(!t){ t=document.createElement('
 
 async function api(path, body={}){
   try{
-    const r = await fetch(SERVER+path, { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ ...body, adminKey: ADMIN_KEY }), signal:AbortSignal.timeout(30000) });
-    return await r.json();
+    const r = await fetch(SERVER+path, { method:'POST',
+      headers:{ 'Content-Type':'application/json', ...(SESSION_TOKEN?{ Authorization:'Bearer '+SESSION_TOKEN }:{}) },
+      body: JSON.stringify(body), signal:AbortSignal.timeout(30000) });
+    const d = await r.json();
+    // A dead/expired/revoked session — bounce back to the login screen instead
+    // of leaving the panel silently failing every call.
+    if (r.status === 401 && path !== '/admin/login' && path !== '/admin/check-key') {
+      clearSession();
+      $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden');
+      $('loginErr').textContent = 'Your session ended — sign in again.';
+    }
+    return d;
   }catch(e){ return { status:'error', message: e.name==='TimeoutError'?'Server is waking up — try again in a moment.':'Network error' }; }
 }
 
 // ── LOGIN ──
+// Owner: leaves the username field blank, enters the master key. Staff: fills
+// in the username + password they were given. Either way the server hands
+// back a session token — the panel never has to remember which kind it was.
 async function doLogin(){
-  const key = $('keyInput').value.trim();
-  if(!key){ $('loginErr').textContent='Enter the admin key.'; return; }
+  const username = $('userInput').value.trim().toLowerCase();
+  const secret = $('keyInput').value;
+  if(!secret){ $('loginErr').textContent = username ? 'Enter your password.' : 'Enter the admin key.'; return; }
   const btn=$('loginBtn'); btn.disabled=true; btn.textContent='Checking…'; $('loginErr').textContent='';
   try{
+    const path = username ? '/admin/login' : '/admin/check-key';
+    const payload = username ? { username, password: secret } : { key: secret };
     // Timeout so a cold/asleep server can't leave the button stuck on "Checking…".
-    const r = await fetch(SERVER+'/admin/check-key', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key }), signal:AbortSignal.timeout(15000) });
+    const r = await fetch(SERVER+path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload), signal:AbortSignal.timeout(15000) });
     const d = await r.json();
-    if(d.status==='success'){ ADMIN_KEY=key; try{ sessionStorage.setItem('fg_admin_key',key);}catch(_){} openShell(); }
-    else { $('loginErr').textContent = d.message || 'Invalid key.'; }
+    if(d.status==='success'){ storeSession(d.token, d.username, d.role); openShell(); }
+    else { $('loginErr').textContent = d.message || 'Invalid credentials.'; }
   }catch(e){ $('loginErr').textContent = 'Network error — try again.'; }
   btn.disabled=false; btn.textContent='Sign in';
 }
 $('loginBtn').addEventListener('click', doLogin);
 $('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
-$('logoutBtn').addEventListener('click', ()=>{ ADMIN_KEY=''; try{ sessionStorage.removeItem('fg_admin_key'); }catch(_){} $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden'); $('keyInput').value=''; });
+$('userInput').addEventListener('keydown', e=>{ if(e.key==='Enter') $('keyInput').focus(); });
+$('logoutBtn').addEventListener('click', async ()=>{
+  api('/admin/logout', {}).catch(()=>{});
+  clearSession();
+  $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden');
+  $('keyInput').value=''; $('userInput').value='';
+});
 
 function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); startLive();
-  if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden'); }
+  if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
+  // Managing other admin accounts and reading the activity log are owner-only —
+  // a staff login (even a compromised one) never even sees these tabs exist.
+  const isOwner = SESSION_ROLE === 'owner';
+  $('adminsTab').classList.toggle('hidden', !isOwner);
+  $('auditLogTab').classList.toggle('hidden', !isOwner);
+}
 $('liveBtn').addEventListener('click', ()=>{ setLive(!_live); if(_live) liveTick(); });
 $('installBtn').addEventListener('click', async ()=>{
   if (!window._adminInstallPrompt) return toast('Open the browser menu and choose Install app', 'ok');
@@ -291,7 +336,7 @@ function switchTab(name){
   const c=$('content'); c.innerHTML='<div class="empty">Loading…</div>';
   ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, banners:renderBanners, codes:renderCodes, transactions:renderTransactions,
-     referrals:renderReferrals, settings:renderSettings }[name])();
+     referrals:renderReferrals, settings:renderSettings, admins:renderAdmins, auditlog:renderAuditLog }[name])();
 }
 async function refreshBadges(){
   const s = await api('/admin/stats');
@@ -813,6 +858,93 @@ async function renderCodes(){
   document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ const d=await api('/admin/codes/deactivate',{codeId:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderCodes(); }));
 }
 
+// ── ADMINS (owner only) ──
+// Each person given access gets their own login instead of sharing the
+// master key — deactivating or resetting one account here never touches
+// anyone else's, and every sensitive action is attributed to whoever did it
+// in the Activity Log tab.
+async function renderAdmins(){
+  const r = await api('/admin/admins/list');
+  const list = r.admins||[];
+  $('content').innerHTML = `
+    <h2 class="sec">Admin accounts</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">You (the owner) always sign in with the master admin key — it's never given to anyone below. Create a separate username + password for each other person who needs access.</p>
+      <div class="row">
+        <div><label>Username</label><input id="aaUser" placeholder="e.g. mary" autocomplete="off"></div>
+        <div><label>Password</label><input id="aaPass" type="password" placeholder="At least 8 characters" autocomplete="new-password"></div>
+      </div>
+      <button class="btn block" id="aaCreate">Create admin account</button>
+    </div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Username</th><th>Status</th><th>Created</th><th>Last login</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(a=>`
+      <tr><td><b>${esc(a.username)}</b></td>
+      <td><span class="pill-tag ${a.active?'t-ok':'t-mut'}">${a.active?'Active':'Deactivated'}</span></td>
+      <td>${fdate(a.createdAt)||'—'}</td><td>${fdate(a.lastLoginAt)||'Never'}</td>
+      <td style="white-space:nowrap">
+        ${a.active?`<button class="btn sm" data-deact="${esc(a.username)}">Deactivate</button>`:`<button class="btn sm" data-react="${esc(a.username)}">Reactivate</button>`}
+        <button class="btn sm" data-reset="${esc(a.username)}">Reset password</button>
+        <button class="btn danger sm" data-del="${esc(a.username)}">Delete</button>
+      </td></tr>`).join(''):'<tr><td colspan="5" class="empty">No other admins yet</td></tr>'}
+    </tbody></table></div>`;
+  $('aaCreate').addEventListener('click', async()=>{
+    const username=$('aaUser').value.trim().toLowerCase(), password=$('aaPass').value;
+    if(!username||!password) return toast('Enter a username and password','err');
+    const b=$('aaCreate'); b.disabled=true; b.textContent='Creating…';
+    const d=await api('/admin/admins/create',{username,password});
+    b.disabled=false; b.textContent='Create admin account';
+    if(d.status==='success'){ toast('Admin account created','ok'); renderAdmins(); } else toast(d.message||'Failed','err');
+  });
+  document.querySelectorAll('[data-deact]').forEach(b=>b.addEventListener('click', async()=>{
+    if(!confirm(`Deactivate "${b.dataset.deact}"? Their access ends immediately, including any device they're already signed in on.`)) return;
+    const d=await api('/admin/admins/deactivate',{username:b.dataset.deact});
+    toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderAdmins();
+  }));
+  document.querySelectorAll('[data-react]').forEach(b=>b.addEventListener('click', async()=>{
+    const d=await api('/admin/admins/reactivate',{username:b.dataset.react});
+    toast(d.status==='success'?'Reactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderAdmins();
+  }));
+  document.querySelectorAll('[data-reset]').forEach(b=>b.addEventListener('click', async()=>{
+    const password = prompt(`New password for "${b.dataset.reset}" (at least 8 characters):`);
+    if(!password) return;
+    const d=await api('/admin/admins/reset-password',{username:b.dataset.reset,password});
+    toast(d.status==='success'?'Password reset — they are signed out everywhere and must log in again':(d.message||'Failed'),d.status==='success'?'ok':'err');
+  }));
+  document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async()=>{
+    if(!confirm(`Permanently delete "${b.dataset.del}"? This cannot be undone.`)) return;
+    const d=await api('/admin/admins/delete',{username:b.dataset.del});
+    toast(d.status==='success'?'Deleted':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderAdmins();
+  }));
+}
+
+// ── ACTIVITY LOG (owner only) ──
+// Every sensitive action across the panel — settings changes, bans, manual
+// credits, withdrawals processed, account management — lands here with
+// whoever actually did it, so five people sharing the panel is never a
+// black box.
+const AUDIT_LABELS = {
+  admin_created:'Admin account created', admin_deactivated:'Admin deactivated', admin_reactivated:'Admin reactivated',
+  admin_password_reset:'Admin password reset', admin_deleted:'Admin account deleted',
+  deposit_approved:'Deposit approved', deposit_rejected:'Deposit rejected', deposit_force_credited:'Deposit force-credited',
+  withdrawal_rejected:'Withdrawal rejected', withdrawal_processed:'Withdrawal processed',
+  manual_credit:'Manual credit', manual_debit:'Manual debit', user_banned:'User banned', user_unbanned:'User unbanned',
+  user_deleted:'User account deleted', settings_updated:'Settings updated', banner_set:'Banner changed',
+  product_created:'Product created', product_updated:'Product updated', product_deleted:'Product deleted', products_cleared:'All products cleared',
+};
+async function renderAuditLog(){
+  const r = await api('/admin/audit-log');
+  const list = r.log||[];
+  $('content').innerHTML = `
+    <h2 class="sec">Activity log</h2>
+    <div class="panel-card"><p class="muted" style="margin-top:0">The most recent 200 sensitive actions across the panel, newest first.</p></div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>
+    <tbody>${list.length?list.map(e=>`
+      <tr><td style="white-space:nowrap">${fdate(e.createdAt)}</td><td><b>${esc(e.actor||'?')}</b></td>
+      <td>${esc(AUDIT_LABELS[e.action]||e.action)}</td>
+      <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(JSON.stringify(e.meta||{}))}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Nothing logged yet</td></tr>'}
+    </tbody></table></div>`;
+}
+
 // ── TRANSACTIONS ──
 let _txns=[], _txFilter='all';
 async function renderTransactions(){
@@ -999,7 +1131,7 @@ function closeModal(){ const r=$('modalRoot'); r.classList.add('hidden'); r.inne
 // ── BOOT ──
 // If we already have a stored key (validated at first login), show the shell
 // IMMEDIATELY — like Voltra — instead of blocking on a check-key round-trip.
-if(ADMIN_KEY){ openShell(); }
+if(SESSION_TOKEN){ openShell(); }
 </script>
 </body>
 </html>

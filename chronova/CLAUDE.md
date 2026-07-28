@@ -92,6 +92,47 @@ Everything is in `chronova/` (this directory):
   `admin-dist/`)
 - `sw.js`, `manifest.json`, icon PNGs — PWA shell
 
+## Admin panel access control (multi-admin)
+
+The owner gives admin access to multiple people (staff), so nobody shares one
+password. `ADMIN_KEY` (env var) is the **owner's own master key only** — never
+handed to staff. Each staff member gets an individual account instead:
+- `adminUsers` (Mongo): `{username, passwordHash (scrypt, salt:hash hex), active, createdAt, lastLoginAt}`.
+- `adminSessions`: opaque random token → `{username, role, createdAt, expiresAt}`,
+  12h TTL. Login (`/admin/check-key` for the owner, `/admin/login` for staff)
+  issues one; the client sends it as `Authorization: Bearer <token>` from then
+  on instead of resending the key/password on every call.
+- `adminAuditLog`: append-only `{actor, role, action, meta, ip, createdAt}` —
+  written by `logAdminAction()` from every sensitive mutating endpoint (bans,
+  manual credit/debit, deposit/withdrawal approve/reject/process, settings
+  changes, product/banner edits, admin-account management itself). Readable
+  only via `/admin/audit-log` (owner-only) — the admin.html "Activity Log" tab.
+- `verifyAdmin(req)` accepts EITHER a resolved session (`req.adminUser`, set by
+  middleware before the route runs) OR the legacy raw `ADMIN_KEY` in the
+  `Authorization` header / `body.adminKey` — this is what keeps all 42
+  existing `if (!verifyAdmin(req))` call sites unchanged. `verifyOwner(req)`
+  additionally requires `role === 'owner'` (or the legacy key path, which has
+  no `req.adminUser` at all) — used to gate the `/admin/admins/*` and
+  `/admin/audit-log` endpoints so a staff account (even a compromised one)
+  can never create more admins, see the log, or touch anyone else's account.
+- Deactivating or resetting one account (`/admin/admins/deactivate`,
+  `/admin/admins/reset-password`) calls `invalidateSessionsFor(username)`,
+  which deletes that person's `adminSessions` docs — their access dies
+  **immediately**, on every device, not just at their next login attempt.
+  Nobody else's session or password is touched.
+- Per-username login lockout (5 fails → 15 min, in-process `_loginFails` Map)
+  is separate from the existing per-IP `adminLoginLimiter` — stops someone
+  spraying one username's password from many IPs.
+- `admin.html`: the login form has an optional Username field — blank means
+  "I'm the owner, this is the master key"; filled in means a staff username +
+  password via `/admin/login`. `SESSION_TOKEN`/`SESSION_USER`/`SESSION_ROLE`
+  live in `sessionStorage` (not the raw secret). `openShell()` hides the
+  Admins/Activity Log tabs entirely for `SESSION_ROLE !== 'owner'`.
+- Test coverage: `test-admin-accounts.js` (29 checks) — login for both roles,
+  deactivation/reset kills existing sessions instantly, staff can't reach
+  owner-only endpoints, per-username lockout, logout invalidates server-side,
+  audit log records the right actor. Run it after touching any of this.
+
 ## Build & deploy pipeline
 
 1. Edit `original_module.js` (app logic) and/or `index.html` (CSS/markup).
