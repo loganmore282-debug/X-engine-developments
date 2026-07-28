@@ -163,6 +163,14 @@ device gets both.
   `admin.html` source) has `push`/`notificationclick` listeners added on top
   of its otherwise-intentional no-op/no-cache behavior — don't add caching
   logic here, only notification display.
+- Not silent: `showNotification()` sets no `silent`/`vibrate` override, so a
+  backgrounded device plays its normal system notification sound. Foreground
+  (tab open + focused) is different — that's handled by `onMessage()` in
+  `admin.html`, which only shows an in-page `toast()`, no sound.
+- Manually crediting a wallet (`/admin/deposit`) is owner-only (`verifyOwner`)
+  — staff can debit/ban/etc. but never credit, that's the one adjustment
+  reserved for the owner. The Credit button itself only renders in
+  `admin.html` when `SESSION_ROLE === 'owner'`.
 - Not verified end-to-end in this sandbox (no outbound internet to Firebase,
   and no real deployed backend to register a token against) — code is
   defensively guarded (`typeof firebase === 'undefined'` etc.) and syntax

@@ -3332,8 +3332,10 @@ app.get('/account/transactions', async (req, res) => {
 // ═══════════════════════════════════════════
 // ADMIN — wallet adjustments, deposits, stats, settings, lists
 // ═══════════════════════════════════════════
+// Owner-only: manually crediting a wallet is the one adjustment staff never
+// get, unlike debit/ban/etc. — too easy to abuse for free money.
 app.post('/admin/deposit', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, amount, note } = req.body;
   const amt = parseFloat(amount || 0);
   if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });

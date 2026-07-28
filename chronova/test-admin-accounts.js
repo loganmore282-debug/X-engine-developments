@@ -155,6 +155,10 @@ function check(name, cond, extra) {
   check('staff CANNOT clear the product catalogue', r.code === 401, r.body);
   r = await call('POST', '/admin/products/list', { token: ownerToken, body: {} });
   check('owner CAN still list products', r.body?.status === 'success', r.body);
+  r = await call('POST', '/admin/deposit', { token: bobToken, body: { userId: 'x', amount: 1000 } });
+  check('staff CANNOT credit a wallet (owner-only)', r.code === 401, r.body);
+  r = await call('POST', '/admin/deposit', { token: ownerToken, body: { userId: 'nonexistent-uid', amount: 1000 } });
+  check('owner CAN reach the credit-wallet endpoint (fails on missing user, not auth)', r.code !== 401, r.body);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
