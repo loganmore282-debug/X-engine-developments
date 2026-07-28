@@ -307,6 +307,37 @@ async function realDeposit(token, amount, phone) {
   }
   check('every counter matches its ledger-rebuilt value exactly (zero drift)', allMatch, mismatches);
 
+  console.log('\n── 13. Team counts (LV1/LV2/LV3) are recount-verified against the live referral graph');
+  // teamL1/L2/L3Count are otherwise pure increment/decrement counters with no
+  // independent source of truth. Recount must rebuild them from referredBy
+  // itself. Expected shape at this point: alice ← bob ← carol ← dave, plus
+  // eve + m1..m5 all directly under alice.
+  check("alice's L1 = bob, eve, m1..m5 (7)", userDoc('alice-uid').teamL1Count === 7, userDoc('alice-uid').teamL1Count);
+  check("alice's L2 = carol (bob's referral) (1)", userDoc('alice-uid').teamL2Count === 1, userDoc('alice-uid').teamL2Count);
+  check("alice's L3 = dave (carol's referral) (1)", userDoc('alice-uid').teamL3Count === 1, userDoc('alice-uid').teamL3Count);
+  check("bob's L1 = carol (1)", userDoc('bob-uid').teamL1Count === 1, userDoc('bob-uid').teamL1Count);
+  check("bob's L2 = dave (1)", userDoc('bob-uid').teamL2Count === 1, userDoc('bob-uid').teamL2Count);
+  check("carol's L1 = dave (1)", userDoc('carol-uid').teamL1Count === 1, userDoc('carol-uid').teamL1Count);
+
+  console.log('\n── 14. A deleted referrer never leaves a commission stuck retrying forever');
+  const F = 'uid:frank-uid', G = 'uid:gina-uid';
+  await call('POST', '/account/create-profile', { token: F, body: { phone: '0771000090' } });
+  await call('POST', '/register', { token: F, body: { referralCode: '' } });
+  const frankCode = userDoc('frank-uid').referralCode;
+  await call('POST', '/account/create-profile', { token: G, body: { phone: '0771000091' } });
+  await call('POST', '/register', { token: G, body: { referralCode: frankCode } });
+  check('gina registered under frank', userDoc('gina-uid').referredBy === 'frank-uid', userDoc('gina-uid').referredBy);
+  r = await call('POST', '/admin/user/delete', { body: { ...ADMIN, userId: 'frank-uid', confirm: 'DELETE' } });
+  check('frank (the referrer) is deleted', r.body?.status === 'success', r.body);
+  check("gina's referredBy still points at the now-deleted frank", userDoc('gina-uid').referredBy === 'frank-uid');
+  const ginaDepId = await realDeposit(G, 40000, '0771000091');
+  r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN });
+  check('reconcile does not error out on the dangling deleted referrer', r.body?.status === 'success', r.body);
+  check('the deposit is marked commDone (terminal — stops being retried forever)', deposits().get(ginaDepId).commDone === true, deposits().get(ginaDepId).commDone);
+  check("gina's own deposit still credited normally despite the dead referrer", userDoc('gina-uid').walletBalance === 5000 + 40000, userDoc('gina-uid').walletBalance);
+  r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN });
+  check('re-running reconcile again is a clean no-op, not an infinite retry', r.body?.status === 'success', r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

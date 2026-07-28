@@ -620,7 +620,7 @@ async function _payChain(investorId, amount, investmentId) {
     const dedupFlag = `commPaid_${investmentId}`;
 
     const l1Snap = await db.collection('users').doc(l1Id).get();
-    if (!l1Snap.exists) return;
+    if (!l1Snap.exists) return true; // referrer account was deleted — unrecoverable, stop retrying
     const l1Amt = Math.round(amount * commL1);
     if (l1Amt > 0 && !l1Snap.data()[dedupFlag]) {
       await db.runTransaction(async t => {
@@ -3180,7 +3180,7 @@ async function recountUserTotals() {
   ]);
   const zero = () => ({ totalDeposited: 0, realDeposited: 0, totalEarned: 0, commissionEarned: 0,
     commissionL1Earned: 0, commissionL2Earned: 0, commissionL3Earned: 0,
-    checkinEarned: 0, totalWithdrawn: 0 });
+    checkinEarned: 0, totalWithdrawn: 0, teamL1Count: 0, teamL2Count: 0, teamL3Count: 0 });
   const agg = {};
   const bucket = id => (agg[id] = agg[id] || zero());
   txSnap.forEach(d => {
@@ -3204,6 +3204,30 @@ async function recountUserTotals() {
   witSnap.forEach(d => {
     const w = d.data();
     if (w.userId) bucket(w.userId).totalWithdrawn += (w.netAmount || w.amount || 0);
+  });
+  // Team counts (LV1/LV2/LV3 shown on the Team screen) are otherwise pure
+  // increment/decrement counters with no independent source of truth — a
+  // failed increment (e.g. linkReferral's team-count step throwing after the
+  // referral link itself already committed) permanently under-counts with no
+  // way to detect it. Rebuild all three levels here from the live referredBy
+  // graph, the same way every other counter in this recount is ground-truthed.
+  const childrenOf = new Map();
+  usersSnap.forEach(d => {
+    const ref = d.data().referredBy;
+    if (!ref) return;
+    if (!childrenOf.has(ref)) childrenOf.set(ref, []);
+    childrenOf.get(ref).push(d.id);
+  });
+  usersSnap.forEach(d => {
+    const l1 = childrenOf.get(d.id) || [];
+    let l2Count = 0, l3Count = 0;
+    for (const c1 of l1) {
+      const l2kids = childrenOf.get(c1) || [];
+      l2Count += l2kids.length;
+      for (const c2 of l2kids) l3Count += (childrenOf.get(c2) || []).length;
+    }
+    const b = bucket(d.id);
+    b.teamL1Count = l1.length; b.teamL2Count = l2Count; b.teamL3Count = l3Count;
   });
   let updated = 0;
   for (const doc of usersSnap.docs) {
