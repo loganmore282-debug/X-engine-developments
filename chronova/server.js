@@ -183,8 +183,7 @@ const CHECKIN_BONUS    = 500;
 const COMM_L1          = 0.30;    // referral bonus, level 1
 const COMM_L2          = 0.03;    // level 2
 const COMM_L3          = 0.01;    // level 3
-const LIQUIDITY_FEE    = 0.14;    // withdrawal fee — matches runRatePatchOnce()'s
-                                   // migrated live value; keep these in sync
+const LIQUIDITY_FEE    = 0.17;    // withdrawal fee
 const RETURN_MULTIPLE  = 30;      // payout = price * RETURN_MULTIPLE
 const CYCLE_DAYS       = 120;     // investment period (days), fixed for every watch tier
 // EARNINGS: each product pays daily cashback (expectedReturn / cycle) every 24 hours
@@ -3523,6 +3522,19 @@ async function runRatePatchOnce() {
     console.log('Rate patch applied: check-in 500, withdrawal fee 14%');
   } catch (e) { console.error('Rate patch error:', e.message); }
 }
+// Correction (owner's call): the V2 patch's withdrawal fee should have stayed
+// 17%, not 14% — check-in 500 was correct and is left alone. One-time, same
+// pattern as V2, so this only ever overrides a live value once.
+async function runRatePatchV3Once() {
+  try {
+    const s = await getSettings();
+    if (s.ratePatchV3Done) return;
+    await db.collection('settings').doc('main').set(
+      { liquidityFee: 0.17, ratePatchV3Done: true }, { merge: true });
+    _settingsCache = null; _settingsCacheTs = 0;
+    console.log('Rate patch V3 applied: withdrawal fee corrected to 17%');
+  } catch (e) { console.error('Rate patch V3 error:', e.message); }
+}
 
 // One-time self-heal at boot: fixes every account whose counters predate the
 // counter fixes (e.g. check-ins that never counted into totalEarned).
@@ -4007,7 +4019,7 @@ async function startServer() {
     try {
       await connectMongo(MONGODB_URI);
       if (!cronsStarted) { cronsStarted = true; startCrons();
-        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await reconcileReferrals(); })().catch(() => {});
+        (async () => { await runRecountMigrationOnce(); await runRatePatchOnce(); await runRatePatchV3Once(); await reconcileReferrals(); })().catch(() => {});
       }
     } catch (e) {
       console.error('MongoDB not reachable yet — retrying in 5s:', e.message);

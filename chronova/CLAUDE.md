@@ -34,13 +34,13 @@ the intended default naming/pricing, not a guarantee of what's live). Return **�
 **ACTIVE referral count** (active = totalInvested > 0): 3→10,000 / 10→50,000 / 15→75,000 /
 20→100,000.
 
-**Check-in bonus is 500, withdrawal fee is 14%** — `runRatePatchOnce()` in server.js
-force-applied this once (`ratePatchV2Done` guard) to override any older saved value
-(300 / 17%), per an owner-authorized change. `CHECKIN_BONUS`/`LIQUIDITY_FEE` in
-server.js are the fallback defaults used only when the settings doc doesn't have a
-value yet — `LIQUIDITY_FEE` was still 0.17 (a real mismatch, found and fixed in a
-debugging pass) until it was brought in line with the migrated 0.14. Don't "fix"
-either of these back to 300/17%, that would be undoing an intentional change.
+**Confirmed by the owner: check-in bonus 500, withdrawal fee 17%.** `runRatePatchOnce()`
+bumped check-in from 300→500 (correct, kept) but also dropped the withdrawal fee to 14%
+— that part was wrong and got walked back by `runRatePatchV3Once()` (`ratePatchV3Done`
+guard), which force-sets `liquidityFee` back to 0.17 once. `CHECKIN_BONUS` (500) and
+`LIQUIDITY_FEE` (0.17) in server.js are the fallback defaults and match live. If a future
+rate change is needed, prefer a new one-time patch function (V4, …) over hand-editing the
+live settings doc, so the intent is documented and idempotent.
 
 **Payment flow — manual mobile-money, NOT a gateway:** admin configures up to ~7
 recipient mobile-money numbers in the admin panel. On deposit, the server auto-assigns
