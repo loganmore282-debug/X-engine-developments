@@ -135,8 +135,8 @@ log('index.html    :', fs.statSync(HTML).size, 'bytes — IIFE inlined');
 const DIST = __dirname + '/dist';
 if (!fs.existsSync(DIST)) fs.mkdirSync(DIST);
 ['index.html', 'manifest.json', 'sw.js', 'icon-192.png', 'icon-512.png',
- 'icon-maskable-192.png', 'icon-maskable-512.png']
+ 'icon-maskable-192.png', 'icon-maskable-512.png', 'link-preview.jpg']
   .forEach((f) => fs.copyFileSync(__dirname + '/' + f, DIST + '/' + f));
-log('dist/         : synced (index.html, manifest.json, sw.js, icons incl. maskable)');
+log('dist/         : synced (index.html, manifest.json, sw.js, icons incl. maskable, link-preview.jpg)');
 
 log('\nDone. EdgeOne auto-deploys the dist/ folder from git — no manual upload needed.');

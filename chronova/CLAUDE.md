@@ -208,7 +208,7 @@ device gets both.
    bare no-op service worker so the admin panel never serves stale data).
 5. Zip for handoff:
    ```
-   (cd dist && zip -q -j ../chronova-userpanel.zip index.html manifest.json sw.js icon-192.png icon-512.png icon-maskable-192.png icon-maskable-512.png)
+   (cd dist && zip -q -j ../chronova-userpanel.zip index.html manifest.json sw.js icon-192.png icon-512.png icon-maskable-192.png icon-maskable-512.png link-preview.jpg)
    (cd admin-dist && zip -q -j ../chronova-admin.zip index.html manifest.json sw.js icon-192.png icon-512.png icon-maskable-192.png icon-maskable-512.png)
    ```
 6. Commit + push to `claude/voltra-session-continue-mk95gw`, then deliver zips via
