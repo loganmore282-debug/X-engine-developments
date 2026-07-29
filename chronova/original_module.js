@@ -675,13 +675,13 @@ let _teamStats = null;
 // truth for what's actually claimable; these fill in the moment stats arrive.
 // Target = a COUNT of active level-1 referrals (not a currency amount).
 const TEAM_MILESTONES = [
-  { target:   5, reward:   10000 },
-  { target:  10, reward:   20000 },
-  { target:  20, reward:   40000 },
-  { target:  50, reward:  100000 },
-  { target: 100, reward:  200000 },
-  { target: 200, reward:  500000 },
-  { target: 500, reward: 1000000 },
+  { target:   5, reward:    5000 },
+  { target:  10, reward:   10000 },
+  { target:  20, reward:   20000 },
+  { target:  50, reward:   50000 },
+  { target: 100, reward:  100000 },
+  { target: 200, reward:  200000 },
+  { target: 500, reward:  400000 },
 ];
 async function loadTeam() {
   const [r, s] = await Promise.all([api('/team/members'), api('/team/stats')]);

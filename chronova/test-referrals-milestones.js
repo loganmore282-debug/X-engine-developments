@@ -273,11 +273,11 @@ async function realDeposit(token, amount, phone) {
   r = await call('POST', '/team/milestone/claim', { token: A, body: { target: 10 } }); // real tier, not yet reached
   check('claiming an unreached real tier is rejected', r.body?.status !== 'success', r.body);
   r = await call('POST', '/team/milestone/claim', { token: A, body: { target: 5 } });
-  check('alice claims the reached 5-target milestone for exactly 10000', r.body?.status === 'success' && r.body?.amount === 10000, r.body);
-  check('wallet credited by exactly the reward', userDoc('alice-uid').walletBalance === aliceBalPreClaim + 10000, userDoc('alice-uid').walletBalance - aliceBalPreClaim);
+  check('alice claims the reached 5-target milestone for exactly 5000', r.body?.status === 'success' && r.body?.amount === 5000, r.body);
+  check('wallet credited by exactly the reward', userDoc('alice-uid').walletBalance === aliceBalPreClaim + 5000, userDoc('alice-uid').walletBalance - aliceBalPreClaim);
   r = await call('POST', '/team/milestone/claim', { token: A, body: { target: 5 } });
   check('claiming the SAME milestone twice is rejected (no double-pay)', r.body?.status !== 'success', r.body);
-  check('wallet did not move on the double-claim attempt', userDoc('alice-uid').walletBalance === aliceBalPreClaim + 10000, userDoc('alice-uid').walletBalance);
+  check('wallet did not move on the double-claim attempt', userDoc('alice-uid').walletBalance === aliceBalPreClaim + 5000, userDoc('alice-uid').walletBalance);
   r = await call('GET', '/team/stats', { token: A });
   const m5b = (r.body?.milestones || []).find(m => m.target === 5);
   check('/team/stats now reflects the claim (claimed:true)', m5b?.claimed === true, m5b);

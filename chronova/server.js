@@ -208,13 +208,13 @@ function durPhrase(hours) {
 // the server always recomputes the live count at claim time, it never trusts
 // the client. `target` is a member COUNT, not money.
 const TEAM_MILESTONES = [
-  { target:   5, reward:   10000 },
-  { target:  10, reward:   20000 },
-  { target:  20, reward:   40000 },
-  { target:  50, reward:  100000 },
-  { target: 100, reward:  200000 },
-  { target: 200, reward:  500000 },
-  { target: 500, reward: 1000000 },
+  { target:   5, reward:    5000 },
+  { target:  10, reward:   10000 },
+  { target:  20, reward:   20000 },
+  { target:  50, reward:   50000 },
+  { target: 100, reward:  100000 },
+  { target: 200, reward:  200000 },
+  { target: 500, reward:  400000 },
 ];
 
 // ── UUID v4 generator ──
