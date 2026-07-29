@@ -3738,6 +3738,19 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// Cheap, dedicated endpoint for the little pending-withdrawals badge that
+// polls every 12s from EVERY open admin tab regardless of which tab is
+// active — it used to call the full /admin/stats below just for this one
+// number, meaning every single badge refresh also scanned up to 10,000
+// user docs and every active investment for no reason. Only queries the
+// one already-indexed, already-small collection this actually needs.
+app.post('/admin/badges', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('withdrawals').where('status', '==', 'pending').select('status').get();
+    return res.json({ status: 'success', pendingWithdrawals: snap.size });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
 app.post('/admin/stats', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

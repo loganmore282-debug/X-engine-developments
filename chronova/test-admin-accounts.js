@@ -200,6 +200,14 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/deposit', { token: ownerToken, body: { userId: 'nonexistent-uid', amount: 1000 } });
   check('owner CAN reach the credit-wallet endpoint (fails on missing user, not auth)', r.code !== 401, r.body);
 
+  console.log('\n── 9. The lightweight badge endpoint (polled every 12s from every open tab) works without the heavy full-stats scan');
+  r = await call('POST', '/admin/badges', { token: ownerToken, body: {} });
+  check('owner reads the pending-withdrawals badge count', r.body?.status === 'success' && typeof r.body.pendingWithdrawals === 'number', r.body);
+  r = await call('POST', '/admin/badges', { token: bobToken3, body: {} });
+  check('staff can read it too (not owner-only — staff process withdrawals)', r.body?.status === 'success', r.body);
+  r = await call('POST', '/admin/badges', { body: {} });
+  check('an unauthenticated call is rejected', r.code === 401, r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

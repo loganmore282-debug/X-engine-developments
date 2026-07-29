@@ -219,7 +219,7 @@ function storeSession(token, username, role){
 }
 function clearSession(){
   SESSION_TOKEN = ''; SESSION_USER = ''; SESSION_ROLE = '';
-  try { sessionStorage.removeItem('fg_admin_token'); sessionStorage.removeItem('fg_admin_user'); sessionStorage.removeItem('fg_admin_role'); } catch (_) {}
+  try { sessionStorage.removeItem('fg_admin_token'); sessionStorage.removeItem('fg_admin_user'); sessionStorage.removeItem('fg_admin_role'); sessionStorage.removeItem('fg_admin_tab'); } catch (_) {}
 }
 
 const $ = id => document.getElementById(id);
@@ -322,7 +322,10 @@ $('logoutBtn').addEventListener('click', async ()=>{
   $('keyInput').value=''; $('userInput').value='';
 });
 
-function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden'); switchTab('dashboard'); refreshBadges(); startLive();
+function openShell(){ $('loginView').classList.add('hidden'); $('shell').classList.remove('hidden');
+  let lastTab = 'dashboard';
+  try { const saved = sessionStorage.getItem('fg_admin_tab'); if (saved && VALID_TABS.has(saved)) lastTab = saved; } catch (_) {}
+  switchTab(lastTab); refreshBadges(); startLive();
   if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
   // Admin accounts, the activity log, products, banners, and settings are all
   // owner-only — a staff login (even a compromised one) never even sees these
@@ -411,11 +414,16 @@ try { setPushUIState(!!localStorage.getItem('chr_admin_push_token')); } catch(_)
 }); })();
 
 // ── TABS ──
+const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','codes','transactions','referrals','settings','admins','auditlog']);
 let _tab='dashboard';
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
 $('refreshBtn').addEventListener('click',()=>{ switchTab(_tab); refreshBadges(); });
 function switchTab(name){
   _tab=name;
+  // Survives a plain page reload (mobile browsers reload backgrounded tabs
+  // often) — without this, reopening the panel always bounced back to
+  // Dashboard even if you were deep in Withdrawals or Codes a moment ago.
+  try { sessionStorage.setItem('fg_admin_tab', name); } catch (_) {}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
   const c=$('content'); c.innerHTML='<div class="empty">Loading…</div>';
   ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
@@ -423,7 +431,7 @@ function switchTab(name){
      referrals:renderReferrals, settings:renderSettings, admins:renderAdmins, auditlog:renderAuditLog }[name])();
 }
 async function refreshBadges(){
-  const s = await api('/admin/stats');
+  const s = await api('/admin/badges');
   if(s.status==='success' && s.pendingWithdrawals>0){ $('wBadge').textContent=s.pendingWithdrawals; $('wBadge').classList.remove('hidden'); }
   else $('wBadge').classList.add('hidden');
 }
