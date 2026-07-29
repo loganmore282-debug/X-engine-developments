@@ -21,6 +21,61 @@ app.use(helmet({
   noSniff: true,
   crossOriginResourcePolicy: { policy: 'same-site' }
 }));
+
+// ── RATE LIMITERS ──
+// Deliberately registered BEFORE any body parsing below: a flood of oversized
+// or high-volume requests must be rejected on IP/path/header alone, without
+// the server ever spending CPU/memory parsing the body first (that includes
+// the 8mb admin-upload parser — an unauthenticated flood of large payloads
+// used to be fully parsed before the route handler's auth check ever saw it).
+// Ugandan carrier-NAT IPs put many real users behind one IP, so money/value
+// endpoints key the limiter on the Firebase user (from the token), not the
+// shared IP. Only unauthenticated login/register falls back to per-IP.
+function rlKeyByUser(req) {
+  const auth = req.headers.authorization || '';
+  if (auth.startsWith('Bearer ')) {
+    try {
+      const p = JSON.parse(Buffer.from(auth.slice(7).split('.')[1], 'base64').toString('utf8'));
+      const uid = p && (p.user_id || p.sub);
+      if (uid) return 'u:' + uid;
+    } catch (_) {}
+  }
+  return req.ip;
+}
+// BASELINE FLOOR — every request, on every route, is capped here first. The
+// named limiters below are all STRICTER and apply on top of this for their
+// own paths; this one alone is what stands between a flood/DoS attempt and
+// anything that was never explicitly listed (public reads like /products,
+// /settings/public, /public/*, payment webhooks, any endpoint added later
+// and forgotten here). Keyed by user where authenticated so one legitimate
+// heavy user on shared carrier-NAT can't be capped by a stranger's traffic,
+// falling back to IP for anonymous requests (webhooks, public endpoints).
+// Set above adminLimiter's 300/min so it never becomes the bottleneck for
+// legitimate heavier admin-panel traffic — it only bites when nothing more
+// specific already applies, or when even the generous admin ceiling is
+// somehow exceeded.
+const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 400, keyGenerator: rlKeyByUser,
+  standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+app.use((req, res, next) => (req.path === '/health' ? next() : globalLimiter(req, res, next)));
+
+const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 40, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
+const apiLimiter  = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
+const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests. Slow down.' } });
+app.use('/auth/', authLimiter);
+app.use('/admin/check-key', adminLoginLimiter);
+app.use('/admin/login', adminLoginLimiter);
+app.use('/admin/', adminLimiter);
+// Money/value endpoints added in phase 2 will be registered here as they land:
+['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/card', '/redeem']
+  .forEach(p => app.use(p, apiLimiter));
+
+// ── BODY PARSING ── (after rate limiting, so a flood never pays parse cost)
 // Admin image uploads (product images / home banners) arrive as base64 data
 // URIs, which exceed the tight default body limit. Give only those two admin
 // routes a larger parser; everything else stays capped at 64kb. Once this
@@ -65,33 +120,6 @@ function esc(s) {
   ));
 }
 
-// ── RATE LIMITERS ──
-// Ugandan carrier-NAT IPs put many real users behind one IP, so money/value
-// endpoints key the limiter on the Firebase user (from the token), not the
-// shared IP. Only unauthenticated login/register falls back to per-IP.
-function rlKeyByUser(req) {
-  const auth = req.headers.authorization || '';
-  if (auth.startsWith('Bearer ')) {
-    try {
-      const p = JSON.parse(Buffer.from(auth.slice(7).split('.')[1], 'base64').toString('utf8'));
-      const uid = p && (p.user_id || p.sub);
-      if (uid) return 'u:' + uid;
-    } catch (_) {}
-  }
-  return req.ip;
-}
-const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 40, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
-const apiLimiter  = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Slow down.' } });
-const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
-const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests. Slow down.' } });
-app.use('/auth/', authLimiter);
-app.use('/admin/check-key', adminLoginLimiter);
-app.use('/admin/login', adminLoginLimiter);
-app.use('/admin/', adminLimiter);
 // Best-effort: if a Bearer token is a valid admin session, attach req.adminUser
 // so verifyAdmin()/verifyOwner() below can recognise it. A raw master-key
 // Authorization header simply won't match any session and falls through.
@@ -100,9 +128,6 @@ app.use('/admin/', async (req, res, next) => {
   if (header) { try { req.adminUser = await resolveSession(header); } catch (_) {} }
   next();
 });
-// Money/value endpoints added in phase 2 will be registered here as they land:
-['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/card', '/redeem']
-  .forEach(p => app.use(p, apiLimiter));
 
 // ── MAINTENANCE GATE ──
 // When maintenance mode is on, every money/account action is blocked for normal
