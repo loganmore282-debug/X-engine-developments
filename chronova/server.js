@@ -224,6 +224,7 @@ const APP_VERSION      = '1.7.0';   // shown on the in-app "Download app" screen
 const APP_SIZE         = '2.4 MB';  // approximate installed PWA size
 const MIN_DEPOSIT      = 25000;
 const MIN_WITHDRAWAL   = 10000;   // no multiples restriction
+const MAX_WITHDRAWALS_PER_DAY = 2; // per user, any status — caps admin/liquidity load, not just payouts
 const WELCOME_BONUS    = 5000;
 const CHECKIN_BONUS    = 500;
 const COMM_L1          = 0.30;    // referral bonus, level 1
@@ -3015,12 +3016,33 @@ app.post('/withdraw/request', async (req, res) => {
     if ((user.walletBalance || 0) < amt)
       return res.status(400).json({ status: 'error', message: `Insufficient balance. Available: ${fmtUGX(user.walletBalance || 0)}` });
 
+    const { date, time } = nowStr();
+    // Daily withdrawal cap — counts every request made TODAY regardless of its
+    // eventual status (a rejected/failed one still cost admin time to handle),
+    // so it can never be bypassed by requesting, getting rejected, and retrying.
+    const maxPerDay = sett.maxWithdrawalsPerDay ?? MAX_WITHDRAWALS_PER_DAY;
+    if (maxPerDay > 0) {
+      const todaySnap = await db.collection('withdrawals')
+        .where('userId', '==', userId).where('date', '==', date).select('status').get();
+      if (todaySnap.size >= maxPerDay)
+        return res.status(400).json({ status: 'error', message: `You've reached today's limit of ${maxPerDay} withdrawal request(s). Try again tomorrow.` });
+    }
+
     const fee = Math.round(amt * feeRate);
     const netAmt = amt - fee;
-    const { date, time } = nowStr();
     const ref = await uniqueRef('withdrawals', 'B');
     let witId;
-    await withLock('bal:' + userId, () => db.runTransaction(async t => {
+    await withLock('bal:' + userId, async () => {
+      // Re-checked HERE, inside the same per-user lock the balance debit uses
+      // below — two taps of the withdraw button fired at the exact same
+      // instant are serialised by this lock, so the second one always sees
+      // the first one's just-created row and can't slip past the cap.
+      if (maxPerDay > 0) {
+        const recheck = await db.collection('withdrawals')
+          .where('userId', '==', userId).where('date', '==', date).select('status').get();
+        if (recheck.size >= maxPerDay) throw new Error(`You've reached today's limit of ${maxPerDay} withdrawal request(s). Try again tomorrow.`);
+      }
+      return db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       const bal   = fresh.data().walletBalance || 0;
@@ -3038,7 +3060,8 @@ app.post('/withdraw/request', async (req, res) => {
         amount: -amt, fee, netAmount: netAmt, phone: fullPhone,
         status: 'pending', date, time, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
-    }));
+      });
+    });
     notifyAdmins(`Chronova withdrawal: ${user.name || 'User'} wants ${fmtUGX(amt)} (net ${fmtUGX(netAmt)} after fee) to ${fullPhone}. Ref ${witId}. Tap "Send via MarzPay" in the panel, or it auto-releases through the gateway in 15 min (7am-6pm only).`).catch(() => {});
     sendAdminPush('New withdrawal request', `${user.name || 'A user'} requested ${fmtUGX(netAmt)} to ${fullPhone}.`, { type: 'withdrawal', id: witId }).catch(() => {});
     return res.json({ status: 'success', withdrawalId: witId, netAmount: netAmt, fee, message: 'Withdrawal submitted. Processing soon.' });

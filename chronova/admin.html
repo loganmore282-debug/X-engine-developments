@@ -1166,6 +1166,7 @@ async function renderSettings(){
         <div><label>L3 commission (0–1)</label><input id="sC3" type="number" step="0.01" value="${v('commL3',0.01)}"></div>
       </div>
       <div class="row" style="margin-top:6px">
+        <div><label>Max withdrawals per user per day</label><input id="sMaxWitDay" type="number" min="0" value="${v('maxWithdrawalsPerDay',2)}"></div>
       </div>
       <div class="switch-row" style="margin-top:8px"><span><b>Require a watch before withdrawing</b> <span class="muted">(blocks bonus-only cashouts)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
@@ -1229,6 +1230,7 @@ async function renderSettings(){
       minDeposit:+$('sMinDep').value, minWithdrawal:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
       checkinBonus:+$('sCheckin').value, liquidityFee:+$('sFee').value,
       commL1:+$('sC1').value, commL2:+$('sC2').value, commL3:+$('sC3').value,
+      maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
       maintenanceMsg:$('sMaintMsg').value.trim()
     };
