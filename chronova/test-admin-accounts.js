@@ -202,6 +202,10 @@ function check(name, cond, extra) {
   check('staff CANNOT credit a wallet (owner-only)', r.code === 401, r.body);
   r = await call('POST', '/admin/deposit', { token: ownerToken, body: { userId: 'nonexistent-uid', amount: 1000 } });
   check('owner CAN reach the credit-wallet endpoint (fails on missing user, not auth)', r.code !== 401, r.body);
+  r = await call('POST', '/admin/deposit/force-credit', { token: bobToken, body: { depositId: 'x' } });
+  check('staff CANNOT force-credit a deposit either — it credits on the admin\'s say-so with no independent gateway recheck, same risk as /admin/deposit', r.code === 401, r.body);
+  r = await call('POST', '/admin/deposit/force-credit', { token: ownerToken, body: { depositId: 'nonexistent-dep' } });
+  check('owner CAN reach force-credit (fails on missing deposit, not auth)', r.code !== 401, r.body);
 
   console.log('\n── 9. The lightweight badge endpoint (polled every 12s from every open tab) works without the heavy full-stats scan');
   r = await call('POST', '/admin/badges', { token: ownerToken, body: {} });

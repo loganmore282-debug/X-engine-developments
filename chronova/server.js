@@ -3818,8 +3818,12 @@ app.post('/admin/user/delete', async (req, res) => {
 // MarzPay dashboard but the API/webhook can't confirm it, force-credit the
 // deposit to its user. Uses the same locked, idempotent credit path — a
 // force-credit can never double-credit, and an already-matched deposit is a no-op.
+// OWNER-ONLY: unlike /admin/deposit/complete (which only credits after
+// RE-CHECKING the real gateway status), this one credits on the admin's own
+// say-so with no independent confirmation — same risk class as manually
+// crediting a wallet outright, so it gets the same gate.
 app.post('/admin/deposit/force-credit', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { depositId } = req.body;
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
