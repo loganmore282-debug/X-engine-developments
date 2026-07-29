@@ -2209,12 +2209,17 @@ app.post('/admin/codes/generate', async (req, res) => {
       const key = code.toUpperCase();
       if (existing.has(key)) continue;
       made.push(code); existing.add(key);
+      // Attributed on the code doc itself (shown in the panel's Codes table) AND
+      // in the audit log below — previously neither recorded who generated a
+      // code, so "who made this?" was unanswerable even for a legitimate review.
       const docData = { code, codeKey: key, minAmount: min, maxAmount: max, active: true, usedBy: [],
-        maxUsers: maxUsers ? Math.max(1, parseInt(maxUsers)) : null, createdAt: FieldValue.serverTimestamp() };
+        maxUsers: maxUsers ? Math.max(1, parseInt(maxUsers)) : null, createdAt: FieldValue.serverTimestamp(),
+        createdBy: req.adminUser?.username || 'owner-key' };
       if (expiresAt) docData.expiresAt = expiresAt;
       batch.set(db.collection('redemptionCodes').doc(), docData);
     }
     await batch.commit();
+    logAdminAction(req, 'codes_generated', { count: made.length, minAmount: min, maxAmount: max, codes: made });
     return res.json({ status: 'success', codes: made, count: made.length, minAmount: min, maxAmount: max });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -2231,6 +2236,7 @@ app.post('/admin/codes/deactivate', async (req, res) => {
   if (!codeId) return res.status(400).json({ status: 'error', message: 'codeId required' });
   try {
     await db.collection('redemptionCodes').doc(codeId).update({ active: false });
+    logAdminAction(req, 'code_deactivated', { codeId });
     return res.json({ status: 'success' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });

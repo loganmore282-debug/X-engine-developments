@@ -106,6 +106,11 @@ function check(name, cond, extra) {
   check('bob\'s OLD password no longer works', r.code === 401, r.body);
   r = await call('POST', '/admin/login', { body: { username: 'bob', password: 'brand-new-password1' } });
   check('bob logs in fine with the NEW password', r.body?.status === 'success', r.body);
+  // Kept alive (never logged out) for the codes-attribution check in section 7b,
+  // below all the login-attempt-heavy sections — reused there instead of a
+  // fresh login, since /admin/login itself is tightly rate-limited and this
+  // suite already spends most of that budget on sections 3-6.
+  const bobToken3 = r.body?.token;
 
   console.log('\n── 5. Per-username lockout after repeated failed logins');
   for (let i = 0; i < 5; i++) await call('POST', '/admin/login', { body: { username: 'carol-nobody', password: 'guess' + i } });
@@ -135,6 +140,28 @@ function check(name, cond, extra) {
     log.map(e => e.action));
   r = await call('POST', '/admin/audit-log', { token: bobToken, body: {} });
   check('staff CANNOT read the audit log (owner-only)', r.code === 401, r.body);
+
+  console.log('\n── 7b. Gift codes record WHO generated/deactivated them — this used to be untracked');
+  r = await call('POST', '/admin/codes/generate', { token: ownerToken, body: { minAmount: 1000, maxAmount: 2000, count: 1 } });
+  check('owner generates a code', r.body?.status === 'success' && r.body.codes?.length === 1, r.body);
+  const ownerCode = r.body.codes[0];
+  r = await call('POST', '/admin/codes/generate', { token: bobToken3, body: { minAmount: 200, maxAmount: 200, count: 1 } });
+  check('staff (bob) can also generate a code', r.body?.status === 'success' && r.body.codes?.length === 1, r.body);
+  const bobCode = r.body.codes[0];
+  r = await call('POST', '/admin/codes/list', { token: ownerToken, body: {} });
+  const codeList = r.body?.codes || [];
+  const ownerCodeDoc = codeList.find(c => c.code === ownerCode);
+  const bobCodeDoc = codeList.find(c => c.code === bobCode);
+  check('the owner-generated code is attributed to "owner" right in the list', ownerCodeDoc?.createdBy === 'owner', ownerCodeDoc);
+  check('the staff-generated code is attributed to "bob" by name, not just "an admin"', bobCodeDoc?.createdBy === 'bob', bobCodeDoc);
+  r = await call('POST', '/admin/codes/deactivate', { token: bobToken3, body: { codeId: bobCodeDoc.id } });
+  check('bob deactivates his own code', r.body?.status === 'success', r.body);
+  r = await call('POST', '/admin/audit-log', { token: ownerToken, body: {} });
+  const log2 = r.body?.log || [];
+  check('audit log recorded codes_generated for BOTH the owner\'s and bob\'s code batches',
+    log2.filter(e => e.action === 'codes_generated').length >= 2, log2.filter(e => e.action === 'codes_generated'));
+  check('audit log recorded code_deactivated with bob as the actor',
+    log2.some(e => e.action === 'code_deactivated' && e.actor === 'bob'), log2.filter(e => e.action === 'code_deactivated'));
 
   console.log('\n── 8. Settings, Products and Banners are owner-only too');
   r = await call('POST', '/admin/settings', { token: ownerToken, body: {} });

@@ -924,11 +924,12 @@ async function renderCodes(){
       <button class="btn block" id="genBtn">Generate codes</button>
       <div id="genOut"></div>
     </div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward range</th><th>Used</th><th>Status</th><th></th></tr></thead>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward range</th><th>Used</th><th>Status</th><th>Created by</th><th></th></tr></thead>
     <tbody>${list.length?list.map(c=>`
       <tr><td><b>${esc(c.code)}</b></td><td>${c.minAmount!=null?`${ugx(c.minAmount)} – ${ugx(c.maxAmount)}`:ugx(c.amount)}</td><td>${c.usedCount||0}${c.maxUsers?(' / '+c.maxUsers):''}</td>
       <td><span class="pill-tag ${c.active?'t-ok':'t-mut'}">${c.active?'Active':'Off'}</span></td>
-      <td>${c.active?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No codes yet</td></tr>'}
+      <td>${esc(c.createdBy||'—')}</td>
+      <td>${c.active?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No codes yet</td></tr>'}
     </tbody></table></div>`;
   $('genBtn').addEventListener('click', async()=>{
     const minAmount=parseFloat($('cMin').value||0), maxAmount=parseFloat($('cMax2').value||0);
