@@ -21,12 +21,12 @@ const EmailAuthProvider = { credential: () => ({}) };
 const PNG_GOLD = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mM4rc/wHwAFRQKPGZOTAwAAAABJRU5ErkJggg==';
 
 const PRODUCTS = [
-  { key: 'casio',    label: 'Casio Edifice',      price: 25000,  expectedReturn: 750000,   cycle: 120, image: '' },
-  { key: 'fossil',   label: 'Fossil Grant',       price: 50000,  expectedReturn: 1500000,  cycle: 120, image: '' },
-  { key: 'tissot',   label: 'Tissot Le Locle',    price: 80000,  expectedReturn: 2400000,  cycle: 120, image: '' },
-  { key: 'longines', label: 'Longines Master',    price: 150000, expectedReturn: 4500000,  cycle: 120, image: '' },
-  { key: 'omega',    label: 'Omega Seamaster',    price: 200000, expectedReturn: 6000000,  cycle: 120, image: '' },
-  { key: 'patek',    label: 'Patek Calatrava',    price: 500000, expectedReturn: 15000000, cycle: 120, image: '' },
+  { key: 'casio',    label: 'Casio Edifice',      price: 25000,  expectedReturn: 750000,   cycle: 120, image: '', level: 1 },
+  { key: 'fossil',   label: 'Fossil Grant',       price: 50000,  expectedReturn: 1500000,  cycle: 120, image: '', level: 2 },
+  { key: 'tissot',   label: 'Tissot Le Locle',    price: 80000,  expectedReturn: 2400000,  cycle: 120, image: '', level: 3 },
+  { key: 'longines', label: 'Longines Master',    price: 150000, expectedReturn: 4500000,  cycle: 120, image: '', level: 4 },
+  { key: 'omega',    label: 'Omega Seamaster',    price: 200000, expectedReturn: 6000000,  cycle: 120, image: '', level: 5 },
+  { key: 'patek',    label: 'Patek Calatrava',    price: 500000, expectedReturn: 15000000, cycle: 120, image: '', level: 6 },
 ];
 
 const FIXTURES = `
@@ -82,7 +82,7 @@ _account = {
   lastCheckinDate: null,
 };
 _investments = [
-  { id: 'i1', tierKey: 'tissot', tierLabel: 'VIP3 Tissot', amount: 80000, expectedReturn: 2400000, cycle: 120,
+  { id: 'i1', tierKey: 'tissot', tierLabel: 'VIP3 Tissot', level: 3, amount: 80000, expectedReturn: 2400000, cycle: 120,
     dailyPayout: 20000, payoutsMade: 3, payoutsTotal: 120, paidOut: 60000, status: 'active',
     createdAt: Date.now() - 3 * 86400000 },
 ];

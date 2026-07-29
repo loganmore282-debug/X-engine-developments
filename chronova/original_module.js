@@ -676,12 +676,12 @@ let _teamStats = null;
 // Target = a COUNT of active level-1 referrals (not a currency amount).
 const TEAM_MILESTONES = [
   { target:   5, reward:   10000 },
-  { target:  10, reward:   25000 },
-  { target:  20, reward:   50000 },
-  { target:  50, reward:  120000 },
-  { target: 100, reward:  250000 },
-  { target: 200, reward:  600000 },
-  { target: 500, reward: 2000000 },
+  { target:  10, reward:   20000 },
+  { target:  20, reward:   40000 },
+  { target:  50, reward:  100000 },
+  { target: 100, reward:  200000 },
+  { target: 200, reward:  500000 },
+  { target: 500, reward: 1000000 },
 ];
 async function loadTeam() {
   const [r, s] = await Promise.all([api('/team/members'), api('/team/stats')]);
@@ -1919,17 +1919,15 @@ const MENU_ICONS = {
   logout:   _mi('<path d="M12 3a9 9 0 1 0 6.5 2.8"/><path d="M12 2v9"/>'),
 };
 
-// Level reflects the HIGHEST vip tier actually owned — parsed from the
-// product's tierLabel as it was at purchase time (e.g. "VIP3 Tissot" -> 3),
-// not a count of purchases. Two VIP1 watches still shows Level 1; one VIP4
+// Level reflects the HIGHEST vip tier actually owned — the admin sets each
+// product's VIP level explicitly (Products tab), frozen onto the investment
+// record at purchase time, so the app never has to guess it from the
+// product's display name. Two VIP1 watches still shows Level 1; one VIP4
 // purchase shows Level 4 even if it's the only product owned. No product
-// with a recognisable VIP tier, no badge.
+// with a level set, no badge.
 function memberLevel() {
   let max = 0;
-  for (const inv of _investments) {
-    const m = /VIP\s*(\d+)/i.exec(inv.tierLabel || '');
-    if (m) max = Math.max(max, parseInt(m[1], 10));
-  }
+  for (const inv of _investments) max = Math.max(max, Number(inv.level) || 0);
   return max;
 }
 

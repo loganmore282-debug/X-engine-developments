@@ -804,6 +804,8 @@ function editProduct(p, order){
       <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||30}"></div>
       <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
     </div>
+    <label>VIP level <span class="muted">(drives the buyer's account badge — not the product name)</span></label>
+    <input id="pLevel" type="number" min="0" value="${p.level!=null?p.level:''}" placeholder="e.g. 3 for a VIP3 watch">
     <label>Watch image</label>
     <div class="img-picker">
       <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
@@ -831,7 +833,7 @@ function editProduct(p, order){
   $('pSave').addEventListener('click', async()=>{
     const image = imgData || $('pImage').value.trim();
     const body = { id:p.id, label:$('pLabel').value, key:$('pKey').value, price:$('pPrice').value,
-      expectedReturn:$('pRet').value, cycle:$('pCycle').value, order:$('pOrder').value,
+      expectedReturn:$('pRet').value, cycle:$('pCycle').value, order:$('pOrder').value, level:$('pLevel').value,
       image, active:$('pActive').checked, comingSoon:$('pSoon').checked };
     if(!parseFloat(body.price)) return toast('Enter a price','err');
     const restore=$('pSave').textContent; $('pSave').disabled=true; $('pSave').textContent='Saving…';

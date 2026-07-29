@@ -87,6 +87,13 @@ admin manually sends the money then marks paid, or rejects (auto-refund).
   values) via `tierTint(product, index)` — assigned by **position** in the admin-driven
   product list, not by a tier key lookup, so there's no key-matching failure mode left to
   regress (the old `GEM_COLORS`-by-key design this replaced is gone; don't reintroduce it).
+- Each product has an explicit **VIP level** (`level`, a plain integer set in the admin
+  product form, Products tab — separate from the free-text `label` like "VIP3 Tissot").
+  It's frozen onto the investment record at purchase time (`level` field, alongside
+  `tierLabel`/`tierKey`), and the account screen's "Level N" badge (`memberLevel()` in
+  original_module.js) is the HIGHEST `level` across everything the user owns — never
+  parsed from product name text, never a purchase count. Set this whenever adding/editing
+  a product or the badge silently shows nothing for that tier.
 
 ## Where the app lives
 

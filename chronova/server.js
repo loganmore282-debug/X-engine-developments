@@ -209,12 +209,12 @@ function durPhrase(hours) {
 // the client. `target` is a member COUNT, not money.
 const TEAM_MILESTONES = [
   { target:   5, reward:   10000 },
-  { target:  10, reward:   25000 },
-  { target:  20, reward:   50000 },
-  { target:  50, reward:  120000 },
-  { target: 100, reward:  250000 },
-  { target: 200, reward:  600000 },
-  { target: 500, reward: 2000000 },
+  { target:  10, reward:   20000 },
+  { target:  20, reward:   40000 },
+  { target:  50, reward:  100000 },
+  { target: 100, reward:  200000 },
+  { target: 200, reward:  500000 },
+  { target: 500, reward: 1000000 },
 ];
 
 // ── UUID v4 generator ──
@@ -1681,7 +1681,7 @@ app.post('/invest/create', async (req, res) => {
       t.update(uRef, { walletBalance: FieldValue.increment(-tier.price), totalInvested: FieldValue.increment(tier.price) });
       const { date, time } = nowStr();
       t.set(invRef, {
-        userId, tierKey: tier.key, tierLabel: tier.label,
+        userId, tierKey: tier.key, tierLabel: tier.label, level: Number(tier.level) || 0,
         amount: tier.price, cycle: tier.cycle, expectedReturn: tier.expectedReturn,
         status: 'active', maturityDate: matDate,
         dailyPayout, payoutsTotal: tier.cycle, payoutsMade: 0, paidOut: 0, nextPayoutAt,
@@ -3944,8 +3944,9 @@ app.post('/admin/products/save', async (req, res) => {
   const expectedReturn = Math.round(parseFloat(req.body.expectedReturn) || price * RETURN_MULTIPLE);
   const label = String(req.body.label || '').replace(/[<>]/g, '').trim().slice(0, 40) || 'Product';
   const key = String(req.body.key || label).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24) || ('item' + Date.now());
+  const level = Math.max(0, Math.round(parseFloat(req.body.level) || 0));
   const data = {
-    key, label, price, cycle, expectedReturn, dailyReturn: expectedReturn / cycle,
+    key, label, price, cycle, expectedReturn, dailyReturn: expectedReturn / cycle, level,
     // Allow both short hosted URLs and full base64 data-URI uploads (the admin
     // downscales images before sending, so this stays well under the 8mb body cap).
     image: String(req.body.image || '').trim().slice(0, 4000000),
