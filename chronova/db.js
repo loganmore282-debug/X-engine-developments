@@ -30,7 +30,48 @@ async function connectMongo(uri) {
   _client.on('serverHeartbeatFailed', e => console.warn('Mongo heartbeat failed:', e && e.failure && e.failure.message));
   _client.on('close', () => console.warn('Mongo connection closed'));
   console.log(`MongoDB connected (${dbName})`);
+  ensureIndexes().catch(e => console.warn('Index build warning:', e.message));
   return _mdb;
+}
+
+// Every field server.js filters on via .where() needs an index here — without
+// one, MongoDB does a full collection scan on every single request for it
+// (userId, referredBy, status, marzReference...), and that scan gets slower
+// as each collection grows. createIndex is a cheap no-op if the index already
+// exists, so this just runs on every boot instead of needing a one-time
+// migration step. Fired in the background (not awaited by connectMongo) so a
+// slow first-time build on an already-large collection never delays startup —
+// queries run at their old (scan) speed until it finishes, then stay fast.
+async function ensureIndexes() {
+  const specs = [
+    ['users',           { referredBy: 1 }],
+    ['users',           { referralCode: 1 }],
+    ['users',           { usernameLower: 1 }],
+    ['investments',     { userId: 1 }],
+    ['investments',     { status: 1 }],
+    ['transactions',    { userId: 1 }],
+    ['transactions',    { withdrawalId: 1 }],
+    ['transactions',    { code: 1 }],
+    ['withdrawals',     { userId: 1 }],
+    ['withdrawals',     { status: 1 }],
+    ['withdrawals',     { marzReference: 1 }],
+    ['withdrawals',     { marzTxUuid: 1 }],
+    ['pendingDeposits', { userId: 1 }],
+    ['pendingDeposits', { marzReference: 1 }],
+    ['pendingDeposits', { status: 1 }],
+    ['pendingDeposits', { userId: 1, manualPending: 1 }],
+    ['redemptionCodes', { code: 1 }],
+    ['redemptionCodes', { codeKey: 1 }],
+    ['adminPushTokens', { token: 1 }],
+    ['adminSessions',   { username: 1 }],
+    ['captchas',        { expires: 1 }],
+    ['products',        { key: 1 }],
+  ];
+  const results = await Promise.allSettled(
+    specs.map(([col, keys]) => _mdb.collection(col).createIndex(keys))
+  );
+  const failed = results.filter(r => r.status === 'rejected').length;
+  console.log(`MongoDB indexes ensured (${specs.length - failed}/${specs.length})`);
 }
 
 // Lightweight liveness check for the /health endpoint — pings the DB with a

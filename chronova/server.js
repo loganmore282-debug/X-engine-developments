@@ -1742,59 +1742,67 @@ app.post('/invest/create', async (req, res) => {
 // completes a cycle absorbs any rounding remainder so paidOut lands exactly
 // on expectedReturn.
 const _creditingPayouts = new Set();
+// Settles ONE investment doc if its next cashback is due. Shared by the global
+// cron (runDailyPayouts, below) and by a single user's own "settle-on-open"
+// request — so a request never has to pay the cost of scanning/crediting
+// every OTHER user's investments just to land its own caller's cashback.
+async function settleInvestmentIfDue(doc) {
+  const inv = doc.data();
+  const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
+  const made  = Number(inv.payoutsMade) || 0;
+  if (!total || made >= total) return false;
+  const createdMs = tsMillis(inv.createdAt) || Date.now();
+  const elapsedDays = Math.floor((Date.now() - createdMs) / 86400000);
+  const dueCount = Math.min(total, elapsedDays) - made;
+  if (dueCount <= 0) return false;
+  if (_creditingPayouts.has(doc.id)) return false;
+  _creditingPayouts.add(doc.id);
+  try {
+    const invRef = doc.ref;
+    let didCredit = false;
+    await withLock('payout:' + doc.id, async () => {
+      let amount = 0, newMade = 0, willComplete = false;
+      await db.runTransaction(async t => {
+        const fresh = await t.get(invRef);
+        if (!fresh.exists || fresh.data().status !== 'active') return;
+        const f = fresh.data();
+        const fMade = Number(f.payoutsMade) || 0;
+        const fTotal = Number(f.payoutsTotal) || Number(f.cycle) || 0;
+        const fElapsed = Math.floor((Date.now() - (tsMillis(f.createdAt) || Date.now())) / 86400000);
+        const fDue = Math.min(fTotal, fElapsed) - fMade;
+        if (fDue <= 0) return;
+        newMade = fMade + fDue;
+        willComplete = newMade >= fTotal;
+        const dailyPayout = Number(f.dailyPayout) || 0;
+        amount = willComplete
+          ? Math.max(0, (Number(f.expectedReturn) || 0) - (Number(f.paidOut) || 0))
+          : dailyPayout * fDue;
+        if (amount <= 0) return;
+        const uRef = db.collection('users').doc(f.userId);
+        t.update(uRef, { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount) });
+        t.update(invRef, {
+          payoutsMade: newMade, paidOut: FieldValue.increment(amount),
+          nextPayoutAt: new Date(Date.now() + 86400000),
+          status: willComplete ? 'matured' : 'active'
+        });
+        const { date, time } = nowStr();
+        t.set(db.collection('transactions').doc(), {
+          userId: f.userId, type: 'gem_payout',
+          description: `Cashback — ${f.tierLabel || 'watch'} (day ${newMade}/${fTotal})`,
+          amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
+        });
+        didCredit = true;
+      });
+    });
+    return didCredit;
+  } finally { _creditingPayouts.delete(doc.id); }
+}
 async function runDailyPayouts() {
   let credited = 0;
   try {
     const snap = await db.collection('investments').where('status', '==', 'active').limit(2000).get();
     for (const doc of snap.docs) {
-      const inv = doc.data();
-      const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
-      const made  = Number(inv.payoutsMade) || 0;
-      if (!total || made >= total) continue;
-      const createdMs = tsMillis(inv.createdAt) || Date.now();
-      const elapsedDays = Math.floor((Date.now() - createdMs) / 86400000);
-      const dueCount = Math.min(total, elapsedDays) - made;
-      if (dueCount <= 0) continue;
-      if (_creditingPayouts.has(doc.id)) continue;
-      _creditingPayouts.add(doc.id);
-      try {
-        await withLock('payout:' + doc.id, async () => {
-          const invRef = doc.ref;
-          let didCredit = false, amount = 0, newMade = 0, willComplete = false;
-          await db.runTransaction(async t => {
-            const fresh = await t.get(invRef);
-            if (!fresh.exists || fresh.data().status !== 'active') return;
-            const f = fresh.data();
-            const fMade = Number(f.payoutsMade) || 0;
-            const fTotal = Number(f.payoutsTotal) || Number(f.cycle) || 0;
-            const fElapsed = Math.floor((Date.now() - (tsMillis(f.createdAt) || Date.now())) / 86400000);
-            const fDue = Math.min(fTotal, fElapsed) - fMade;
-            if (fDue <= 0) return;
-            newMade = fMade + fDue;
-            willComplete = newMade >= fTotal;
-            const dailyPayout = Number(f.dailyPayout) || 0;
-            amount = willComplete
-              ? Math.max(0, (Number(f.expectedReturn) || 0) - (Number(f.paidOut) || 0))
-              : dailyPayout * fDue;
-            if (amount <= 0) return;
-            const uRef = db.collection('users').doc(f.userId);
-            t.update(uRef, { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount) });
-            t.update(invRef, {
-              payoutsMade: newMade, paidOut: FieldValue.increment(amount),
-              nextPayoutAt: new Date(Date.now() + 86400000),
-              status: willComplete ? 'matured' : 'active'
-            });
-            const { date, time } = nowStr();
-            t.set(db.collection('transactions').doc(), {
-              userId: f.userId, type: 'gem_payout',
-              description: `Cashback — ${f.tierLabel || 'watch'} (day ${newMade}/${fTotal})`,
-              amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
-            });
-            didCredit = true;
-          });
-          if (didCredit) credited++;
-        });
-      } finally { _creditingPayouts.delete(doc.id); }
+      if (await settleInvestmentIfDue(doc)) credited++;
     }
   } catch (e) { console.error('runDailyPayouts error:', e.message); }
   return credited;
@@ -3277,10 +3285,15 @@ app.get('/account/investments', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     let snap = await db.collection('investments').where('userId', '==', userId).get();
-    // Settle-on-open: if any of this user's payouts is due right now, run the
-    // payout engine immediately (guarded, idempotent) and re-read — so the
-    // cashback lands the moment the countdown reaches zero, not minutes later.
-    const due = snap.docs.some(d => {
+    // Settle-on-open: if any of THIS user's payouts is due right now, settle
+    // just their own investments and re-read — so the cashback lands the
+    // moment the countdown reaches zero, not minutes later. Deliberately
+    // scoped to this user only (settleInvestmentIfDue on their own docs), NOT
+    // the global runDailyPayouts() — that scans every active investment on the
+    // platform, so calling it from a single page load meant one user's payout
+    // landing due could make THEIR page load pay the cost of settling
+    // everyone else's too. The 60s cron still covers everyone on its own.
+    const due = snap.docs.filter(d => {
       const inv = d.data();
       if (inv.status !== 'active') return false;
       // Deterministic: due if more 24h marks have passed since purchase than the
@@ -3290,8 +3303,8 @@ app.get('/account/investments', async (req, res) => {
       const elapsedDays = Math.floor((Date.now() - createdMs) / 86400000);
       return Math.min(total || elapsedDays, elapsedDays) > (inv.payoutsMade || 0);
     });
-    if (due) {
-      await runDailyPayouts();
+    if (due.length) {
+      for (const doc of due) await settleInvestmentIfDue(doc);
       snap = await db.collection('investments').where('userId', '==', userId).get();
     }
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));

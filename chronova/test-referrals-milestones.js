@@ -228,6 +228,28 @@ async function realDeposit(token, amount, phone) {
   check('opening /account/investments settles the due payout with no separate cron call', userDoc('dave-uid').walletBalance === daveBalPre3 + 7500, userDoc('dave-uid').walletBalance - daveBalPre3);
   check('the API response already reflects the fresh payoutsMade (5)', r.body?.investments?.[0]?.payoutsMade === 5, r.body?.investments?.[0]?.payoutsMade);
 
+  console.log('\n── 8b. Settle-on-open is scoped to the CALLER only — it must never settle another user\'s due investment too');
+  // Performance fix: opening your own page used to run the GLOBAL payout sweep
+  // (every active investment on the platform) if your own payout happened to
+  // be due, so one user's page load paid for crediting everyone else's too.
+  // It must now touch ONLY the caller's own investments.
+  await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'bob-uid', amount: 30000, note: 'seed for isolation check' } });
+  r = await call('POST', '/invest/create', { token: B, body: { tierKey: 'watch1' } });
+  check('bob buys watch1 for the isolation check', r.body?.status === 'success', r.body);
+  const bobInv = [...investments().entries()].find(([, v]) => v.userId === 'bob-uid' && v.status === 'active')[1];
+  bobInv.createdAt = new Date(Date.now() - 25 * 3600000); // bob also has a payout due right now
+  const bobBalPre = userDoc('bob-uid').walletBalance;
+  daveInv.createdAt = new Date(Date.now() - (6 * 24 + 1) * 3600000); // dave due again too
+  const daveBalPreIso = userDoc('dave-uid').walletBalance;
+  r = await call('GET', '/account/investments', { token: D }); // dave opens HIS OWN page
+  await sleep(150);
+  check('dave\'s own due payout still settles on his own page load', userDoc('dave-uid').walletBalance === daveBalPreIso + 7500, userDoc('dave-uid').walletBalance - daveBalPreIso);
+  check('bob\'s due payout was NOT touched by dave opening his page (no cross-user settlement)',
+    userDoc('bob-uid').walletBalance === bobBalPre && bobInv.payoutsMade === 0, { bobBal: userDoc('bob-uid').walletBalance, bobBalPre, bobPayoutsMade: bobInv.payoutsMade });
+  r = await call('GET', '/account/investments', { token: B }); // bob opens HIS OWN page next
+  await sleep(150);
+  check('bob\'s own due payout settles once HE opens his page', userDoc('bob-uid').walletBalance === bobBalPre + 7500, userDoc('bob-uid').walletBalance - bobBalPre);
+
   console.log('\n── 9. Final payout absorbs the rounding remainder exactly');
   await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'dave-uid', amount: 33333, note: 'seed for remainder watch' } });
   r = await call('POST', '/invest/create', { token: D, body: { tierKey: 'watch2' } });
