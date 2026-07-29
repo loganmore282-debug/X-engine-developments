@@ -552,8 +552,17 @@ let _realtimeTimer = null, _realtimeSig = '', _tickN = 0;
 function dataSig() {
   // Per-row statuses (not just counts): a deposit flipping pending→success or a
   // withdrawal being processed MUST repaint recent activity without a reload.
+  // referralCode + the team-stats block are included too: a slow/cold first
+  // load can leave the Team tab painted as "not ready yet" / all-zero while
+  // _account and _teamStats quietly finish loading in the background — without
+  // these in the signature that real data never triggers a repaint (nothing
+  // else on the tab necessarily changed), so it looked "stuck" until the user
+  // manually reloaded the page.
+  const ts = _teamStats;
   return [_account?.walletBalance, _account?.totalEarned, _account?.commissionEarned,
     _account?.totalWithdrawn, _account?.totalDeposited, _account?.teamL1Count,
+    _account?.referralCode, _account?.status,
+    ts?.counts?.l1, ts?.counts?.l2, ts?.counts?.l3, ts?.earned?.commissions, ts?.earned?.teamRewards,
     _txns.length, _txns.slice(0, 30).map(t => t.status).join(''), _investments.length,
     _investments.map(i => i.status).join(''), _members.length].join('|');
 }
