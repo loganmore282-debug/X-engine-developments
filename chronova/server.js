@@ -2233,8 +2233,11 @@ app.post('/admin/redemptions/reconcile', async (req, res) => {
   return res.json({ status: 'success', healed });
 });
 
+// OWNER-ONLY: a gift code is a direct money lever exactly like manually
+// crediting a wallet (also owner-only) — anyone who can mint one can redeem
+// it themselves through any personal user account and withdraw the payout.
 app.post('/admin/codes/generate', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { count = 1, minAmount, maxAmount, expiresInDays, maxUsers } = req.body;
   const min = Math.max(0, Math.round(parseFloat(minAmount) || 0));
   const max = Math.max(0, Math.round(parseFloat(maxAmount) || 0));
@@ -2271,14 +2274,14 @@ app.post('/admin/codes/generate', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/codes/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('redemptionCodes').orderBy('createdAt', 'desc').limit(200).get();
     return res.json({ status: 'success', codes: snap.docs.map(d => ({ id: d.id, ...d.data(), usedCount: (d.data().usedBy || []).length })) });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/codes/deactivate', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { codeId } = req.body;
   if (!codeId) return res.status(400).json({ status: 'error', message: 'codeId required' });
   try {

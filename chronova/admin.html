@@ -184,7 +184,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="tab" data-tab="withdrawals">Withdrawals <span class="badge-n hidden" id="wBadge"></span></button>
         <button class="tab" data-tab="products" id="productsTab">Products</button>
         <button class="tab" data-tab="banners" id="bannersTab">Banners</button>
-        <button class="tab" data-tab="codes">Codes</button>
+        <button class="tab" data-tab="codes" id="codesTab">Codes</button>
         <button class="tab" data-tab="transactions">Transactions</button>
         <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="settings" id="settingsTab">Settings</button>
@@ -327,15 +327,18 @@ function openShell(){ $('loginView').classList.add('hidden'); $('shell').classLi
   try { const saved = sessionStorage.getItem('fg_admin_tab'); if (saved && VALID_TABS.has(saved)) lastTab = saved; } catch (_) {}
   switchTab(lastTab); refreshBadges(); startLive();
   if (window._adminInstallPrompt) $('installBtn').classList.remove('hidden');
-  // Admin accounts, the activity log, products, banners, and settings are all
-  // owner-only — a staff login (even a compromised one) never even sees these
-  // tabs exist, and the matching endpoints reject them server-side too.
+  // Admin accounts, the activity log, products, banners, settings, and gift
+  // codes are all owner-only — a staff login (even a compromised one) never
+  // even sees these tabs exist, and the matching endpoints reject them
+  // server-side too. Gift codes are a direct money lever exactly like manual
+  // wallet crediting (also owner-only): a staff account could otherwise mint
+  // a high-value code and redeem it through any personal user account.
   const isOwner = SESSION_ROLE === 'owner';
-  ['adminsTab', 'auditLogTab', 'productsTab', 'bannersTab', 'settingsTab']
+  ['adminsTab', 'auditLogTab', 'productsTab', 'bannersTab', 'settingsTab', 'codesTab']
     .forEach(id => $(id).classList.toggle('hidden', !isOwner));
   // If a staff session somehow lands on one of these tabs (e.g. a stale
   // deep-link), bounce back to the dashboard instead of showing a dead screen.
-  if (!isOwner && ['products', 'banners', 'settings'].includes(_tab)) switchTab('dashboard');
+  if (!isOwner && ['products', 'banners', 'settings', 'codes'].includes(_tab)) switchTab('dashboard');
 }
 $('liveBtn').addEventListener('click', ()=>{ setLive(!_live); if(_live) liveTick(); });
 $('installBtn').addEventListener('click', async ()=>{

@@ -141,27 +141,30 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/audit-log', { token: bobToken, body: {} });
   check('staff CANNOT read the audit log (owner-only)', r.code === 401, r.body);
 
-  console.log('\n── 7b. Gift codes record WHO generated/deactivated them — this used to be untracked');
+  console.log('\n── 7b. Gift codes are owner-only (a mint-and-redeem-yourself lever, same class as manual crediting) and record WHO generated/deactivated them');
   r = await call('POST', '/admin/codes/generate', { token: ownerToken, body: { minAmount: 1000, maxAmount: 2000, count: 1 } });
   check('owner generates a code', r.body?.status === 'success' && r.body.codes?.length === 1, r.body);
   const ownerCode = r.body.codes[0];
-  r = await call('POST', '/admin/codes/generate', { token: bobToken3, body: { minAmount: 200, maxAmount: 200, count: 1 } });
-  check('staff (bob) can also generate a code', r.body?.status === 'success' && r.body.codes?.length === 1, r.body);
-  const bobCode = r.body.codes[0];
+  r = await call('POST', '/admin/codes/generate', { token: bobToken3, body: { minAmount: 700000, maxAmount: 700000, count: 1 } });
+  check('staff CANNOT generate a gift code — this was the actual hole a rogue/compromised staff account could mint a high-value code through and redeem it themselves',
+    r.code === 401, r.body);
+  r = await call('POST', '/admin/codes/list', { token: bobToken3, body: {} });
+  check('staff CANNOT list codes either', r.code === 401, r.body);
   r = await call('POST', '/admin/codes/list', { token: ownerToken, body: {} });
   const codeList = r.body?.codes || [];
   const ownerCodeDoc = codeList.find(c => c.code === ownerCode);
-  const bobCodeDoc = codeList.find(c => c.code === bobCode);
   check('the owner-generated code is attributed to "owner" right in the list', ownerCodeDoc?.createdBy === 'owner', ownerCodeDoc);
-  check('the staff-generated code is attributed to "bob" by name, not just "an admin"', bobCodeDoc?.createdBy === 'bob', bobCodeDoc);
-  r = await call('POST', '/admin/codes/deactivate', { token: bobToken3, body: { codeId: bobCodeDoc.id } });
-  check('bob deactivates his own code', r.body?.status === 'success', r.body);
+  check('the rejected staff attempt never actually created a 700,000 code', !codeList.some(c => c.minAmount === 700000), codeList.map(c => c.minAmount));
+  r = await call('POST', '/admin/codes/deactivate', { token: bobToken3, body: { codeId: ownerCodeDoc.id } });
+  check('staff CANNOT deactivate a code either', r.code === 401, r.body);
+  r = await call('POST', '/admin/codes/deactivate', { token: ownerToken, body: { codeId: ownerCodeDoc.id } });
+  check('owner deactivates the code', r.body?.status === 'success', r.body);
   r = await call('POST', '/admin/audit-log', { token: ownerToken, body: {} });
   const log2 = r.body?.log || [];
-  check('audit log recorded codes_generated for BOTH the owner\'s and bob\'s code batches',
-    log2.filter(e => e.action === 'codes_generated').length >= 2, log2.filter(e => e.action === 'codes_generated'));
-  check('audit log recorded code_deactivated with bob as the actor',
-    log2.some(e => e.action === 'code_deactivated' && e.actor === 'bob'), log2.filter(e => e.action === 'code_deactivated'));
+  check('audit log recorded codes_generated for the owner\'s code batch',
+    log2.some(e => e.action === 'codes_generated' && e.actor === 'owner'), log2.filter(e => e.action === 'codes_generated'));
+  check('audit log recorded code_deactivated with owner as the actor',
+    log2.some(e => e.action === 'code_deactivated' && e.actor === 'owner'), log2.filter(e => e.action === 'code_deactivated'));
 
   console.log('\n── 7c. A transient DB hiccup while checking a session must NEVER look like "your session is invalid"');
   // Regression test: a real Mongo blip resolving the session token used to be
