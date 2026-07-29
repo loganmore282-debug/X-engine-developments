@@ -1929,22 +1929,34 @@ async function auditIntegrity() {
   try {
     const alerts = [];
     const usersSnap = await db.collection('users').get();
+    // ONE bulk fetch of every transaction, grouped by userId in memory — this
+    // used to be a SEPARATE awaited query PER USER (1,200+ sequential Mongo
+    // round-trips at current scale, easily taking minutes and making a second
+    // click land on "already running" while the first was still grinding
+    // through the list). Same math, same alerts, just one round-trip instead
+    // of one-per-user.
+    const allTxSnap = await db.collection('transactions').get();
+    const txByUser = new Map();
+    allTxSnap.forEach(d => {
+      const t = d.data();
+      if (!t.userId) return;
+      if (!txByUser.has(t.userId)) txByUser.set(t.userId, []);
+      txByUser.get(t.userId).push(t);
+    });
     for (const uDoc of usersSnap.docs) {
       const u = uDoc.data(); const uid = uDoc.id;
       if (!u.registrationDone) continue; // unfinished sign-ups have no ledger yet
       if ((u.walletBalance || 0) < 0)
         alerts.push({ kind: 'negative_balance', userId: uid, username: u.username || '', balance: u.walletBalance });
-      const txSnap = await db.collection('transactions').where('userId', '==', uid).get();
       let expected = 0;
       const creditRefs = new Map();
-      txSnap.forEach(d => {
-        const t = d.data();
+      for (const t of (txByUser.get(uid) || [])) {
         if (t.type === 'withdrawal' || t.status === 'success') expected += (t.amount || 0);
         if (t.type === 'topup' && (t.depositId || t.marzReference)) {
           const k = String(t.depositId || t.marzReference);
           creditRefs.set(k, (creditRefs.get(k) || 0) + 1);
         }
-      });
+      }
       for (const [ref, n] of creditRefs) if (n > 1)
         alerts.push({ kind: 'duplicate_credit', userId: uid, username: u.username || '', ref, times: n });
       const bal = u.walletBalance || 0;
@@ -1977,7 +1989,11 @@ async function auditIntegrity() {
       .filter(({ w }) => (w.marzTxUuid || w.marzReference) && (Date.now() - tsMillis(w.failedAt || w.createdAt)) < 72 * 3600000)
       .sort((a, b) => tsMillis(b.w.failedAt || b.w.createdAt) - tsMillis(a.w.failedAt || a.w.createdAt))
       .slice(0, 40);
-    for (const { d, w } of recentFailed) {
+    // Fired concurrently, not one-at-a-time — these are external HTTP calls
+    // to the gateway, so a sequential loop here would add real wall-clock
+    // seconds (or worse) on top of the audit for no benefit; 40 at once is a
+    // small, bounded burst.
+    await Promise.all(recentFailed.map(async ({ d, w }) => {
       try {
         const real = await getPayoutStatus(w);
         if (PAY_OK.includes(real)) {
@@ -1987,7 +2003,7 @@ async function auditIntegrity() {
             message: 'Marked FAILED (and refunded) but the gateway confirms it was actually SENT — check the recipient before this happens again.' });
         }
       } catch (_) { /* gateway unreachable for this one right now — next hourly run retries it */ }
-    }
+    }));
     const result = { ranAt: new Date().toISOString(), usersChecked: usersSnap.size,
       alertCount: alerts.length, healthy: alerts.length === 0, alerts: alerts.slice(0, 200) };
     await db.collection('integrity').doc('latest').set(result);
