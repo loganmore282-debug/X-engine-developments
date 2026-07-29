@@ -2752,14 +2752,22 @@ app.post('/admin/deposit/reject', async (req, res) => {
 // ── ADMIN: reject a withdrawal (refunds the held funds, idempotent) ──
 app.post('/admin/withdraw/reject', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  const withdrawalId = String(req.body.withdrawalId || '');
+  // Same lock as /admin/withdraw/process: a reject must never land while a
+  // process/auto-release is mid-flight sending real money, or the user gets
+  // paid AND refunded.
+  if (_withdrawInFlight.has(withdrawalId))
+    return res.status(409).json({ status: 'error', message: 'This withdrawal is being processed right now — check the list in a moment.' });
+  _withdrawInFlight.add(withdrawalId);
   try {
-    const ref = db.collection('withdrawals').doc(String(req.body.withdrawalId || ''));
+    const ref = db.collection('withdrawals').doc(withdrawalId);
     const snap = await ref.get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const ok = await failWithdrawal(snap, String(req.body.reason || 'Rejected by admin — refunded'));
-    logAdminAction(req, 'withdrawal_rejected', { withdrawalId: req.body.withdrawalId, reason: req.body.reason });
+    logAdminAction(req, 'withdrawal_rejected', { withdrawalId, reason: req.body.reason });
     return res.json({ status: 'success', done: ok, message: ok ? 'Rejected & refunded' : 'Already settled' });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+  finally { _withdrawInFlight.delete(withdrawalId); }
 });
 setInterval(() => { sweepExpiredManualOrders().catch(() => {}); }, 2 * 60 * 1000);
 
@@ -2965,6 +2973,13 @@ app.post('/withdraw/request', async (req, res) => {
   }
 });
 const _completingWithdrawals = new Set();
+// Guards the actual MONEY-SEND step (MarzPay send-money) — shared by the admin
+// "Process" button, the auto-release sweep, and admin "Reject". Two admins
+// hitting Process on the same request at once, or an admin racing the sweep
+// or a reject, can otherwise both act on one withdrawal (double disbursement,
+// or a payout that also gets refunded). Checked-and-set with no `await` in
+// between, so it can't race even though M0 gives no real transaction locking.
+const _withdrawInFlight = new Set();
 async function completeWithdrawal(witDoc) {
   const wit = witDoc.data();
   if (wit.status === 'processed' || wit.status === 'failed') return false;
@@ -3114,13 +3129,12 @@ function inWithdrawWindow() {
   const h = eatNow().getUTCHours(); // eatNow() is already shifted to Kampala time
   return h >= WITHDRAW_WINDOW_START_H && h < WITHDRAW_WINDOW_END_H;
 }
-const _autoReleasing = new Set();
-
 async function autoReleaseWithdrawal(witDoc) {
   const id = witDoc.id, wit = witDoc.data();
   if (wit.status !== 'pending') return false;
-  if (_autoReleasing.has(id)) return false;   // single writer per withdrawal
-  _autoReleasing.add(id);
+  // shared with /admin/withdraw/process + /admin/withdraw/reject — see _withdrawInFlight above
+  if (_withdrawInFlight.has(id)) return false;
+  _withdrawInFlight.add(id);
   try {
     const phone     = wit.withdrawalPhone || wit.userPhone || '';
     const netAmount = wit.netAmount || wit.amount;
@@ -3169,7 +3183,7 @@ async function autoReleaseWithdrawal(witDoc) {
       autoTries: FieldValue.increment(1), lastAutoError: e.message,
       lastAutoAt: FieldValue.serverTimestamp() }); } catch (_) {}
     return false;
-  } finally { _autoReleasing.delete(id); }
+  } finally { _withdrawInFlight.delete(id); }
 }
 
 let _sweepingWithdrawals = false;
@@ -3197,6 +3211,11 @@ app.post('/admin/withdraw/process', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { withdrawalId } = req.body;
   if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+  // Same-request race guard: two admins (or an admin racing the auto-release
+  // sweep / a reject) hitting this at once must never both reach MarzPay.
+  if (_withdrawInFlight.has(withdrawalId))
+    return res.status(409).json({ status: 'error', message: 'Another admin is already processing this withdrawal right now — check the list in a moment.' });
+  _withdrawInFlight.add(withdrawalId);
   try {
     const witSnap = await db.collection('withdrawals').doc(withdrawalId).get();
     if (!witSnap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
@@ -3248,7 +3267,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const friendly = /abort|timeout|fetch failed|network|ENOTFOUND|ECONN|Unexpected token|JSON/i.test(e.message || '')
       ? PROVIDER_BUSY_MSG : (e.message || 'Could not process withdrawal');
     return res.status(500).json({ status: 'error', message: friendly });
-  }
+  } finally { _withdrawInFlight.delete(withdrawalId); }
 });
 // ═══════════════════════════════════════════
 // ACCOUNT — own investments / withdrawals / transactions
