@@ -67,10 +67,22 @@ async function ensureIndexes() {
     ['captchas',        { expires: 1 }],
     ['products',        { key: 1 }],
   ];
-  const results = await Promise.allSettled(
-    specs.map(([col, keys]) => _mdb.collection(col).createIndex(keys))
-  );
-  const failed = results.filter(r => r.status === 'rejected').length;
+  // ONE AT A TIME — M0's free tier has very little real concurrency headroom.
+  // Firing all of these at once (Promise.all/allSettled) queued ~22 simultaneous
+  // operations against the same small connection pool at the exact moment the
+  // rest of server startup (recount migration, rate patches, crons) was ALSO
+  // opening connections — that combination exhausted the pool and produced
+  // cascading "Timed out while checking out a connection" errors across
+  // completely unrelated requests (login, registration, reconcilers) for the
+  // first several seconds after every single deploy. Sequential keeps peak
+  // concurrent demand from this function at 1, at the cost of a few more
+  // seconds before every index is confirmed built — a trade very worth making
+  // since nothing blocks on this finishing (it's fire-and-forget from connectMongo).
+  let failed = 0;
+  for (const [col, keys] of specs) {
+    try { await _mdb.collection(col).createIndex(keys); }
+    catch (e) { failed++; console.warn(`Index build failed (${col} ${JSON.stringify(keys)}):`, e.message); }
+  }
   console.log(`MongoDB indexes ensured (${specs.length - failed}/${specs.length})`);
 }
 
