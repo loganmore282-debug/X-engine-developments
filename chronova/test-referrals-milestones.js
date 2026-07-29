@@ -246,6 +246,7 @@ async function realDeposit(token, amount, phone) {
 
   console.log('\n── 10. Task Center: milestone reached vs claimed are genuinely different things');
   // Build 5 fresh direct referrals of alice, each becoming "active" (invested).
+  const l1DepositTotalBefore = (await call('GET', '/team/stats', { token: A })).body?.l1DepositTotal || 0;
   const memberTokens = [];
   for (let i = 1; i <= 5; i++) {
     const uid = `uid:m${i}-uid`;
@@ -281,6 +282,31 @@ async function realDeposit(token, amount, phone) {
   r = await call('GET', '/team/stats', { token: A });
   const m5b = (r.body?.milestones || []).find(m => m.target === 5);
   check('/team/stats now reflects the claim (claimed:true)', m5b?.claimed === true, m5b);
+
+  console.log('\n── 11b. Task Center: LEVEL 1 team-DEPOSIT milestones are a separate ladder, also server-verified');
+  // alice's 5 L1 members were each admin-credited 30000 above -> l1DepositTotal
+  // must have grown by exactly 150,000 from whatever it was before (alice's L1
+  // already includes bob/eve from earlier sections, so it isn't starting from 0).
+  r = await call('GET', '/team/stats', { token: A });
+  check('l1DepositTotal grew by exactly the 5 x 30000 admin credits', r.body?.l1DepositTotal === l1DepositTotalBefore + 150000, { before: l1DepositTotalBefore, after: r.body?.l1DepositTotal });
+  const d100k = (r.body?.milestones || []).find(m => m.type === 'deposit' && m.target === 100000);
+  check('100,000 deposit-tier shows achieved but NOT claimed', d100k?.achieved === true && d100k?.claimed === false, d100k);
+  const d250k = (r.body?.milestones || []).find(m => m.type === 'deposit' && m.target === 250000);
+  check('250,000 deposit-tier NOT achieved yet', d250k?.achieved === false, d250k);
+  r = await call('POST', '/team/milestone/claim', { token: A, body: { target: 250000, type: 'deposit' } });
+  check('claiming an unreached deposit tier is rejected', r.body?.status !== 'success', r.body);
+  r = await call('POST', '/team/milestone/claim', { token: A, body: { target: 100000 } }); // no type -> COUNT table, no such tier
+  check('the same numeric target without type:"deposit" does not accidentally match the count ladder', r.body?.status !== 'success', r.body);
+  const aliceBalPreDepClaim = userDoc('alice-uid').walletBalance;
+  r = await call('POST', '/team/milestone/claim', { token: A, body: { target: 100000, type: 'deposit' } });
+  check('alice claims the 100,000 deposit-tier for exactly 1000', r.body?.status === 'success' && r.body?.amount === 1000, r.body);
+  check('wallet credited by exactly the deposit-tier reward', userDoc('alice-uid').walletBalance === aliceBalPreDepClaim + 1000, userDoc('alice-uid').walletBalance - aliceBalPreDepClaim);
+  r = await call('POST', '/team/milestone/claim', { token: A, body: { target: 100000, type: 'deposit' } });
+  check('claiming the SAME deposit-tier twice is rejected (no double-pay)', r.body?.status !== 'success', r.body);
+  check('wallet did not move on the double-claim attempt', userDoc('alice-uid').walletBalance === aliceBalPreDepClaim + 1000, userDoc('alice-uid').walletBalance);
+  r = await call('GET', '/team/stats', { token: A });
+  const m5c = (r.body?.milestones || []).find(m => m.type === 'count' && m.target === 5);
+  check('the earlier COUNT-tier claim is untouched by the deposit-tier claims (separate claim flags)', m5c?.claimed === true, m5c);
 
   console.log('\n── 12. Balance-tab capstone: the ledger recount matches the live counters EXACTLY');
   // Everything above moved money through commissions, cashback, milestones and

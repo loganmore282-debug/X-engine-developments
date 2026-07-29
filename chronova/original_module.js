@@ -683,6 +683,14 @@ const TEAM_MILESTONES = [
   { target: 200, reward:  200000 },
   { target: 500, reward:  400000 },
 ];
+// Same ladder pattern, on level 1 team deposit TOTALS instead of a count.
+const TEAM_DEPOSIT_MILESTONES = [
+  { target:  100000, reward:  1000 },
+  { target:  250000, reward:  2500 },
+  { target:  500000, reward:  5000 },
+  { target: 1000000, reward: 10000 },
+  { target: 2000000, reward: 20000 },
+];
 async function loadTeam() {
   const [r, s] = await Promise.all([api('/team/members'), api('/team/stats')]);
   if (r.status === 'success') _members = r.members || [];
@@ -1860,24 +1868,36 @@ function renderTaskCenterPage(loading) {
     return;
   }
   const ts = _teamStats;
-  const rows = TEAM_MILESTONES.map(m => {
-    const s = ts?.milestones?.find(x => x.target === m.target);
+  const row = (m, type) => {
+    const s = ts?.milestones?.find(x => x.target === m.target && x.type === type);
     const current  = Math.min(s?.current ?? 0, m.target);
     const claimed  = !!s?.claimed;
     const achieved = !!s?.achieved;
     const pillClass = claimed ? 'is-done' : (achieved ? 'is-ready' : '');
     const pillLabel = claimed ? 'Received' : (achieved ? 'Claim' : 'In Progress');
+    const desc = type === 'deposit'
+      ? `Level 1 team deposits <b>${ugx(m.target)}</b> to get: <em>${ugx(m.reward)}</em>`
+      : `Invite <b>${m.target}</b> Level 1 investors to get: <em>${ugx(m.reward)}</em>`;
+    // Money targets are too long to repeat in full as "X/Y" without wrapping,
+    // so the Progress column shows a percentage there instead of the count
+    // ladder's "current/target" — the Current/Target columns still carry the
+    // full UGX figures.
+    const curTxt = type === 'deposit' ? ugx(current) : current;
+    const tgtTxt = type === 'deposit' ? ugx(m.target) : m.target;
+    const progTxt = type === 'deposit' ? `${Math.min(100, Math.floor(current / m.target * 100))}%` : `${current}/${m.target}`;
     return `
       <div class="tk-row">
-        <div class="tk-desc">Invite <b>${m.target}</b> Level 1 investors to get: <em>${ugx(m.reward)}</em></div>
+        <div class="tk-desc">${desc}</div>
         <div class="tk-stats">
-          <div><b>${current}</b><span>Current</span></div>
-          <div><b>${m.target}</b><span>Target</span></div>
-          <div><b>${current}/${m.target}</b><span>Progress</span></div>
+          <div><b>${curTxt}</b><span>Current</span></div>
+          <div><b>${tgtTxt}</b><span>Target</span></div>
+          <div><b>${progTxt}</b><span>Progress</span></div>
         </div>
-        <button class="tk-pill ${pillClass}" data-target="${m.target}"${(claimed || !achieved) ? ' disabled' : ''}>${pillLabel}</button>
+        <button class="tk-pill ${pillClass}" data-target="${m.target}" data-type="${type}"${(claimed || !achieved) ? ' disabled' : ''}>${pillLabel}</button>
       </div>`;
-  }).join('');
+  };
+  const rows = TEAM_MILESTONES.map(m => row(m, 'count')).join('')
+    + TEAM_DEPOSIT_MILESTONES.map(m => row(m, 'deposit')).join('');
 
   openModal(`
     <div class="modal-head"><h2>Task Center</h2><button class="modal-close">${ICN.close}</button></div>
@@ -1889,8 +1909,9 @@ function renderTaskCenterPage(loading) {
     b.addEventListener('click', async () => {
       if (b.disabled) return;
       const target = Number(b.dataset.target);
+      const type = b.dataset.type;
       const restore = setBusy(b);
-      const r = await api('/team/milestone/claim', { method: 'POST', body: { target } });
+      const r = await api('/team/milestone/claim', { method: 'POST', body: { target, type } });
       if (r.status !== 'success') { restore(); return toast(r.message || 'Could not claim'); }
       await loadTeam();
       renderTeam();

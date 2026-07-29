@@ -216,6 +216,16 @@ const TEAM_MILESTONES = [
   { target: 200, reward:  200000 },
   { target: 500, reward:  400000 },
 ];
+// Same Task Center, a second ladder — this one on the total money a user's
+// LEVEL 1 referrals have deposited (never L2/L3), same manual-claim pattern.
+// `target` is an amount, not a count.
+const TEAM_DEPOSIT_MILESTONES = [
+  { target:  100000, reward:  1000 },
+  { target:  250000, reward:  2500 },
+  { target:  500000, reward:  5000 },
+  { target: 1000000, reward: 10000 },
+  { target: 2000000, reward: 20000 },
+];
 
 // ── UUID v4 generator ──
 function uuidv4() {
@@ -859,19 +869,33 @@ async function activeL1Count(userId) {
   snap.forEach(d => { if ((d.data().totalInvested || 0) > 0) l1Total += 1; });
   return l1Total;
 }
+// Sum of totalDeposited across this user's LEVEL 1 referrals only — recomputed
+// live on every claim/stats read, same as activeL1Count, so this can never be
+// forged from the client either.
+async function l1TeamDeposits(userId) {
+  const snap = await db.collection('users').where('referredBy', '==', userId).get();
+  let total = 0;
+  snap.forEach(d => { total += Number(d.data().totalDeposited || 0); });
+  return total;
+}
 app.post('/team/milestone/claim', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const target = Number(req.body.target);
-  const m = TEAM_MILESTONES.find(x => x.target === target);
+  const isDeposit = req.body.type === 'deposit';
+  const table = isDeposit ? TEAM_DEPOSIT_MILESTONES : TEAM_MILESTONES;
+  const m = table.find(x => x.target === target);
   if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
   try {
-    const l1Total = await activeL1Count(userId);
-    if (l1Total < m.target)
-      return res.status(400).json({ status: 'error', message: `You need ${m.target} active referrals to claim this — you have ${l1Total}.` });
-    const claimFlag = 'milestoneClaimed_' + m.target;
+    const progress = isDeposit ? await l1TeamDeposits(userId) : await activeL1Count(userId);
+    if (progress < m.target) {
+      const need = isDeposit ? fmtUGX(m.target) : m.target;
+      const have = isDeposit ? fmtUGX(progress) : progress;
+      return res.status(400).json({ status: 'error', message: `You need ${need} to claim this — you have ${have}.` });
+    }
+    const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
     let done = false;
-    await withLock('milestoneclaim:' + userId + ':' + m.target, async () => {
+    await withLock('milestoneclaim:' + userId + ':' + claimFlag, async () => {
       await db.runTransaction(async t => {
         const uRef  = db.collection('users').doc(userId);
         const fresh = await t.get(uRef);
@@ -884,7 +908,7 @@ app.post('/team/milestone/claim', async (req, res) => {
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'team_reward',
-          description: `Task Center — ${m.target} active referrals`,
+          description: isDeposit ? `Task Center — level 1 team deposits ${fmtUGX(m.target)}` : `Task Center — ${m.target} active referrals`,
           amount: m.reward, milestone: m.target, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -1620,20 +1644,30 @@ app.get('/team/stats', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const l1ActiveCount = await activeL1Count(userId);
+    const l1DepositTotal = await l1TeamDeposits(userId);
     const uSnap = await db.collection('users').doc(userId).get();
     const u = uSnap.exists ? uSnap.data() : {};
-    const milestones = TEAM_MILESTONES.map(m => ({
-      target: m.target, reward: m.reward,
-      current: l1ActiveCount,
-      achieved: l1ActiveCount >= m.target,
-      claimed: !!u['milestoneClaimed_' + m.target],
-    }));
+    const milestones = [
+      ...TEAM_MILESTONES.map(m => ({
+        type: 'count', target: m.target, reward: m.reward,
+        current: l1ActiveCount,
+        achieved: l1ActiveCount >= m.target,
+        claimed: !!u['milestoneClaimed_' + m.target],
+      })),
+      ...TEAM_DEPOSIT_MILESTONES.map(m => ({
+        type: 'deposit', target: m.target, reward: m.reward,
+        current: l1DepositTotal,
+        achieved: l1DepositTotal >= m.target,
+        claimed: !!u['depositMilestoneClaimed_' + m.target],
+      })),
+    ];
     return res.json({
-      status: 'success', l1ActiveCount, l1DepositTotal: l1ActiveCount, milestones,
+      status: 'success', l1ActiveCount, l1DepositTotal, milestones,
       counts:  { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
       earned:  { l1: u.commissionL1Earned || 0, l2: u.commissionL2Earned || 0, l3: u.commissionL3Earned || 0,
                  commissions: u.commissionEarned || 0,
-                 teamRewards: TEAM_MILESTONES.reduce((s, m) => s + (u['milestoneClaimed_' + m.target] ? m.reward : 0), 0) },
+                 teamRewards: TEAM_MILESTONES.reduce((s, m) => s + (u['milestoneClaimed_' + m.target] ? m.reward : 0), 0)
+                            + TEAM_DEPOSIT_MILESTONES.reduce((s, m) => s + (u['depositMilestoneClaimed_' + m.target] ? m.reward : 0), 0) },
     });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });

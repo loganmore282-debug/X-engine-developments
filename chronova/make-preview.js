@@ -108,18 +108,23 @@ _members = window.__PV.members;
 // 12 active referrals: the 5-target is claimed, the 10-target is reached but
 // not yet claimed (shows an active Claim button), everything past that is locked.
 window.__PV.teamStats = {
-  l1ActiveCount: 12, l1DepositTotal: 12,
+  l1ActiveCount: 12, l1DepositTotal: 300000,
   milestones: [
-    { target: 5,   reward: 10000,   current: 12, achieved: true,  claimed: true  },
-    { target: 10,  reward: 25000,   current: 12, achieved: true,  claimed: false },
-    { target: 20,  reward: 50000,   current: 12, achieved: false, claimed: false },
-    { target: 50,  reward: 120000,  current: 12, achieved: false, claimed: false },
-    { target: 100, reward: 250000,  current: 12, achieved: false, claimed: false },
-    { target: 200, reward: 600000,  current: 12, achieved: false, claimed: false },
-    { target: 500, reward: 2000000, current: 12, achieved: false, claimed: false },
+    { type: 'count', target: 5,   reward: 5000,   current: 12,     achieved: true,  claimed: true  },
+    { type: 'count', target: 10,  reward: 10000,  current: 12,     achieved: true,  claimed: false },
+    { type: 'count', target: 20,  reward: 20000,  current: 12,     achieved: false, claimed: false },
+    { type: 'count', target: 50,  reward: 50000,  current: 12,     achieved: false, claimed: false },
+    { type: 'count', target: 100, reward: 100000, current: 12,     achieved: false, claimed: false },
+    { type: 'count', target: 200, reward: 200000, current: 12,     achieved: false, claimed: false },
+    { type: 'count', target: 500, reward: 400000, current: 12,     achieved: false, claimed: false },
+    { type: 'deposit', target: 100000,  reward: 1000,  current: 300000, achieved: true,  claimed: true  },
+    { type: 'deposit', target: 250000,  reward: 2500,  current: 300000, achieved: true,  claimed: false },
+    { type: 'deposit', target: 500000,  reward: 5000,  current: 300000, achieved: false, claimed: false },
+    { type: 'deposit', target: 1000000, reward: 10000, current: 300000, achieved: false, claimed: false },
+    { type: 'deposit', target: 2000000, reward: 20000, current: 300000, achieved: false, claimed: false },
   ],
   counts: { l1: 12, l2: 3, l3: 1 },
-  earned: { l1: 45000, l2: 6000, l3: 500, commissions: 51500, teamRewards: 10000 },
+  earned: { l1: 45000, l2: 6000, l3: 500, commissions: 51500, teamRewards: 6000 },
 };
 window.__render = (tab) => {
   _booting = false;

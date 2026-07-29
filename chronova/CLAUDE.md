@@ -246,6 +246,33 @@ Render env vars. Never put secrets or the model identifier in commits/PRs/code.
   The ticker hides itself entirely when the feed is empty rather than showing a
   half-empty bar.
 
+## Task Center: two milestone ladders, rendered as ONE undistinguished list
+
+`TEAM_MILESTONES` (count of active L1 referrals) and `TEAM_DEPOSIT_MILESTONES`
+(total money L1 referrals have deposited — `l1TeamDeposits()`, sums `totalDeposited`
+across everyone with `referredBy == userId`, LEVEL 1 ONLY, never L2/L3) exist
+side by side in both server.js and original_module.js. `/team/stats` returns
+them concatenated into one `milestones` array (each item tagged `type: 'count'`
+or `'deposit'`); `renderTaskCenterPage()` renders the count ladder then the
+deposit ladder back to back — same card style, same Claim/In Progress/Received
+button, **no heading, label, or divider between them** — this is intentional,
+the owner explicitly asked for a continuation, not two visibly separate
+sections. Don't add one back in.
+- Claiming (`/team/milestone/claim`) takes `{ target, type }` — `type` omitted
+  or anything other than `'deposit'` means the count ladder. Both progress
+  counts are recomputed live server-side on every claim (never trusted from
+  the client), reward amounts come only from the server's own tables, and each
+  ladder has its own claim-flag namespace (`milestoneClaimed_<target>` vs
+  `depositMilestoneClaimed_<target>`) so the two can never collide or
+  double-pay each other even where target numbers happen to differ in scale.
+- Current rewards: count ladder 5→5,000 / 10→10,000 / 20→20,000 / 50→50,000 /
+  100→100,000 / 200→200,000 / 500→400,000. Deposit ladder 100,000→1,000 /
+  250,000→2,500 / 500,000→5,000 / 1,000,000→10,000 / 2,000,000→20,000.
+- Test coverage: test-referrals-milestones.js section 11b claims a deposit
+  tier end to end (achieved-not-claimed, reject-unreached, reject-double-claim,
+  cross-ladder isolation) the same way section 11 already covered the count
+  ladder — extend both together if either ladder's rules ever change.
+
 ## Known constraints
 
 - No outbound internet in the sandbox — Firebase's `gstatic.com` module import fails
