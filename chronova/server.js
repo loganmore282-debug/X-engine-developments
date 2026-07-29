@@ -4,6 +4,7 @@ const cors        = require('cors');
 const crypto      = require('crypto');
 const helmet      = require('helmet');
 const compression = require('compression');
+const sharp       = require('sharp');
 const rateLimit   = require('express-rate-limit');
 if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
@@ -4156,6 +4157,49 @@ app.post('/admin/products/list', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { return res.json({ status: 'success', products: await fetchProducts(true) }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Re-encodes a base64 image data-URI to a smaller JPEG (resize + requality).
+// Used to shrink product images already sitting in the database at whatever
+// size they were first uploaded — /products ships every active product's
+// image on every single app boot, so this is the single biggest lever on how
+// long "products" specifically takes to load compared to every other tab.
+async function recompressImage(dataUri, maxDim, quality) {
+  const m = String(dataUri || '').match(/^data:image\/[a-zA-Z0-9+.-]+;base64,(.+)$/);
+  if (!m) return null;
+  const buf = Buffer.from(m[1], 'base64');
+  const out = await sharp(buf).rotate()
+    .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality, mozjpeg: true })
+    .toBuffer();
+  return 'data:image/jpeg;base64,' + out.toString('base64');
+}
+// One-click, repeatable pass over every product's stored image — shrinks
+// anything still at its original (larger) uploaded size. Idempotent: an
+// image that's already small, or that fails to shrink further, is left
+// alone, so running this again later (e.g. after a new large upload) is
+// always safe and only touches what's actually still oversized.
+app.post('/admin/products/recompress-images', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const maxDim   = Math.max(100, Math.round(parseFloat(req.body.maxDim) || 640));
+  const quality  = Math.min(95, Math.max(30, Math.round(parseFloat(req.body.quality) || 70)));
+  try {
+    const snap = await db.collection('products').get();
+    let processed = 0, skipped = 0, bytesBefore = 0, bytesAfter = 0;
+    for (const doc of snap.docs) {
+      const p = doc.data();
+      if (!p.image || !p.image.startsWith('data:image/')) { skipped++; continue; }
+      const before = p.image.length;
+      if (before < 60000) { skipped++; continue; } // already small — not worth touching
+      try {
+        const smaller = await recompressImage(p.image, maxDim, quality);
+        if (!smaller || smaller.length >= before) { skipped++; continue; }
+        await doc.ref.update({ image: smaller });
+        processed++; bytesBefore += before; bytesAfter += smaller.length;
+      } catch (e) { console.warn('recompress product image failed:', doc.id, e.message); skipped++; }
+    }
+    logAdminAction(req, 'products_images_recompressed', { processed, skipped, bytesBefore, bytesAfter });
+    return res.json({ status: 'success', processed, skipped, bytesBefore, bytesAfter });
+  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/products/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

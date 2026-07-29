@@ -820,6 +820,7 @@ async function renderProducts(){
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products (${list.length})</h2>
+      <button class="btn sm ghost" id="shrinkImgs" title="Re-encode every product's stored image smaller — fixes anything uploaded before the size limit was tightened">Shrink images</button>
       <button class="btn sm ghost" id="clearProd">Clear all</button>
       <button class="btn sm" id="newProd">+ New product</button></div>
     <div class="prod-grid">${list.length?list.map(p=>`
@@ -839,6 +840,16 @@ async function renderProducts(){
     const d=await api('/admin/products/clear');
     toast(d.status==='success'?`Removed ${d.removed} product${d.removed===1?'':'s'}`:(d.message||'Failed'),d.status==='success'?'ok':'err');
     renderProducts();
+  });
+  $('shrinkImgs').addEventListener('click',async()=>{
+    const b=$('shrinkImgs'); b.disabled=true; b.textContent='Shrinking…';
+    const d=await api('/admin/products/recompress-images');
+    b.disabled=false; b.textContent='Shrink images';
+    if(d.status==='success'){
+      const savedKb = Math.round((d.bytesBefore-d.bytesAfter)/1024);
+      toast(d.processed>0?`Shrunk ${d.processed} image(s) — saved ~${savedKb}KB`:'Nothing to shrink — every image is already small','ok');
+      if(d.processed>0) renderProducts();
+    } else toast(d.message||'Failed','err');
   });
   document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editProduct(list.find(p=>p.id===b.dataset.edit))));
   document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Delete this product?'))return; const d=await api('/admin/products/delete',{id:b.dataset.del}); toast(d.status==='success'?'Deleted':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderProducts(); }));
@@ -878,7 +889,11 @@ function editProduct(p, order){
   const setPrev = (src)=>{ $('pImgPrev').innerHTML = src?`<img src="${esc(src)}" alt="">`:'<span class="muted">No image</span>'; $('pImgClear').style.display = src?'':'none'; };
   $('pFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
-    try{ imgData = await fileToDataUrl(f); $('pImage').value=''; setPrev(imgData); toast('Image ready — tap Save product','ok'); }
+    // Smaller than the old default (900/0.82) — /products ships every active
+    // product's image on every app boot, so this is downscaled specifically
+    // to keep that response light. Still plenty sharp for the 96px list
+    // thumbnail and the purchase-confirm sheet's art.
+    try{ imgData = await fileToDataUrl(f,640,0.7); $('pImage').value=''; setPrev(imgData); toast('Image ready — tap Save product','ok'); }
     catch(err){ toast(err.message||'Could not read image','err'); }
   });
   $('pImgClear').addEventListener('click', ()=>{ imgData=''; $('pImage').value=''; setPrev(''); });

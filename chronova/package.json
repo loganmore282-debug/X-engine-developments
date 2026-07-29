@@ -14,7 +14,8 @@
     "express-rate-limit": "^7.4.0",
     "firebase-admin": "^12.0.0",
     "helmet": "^7.1.0",
-    "mongodb": "^6.3.0"
+    "mongodb": "^6.3.0",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "javascript-obfuscator": "^5.5.0",

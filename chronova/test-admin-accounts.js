@@ -231,6 +231,30 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/deposits/list', { body: {} });
   check('an unauthenticated call is rejected', r.code === 401, r.body);
 
+  console.log('\n── 11. "Shrink images" actually re-encodes stored product images smaller — the real lever on why Products loads slower than every other tab');
+  const sharp = require('sharp');
+  // Random noise compresses realistically (unlike a flat color), so this is a
+  // meaningful stand-in for a real uploaded photo, not a degenerate best-case.
+  const noiseBuf = Buffer.alloc(900 * 900 * 3);
+  for (let i = 0; i < noiseBuf.length; i++) noiseBuf[i] = Math.floor(Math.random() * 256);
+  const bigJpeg = await sharp(noiseBuf, { raw: { width: 900, height: 900, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
+  const bigDataUri = 'data:image/jpeg;base64,' + bigJpeg.toString('base64');
+  mockdb.__store.get('products') || mockdb.__store.set('products', new Map());
+  mockdb.__store.get('products').set('prod-big', { key: 'big', label: 'Big Photo Watch', price: 50000, cycle: 120, active: true, image: bigDataUri });
+  mockdb.__store.get('products').set('prod-small', { key: 'small', label: 'Already Small', price: 30000, cycle: 120, active: true, image: 'data:image/jpeg;base64,' + 'A'.repeat(500) });
+  r = await call('POST', '/admin/products/recompress-images', { token: bobToken3, body: {} });
+  check('staff (non-owner) cannot run this — it rewrites live product data', r.code === 401, r.body);
+  r = await call('POST', '/admin/products/recompress-images', { token: ownerToken, body: {} });
+  check('owner call succeeds', r.body?.status === 'success', r.body);
+  check('the big image was processed', r.body?.processed >= 1, r.body);
+  check('an already-small image was skipped, not touched', r.body?.skipped >= 1, r.body);
+  check('bytesAfter is meaningfully smaller than bytesBefore', r.body?.bytesAfter < r.body?.bytesBefore * 0.5, { before: r.body?.bytesBefore, after: r.body?.bytesAfter });
+  const bigAfter = mockdb.__store.get('products').get('prod-big');
+  check('the stored image on the actual product doc shrank', bigAfter.image.length < bigDataUri.length * 0.5, { before: bigDataUri.length, after: bigAfter.image.length });
+  check('the shrunk image is still a valid, loadable data URI', /^data:image\/jpeg;base64,/.test(bigAfter.image), bigAfter.image.slice(0, 30));
+  const smallDoc = mockdb.__store.get('products').get('prod-small');
+  check('the already-small image was left byte-for-byte untouched', smallDoc.image === 'data:image/jpeg;base64,' + 'A'.repeat(500), smallDoc.image.length);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
