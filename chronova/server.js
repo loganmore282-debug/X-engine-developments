@@ -1115,7 +1115,15 @@ async function getProductByKeyOrId(idOrKey) {
 app.get('/products', async (_req, res) => {
   try {
     res.json({ status: 'success', products: await fetchProducts(false) });
-  } catch (e) { res.json({ status: 'success', products: [] }); }
+  } catch (e) {
+    // NEVER mask a real failure (a DB hiccup, a dropped connection) as a
+    // genuinely empty catalogue — the two look identical to the client
+    // otherwise ("No products yet") when this one is actually "couldn't
+    // check right now". A distinct error lets the app retry and show that
+    // distinction instead of implying the admin published nothing.
+    console.error('Products fetch error:', e.message);
+    res.status(503).json({ status: 'error', message: 'Could not load products right now — try again in a moment.' });
+  }
 });
 
 // ── USERNAMES ──

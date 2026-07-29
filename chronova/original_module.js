@@ -673,10 +673,12 @@ async function loadAccount() {
   if (accR.status === 'success') _account = accR.account;
   if (invR.status === 'success') _investments = invR.investments || [];
 }
+let _productsLoadFailed = false;
 async function loadProducts() {
   if (_products.length) return;
   const r = await api('/products');
-  if (r.status === 'success') _products = r.products || [];
+  if (r.status === 'success') { _products = r.products || []; _productsLoadFailed = false; }
+  else _productsLoadFailed = true;
 }
 let _teamStats = null;
 // Client-side copy of the milestone ladder so the Task Center renders instantly
@@ -1446,10 +1448,14 @@ function renderProducts() {
     </div>`;
 
   if (!_products.length) {
+    // A failed fetch (connection hiccup) and a genuinely empty catalogue look
+    // identical unless we say otherwise — showing "No products yet" for a
+    // load FAILURE reads as "the admin published nothing", when the truth is
+    // just "couldn't reach the server that time".
     el.innerHTML = shortcut + `<div class="shop-empty">
       <span class="shop-empty-ic">${MENU_ICONS.records}</span>
-      <b>No products yet</b>
-      <span>The shop is empty. New products appear here as soon as they are published.</span>
+      <b>${_productsLoadFailed ? 'Could not load products' : 'No products yet'}</b>
+      <span>${_productsLoadFailed ? 'Check your connection — retrying automatically.' : 'The shop is empty. New products appear here as soon as they are published.'}</span>
     </div>`;
     el.querySelector('#pdMine').addEventListener('click', openHoldingsModal);
     el.querySelector('#pdCumulative').addEventListener('click', () => openRecordsPage('income'));
