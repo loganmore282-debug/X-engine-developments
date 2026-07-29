@@ -4032,11 +4032,37 @@ app.post('/admin/transactions/list', async (req, res) => {
     return res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
+// EVERY deposit attempt (manual recipient-number orders AND gateway deposits
+// from MarzPay/ObPay/ZengaPay), any status — pending, processing, successful
+// ('matched'), failed, expired, rejected. Previously the Deposits tab only
+// ever showed the live manualPending queue, so a failed or still-processing
+// gateway deposit was invisible in the admin panel entirely.
 app.post('/admin/deposits/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { limit: lim = 200 } = req.body;
   try {
-    const snap = await db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(200).get();
-    return res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    // Page for display is capped; STATUS COUNTS are tallied across every
+    // deposit (a light status-only scan) so the tab totals never freeze at
+    // the page size — same pattern as /admin/withdrawals/list.
+    const [snap, allSnap] = await Promise.all([
+      db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get(),
+      db.collection('pendingDeposits').select('status').get()
+    ]);
+    const counts = {};
+    allSnap.forEach(d => { const s = d.data().status || 'unknown'; counts[s] = (counts[s] || 0) + 1; });
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const ids = [...new Set(rows.map(r => r.userId).filter(Boolean))];
+    const names = {};
+    await Promise.all(ids.map(async id => {
+      try { const u = await db.collection('users').doc(id).get(); if (u.exists) names[id] = { name: u.data().name || u.data().username || '', phone: u.data().phone || '' }; }
+      catch (_) {}
+    }));
+    rows.forEach(r => {
+      const n = names[r.userId] || {};
+      r.userName = n.name || '';
+      r.userPhone = n.phone || r.phone || r.senderPhone || '';
+    });
+    return res.json({ status: 'success', deposits: rows, counts, total: allSnap.size });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdrawals/list', async (req, res) => {

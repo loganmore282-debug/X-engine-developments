@@ -208,6 +208,29 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/badges', { body: {} });
   check('an unauthenticated call is rejected', r.code === 401, r.body);
 
+  console.log('\n── 10. Deposits tab now shows EVERY deposit (manual + gateway), any status — not just the live manual queue');
+  mockdb.__store.get('users') || mockdb.__store.set('users', new Map());
+  mockdb.__store.get('users').set('dep-tester-uid', { name: 'Dep Tester', username: 'deptester', phone: '0771000099', registrationDone: true });
+  mockdb.__store.get('pendingDeposits') || mockdb.__store.set('pendingDeposits', new Map());
+  const deps = mockdb.__store.get('pendingDeposits');
+  deps.set('dep-manual-1', { userId: 'dep-tester-uid', provider: 'manual', manual: true, manualPending: true, status: 'claimed', amount: 10000, recipientNumber: '0700111222', recipientName: 'Shop A', createdAt: new Date() });
+  deps.set('dep-gw-processing', { userId: 'dep-tester-uid', provider: 'marzpay', status: 'processing', amount: 20000, marzReference: 'ref-abc', createdAt: new Date() });
+  deps.set('dep-gw-success', { userId: 'dep-tester-uid', provider: 'marzpay', status: 'matched', amount: 30000, creditedAmount: 30000, createdAt: new Date() });
+  deps.set('dep-gw-failed', { userId: 'dep-tester-uid', provider: 'obpay', status: 'failed', amount: 15000, createdAt: new Date() });
+  r = await call('POST', '/admin/deposits/list', { token: ownerToken, body: { limit: 300 } });
+  check('the list call succeeds', r.body?.status === 'success', r.body);
+  const depIds = (r.body?.deposits || []).map(d => d.id);
+  check('a PROCESSING gateway deposit is visible (used to be invisible — only manualPending showed before)', depIds.includes('dep-gw-processing'), depIds);
+  check('a SUCCESSFUL (matched) gateway deposit is visible', depIds.includes('dep-gw-success'), depIds);
+  check('a FAILED gateway deposit is visible', depIds.includes('dep-gw-failed'), depIds);
+  check('the manual order is still there too', depIds.includes('dep-manual-1'), depIds);
+  check('status counts are tallied across every status, not just the manual queue',
+    r.body?.counts?.processing >= 1 && r.body?.counts?.matched >= 1 && r.body?.counts?.failed >= 1 && r.body?.counts?.claimed >= 1, r.body?.counts);
+  const gwRow = (r.body?.deposits || []).find(d => d.id === 'dep-gw-success');
+  check('the depositor\'s name/phone are resolved onto the row', gwRow?.userName === 'Dep Tester' && gwRow?.userPhone === '0771000099', gwRow);
+  r = await call('POST', '/admin/deposits/list', { body: {} });
+  check('an unauthenticated call is rejected', r.code === 401, r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

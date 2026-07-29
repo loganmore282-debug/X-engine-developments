@@ -173,7 +173,6 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
         <button class="btn ghost sm" id="pushBtn" title="Enable push notifications">Notify</button>
         <button class="btn ghost sm hidden" id="installBtn">Install</button>
-        <button class="btn ghost sm" id="syncBtn" title="Re-check every in-flight deposit and withdrawal against MarzPay right now">Sync MarzPay</button>
         <button class="btn ghost sm" id="refreshBtn">Refresh</button>
         <button class="btn ghost sm" id="logoutBtn">Log out</button>
       </div>
@@ -413,16 +412,6 @@ try { setPushUIState(!!localStorage.getItem('chr_admin_push_token')); } catch(_)
   const n = payload.notification || {};
   toast((n.title ? n.title + ': ' : '') + (n.body || 'New activity'), 'ok');
 }); })();
-
-$('syncBtn').addEventListener('click', async ()=>{
-  const btn=$('syncBtn'); const t=btn.textContent; btn.disabled=true; btn.textContent='Syncing…';
-  const d = await api('/admin/payments/sync');
-  btn.disabled=false; btn.textContent=t;
-  if(d.status==='success'){
-    toast(d.settled>0 ? `Synced — settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced — nothing was waiting on MarzPay', 'ok');
-    if(['withdrawals','deposits','dashboard','transactions'].includes(_tab)) switchTab(_tab);
-  } else toast(d.message||'Sync failed','err');
-});
 
 // ── TABS ──
 const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','codes','transactions','referrals','settings','admins','auditlog']);
@@ -709,25 +698,55 @@ async function openUser(uid){
 }
 
 // ── DEPOSITS ──
+// Shared by the Deposits + Withdrawals tabs — both got their own "Sync
+// MarzPay" button that re-checks in-flight payments right now instead of
+// waiting for the background pollers, then repaints whichever tab called it.
+async function syncMarzPay(btn, afterFn){
+  const t=btn.textContent; btn.disabled=true; btn.textContent='Syncing…';
+  const d = await api('/admin/payments/sync');
+  btn.disabled=false; btn.textContent=t;
+  if(d.status==='success'){
+    toast(d.settled>0 ? `Synced — settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced — nothing was waiting on MarzPay', 'ok');
+    afterFn();
+  } else toast(d.message||'Sync failed','err');
+}
 function cpLeft(ms){ const s=Math.max(0,Math.floor((ms-Date.now())/1000)); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+const DEP_PROVIDER_LABEL = { manual: 'Manual', marzpay: 'MarzPay', obpay: 'ObPay', zengapay: 'ZengaPay' };
+let _deps=[], _depFilter='pending';
 async function renderDeposits(){
-  const r = await api('/admin/deposits/pending');
-  const orders = r.orders||[];
+  const r = await api('/admin/deposits/list', { limit: 300 });
+  _deps = r.deposits||[];
+  const counts = r.counts||{};
+  const grp = { pending: (counts.claimed||0)+(counts.awaiting_payment||0), processing: counts.processing||0,
+    matched: counts.matched||0, failed: (counts.failed||0)+(counts.expired||0)+(counts.rejected||0) };
+  const subs = [['pending','Pending'],['processing','Processing'],['matched','Successful'],['failed','Failed'],['all','All']];
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Deposit approvals (${orders.length})</h2>
+    <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
+      <button class="btn sm ghost" id="depSync">Sync MarzPay</button>
       <button class="btn sm ghost" id="depRefresh">Refresh</button></div>
-    <p class="muted" style="margin:-6px 0 12px">A user pays one of your recipient numbers, then you confirm the money landed and tap <b>Approve</b> to credit their wallet.</p>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Ref</th><th>User</th><th>Amount</th><th>Pays to</th><th>From</th><th>Left</th><th></th></tr></thead>
-    <tbody>${orders.length?orders.map(o=>`
-      <tr><td><span class="muted">${esc(o.reference||'')}</span></td>
-      <td>${esc(o.userName||'')}<br><span class="muted">${esc(o.userPhone||'')}</span></td>
-      <td><b>${ugx(o.amount)}</b></td>
-      <td>${esc(o.recipientNumber||'')}<br><span class="muted">${esc(o.recipientName||'')} ${esc(o.recipientNetwork||'')}</span></td>
-      <td>${esc(o.senderPhone||'—')}${o.txnId?`<br><span class="muted">txn ${esc(o.txnId)}</span>`:''}</td>
-      <td><span class="muted">${o.status==='claimed'?'claimed · ':''}${cpLeft(o.expiresAtMs||0)}</span></td>
-      <td style="white-space:nowrap"><button class="btn ok sm" data-appr="${esc(o.id)}">Approve</button> <button class="btn danger sm" data-drej="${esc(o.id)}">Reject</button></td></tr>`).join(''):'<tr><td colspan="7" class="empty">No pending deposit orders</td></tr>'}
-    </tbody></table></div>`;
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt — manual recipient-number orders and MarzPay/ObPay/ZengaPay gateway payments — whatever its status. Manual orders still need your <b>Approve</b> once the money has actually landed.</p>
+    <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${r.total??_deps.length})`:(grp[k]?` (${grp[k]})`:'')}</button>`).join('')}</div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
   $('depRefresh').addEventListener('click', renderDeposits);
+  $('depSync').addEventListener('click', ()=>syncMarzPay($('depSync'), renderDeposits));
+  document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); }));
+  drawDeps();
+}
+function drawDeps(){
+  const inGroup = { pending: ['claimed','awaiting_payment'], processing: ['processing'], matched: ['matched'], failed: ['failed','expired','rejected'] };
+  const list = _depFilter==='all' ? _deps : _deps.filter(d=>(inGroup[_depFilter]||[]).includes(d.status));
+  $('depRows').innerHTML = list.length?list.map(d=>{
+    const actionable = d.manual && d.manualPending;
+    const detail = d.manual
+      ? `${esc(d.recipientNumber||'')} ${esc(d.recipientName||'')}${d.senderPhone?` · from ${esc(d.senderPhone)}`:''}${d.txnId?` · txn ${esc(d.txnId)}`:''}`
+      : (d.reference ? `ref ${esc(d.reference)}` : '');
+    return `<tr><td>${fdate(d.createdAt)}</td>
+      <td>${esc(d.userName||'')}<br><span class="muted">${esc(d.userPhone||'')}</span></td>
+      <td><b>${ugx(d.creditedAmount||d.amount)}</b></td>
+      <td>${esc(DEP_PROVIDER_LABEL[d.provider]||d.provider||'—')}<br><span class="muted" style="font-size:11px">${detail}</span></td>
+      <td>${statusPill(d.status)}${d.status==='claimed'&&d.expiresAtMs?` <span class="muted">${cpLeft(d.expiresAtMs)}</span>`:''}</td>
+      <td style="white-space:nowrap">${actionable?`<button class="btn ok sm" data-appr="${esc(d.id)}">Approve</button> <button class="btn danger sm" data-drej="${esc(d.id)}">Reject</button>`:''}</td></tr>`;
+  }).join(''):'<tr><td colspan="6" class="empty">No deposits</td></tr>';
   document.querySelectorAll('[data-appr]').forEach(b=>b.addEventListener('click',async()=>{
     if(!confirm('Approve this deposit? Only after you have confirmed the money arrived on your number. This credits the user.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/approve',{orderId:b.dataset.appr});
@@ -760,11 +779,13 @@ async function renderWithdrawals(){
     <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Withdrawals processed</th><th>Amount paid</th></tr></thead>
     <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'—'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
-    <h2 class="sec">Withdrawals</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
+      <button class="btn sm ghost" id="witSync">Sync MarzPay</button></div>
     ${procChart}
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${r.total||_wits.length})`:(counts[k]?` (${counts[k]})`:'')}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody id="witRows"></tbody></table></div>`;
   document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; renderWithdrawals(); }));
+  $('witSync').addEventListener('click', ()=>syncMarzPay($('witSync'), renderWithdrawals));
   drawWits();
 }
 function drawWits(){

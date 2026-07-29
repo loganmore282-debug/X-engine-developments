@@ -73,15 +73,22 @@ function snap(cname, id, raw) {
 function query(cname, filters = [], order = null, lim = 0) {
   return {
     where(f, op, v) {
-      if (op !== '==') throw new Error('mockdb: only == supported');
-      return query(cname, [...filters, [f, v]], order, lim);
+      if (op !== '==' && op !== 'in') throw new Error('mockdb: only == and in supported');
+      return query(cname, [...filters, [f, op, v]], order, lim);
     },
     orderBy(f, dir) { return query(cname, filters, [f, dir || 'asc'], lim); },
     limit(n) { return query(cname, filters, order, n); },
     select() { return query(cname, filters, order, lim); }, // projection: no-op in mock
     async get() {
+      // '_id' isn't a field inside the stored data object here (the Map key IS
+      // the id) — real Mongo docs DO carry a genuine _id field (see db.js's
+      // set()), so this matches against the entry key to stay faithful to that.
       let rows = [...coll(cname).entries()]
-        .filter(([, d]) => filters.every(([f, v]) => d[f] === v || String(d[f]) === String(v)));
+        .filter(([id, d]) => filters.every(([f, op, v]) => {
+          const actual = f === '_id' ? id : d[f];
+          if (op === 'in') return Array.isArray(v) && v.some(x => actual === x || String(actual) === String(x));
+          return actual === v || String(actual) === String(v);
+        }));
       if (order) {
         const [f, dir] = order;
         const ms = x => x instanceof Date ? x.getTime() : (typeof x === 'number' ? x : new Date(x).getTime() || 0);
