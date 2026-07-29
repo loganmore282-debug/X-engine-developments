@@ -173,6 +173,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
         <button class="btn ghost sm" id="pushBtn" title="Enable push notifications">Notify</button>
         <button class="btn ghost sm hidden" id="installBtn">Install</button>
+        <button class="btn ghost sm" id="syncBtn" title="Re-check every in-flight deposit and withdrawal against MarzPay right now">Sync MarzPay</button>
         <button class="btn ghost sm" id="refreshBtn">Refresh</button>
         <button class="btn ghost sm" id="logoutBtn">Log out</button>
       </div>
@@ -412,6 +413,16 @@ try { setPushUIState(!!localStorage.getItem('chr_admin_push_token')); } catch(_)
   const n = payload.notification || {};
   toast((n.title ? n.title + ': ' : '') + (n.body || 'New activity'), 'ok');
 }); })();
+
+$('syncBtn').addEventListener('click', async ()=>{
+  const btn=$('syncBtn'); const t=btn.textContent; btn.disabled=true; btn.textContent='Syncing…';
+  const d = await api('/admin/payments/sync');
+  btn.disabled=false; btn.textContent=t;
+  if(d.status==='success'){
+    toast(d.settled>0 ? `Synced — settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced — nothing was waiting on MarzPay', 'ok');
+    if(['withdrawals','deposits','dashboard','transactions'].includes(_tab)) switchTab(_tab);
+  } else toast(d.message||'Sync failed','err');
+});
 
 // ── TABS ──
 const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','codes','transactions','referrals','settings','admins','auditlog']);

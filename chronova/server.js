@@ -1855,10 +1855,17 @@ async function runDailyPayouts() {
   return credited;
 }
 
+// Manual "Sync with MarzPay" button — re-checks every in-flight deposit AND
+// withdrawal against the real gateway right now, instead of waiting for the
+// background pollers (every 30s / next sweep). Same functions the automatic
+// background jobs use, so this can never settle anything differently or
+// double-pay — it just runs them on demand.
 app.post('/admin/payments/sync', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const settled = await pollPendingPayments();
-  return res.json({ status: 'success', settled });
+  const [depositsSettled, withdrawalsSettled] = await Promise.all([
+    pollPendingPayments(), pollPendingWithdrawalStatus()
+  ]);
+  return res.json({ status: 'success', settled: depositsSettled + withdrawalsSettled, depositsSettled, withdrawalsSettled });
 });
 // Verify ONE withdrawal against MarzPay — ask the gateway what really happened to
 // this payout, so a "Failed" row can be confirmed (or a double-payment caught).
@@ -3095,6 +3102,33 @@ async function failWithdrawal(witDoc, reason) {
   } catch (txErr) { console.warn('failWithdrawal tx update:', txErr.message); }
   return true;
   } finally { _completingWithdrawals.delete(witDoc.id); }
+}
+// Bulk gateway-status sync for withdrawals — the deposit-side equivalent of
+// pollPendingPayments() above. Re-checks every withdrawal still sitting in
+// 'processing' against its real provider status and settles it (paid or
+// failed) accordingly, exactly like the per-user poll in /withdraw/status/:id
+// and the webhook handler do one at a time. Read-only if nothing has actually
+// changed at the provider — completeWithdrawal/failWithdrawal are already
+// idempotent and lock-guarded, so running this repeatedly is always safe.
+let _syncingWithdrawalStatus = false;
+async function pollPendingWithdrawalStatus() {
+  if (_syncingWithdrawalStatus) return 0;
+  _syncingWithdrawalStatus = true;
+  let settled = 0;
+  try {
+    const snap = await db.collection('withdrawals').where('status', '==', 'processing').limit(50).get();
+    for (const doc of snap.docs) {
+      const wit = doc.data();
+      if (!wit.marzTxUuid && !wit.marzReference) continue; // never reached the gateway — nothing to check
+      try {
+        const real = await getPayoutStatus(wit);
+        if (PAY_OK.includes(real)) { if (await completeWithdrawal(doc)) settled++; }
+        else if (PAY_FAIL.includes(real)) { if (await failWithdrawal(doc, 'Disbursement failed (sync)')) settled++; }
+      } catch (e) { console.warn('pollPendingWithdrawalStatus item error:', e.message); }
+    }
+  } catch (e) { console.error('pollPendingWithdrawalStatus error:', e.message); }
+  finally { _syncingWithdrawalStatus = false; }
+  return settled;
 }
 app.get('/withdraw/status/:id', async (req, res) => {
   const userId = await verifyAuth(req);

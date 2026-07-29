@@ -44,6 +44,7 @@ require.cache[faPath] = faMod;
 const realFetch = global.fetch;
 let sendMoneyCalls = 0;
 let marzN = 0;
+const marzStatusMap = new Map(); // uuid -> status, for the GET /send-money/:uuid check
 global.fetch = async (url, opts = {}) => {
   const u = String(url);
   const json = body => ({ ok: true, status: 200, json: async () => body });
@@ -54,6 +55,8 @@ global.fetch = async (url, opts = {}) => {
     const uuid = 'WTX-' + (++marzN);
     return json({ status: 'success', data: { transaction: { uuid, status: 'pending' } } });
   }
+  const m = u.match(/\/send-money\/([^/]+)$/);
+  if (m) return json({ data: { transaction: { status: marzStatusMap.get(m[1]) || 'pending' } } });
   return json({ status: 'error', message: 'unknown stub route' });
 };
 
@@ -139,6 +142,26 @@ function seedWithdrawal(id, uid, amount = 50000) {
     check('processed path: wallet was NOT also refunded (still debited, money in flight)', bobBal === 950000, bobBal);
     check('processed path: MarzPay was called exactly once', sendMoneyCalls === 1, sendMoneyCalls);
   }
+
+  console.log('\n── 4. Admin "Sync MarzPay" button settles a stuck processing withdrawal on demand');
+  seedUser('carol-uid', { walletBalance: 500000 });
+  mockdb.__store.get('withdrawals').set('wit-sync-1', {
+    userId: 'carol-uid', userName: 'carol-uid', userPhone: '0771000003', withdrawalPhone: '0771000003',
+    amount: 20000, fee: 0, netAmount: 20000, status: 'processing', marzTxUuid: 'WTX-SYNC-1', createdAt: new Date(),
+  });
+  marzStatusMap.set('WTX-SYNC-1', 'completed'); // MarzPay says it actually landed
+  const carolBalPre = mockdb.__store.get('users').get('carol-uid').walletBalance;
+  const r4 = await call('POST', '/admin/payments/sync', { ...ADMIN });
+  check('sync call succeeds and reports at least one withdrawal settled', r4.body?.status === 'success' && r4.body?.withdrawalsSettled >= 1, r4.body);
+  const witSync1 = mockdb.__store.get('withdrawals').get('wit-sync-1');
+  check('the stuck withdrawal is now marked processed', witSync1.status === 'processed', witSync1.status);
+  check('totalWithdrawn was credited on the settle (money was already out of the wallet at request time)',
+    mockdb.__store.get('users').get('carol-uid').totalWithdrawn === 20000, mockdb.__store.get('users').get('carol-uid').totalWithdrawn);
+  const r5 = await call('POST', '/admin/payments/sync', { ...ADMIN });
+  check('running sync again does not re-settle (or double-pay) the same withdrawal', r5.body?.status === 'success', r5.body);
+  check('wallet/totalWithdrawn unchanged by the second sync', mockdb.__store.get('users').get('carol-uid').walletBalance === carolBalPre, mockdb.__store.get('users').get('carol-uid').walletBalance);
+  const r6 = await call('POST', '/admin/payments/sync', {});
+  check('an unauthenticated sync call is rejected', r6.code === 401, r6.body);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
