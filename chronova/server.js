@@ -2107,7 +2107,15 @@ function randomAmountIn(min, max) {
   const raw = lo + Math.random() * (hi - lo);
   return Math.max(lo, Math.round(raw / 100) * 100); // clean multiple of 100
 }
-const _redeemingCodes = new Set(); // code doc id -> being redeemed (single-writer)
+// code doc id -> timestamp the lock was acquired (single-writer). A normal
+// redemption always releases this in its `finally` below within a fraction of
+// a second — but if the awaited DB call ever genuinely hangs (a dropped
+// connection with no response at all, rather than a clean timeout/error), the
+// lock must not stay stuck on that one code forever. Any hold older than
+// REDEEM_LOCK_MAX_MS is treated as abandoned and reclaimed, so a code can
+// never be permanently "stuck processing" for everyone trying to redeem it.
+const _redeemingCodes = new Map();
+const REDEEM_LOCK_MAX_MS = 20000;
 
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -2129,9 +2137,10 @@ app.post('/redeem', async (req, res) => {
     if ((d.usedBy || []).includes(userId)) return res.status(400).json({ status: 'error', message: 'You have already redeemed this code' });
     if (d.maxUsers && (d.usedBy || []).length >= d.maxUsers) return res.status(400).json({ status: 'error', message: 'This code has reached its usage limit' });
     if (d.expiresAt && new Date(tsMillis(d.expiresAt)) < new Date()) return res.status(400).json({ status: 'error', message: 'This code has expired' });
-    if (_redeemingCodes.has(doc.id))
+    const heldSince = _redeemingCodes.get(doc.id);
+    if (heldSince != null && Date.now() - heldSince < REDEEM_LOCK_MAX_MS)
       return res.status(429).json({ status: 'error', message: 'This code is being processed. Try again in a moment.' });
-    _redeemingCodes.add(doc.id);
+    _redeemingCodes.set(doc.id, Date.now());
     try {
       const { date, time } = nowStr();
       let err = null, ok = false, amount = 0;

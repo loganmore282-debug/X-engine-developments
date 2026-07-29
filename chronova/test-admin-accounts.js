@@ -255,6 +255,43 @@ function check(name, cond, extra) {
   const smallDoc = mockdb.__store.get('products').get('prod-small');
   check('the already-small image was left byte-for-byte untouched', smallDoc.image === 'data:image/jpeg;base64,' + 'A'.repeat(500), smallDoc.image.length);
 
+  console.log('\n── 12. Gift-code redeem lock is self-healing — never permanently "stuck processing" for a code');
+  mockdb.__store.get('users') || mockdb.__store.set('users', new Map());
+  for (let i = 0; i < 6; i++) {
+    mockdb.__store.get('users').set('redeemer-' + i, { name: 'Redeemer ' + i, walletBalance: 0, totalEarned: 0 });
+  }
+  mockdb.__store.get('redemptionCodes') || mockdb.__store.set('redemptionCodes', new Map());
+  mockdb.__store.get('redemptionCodes').set('lock-code-1', {
+    codeKey: 'LOCKTEST', code: 'LOCKTEST', active: true, usedBy: [], minAmount: 100, maxAmount: 100,
+  });
+  // Fire several genuinely concurrent redemptions of the SAME code by
+  // DIFFERENT users — this is exactly the shape of many people redeeming one
+  // Telegram-shared code at once. None of them has a maxUsers cap, so every
+  // one of them should end up succeeding; the lock only ever serializes the
+  // DB write, it never silently drops a legitimate redemption.
+  const concurrentResults = await Promise.all(
+    [0, 1, 2, 3, 4].map(i => call('POST', '/redeem', { token: 'uid:redeemer-' + i, body: { code: 'LOCKTEST' } }))
+  );
+  const successes = concurrentResults.filter(r => r.body?.status === 'success');
+  check('every concurrent redeemer of an uncapped code is eventually credited, none silently dropped',
+    successes.length === 5, concurrentResults.map(r => r.body));
+  const lockedCode = mockdb.__store.get('redemptionCodes').get('lock-code-1');
+  check('usedBy reflects exactly the 5 distinct redeemers, no duplicates/loss',
+    new Set(lockedCode.usedBy).size === 5 && lockedCode.usedBy.length === 5, lockedCode.usedBy);
+  for (let i = 0; i < 5; i++) {
+    const u = mockdb.__store.get('users').get('redeemer-' + i);
+    check(`redeemer-${i} was credited exactly once (100), not zero, not double`, u.walletBalance === 100, u.walletBalance);
+  }
+  // The lock must never outlive the request that held it: a 6th, later
+  // redeemer of the same code must NOT be turned away with "being processed"
+  // once the concurrent batch above has actually finished.
+  r = await call('POST', '/redeem', { token: 'uid:redeemer-5', body: { code: 'LOCKTEST' } });
+  check('a redeemer arriving after the burst is not falsely told the code is still processing',
+    r.body?.status === 'success', r.body);
+  r = await call('POST', '/redeem', { token: 'uid:redeemer-5', body: { code: 'LOCKTEST' } });
+  check('redeeming the same code twice as the same user is still correctly rejected (unrelated to the lock)',
+    r.code === 400 && /already redeemed/i.test(r.body?.message || ''), r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
