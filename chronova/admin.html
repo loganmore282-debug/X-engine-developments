@@ -416,6 +416,12 @@ try { setPushUIState(!!localStorage.getItem('chr_admin_push_token')); } catch(_)
 // ── TABS ──
 const VALID_TABS = new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','codes','transactions','referrals','settings','admins','auditlog']);
 let _tab='dashboard';
+// A renderer's fetch can still be in flight when the user taps a DIFFERENT
+// tab — without this check, the slow response finally lands and overwrites
+// whatever tab is now actually on screen with the wrong tab's content (looks
+// like "tapping one tab lands you on another category"). Every renderer
+// checks this right after its fetch, before painting anything.
+function staleTab(name){ return _tab !== name; }
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
 $('refreshBtn').addEventListener('click',()=>{ switchTab(_tab); refreshBadges(); });
 function switchTab(name){
@@ -463,6 +469,7 @@ let _anPeriod = 30;
 async function renderAnalytics(){
   $('content').innerHTML='<div class="empty">Crunching numbers…</div>';
   const a = await api('/admin/analytics', { days:_anPeriod });
+  if(staleTab('analytics')) return;
   if(a.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
   const k=a.kpis||{};
   const h12=x=>{const ap=x<12?'am':'pm';let h=x%12;if(h===0)h=12;return h+ap;};
@@ -517,6 +524,7 @@ async function renderAnalytics(){
 }
 async function renderDashboard(){
   const s = await api('/admin/stats');
+  if(staleTab('dashboard')) return;
   if(s.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load stats. '+esc(s.message||'')+'</div>'; return; }
   $('content').innerHTML = `
     <h2 class="sec">Overview</h2>
@@ -545,6 +553,7 @@ async function renderDashboard(){
       <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Status</th></tr></thead><tbody id="dashTx"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
     </div>`;
   const r = await api('/admin/transactions/list', { limit: 12 });
+  if(staleTab('dashboard')) return;
   const list = r.transactions || [];
   $('dashTx').innerHTML = list.length ? list.map(t=>`
     <tr><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
@@ -563,6 +572,7 @@ function statusPill(s){
 let _users=[];
 async function renderUsers(){
   const r = await api('/admin/users');
+  if(staleTab('users')) return;
   _users = (r.users||[]).sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Users (${_users.length})</h2>
@@ -715,6 +725,7 @@ const DEP_PROVIDER_LABEL = { manual: 'Manual', marzpay: 'MarzPay', obpay: 'ObPay
 let _deps=[], _depFilter='pending';
 async function renderDeposits(){
   const r = await api('/admin/deposits/list', { limit: 300 });
+  if(staleTab('deposits')) return;
   _deps = r.deposits||[];
   const counts = r.counts||{};
   const grp = { pending: (counts.claimed||0)+(counts.awaiting_payment||0), processing: counts.processing||0,
@@ -763,6 +774,7 @@ function drawDeps(){
 let _wits=[], _witFilter='pending';
 async function renderWithdrawals(){
   const r = await api('/admin/withdrawals/list', { limit: 500 });
+  if(staleTab('withdrawals')) return;
   _wits = r.withdrawals||[];
   // TRUE counts come from the server (all withdrawals), so they never freeze at
   // the page size. Fall back to counting the page only if the server is old.
@@ -804,6 +816,7 @@ function drawWits(){
 function tintSwatch(){ return '<div class="tint-sw"></div>'; }
 async function renderProducts(){
   const r = await api('/admin/products/list');
+  if(staleTab('products')) return;
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products (${list.length})</h2>
@@ -905,6 +918,7 @@ const BANNER_SLOTS = [
 
 async function renderBanners(){
   const r = await api('/admin/banners');
+  if(staleTab('banners')) return;
   const s = r.banners||{};
   $('content').innerHTML = `
     <h2 class="sec">App banners</h2>
@@ -949,6 +963,7 @@ async function renderBanners(){
 // ── CODES ──
 async function renderCodes(){
   const r = await api('/admin/codes/list');
+  if(staleTab('codes')) return;
   const list = r.codes||[];
   $('content').innerHTML = `
     <h2 class="sec">Gift codes</h2>
@@ -992,6 +1007,7 @@ async function renderCodes(){
 // in the Activity Log tab.
 async function renderAdmins(){
   const r = await api('/admin/admins/list');
+  if(staleTab('admins')) return;
   const list = r.admins||[];
   $('content').innerHTML = `
     <h2 class="sec">Admin accounts</h2>
@@ -1060,6 +1076,7 @@ const AUDIT_LABELS = {
 };
 async function renderAuditLog(){
   const r = await api('/admin/audit-log');
+  if(staleTab('auditlog')) return;
   const list = r.log||[];
   $('content').innerHTML = `
     <h2 class="sec">Activity log</h2>
@@ -1076,6 +1093,7 @@ async function renderAuditLog(){
 let _txns=[], _txFilter='all';
 async function renderTransactions(){
   const r = await api('/admin/transactions/list', { limit: 400 });
+  if(staleTab('transactions')) return;
   _txns = r.transactions||[];
   const subs=[['all','All'],['topup','Deposits'],['withdrawal','Withdrawals'],['commission','Commissions'],['investment','Watches'],['checkin','Check-in'],['redeem','Codes']];
   $('content').innerHTML = `
@@ -1101,6 +1119,7 @@ function drawTxns(){
 // ── REFERRALS ──
 async function renderReferrals(){
   const r = await api('/admin/referrals/list');
+  if(staleTab('referrals')) return;
   const list = r.referrals||[];
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Referrals (${list.length})</h2>
@@ -1128,6 +1147,7 @@ async function renderReferrals(){
 // ── SETTINGS ──
 async function renderSettings(){
   const r = await api('/admin/settings');
+  if(staleTab('settings')) return;
   const s = r.settings||{};
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
