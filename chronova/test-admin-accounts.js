@@ -163,6 +163,19 @@ function check(name, cond, extra) {
   check('audit log recorded code_deactivated with bob as the actor',
     log2.some(e => e.action === 'code_deactivated' && e.actor === 'bob'), log2.filter(e => e.action === 'code_deactivated'));
 
+  console.log('\n── 7c. A transient DB hiccup while checking a session must NEVER look like "your session is invalid"');
+  // Regression test: a real Mongo blip resolving the session token used to be
+  // swallowed silently, leaving req.adminUser unset — which fell through to a
+  // hard 401 "Unauthorized", and admin.html treats ANY 401 as "log the owner
+  // out, wipe the stored session, show the login screen". A perfectly valid,
+  // unexpired session should never be thrown away just because one DB read
+  // hiccuped.
+  mockdb.__mockDbFailOnce.add('adminSessions');
+  r = await call('POST', '/admin/stats', { token: ownerToken, body: {} });
+  check('a DB hiccup during session-check returns 503 (retryable), NOT 401 (logged out)', r.code === 503, r.body);
+  r = await call('POST', '/admin/stats', { token: ownerToken, body: {} });
+  check('the SAME still-valid session works again right after (it was never actually invalidated)', r.body?.status === 'success', r.body);
+
   console.log('\n── 8. Settings, Products and Banners are owner-only too');
   r = await call('POST', '/admin/settings', { token: ownerToken, body: {} });
   check('owner CAN read settings', r.body?.status === 'success', r.body);

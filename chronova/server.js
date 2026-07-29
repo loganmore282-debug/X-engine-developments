@@ -120,12 +120,26 @@ function esc(s) {
   ));
 }
 
-// Best-effort: if a Bearer token is a valid admin session, attach req.adminUser
-// so verifyAdmin()/verifyOwner() below can recognise it. A raw master-key
-// Authorization header simply won't match any session and falls through.
+// If a Bearer token is a valid admin session, attach req.adminUser so
+// verifyAdmin()/verifyOwner() below can recognise it. A raw master-key
+// Authorization header skips the DB lookup entirely (verifyAdmin compares it
+// directly) and falls through untouched.
 app.use('/admin/', async (req, res, next) => {
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (header) { try { req.adminUser = await resolveSession(header); } catch (_) {} }
+  if (header && !(ADMIN_KEY && safeEqual(header, ADMIN_KEY))) {
+    try {
+      req.adminUser = await resolveSession(header);
+    } catch (e) {
+      // A transient DB hiccup (Mongo cold-start, a dropped connection) must
+      // NEVER look like "your session is invalid" to the client — that wipes
+      // a perfectly good, unexpired session and forces a real re-login for no
+      // reason. admin.html's api() only bounces to the login screen on a 401;
+      // anything else just shows a retryable error and leaves the stored
+      // session alone, so this is a 503, not a silent fall-through to 401.
+      console.error('Session resolve error:', e.message);
+      return res.status(503).json({ status: 'error', message: 'Could not verify your session right now — try again in a moment.' });
+    }
+  }
   next();
 });
 

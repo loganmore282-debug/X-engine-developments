@@ -27,10 +27,20 @@ function applyPatch(target, patch) {
   }
 }
 
+// Test-only hook (mirrors global.__marzSendFail elsewhere): put a collection
+// name in this Set to make its NEXT .get() throw once, simulating a transient
+// Mongo hiccup (cold-start, dropped connection) rather than a real "not
+// found" — the two must be handled differently by server.js.
+global.__mockDbFailOnce = new Set();
+
 function docRef(cname, id) {
   const ref = {
     id,
     async get() {
+      if (global.__mockDbFailOnce.has(cname)) {
+        global.__mockDbFailOnce.delete(cname);
+        throw new Error('Simulated transient DB error');
+      }
       const raw = coll(cname).get(id);
       return snap(cname, id, raw);
     },
@@ -124,5 +134,6 @@ module.exports = {
   db, FieldValue,
   connectMongo: async () => {},
   pingDb: async () => true,
-  __store: store,           // test hook: direct state access/manipulation
+  __store: store,                          // test hook: direct state access/manipulation
+  __mockDbFailOnce: global.__mockDbFailOnce, // test hook: force the next .get() on a collection to throw once
 };
