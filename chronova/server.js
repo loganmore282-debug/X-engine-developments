@@ -4,7 +4,6 @@ const cors        = require('cors');
 const crypto      = require('crypto');
 const helmet      = require('helmet');
 const compression = require('compression');
-const sharp       = require('sharp');
 const rateLimit   = require('express-rate-limit');
 if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
@@ -4170,6 +4169,21 @@ app.post('/admin/products/list', async (req, res) => {
   try { return res.json({ status: 'success', products: await fetchProducts(true) }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Loaded lazily, on first actual use, NOT at boot. sharp is a native addon —
+// its prebuilt binary has to match the exact host (libc, arch) it runs on,
+// and a mismatch there throws at require() time. Requiring it at the top of
+// this file meant that failure took the ENTIRE server down before Express
+// even started (every endpoint, not just this one) — a single point of
+// failure for a feature only the owner uses. Now a load failure only ever
+// disables "Shrink images" itself; every money/auth/product endpoint is
+// completely unaffected regardless of whether sharp works on this host.
+let _sharp, _sharpLoadError;
+function loadSharp() {
+  if (_sharp || _sharpLoadError) return _sharp;
+  try { _sharp = require('sharp'); }
+  catch (e) { _sharpLoadError = e; console.error('sharp failed to load (image shrinking disabled):', e.message); }
+  return _sharp;
+}
 // Re-encodes a base64 image data-URI to a smaller JPEG (resize + requality).
 // Used to shrink product images already sitting in the database at whatever
 // size they were first uploaded — /products ships every active product's
@@ -4178,6 +4192,8 @@ app.post('/admin/products/list', async (req, res) => {
 async function recompressImage(dataUri, maxDim, quality) {
   const m = String(dataUri || '').match(/^data:image\/[a-zA-Z0-9+.-]+;base64,(.+)$/);
   if (!m) return null;
+  const sharp = loadSharp();
+  if (!sharp) throw new Error('Image processing is not available on this server right now');
   const buf = Buffer.from(m[1], 'base64');
   const out = await sharp(buf).rotate()
     .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
@@ -4192,6 +4208,7 @@ async function recompressImage(dataUri, maxDim, quality) {
 // always safe and only touches what's actually still oversized.
 app.post('/admin/products/recompress-images', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!loadSharp()) return res.status(503).json({ status: 'error', message: 'Image processing is not available on this server right now — try again later' });
   const maxDim   = Math.max(100, Math.round(parseFloat(req.body.maxDim) || 640));
   const quality  = Math.min(95, Math.max(30, Math.round(parseFloat(req.body.quality) || 70)));
   try {
