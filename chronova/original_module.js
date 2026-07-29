@@ -505,9 +505,14 @@ onAuthStateChanged(auth, async (user) => {
   // watches, transactions AND settings (banner images) — BEFORE revealing the
   // dashboard, so it appears already populated: no "UGX 0 → real" flash and no
   // default banners flashing before the admin images. Capped so a slow network
-  // can't hang the sync screen; anything still loading finishes in the background.
+  // can't hang the sync screen forever; anything still loading finishes in the
+  // background. Products carries a base64 image per item (100s of KB each) so
+  // it's reliably the slowest of these six on a weak connection — the cap is
+  // generous specifically so the loader waits for it instead of releasing
+  // early and showing an empty Products tab that only fills in a few seconds
+  // later once you happen to tap over to it.
   const essential = Promise.all([loadAccount(), loadPublicSettings(), loadTxns(), loadProducts(), loadTeam(), loadActivityFeed()]);
-  await Promise.race([essential, new Promise(r => setTimeout(r, 8000))]);
+  await Promise.race([essential, new Promise(r => setTimeout(r, 20000))]);
   _booting = false;
   if (checkGate()) return;
   // SELF-HEAL: an interrupted sign-up (app closed / network died between the

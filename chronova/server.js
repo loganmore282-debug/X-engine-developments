@@ -1,9 +1,10 @@
-const express    = require('express');
-const admin      = require('firebase-admin');
-const cors       = require('cors');
-const crypto     = require('crypto');
-const helmet     = require('helmet');
-const rateLimit  = require('express-rate-limit');
+const express     = require('express');
+const admin       = require('firebase-admin');
+const cors        = require('cors');
+const crypto      = require('crypto');
+const helmet      = require('helmet');
+const compression = require('compression');
+const rateLimit   = require('express-rate-limit');
 if (!globalThis.fetch) { globalThis.fetch = (...a) => import('node-fetch').then(m => m.default(...a)); }
 
 // ── GLOBAL ERROR SAFETY NET ──
@@ -13,6 +14,12 @@ process.on('uncaughtException',  (err)    => { console.error('Uncaught exception
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+// gzip/br every response over the wire — nothing did this before. Products in
+// particular ship a base64 image per item (100s of KB each), so the /products
+// response was going out completely uncompressed while every other endpoint's
+// tiny plain-JSON response felt instant by comparison; that size gap is
+// exactly why products specifically were the slow one to load.
+app.use(compression());
 app.use(helmet({
   contentSecurityPolicy: false,
   hsts: { maxAge: 31536000, includeSubDomains: true },
