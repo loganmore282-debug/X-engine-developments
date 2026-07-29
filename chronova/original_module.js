@@ -805,7 +805,7 @@ async function loadActivityFeed() {
 }
 function wireHtml() {
   if (!_activityFeed.length) return '';
-  const one = f => `<span class="wire-item"><i class="wire-dot ${f.kind === 'recharge' ? 'in' : 'out'}"></i>${esc(f.phone)} <em>${esc(f.kind)}</em> ${ugx(f.amount)}</span>`;
+  const one = f => `<span class="wire-item">${esc(f.phone)} <em>${esc(f.kind)}</em> ${ugx(f.amount)}</span>`;
   const s = _activityFeed.map(one).join('');
   return s + s; // doubled so the -50% marquee loops seamlessly
 }
@@ -1919,10 +1919,18 @@ const MENU_ICONS = {
   logout:   _mi('<path d="M12 3a9 9 0 1 0 6.5 2.8"/><path d="M12 2v9"/>'),
 };
 
-// Level counts purchases, nothing more: first product is level 1, second is
-// level 2, and so on. No product, no badge.
+// Level reflects the HIGHEST vip tier actually owned — parsed from the
+// product's tierLabel as it was at purchase time (e.g. "VIP3 Tissot" -> 3),
+// not a count of purchases. Two VIP1 watches still shows Level 1; one VIP4
+// purchase shows Level 4 even if it's the only product owned. No product
+// with a recognisable VIP tier, no badge.
 function memberLevel() {
-  return _investments.length;
+  let max = 0;
+  for (const inv of _investments) {
+    const m = /VIP\s*(\d+)/i.exec(inv.tierLabel || '');
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max;
 }
 
 function renderAccount() {

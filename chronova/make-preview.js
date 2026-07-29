@@ -82,7 +82,7 @@ _account = {
   lastCheckinDate: null,
 };
 _investments = [
-  { id: 'i1', tierKey: 'tissot', tierLabel: 'Tissot Le Locle', amount: 80000, expectedReturn: 2400000, cycle: 120,
+  { id: 'i1', tierKey: 'tissot', tierLabel: 'VIP3 Tissot', amount: 80000, expectedReturn: 2400000, cycle: 120,
     dailyPayout: 20000, payoutsMade: 3, payoutsTotal: 120, paidOut: 60000, status: 'active',
     createdAt: Date.now() - 3 * 86400000 },
 ];
