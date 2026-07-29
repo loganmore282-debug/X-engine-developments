@@ -1964,6 +1964,30 @@ async function auditIntegrity() {
         alerts.push({ kind: 'withdrawal_stuck', withdrawalId: d.id, userId: w.userId,
           username: w.userName || '', amount: w.amount, hours: ageH });
     });
+    // Recently-FAILED withdrawals — double-check against the real gateway.
+    // A "failed" withdrawal already refunded the user's wallet internally; if
+    // the gateway actually sent the money anyway, the user was paid AND
+    // refunded — a real leak, not just a cosmetic status mismatch. Bounded to
+    // the last 72h and a small batch so this can never turn into hammering
+    // the gateway's API; never touches money itself, only reports (same rule
+    // as the rest of this audit) so the owner can verify before acting.
+    const failedSnap = await db.collection('withdrawals').where('status', '==', 'failed').get();
+    const recentFailed = failedSnap.docs
+      .map(d => ({ d, w: d.data() }))
+      .filter(({ w }) => (w.marzTxUuid || w.marzReference) && (Date.now() - tsMillis(w.failedAt || w.createdAt)) < 72 * 3600000)
+      .sort((a, b) => tsMillis(b.w.failedAt || b.w.createdAt) - tsMillis(a.w.failedAt || a.w.createdAt))
+      .slice(0, 40);
+    for (const { d, w } of recentFailed) {
+      try {
+        const real = await getPayoutStatus(w);
+        if (PAY_OK.includes(real)) {
+          const ageH = Math.round((Date.now() - tsMillis(w.failedAt || w.createdAt)) / 3600000);
+          alerts.push({ kind: 'failed_withdrawal_actually_sent', withdrawalId: d.id, userId: w.userId,
+            username: w.userName || '', amount: w.amount, hours: ageH,
+            message: 'Marked FAILED (and refunded) but the gateway confirms it was actually SENT — check the recipient before this happens again.' });
+        }
+      } catch (_) { /* gateway unreachable for this one right now — next hourly run retries it */ }
+    }
     const result = { ranAt: new Date().toISOString(), usersChecked: usersSnap.size,
       alertCount: alerts.length, healthy: alerts.length === 0, alerts: alerts.slice(0, 200) };
     await db.collection('integrity').doc('latest').set(result);

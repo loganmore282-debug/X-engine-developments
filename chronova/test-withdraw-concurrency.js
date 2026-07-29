@@ -197,6 +197,30 @@ function seedWithdrawal(id, uid, amount = 50000) {
   check('exactly ONE of the two simultaneous requests succeeded (bringing today\'s total to exactly 2)', erinSuccesses.length === 1, erinResults.map(r => r.body));
   check('the other was rejected for the daily cap, not silently allowed through', erinResults.some(r => r.body?.status !== 'success' && /limit/i.test(r.body?.message || '')), erinResults.map(r => r.body));
 
+  console.log('\n── 6. Integrity audit catches a "FAILED" withdrawal the gateway actually paid — the double-payment risk behind repeated failures');
+  seedUser('finn-uid', { walletBalance: 500000 });
+  mockdb.__store.get('withdrawals').set('wit-finn-failed', {
+    userId: 'finn-uid', userName: 'finn-uid', userPhone: '0771000006', withdrawalPhone: '0771000006',
+    amount: 24150, fee: 4106, netAmount: 20044, status: 'failed', marzTxUuid: 'WTX-FINN-1',
+    failureReason: 'Disbursement failed (sync)', failedAt: new Date(), createdAt: new Date(),
+  });
+  // Genuinely stale/expired failure — outside the 72h lookback window — must
+  // NOT be re-checked (bounded batch, never hammers the gateway for old history).
+  mockdb.__store.get('withdrawals').set('wit-old-failed', {
+    userId: 'finn-uid', userName: 'finn-uid', userPhone: '0771000006', withdrawalPhone: '0771000006',
+    amount: 10000, fee: 1700, netAmount: 8300, status: 'failed', marzTxUuid: 'WTX-OLD-1',
+    failureReason: 'Disbursement failed (sync)', failedAt: new Date(Date.now() - 100 * 3600000), createdAt: new Date(Date.now() - 100 * 3600000),
+  });
+  marzStatusMap.set('WTX-FINN-1', 'completed'); // gateway says it actually landed, despite our "failed" record
+  marzStatusMap.set('WTX-OLD-1', 'completed');  // would also flag if the audit wrongly checked it — must not
+  const rAudit = await call('POST', '/admin/integrity', { body: { ...ADMIN } });
+  check('audit call succeeds', rAudit.body?.status === 'success', rAudit.body);
+  const flagged = (rAudit.body?.alerts || []).filter(a => a.kind === 'failed_withdrawal_actually_sent');
+  check('the recent FAILED-but-actually-SENT withdrawal is flagged', flagged.some(a => a.withdrawalId === 'wit-finn-failed'), rAudit.body?.alerts);
+  check('a stale (>72h) failed withdrawal is NOT re-checked, even though it would also match', !flagged.some(a => a.withdrawalId === 'wit-old-failed'), flagged);
+  check('the flag never touched the wallet — this is report-only, same rule as every other integrity check',
+    mockdb.__store.get('users').get('finn-uid').walletBalance === 500000, mockdb.__store.get('users').get('finn-uid').walletBalance);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });
