@@ -2028,6 +2028,33 @@ async function auditIntegrity() {
         }
       } catch (_) { /* gateway unreachable for this one right now — next hourly run retries it */ }
     }));
+    // Deposits stuck 'initiating' — the record is written BEFORE calling the
+    // gateway specifically so a crash right after that call succeeds (real
+    // money charged to the user's phone) leaves a trace instead of nothing.
+    // This should normally clear within the same request, a fraction of a
+    // second; anything still here after 2 minutes means the process died
+    // mid-request. Report-only — we may not even have the gateway's own uuid
+    // yet, so this can't be auto-verified like the checks above; the owner
+    // needs to check the reference against the gateway's own dashboard.
+    const initSnap = await db.collection('pendingDeposits').where('status', '==', 'initiating').get();
+    initSnap.forEach(d => {
+      const p = d.data();
+      const ageMin = Math.round((Date.now() - tsMillis(p.createdAt)) / 60000);
+      if (ageMin >= 2)
+        alerts.push({ kind: 'deposit_stuck_initiating', depositId: d.id, userId: p.userId,
+          amount: p.amount, phone: p.phone, reference: p.marzReference, minutes: ageMin,
+          message: 'Never heard back from the gateway after starting this payment — check this reference on the gateway dashboard directly; the money may have actually moved.' });
+    });
+    // Withdrawals stuck 'sending' — same crash window, payout side.
+    const sendingSnap = await db.collection('withdrawals').where('status', '==', 'sending').get();
+    sendingSnap.forEach(d => {
+      const w = d.data();
+      const ageMin = Math.round((Date.now() - tsMillis(w.sendingAt || w.createdAt)) / 60000);
+      if (ageMin >= 2)
+        alerts.push({ kind: 'withdrawal_stuck_sending', withdrawalId: d.id, userId: w.userId,
+          username: w.userName || '', amount: w.amount, reference: w.sendingReference, minutes: ageMin,
+          message: 'Never heard back from the gateway after starting this payout — check this reference on the gateway dashboard directly; the user may have actually been paid.' });
+    });
     const result = { ranAt: new Date().toISOString(), usersChecked: usersSnap.size,
       alertCount: alerts.length, healthy: alerts.length === 0, alerts: alerts.slice(0, 200) };
     await db.collection('integrity').doc('latest').set(result);
@@ -2447,17 +2474,35 @@ app.post('/deposit/marzpay', async (req, res) => {
 
     const reference = uuidv4();
     const ref = await uniqueRef('pendingDeposits', 'B');
+    const { date, time } = nowStr();
+    const depRef = db.collection('pendingDeposits').doc();
+    // Write the record BEFORE calling the gateway, not after. marzCollect()
+    // below can trigger a REAL mobile-money charge to the user's phone; if
+    // this process crashes right after that call succeeds (a redeploy
+    // landing at the wrong instant — the exact bug that left a real,
+    // completed MarzPay charge with zero trace in this app), the doc must
+    // already exist so a reconciler can find it via OUR OWN reference, even
+    // without MarzPay's uuid yet. 'initiating' is a genuinely temporary
+    // status — normally overwritten within the same request a moment later.
+    await depRef.set({
+      userId, phone, amount: amt, ref, marzReference: reference,
+      status: 'initiating', date, time, createdAt: FieldValue.serverTimestamp()
+    });
     const mpData = await marzCollect({
       amount: amt, phone, reference, description: user.name || userId,
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
     });
     const isSandbox = mpData.status === 'sandbox' || mpData.data?.collection?.mode === 'sandbox';
-    if (mpData.status !== 'success' && !isSandbox)
+    if (mpData.status !== 'success' && !isSandbox) {
+      // Gateway explicitly rejected the request — no money moved, so it's
+      // safe to mark this attempt failed outright rather than leave it
+      // stuck 'initiating' forever.
+      await depRef.update({ status: 'failed', failedAt: FieldValue.serverTimestamp(),
+        failureReason: marzUserMsg(mpData, 'Could not start the payment') }).catch(() => {});
       return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the payment right now. Please try again.') });
+    }
 
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
-    const { date, time } = nowStr();
-    const depRef = db.collection('pendingDeposits').doc();
 
     if (isSandbox) {
       await db.runTransaction(async t => {
@@ -2465,10 +2510,8 @@ app.post('/deposit/marzpay', async (req, res) => {
         const uSnap2 = await t.get(uRef);
         if (!uSnap2.exists) throw new Error('User not found');
         t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt), realDeposited: FieldValue.increment(amt) });
-        t.set(depRef, {
-          userId, phone, amount: amt, creditedAmount: amt, ref,
-          marzReference: reference, marzTxUuid, status: 'matched', date, time,
-          matchedAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp()
+        t.update(depRef, {
+          creditedAmount: amt, marzTxUuid, status: 'matched', matchedAt: FieldValue.serverTimestamp()
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'topup', description: 'Wallet top-up',
@@ -2477,10 +2520,7 @@ app.post('/deposit/marzpay', async (req, res) => {
         });
       });
     } else {
-      await depRef.set({
-        userId, phone, amount: amt, ref, marzReference: reference, marzTxUuid,
-        status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
-      });
+      await depRef.update({ marzTxUuid, status: 'processing' });
     }
     if (isSandbox) {
       // the sandbox branch credits inline, so it must trigger the upline reward
@@ -3370,6 +3410,11 @@ async function autoReleaseWithdrawal(witDoc) {
     if (!phone || !(netAmount > 0)) return false;
 
     const reference = uuidv4();
+    // Same reasoning as /admin/withdraw/process: write the "being sent"
+    // marker + our own reference BEFORE the real gateway call, so a crash
+    // right after marzSendMoney() succeeds can never leave this stuck at
+    // 'pending' with zero trace of what was actually attempted.
+    await witDoc.ref.update({ status: 'sending', sendingReference: reference, sendingBy: 'server', sendingAt: FieldValue.serverTimestamp() });
     const mpData = await marzSendMoney({
       amount: netAmount, phone, reference, description: wit.userName || wit.userId,
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
@@ -3377,6 +3422,7 @@ async function autoReleaseWithdrawal(witDoc) {
     const sandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
     if (mpData.status !== 'success' && mpData.status !== 'pending' && !sandbox) {
       await witDoc.ref.update({
+        status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null,
         autoTries:     FieldValue.increment(1),
         lastAutoError: marzUserMsg(mpData, 'Gateway did not accept the payout'),
         lastAutoAt:    FieldValue.serverTimestamp()
@@ -3465,12 +3511,28 @@ app.post('/admin/withdraw/process', async (req, res) => {
     // it exclusively, so there is no provider to pick.
     // ── MarzPay payout ──
     const reference = uuidv4();
+    const processedByPre = req.adminUser?.username || 'owner-key';
+    // Mark this as "being sent" and record OUR OWN reference BEFORE calling
+    // the gateway, not after. marzSendMoney() below can trigger a REAL
+    // MarzPay payout even if this process crashes right after that call
+    // succeeds (a redeploy at the wrong instant) — writing this first means
+    // a crash can never leave an invisible payout stuck silently at
+    // 'pending' forever with no trace of what was actually attempted.
+    await db.collection('withdrawals').doc(withdrawalId).update({
+      status: 'sending', sendingReference: reference, sendingBy: processedByPre, sendingAt: FieldValue.serverTimestamp()
+    });
     const mpData = await marzSendMoney({
       amount: netAmount, phone, reference, description: wit.userName || wit.userId,
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
     });
     const witSandbox = mpData.status === 'sandbox' || mpData.data?.disbursement?.mode === 'sandbox';
     if (mpData.status !== 'success' && mpData.status !== 'pending' && !witSandbox) {
+      // Gateway explicitly rejected — no money moved, so it's safe to put
+      // this back to 'pending' exactly as before (matching the message
+      // below, which promises it stays pending and untouched).
+      await db.collection('withdrawals').doc(withdrawalId).update({
+        status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null
+      }).catch(() => {});
       const reason = marzUserMsg(mpData, '');
       const detail = (reason && reason !== PROVIDER_BUSY_MSG) ? ` MarzPay said: ${reason}` : '';
       return res.status(400).json({ status: 'error',
