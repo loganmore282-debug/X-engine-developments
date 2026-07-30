@@ -571,6 +571,15 @@ function nowStr() {
     time: pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds())
   };
 }
+// Reduces any phone to its 9-digit national core so 0771…, +256771…, 256771…
+// and 771… all match each other in search — mirrors admin.html's client-side
+// phoneCore() used for the Users tab search, kept consistent server-side too.
+function phoneCore(raw) {
+  let n = String(raw || '').replace(/\D/g, '');
+  if (n.startsWith('256')) n = n.slice(3);
+  if (n.startsWith('0') && n.length >= 10) n = n.slice(1);
+  return n;
+}
 function cleanPhone(raw) {
   const s = String(raw || '').replace(/\D/g, '');
   if (s.startsWith('256') && s.length >= 12) return '+' + s;
@@ -4184,48 +4193,64 @@ app.post('/admin/transactions/list', async (req, res) => {
 // gateway deposit was invisible in the admin panel entirely.
 app.post('/admin/deposits/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { limit: lim = 200 } = req.body;
   try {
-    // Page for display is capped; STATUS COUNTS are tallied across every
-    // deposit (a light status-only scan) so the tab totals never freeze at
-    // the page size — same pattern as /admin/withdrawals/list.
-    const [snap, allSnap] = await Promise.all([
-      db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get(),
-      db.collection('pendingDeposits').select('status').get()
+    // Full history, not a capped recent page — the panel needs to search
+    // across ALL-TIME deposits (by phone, referral code, or name), not just
+    // whatever page happened to load. Same "fetch everyone once" pattern
+    // already used for the Users tab at this same scale (1,300+ accounts).
+    // ONE bulk users fetch (not one query per depositor) — the per-id
+    // Promise.all version here used to fire a separate query per unique
+    // depositor, the exact pattern that made the Integrity Audit slow at
+    // 1,300+ users before that was fixed the same way.
+    const [snap, usersSnap] = await Promise.all([
+      db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(10000).get(),
+      db.collection('users').get(),
     ]);
-    const counts = {};
-    allSnap.forEach(d => { const s = d.data().status || 'unknown'; counts[s] = (counts[s] || 0) + 1; });
-    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const ids = [...new Set(rows.map(r => r.userId).filter(Boolean))];
     const names = {};
-    await Promise.all(ids.map(async id => {
-      try { const u = await db.collection('users').doc(id).get(); if (u.exists) names[id] = { name: u.data().name || u.data().username || '', phone: u.data().phone || '' }; }
-      catch (_) {}
-    }));
+    usersSnap.forEach(u => {
+      const d = u.data();
+      names[u.id] = { name: d.name || d.username || '', phone: d.phone || '', referralCode: d.referralCode || d.username || '' };
+    });
+    const counts = {};
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     rows.forEach(r => {
+      counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1;
       const n = names[r.userId] || {};
       r.userName = n.name || '';
-      r.userPhone = n.phone || r.phone || r.senderPhone || '';
+      r.accountPhone = n.phone || '';
+      r.userReferralCode = n.referralCode || '';
+      // The number actually used to pay THIS transaction — a user can pay
+      // from a different phone than the one on their account, so this is
+      // deliberately NOT the same as accountPhone. Prefer what was actually
+      // reported/collected at payment time; fall back to the account phone
+      // only when nothing transaction-specific was ever captured.
+      r.payPhone = r.senderPhone || r.phone || n.phone || '';
+      r.userPhone = r.payPhone; // kept for older admin.html builds still reading this field
     });
-    return res.json({ status: 'success', deposits: rows, counts, total: allSnap.size });
+    return res.json({ status: 'success', deposits: rows, counts, total: rows.length });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdrawals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { limit: lim = 200 } = req.body;
   try {
-    // The page for display is limited, but the STATUS COUNTS are tallied across
-    // EVERY withdrawal (a light status-only scan) so the tab totals never cap out
-    // at the page size — the "Processed (394)" freeze bug.
-    const [snap, allSnap] = await Promise.all([
-      db.collection('withdrawals').orderBy('createdAt', 'desc').limit(Number(lim) || 200).get(),
-      db.collection('withdrawals').select('status', 'amount', 'netAmount', 'createdAt', 'processedAt').get()
+    // Full history, not a capped recent page — same reasoning as
+    // /admin/deposits/list: the panel needs to search across ALL-TIME
+    // withdrawals (by phone, referral code, or name), not just a recent page.
+    // ONE bulk users fetch (not one query per withdrawer) so referral-code
+    // search works without reintroducing the per-user-query slowness the
+    // Integrity Audit fix already solved elsewhere today.
+    const [snap, usersSnap] = await Promise.all([
+      db.collection('withdrawals').orderBy('createdAt', 'desc').limit(10000).get(),
+      db.collection('users').get(),
     ]);
+    const codes = {};
+    usersSnap.forEach(u => { codes[u.id] = u.data().referralCode || u.data().username || ''; });
     const counts = { pending: 0, processing: 0, processed: 0, rejected: 0, failed: 0 };
     let processedAmount = 0;
     const procByDay = {};
-    allSnap.forEach(d => {
-      const w = d.data();
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    rows.forEach(w => {
+      w.userReferralCode = codes[w.userId] || '';
       counts[w.status] = (counts[w.status] || 0) + 1;
       if (w.status === 'processed') {
         const amt = (w.netAmount || w.amount || 0);
@@ -4241,11 +4266,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
       const k = new Date(Date.now() + EAT_MS - i * 86400000).toISOString().slice(0, 10);
       processedByDay.push({ day: k, count: procByDay[k]?.count || 0, amount: procByDay[k]?.amount || 0 });
     }
-    return res.json({
-      status: 'success',
-      withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })),
-      counts, total: allSnap.size, processedAmount, processedByDay
-    });
+    return res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedAmount, processedByDay });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/referrals/list', async (req, res) => {

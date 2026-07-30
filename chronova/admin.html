@@ -727,7 +727,7 @@ function cpLeft(ms){ const s=Math.max(0,Math.floor((ms-Date.now())/1000)); retur
 const DEP_PROVIDER_LABEL = { manual: 'Manual', marzpay: 'MarzPay', obpay: 'ObPay', zengapay: 'ZengaPay' };
 let _deps=[], _depFilter='pending';
 async function renderDeposits(){
-  const r = await api('/admin/deposits/list', { limit: 300 });
+  const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits')) return;
   _deps = r.deposits||[];
   const counts = r.counts||{};
@@ -738,29 +738,43 @@ async function renderDeposits(){
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync MarzPay</button>
       <button class="btn sm ghost" id="depRefresh">Refresh</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt — manual recipient-number orders and MarzPay/ObPay/ZengaPay gateway payments — whatever its status. Manual orders still need your <b>Approve</b> once the money has actually landed.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — manual recipient-number orders and MarzPay/ObPay/ZengaPay gateway payments — whatever its status. Manual orders still need your <b>Approve</b> once the money has actually landed.</p>
+    <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone, referral code, or name — searches all-time, not just this page"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${r.total??_deps.length})`:(grp[k]?` (${grp[k]})`:'')}</button>`).join('')}</div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Paid from</th><th>Amount</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;
   $('depRefresh').addEventListener('click', renderDeposits);
   $('depSync').addEventListener('click', ()=>syncMarzPay($('depSync'), renderDeposits));
+  $('depSearch').addEventListener('input', drawDeps);
   document.querySelectorAll('[data-df]').forEach(b=>b.addEventListener('click',()=>{ _depFilter=b.dataset.df; drawDeps(); }));
   drawDeps();
 }
 function drawDeps(){
   const inGroup = { pending: ['claimed','awaiting_payment'], processing: ['processing'], matched: ['matched'], failed: ['failed','expired','rejected'] };
-  const list = _depFilter==='all' ? _deps : _deps.filter(d=>(inGroup[_depFilter]||[]).includes(d.status));
+  let list = _depFilter==='all' ? _deps : _deps.filter(d=>(inGroup[_depFilter]||[]).includes(d.status));
+  const raw = ($('depSearch')?.value||'').trim();
+  const q = raw.toLowerCase(), qCore = phoneCore(raw);
+  if(q) list = list.filter(d =>
+    (d.userName||'').toLowerCase().includes(q) ||
+    (d.userReferralCode||'').toLowerCase().includes(q) ||
+    (qCore && (phoneCore(d.payPhone).includes(qCore) || phoneCore(d.accountPhone).includes(qCore) || phoneCore(d.recipientNumber).includes(qCore)))
+  );
   $('depRows').innerHTML = list.length?list.map(d=>{
     const actionable = d.manual && d.manualPending;
     const detail = d.manual
-      ? `${esc(d.recipientNumber||'')} ${esc(d.recipientName||'')}${d.senderPhone?` · from ${esc(d.senderPhone)}`:''}${d.txnId?` · txn ${esc(d.txnId)}`:''}`
+      ? `to ${esc(d.recipientNumber||'')} ${esc(d.recipientName||'')}${d.txnId?` · txn ${esc(d.txnId)}`:''}`
       : (d.reference ? `ref ${esc(d.reference)}` : '');
+    // "Paid from" is the number actually used for THIS transaction — can
+    // differ from the account's own registered phone, which is why it's its
+    // own column rather than folded into the account phone.
+    const acctDiffers = d.accountPhone && d.payPhone && phoneCore(d.accountPhone) !== phoneCore(d.payPhone);
     return `<tr><td>${fdate(d.createdAt)}</td>
-      <td>${esc(d.userName||'')}<br><span class="muted">${esc(d.userPhone||'')}</span></td>
+      <td>${esc(d.userName||'')}${d.userReferralCode?`<br><span class="muted">${esc(d.userReferralCode)}</span>`:''}</td>
+      <td><b>${esc(d.payPhone||'—')}</b>${acctDiffers?`<br><span class="muted" style="font-size:11px">acct: ${esc(d.accountPhone)}</span>`:''}</td>
       <td><b>${ugx(d.creditedAmount||d.amount)}</b></td>
       <td>${esc(DEP_PROVIDER_LABEL[d.provider]||d.provider||'—')}<br><span class="muted" style="font-size:11px">${detail}</span></td>
       <td>${statusPill(d.status)}${d.status==='claimed'&&d.expiresAtMs?` <span class="muted">${cpLeft(d.expiresAtMs)}</span>`:''}</td>
       <td style="white-space:nowrap">${actionable?`<button class="btn ok sm" data-appr="${esc(d.id)}">Approve</button>${SESSION_ROLE==='owner'?` <button class="btn danger sm" data-drej="${esc(d.id)}">Reject</button>`:''}`:''}</td></tr>`;
-  }).join(''):'<tr><td colspan="6" class="empty">No deposits</td></tr>';
+  }).join(''):'<tr><td colspan="7" class="empty">No deposits</td></tr>';
   document.querySelectorAll('[data-appr]').forEach(b=>b.addEventListener('click',async()=>{
     if(!confirm('Approve this deposit? Only after you have confirmed the money arrived on your number. This credits the user.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/approve',{orderId:b.dataset.appr});
@@ -776,7 +790,7 @@ function drawDeps(){
 // ── WITHDRAWALS ──
 let _wits=[], _witFilter='pending';
 async function renderWithdrawals(){
-  const r = await api('/admin/withdrawals/list', { limit: 500 });
+  const r = await api('/admin/withdrawals/list', {});
   if(staleTab('withdrawals')) return;
   _wits = r.withdrawals||[];
   // TRUE counts come from the server (all withdrawals), so they never freeze at
@@ -797,16 +811,25 @@ async function renderWithdrawals(){
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
       <button class="btn sm ghost" id="witSync">Sync MarzPay</button></div>
     ${procChart}
+    <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone, referral code, or name — searches all-time, not just this page"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${r.total||_wits.length})`:(counts[k]?` (${counts[k]})`:'')}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Amount</th><th>Net</th><th>Status</th><th></th></tr></thead><tbody id="witRows"></tbody></table></div>`;
   document.querySelectorAll('[data-wf]').forEach(b=>b.addEventListener('click',()=>{ _witFilter=b.dataset.wf; renderWithdrawals(); }));
   $('witSync').addEventListener('click', ()=>syncMarzPay($('witSync'), renderWithdrawals));
+  $('witSearch').addEventListener('input', drawWits);
   drawWits();
 }
 function drawWits(){
-  const list = _witFilter==='all' ? _wits : _wits.filter(w=>w.status===_witFilter);
+  let list = _witFilter==='all' ? _wits : _wits.filter(w=>w.status===_witFilter);
+  const raw = ($('witSearch')?.value||'').trim();
+  const q = raw.toLowerCase(), qCore = phoneCore(raw);
+  if(q) list = list.filter(w =>
+    (w.userName||'').toLowerCase().includes(q) ||
+    (w.userReferralCode||'').toLowerCase().includes(q) ||
+    (qCore && (phoneCore(w.withdrawalPhone).includes(qCore) || phoneCore(w.userPhone).includes(qCore)))
+  );
   $('witRows').innerHTML = list.length?list.map(w=>`
-    <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
+    <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}${w.userReferralCode?`<br><span class="muted">${esc(w.userReferralCode)}</span>`:''}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
     <td>${statusPill(w.status)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:''}`:w.status==='processing'?`<button class="btn sm" data-vrf="${esc(w.id)}">Verify</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
