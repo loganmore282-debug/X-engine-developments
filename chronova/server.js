@@ -2087,8 +2087,20 @@ function startCrons() {
   // MarzPay rate-limits by account rather than per-endpoint. Back to a safe
   // interval while this is being diagnosed properly against real traffic.
   setInterval(pollPendingPayments, 30 * 1000);
-  // release any withdrawal the admin has left sitting past their 5-minute window
-  setInterval(sweepPendingWithdrawals, 60 * 1000);
+  // DISABLED (2026-07-30, explicit request): the automatic withdrawal
+  // release (sweepPendingWithdrawals -> autoReleaseWithdrawal) repeatedly
+  // calls marzSendMoney — a real, state-changing disbursement request, not
+  // a read-only status check — up to 8 times per withdrawal while MarzPay
+  // is in this "temporarily busy" state. Beyond suspected rate-limiting,
+  // this carries a sharper risk: each retry generates a BRAND NEW reference
+  // (uuidv4()), so if MarzPay is actually just slow rather than genuinely
+  // rejecting, more than one retried attempt could eventually land as a
+  // real payout — a double-payment risk, not just a cosmetic one. Every
+  // withdrawal now requires a manual "Send via MarzPay" click — the
+  // function itself is untouched below, only this schedule line is off, so
+  // it's a one-line change to re-enable once MarzPay's stability and the
+  // reference-reuse question are both sorted.
+  // setInterval(sweepPendingWithdrawals, 60 * 1000);
   setTimeout(pollPendingPayments, 15 * 1000);
   // Withdrawal STATUS settlement — this used to only run when an admin
   // clicked "Sync MarzPay" by hand; a withdrawal sent to the gateway with no
