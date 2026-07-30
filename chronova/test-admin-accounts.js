@@ -266,6 +266,13 @@ function check(name, cond, extra) {
     diffRow?.payPhone === '0755222333', diffRow);
   check('the account phone is still separately available too, so nothing is lost when they differ',
     diffRow?.accountPhone === '0771000099', diffRow);
+  // "Processed per day" for deposits, matching the same breakdown withdrawals
+  // already have — two 'matched' deposits seeded above (30,000 + 25,000),
+  // both just now, so today's bucket should carry both.
+  check('processedAmount totals every matched deposit\'s credited amount', r.body?.processedAmount === 55000, r.body?.processedAmount);
+  check('processedByDay has 30 days of data, newest last', Array.isArray(r.body?.processedByDay) && r.body.processedByDay.length === 30, r.body?.processedByDay?.length);
+  const todayBucket = r.body?.processedByDay?.[r.body.processedByDay.length - 1];
+  check('today\'s bucket shows both matched deposits — count 2, amount 55,000', todayBucket?.count === 2 && todayBucket?.amount === 55000, todayBucket);
   r = await call('POST', '/admin/deposits/list', { body: {} });
   check('an unauthenticated call is rejected', r.code === 401, r.body);
 

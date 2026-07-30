@@ -734,11 +734,21 @@ async function renderDeposits(){
   const grp = { pending: (counts.claimed||0)+(counts.awaiting_payment||0), processing: counts.processing||0,
     matched: counts.matched||0, failed: (counts.failed||0)+(counts.expired||0)+(counts.rejected||0) };
   const subs = [['pending','Pending'],['processing','Processing'],['matched','Successful'],['failed','Failed'],['all','All']];
+  const dpbd = r.processedByDay||[];
+  const dMaxP = Math.max(1, ...dpbd.map(d=>d.count));
+  const dRows = dpbd.slice().reverse(); // newest day first
+  const depProcChart = dpbd.length ? `<div class="panel-card">
+    <div class="row" style="align-items:center;margin-bottom:2px"><h2 class="sec" style="flex:1;margin:0">Processed per day</h2>
+    <div class="muted"><b>${counts.matched||0}</b> processed all-time · ${ugx(r.processedAmount||0)} received</div></div>
+    <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${dayLabel(d.day)}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
+    <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Deposits processed</th><th>Amount received</th></tr></thead>
+    <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'—'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync MarzPay</button>
       <button class="btn sm ghost" id="depRefresh">Refresh</button></div>
     <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — manual recipient-number orders and MarzPay/ObPay/ZengaPay gateway payments — whatever its status. Manual orders still need your <b>Approve</b> once the money has actually landed.</p>
+    ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone, referral code, or name — searches all-time, not just this page"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${r.total??_deps.length})`:(grp[k]?` (${grp[k]})`:'')}</button>`).join('')}</div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>User</th><th>Paid from</th><th>Amount</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody id="depRows"></tbody></table></div>`;

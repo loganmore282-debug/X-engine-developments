@@ -4312,6 +4312,8 @@ app.post('/admin/deposits/list', async (req, res) => {
       names[u.id] = { name: d.name || d.username || '', phone: d.phone || '', referralCode: d.referralCode || d.username || '' };
     });
     const counts = {};
+    let processedAmount = 0;
+    const procByDay = {};
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     rows.forEach(r => {
       counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1;
@@ -4326,8 +4328,23 @@ app.post('/admin/deposits/list', async (req, res) => {
       // only when nothing transaction-specific was ever captured.
       r.payPhone = r.senderPhone || r.phone || n.phone || '';
       r.userPhone = r.payPhone; // kept for older admin.html builds still reading this field
+      // Same "processed per day" breakdown already built for withdrawals —
+      // 'matched' is a deposit's successful/credited terminal status.
+      if (r.status === 'matched') {
+        const amt = (r.creditedAmount || r.amount || 0);
+        processedAmount += amt;
+        const ms = tsMillis(r.matchedAt || r.createdAt);
+        const day = new Date(ms + EAT_MS).toISOString().slice(0, 10);
+        const e = (procByDay[day] = procByDay[day] || { count: 0, amount: 0 });
+        e.count++; e.amount += amt;
+      }
     });
-    return res.json({ status: 'success', deposits: rows, counts, total: rows.length });
+    const processedByDay = [];
+    for (let i = 29; i >= 0; i--) {
+      const k = new Date(Date.now() + EAT_MS - i * 86400000).toISOString().slice(0, 10);
+      processedByDay.push({ day: k, count: procByDay[k]?.count || 0, amount: procByDay[k]?.amount || 0 });
+    }
+    return res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedAmount, processedByDay });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdrawals/list', async (req, res) => {
