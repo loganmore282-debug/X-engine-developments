@@ -4394,15 +4394,22 @@ app.post('/admin/withdrawals/list', async (req, res) => {
 app.post('/admin/referrals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('referrals').orderBy('createdAt', 'desc').limit(200).get();
+    // Full history, not capped at a small recent page — same reasoning as
+    // Deposits/Withdrawals: searching by code needs to reach every join ever
+    // recorded, not just the latest 200. ONE bulk users fetch (not one query
+    // per referrer/referred id) — the old per-id Promise.all here was the
+    // same N-query pattern that made the Integrity Audit slow at 1,300+
+    // users before that got fixed the same way.
+    const [snap, usersSnap] = await Promise.all([
+      db.collection('referrals').orderBy('createdAt', 'desc').limit(10000).get(),
+      db.collection('users').get(),
+    ]);
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Resolve the referrer / new-user IDs to usernames so the panel is readable.
-    const ids = [...new Set(rows.flatMap(r => [r.referrerId, r.referredUserId]).filter(Boolean))];
     const names = {};
-    await Promise.all(ids.map(async id => {
-      try { const u = await db.collection('users').doc(id).get(); if (u.exists) names[id] = u.data().username || u.data().name || u.data().phone || id; }
-      catch (_) {}
-    }));
+    usersSnap.forEach(u => {
+      const d = u.data();
+      names[u.id] = d.username || d.name || d.phone || u.id;
+    });
     rows.forEach(r => { r.referrerName = names[r.referrerId] || r.referrerId || '—'; r.referredName = names[r.referredUserId] || r.referredUserId || '—'; });
     return res.json({ status: 'success', referrals: rows });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }

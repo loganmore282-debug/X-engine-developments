@@ -1167,18 +1167,21 @@ function drawTxns(){
 }
 
 // ── REFERRALS ──
+let _refs=[];
 async function renderReferrals(){
   const r = await api('/admin/referrals/list');
   if(staleTab('referrals')) return;
-  const list = r.referrals||[];
+  _refs = r.referrals||[];
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Referrals (${list.length})</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Referrals (${_refs.length})</h2>
       <button class="btn sm" id="recoLinks">Fix missing links</button>
       <button class="btn sm" id="recoComm">Pay missing rewards</button></div>
     <p class="muted" style="margin-top:0"><b>Fix missing links</b>: records every join that was left unlinked. <b>Pay missing rewards</b>: pays any referral commission still owed on investments. Both are safe and never double-pay. Task Center milestone rewards are claimed by the user in-app, not paid by the admin.</p>
+    <div class="panel-card" style="margin-bottom:12px"><input id="refSearch" placeholder="Search a code or name — shows who referred them AND everyone they referred"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Referrer</th><th>New user</th><th>Level</th></tr></thead>
-    <tbody>${list.length?list.map(x=>`<tr class="${x.referrerId?'clickable':''}" ${x.referrerId?`data-uid="${esc(x.referrerId)}"`:''}><td>${fdate(x.createdAt)}</td><td><b>${esc(x.referrerName||x.referrerId||'')}</b></td><td>${esc(x.referredName||x.referredUserId||'')}</td><td>${x.level?('L'+x.level):'L1'}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No referrals yet</td></tr>'}</tbody></table></div>`;
-  document.querySelectorAll('#content tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
+    <tbody id="refRows"></tbody></table></div>`;
+  $('refSearch').addEventListener('input', drawRefs);
+  drawRefs();
   $('recoComm').addEventListener('click',async()=>{
     const b=$('recoComm'); b.disabled=true; b.textContent='Checking…';
     const d=await api('/admin/commissions/reconcile');
@@ -1192,6 +1195,16 @@ async function renderReferrals(){
     toast(d.status==='success'?`Linked ${d.linked} missing referral(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'&&d.linked) renderReferrals();
   });
+}
+function drawRefs(){
+  const raw = ($('refSearch')?.value||'').trim().toLowerCase();
+  // A single code can appear as EITHER side of an edge — matching both
+  // columns against the same term is what surfaces "their referrer" (the row
+  // where the code is the new user) and "their referrals" (every row where
+  // the code is the referrer) together, in the one familiar table.
+  const list = raw ? _refs.filter(x => (x.referrerName||'').toLowerCase().includes(raw) || (x.referredName||'').toLowerCase().includes(raw)) : _refs;
+  $('refRows').innerHTML = list.length?list.map(x=>`<tr class="${x.referrerId?'clickable':''}" ${x.referrerId?`data-uid="${esc(x.referrerId)}"`:''}><td>${fdate(x.createdAt)}</td><td><b>${esc(x.referrerName||x.referrerId||'')}</b></td><td>${esc(x.referredName||x.referredUserId||'')}</td><td>${x.level?('L'+x.level):'L1'}</td></tr>`).join(''):`<tr><td colspan="4" class="empty">${raw?'No matching referrals':'No referrals yet'}</td></tr>`;
+  document.querySelectorAll('#refRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 
 // ── SETTINGS ──
