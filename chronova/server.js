@@ -3435,7 +3435,13 @@ async function autoReleaseWithdrawal(witDoc) {
       await witDoc.ref.update({
         status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null,
         autoTries:     FieldValue.increment(1),
-        lastAutoError: marzUserMsg(mpData, 'Gateway did not accept the payout'),
+        // The RAW MarzPay response, not the user-friendly masked version —
+        // this field is only ever shown to the owner in the admin panel
+        // (never to an end user), and marzUserMsg() collapses a wide range
+        // of transient-fault wording into one generic "temporarily busy"
+        // phrase, exactly the ambiguity the owner needs to see through to
+        // tell a real outage apart from something actionable on our side.
+        lastAutoError: String(mpData?.message || 'Gateway did not accept the payout — no error message returned'),
         lastAutoAt:    FieldValue.serverTimestamp()
       });
       return false;                            // stays pending; retried next sweep
