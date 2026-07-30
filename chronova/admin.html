@@ -819,6 +819,16 @@ async function renderWithdrawals(){
   $('witSearch').addEventListener('input', drawWits);
   drawWits();
 }
+// 'pending' (never yet sent to the gateway) and 'processing' (already sent,
+// awaiting the gateway's confirmation) both showed the same generic
+// "Processing" pill via the shared statusPill() — indistinguishable from the
+// panel, which is exactly what made a genuinely-still-pending withdrawal
+// look like it had already been auto-released. Withdrawals get their own,
+// more specific label.
+function witStatusPill(w){
+  if(w.status==='pending') return `<span class="pill-tag t-warn">Awaiting release</span>`;
+  return statusPill(w.status);
+}
 function drawWits(){
   let list = _witFilter==='all' ? _wits : _wits.filter(w=>w.status===_witFilter);
   const raw = ($('witSearch')?.value||'').trim();
@@ -831,7 +841,7 @@ function drawWits(){
   $('witRows').innerHTML = list.length?list.map(w=>`
     <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}${w.userReferralCode?`<br><span class="muted">${esc(w.userReferralCode)}</span>`:''}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
-    <td>${statusPill(w.status)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:''}</td>
+    <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:''}${w.status==='pending'&&(w.autoTries||0)>0?`<br><span class="muted" style="font-size:11px">auto-release tried ${w.autoTries}× — ${esc(w.lastAutoError||'no response yet')}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:''}`:w.status==='processing'?`<button class="btn sm" data-vrf="${esc(w.id)}">Verify</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
   document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Send this payout through MarzPay now?'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection? (funds are refunded to the user)','Rejected by admin'); if(reason===null)return; const d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
