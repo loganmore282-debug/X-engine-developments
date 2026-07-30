@@ -4310,9 +4310,14 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     const counts = { pending: 0, processing: 0, processed: 0, rejected: 0, failed: 0 };
     let processedAmount = 0;
     const procByDay = {};
+    const isOwner = verifyOwner(req);
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     rows.forEach(w => {
       w.userReferralCode = codes[w.userId] || '';
+      // Who processed a withdrawal is owner-only visibility — staff can see
+      // that it WAS processed, just not by whom. Stripped server-side (not
+      // just hidden in the UI) so it can't be read off the network response.
+      if (!isOwner) { delete w.processedBy; delete w.sendingBy; }
       counts[w.status] = (counts[w.status] || 0) + 1;
       if (w.status === 'processed') {
         const amt = (w.netAmount || w.amount || 0);

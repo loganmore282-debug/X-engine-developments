@@ -251,6 +251,14 @@ function seedWithdrawal(id, uid, amount = 50000) {
   const witAfter2 = mockdb.__store.get('withdrawals').get('wit-window-2');
   check('this one is correctly attributed to the staff member who processed it, not the owner', witAfter2.processedBy === 'greta', witAfter2.processedBy);
 
+  console.log('\n── Who processed a withdrawal is owner-only visibility — staff can see it happened, not by whom');
+  let rl = await call('POST', '/admin/withdrawals/list', { token: gretaToken, body: {} });
+  const staffRow = (rl.body?.withdrawals || []).find(w => w.id === 'wit-window-2');
+  check('staff CANNOT see who processed it via the list endpoint, even though it really is greta', !staffRow?.processedBy, staffRow);
+  rl = await call('POST', '/admin/withdrawals/list', { body: { ...ADMIN } });
+  const ownerRow = (rl.body?.withdrawals || []).find(w => w.id === 'wit-window-2');
+  check('the OWNER can see it — attributed to greta', ownerRow?.processedBy === 'greta', ownerRow);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });
