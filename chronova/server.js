@@ -2690,6 +2690,30 @@ async function pollPendingPayments() {
         if (result && (result.credited || result.failed)) settled++;
       } catch (e) { console.warn('pollPendingPayments item error:', e.message); }
     }
+    // Recently-FAILED deposits — re-verify against the real gateway. A user
+    // who says "I paid but never got credited" is usually right that the
+    // money actually moved; our side just marked it failed early (a timeout,
+    // a cancelled status-poll, a transient gateway hiccup) before the payment
+    // actually cleared. creditMarzDeposit() already explicitly allows
+    // reviving a 'failed' deposit if the gateway confirms success late — this
+    // just widens the automatic sweep to also re-check those, not only ones
+    // still 'processing'. Bounded to the last 48h and a small batch so this
+    // never turns into hammering the gateway with old history; manual
+    // (recipient-number) deposits and admin-rejected ones have no gateway
+    // reference, so the poll functions safely no-op on them.
+    const failedSnap = await db.collection('pendingDeposits').where('status', '==', 'failed').limit(80).get();
+    const recentFailed = failedSnap.docs
+      .filter(d => (Date.now() - tsMillis(d.data().failedAt || d.data().createdAt)) < 48 * 3600000)
+      .slice(0, 30);
+    await Promise.all(recentFailed.map(async doc => {
+      const dep = doc.data();
+      try {
+        const result = dep.provider === 'zengapay' ? await pollZengaDepositStatus(doc)
+                     : dep.provider === 'obpay'    ? await pollObpayDepositStatus(doc)
+                     : await pollMarzDepositStatus(doc);
+        if (result && result.credited) settled++;
+      } catch (e) { console.warn('pollPendingPayments (failed-recheck) item error:', e.message); }
+    }));
   } catch (e) { console.error('pollPendingPayments error:', e.message); }
   finally { _sweepingDeposits = false; }
   return settled;
@@ -4212,67 +4236,6 @@ app.post('/admin/products/list', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try { return res.json({ status: 'success', products: await fetchProducts(true) }); }
   catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
-});
-// Loaded lazily, on first actual use, NOT at boot. sharp is a native addon —
-// its prebuilt binary has to match the exact host (libc, arch) it runs on,
-// and a mismatch there throws at require() time. Requiring it at the top of
-// this file meant that failure took the ENTIRE server down before Express
-// even started (every endpoint, not just this one) — a single point of
-// failure for a feature only the owner uses. Now a load failure only ever
-// disables "Shrink images" itself; every money/auth/product endpoint is
-// completely unaffected regardless of whether sharp works on this host.
-let _sharp, _sharpLoadError;
-function loadSharp() {
-  if (_sharp || _sharpLoadError) return _sharp;
-  try { _sharp = require('sharp'); }
-  catch (e) { _sharpLoadError = e; console.error('sharp failed to load (image shrinking disabled):', e.message); }
-  return _sharp;
-}
-// Re-encodes a base64 image data-URI to a smaller JPEG (resize + requality).
-// Used to shrink product images already sitting in the database at whatever
-// size they were first uploaded — /products ships every active product's
-// image on every single app boot, so this is the single biggest lever on how
-// long "products" specifically takes to load compared to every other tab.
-async function recompressImage(dataUri, maxDim, quality) {
-  const m = String(dataUri || '').match(/^data:image\/[a-zA-Z0-9+.-]+;base64,(.+)$/);
-  if (!m) return null;
-  const sharp = loadSharp();
-  if (!sharp) throw new Error('Image processing is not available on this server right now');
-  const buf = Buffer.from(m[1], 'base64');
-  const out = await sharp(buf).rotate()
-    .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality, mozjpeg: true })
-    .toBuffer();
-  return 'data:image/jpeg;base64,' + out.toString('base64');
-}
-// One-click, repeatable pass over every product's stored image — shrinks
-// anything still at its original (larger) uploaded size. Idempotent: an
-// image that's already small, or that fails to shrink further, is left
-// alone, so running this again later (e.g. after a new large upload) is
-// always safe and only touches what's actually still oversized.
-app.post('/admin/products/recompress-images', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  if (!loadSharp()) return res.status(503).json({ status: 'error', message: 'Image processing is not available on this server right now — try again later' });
-  const maxDim   = Math.max(100, Math.round(parseFloat(req.body.maxDim) || 640));
-  const quality  = Math.min(95, Math.max(30, Math.round(parseFloat(req.body.quality) || 70)));
-  try {
-    const snap = await db.collection('products').get();
-    let processed = 0, skipped = 0, bytesBefore = 0, bytesAfter = 0;
-    for (const doc of snap.docs) {
-      const p = doc.data();
-      if (!p.image || !p.image.startsWith('data:image/')) { skipped++; continue; }
-      const before = p.image.length;
-      if (before < 60000) { skipped++; continue; } // already small — not worth touching
-      try {
-        const smaller = await recompressImage(p.image, maxDim, quality);
-        if (!smaller || smaller.length >= before) { skipped++; continue; }
-        await doc.ref.update({ image: smaller });
-        processed++; bytesBefore += before; bytesAfter += smaller.length;
-      } catch (e) { console.warn('recompress product image failed:', doc.id, e.message); skipped++; }
-    }
-    logAdminAction(req, 'products_images_recompressed', { processed, skipped, bytesBefore, bytesAfter });
-    return res.json({ status: 'success', processed, skipped, bytesBefore, bytesAfter });
-  } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/products/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
