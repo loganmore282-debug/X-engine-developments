@@ -275,6 +275,25 @@ function seedWithdrawal(id, uid, amount = 50000) {
   const autoSettled = mockdb.__store.get('withdrawals').get('wit-auto-settle');
   check('it settled to processed with NO admin action taken — the background poll alone did this', autoSettled.status === 'processed', autoSettled.status);
 
+  console.log('\n── An automatically-released withdrawal (past its 15-min window, nobody touched it) is attributed to "server", same field as a human admin');
+  // autoReleaseWithdrawal() now writes processedBy: 'server' — the exact
+  // same field a human admin's action writes — so the panel's existing
+  // "by X · date" line shows the release happened automatically instead of
+  // silently showing nobody, and the SAME owner-only visibility rule from
+  // above applies uniformly whether the actor is a person or the server.
+  seedUser('rosa-uid');
+  mockdb.__store.get('withdrawals').set('wit-auto-released', {
+    userId: 'rosa-uid', userName: 'rosa-uid', userPhone: '0771000007', withdrawalPhone: '0771000007',
+    amount: 15000, fee: 0, netAmount: 15000, status: 'processing', provider: 'marzpay',
+    marzTxUuid: 'WTX-ROSA-1', releasedBy: 'server', processedBy: 'server', createdAt: new Date(), processedAt: new Date(),
+  });
+  rl = await call('POST', '/admin/withdrawals/list', { body: { ...ADMIN } });
+  const ownerAutoRow = (rl.body?.withdrawals || []).find(w => w.id === 'wit-auto-released');
+  check('the owner sees it was released by "server", not blank and not a person\'s name', ownerAutoRow?.processedBy === 'server', ownerAutoRow);
+  rl = await call('POST', '/admin/withdrawals/list', { token: gretaToken, body: {} });
+  const staffAutoRow = (rl.body?.withdrawals || []).find(w => w.id === 'wit-auto-released');
+  check('staff still cannot see the attribution — "server" is stripped the same as a human actor would be', !staffAutoRow?.processedBy, staffAutoRow);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

@@ -3443,16 +3443,20 @@ async function autoReleaseWithdrawal(witDoc) {
 
     const marzTxUuid = mpData.data?.transaction?.uuid || '';
     const batch = db.batch();
+    // processedBy: 'server' — the SAME field the panel already shows "by X ·
+    // date" from for a human admin action, so an automatic release (past its
+    // 15-minute window, nobody touched it) is attributed just as clearly as
+    // a manual one, instead of silently showing nobody.
     if (sandbox) {
       batch.update(witDoc.ref, {
         status: 'processed', provider: 'marzpay', marzReference: reference, marzTxUuid,
-        releasedBy: 'server', processedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp()
+        releasedBy: 'server', processedBy: 'server', processedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp()
       });
       batch.update(db.collection('users').doc(wit.userId), { totalWithdrawn: FieldValue.increment(netAmount) });
     } else {
       batch.update(witDoc.ref, {
         status: 'processing', provider: 'marzpay', marzReference: reference, marzTxUuid,
-        releasedBy: 'server', processedAt: FieldValue.serverTimestamp()
+        releasedBy: 'server', processedBy: 'server', processedAt: FieldValue.serverTimestamp()
       });
     }
     await batch.commit();
