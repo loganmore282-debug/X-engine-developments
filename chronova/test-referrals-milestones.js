@@ -386,6 +386,40 @@ async function realDeposit(token, amount, phone) {
   r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN });
   check('re-running reconcile again is a clean no-op, not an infinite retry', r.body?.status === 'success', r.body);
 
+  console.log('\n── 15. Welcome-bonus retry safety: a repeated /register can never re-credit or duplicate the ledger row');
+  // Real production bug found via the Integrity Audit: the OLD code wrote the
+  // "Welcome gift" transaction row BEFORE the user doc's registrationDone +
+  // wallet credit, inside a batch that applies sequentially with no rollback
+  // (M0 has no real transactions). A process restart landing between those
+  // two writes (exactly what several redeploys in one day risk) left a
+  // "Welcome gift" ledger row with registrationDone still false; a retried
+  // /register call (the client, or the documented boot self-heal) then ran
+  // the WHOLE flow again, writing a SECOND Welcome-gift row once it finally
+  // succeeded — ledger over-counted by one welcome bonus per orphaned
+  // attempt, wallet only ever credited once. Fixed by writing the user's own
+  // doc FIRST, so an interruption always leaves the user paid; this proves a
+  // retry after that reorder is now a safe, silent no-op.
+  const H = 'uid:henry-uid';
+  await call('POST', '/account/create-profile', { token: H, body: { phone: '0771000092' } });
+  r = await call('POST', '/register', { token: H, body: { referralCode: '' } });
+  check('henry registers normally, welcome bonus 5000', r.body?.status === 'success' && r.body?.welcomeBonus === 5000, r.body);
+  check('exactly ONE "Welcome gift" transaction row exists', countTx('henry-uid', 'admin_credit') === 1, countTx('henry-uid', 'admin_credit'));
+  check('wallet shows exactly one welcome credit', userDoc('henry-uid').walletBalance === 5000, userDoc('henry-uid').walletBalance);
+  // Directly simulate the failure this fix targets: a process restart landing
+  // between the two writes means the "Welcome gift" ledger row never actually
+  // gets written, even though registrationDone + the wallet credit (the SAME
+  // single batch op under the fix) already fully landed. Deleting the row
+  // here reproduces exactly that end state without needing to kill the
+  // process mid-batch.
+  const henryTxId = [...txns().entries()].find(([, t]) => t.userId === 'henry-uid' && t.type === 'admin_credit')[0];
+  txns().delete(henryTxId);
+  check('(simulated) the Welcome-gift ledger row is now missing, as an interrupted batch would leave it', countTx('henry-uid', 'admin_credit') === 0, countTx('henry-uid', 'admin_credit'));
+  check('the wallet credit is UNAFFECTED — it was written in the same op as registrationDone, not the missing one', userDoc('henry-uid').walletBalance === 5000, userDoc('henry-uid').walletBalance);
+  r = await call('POST', '/register', { token: H, body: { referralCode: '' } });
+  check('a retried /register — even with the ledger row missing — is recognised as already done, not re-run', r.body?.status === 'already_done', r.body);
+  check('the retry did NOT grant a second welcome bonus on top of the one already paid', userDoc('henry-uid').walletBalance === 5000, userDoc('henry-uid').walletBalance);
+  check('the retry did NOT resurrect or duplicate the ledger row (missing history line stays cosmetic, never compounds)', countTx('henry-uid', 'admin_credit') === 0, countTx('henry-uid', 'admin_credit'));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

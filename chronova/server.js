@@ -1421,11 +1421,6 @@ app.post('/register', async (req, res) => {
     const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
     if (!useCode) update.pendingReferral = '';
 
-    batch.set(db.collection('transactions').doc(), {
-      userId, type: 'admin_credit', description: 'Welcome gift',
-      amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-    });
-
     if (referrerId) {
       update.referredBy = referrerId;
       update.pendingReferral = '';   // linked now — safe to clear
@@ -1444,7 +1439,27 @@ app.post('/register', async (req, res) => {
       });
     }
 
+    // ORDER MATTERS (M0 batches apply sequentially, no rollback — see db.js):
+    // the user's OWN doc — registrationDone + the actual wallet credit — is
+    // written FIRST. If the process dies right after this (a redeploy landing
+    // at the exact wrong instant, same class of bug as the redeem-lock fix
+    // earlier today), the user is already fully, correctly paid and marked
+    // done; a retried /register call (the client, or the boot self-heal
+    // mentioned above) hits the registrationDone guard and stops immediately
+    // instead of re-running this whole block. The only possible casualty of
+    // an interruption is the "Welcome gift" HISTORY LINE below never getting
+    // written — cosmetic, not money. The previous order had this backwards:
+    // it wrote the Welcome-gift transaction row FIRST, so an interruption
+    // there left a ledger row with NO registrationDone yet — a retry then
+    // wrote a SECOND Welcome-gift row on top of the first once it finally
+    // succeeded, over-counting the ledger by one welcome bonus per orphaned
+    // attempt while the wallet only ever received the credit once. That is
+    // exactly the "balance ≠ ledger" pattern the Integrity Audit found today.
     batch.update(userRef, update);
+    batch.set(db.collection('transactions').doc(), {
+      userId, type: 'admin_credit', description: 'Welcome gift',
+      amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+    });
     await batch.commit();
     return res.json({ status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode });
     }); // end withLock
