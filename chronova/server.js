@@ -2080,18 +2080,23 @@ function startCrons() {
   // (webhooks are not reliable enough to be the only path — every callback
   // handler already acks instantly and settles in the background, but this
   // is the catch-all when a webhook never shows up at all).
-  setInterval(pollPendingPayments, 2 * 1000);
+  // REVERTED from 2s (2026-07-30): suspected of hammering MarzPay's API
+  // hard enough to trigger their own rate-limiting/"temporarily busy"
+  // responses — one status-check call per stuck item, every single tick.
+  // That would explain the busy errors hitting deposit COLLECTION too if
+  // MarzPay rate-limits by account rather than per-endpoint. Back to a safe
+  // interval while this is being diagnosed properly against real traffic.
+  setInterval(pollPendingPayments, 30 * 1000);
   // release any withdrawal the admin has left sitting past their 5-minute window
   setInterval(sweepPendingWithdrawals, 60 * 1000);
-  setTimeout(pollPendingPayments, 2 * 1000);
+  setTimeout(pollPendingPayments, 15 * 1000);
   // Withdrawal STATUS settlement — this used to only run when an admin
   // clicked "Sync MarzPay" by hand; a withdrawal sent to the gateway with no
   // callback ever arriving could sit at 'processing' indefinitely with
-  // nobody the wiser. Now on the same fast, automatic background cadence as
-  // deposits above, so a completed or failed payout lands within moments
-  // with zero manual action needed.
-  setInterval(pollPendingWithdrawalStatus, 2 * 1000);
-  setTimeout(pollPendingWithdrawalStatus, 2 * 1000);
+  // nobody the wiser. Kept on an automatic background cadence (was 2s,
+  // reverted to 30s for the same rate-limit suspicion above).
+  setInterval(pollPendingWithdrawalStatus, 30 * 1000);
+  setTimeout(pollPendingWithdrawalStatus, 15 * 1000);
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
   setTimeout(reconcileCommissions, 90 * 1000);

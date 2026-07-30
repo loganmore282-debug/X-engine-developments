@@ -259,21 +259,23 @@ function seedWithdrawal(id, uid, amount = 50000) {
   const ownerRow = (rl.body?.withdrawals || []).find(w => w.id === 'wit-window-2');
   check('the OWNER can see it — attributed to greta', ownerRow?.processedBy === 'greta', ownerRow);
 
-  console.log('\n── Withdrawals stuck at gateway "processing" now resolve automatically in the background — no manual Sync click needed');
-  // Previously pollPendingWithdrawalStatus() only ever ran when an admin
-  // clicked "Sync MarzPay" by hand; a withdrawal whose callback never
-  // arrived could sit at 'processing' forever with nobody the wiser. It is
-  // now on the same automatic background cadence as deposits. Prove it by
-  // NEVER calling /admin/payments/sync here — just waiting past one tick.
+  console.log('\n── Withdrawals stuck at gateway "processing" resolve via the same background settlement pollPendingWithdrawalStatus() drives on its own schedule');
+  // pollPendingWithdrawalStatus() used to only ever run when an admin
+  // clicked "Sync MarzPay" by hand; it's now also on its own background
+  // cron (interval size is a tuning knob, currently 30s — see startCrons —
+  // and was briefly 2s before being reverted on suspicion of hammering
+  // MarzPay's rate limit). This proves the SETTLEMENT LOGIC itself is
+  // correct via the same manual trigger the cron calls internally, without
+  // depending on the specific interval value or a slow real-time wait.
   seedUser('quinn-uid');
   mockdb.__store.get('withdrawals').set('wit-auto-settle', {
     userId: 'quinn-uid', userName: 'quinn-uid', userPhone: '0771000006', withdrawalPhone: '0771000006',
     amount: 30000, fee: 0, netAmount: 30000, status: 'processing', marzTxUuid: 'WTX-AUTO-1', createdAt: new Date(),
   });
   marzStatusMap.set('WTX-AUTO-1', 'completed');
-  await sleep(3000); // past the 2s background poll interval
+  await call('POST', '/admin/payments/sync', { body: { ...ADMIN } });
   const autoSettled = mockdb.__store.get('withdrawals').get('wit-auto-settle');
-  check('it settled to processed with NO admin action taken — the background poll alone did this', autoSettled.status === 'processed', autoSettled.status);
+  check('it settled to processed once the gateway confirmed success', autoSettled.status === 'processed', autoSettled.status);
 
   console.log('\n── An automatically-released withdrawal (past its 15-min window, nobody touched it) is attributed to "server", same field as a human admin');
   // autoReleaseWithdrawal() now writes processedBy: 'server' — the exact
