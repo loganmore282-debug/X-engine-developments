@@ -259,6 +259,22 @@ function seedWithdrawal(id, uid, amount = 50000) {
   const ownerRow = (rl.body?.withdrawals || []).find(w => w.id === 'wit-window-2');
   check('the OWNER can see it — attributed to greta', ownerRow?.processedBy === 'greta', ownerRow);
 
+  console.log('\n── Withdrawals stuck at gateway "processing" now resolve automatically in the background — no manual Sync click needed');
+  // Previously pollPendingWithdrawalStatus() only ever ran when an admin
+  // clicked "Sync MarzPay" by hand; a withdrawal whose callback never
+  // arrived could sit at 'processing' forever with nobody the wiser. It is
+  // now on the same automatic background cadence as deposits. Prove it by
+  // NEVER calling /admin/payments/sync here — just waiting past one tick.
+  seedUser('quinn-uid');
+  mockdb.__store.get('withdrawals').set('wit-auto-settle', {
+    userId: 'quinn-uid', userName: 'quinn-uid', userPhone: '0771000006', withdrawalPhone: '0771000006',
+    amount: 30000, fee: 0, netAmount: 30000, status: 'processing', marzTxUuid: 'WTX-AUTO-1', createdAt: new Date(),
+  });
+  marzStatusMap.set('WTX-AUTO-1', 'completed');
+  await sleep(9000); // past the 8s background poll interval, well under its own timeout
+  const autoSettled = mockdb.__store.get('withdrawals').get('wit-auto-settle');
+  check('it settled to processed with NO admin action taken — the background poll alone did this', autoSettled.status === 'processed', autoSettled.status);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

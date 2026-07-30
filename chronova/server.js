@@ -2075,12 +2075,23 @@ function startCrons() {
   // plus the settle-on-open hook in /account/investments for instant landing.
   setInterval(runDailyPayouts, 60 * 1000);
   setTimeout(runDailyPayouts, 15 * 1000);
-  // Background payment settlement — every 45s, so a paid deposit lands even if
-  // the user closed the app and the callback never arrived.
-  setInterval(pollPendingPayments, 30 * 1000);
+  // Background payment settlement — fast, so a paid deposit lands within
+  // moments even if the user closed the app and the callback never arrived
+  // (webhooks are not reliable enough to be the only path — every callback
+  // handler already acks instantly and settles in the background, but this
+  // is the catch-all when a webhook never shows up at all).
+  setInterval(pollPendingPayments, 8 * 1000);
   // release any withdrawal the admin has left sitting past their 5-minute window
   setInterval(sweepPendingWithdrawals, 60 * 1000);
-  setTimeout(pollPendingPayments, 15 * 1000);
+  setTimeout(pollPendingPayments, 5 * 1000);
+  // Withdrawal STATUS settlement — this used to only run when an admin
+  // clicked "Sync MarzPay" by hand; a withdrawal sent to the gateway with no
+  // callback ever arriving could sit at 'processing' indefinitely with
+  // nobody the wiser. Now on the same fast, automatic background cadence as
+  // deposits above, so a completed or failed payout lands within moments
+  // with zero manual action needed.
+  setInterval(pollPendingWithdrawalStatus, 8 * 1000);
+  setTimeout(pollPendingWithdrawalStatus, 5 * 1000);
   // Referral safety-net: catch any commission that didn't get paid at invest time.
   setInterval(reconcileCommissions, 10 * 60 * 1000);
   setTimeout(reconcileCommissions, 90 * 1000);
