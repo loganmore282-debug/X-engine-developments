@@ -221,6 +221,36 @@ function seedWithdrawal(id, uid, amount = 50000) {
   check('the flag never touched the wallet — this is report-only, same rule as every other integrity check',
     mockdb.__store.get('users').get('finn-uid').walletBalance === 500000, mockdb.__store.get('users').get('finn-uid').walletBalance);
 
+  console.log('\n── 7. Staff can only process a withdrawal inside the 7am-6pm Kampala window; the owner is exempt; who/when is recorded');
+  await call('POST', '/admin/admins/create', { body: { ...ADMIN, username: 'greta', password: 'greta-pass-1234' } });
+  let rLogin = await call('POST', '/admin/login', { body: { username: 'greta', password: 'greta-pass-1234' } });
+  const gretaToken = rLogin.body?.token;
+  check('staff account "greta" created and logged in', !!gretaToken, rLogin.body);
+
+  seedUser('greta-target-uid');
+  seedWithdrawal('wit-window-1', 'greta-target-uid');
+  const realDateNow = Date.now;
+  const eatHourMs = h => Date.parse('2025-06-01T00:00:00Z') + h * 3600000 - 3 * 3600000; // eatNow() adds 3h
+  Date.now = () => eatHourMs(2); // 02:00 Kampala — well outside 7am-6pm
+  let rw = await call('POST', '/admin/withdraw/process', { token: gretaToken, body: { withdrawalId: 'wit-window-1' } });
+  check('staff blocked from processing at 2am Kampala (outside the window)', rw.code === 403 && /7am|6pm/i.test(rw.body?.message || ''), rw.body);
+  check('the blocked attempt never touched MarzPay or the withdrawal itself', mockdb.__store.get('withdrawals').get('wit-window-1').status === 'pending', mockdb.__store.get('withdrawals').get('wit-window-1').status);
+  rw = await call('POST', '/admin/withdraw/process', { body: { ...ADMIN, withdrawalId: 'wit-window-1' } });
+  Date.now = realDateNow;
+  check('the OWNER is not blocked by the window even at 2am — this restriction limits staff, not the owner', rw.body?.status === 'success', rw.body);
+  const witAfter = mockdb.__store.get('withdrawals').get('wit-window-1');
+  check('the withdrawal record itself shows WHO processed it', witAfter.processedBy === 'owner-key', witAfter.processedBy);
+  check('and WHEN — a real timestamp landed on processedAt', !!witAfter.processedAt, witAfter.processedAt);
+
+  seedUser('greta-target-2-uid');
+  seedWithdrawal('wit-window-2', 'greta-target-2-uid');
+  Date.now = () => eatHourMs(10); // 10:00 Kampala — inside the window
+  rw = await call('POST', '/admin/withdraw/process', { token: gretaToken, body: { withdrawalId: 'wit-window-2' } });
+  Date.now = realDateNow;
+  check('staff CAN process a withdrawal at 10am Kampala (inside the window)', rw.body?.status === 'success', rw.body);
+  const witAfter2 = mockdb.__store.get('withdrawals').get('wit-window-2');
+  check('this one is correctly attributed to the staff member who processed it, not the owner', witAfter2.processedBy === 'greta', witAfter2.processedBy);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

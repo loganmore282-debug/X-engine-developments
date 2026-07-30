@@ -184,10 +184,24 @@ device gets both.
   backgrounded device plays its normal system notification sound. Foreground
   (tab open + focused) is different — that's handled by `onMessage()` in
   `admin.html`, which only shows an in-page `toast()`, no sound.
-- Manually crediting a wallet (`/admin/deposit`) is owner-only (`verifyOwner`)
-  — staff can debit/ban/etc. but never credit, that's the one adjustment
-  reserved for the owner. The Credit button itself only renders in
-  `admin.html` when `SESSION_ROLE === 'owner'`.
+- **Updated policy (owner-only user actions):** crediting, debiting, banning,
+  deleting an account, and resetting a user's password are ALL owner-only now
+  (`verifyOwner` on `/admin/deposit`, `/admin/debit`, `/admin/ban`,
+  `/admin/user/delete`, `/admin/user/reset-password`, and
+  `/admin/deposit/force-credit`) — staff can no longer do any of these
+  (earlier sessions had staff able to debit/ban; that was deliberately
+  tightened after a real gift-code abuse incident). `admin.html`'s user-detail
+  modal only renders the Credit/Debit/Ban/Delete buttons and the
+  reset-password field at all when `SESSION_ROLE === 'owner'`.
+- Withdrawal payouts (`/admin/withdraw/process`) are staff-accessible but
+  gated to the same **7am-6pm Kampala window** as the automatic gateway
+  release (`inWithdrawWindow()`) — the owner is exempt (`verifyOwner` bypasses
+  the window check; the restriction limits staff, not the owner).
+  `/admin/withdraw/reject` has no window restriction (refunding the user's
+  own already-debited money carries no gateway/leak risk). Every processed
+  withdrawal stores `processedBy` (username, or `'owner-key'` for the legacy
+  master key) + `processedAt` directly on the withdrawal doc — shown right in
+  the admin.html Withdrawals row, not just the separate Activity Log.
 - Not verified end-to-end in this sandbox (no outbound internet to Firebase,
   and no real deployed backend to register a token against) — code is
   defensively guarded (`typeof firebase === 'undefined'` etc.) and syntax

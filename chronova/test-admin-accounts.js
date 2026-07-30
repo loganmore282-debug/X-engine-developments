@@ -180,32 +180,47 @@ function check(name, cond, extra) {
   check('the SAME still-valid session works again right after (it was never actually invalidated)', r.body?.status === 'success', r.body);
 
   console.log('\n── 8. Settings, Products and Banners are owner-only too');
+  // NOTE: uses bobToken3 (still-alive) not bobToken (deliberately killed back
+  // in section 4's password-reset test) — a dead session 401s regardless of
+  // the endpoint's own permission check, which would make every "staff
+  // CANNOT..." assertion below pass for the wrong reason no matter what the
+  // code actually enforced.
   r = await call('POST', '/admin/settings', { token: ownerToken, body: {} });
   check('owner CAN read settings', r.body?.status === 'success', r.body);
-  r = await call('POST', '/admin/settings', { token: bobToken, body: {} });
+  r = await call('POST', '/admin/settings', { token: bobToken3, body: {} });
   check('staff CANNOT read settings', r.code === 401, r.body);
-  r = await call('POST', '/admin/settings/update', { token: bobToken, body: { maintenanceMode: true } });
+  r = await call('POST', '/admin/settings/update', { token: bobToken3, body: { maintenanceMode: true } });
   check('staff CANNOT write settings', r.code === 401, r.body);
-  r = await call('POST', '/admin/banners', { token: bobToken, body: {} });
+  r = await call('POST', '/admin/banners', { token: bobToken3, body: {} });
   check('staff CANNOT read banners', r.code === 401, r.body);
-  r = await call('POST', '/admin/banners/set', { token: bobToken, body: { key: 'bannerHero', url: 'https://evil.example/x.png' } });
+  r = await call('POST', '/admin/banners/set', { token: bobToken3, body: { key: 'bannerHero', url: 'https://evil.example/x.png' } });
   check('staff CANNOT write banners', r.code === 401, r.body);
-  r = await call('POST', '/admin/products/list', { token: bobToken, body: {} });
+  r = await call('POST', '/admin/products/list', { token: bobToken3, body: {} });
   check('staff CANNOT list products', r.code === 401, r.body);
-  r = await call('POST', '/admin/products/save', { token: bobToken, body: { label: 'Hijacked', price: 1 } });
+  r = await call('POST', '/admin/products/save', { token: bobToken3, body: { label: 'Hijacked', price: 1 } });
   check('staff CANNOT create/edit products', r.code === 401, r.body);
-  r = await call('POST', '/admin/products/clear', { token: bobToken, body: {} });
+  r = await call('POST', '/admin/products/clear', { token: bobToken3, body: {} });
   check('staff CANNOT clear the product catalogue', r.code === 401, r.body);
   r = await call('POST', '/admin/products/list', { token: ownerToken, body: {} });
   check('owner CAN still list products', r.body?.status === 'success', r.body);
-  r = await call('POST', '/admin/deposit', { token: bobToken, body: { userId: 'x', amount: 1000 } });
+  r = await call('POST', '/admin/deposit', { token: bobToken3, body: { userId: 'x', amount: 1000 } });
   check('staff CANNOT credit a wallet (owner-only)', r.code === 401, r.body);
   r = await call('POST', '/admin/deposit', { token: ownerToken, body: { userId: 'nonexistent-uid', amount: 1000 } });
   check('owner CAN reach the credit-wallet endpoint (fails on missing user, not auth)', r.code !== 401, r.body);
-  r = await call('POST', '/admin/deposit/force-credit', { token: bobToken, body: { depositId: 'x' } });
+  r = await call('POST', '/admin/deposit/force-credit', { token: bobToken3, body: { depositId: 'x' } });
   check('staff CANNOT force-credit a deposit either — it credits on the admin\'s say-so with no independent gateway recheck, same risk as /admin/deposit', r.code === 401, r.body);
   r = await call('POST', '/admin/deposit/force-credit', { token: ownerToken, body: { depositId: 'nonexistent-dep' } });
   check('owner CAN reach force-credit (fails on missing deposit, not auth)', r.code !== 401, r.body);
+  r = await call('POST', '/admin/debit', { token: bobToken3, body: { userId: 'x', amount: 1000 } });
+  check('staff CANNOT debit a wallet either (owner-only now)', r.code === 401, r.body);
+  r = await call('POST', '/admin/debit', { token: ownerToken, body: { userId: 'nonexistent-uid', amount: 1000 } });
+  check('owner CAN reach debit (fails on missing user, not auth)', r.code !== 401, r.body);
+  r = await call('POST', '/admin/ban', { token: bobToken3, body: { userId: 'x', action: 'ban' } });
+  check('staff CANNOT ban/unban a user (owner-only now)', r.code === 401, r.body);
+  r = await call('POST', '/admin/user/reset-password', { token: bobToken3, body: { userId: 'x', newPassword: 'whatever123' } });
+  check('staff CANNOT reset a user\'s password (owner-only now)', r.code === 401, r.body);
+  r = await call('POST', '/admin/user/delete', { token: bobToken3, body: { userId: 'x', confirm: 'DELETE' } });
+  check('staff CANNOT delete an account (owner-only now)', r.code === 401, r.body);
 
   console.log('\n── 9. The lightweight badge endpoint (polled every 12s from every open tab) works without the heavy full-stats scan');
   r = await call('POST', '/admin/badges', { token: ownerToken, body: {} });

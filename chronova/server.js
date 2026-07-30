@@ -3425,6 +3425,14 @@ async function sweepPendingWithdrawals() {
 
 app.post('/admin/withdraw/process', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  // Staff may only send a payout inside the 7am-6pm Kampala window — same
+  // hours the automatic gateway release already respects. The owner is
+  // exempt (verifyOwner covers both a real owner session and the legacy
+  // master key), since this restriction exists to limit what STAFF can do
+  // unsupervised, not to block the owner from acting outside office hours.
+  if (!verifyOwner(req) && !inWithdrawWindow())
+    return res.status(403).json({ status: 'error',
+      message: 'Withdrawals can only be processed between 7am and 6pm (Kampala time). Try again within that window.' });
   const { withdrawalId } = req.body;
   if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
   // Same-request race guard: two admins (or an admin racing the auto-release
@@ -3458,15 +3466,19 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const { date, time } = nowStr();
     const batch = db.batch();
     const marzTxUuid = mpData.data?.transaction?.uuid || '';
+    // Who approved this and when — stored right on the withdrawal record
+    // itself (not just the separate Activity Log) so it's visible directly
+    // alongside the payout in the Withdrawals list.
+    const processedBy = req.adminUser?.username || 'owner-key';
     if (witSandbox) {
       batch.update(db.collection('withdrawals').doc(withdrawalId), {
-        status: 'processed', provider: 'marzpay', marzReference: reference, marzTxUuid,
+        status: 'processed', provider: 'marzpay', marzReference: reference, marzTxUuid, processedBy,
         processedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp()
       });
       batch.update(db.collection('users').doc(wit.userId), { totalWithdrawn: FieldValue.increment(netAmount) });
     } else {
       batch.update(db.collection('withdrawals').doc(withdrawalId), {
-        status: 'processing', provider: 'marzpay', marzReference: reference, marzTxUuid, processedAt: FieldValue.serverTimestamp()
+        status: 'processing', provider: 'marzpay', marzReference: reference, marzTxUuid, processedBy, processedAt: FieldValue.serverTimestamp()
       });
     }
     await batch.commit();
@@ -3623,8 +3635,12 @@ app.post('/admin/deposit', async (req, res) => {
     return res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
+// OWNER-ONLY: debiting a user's wallet, banning, resetting a password, and
+// deleting an account are all irreversible or user-harming actions on a
+// staff member's own say-so — locked to the owner the same as manual
+// crediting, gift codes, and force-credit already are.
 app.post('/admin/debit', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, amount, note } = req.body;
   const amt = Math.abs(parseFloat(amount || 0));
   if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
@@ -3647,7 +3663,7 @@ app.post('/admin/debit', async (req, res) => {
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/ban', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, action, reason } = req.body;
   try {
     const isBan = action === 'ban';
@@ -3665,7 +3681,7 @@ app.post('/admin/ban', async (req, res) => {
 // against that. Used when a user is locked out and the self-service SMS reset
 // isn't available.
 app.post('/admin/user/reset-password', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, newPassword } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   if (!newPassword || String(newPassword).length < 6)
@@ -3825,7 +3841,7 @@ app.post('/admin/users/recount', async (req, res) => {
 // counts up the chain, and frees the phone number in Firebase so it can register
 // again. Requires confirm:"DELETE" so a stray click can never wipe an account.
 app.post('/admin/user/delete', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, confirm } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   if (confirm !== 'DELETE') return res.status(400).json({ status: 'error', message: 'Type DELETE to confirm' });
