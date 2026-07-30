@@ -759,7 +759,7 @@ function drawDeps(){
       <td><b>${ugx(d.creditedAmount||d.amount)}</b></td>
       <td>${esc(DEP_PROVIDER_LABEL[d.provider]||d.provider||'—')}<br><span class="muted" style="font-size:11px">${detail}</span></td>
       <td>${statusPill(d.status)}${d.status==='claimed'&&d.expiresAtMs?` <span class="muted">${cpLeft(d.expiresAtMs)}</span>`:''}</td>
-      <td style="white-space:nowrap">${actionable?`<button class="btn ok sm" data-appr="${esc(d.id)}">Approve</button> <button class="btn danger sm" data-drej="${esc(d.id)}">Reject</button>`:''}</td></tr>`;
+      <td style="white-space:nowrap">${actionable?`<button class="btn ok sm" data-appr="${esc(d.id)}">Approve</button>${SESSION_ROLE==='owner'?` <button class="btn danger sm" data-drej="${esc(d.id)}">Reject</button>`:''}`:''}</td></tr>`;
   }).join(''):'<tr><td colspan="6" class="empty">No deposits</td></tr>';
   document.querySelectorAll('[data-appr]').forEach(b=>b.addEventListener('click',async()=>{
     if(!confirm('Approve this deposit? Only after you have confirmed the money arrived on your number. This credits the user.'))return;
@@ -809,7 +809,7 @@ function drawWits(){
     <tr><td>${fdate(w.createdAt)}</td><td>${esc(w.userName||'')}<br><span class="muted">${esc(w.withdrawalPhone||w.userPhone||'')}</span></td>
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.netAmount)}</b></td>
     <td>${statusPill(w.status)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:''}</td>
-    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> <button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:w.status==='processing'?`<button class="btn sm" data-vrf="${esc(w.id)}">Verify</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
+    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button> `:''}`:w.status==='processing'?`<button class="btn sm" data-vrf="${esc(w.id)}">Verify</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No withdrawals</td></tr>';
   document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Send this payout through MarzPay now?'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async()=>{ const reason=prompt('Reason for rejection? (funds are refunded to the user)','Rejected by admin'); if(reason===null)return; const d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async()=>{ const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ const p=d.provider||'Provider'; alert(`${p} verify\n\nOur record: ${d.ourStatus}\n${p} says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));

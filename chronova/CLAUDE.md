@@ -196,12 +196,17 @@ device gets both.
 - Withdrawal payouts (`/admin/withdraw/process`) are staff-accessible but
   gated to the same **7am-6pm Kampala window** as the automatic gateway
   release (`inWithdrawWindow()`) — the owner is exempt (`verifyOwner` bypasses
-  the window check; the restriction limits staff, not the owner).
-  `/admin/withdraw/reject` has no window restriction (refunding the user's
-  own already-debited money carries no gateway/leak risk). Every processed
-  withdrawal stores `processedBy` (username, or `'owner-key'` for the legacy
-  master key) + `processedAt` directly on the withdrawal doc — shown right in
-  the admin.html Withdrawals row, not just the separate Activity Log.
+  the window check; the restriction limits staff, not the owner). Every
+  processed withdrawal stores `processedBy` (username, or `'owner-key'` for
+  the legacy master key) + `processedAt` directly on the withdrawal doc —
+  shown right in the admin.html Withdrawals row, not just the separate
+  Activity Log.
+- **Rejecting** a deposit or withdrawal (`/admin/deposit/reject`,
+  `/admin/withdraw/reject`) is owner-only too — staff can still **approve** a
+  deposit and **process** a withdrawal (within the window), but declining one
+  is a final, one-way call on someone's money and needs the owner. Both
+  Reject buttons are hidden from staff in admin.html (`SESSION_ROLE==='owner'`
+  gate), same pattern as the other owner-only actions above.
 - Not verified end-to-end in this sandbox (no outbound internet to Firebase,
   and no real deployed backend to register a token against) — code is
   defensively guarded (`typeof firebase === 'undefined'` etc.) and syntax

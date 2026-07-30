@@ -2903,8 +2903,12 @@ app.post('/admin/deposit/approve', async (req, res) => {
     return res.json({ status: 'success', message: `Credited ${fmtUGX(o.amount)}` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
+// OWNER-ONLY: rejecting a deposit or withdrawal is a final, user-facing money
+// decision (declining someone's payment, or refusing to pay out a request) —
+// staff can still APPROVE a deposit or PROCESS a withdrawal (within the
+// window), but a rejection now needs the owner.
 app.post('/admin/deposit/reject', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
   try {
     const ref = db.collection('pendingDeposits').doc(String(req.body.orderId || ''));
     const snap = await ref.get();
@@ -2918,7 +2922,7 @@ app.post('/admin/deposit/reject', async (req, res) => {
 });
 // ── ADMIN: reject a withdrawal (refunds the held funds, idempotent) ──
 app.post('/admin/withdraw/reject', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Invalid key' });
   const withdrawalId = String(req.body.withdrawalId || '');
   // Same lock as /admin/withdraw/process: a reject must never land while a
   // process/auto-release is mid-flight sending real money, or the user gets

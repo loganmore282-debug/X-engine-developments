@@ -221,6 +221,10 @@ function check(name, cond, extra) {
   check('staff CANNOT reset a user\'s password (owner-only now)', r.code === 401, r.body);
   r = await call('POST', '/admin/user/delete', { token: bobToken3, body: { userId: 'x', confirm: 'DELETE' } });
   check('staff CANNOT delete an account (owner-only now)', r.code === 401, r.body);
+  r = await call('POST', '/admin/deposit/reject', { token: bobToken3, body: { orderId: 'x', reason: 'test' } });
+  check('staff CANNOT reject a deposit (owner-only now — staff may still Approve)', r.code === 401, r.body);
+  r = await call('POST', '/admin/withdraw/reject', { token: bobToken3, body: { withdrawalId: 'x', reason: 'test' } });
+  check('staff CANNOT reject a withdrawal either (owner-only now — staff may still Process, in-window)', r.code === 401, r.body);
 
   console.log('\n── 9. The lightweight badge endpoint (polled every 12s from every open tab) works without the heavy full-stats scan');
   r = await call('POST', '/admin/badges', { token: ownerToken, body: {} });
