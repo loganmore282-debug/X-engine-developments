@@ -271,7 +271,7 @@ function seedWithdrawal(id, uid, amount = 50000) {
     amount: 30000, fee: 0, netAmount: 30000, status: 'processing', marzTxUuid: 'WTX-AUTO-1', createdAt: new Date(),
   });
   marzStatusMap.set('WTX-AUTO-1', 'completed');
-  await sleep(9000); // past the 8s background poll interval, well under its own timeout
+  await sleep(3000); // past the 2s background poll interval
   const autoSettled = mockdb.__store.get('withdrawals').get('wit-auto-settle');
   check('it settled to processed with NO admin action taken — the background poll alone did this', autoSettled.status === 'processed', autoSettled.status);
 
