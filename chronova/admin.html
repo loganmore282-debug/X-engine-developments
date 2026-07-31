@@ -657,6 +657,8 @@ async function openUser(uid){
     ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned${u.banReason?' — '+esc(u.banReason):''}</div>`:''}
     <label>Amount (UGX)</label><input id="adjAmt" type="number" placeholder="0">
     <label>Note (optional)</label><input id="adjNote" placeholder="Reason">
+    ${SESSION_ROLE==='owner'?`<label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:400">
+      <input type="checkbox" id="adjNoComm" style="width:auto"> Bonus/correction — don't pay referral commission on this credit</label>`:''}
     <div class="row" style="margin-top:14px">
       ${SESSION_ROLE==='owner'?`<button class="btn ok sm" id="creditBtn">Credit</button>
       <button class="btn danger sm" id="debitBtn">Debit</button>
@@ -685,7 +687,7 @@ async function openUser(uid){
       <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap;text-align:right">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td class="empty">No transactions</td></tr>';
   })();
   const amt=()=>parseFloat($('adjAmt').value||0), note=()=>$('adjNote').value.trim();
-  $('creditBtn')?.addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
+  $('creditBtn')?.addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/deposit',{userId:uid,amount:amt(),note:note(),noCommission:$('adjNoComm')?.checked||false}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('debitBtn')?.addEventListener('click', async()=>{ if(!amt())return toast('Enter an amount','err'); const d=await api('/admin/debit',{userId:uid,amount:amt(),note:note()}); toast(d.message||d.status, d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('banBtn')?.addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); renderUsers(); } });
   $('pwBtn')?.addEventListener('click', async()=>{

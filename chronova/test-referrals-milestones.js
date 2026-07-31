@@ -420,6 +420,59 @@ async function realDeposit(token, amount, phone) {
   check('the retry did NOT grant a second welcome bonus on top of the one already paid', userDoc('henry-uid').walletBalance === 5000, userDoc('henry-uid').walletBalance);
   check('the retry did NOT resurrect or duplicate the ledger row (missing history line stays cosmetic, never compounds)', countTx('henry-uid', 'admin_credit') === 0, countTx('henry-uid', 'admin_credit'));
 
+  console.log('\n── 16. THE OWNER-REPORTED BUG: a referral funded via manual admin credit (not a real gateway deposit) must still pay upline commission');
+  // Real complaint: a referrer recruited 2 active investors, but only ever
+  // received ONE L1 commission. Root cause — during a MarzPay outage, staff
+  // fix a customer's missing deposit with /admin/deposit (a plain wallet
+  // credit, no pendingDeposits record at all), which never called
+  // payCommissions — so a referred user funded that way could invest and
+  // count as "active" everywhere, while the referrer silently never got
+  // paid, and "Pay missing rewards" couldn't find anything to fix because it
+  // only ever swept pendingDeposits/investments, never admin_credit rows.
+  const K = 'uid:kayla-uid', L = 'uid:liam-uid';
+  await call('POST', '/account/create-profile', { token: K, body: { phone: '0771000093' } });
+  r = await call('POST', '/register', { token: K, body: { referralCode: '' } });
+  const kaylaCode = userDoc('kayla-uid').referralCode;
+  await call('POST', '/account/create-profile', { token: L, body: { phone: '0771000094' } });
+  r = await call('POST', '/register', { token: L, body: { referralCode: kaylaCode } });
+  check('liam registered under kayla', r.body?.referrerId === 'kayla-uid', r.body);
+  const kaylaCommPre = userDoc('kayla-uid').commissionEarned || 0;
+  r = await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'liam-uid', amount: 25000, note: 'reconciling a MarzPay deposit that never recorded' } });
+  check('the manual credit succeeds', r.body?.status === 'success', r.body);
+  check('kayla is paid L1 commission (30% of 25000 = 7500) on the manual credit exactly like a real deposit', (userDoc('kayla-uid').commissionEarned || 0) === kaylaCommPre + 7500, userDoc('kayla-uid').commissionEarned);
+  check('liam\'s manual credit counts as a real deposit (realDeposited moved)', userDoc('liam-uid').realDeposited >= 25000, userDoc('liam-uid').realDeposited);
+
+  console.log('\n── 16b. noCommission:true opts a specific credit OUT (genuine bonus/correction, not a real deposit)');
+  const kaylaCommPre2 = userDoc('kayla-uid').commissionEarned || 0;
+  const liamRealDepPre = userDoc('liam-uid').realDeposited || 0;
+  r = await call('POST', '/admin/deposit', { body: { ...ADMIN, userId: 'liam-uid', amount: 5000, note: 'apology bonus', noCommission: true } });
+  check('the flagged credit succeeds', r.body?.status === 'success', r.body);
+  check('no commission is paid on a credit explicitly flagged noCommission', (userDoc('kayla-uid').commissionEarned || 0) === kaylaCommPre2, userDoc('kayla-uid').commissionEarned);
+  check('a noCommission credit does NOT count toward realDeposited either', (userDoc('liam-uid').realDeposited || 0) === liamRealDepPre, userDoc('liam-uid').realDeposited);
+  r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN }); await sleep(200);
+  check('reconcile leaves the noCommission credit alone too', (userDoc('kayla-uid').commissionEarned || 0) === kaylaCommPre2, userDoc('kayla-uid').commissionEarned);
+
+  console.log('\n── 16c. "Pay missing rewards" retroactively catches an admin credit that predates this fix, without touching the Welcome gift');
+  const M = 'uid:mia-uid';
+  await call('POST', '/account/create-profile', { token: M, body: { phone: '0771000095' } });
+  r = await call('POST', '/register', { token: M, body: { referralCode: kaylaCode } });
+  check('mia registered under kayla', r.body?.referrerId === 'kayla-uid', r.body);
+  // Simulate an OLDER admin_credit row written before commission-on-credit
+  // existed: no noCommission flag, no commDone flag — exactly what every
+  // historical manual-credit row in the live database looks like today.
+  // Inserted directly (bypassing /admin/deposit, which now always sets the
+  // flag) to prove the sweep still finds and fixes pre-fix rows.
+  const legacyTxId = require('crypto').randomUUID();
+  txns().set(legacyTxId, { userId: 'mia-uid', type: 'admin_credit', description: 'Chronova credit', amount: 40000, status: 'success', createdAt: new Date() });
+  users().set('mia-uid', { ...userDoc('mia-uid'), walletBalance: (userDoc('mia-uid').walletBalance || 0) + 40000, totalDeposited: (userDoc('mia-uid').totalDeposited || 0) + 40000 });
+  const miaWelcomeTxId = [...txns().entries()].find(([, t]) => t.userId === 'mia-uid' && t.description === 'Welcome gift')[0];
+  const kaylaCommPre3 = userDoc('kayla-uid').commissionEarned || 0;
+  r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN }); await sleep(200);
+  check('the legacy (pre-fix, unflagged) admin credit is caught by the reconcile sweep — kayla now gets 30% of 40000 = 12000', (userDoc('kayla-uid').commissionEarned || 0) === kaylaCommPre3 + 12000, userDoc('kayla-uid').commissionEarned);
+  check('mia\'s own Welcome gift (5000, also admin_credit) was NEVER commissioned by the sweep', txns().get(miaWelcomeTxId)?.commDone !== true, txns().get(miaWelcomeTxId));
+  r = await call('POST', '/admin/commissions/reconcile', { body: ADMIN }); await sleep(200);
+  check('re-running reconcile again does not double-pay the legacy credit', (userDoc('kayla-uid').commissionEarned || 0) === kaylaCommPre3 + 12000, userDoc('kayla-uid').commissionEarned);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('SUITE CRASH:', e); process.exit(1); });

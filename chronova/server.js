@@ -772,6 +772,7 @@ function tsMillis(v) {
 // sourceId is whatever the reward hangs off — a deposit id now, an investment id
 // for the legacy records the reconciler still sweeps. Both are Mongo doc ids, so
 // the per-source dedup flag can never collide between the two.
+const COMM_SOURCE_COLLECTION = { investment: 'investments', admin_credit: 'transactions' };
 async function payCommissions(investorId, amount, sourceId, sourceKind = 'deposit') {
   const investmentId = sourceId;
   // Only mark the source "handled" when a referrer chain actually existed to
@@ -788,7 +789,7 @@ async function payCommissions(investorId, amount, sourceId, sourceKind = 'deposi
     catch (e) { console.error('Commission error:', e.message); }
   });
   if (handled) {
-    const coll = sourceKind === 'investment' ? 'investments' : 'pendingDeposits';
+    const coll = COMM_SOURCE_COLLECTION[sourceKind] || 'pendingDeposits';
     try { await db.collection(coll).doc(sourceId).update({ commDone: true }); } catch (_) {}
   }
 }
@@ -907,6 +908,22 @@ async function reconcileCommissions(limit = 800) {
       const dep = doc.data();
       if (dep.commDone || dep.status !== 'matched') continue;
       await payCommissions(dep.userId, dep.creditedAmount || dep.amount, doc.id, 'deposit');
+      fixed++;
+    }
+    // Manual admin credits (/admin/deposit) pay commission the same as a real
+    // deposit unless explicitly flagged noCommission — this catches any that
+    // slipped through (older records made before that call started firing
+    // commission immediately, or a call that failed mid-way).
+    const txSnap = await db.collection('transactions').where('type', '==', 'admin_credit')
+      .orderBy('createdAt', 'desc').limit(limit).get();
+    for (const doc of txSnap.docs) {
+      const tx = doc.data();
+      // The sign-up "Welcome gift" is also stored as admin_credit (it shares
+      // the same "money in" bucket as manual credits elsewhere) but it is
+      // never a real deposit — skip it by description too, since historical
+      // rows predate the noCommission flag above.
+      if (tx.commDone || tx.noCommission || tx.description === 'Welcome gift') continue;
+      await payCommissions(tx.userId, tx.amount, doc.id, 'admin_credit');
       fixed++;
     }
   } catch (e) { console.error('reconcileCommissions error:', e.message); }
@@ -1466,7 +1483,11 @@ app.post('/register', async (req, res) => {
     // exactly the "balance ≠ ledger" pattern the Integrity Audit found today.
     batch.update(userRef, update);
     batch.set(db.collection('transactions').doc(), {
-      userId, type: 'admin_credit', description: 'Welcome gift',
+      // noCommission: the sign-up bonus is not a real deposit — it must never
+      // earn the referrer chain a commission (the commission reconcile sweep
+      // below otherwise treats every admin_credit-typed row as a manual
+      // deposit reconciliation and would pay commission on this too).
+      userId, type: 'admin_credit', description: 'Welcome gift', noCommission: true,
       amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
     });
     await batch.commit();
@@ -3727,24 +3748,33 @@ app.get('/account/transactions', async (req, res) => {
 // get, unlike debit/ban/etc. — too easy to abuse for free money.
 app.post('/admin/deposit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { userId, amount, note } = req.body;
+  const { userId, amount, note, noCommission } = req.body;
   const amt = parseFloat(amount || 0);
   if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  // A manual credit is, in practice, almost always staff reconciling money the
+  // user genuinely paid (a MarzPay deposit that never got recorded, a lost
+  // reference, etc.) — so by default it pays the L1/L2/L3 upline exactly like
+  // a real deposit would, and counts toward realDeposited. `noCommission:true`
+  // opts a specific credit OUT for genuine bonuses/corrections that aren't a
+  // real recharge and shouldn't earn anyone a referral reward.
+  const payComm = noCommission !== true;
   try {
     const { date, time } = nowStr();
+    const txRef = db.collection('transactions').doc();
     await db.runTransaction(async t => {
       const uRef  = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
-      // Admin credit counts toward TEAM VOLUME (all money in) but NOT toward
-      // realDeposited — the dashboard's "Total deposits" stays real-network only.
-      t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
-      t.set(db.collection('transactions').doc(), {
+      const inc = { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) };
+      if (payComm) inc.realDeposited = FieldValue.increment(amt);
+      t.update(uRef, inc);
+      t.set(txRef, {
         userId, type: 'admin_credit', description: note || 'Chronova credit',
-        amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        amount: amt, status: 'success', date, time, noCommission: !payComm, createdAt: FieldValue.serverTimestamp()
       });
     });
-    logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
+    if (payComm) payCommissions(userId, amt, txRef.id, 'admin_credit').catch(e => console.error('Commission err:', e.message));
+    logAdminAction(req, 'manual_credit', { userId, amount: amt, note, noCommission: !payComm });
     return res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
   } catch (e) { return res.status(500).json({ status: 'error', message: e.message }); }
 });
