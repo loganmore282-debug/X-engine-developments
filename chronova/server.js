@@ -4137,11 +4137,15 @@ app.post('/admin/analytics', async (req, res) => {
   const days   = Math.min(Math.max(parseInt(req.body.days) || 30, 1), 180);
   const sinceMs = Date.now() - days * 86400000;
   try {
-    const [txSnap, witSnap, usersSnap] = await Promise.all([
+    const [txSnap, witSnap, usersSnap, invSnap, sett] = await Promise.all([
       db.collection('transactions').orderBy('createdAt', 'desc').limit(20000).get(),
       db.collection('withdrawals').orderBy('createdAt', 'desc').limit(20000).get(),
-      db.collection('users').limit(20000).get()
+      db.collection('users').limit(20000).get(),
+      db.collection('investments').limit(20000).get(),
+      getSettings()
     ]);
+    const minWithdrawal = sett.minWithdrawal ?? MIN_WITHDRAWAL;
+    const checkinBonus  = sett.checkinBonus ?? CHECKIN_BONUS;
 
     const byHour = Array.from({ length: 24 }, (_, h) => ({ h, depAmt: 0, depCnt: 0, witAmt: 0, witCnt: 0 }));
     const bands  = { morning: { dep: 0, wit: 0 }, afternoon: { dep: 0, wit: 0 }, evening: { dep: 0, wit: 0 }, night: { dep: 0, wit: 0 } };
@@ -4153,7 +4157,64 @@ app.post('/admin/analytics', async (req, res) => {
     const FORECAST_DAYS = 14;
     const forecastSinceMs = Date.now() - FORECAST_DAYS * 86400000;
     const fcDayMap = {};
-    const ensureFcDay = k => (fcDayMap[k] = fcDayMap[k] || { dep: 0, wit: 0 });
+    const ensureFcDay = k => (fcDayMap[k] = fcDayMap[k] || { dep: 0, wit: 0, depOrganic: 0 });
+
+    // ── Pre-passes for the bottom-up forecast (below) — need each user's
+    // EARLIEST deposit (to spot a first-time "pipeline" conversion) and each
+    // investment's approximate maturity moment (to spot a "reinvestment"
+    // deposit landing shortly after), both BEFORE tagging any individual
+    // deposit as organic vs. one of those two, so the tagging pass never has
+    // to guess using only partial information.
+    const firstDepositMsByUser = {};
+    const topupMsByUser = {};           // userId -> [ms, ...] every deposit ever, for the reinvestment-rate check below
+    txSnap.forEach(d => {
+      const t = d.data();
+      if (t.type !== 'topup') return;
+      const ms = tsMillis(t.createdAt);
+      if (!firstDepositMsByUser[t.userId] || ms < firstDepositMsByUser[t.userId]) firstDepositMsByUser[t.userId] = ms;
+      (topupMsByUser[t.userId] = topupMsByUser[t.userId] || []).push(ms);
+    });
+    const investmentsByUser = {};       // userId -> [{createdAtMs, status, dailyPayout, payoutsMade, payoutsTotal, amount}]
+    const maturedWindowsByUser = {};    // userId -> [[startMs, endMs], ...] — the ~5 days right after a maturity
+    invSnap.forEach(d => {
+      const inv = d.data();
+      const createdAtMs = tsMillis(inv.createdAt);
+      (investmentsByUser[inv.userId] = investmentsByUser[inv.userId] || []).push({
+        createdAtMs, status: inv.status, dailyPayout: Number(inv.dailyPayout) || 0,
+        payoutsMade: Number(inv.payoutsMade) || 0, payoutsTotal: Number(inv.payoutsTotal) || Number(inv.cycle) || 0,
+        amount: Number(inv.amount) || 0
+      });
+      if (inv.status === 'matured') {
+        const total = Number(inv.payoutsTotal) || Number(inv.cycle) || 0;
+        // No maturedAt is stored — approximate it from when the cycle would
+        // have completed at the daily cadence every other payout follows.
+        const maturedAtMs = createdAtMs + total * 86400000;
+        (maturedWindowsByUser[inv.userId] = maturedWindowsByUser[inv.userId] || []).push([maturedAtMs, maturedAtMs + 5 * 86400000]);
+      }
+    });
+    const REINVEST_WINDOW_DAYS = 5, PIPELINE_WINDOW_DAYS = 3;
+    function isReinvestmentDeposit(userId, ms) {
+      const wins = maturedWindowsByUser[userId];
+      return !!wins && wins.some(([s, e]) => ms >= s && ms <= e);
+    }
+    function isPipelineDeposit(userId, ms, regMs) {
+      return firstDepositMsByUser[userId] === ms && regMs && (ms - regMs) <= PIPELINE_WINDOW_DAYS * 86400000;
+    }
+    const userRegMs = {};
+    usersSnap.forEach(u => { userRegMs[u.id] = tsMillis(u.data().createdAt); });
+
+    // Per-user trailing-14-day income signals for the withdrawal forecast —
+    // some members earn steady commission/check-in income, most don't, so
+    // this is read per-user rather than assumed for everyone (an inactive
+    // referrer's commission average is correctly 0, not the platform's).
+    const commission14ByUser = {}, checkinCount14ByUser = {};
+    txSnap.forEach(d => {
+      const t = d.data();
+      const ms = tsMillis(t.createdAt);
+      if (ms < forecastSinceMs) return;
+      if (t.type === 'commission') commission14ByUser[t.userId] = (commission14ByUser[t.userId] || 0) + Math.abs(t.amount || 0);
+      else if (t.type === 'checkin') checkinCount14ByUser[t.userId] = (checkinCount14ByUser[t.userId] || 0) + 1;
+    });
 
     let depAmount = 0, depCount = 0, commissionsPaid = 0, teamRewardsPaid = 0, investedAmount = 0;
     // DEPOSITS + earnings come from the transactions ledger (real network top-ups).
@@ -4165,7 +4226,15 @@ app.post('/admin/analytics', async (req, res) => {
       // cut off day 8-14 before the forecast ever saw them.
       if (t.type === 'topup' && ms >= forecastSinceMs) {
         const { day } = eatParts(t.createdAt);
-        ensureFcDay(day).dep += Math.abs(t.amount || 0);
+        const a = Math.abs(t.amount || 0);
+        const fc = ensureFcDay(day);
+        fc.dep += a;
+        // Only the ORGANIC share (not a maturity-triggered reinvestment or a
+        // brand-new signup's first deposit) feeds the trend baseline below —
+        // those two are instead estimated bottom-up from what's actually
+        // happening right now (who's maturing, who's mid-funnel), so counting
+        // them in the trend too would double them up.
+        if (!isReinvestmentDeposit(t.userId, ms) && !isPipelineDeposit(t.userId, ms, userRegMs[t.userId])) fc.depOrganic += a;
       }
       if (ms < sinceMs) return;
       if (t.type === 'topup') {
@@ -4183,12 +4252,13 @@ app.post('/admin/analytics', async (req, res) => {
     // WITHDRAWALS come from the withdrawals collection (has status + recipient).
     let witAmount = 0, witCount = 0;
     const bigWits = [];
+    const witHistoryByUser = {};   // userId -> [{ms, amount}], every real (non-rejected) withdrawal ever — used for each member's OWN cadence below
     witSnap.forEach(d => {
       const w = d.data();
       const ms = tsMillis(w.createdAt);
-      if (w.status !== 'rejected' && ms >= forecastSinceMs) {
-        const { day } = eatParts(w.createdAt);
-        ensureFcDay(day).wit += Math.abs(w.amount || 0);
+      if (w.status !== 'rejected') {
+        (witHistoryByUser[w.userId] = witHistoryByUser[w.userId] || []).push({ ms, amount: Math.abs(w.amount || 0) });
+        if (ms >= forecastSinceMs) { const { day } = eatParts(w.createdAt); ensureFcDay(day).wit += Math.abs(w.amount || 0); }
       }
       if (ms < sinceMs) return;
       if (w.status === 'rejected') return;            // never actually left → skip
@@ -4230,19 +4300,57 @@ app.post('/admin/analytics', async (req, res) => {
     const busiestBand = Object.entries(bands).reduce((p, c) => (c[1].dep + c[1].wit) > (p[1].dep + p[1].wit) ? c : p)[0];
 
     // ── TOMORROW'S FORECAST ──
-    // Deliberately simple and explainable rather than a black-box model: take
-    // the daily average over the most recent week, then nudge it by how much
-    // that week grew or shrank versus the week before — an owner can sanity
-    // check both numbers themselves from the same daily chart above. Clamped
-    // so one freak day (a single huge withdrawal, a dead day with zero
-    // activity) can't send the estimate to something absurd.
+    // Withdrawals are modelled bottom-up, member by member — not a trend
+    // line — because whether someone CAN withdraw tomorrow depends on THEIR
+    // OWN wallet balance, watches, and habits, not the platform average:
+    // balance + tomorrow's daily-cashback payout (every active watch pays
+    // once more) + their own trailing averages of commission and check-in
+    // income (some members earn these steadily, most don't — read per-user,
+    // never assumed) must clear the minimum withdrawal, AND they have to
+    // actually be "due" — judged by their OWN historical gap between
+    // withdrawals when they have one (2+ withdrawals), falling back to
+    // "counted the moment they're able" for members with no established
+    // habit yet. A 25,000 watch's ~6,250 daily cashback alone doesn't clear
+    // a 10,000 minimum, so that member correctly doesn't show up as ready
+    // until a day their balance/income actually crosses it.
+    const avg = arr => arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    let bottomUpWitTotal = 0, likelyWithdrawerCount = 0;
+    usersSnap.forEach(d => {
+      const uid = d.id;
+      const u = d.data();
+      const balance = Number(u.walletBalance) || 0;
+      const invs = investmentsByUser[uid] || [];
+      const tomorrowCashback = invs.reduce((s, iv) => s + (iv.status === 'active' && iv.payoutsMade < iv.payoutsTotal ? iv.dailyPayout : 0), 0);
+      const commissionAvg = (commission14ByUser[uid] || 0) / FORECAST_DAYS;
+      const checkinAvg = ((checkinCount14ByUser[uid] || 0) / FORECAST_DAYS) * checkinBonus;
+      const projected = balance + tomorrowCashback + commissionAvg + checkinAvg;
+      if (projected < minWithdrawal) return;
+      const hist = (witHistoryByUser[uid] || []).slice().sort((a, b) => a.ms - b.ms);
+      let dueTomorrow = true;                          // no habit yet → counted as soon as they're able
+      if (hist.length >= 2) {
+        const gaps = [];
+        for (let i = 1; i < hist.length; i++) gaps.push((hist[i].ms - hist[i - 1].ms) / 86400000);
+        const daysSinceLast = (Date.now() - hist[hist.length - 1].ms) / 86400000;
+        dueTomorrow = daysSinceLast >= avg(gaps);        // their own cadence, e.g. "usually every 2 days"
+      }
+      if (!dueTomorrow) return;
+      const typical = hist.length ? avg(hist.map(h => h.amount)) : projected;
+      bottomUpWitTotal += clamp(Math.round(typical), minWithdrawal, Math.round(projected));
+      likelyWithdrawerCount++;
+    });
+
+    // Deposits keep the simple historical-trend baseline (organic deposits
+    // aren't something the server can see coming — no product/balance signal
+    // predicts a brand new outside top-up) but ADD two bottom-up signals for
+    // the parts that ARE visible from platform state, so neither gets
+    // double-counted against the trend (see the isReinvestmentDeposit/
+    // isPipelineDeposit tagging above, which excludes both from "organic").
     const fc14 = [];
     for (let i = FORECAST_DAYS - 1; i >= 0; i--) {
       const k = new Date(Date.now() + EAT_MS - i * 86400000).toISOString().slice(0, 10);
-      fc14.push(fcDayMap[k] || { dep: 0, wit: 0 });
+      fc14.push(fcDayMap[k] || { dep: 0, wit: 0, depOrganic: 0 });
     }
-    const avg = arr => arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     function projectNextDay(field) {
       const last7 = fc14.slice(7).map(d => d[field]);
       const prev7 = fc14.slice(0, 7).map(d => d[field]);
@@ -4250,14 +4358,71 @@ app.post('/admin/analytics', async (req, res) => {
       const growth = avgPrev7 > 0 ? clamp((avgLast7 - avgPrev7) / avgPrev7, -0.4, 0.6) : 0;
       return { estimate: Math.max(0, Math.round(avgLast7 * (1 + growth))), avgLast7: Math.round(avgLast7), growthPct: Math.round(growth * 100) };
     }
-    const depForecast = projectNextDay('dep');
-    const witForecast = projectNextDay('wit');
+    const depOrganicForecast = projectNextDay('depOrganic');
+    const witTrendForecast = projectNextDay('wit'); // simple trend, kept only as a sanity-check reference
+
+    // Signal 1 — watches maturing tomorrow: of everyone who's EVER matured a
+    // watch, what fraction made a NEW DEPOSIT within 5 days after (not just
+    // another purchase funded from the same matured payout — that would be
+    // an internal reallocation, not new money in)? Applied to whoever's
+    // maturing tomorrow specifically (their final cashback lands and
+    // completes the cycle), not the platform average.
+    let maturedTotal = 0, maturedReinvested = 0, maturingTomorrowCount = 0, maturingTomorrowAmount = 0;
+    Object.entries(investmentsByUser).forEach(([uid, list]) => {
+      list.forEach(inv => {
+        if (inv.status === 'active' && inv.payoutsTotal > 0 && (inv.payoutsTotal - inv.payoutsMade) === 1) {
+          maturingTomorrowCount++; maturingTomorrowAmount += inv.amount;
+        }
+        if (inv.status !== 'matured') return;
+        maturedTotal++;
+        const maturedAtMs = inv.createdAtMs + inv.payoutsTotal * 86400000;
+        if ((topupMsByUser[uid] || []).some(ms => ms > maturedAtMs && ms <= maturedAtMs + REINVEST_WINDOW_DAYS * 86400000)) maturedReinvested++;
+      });
+    });
+    const reinvestRate = maturedTotal ? maturedReinvested / maturedTotal : 0;
+    const maturingReinvestEstimate = Math.round(maturingTomorrowAmount * reinvestRate);
+
+    // Signal 2 — new signups still mid-funnel: of everyone whose signup is
+    // old enough to judge (3+ days), what fraction made their first deposit
+    // within 3 days? Applied to whoever's currently IN that 3-day window
+    // with no deposit yet, amortized evenly across the days they're in it.
+    let eligibleSignups = 0, convertedWithin3 = 0, pipelineUsersNow = 0;
+    const firstDepAmounts = [];
+    usersSnap.forEach(d => {
+      const uid = d.id;
+      const regMs = userRegMs[uid];
+      if (!regMs) return;
+      const ageDays = (Date.now() - regMs) / 86400000;
+      if (ageDays >= PIPELINE_WINDOW_DAYS) {
+        eligibleSignups++;
+        const fd = firstDepositMsByUser[uid];
+        if (fd && (fd - regMs) <= PIPELINE_WINDOW_DAYS * 86400000) convertedWithin3++;
+      } else if (ageDays >= 0 && !firstDepositMsByUser[uid]) pipelineUsersNow++;
+    });
+    txSnap.forEach(d => {
+      const t = d.data();
+      if (t.type !== 'topup') return;
+      const ms = tsMillis(t.createdAt);
+      const regMs = userRegMs[t.userId];
+      if (firstDepositMsByUser[t.userId] === ms && regMs && (ms - regMs) <= PIPELINE_WINDOW_DAYS * 86400000) firstDepAmounts.push(Math.abs(t.amount || 0));
+    });
+    const conversionRate = eligibleSignups ? convertedWithin3 / eligibleSignups : 0;
+    const avgFirstDepositAmount = firstDepAmounts.length ? avg(firstDepAmounts) : MIN_DEPOSIT;
+    const pipelineEstimate = Math.round(pipelineUsersNow * (conversionRate / PIPELINE_WINDOW_DAYS) * avgFirstDepositAmount);
+
     const forecast = {
       basisDays: FORECAST_DAYS,
-      estimatedNextDayDeposits: depForecast.estimate,
-      estimatedNextDayWithdrawals: witForecast.estimate,
-      depositsAvgLast7: depForecast.avgLast7, depositsGrowthPct: depForecast.growthPct,
-      withdrawalsAvgLast7: witForecast.avgLast7, withdrawalsGrowthPct: witForecast.growthPct
+      withdrawals: {
+        estimate: Math.round(bottomUpWitTotal),
+        likelyWithdrawerCount,
+        trendReference: witTrendForecast.estimate
+      },
+      deposits: {
+        organicTrend: depOrganicForecast.estimate,
+        maturingReinvestEstimate, maturingCount: maturingTomorrowCount, reinvestRatePct: Math.round(reinvestRate * 100),
+        pipelineEstimate, pipelineUserCount: pipelineUsersNow, conversionRatePct: Math.round(conversionRate * 100),
+        estimate: depOrganicForecast.estimate + maturingReinvestEstimate + pipelineEstimate
+      }
     };
 
     return res.json({
