@@ -4147,12 +4147,26 @@ app.post('/admin/analytics', async (req, res) => {
     const bands  = { morning: { dep: 0, wit: 0 }, afternoon: { dep: 0, wit: 0 }, evening: { dep: 0, wit: 0 }, night: { dep: 0, wit: 0 } };
     const dayMap = {};                  // dayKey → { dep, wit, users }
     const ensureDay = k => (dayMap[k] = dayMap[k] || { day: k, dep: 0, wit: 0, users: 0 });
+    // Forecast always looks at a fixed 14-day window regardless of the chart's
+    // selected period (7/30/90) — otherwise switching the period would change
+    // "tomorrow's estimate", which makes no sense to an owner reading it.
+    const FORECAST_DAYS = 14;
+    const forecastSinceMs = Date.now() - FORECAST_DAYS * 86400000;
+    const fcDayMap = {};
+    const ensureFcDay = k => (fcDayMap[k] = fcDayMap[k] || { dep: 0, wit: 0 });
 
     let depAmount = 0, depCount = 0, commissionsPaid = 0, teamRewardsPaid = 0, investedAmount = 0;
     // DEPOSITS + earnings come from the transactions ledger (real network top-ups).
     txSnap.forEach(d => {
       const t = d.data();
       const ms = tsMillis(t.createdAt);
+      // Forecast accumulation runs on its own fixed 14-day window, checked
+      // BEFORE the period cutoff below — otherwise a 7-day chart period would
+      // cut off day 8-14 before the forecast ever saw them.
+      if (t.type === 'topup' && ms >= forecastSinceMs) {
+        const { day } = eatParts(t.createdAt);
+        ensureFcDay(day).dep += Math.abs(t.amount || 0);
+      }
       if (ms < sinceMs) return;
       if (t.type === 'topup') {
         const a = Math.abs(t.amount || 0);
@@ -4172,6 +4186,10 @@ app.post('/admin/analytics', async (req, res) => {
     witSnap.forEach(d => {
       const w = d.data();
       const ms = tsMillis(w.createdAt);
+      if (w.status !== 'rejected' && ms >= forecastSinceMs) {
+        const { day } = eatParts(w.createdAt);
+        ensureFcDay(day).wit += Math.abs(w.amount || 0);
+      }
       if (ms < sinceMs) return;
       if (w.status === 'rejected') return;            // never actually left → skip
       const a = Math.abs(w.amount || 0);
@@ -4211,6 +4229,37 @@ app.post('/admin/analytics', async (req, res) => {
     const peakWithdrawHour = byHour.reduce((p, c) => c.witCnt > p.witCnt ? c : p, byHour[0]).h;
     const busiestBand = Object.entries(bands).reduce((p, c) => (c[1].dep + c[1].wit) > (p[1].dep + p[1].wit) ? c : p)[0];
 
+    // ── TOMORROW'S FORECAST ──
+    // Deliberately simple and explainable rather than a black-box model: take
+    // the daily average over the most recent week, then nudge it by how much
+    // that week grew or shrank versus the week before — an owner can sanity
+    // check both numbers themselves from the same daily chart above. Clamped
+    // so one freak day (a single huge withdrawal, a dead day with zero
+    // activity) can't send the estimate to something absurd.
+    const fc14 = [];
+    for (let i = FORECAST_DAYS - 1; i >= 0; i--) {
+      const k = new Date(Date.now() + EAT_MS - i * 86400000).toISOString().slice(0, 10);
+      fc14.push(fcDayMap[k] || { dep: 0, wit: 0 });
+    }
+    const avg = arr => arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    function projectNextDay(field) {
+      const last7 = fc14.slice(7).map(d => d[field]);
+      const prev7 = fc14.slice(0, 7).map(d => d[field]);
+      const avgLast7 = avg(last7), avgPrev7 = avg(prev7);
+      const growth = avgPrev7 > 0 ? clamp((avgLast7 - avgPrev7) / avgPrev7, -0.4, 0.6) : 0;
+      return { estimate: Math.max(0, Math.round(avgLast7 * (1 + growth))), avgLast7: Math.round(avgLast7), growthPct: Math.round(growth * 100) };
+    }
+    const depForecast = projectNextDay('dep');
+    const witForecast = projectNextDay('wit');
+    const forecast = {
+      basisDays: FORECAST_DAYS,
+      estimatedNextDayDeposits: depForecast.estimate,
+      estimatedNextDayWithdrawals: witForecast.estimate,
+      depositsAvgLast7: depForecast.avgLast7, depositsGrowthPct: depForecast.growthPct,
+      withdrawalsAvgLast7: witForecast.avgLast7, withdrawalsGrowthPct: witForecast.growthPct
+    };
+
     return res.json({
       status: 'success', period: days,
       kpis: {
@@ -4220,7 +4269,7 @@ app.post('/admin/analytics', async (req, res) => {
         totalUsers, newUsers, activeInvestors,
         investedAmount, commissionsPaid, teamRewardsPaid
       },
-      byHour, bands, byDay,
+      byHour, bands, byDay, forecast,
       peakDepositHour, peakWithdrawHour, busiestBand,
       topReferrers: referrers.slice(0, 10),
       topDepositors: depositors.slice(0, 10),

@@ -488,9 +488,19 @@ async function renderAnalytics(){
        <div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>`;
   const bandCard=(key,label)=>{const b=a.bands[key]||{dep:0,wit:0};const on=a.busiestBand===key;
     return `<div class="stat" style="${on?'outline:2px solid var(--gold);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">deposits</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">withdrawals</div></div>`;};
+  const f=a.forecast||{};
+  const trendTag=pct=>{const p=pct||0; if(!p) return ''; return ` <span style="font-size:11px;color:${p>0?'var(--ok)':'var(--danger)'}">${p>0?'▲':'▼'}${Math.abs(p)}% vs the week before</span>`;};
   $('content').innerHTML=`
     <div class="row" style="align-items:center;margin-bottom:6px"><h2 class="sec" style="flex:1;margin:0">Analytics</h2></div>
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin-top:0">Tomorrow's estimate</h2>
+      <p class="muted" style="margin-top:0">Not a guarantee — the server's best guess from your last ${f.basisDays||14} days of activity: the daily average of the most recent week, adjusted for how much that week grew or shrank versus the week before.</p>
+      <div class="cards">
+        <div class="stat"><div class="n" style="color:var(--ok)">${ugx(f.estimatedNextDayDeposits)}</div><div class="l">Estimated deposits tomorrow</div><div style="margin-top:4px">${trendTag(f.depositsGrowthPct)}</div></div>
+        <div class="stat"><div class="n" style="color:var(--danger)">${ugx(f.estimatedNextDayWithdrawals)}</div><div class="l">Estimated withdrawals to process tomorrow</div><div style="margin-top:4px">${trendTag(f.withdrawalsGrowthPct)}</div></div>
+      </div>
+    </div>
     <div class="cards">
       <div class="stat"><div class="n" style="color:var(--ok)">${ugx(k.depositsAmount)}</div><div class="l">Deposits (${k.depositsCount||0})</div></div>
       <div class="stat"><div class="n" style="color:var(--danger)">${ugx(k.withdrawalsAmount)}</div><div class="l">Withdrawals (${k.withdrawalsCount||0})</div></div>
