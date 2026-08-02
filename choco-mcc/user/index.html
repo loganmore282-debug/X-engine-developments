@@ -146,6 +146,7 @@
   .photo-banner.pb-flush{margin:0;border-radius:0;}
   .photo-banner.pb-sm{height:110px;}
   .photo-banner.pb-hero{height:170px;margin:14px 20px;border-radius:26px;}
+  .photo-banner.pb-full{height:240px;}
   .auth-banner{position:relative;border-radius:22px;overflow:hidden;height:150px;margin-bottom:20px;box-shadow:var(--shadow-lg);}
   .auth-banner img{width:100%;height:100%;object-fit:cover;display:block;}
   .uline-tabs{display:flex;gap:22px;margin:4px 20px 0;border-bottom:1.5px solid var(--line);}
@@ -174,6 +175,13 @@
   .menu-lbl{font-size:14px;font-weight:700;flex:1;}
 
   .profile-card{margin:16px 20px;padding:20px;border-radius:22px;background:linear-gradient(150deg,#4A2A17,#2C160C);color:#fff;box-shadow:var(--shadow-lg);}
+  .acct-cover{position:relative;height:170px;margin-bottom:46px;}
+  .acct-cover img{width:100%;height:100%;object-fit:cover;display:block;}
+  .acct-card{position:absolute;left:20px;right:20px;bottom:-32px;background:linear-gradient(150deg,#4A2A17,#2C160C);
+    border-radius:20px;box-shadow:var(--shadow-lg);padding:16px 18px;display:flex;align-items:center;gap:14px;color:#fff;}
+  .acct-icon{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .acct-num{font-size:16px;font-weight:800;}
   .avatar{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;}
 
   .code-box{display:flex;align-items:center;justify-content:space-between;background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px 20px;}
@@ -222,10 +230,6 @@
     <span class="auth-tag" id="authTag">DEMO MODE — LOCAL ONLY</span>
     <div class="auth-title" id="authTitle">Welcome to ChocoMCC</div>
     <div class="auth-sub" id="authSub">Sign in to grow your stash of the world's finest chocolate brands.</div>
-    <div id="regNameField" class="field" style="display:none">
-      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4.1 3.4-7.5 7.5-7.5s7.5 3.4 7.5 7.5"/></svg></span>
-      <input id="fName" placeholder="Your name">
-    </div>
     <div class="field">
       <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg></span>
       <input id="fPhone" placeholder="Phone number" inputmode="tel">
@@ -246,12 +250,7 @@
   <div id="app">
     <!-- HOME -->
     <div id="viewHome">
-      <div class="topbar">
-        <div class="greet" id="homeGreet">Good day</div>
-        <div class="hello" id="homeName">Member</div>
-      </div>
-
-      <div class="photo-banner pb-hero" id="homeBanner"></div>
+      <div class="photo-banner pb-flush pb-full" id="homeBanner"></div>
 
       <div class="actions-row">
         <button class="act-chip" onclick="openOverlay('deposit')">
@@ -287,7 +286,12 @@
         <div class="view-title">The Shop</div>
         <div class="muted" style="font-size:13px">Every tier pays a daily reward until it matures.</div>
       </div>
-      <div class="prod-grid" id="shopGrid"></div>
+      <div class="uline-tabs">
+        <button class="uline-tab active" data-st="products" onclick="setShopTab('products')">Products</button>
+        <button class="uline-tab" data-st="owned" onclick="setShopTab('owned')">My Chocolates</button>
+      </div>
+      <div class="prod-grid" id="shopGrid" style="margin-top:14px"></div>
+      <div id="ownedList" style="display:none;margin-top:14px"></div>
       <div style="height:14px"></div>
     </div>
 
@@ -347,13 +351,16 @@
 
     <!-- ACCOUNT -->
     <div id="viewAccount" style="display:none">
-      <div class="photo-banner" id="accountBanner"></div>
-      <div class="profile-card row" style="gap:14px">
-        <div class="avatar" id="avaLetter">M</div>
-        <div>
-          <div style="font-weight:800;font-size:16px" id="acctName">Member</div>
-          <div style="color:#CBAB8B;font-size:12.5px" id="acctPhone">0700 000 000</div>
+      <div class="acct-cover">
+        <img src="" id="accountBanner">
+        <div class="acct-card">
+          <div class="acct-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2c-3 3-5 6-5 9a5 5 0 0010 0c0-3-2-6-5-9z" fill="#fff"/></svg></div>
+          <div class="acct-num" id="acctPhone">0700 000 000</div>
         </div>
+      </div>
+      <div class="cards" style="margin:0 20px 18px">
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n" style="color:var(--mint)" id="acctBalNum">UGX 0</div><div class="l">Balance</div></div>
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('withdrawals')"><div class="n" style="color:var(--berry)" id="acctWitNum">UGX 0</div><div class="l">Withdrawals</div></div>
       </div>
       <button class="menu-item" onclick="switchTab('shop')"><div class="menu-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="3" y="7" width="18" height="12" rx="2.5"/><path d="M3 13h18M9 7v12M15 7v12"/></svg></div><div class="menu-lbl">My Chocolates</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="menu-item" onclick="openOverlay('records')"><div class="menu-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 3h11v18l-2.2-1.6L13 21l-2.3-1.6L8.5 21l-2-1.6V3z"/><path d="M9 8.2h6M9 12h6"/></svg></div><div class="menu-lbl">Records</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
@@ -537,7 +544,6 @@ document.querySelector('#authBanner img').src = CHOCO_BANNERS.assortment;
 document.getElementById('authSwitchBtn').onclick = function(){
   authMode = authMode==='login' ? 'register':'login';
   document.querySelector('#authBanner img').src = authMode==='register' ? CHOCO_BANNERS.lavacake : CHOCO_BANNERS.assortment;
-  document.getElementById('regNameField').style.display = authMode==='register' ? 'block':'none';
   document.getElementById('regCodeField').style.display = authMode==='register' ? 'block':'none';
   document.getElementById('authTitle').textContent = authMode==='register' ? 'Create your account':'Welcome to ChocoMCC';
   document.getElementById('authSub').textContent = authMode==='register' ? 'Join and start stacking chocolate tiers today.' : 'Sign in to grow your stash of the world\'s finest chocolate brands.';
@@ -553,8 +559,7 @@ document.getElementById('authGo').onclick = function(){
   var pass = document.getElementById('fPass').value.trim();
   if(!phone || !pass){ toast('Enter your phone and password'); return; }
   if(authMode==='register'){
-    var name = document.getElementById('fName').value.trim();
-    STATE = freshState(name, phone);
+    STATE = freshState('Member', phone);
     saveState();
     toast('Account created — welcome!');
   } else {
@@ -574,9 +579,6 @@ function enterApp(){
 /* ====================== RENDER ====================== */
 function renderAll(){
   var s = STATE;
-  document.getElementById('homeName').textContent = s.name;
-  var hr = new Date().getHours();
-  document.getElementById('homeGreet').textContent = hr<12?'Good morning':(hr<17?'Good afternoon':'Good evening');
   document.getElementById('homeBanner').innerHTML = '<img src="'+CHOCO_BANNERS.barstack+'">';
   document.getElementById('teamBanner').innerHTML = '<img src="'+CHOCO_BANNERS.giftbox+'">';
   document.getElementById('depositBanner').innerHTML = '<img src="'+CHOCO_BANNERS.basket+'">';
@@ -584,11 +586,11 @@ function renderAll(){
   document.getElementById('supportBanner').innerHTML = '<img src="'+CHOCO_BANNERS.ganache+'">';
   document.getElementById('aboutBanner').innerHTML = '<img src="'+CHOCO_BANNERS.factory2+'">';
   document.getElementById('bindbankBanner').innerHTML = '<img src="'+CHOCO_BANNERS.factory1+'">';
-  document.getElementById('shopBanner').innerHTML = '<img src="'+CHOCO_BANNERS.truffle+'">';
-  document.getElementById('accountBanner').innerHTML = '<img src="'+CHOCO_BANNERS.rocherstack+'">';
-  document.getElementById('acctName').textContent = s.name;
+  document.getElementById('shopBanner').innerHTML = '<img src="'+CHOCO_BANNERS.darkbar+'">';
+  document.getElementById('accountBanner').src = CHOCO_BANNERS.rocherstack;
   document.getElementById('acctPhone').textContent = s.phone || '—';
-  document.getElementById('avaLetter').textContent = (s.name||'M').charAt(0).toUpperCase();
+  document.getElementById('acctBalNum').textContent = ugx(s.balance);
+  document.getElementById('acctWitNum').textContent = ugx(s.totalWithdrawn);
   document.getElementById('teamCode').textContent = s.referralCode;
   document.getElementById('teamL1').textContent = s.team.l1;
   document.getElementById('teamL2').textContent = s.team.l2;
@@ -632,6 +634,31 @@ function renderShop(){
       '<div class="prod-arrow">'+ICON_CHEV+'</div></div></button>';
   }).join('');
   document.getElementById('shopGrid').innerHTML = html;
+}
+var _shopTab = 'products';
+function setShopTab(t){
+  _shopTab = t;
+  document.querySelectorAll('[data-st]').forEach(function(b){ b.classList.toggle('active', b.dataset.st===t); });
+  document.getElementById('shopGrid').style.display = t==='products' ? 'grid' : 'none';
+  document.getElementById('ownedList').style.display = t==='owned' ? 'block' : 'none';
+  if(t==='owned') renderOwned();
+}
+function renderOwned(){
+  var sett = getSettings();
+  if(!STATE.investments.length){ document.getElementById('ownedList').innerHTML = '<div class="empty">No chocolates owned yet — buy one from Products to start earning.</div>'; return; }
+  var html = STATE.investments.map(function(inv){
+    var daysElapsed = Math.floor((Date.now()-inv.boughtAt)/86400000);
+    var totalPayout = inv.price*sett.returnMultiple;
+    var accrued = Math.min(totalPayout, dailyReturn(inv.price)*daysElapsed);
+    var matured = daysElapsed >= sett.cycleDays;
+    return '<div class="bank-row">'+
+      '<img src="'+CHOCO_IMAGES[inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
+      '<div class="bank-info"><b>'+inv.name+'</b><span>Day '+Math.min(daysElapsed,sett.cycleDays)+' of '+sett.cycleDays+' · '+ugx(inv.price)+'</span></div>'+
+      '<div style="text-align:right"><b style="color:var(--mint);font-size:14px">'+ugx(accrued)+'</b><br>'+
+      '<span style="font-size:10.5px;color:'+(matured?'var(--mint)':'var(--cocoa-faint)')+'">'+(matured?'Matured':'Accruing')+'</span></div>'+
+      '</div>';
+  }).join('');
+  document.getElementById('ownedList').innerHTML = html;
 }
 var TICKER_NAMES=['Aisha K.','Brian T.','Cynthia N.','Daniel O.','Faith M.','Grace A.','Ivan S.','Joan K.'];
 function renderTicker(){
@@ -680,6 +707,7 @@ function switchTab(name){
   });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===name); });
   if(name==='rewards' || name==='team' || name==='home') renderAll();
+  if(name==='shop') setShopTab('products');
 }
 function openOverlay(name){
   closeOverlay();
