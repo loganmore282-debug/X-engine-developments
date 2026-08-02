@@ -635,6 +635,11 @@ app.post('/deposit/marzpay', async (req, res) => {
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
     });
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
+      // Log the RAW gateway response — marzUserMsg() below deliberately hides
+      // this from the user behind a friendly message, so without this line
+      // there is no way to tell a bad MARZPAY_KEY apart from a real MarzPay
+      // outage apart from staring at Render's logs and seeing nothing.
+      console.error('MarzPay collect-money rejected:', JSON.stringify(mpData));
       await depRef.update({ status: 'failed', failureReason: marzUserMsg(mpData, 'Could not start the payment') }).catch(() => {});
       return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the payment right now. Please try again.') });
     }
@@ -774,6 +779,7 @@ app.post('/withdraw/request', async (req, res) => {
     });
     const witRef = db.collection('withdrawals').doc(witId);
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
+      console.error('MarzPay send-money rejected:', JSON.stringify(mpData));
       // Gateway rejected outright — refund immediately, nothing left in flight.
       await db.runTransaction(async t => {
         const uRef = db.collection('users').doc(userId);
