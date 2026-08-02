@@ -200,6 +200,13 @@
   .link-box{background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px 20px;}
   .link-row{display:flex;align-items:center;gap:10px;}
   .link-row span{flex:1;font-size:12.5px;font-weight:700;color:var(--cocoa-soft);}
+
+  .pay-status-card{margin:16px 20px;background:var(--mint-pale);border-radius:20px;padding:22px 20px;text-align:center;}
+  .pay-status-ic{width:52px;height:52px;border-radius:16px;background:var(--mint);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+  .pay-status-card h3{font-size:17px;color:var(--cocoa);}
+  .pay-steps{list-style:none;margin:16px 0 0;padding:0;text-align:left;}
+  .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:var(--cocoa-soft);font-weight:600;}
+  .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--mint);}
   .code-box b{font-size:16px;letter-spacing:1.5px;}
   .comm-row{display:flex;gap:10px;margin:0 20px 16px;}
   .comm-tile{flex:1;background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px 10px;text-align:center;}
@@ -406,7 +413,7 @@
   <div class="overlay" id="ovDeposit">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Add Funds</div></div>
     <div class="photo-banner" id="depositBanner"></div>
-    <div class="info-box">Funds are added to your wallet instantly. Mobile-money processing goes live once the backend is connected.</div>
+    <div class="info-box">Funds are added to your wallet once your mobile-money payment is confirmed.</div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
       <input class="famt" id="depAmt" type="number" placeholder="0">
@@ -415,7 +422,33 @@
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=90000">UGX 90,000</button>
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=200000">UGX 200,000</button>
       </div>
-      <button class="btn btn-primary btn-block" onclick="doDeposit()">Add Funds</button>
+      <span class="flabel">Mobile-money number to pay from</span>
+      <input class="famt" id="depPhone" type="tel" placeholder="0771234567" style="font-size:16px">
+      <button class="btn btn-primary btn-block" id="depGoBtn" onclick="doDeposit()">Add Funds</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovDepositStatus">
+    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Add Funds</div></div>
+    <div class="pay-status-card">
+      <div class="pay-status-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg></div>
+      <h3>Payment Initiated Successfully!</h3>
+      <p class="muted" id="depStatusPhone" style="font-size:13.5px;margin-top:6px">You will receive a payment prompt on your phone shortly.</p>
+      <ul class="pay-steps">
+        <li>Check your phone for the payment request</li>
+        <li>Enter your mobile-money PIN to confirm</li>
+        <li>We'll verify the payment automatically</li>
+      </ul>
+    </div>
+    <div class="link-box">
+      <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">TRANSACTION REFERENCE</div>
+      <div class="link-row"><span id="depStatusRef" style="word-break:break-all">—</span><button class="btn btn-dark btn-sm" onclick="copyDepositRef()">Copy</button></div>
+    </div>
+    <div class="info-box" id="depStatusMsg" style="background:var(--caramel-pale);color:var(--caramel-deep)">Payment initiated — check your phone.</div>
+    <div style="padding:0 20px">
+      <button class="btn btn-primary btn-block" onclick="manualVerifyDeposit()">Verify Payment</button>
+      <div style="text-align:center;margin-top:14px"><span class="muted" onclick="cancelDepositStatus()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
+      <div style="text-align:center;margin-top:8px" class="muted" id="depStatusAttempt" style="font-size:11.5px"></div>
     </div>
   </div>
 
@@ -429,7 +462,7 @@
       <input class="famt" id="witAmt" type="number" placeholder="0" oninput="renderWitCalc()">
       <div class="calc-row"><span>Service fee (19%)</span><span id="witFee">UGX 0</span></div>
       <div class="calc-row"><span>You receive</span><span id="witNet">UGX 0</span></div>
-      <button class="btn btn-berry btn-block" style="margin-top:12px" onclick="doWithdraw()">Request Cash Out</button>
+      <button class="btn btn-berry btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Cash Out</button>
     </div>
   </div>
 
@@ -523,9 +556,7 @@
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
-  // ChocoMCC — Firebase web config (choco-mcc project). Auth only for now —
-  // wallet/product/transaction data still lives in localStorage until the
-  // real backend + database are wired up.
+  // ChocoMCC — Firebase web config (choco-mcc project).
   const firebaseConfig = {
     apiKey: "AIzaSyAqWs_sYu2UiruVuGN_JI0SbeD1gQeV3Ys",
     authDomain: "choco-mcc.firebaseapp.com",
@@ -541,6 +572,7 @@
   window.fbCreateUser = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
   window.fbSignIn     = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
   window.fbSignOut    = () => signOut(auth);
+  window.fbGetIdToken = () => auth.currentUser ? auth.currentUser.getIdToken() : Promise.resolve(null);
   onAuthStateChanged(auth, user => { if (window.onFbAuthChanged) window.onFbAuthChanged(user); });
 </script>
 
@@ -569,6 +601,61 @@ var PRODUCTS = [
 ];
 // Fixed promo codes (server-issued codes come once the backend is wired up) — each redeemable once per member.
 var PROMO_CODES = { 'CHOCO50':5000, 'SWEET100':10000, 'CACAO25':2500 };
+var NETWORK_COLORS = { 'MTN Mobile Money':{color:'#FFCC08',textColor:'#3B2416'}, 'Airtel Money':{color:'#ED1C24',textColor:'#fff'} };
+
+/* ====================== SERVER API ====================== */
+var SERVER = 'https://mybusinessuganda.onrender.com';
+async function api(path, body, method){
+  method = method || (body ? 'POST' : 'GET');
+  var headers = {};
+  if(window.fbGetIdToken){
+    try{ var tok = await window.fbGetIdToken(); if(tok) headers['Authorization'] = 'Bearer '+tok; }catch(e){}
+  }
+  var opts = { method: method, headers: headers };
+  if(body){ headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  try{
+    var resp = await fetch(SERVER+path, opts);
+    return await resp.json();
+  }catch(e){
+    return { status:'error', message:'Network error — check your connection' };
+  }
+}
+// Pulls the live account/investments/bank accounts/transactions from the
+// server and stamps them onto STATE. Called after every money action and on
+// app entry, since deposit/withdrawal/cashback settlement all happen server-side.
+async function refreshFromServer(){
+  var accR = await api('/account');
+  if(accR.status==='success'){
+    var a = accR.account;
+    STATE.phone = a.phone || STATE.phone;
+    STATE.balance = a.walletBalance; STATE.totalDeposited = a.totalDeposited;
+    STATE.totalEarned = a.totalEarned; STATE.totalWithdrawn = a.totalWithdrawn;
+    STATE.totalInvested = a.totalInvested; STATE.checkinStreak = a.checkinStreak;
+    STATE.lastCheckin = a.lastCheckin; STATE.referralCode = a.referralCode || STATE.referralCode;
+    STATE.team = a.team;
+  }
+  var invR = await api('/investments');
+  if(invR.status==='success'){
+    STATE.investments = invR.investments.map(function(iv){
+      return { id: iv.id, key: iv.tierKey, name: iv.tierLabel, price: iv.amount,
+        cycleDays: iv.payoutsTotal, daysElapsed: iv.payoutsMade, accrued: iv.paidOut, matured: iv.status==='matured' };
+    });
+  }
+  var bankR = await api('/bank/list');
+  if(bankR.status==='success') STATE.bankAccounts = bankR.accounts;
+  var txR = await api('/transactions');
+  if(txR.status==='success'){
+    STATE.transactions = txR.transactions.map(function(t){
+      return { type:t.type, amount:t.amount, desc:t.description, when: new Date(t.createdAt).getTime() };
+    });
+  }
+  saveState();
+}
+function serverTodayKey(){
+  var d = new Date(Date.now()+3*3600000);
+  var p = function(n){ return String(n).padStart(2,'0'); };
+  return p(d.getUTCMonth()+1)+'/'+p(d.getUTCDate())+'/'+d.getUTCFullYear();
+}
 
 function getSettings(){
   try{ return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem('choco_admin_settings')||'{}')); }
@@ -576,7 +663,6 @@ function getSettings(){
 }
 function dailyReturn(price){ var s=getSettings(); return Math.round(price*s.returnMultiple/s.cycleDays); }
 function ugx(n){ n=Math.round(Number(n)||0); return 'UGX ' + n.toLocaleString('en-US'); }
-function todayKey(){ return new Date().toISOString().slice(0,10); }
 
 /* ====================== LOCAL STATE (per-account cache — keyed by the real Firebase uid; moves server-side once the backend is wired up) ====================== */
 function loadState(uid){
@@ -594,10 +680,6 @@ function freshState(uid, name, phone){
     team:{l1:0,l2:0,l3:0,commission:0},
     investments: [], transactions: [], bankAccounts: [], defaultBankIdx: 0, usedGiftCodes: []
   };
-}
-function pushTx(type, amount, desc){
-  STATE.transactions.unshift({type:type, amount:amount, desc:desc, when:Date.now()});
-  saveState();
 }
 
 /* ====================== AUTH (real Firebase Authentication — see the module script above) ====================== */
@@ -633,13 +715,16 @@ document.getElementById('authGo').onclick = async function(){
     if(authMode==='register'){
       cred = await window.fbCreateUser(email, pass);
       STATE = freshState(cred.user.uid, 'Member', phone);
-      if(ref) STATE.referredBy = ref;
       saveState();
+      await api('/account/create-profile', { phone: phone });
+      await api('/register', { referralCode: ref });
+      await refreshFromServer();
       toast('Account created — welcome!');
     } else {
       cred = await window.fbSignIn(email, pass);
       STATE = loadState(cred.user.uid) || freshState(cred.user.uid, 'Member', phone);
       saveState();
+      await refreshFromServer();
     }
     enterApp();
   } catch(e){
@@ -673,7 +758,7 @@ function onFbAuthChanged(user){
   if(user && (!STATE || STATE.uid !== user.uid)){
     STATE = loadState(user.uid) || freshState(user.uid, 'Member', '');
     saveState();
-    enterApp();
+    refreshFromServer().then(enterApp);
   } else if(!user){
     STATE = null;
   }
@@ -704,7 +789,7 @@ function renderAll(){
   document.getElementById('rewardsBanner').innerHTML = '<img src="'+CHOCO_BANNERS.cookies+'">';
   document.getElementById('giftCodeThumb').src = CHOCO_BANNERS.bonbon;
   document.getElementById('checkinAmt').textContent = sett.dailyCheckin;
-  var done = s.lastCheckin === todayKey();
+  var done = s.lastCheckin === serverTodayKey();
   var btn = document.getElementById('checkinBtn');
   btn.innerHTML = done ? '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12l4.5 4.5L19.5 6"/></svg>Claimed today</span>' : ('Check in — UGX ' + sett.dailyCheckin);
   btn.disabled = done; btn.style.opacity = done?'.55':'1';
@@ -739,13 +824,10 @@ function renderShop(){
   document.getElementById('shopGrid').innerHTML = html;
 }
 function investmentStats(){
-  var sett = getSettings();
+  // Accrual/maturity are computed and settled server-side (lazy daily
+  // cashback); this just reshapes what refreshFromServer() already stored.
   return STATE.investments.map(function(inv){
-    var daysElapsed = Math.floor((Date.now()-inv.boughtAt)/86400000);
-    var totalPayout = inv.price*sett.returnMultiple;
-    var accrued = Math.min(totalPayout, dailyReturn(inv.price)*daysElapsed);
-    var matured = daysElapsed >= sett.cycleDays;
-    return { inv:inv, daysElapsed:Math.min(daysElapsed,sett.cycleDays), cycleDays:sett.cycleDays, totalPayout:totalPayout, accrued:accrued, matured:matured };
+    return { inv:inv, daysElapsed:inv.daysElapsed, cycleDays:inv.cycleDays, accrued:inv.accrued, matured:inv.matured };
   });
 }
 function renderMyChoc(){
@@ -772,21 +854,15 @@ function renderEarnings(){
       '</div>';
   }).join('');
 }
-function maskedPhone(){
-  var digits = ''; for(var i=0;i<9;i++) digits += Math.floor(Math.random()*10);
-  return '256' + digits.slice(0,6).replace(/./g,'x') + digits.slice(6);
-}
 function renderTicker(){
-  var rows='';
-  for(var i=0;i<6;i++){
-    var isDep = Math.random()>0.45;
-    var num = maskedPhone();
-    var amt = isDep ? (Math.floor(Math.random()*8+1)*25000) : (Math.floor(Math.random()*6+1)*10000);
-    rows += '<div class="ticker-row"><span class="dot" style="background:'+(isDep?'var(--mint)':'var(--berry)')+'"></span>'+
-      '<span style="flex:1">'+num+' '+(isDep?'added funds':'cashed out')+'</span>'+
-      '<b style="color:'+(isDep?'var(--mint)':'var(--berry)')+'">'+(isDep?'+':'-')+ugx(amt).replace('UGX ','')+'</b></div>';
-  }
-  document.getElementById('tickerBox').innerHTML = rows;
+  var list = STATE.transactions.slice(0,6);
+  if(!list.length){ document.getElementById('tickerBox').innerHTML = '<div class="empty">No activity yet.</div>'; return; }
+  document.getElementById('tickerBox').innerHTML = list.map(function(t){
+    var pos = t.amount>=0;
+    return '<div class="ticker-row"><span class="dot" style="background:'+(pos?'var(--mint)':'var(--berry)')+'"></span>'+
+      '<span style="flex:1">'+t.desc+'</span>'+
+      '<b style="color:'+(pos?'var(--mint)':'var(--berry)')+'">'+(pos?'+':'')+ugx(t.amount)+'</b></div>';
+  }).join('');
 }
 var _recordsTab = 'balance';
 function setRecordsTab(t){
@@ -831,6 +907,7 @@ function openOverlay(name){
   if(name==='records'){ setRecordsTab('balance'); }
   if(name==='mychoc') renderMyChoc();
   if(name==='earnings') renderEarnings();
+  if(name==='deposit'){ var dp=document.getElementById('depPhone'); if(dp && !dp.value) dp.value = STATE.phone||''; }
 }
 function closeOverlay(){ document.querySelectorAll('.overlay').forEach(function(o){o.classList.remove('show');}); }
 
@@ -839,10 +916,11 @@ function renderBankList(){
   var list = STATE.bankAccounts;
   if(!list.length){ document.getElementById('bankList').innerHTML = '<div class="empty">No accounts bound yet — add one below.</div>'; return; }
   document.getElementById('bankList').innerHTML = list.map(function(b,i){
+    var nc = NETWORK_COLORS[b.network] || {color:'#EADFC9',textColor:'#3B2416'};
     var initials = b.network.split(' ').map(function(w){return w.charAt(0);}).join('').slice(0,2);
     var masked = b.phone.length>4 ? b.phone.slice(0,4)+'•••'+b.phone.slice(-2) : b.phone;
     return '<div class="bank-row" onclick="setDefaultBank('+i+')" style="cursor:pointer">'+
-      '<div class="bank-net-badge" style="background:'+b.color+';color:'+b.textColor+'">'+initials+'</div>'+
+      '<div class="bank-net-badge" style="background:'+nc.color+';color:'+nc.textColor+'">'+initials+'</div>'+
       '<div class="bank-info"><b>'+b.holder+'</b><span>'+b.network+' · '+masked+'</span></div>'+
       (i===STATE.defaultBankIdx ? '<span class="bank-default">Default</span>' : '')+
       '</div>';
@@ -863,11 +941,14 @@ function pickNetwork(name, color, textColor){
   document.getElementById('npTitle').textContent = name;
   document.getElementById('npName').value=''; document.getElementById('npPhone').value='';
 }
-function saveBankAccount(){
+async function saveBankAccount(){
   var holder = document.getElementById('npName').value.trim();
   var phone = document.getElementById('npPhone').value.trim();
   if(!holder || !phone){ toast('Enter the account holder name and phone'); return; }
-  STATE.bankAccounts.push({network:_pickedNetwork.network, color:_pickedNetwork.color, textColor:_pickedNetwork.textColor, holder:holder, phone:phone});
+  var r = await api('/bank/save', { holder:holder, network:_pickedNetwork.network, phone:phone });
+  if(r.status!=='success'){ toast(r.message||'Could not save the account'); return; }
+  var bankR = await api('/bank/list');
+  if(bankR.status==='success') STATE.bankAccounts = bankR.accounts;
   if(STATE.bankAccounts.length===1) STATE.defaultBankIdx = 0;
   saveState();
   closeNetworkPicker(); renderBankList(); renderWitBankBox();
@@ -882,9 +963,10 @@ function renderWitBankBox(){
     return;
   }
   var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
+  var nc = NETWORK_COLORS[b.network] || {color:'#EADFC9',textColor:'#3B2416'};
   var masked = b.phone.length>4 ? b.phone.slice(0,4)+'•••'+b.phone.slice(-2) : b.phone;
   box.innerHTML = '<div class="bank-row" style="margin:16px 20px 0">'+
-    '<div class="bank-net-badge" style="background:'+b.color+';color:'+b.textColor+'">'+b.network.charAt(0)+'</div>'+
+    '<div class="bank-net-badge" style="background:'+nc.color+';color:'+nc.textColor+'">'+b.network.charAt(0)+'</div>'+
     '<div class="bank-info"><b>Cash out to '+b.holder+'</b><span>'+b.network+' · '+masked+'</span></div>'+
     '<b style="font-size:12px;color:var(--caramel-deep);cursor:pointer" onclick="closeOverlay();openOverlay(\'bindbank\')">Change</b></div>';
 }
@@ -905,24 +987,30 @@ function openProduct(key){
     '<div style="padding:4px 20px 20px"><button class="btn btn-primary btn-block" onclick="buyProduct(\''+p.key+'\')">Buy this chocolate</button></div>';
   openOverlay('product');
 }
-function buyProduct(key){
+async function buyProduct(key){
   var p = PRODUCTS.filter(function(x){return x.key===key;})[0];
   if(STATE.balance < p.price){ toast('Not enough balance — add funds first'); return; }
-  STATE.balance -= p.price; STATE.totalInvested += p.price;
-  STATE.investments.push({key:key,name:p.name,price:p.price,boughtAt:Date.now()});
-  pushTx('buy', -p.price, 'Bought '+p.name);
+  toast('Processing…');
+  var r = await api('/invest/create', { tierKey:key });
+  if(r.status!=='success'){ toast(r.message||'Purchase failed'); return; }
+  await refreshFromServer();
   closeOverlay(); renderAll(); toast('Purchased '+p.name+'!');
 }
 
 /* ====================== ACTIONS ====================== */
-function doDeposit(){
+async function doDeposit(){
   var amt = parseInt(document.getElementById('depAmt').value,10);
+  var phone = document.getElementById('depPhone').value.trim();
   var sett = getSettings();
   if(!amt || amt < sett.minDeposit){ toast('Minimum amount is '+ugx(sett.minDeposit)); return; }
-  STATE.balance += amt; STATE.totalDeposited += amt;
-  pushTx('deposit', amt, 'Added funds to wallet');
+  if(!phone){ toast('Enter the mobile-money number to pay from'); return; }
+  var btn = document.getElementById('depGoBtn'), label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Please wait…';
+  var r = await api('/deposit/marzpay', { amount:amt, phone:phone });
+  btn.disabled = false; btn.textContent = label;
+  if(r.status!=='success'){ toast(r.message||'Could not start the payment'); return; }
   document.getElementById('depAmt').value='';
-  closeOverlay(); renderAll(); toast('Added '+ugx(amt));
+  openDepositStatus(r.depositId, r.reference, phone);
 }
 function renderWitCalc(){
   var sett = getSettings();
@@ -931,40 +1019,88 @@ function renderWitCalc(){
   document.getElementById('witFee').textContent = ugx(fee);
   document.getElementById('witNet').textContent = ugx(amt-fee);
 }
-function doWithdraw(){
+async function doWithdraw(){
   var sett = getSettings();
   if(!STATE.bankAccounts.length){ toast('Bind a bank account first'); closeOverlay(); openOverlay('bindbank'); return; }
   var amt = parseInt(document.getElementById('witAmt').value,10)||0;
   if(amt < sett.minWithdraw){ toast('Minimum cash-out is '+ugx(sett.minWithdraw)); return; }
+  if(amt % 5000 !== 0){ toast('Amount must be a multiple of UGX 5,000'); return; }
   if(amt > STATE.balance){ toast('Insufficient balance'); return; }
-  var fee = Math.round(amt*sett.withdrawFeePct/100); var net = amt-fee;
-  STATE.balance -= amt; STATE.totalWithdrawn += net;
   var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
-  pushTx('withdraw', -amt, 'Cash out to '+b.holder+' ('+b.network+') — net '+ugx(net)+' after '+sett.withdrawFeePct+'% fee');
+  var btn = document.getElementById('witGoBtn'), label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Please wait…';
+  var r = await api('/withdraw/request', { amount:amt, holder:b.holder, network:b.network, phone:b.phone });
+  btn.disabled = false; btn.textContent = label;
+  if(r.status!=='success'){ toast(r.message||'Could not process the cash-out'); return; }
   document.getElementById('witAmt').value=''; renderWitCalc();
-  closeOverlay(); renderAll(); toast('Cash-out requested — net '+ugx(net));
+  await refreshFromServer();
+  closeOverlay(); renderAll(); toast(r.message||'Cash-out requested');
 }
-function doCheckin(){
-  var sett = getSettings();
-  if(STATE.lastCheckin === todayKey()){ toast('Already claimed today'); return; }
-  var yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
-  STATE.checkinStreak = (STATE.lastCheckin===yesterday) ? STATE.checkinStreak+1 : 1;
-  STATE.lastCheckin = todayKey();
-  STATE.balance += sett.dailyCheckin; STATE.totalEarned += sett.dailyCheckin;
-  pushTx('checkin', sett.dailyCheckin, 'Daily check-in bonus, day '+STATE.checkinStreak);
-  renderAll(); toast('+'+ugx(sett.dailyCheckin)+' — see you tomorrow!');
+async function doCheckin(){
+  var r = await api('/checkin', {});
+  if(r.status!=='success'){ toast(r.message||'Check-in failed'); return; }
+  await refreshFromServer();
+  renderAll(); toast('+'+ugx(r.bonus)+' — see you tomorrow!');
 }
-function redeemGiftCode(){
+async function redeemGiftCode(){
   var raw = document.getElementById('giftCodeInput').value.trim().toUpperCase();
   if(!raw){ toast('Enter a code'); return; }
-  if(!PROMO_CODES.hasOwnProperty(raw)){ toast('That code isn\'t valid'); return; }
-  if(STATE.usedGiftCodes.indexOf(raw)!==-1){ toast('You already redeemed this code'); return; }
-  var reward = PROMO_CODES[raw];
-  STATE.balance += reward; STATE.totalEarned += reward;
-  STATE.usedGiftCodes.push(raw);
-  pushTx('giftcode', reward, 'Promo code redeemed — '+raw);
+  var r = await api('/redeem', { code:raw });
+  if(r.status!=='success'){ toast(r.message||"That code isn't valid"); return; }
   document.getElementById('giftCodeInput').value='';
-  renderAll(); toast('+'+ugx(reward)+' credited!');
+  await refreshFromServer();
+  renderAll(); toast('+'+ugx(r.reward)+' credited!');
+}
+
+/* ====================== DEPOSIT STATUS (auto-verifying) ====================== */
+var _depPollTimer = null, _depPollAttempt = 0, _depPollMax = 120, _depPollId = null;
+function openDepositStatus(depositId, reference, phone){
+  _depPollId = depositId; _depPollAttempt = 0;
+  document.getElementById('depStatusPhone').textContent = 'You will receive a payment prompt on '+phone+' shortly.';
+  document.getElementById('depStatusRef').textContent = reference;
+  setDepStatusMsg('pending', 'Payment initiated — check your phone.');
+  document.getElementById('depStatusAttempt').textContent = '';
+  openOverlay('depositStatus');
+  clearInterval(_depPollTimer);
+  _depPollTimer = setInterval(pollDepositStatus, 3000);
+  pollDepositStatus();
+}
+function setDepStatusMsg(kind, text){
+  var el = document.getElementById('depStatusMsg');
+  el.textContent = text;
+  el.style.background = kind==='matched' ? 'var(--mint-pale)' : kind==='failed' ? 'var(--berry-pale)' : 'var(--caramel-pale)';
+  el.style.color      = kind==='matched' ? 'var(--mint)'      : kind==='failed' ? 'var(--berry)'      : 'var(--caramel-deep)';
+}
+async function pollDepositStatus(){
+  if(!_depPollId) return;
+  _depPollAttempt++;
+  var attEl = document.getElementById('depStatusAttempt');
+  if(attEl) attEl.textContent = 'Auto-verifying… (attempt '+_depPollAttempt+'/'+_depPollMax+')';
+  var r = await api('/deposit/marzpay/status', { depositId:_depPollId });
+  if(r.status==='success'){
+    if(r.state==='matched'){
+      clearInterval(_depPollTimer); _depPollTimer=null;
+      setDepStatusMsg('matched', 'Payment confirmed — funds added to your wallet.');
+      await refreshFromServer(); renderAll();
+      return;
+    }
+    if(r.state==='failed'){
+      clearInterval(_depPollTimer); _depPollTimer=null;
+      setDepStatusMsg('failed', r.message || 'Payment was not completed.');
+      return;
+    }
+  }
+  if(_depPollAttempt>=_depPollMax){
+    clearInterval(_depPollTimer); _depPollTimer=null;
+    setDepStatusMsg('failed', "We couldn't confirm this payment automatically — tap Verify Payment or contact support.");
+  }
+}
+function manualVerifyDeposit(){ toast('Checking…'); pollDepositStatus(); }
+function cancelDepositStatus(){ clearInterval(_depPollTimer); _depPollTimer=null; _depPollId=null; closeOverlay(); renderAll(); }
+function copyDepositRef(){
+  var ref = document.getElementById('depStatusRef').textContent;
+  if(navigator.clipboard) navigator.clipboard.writeText(ref).catch(function(){});
+  toast('Reference copied');
 }
 function copyCode(){
   var link = 'https://choco-mcc.com/?reg='+STATE.referralCode;
@@ -977,7 +1113,8 @@ function toast(msg){
 }
 
 /* ====================== BOOT ====================== */
-if(STATE){ enterApp(); }
+// Real entry happens in onFbAuthChanged() once Firebase resolves whether a
+// session is already signed in — STATE is always null at this point.
 </script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}</script>
 </body>
