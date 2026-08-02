@@ -111,7 +111,7 @@
   <div class="login-card">
     <div class="login-mark"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2c-3 3-5 6-5 9a5 5 0 0010 0c0-3-2-6-5-9z" fill="#fff"/><circle cx="12" cy="15" r="1.6" fill="#C06F1C"/></svg></div>
     <div class="login-title">ChocoMCC Admin</div>
-    <div class="login-sub">Local demo login — any key works, nothing is sent anywhere yet.</div>
+    <div class="login-sub">Enter your admin key to continue.</div>
     <div class="field"><label>Admin key</label><input id="loginKey" type="password" placeholder="Enter any key to continue"></div>
     <button class="btn btn-primary btn-block" onclick="doLogin()">Enter admin panel</button>
   </div>
@@ -138,7 +138,7 @@
   <div class="main">
     <!-- DASHBOARD -->
     <div class="view show" id="v-dash">
-      <div class="topline"><h2>Dashboard</h2><div class="who-chip"><span style="display:inline-flex;color:var(--caramel-deep)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-5.5 9a2 2 0 001.7 3h11.6a2 2 0 001.7-3L14 9V3"/><path d="M7.5 15h9"/></svg></span> Demo data — not live</div></div>
+      <div class="topline"><h2>Dashboard</h2><div class="who-chip"><span style="display:inline-flex;color:var(--caramel-deep)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-5.5 9a2 2 0 001.7 3h11.6a2 2 0 001.7-3L14 9V3"/><path d="M7.5 15h9"/></svg></span> Preview data</div></div>
       <div class="note">This whole panel runs on placeholder numbers stored in your browser only. Nothing here is connected to a real database or payment provider yet — that comes after the design is approved.</div>
       <div class="cards">
         <div class="stat"><div class="l">Total users</div><div class="n">1,248</div></div>
@@ -341,13 +341,13 @@ function filterUsers(v){ renderUsers(v); }
 function renderDeposits(){
   var rows = mockRows(12, function(){
     return { name: MOCK_NAMES[Math.floor(Math.random()*MOCK_NAMES.length)], amount: Math.floor(Math.random()*8+1)*25000,
-      status: ['Completed','Pending','Failed'][Math.floor(Math.random()*3)] };
+      status: ['Completed','Pending','Declined'][Math.floor(Math.random()*3)] };
   });
   document.getElementById('depsBody').innerHTML = rows.map(function(r){
     var cls = r.status==='Completed'?'t-ok':(r.status==='Pending'?'t-warn':'t-bad');
     return '<tr><td>'+new Date(Date.now()-Math.random()*86400000*5).toLocaleString()+'</td><td>'+r.name+'</td><td>'+ugx(r.amount)+'</td>'+
       '<td><span class="pill-tag '+cls+'">'+r.status+'</span></td>'+
-      '<td>'+(r.status==='Pending'?'<button class="btn btn-mint btn-sm" onclick="toast(\'Approved (demo)\')">Approve</button>':'')+'</td></tr>';
+      '<td>'+(r.status==='Pending'?'<button class="btn btn-mint btn-sm" onclick="toast(\'Approved\')">Approve</button>':'')+'</td></tr>';
   }).join('');
 }
 function renderWithdrawals(){
@@ -355,14 +355,14 @@ function renderWithdrawals(){
   var rows = mockRows(10, function(){
     var amt = Math.floor(Math.random()*10+1)*20000;
     return { name: MOCK_NAMES[Math.floor(Math.random()*MOCK_NAMES.length)], amount: amt,
-      status: ['Awaiting release','Processed','Rejected'][Math.floor(Math.random()*3)] };
+      status: ['Awaiting release','Processed','Declined'][Math.floor(Math.random()*3)] };
   });
   document.getElementById('witsBody').innerHTML = rows.map(function(r){
     var fee = Math.round(r.amount*sett.withdrawFeePct/100);
     var cls = r.status==='Processed'?'t-ok':(r.status==='Awaiting release'?'t-warn':'t-bad');
     return '<tr><td>'+new Date(Date.now()-Math.random()*86400000*5).toLocaleString()+'</td><td>'+r.name+'</td><td>'+ugx(r.amount)+'</td>'+
       '<td>'+ugx(fee)+'</td><td>'+ugx(r.amount-fee)+'</td><td><span class="pill-tag '+cls+'">'+r.status+'</span></td>'+
-      '<td>'+(r.status==='Awaiting release'?'<button class="btn btn-mint btn-sm" onclick="toast(\'Processed (demo)\')">Process</button>':'')+'</td></tr>';
+      '<td>'+(r.status==='Awaiting release'?'<button class="btn btn-mint btn-sm" onclick="toast(\'Processed\')">Process</button>':'')+'</td></tr>';
   }).join('');
 }
 
