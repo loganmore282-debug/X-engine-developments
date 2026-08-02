@@ -143,12 +143,18 @@
   .photo-banner img{width:100%;height:100%;object-fit:cover;display:block;}
   .photo-banner .pb-tint{position:absolute;inset:0;background:linear-gradient(0deg,rgba(36,19,11,.72),rgba(36,19,11,0) 65%);display:flex;align-items:flex-end;padding:14px 18px;}
   .photo-banner .pb-tint span{color:#fff;font-weight:800;font-size:14px;letter-spacing:.2px;}
+  .photo-banner .pb-tint.pb-btn-row{background:linear-gradient(0deg,rgba(36,19,11,.82),rgba(36,19,11,.1));align-items:center;justify-content:space-between;gap:10px;padding:0 16px;}
+  .pb-action-btn{flex:1;background:rgba(255,255,255,.16);backdrop-filter:blur(2px);border:1.5px solid rgba(255,255,255,.4);
+    color:#fff;font-weight:800;font-size:12.5px;padding:12px 10px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:6px;}
   .photo-banner.pb-flush{margin:0;border-radius:0;}
   .photo-banner.pb-sm{height:110px;}
   .photo-banner.pb-hero{height:170px;margin:14px 20px;border-radius:26px;}
   .photo-banner.pb-full{height:240px;}
-  .auth-banner{position:relative;border-radius:22px;overflow:hidden;height:150px;margin-bottom:20px;box-shadow:var(--shadow-lg);}
+  .auth-banner{position:relative;overflow:hidden;height:230px;margin:-32px -26px 20px -26px;box-shadow:var(--shadow-lg);}
   .auth-banner img{width:100%;height:100%;object-fit:cover;display:block;}
+  .auth-banner::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(0deg, var(--cream) 0%, rgba(251,242,228,0) 22%),
+      linear-gradient(160deg, rgba(224,138,44,.32), rgba(59,36,22,.38) 70%);}
   .uline-tabs{display:flex;gap:22px;margin:4px 20px 0;border-bottom:1.5px solid var(--line);}
   .uline-tab{background:none;border:none;padding:10px 2px;font-size:14px;font-weight:800;color:var(--cocoa-faint);
     border-bottom:2.5px solid transparent;margin-bottom:-1.5px;}
@@ -184,7 +190,9 @@
   .acct-num{font-size:16px;font-weight:800;}
   .avatar{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;}
 
-  .code-box{display:flex;align-items:center;justify-content:space-between;background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px 20px;}
+  .link-box{background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px 20px;}
+  .link-row{display:flex;align-items:center;gap:10px;}
+  .link-row span{flex:1;font-size:12.5px;font-weight:700;color:var(--cocoa-soft);}
   .code-box b{font-size:16px;letter-spacing:1.5px;}
   .comm-row{display:flex;gap:10px;margin:0 20px 16px;}
   .comm-tile{flex:1;background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px 10px;text-align:center;}
@@ -281,17 +289,18 @@
 
     <!-- SHOP -->
     <div id="viewShop" style="display:none">
-      <div class="photo-banner" id="shopBanner"></div>
+      <div class="photo-banner pb-flush pb-full" id="shopBanner">
+        <img id="shopBannerImg" src="">
+        <div class="pb-tint pb-btn-row">
+          <button class="pb-action-btn" onclick="openOverlay('mychoc')">My Chocolates <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+          <button class="pb-action-btn" onclick="openOverlay('earnings')">Accrued earnings <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
+      </div>
       <div class="view-pad">
         <div class="view-title">The Shop</div>
         <div class="muted" style="font-size:13px">Every tier pays a daily reward until it matures.</div>
       </div>
-      <div class="uline-tabs">
-        <button class="uline-tab active" data-st="products" onclick="setShopTab('products')">Products</button>
-        <button class="uline-tab" data-st="owned" onclick="setShopTab('owned')">My Chocolates</button>
-      </div>
-      <div class="prod-grid" id="shopGrid" style="margin-top:14px"></div>
-      <div id="ownedList" style="display:none;margin-top:14px"></div>
+      <div class="prod-grid" id="shopGrid"></div>
       <div style="height:14px"></div>
     </div>
 
@@ -302,9 +311,12 @@
         <div class="view-title">My Team</div>
         <div class="muted" style="font-size:13px">Share your code, earn on every level.</div>
       </div>
-      <div class="code-box">
-        <div><div class="muted" style="font-size:11px;font-weight:700">YOUR CODE</div><b id="teamCode">CHM000</b></div>
-        <button class="btn btn-dark btn-sm" onclick="copyCode()">Copy link</button>
+      <div class="link-box">
+        <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">YOUR REFERRAL LINK</div>
+        <div class="link-row">
+          <span id="teamLink" style="word-break:break-all">https://choco-mcc.com/?reg=CHM000</span>
+          <button class="btn btn-dark btn-sm" onclick="copyCode()">Copy</button>
+        </div>
       </div>
       <div class="comm-row">
         <div class="comm-tile"><b>27%</b><span>LEVEL 1</span></div>
@@ -362,7 +374,7 @@
         <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n" style="color:var(--mint)" id="acctBalNum">UGX 0</div><div class="l">Balance</div></div>
         <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('withdrawals')"><div class="n" style="color:var(--berry)" id="acctWitNum">UGX 0</div><div class="l">Withdrawals</div></div>
       </div>
-      <button class="menu-item" onclick="switchTab('shop')"><div class="menu-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="3" y="7" width="18" height="12" rx="2.5"/><path d="M3 13h18M9 7v12M15 7v12"/></svg></div><div class="menu-lbl">My Chocolates</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="menu-item" onclick="openOverlay('mychoc')"><div class="menu-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="3" y="7" width="18" height="12" rx="2.5"/><path d="M3 13h18M9 7v12M15 7v12"/></svg></div><div class="menu-lbl">My Chocolates</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="menu-item" onclick="openOverlay('records')"><div class="menu-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 3h11v18l-2.2-1.6L13 21l-2.3-1.6L8.5 21l-2-1.6V3z"/><path d="M9 8.2h6M9 12h6"/></svg></div><div class="menu-lbl">Records</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="menu-item" onclick="switchTab('team')"><div class="menu-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="9" cy="8.2" r="3"/><path d="M3.2 20c0-3.3 2.6-6 5.8-6s5.8 2.7 5.8 6"/><circle cx="17.3" cy="9.2" r="2.4"/><path d="M15.9 14.3c2.5.4 4.3 2.5 4.3 5"/></svg></div><div class="menu-lbl">Referrals & Team</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="menu-item" onclick="openOverlay('bindbank')"><div class="menu-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="2.5" y="5.5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6 15h4"/></svg></div><div class="menu-lbl">Bind Bank Card</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
@@ -444,6 +456,18 @@
     <div class="info-box">Save the mobile-money account you want withdrawals sent to. You can bind more than one and pick which to use at withdrawal time.</div>
     <div id="bankList" style="padding:0 20px"></div>
     <div style="padding:6px 20px 20px"><button class="btn btn-primary btn-block" onclick="openNetworkPicker()">+ Bind a new account</button></div>
+  </div>
+
+  <div class="overlay" id="ovMychoc">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">My Chocolates</div></div>
+    <div class="info-box">Every chocolate tier you own, running until it matures.</div>
+    <div id="mychocList" style="padding:0 20px"></div>
+  </div>
+
+  <div class="overlay" id="ovEarnings">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Accrued Earnings</div></div>
+    <div class="cards" style="margin:16px 20px"><div class="stat"><div class="n" style="color:var(--mint)" id="earningsTotal">UGX 0</div><div class="l">Total accrued so far</div></div></div>
+    <div id="earningsList" style="padding:0 20px"></div>
   </div>
 
   <div class="modal-bg" id="networkPickerBg" onclick="if(event.target===this) closeNetworkPicker()">
@@ -586,12 +610,12 @@ function renderAll(){
   document.getElementById('supportBanner').innerHTML = '<img src="'+CHOCO_BANNERS.ganache+'">';
   document.getElementById('aboutBanner').innerHTML = '<img src="'+CHOCO_BANNERS.factory2+'">';
   document.getElementById('bindbankBanner').innerHTML = '<img src="'+CHOCO_BANNERS.factory1+'">';
-  document.getElementById('shopBanner').innerHTML = '<img src="'+CHOCO_BANNERS.darkbar+'">';
+  document.getElementById('shopBannerImg').src = CHOCO_BANNERS.darkbar;
   document.getElementById('accountBanner').src = CHOCO_BANNERS.rocherstack;
   document.getElementById('acctPhone').textContent = s.phone || '—';
   document.getElementById('acctBalNum').textContent = ugx(s.balance);
   document.getElementById('acctWitNum').textContent = ugx(s.totalWithdrawn);
-  document.getElementById('teamCode').textContent = s.referralCode;
+  document.getElementById('teamLink').textContent = 'https://choco-mcc.com/?reg='+s.referralCode;
   document.getElementById('teamL1').textContent = s.team.l1;
   document.getElementById('teamL2').textContent = s.team.l2;
   document.getElementById('teamL3').textContent = s.team.l3;
@@ -635,40 +659,52 @@ function renderShop(){
   }).join('');
   document.getElementById('shopGrid').innerHTML = html;
 }
-var _shopTab = 'products';
-function setShopTab(t){
-  _shopTab = t;
-  document.querySelectorAll('[data-st]').forEach(function(b){ b.classList.toggle('active', b.dataset.st===t); });
-  document.getElementById('shopGrid').style.display = t==='products' ? 'grid' : 'none';
-  document.getElementById('ownedList').style.display = t==='owned' ? 'block' : 'none';
-  if(t==='owned') renderOwned();
-}
-function renderOwned(){
+function investmentStats(){
   var sett = getSettings();
-  if(!STATE.investments.length){ document.getElementById('ownedList').innerHTML = '<div class="empty">No chocolates owned yet — buy one from Products to start earning.</div>'; return; }
-  var html = STATE.investments.map(function(inv){
+  return STATE.investments.map(function(inv){
     var daysElapsed = Math.floor((Date.now()-inv.boughtAt)/86400000);
     var totalPayout = inv.price*sett.returnMultiple;
     var accrued = Math.min(totalPayout, dailyReturn(inv.price)*daysElapsed);
     var matured = daysElapsed >= sett.cycleDays;
+    return { inv:inv, daysElapsed:Math.min(daysElapsed,sett.cycleDays), cycleDays:sett.cycleDays, totalPayout:totalPayout, accrued:accrued, matured:matured };
+  });
+}
+function renderMyChoc(){
+  var rows = investmentStats();
+  if(!rows.length){ document.getElementById('mychocList').innerHTML = '<div class="empty">No chocolates running yet — buy one from the Shop to start earning.</div>'; return; }
+  document.getElementById('mychocList').innerHTML = rows.map(function(r){
     return '<div class="bank-row">'+
-      '<img src="'+CHOCO_IMAGES[inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
-      '<div class="bank-info"><b>'+inv.name+'</b><span>Day '+Math.min(daysElapsed,sett.cycleDays)+' of '+sett.cycleDays+' · '+ugx(inv.price)+'</span></div>'+
-      '<div style="text-align:right"><b style="color:var(--mint);font-size:14px">'+ugx(accrued)+'</b><br>'+
-      '<span style="font-size:10.5px;color:'+(matured?'var(--mint)':'var(--cocoa-faint)')+'">'+(matured?'Matured':'Accruing')+'</span></div>'+
+      '<img src="'+CHOCO_IMAGES[r.inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
+      '<div class="bank-info"><b>'+r.inv.name+'</b><span>Day '+r.daysElapsed+' of '+r.cycleDays+' · '+ugx(r.inv.price)+'</span></div>'+
+      '<span class="'+(r.matured?'bank-default':'')+'" style="font-size:10.5px;font-weight:800;color:'+(r.matured?'var(--mint)':'var(--cocoa-faint)')+'">'+(r.matured?'Matured':'Ongoing')+'</span>'+
       '</div>';
   }).join('');
-  document.getElementById('ownedList').innerHTML = html;
 }
-var TICKER_NAMES=['Aisha K.','Brian T.','Cynthia N.','Daniel O.','Faith M.','Grace A.','Ivan S.','Joan K.'];
+function renderEarnings(){
+  var rows = investmentStats();
+  var total = rows.reduce(function(s,r){ return s+r.accrued; }, 0);
+  document.getElementById('earningsTotal').textContent = ugx(total);
+  if(!rows.length){ document.getElementById('earningsList').innerHTML = '<div class="empty">No chocolates running yet — buy one from the Shop to start earning.</div>'; return; }
+  document.getElementById('earningsList').innerHTML = rows.map(function(r){
+    return '<div class="bank-row">'+
+      '<img src="'+CHOCO_IMAGES[r.inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
+      '<div class="bank-info"><b>'+r.inv.name+'</b><span>Day '+r.daysElapsed+' of '+r.cycleDays+'</span></div>'+
+      '<b style="color:var(--mint);font-size:14px">'+ugx(r.accrued)+'</b>'+
+      '</div>';
+  }).join('');
+}
+function maskedPhone(){
+  var digits = ''; for(var i=0;i<9;i++) digits += Math.floor(Math.random()*10);
+  return '256' + digits.slice(0,6).replace(/./g,'x') + digits.slice(6);
+}
 function renderTicker(){
-  var rows=''; var sett=getSettings();
+  var rows='';
   for(var i=0;i<6;i++){
     var isDep = Math.random()>0.45;
-    var name = TICKER_NAMES[Math.floor(Math.random()*TICKER_NAMES.length)];
+    var num = maskedPhone();
     var amt = isDep ? (Math.floor(Math.random()*8+1)*25000) : (Math.floor(Math.random()*6+1)*10000);
     rows += '<div class="ticker-row"><span class="dot" style="background:'+(isDep?'var(--mint)':'var(--berry)')+'"></span>'+
-      '<span style="flex:1">'+name+'</span>'+
+      '<span style="flex:1">'+num+' '+(isDep?'recharged':'withdrew')+'</span>'+
       '<b style="color:'+(isDep?'var(--mint)':'var(--berry)')+'">'+(isDep?'+':'-')+ugx(amt).replace('UGX ','')+'</b></div>';
   }
   document.getElementById('tickerBox').innerHTML = rows;
@@ -707,7 +743,6 @@ function switchTab(name){
   });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===name); });
   if(name==='rewards' || name==='team' || name==='home') renderAll();
-  if(name==='shop') setShopTab('products');
 }
 function openOverlay(name){
   closeOverlay();
@@ -715,6 +750,8 @@ function openOverlay(name){
   if(name==='bindbank') renderBankList();
   if(name==='withdraw') renderWitBankBox();
   if(name==='records'){ setRecordsTab('balance'); }
+  if(name==='mychoc') renderMyChoc();
+  if(name==='earnings') renderEarnings();
 }
 function closeOverlay(){ document.querySelectorAll('.overlay').forEach(function(o){o.classList.remove('show');}); }
 
