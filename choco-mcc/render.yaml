@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: chocomcc-app
+    runtime: static
+    rootDir: choco-mcc/user
+    buildCommand: "echo no build needed"
+    staticPublishPath: .
+    autoDeploy: true
+    headers:
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    name: chocomcc-admin
+    runtime: static
+    rootDir: choco-mcc/admin
+    buildCommand: "echo no build needed"
+    staticPublishPath: .
+    autoDeploy: true
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
