@@ -1,5 +1,22 @@
 services:
   - type: web
+    name: chocomcc-server
+    runtime: node
+    rootDir: choco-mcc
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: ADMIN_KEY
+        sync: false
+      - key: MARZPAY_KEY
+        sync: false
+
+  - type: web
     name: chocomcc-app
     runtime: static
     rootDir: choco-mcc/user
