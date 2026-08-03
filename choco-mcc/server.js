@@ -378,49 +378,70 @@ async function settleAllForUser(userId) {
 }
 
 // ── REFERRAL COMMISSION (credited when a downstream member buys a product) ──
-async function creditReferralCommission(buyerId, amount) {
-  const sett = await getSettings();
-  const buyerSnap = await db.collection('users').doc(buyerId).get();
-  // Don't pay commission on a purchase from an account that's since been
-  // banned — checking the REFERRED member's own status, not just the
-  // referrer's, before any reward goes out.
-  if (!buyerSnap.exists || buyerSnap.data().status === 'banned') return;
-  const l1Id = buyerSnap.data().referredBy;
-  if (!l1Id) return;
-  const rates = [sett.commL1, sett.commL2, sett.commL3];
-  const l1Snap = await db.collection('users').doc(l1Id).get();
-  // Each chain entry carries its own already-fetched snapshot so we never
-  // re-look-up (or blindly trust) a doc that might not exist or might be
-  // banned when it comes time to actually credit it below.
-  let chain = [{ id: l1Id, snap: l1Snap }];
-  const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
-  if (l2Id && l2Id !== l1Id) {
-    const l2Snap = await db.collection('users').doc(l2Id).get();
-    chain.push({ id: l2Id, snap: l2Snap });
-    const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
-    if (l3Id && l3Id !== l2Id && l3Id !== l1Id) {
-      const l3Snap = await db.collection('users').doc(l3Id).get();
-      chain.push({ id: l3Id, snap: l3Snap });
+// Idempotent per (investmentId, level): each level is only ever credited
+// once, tracked via commissionPaidLevels on the investment doc itself, and
+// the whole function is safe to call again for the SAME purchase — by the
+// reconciler after a restart, by a retry, by anything — since already-paid
+// levels are skipped and never re-credited. This is what makes crediting
+// "faultless on restart": if the process dies mid-loop, whatever was
+// credited before that point stays correctly marked done, and the
+// reconciler's periodic re-invocation picks up exactly where it left off
+// rather than either re-paying or permanently losing the remaining levels.
+async function creditReferralCommission(investmentId, buyerId, amount) {
+  await withLock('comm:' + investmentId, async () => {
+    const invRef = db.collection('investments').doc(investmentId);
+    const invSnap = await invRef.get();
+    if (!invSnap.exists) return;
+    const paidLevels = invSnap.data().commissionPaidLevels || [];
+
+    const sett = await getSettings();
+    const buyerSnap = await db.collection('users').doc(buyerId).get();
+    // Don't pay commission on a purchase from an account that's since been
+    // banned — checking the REFERRED member's own status, not just the
+    // referrer's, before any reward goes out.
+    if (!buyerSnap.exists || buyerSnap.data().status === 'banned') return;
+    const l1Id = buyerSnap.data().referredBy;
+    if (!l1Id) return;
+    const rates = [sett.commL1, sett.commL2, sett.commL3];
+    const l1Snap = await db.collection('users').doc(l1Id).get();
+    // Each chain entry carries its own already-fetched snapshot so we never
+    // re-look-up (or blindly trust) a doc that might not exist or might be
+    // banned when it comes time to actually credit it below.
+    let chain = [{ id: l1Id, snap: l1Snap }];
+    const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
+    if (l2Id && l2Id !== l1Id) {
+      const l2Snap = await db.collection('users').doc(l2Id).get();
+      chain.push({ id: l2Id, snap: l2Snap });
+      const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
+      if (l3Id && l3Id !== l2Id && l3Id !== l1Id) {
+        const l3Snap = await db.collection('users').doc(l3Id).get();
+        chain.push({ id: l3Id, snap: l3Snap });
+      }
     }
-  }
-  const { date, time } = nowStr();
-  for (let i = 0; i < chain.length; i++) {
-    const { id, snap } = chain[i];
-    // Skip a referrer that doesn't exist (orphaned link) or is banned —
-    // crediting either would be a phantom or fraudulent payout.
-    if (!snap.exists || snap.data().status === 'banned') continue;
-    const pct = Number(rates[i]) || 0;
-    if (pct <= 0) continue;
-    const reward = Math.round(amount * pct / 100);
-    if (reward <= 0) continue;
-    await db.collection('users').doc(id).update({
-      walletBalance: FieldValue.increment(reward), teamCommission: FieldValue.increment(reward)
-    });
-    await db.collection('transactions').add({
-      userId: id, type: 'commission', description: `Level ${i + 1} reward`,
-      amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-    });
-  }
+    const { date, time } = nowStr();
+    for (let i = 0; i < chain.length; i++) {
+      if (paidLevels.indexOf(i) !== -1) continue; // this level already paid — never re-credit it
+      const { id, snap } = chain[i];
+      // Skip a referrer that doesn't exist (orphaned link) or is banned —
+      // crediting either would be a phantom or fraudulent payout.
+      if (!snap.exists || snap.data().status === 'banned') continue;
+      const pct = Number(rates[i]) || 0;
+      if (pct <= 0) continue;
+      const reward = Math.round(amount * pct / 100);
+      if (reward <= 0) continue;
+      await db.collection('users').doc(id).update({
+        walletBalance: FieldValue.increment(reward), teamCommission: FieldValue.increment(reward)
+      });
+      await db.collection('transactions').add({
+        userId: id, type: 'commission', description: `Level ${i + 1} reward`,
+        amount: reward, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
+      });
+      // Mark THIS level paid immediately after its own credit succeeds — if
+      // anything later in the loop throws, everything credited so far stays
+      // correctly marked done and will never be paid twice on retry.
+      await invRef.update({ commissionPaidLevels: FieldValue.arrayUnion(i) });
+    }
+  });
 }
 
 // ═══════════════════════════════════════════
@@ -450,7 +471,17 @@ app.get('/public/products', async (_req, res) => {
 // feed — global/synchronized is the point, not authenticity. Never swap
 // this for real transaction data.
 const _WIRE_STEP = 5000, _WIRE_CAP = 500000; // matches the real min-withdraw multiple/ceiling
-function maskedMsisdn() { return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0'); }
+// Draws a masked number never yet used in THIS batch (`used`) — plain
+// Math.random() draws let the same last-4-digits show up twice in one
+// 18-row feed often enough to be noticeable, which looked like the same
+// "person" repeating.
+function maskedMsisdn(used) {
+  for (let tries = 0; tries < 50; tries++) {
+    const n = '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    if (!used.has(n)) { used.add(n); return n; }
+  }
+  return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+}
 async function buildActivityFeed() {
   let depositPool = [];
   try {
@@ -461,10 +492,11 @@ async function buildActivityFeed() {
   const withdrawPool = [];
   for (let a = _WIRE_STEP; a <= _WIRE_CAP; a += _WIRE_STEP) withdrawPool.push(a);
   const rows = [];
+  const usedNumbers = new Set();
   for (let i = 0; i < 18; i++) {
     const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
     const pool = kind === 'deposit' ? depositPool : withdrawPool;
-    rows.push({ kind, phone: maskedMsisdn(), amount: pool[Math.floor(Math.random() * pool.length)] });
+    rows.push({ kind, phone: maskedMsisdn(usedNumbers), amount: pool[Math.floor(Math.random() * pool.length)] });
   }
   return rows;
 }
@@ -628,14 +660,14 @@ app.post('/invest/create', async (req, res) => {
       t.set(invRef, {
         userId, tierKey: tier.key, tierLabel: tier.name, amount: tier.price, cycle, expectedReturn,
         status: 'active', dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-        date, time, createdAt: FieldValue.serverTimestamp()
+        commissionPaidLevels: [], date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'investment', description: `Bought ${tier.name}`, amount: -tier.price,
         status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
-    creditReferralCommission(userId, tier.price).catch(e => console.error('Commission error:', e.message));
+    creditReferralCommission(invId, userId, tier.price).catch(e => console.error('Commission error:', e.message));
     res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.name} for ${fmtUGX(tier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', message: e.message });
@@ -1137,8 +1169,24 @@ async function reconcilePendingWithdrawals() {
     }
   } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
 }
+// Re-invokes commission crediting for recent purchases — safe to call
+// repeatedly since creditReferralCommission() skips any level already
+// marked paid. This is what actually makes referral crediting survive a
+// restart: if the server died between the purchase committing and the
+// commission finishing, this picks up exactly where it left off within one
+// reconciler tick instead of leaving the referrer permanently unpaid.
+async function reconcileCommissions() {
+  try {
+    const cutoff = new Date(Date.now() - 10 * 60000);
+    const snap = await db.collection('investments').where('createdAt', '>', cutoff).limit(50).get();
+    for (const doc of snap.docs) {
+      const inv = doc.data();
+      await creditReferralCommission(doc.id, inv.userId, inv.amount).catch(e => console.error('Reconcile commission error:', e.message));
+    }
+  } catch (e) { console.error('Reconcile commissions error:', e.message); }
+}
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcileStuckInitiating).then(reconcilePendingWithdrawals).catch(() => {});
+  reconcilePendingDeposits().then(reconcileStuckInitiating).then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
 }
 
 app.get('/', (_req, res) => res.json({ status: 'ok', service: 'ChocoMCC backend' }));

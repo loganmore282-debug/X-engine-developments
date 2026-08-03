@@ -154,8 +154,17 @@
   .photo-banner.pb-full{height:240px;}
   .auth-banner{position:relative;overflow:hidden;height:230px;margin:-32px -26px 20px -26px;box-shadow:var(--shadow-lg);}
   .auth-banner img{width:100%;height:100%;object-fit:cover;display:block;}
+  /* No straight cutoff line where the photo meets the page — several
+     off-center, differently-sized cream blobs dissolve the bottom edge
+     unevenly (a "badge curve" melt) on top of a long straight fade, so the
+     color sheds into the background gradually and irregularly rather than
+     stopping dead at one flat horizontal line. */
   .auth-banner::after{content:"";position:absolute;inset:0;
-    background:linear-gradient(0deg, var(--cream) 0%, rgba(251,242,228,0) 22%),
+    background:
+      radial-gradient(ellipse 55% 90% at 14% 108%, var(--cream) 0%, rgba(251,242,228,0) 62%),
+      radial-gradient(ellipse 65% 100% at 78% 112%, var(--cream) 0%, rgba(251,242,228,0) 58%),
+      radial-gradient(ellipse 45% 85% at 48% 104%, var(--cream) 0%, rgba(251,242,228,0) 55%),
+      linear-gradient(0deg, var(--cream) 0%, rgba(251,242,228,0) 48%),
       linear-gradient(160deg, rgba(224,138,44,.32), rgba(59,36,22,.38) 70%);}
   .uline-tabs{display:flex;gap:22px;margin:4px 20px 0;border-bottom:1.5px solid var(--line);}
   .uline-tab{background:none;border:none;padding:10px 2px;font-size:14px;font-weight:800;color:var(--cocoa-faint);
@@ -172,7 +181,7 @@
   .rec-st.bad{color:var(--berry);}
   .rec-st.mut{color:var(--cocoa-faint);}
   .rec-line{display:flex;align-items:baseline;gap:10px;padding:3px 0;}
-  .rec-line span{flex:0 0 70px;font-size:12px;color:var(--cocoa-faint);}
+  .rec-line span{flex:0 0 82px;font-size:12px;color:var(--cocoa-faint);}
   .rec-line span::after{content:":";}
   .rec-line b{font-size:12.5px;font-weight:700;color:var(--cocoa);}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;}
@@ -205,8 +214,19 @@
 
   .profile-card{margin:16px 20px;padding:20px;border-radius:22px;background:linear-gradient(150deg,#4A2A17,#2C160C);color:#fff;box-shadow:var(--shadow-lg);}
   .acct-cover{position:relative;height:170px;margin-bottom:46px;}
-  .acct-cover img{width:100%;height:100%;object-fit:cover;display:block;}
-  .acct-card{position:absolute;left:20px;right:20px;bottom:-32px;background:linear-gradient(150deg,#4A2A17,#2C160C);
+  .acct-cover img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;}
+  /* z-index above the ::after fade below — without it, the fade (always the
+     LAST painted layer of .acct-cover, generated content or not) would sit
+     on top of and wash out the card instead of just melting the photo. No
+     overflow:hidden here either — .acct-card deliberately hangs mostly
+     below this box (bottom:-32px) to overlap onto the page; clipping the
+     container would clip the card too. */
+  .acct-cover::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:
+      radial-gradient(ellipse 55% 95% at 12% 110%, var(--cream) 0%, rgba(251,242,228,0) 60%),
+      radial-gradient(ellipse 60% 100% at 82% 105%, var(--cream) 0%, rgba(251,242,228,0) 58%),
+      linear-gradient(0deg, var(--cream) 0%, rgba(251,242,228,0) 42%);}
+  .acct-card{position:absolute;left:20px;right:20px;bottom:-32px;z-index:2;background:linear-gradient(150deg,#4A2A17,#2C160C);
     border-radius:20px;box-shadow:var(--shadow-lg);padding:16px 18px;display:flex;align-items:center;gap:14px;color:#fff;}
   .acct-icon{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));
     display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
@@ -924,6 +944,15 @@ function renderEarnings(){
 // flows continuously downward and loops without a visible seam.
 var _activityFeed = [];
 var _activityFeedTimer = null;
+// Fixed reference point set once at script load. Every renderTicker() call
+// replaces the track element (a fresh feed batch, or just a tab re-render),
+// which would otherwise reset the CSS animation to its start position —
+// visibly stuttering/restarting every ~27s. Setting a NEGATIVE
+// animation-delay equal to how far into the cycle "now" actually is makes a
+// brand-new element resume exactly where the old one would be, so the flow
+// never visibly breaks no matter how often the DOM underneath it changes.
+var TICKER_EPOCH = Date.now();
+var TICKER_CYCLE = 36; // must match .ticker-track's animation duration
 async function refreshActivityFeed(){
   var r = await api('/public/activity-feed');
   if(r.status==='success'){ _activityFeed = r.feed||[]; renderTicker(); }
@@ -943,7 +972,8 @@ function renderTicker(){
       '<span style="flex:1">'+f.phone+' '+(isDep?'added funds':'cashed out')+'</span>'+
       '<b style="color:'+(isDep?'var(--mint)':'var(--berry)')+'">'+(isDep?'+':'-')+ugx(f.amount).replace('UGX ','')+'</b></div>';
   }).join('');
-  box.innerHTML = '<div class="ticker-track">'+rows+rows+'</div>';
+  var delay = -(((Date.now()-TICKER_EPOCH)/1000) % TICKER_CYCLE);
+  box.innerHTML = '<div class="ticker-track" style="animation-delay:'+delay.toFixed(2)+'s">'+rows+rows+'</div>';
 }
 // ── RECORDS — Accrued (income) / Topups (deposits) / Cash Outs (withdrawals) ──
 // Same statement-card shape as Chronova's Records screen: a reference/label
@@ -1001,7 +1031,9 @@ function renderRecords(){
   document.getElementById('recordsList').innerHTML = list.slice(0,50).map(function(r){
     var st = recStatusInfo(r.status);
     var stamp = r.createdAt ? new Date(r.createdAt).toLocaleString() : ((r.date||'')+' '+(r.time||'')).trim();
+    var desc = isTop ? 'Mobile-money top-up' : ('Cash out'+(r.holder ? ' to '+r.holder : '')+(r.network ? ' ('+r.network+')' : ''));
     return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(r.ref||'pending')+'</span><span class="rec-st '+st.cls+'">'+st.label+'</span></div>'+
+      '<div class="rec-line"><span>Description</span><b>'+esc(desc)+'</b></div>'+
       '<div class="rec-line"><span>Amount</span><b>'+ugx(r.amount)+'</b></div>'+
       (!isTop && r.net!=null ? '<div class="rec-line"><span>Received</span><b>'+ugx(r.net)+'</b></div>' : '')+
       '<div class="rec-line"><span>Number</span><b>'+esc(r.phone||'')+'</b></div>'+
@@ -1213,7 +1245,7 @@ function setDepStatusMsg(kind, text){
 // but without this two requests can land back-to-back and briefly show a
 // stale attempt count or flicker the status message.
 var _depPollChecking = false;
-async function pollDepositStatus(){
+async function pollDepositStatus(manual){
   if(!_depPollId || _depPollChecking) return;
   _depPollChecking = true;
   var btn = document.getElementById('depVerifyBtn');
@@ -1227,14 +1259,20 @@ async function pollDepositStatus(){
       if(r.state==='matched'){
         clearInterval(_depPollTimer); _depPollTimer=null;
         setDepStatusMsg('matched', 'Payment confirmed — funds added to your wallet.');
+        if(manual) toast('Successful — funds added to your wallet');
         await refreshFromServer(); renderAll();
         return;
       }
       if(r.state==='failed'){
         clearInterval(_depPollTimer); _depPollTimer=null;
         setDepStatusMsg('failed', r.message || 'Payment was not completed.');
+        if(manual) toast('Declined — '+(r.message||'payment was not completed'));
         return;
       }
+      // state === 'pending' and neither matched nor failed yet.
+      if(manual) toast('Still pending — check your phone for the prompt');
+    } else if(manual){
+      toast(r.message || 'Could not check the payment status right now');
     }
     if(_depPollAttempt>=_depPollMax){
       clearInterval(_depPollTimer); _depPollTimer=null;
@@ -1245,7 +1283,7 @@ async function pollDepositStatus(){
     if(btn) btn.disabled = false;
   }
 }
-function manualVerifyDeposit(){ toast('Checking…'); pollDepositStatus(); }
+function manualVerifyDeposit(){ pollDepositStatus(true); }
 function cancelDepositStatus(){ clearInterval(_depPollTimer); _depPollTimer=null; _depPollId=null; closeOverlay(); renderAll(); }
 function copyDepositRef(){
   var ref = document.getElementById('depStatusRef').textContent;
