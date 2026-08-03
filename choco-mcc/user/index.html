@@ -383,7 +383,7 @@
         <img src="" id="giftCodeThumb" style="width:52px;height:52px;border-radius:14px;object-fit:cover;flex:0 0 auto">
         <div style="flex:1">
           <input class="famt" id="giftCodeInput" style="font-size:15px;padding:12px;margin-bottom:10px;text-transform:uppercase" placeholder="Enter promo code">
-          <button class="btn btn-primary btn-block" onclick="redeemGiftCode()">Redeem</button>
+          <button class="btn btn-primary btn-block" id="redeemBtn" onclick="redeemGiftCode()">Redeem</button>
         </div>
       </div>
     </div>
@@ -460,7 +460,7 @@
     </div>
     <div class="info-box" id="depStatusMsg" style="background:var(--caramel-pale);color:var(--caramel-deep)">Payment initiated — check your phone.</div>
     <div style="padding:0 20px">
-      <button class="btn btn-primary btn-block" onclick="manualVerifyDeposit()">Verify Payment</button>
+      <button class="btn btn-primary btn-block" id="depVerifyBtn" onclick="manualVerifyDeposit()">Verify Payment</button>
       <div style="text-align:center;margin-top:14px"><span class="muted" onclick="cancelDepositStatus()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
       <div style="text-align:center;margin-top:8px" class="muted" id="depStatusAttempt" style="font-size:11.5px"></div>
     </div>
@@ -709,18 +709,25 @@ function phoneToEmail(phone){ return phone.replace(/\D/g,'').replace(/^0+/,'') +
 
 var authMode='login';
 document.querySelector('#authBanner img').src = CHOCO_BANNERS.assortment;
-document.getElementById('authSwitchBtn').onclick = function(){
+// BUG FIXED: this used to re-fetch #authSwitchBtn by id and copy its
+// .onclick — but the very first toggle replaces #authSwitch's innerHTML,
+// destroying that original element, so every toggle AFTER the first called
+// .onclick on a null element and threw silently (no visible error, the tap
+// just did nothing — exactly "Sign up works once, Sign in back does
+// nothing"). toggleAuth() is now the single source of truth; both the
+// static button and every regenerated one call it directly by name, so
+// there's never a stale element reference to go stale.
+function toggleAuth(){
   authMode = authMode==='login' ? 'register':'login';
   document.querySelector('#authBanner img').src = authMode==='register' ? CHOCO_BANNERS.lavacake : CHOCO_BANNERS.assortment;
   document.getElementById('regCodeField').style.display = authMode==='register' ? 'block':'none';
   document.getElementById('authTitle').textContent = authMode==='register' ? 'Create your account':'Welcome to ChocoMCC';
   document.getElementById('authSub').textContent = authMode==='register' ? 'Join and start stacking chocolate tiers today.' : 'Sign in to grow your stash of the world\'s finest chocolate brands.';
   document.getElementById('authSwitch').innerHTML = authMode==='register'
-    ? 'Already a member? <b id="authSwitchBtn2" onclick="toggleAuth()">Sign in</b>'
-    : 'New here? <b id="authSwitchBtn2" onclick="toggleAuth()">Sign up</b>';
-  document.getElementById('authSwitchBtn2').onclick = document.getElementById('authSwitchBtn').onclick;
-};
-function toggleAuth(){ document.getElementById('authSwitchBtn').onclick(); }
+    ? 'Already a member? <b onclick="toggleAuth()">Sign in</b>'
+    : 'New here? <b onclick="toggleAuth()">Sign up</b>';
+}
+document.getElementById('authSwitchBtn').onclick = toggleAuth;
 
 document.getElementById('authGo').onclick = async function(){
   var phone = document.getElementById('fPhone').value.trim();
@@ -1046,17 +1053,23 @@ function openProduct(key){
       '<div class="kv" style="border-bottom:none"><span>Total payout</span><b>'+ugx(p.price*sett.returnMultiple)+'</b></div>'+
     '</div>'+
     '<div class="photo-banner pb-sm"><img src="'+CHOCO_BANNERS.snickerscookie+'"></div>'+
-    '<div style="padding:4px 20px 20px"><button class="btn btn-primary btn-block" onclick="buyProduct(\''+p.key+'\')">Buy this chocolate</button></div>';
+    '<div style="padding:4px 20px 20px"><button class="btn btn-primary btn-block" id="buyProductBtn" onclick="buyProduct(\''+p.key+'\')">Buy this chocolate</button></div>';
   openOverlay('product');
 }
 async function buyProduct(key){
   var p = PRODUCTS.filter(function(x){return x.key===key;})[0];
   if(STATE.balance < p.price){ toast('Not enough balance — add funds first'); return; }
+  var btn = document.getElementById('buyProductBtn');
+  if(btn){ if(btn.disabled) return; btn.disabled = true; }
   toast('Processing…');
-  var r = await api('/invest/create', { tierKey:key });
-  if(r.status!=='success'){ toast(r.message||'Purchase failed'); return; }
-  await refreshFromServer();
-  closeOverlay(); renderAll(); toast('Purchased '+p.name+'!');
+  try{
+    var r = await api('/invest/create', { tierKey:key });
+    if(r.status!=='success'){ toast(r.message||'Purchase failed'); return; }
+    await refreshFromServer();
+    closeOverlay(); renderAll(); toast('Purchased '+p.name+'!');
+  } finally {
+    if(btn) btn.disabled = false;
+  }
 }
 
 /* ====================== ACTIONS ====================== */
@@ -1099,19 +1112,31 @@ async function doWithdraw(){
   closeOverlay(); renderAll(); toast(r.message||'Cash-out requested');
 }
 async function doCheckin(){
-  var r = await api('/checkin', {});
-  if(r.status!=='success'){ toast(r.message||'Check-in failed'); return; }
-  await refreshFromServer();
-  renderAll(); toast('+'+ugx(r.bonus)+' — see you tomorrow!');
+  var btn = document.getElementById('checkinBtn');
+  if(btn){ if(btn.disabled) return; btn.disabled = true; }
+  try{
+    var r = await api('/checkin', {});
+    if(r.status!=='success'){ toast(r.message||'Check-in failed'); if(btn) btn.disabled = false; return; }
+    await refreshFromServer();
+    renderAll(); toast('+'+ugx(r.bonus)+' — see you tomorrow!');
+  } catch(e) {
+    if(btn) btn.disabled = false;
+  }
 }
 async function redeemGiftCode(){
   var raw = document.getElementById('giftCodeInput').value.trim().toUpperCase();
   if(!raw){ toast('Enter a code'); return; }
-  var r = await api('/redeem', { code:raw });
-  if(r.status!=='success'){ toast(r.message||"That code isn't valid"); return; }
-  document.getElementById('giftCodeInput').value='';
-  await refreshFromServer();
-  renderAll(); toast('+'+ugx(r.reward)+' credited!');
+  var btn = document.getElementById('redeemBtn');
+  if(btn){ if(btn.disabled) return; btn.disabled = true; }
+  try{
+    var r = await api('/redeem', { code:raw });
+    if(r.status!=='success'){ toast(r.message||"That code isn't valid"); return; }
+    document.getElementById('giftCodeInput').value='';
+    await refreshFromServer();
+    renderAll(); toast('+'+ugx(r.reward)+' credited!');
+  } finally {
+    if(btn) btn.disabled = false;
+  }
 }
 
 /* ====================== DEPOSIT STATUS (auto-verifying) ====================== */
@@ -1133,28 +1158,42 @@ function setDepStatusMsg(kind, text){
   el.style.background = kind==='matched' ? 'var(--mint-pale)' : kind==='failed' ? 'var(--berry-pale)' : 'var(--caramel-pale)';
   el.style.color      = kind==='matched' ? 'var(--mint)'      : kind==='failed' ? 'var(--berry)'      : 'var(--caramel-deep)';
 }
+// _depPollChecking guards against the auto-interval and a manual "Verify
+// Payment" tap firing at the same instant — not a money-safety issue (the
+// server's own lock/dedup already makes crediting idempotent either way),
+// but without this two requests can land back-to-back and briefly show a
+// stale attempt count or flicker the status message.
+var _depPollChecking = false;
 async function pollDepositStatus(){
-  if(!_depPollId) return;
-  _depPollAttempt++;
-  var attEl = document.getElementById('depStatusAttempt');
-  if(attEl) attEl.textContent = 'Auto-verifying… (attempt '+_depPollAttempt+'/'+_depPollMax+')';
-  var r = await api('/deposit/marzpay/status', { depositId:_depPollId });
-  if(r.status==='success'){
-    if(r.state==='matched'){
-      clearInterval(_depPollTimer); _depPollTimer=null;
-      setDepStatusMsg('matched', 'Payment confirmed — funds added to your wallet.');
-      await refreshFromServer(); renderAll();
-      return;
+  if(!_depPollId || _depPollChecking) return;
+  _depPollChecking = true;
+  var btn = document.getElementById('depVerifyBtn');
+  if(btn) btn.disabled = true;
+  try{
+    _depPollAttempt++;
+    var attEl = document.getElementById('depStatusAttempt');
+    if(attEl) attEl.textContent = 'Auto-verifying… (attempt '+_depPollAttempt+'/'+_depPollMax+')';
+    var r = await api('/deposit/marzpay/status', { depositId:_depPollId });
+    if(r.status==='success'){
+      if(r.state==='matched'){
+        clearInterval(_depPollTimer); _depPollTimer=null;
+        setDepStatusMsg('matched', 'Payment confirmed — funds added to your wallet.');
+        await refreshFromServer(); renderAll();
+        return;
+      }
+      if(r.state==='failed'){
+        clearInterval(_depPollTimer); _depPollTimer=null;
+        setDepStatusMsg('failed', r.message || 'Payment was not completed.');
+        return;
+      }
     }
-    if(r.state==='failed'){
+    if(_depPollAttempt>=_depPollMax){
       clearInterval(_depPollTimer); _depPollTimer=null;
-      setDepStatusMsg('failed', r.message || 'Payment was not completed.');
-      return;
+      setDepStatusMsg('failed', "We couldn't confirm this payment automatically — tap Verify Payment or contact support.");
     }
-  }
-  if(_depPollAttempt>=_depPollMax){
-    clearInterval(_depPollTimer); _depPollTimer=null;
-    setDepStatusMsg('failed', "We couldn't confirm this payment automatically — tap Verify Payment or contact support.");
+  } finally {
+    _depPollChecking = false;
+    if(btn) btn.disabled = false;
   }
 }
 function manualVerifyDeposit(){ toast('Checking…'); pollDepositStatus(); }

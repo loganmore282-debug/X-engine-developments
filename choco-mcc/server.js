@@ -381,30 +381,43 @@ async function settleAllForUser(userId) {
 async function creditReferralCommission(buyerId, amount) {
   const sett = await getSettings();
   const buyerSnap = await db.collection('users').doc(buyerId).get();
-  if (!buyerSnap.exists) return;
+  // Don't pay commission on a purchase from an account that's since been
+  // banned — checking the REFERRED member's own status, not just the
+  // referrer's, before any reward goes out.
+  if (!buyerSnap.exists || buyerSnap.data().status === 'banned') return;
   const l1Id = buyerSnap.data().referredBy;
   if (!l1Id) return;
   const rates = [sett.commL1, sett.commL2, sett.commL3];
-  let chain = [l1Id];
   const l1Snap = await db.collection('users').doc(l1Id).get();
+  // Each chain entry carries its own already-fetched snapshot so we never
+  // re-look-up (or blindly trust) a doc that might not exist or might be
+  // banned when it comes time to actually credit it below.
+  let chain = [{ id: l1Id, snap: l1Snap }];
   const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
   if (l2Id && l2Id !== l1Id) {
-    chain.push(l2Id);
     const l2Snap = await db.collection('users').doc(l2Id).get();
+    chain.push({ id: l2Id, snap: l2Snap });
     const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
-    if (l3Id && l3Id !== l2Id && l3Id !== l1Id) chain.push(l3Id);
+    if (l3Id && l3Id !== l2Id && l3Id !== l1Id) {
+      const l3Snap = await db.collection('users').doc(l3Id).get();
+      chain.push({ id: l3Id, snap: l3Snap });
+    }
   }
   const { date, time } = nowStr();
   for (let i = 0; i < chain.length; i++) {
+    const { id, snap } = chain[i];
+    // Skip a referrer that doesn't exist (orphaned link) or is banned —
+    // crediting either would be a phantom or fraudulent payout.
+    if (!snap.exists || snap.data().status === 'banned') continue;
     const pct = Number(rates[i]) || 0;
     if (pct <= 0) continue;
     const reward = Math.round(amount * pct / 100);
     if (reward <= 0) continue;
-    await db.collection('users').doc(chain[i]).update({
+    await db.collection('users').doc(id).update({
       walletBalance: FieldValue.increment(reward), teamCommission: FieldValue.increment(reward)
     });
     await db.collection('transactions').add({
-      userId: chain[i], type: 'commission', description: `Level ${i + 1} reward`,
+      userId: id, type: 'commission', description: `Level ${i + 1} reward`,
       amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
     });
   }
@@ -636,10 +649,25 @@ app.post('/deposit/marzpay', async (req, res) => {
       userId, phone, amount: amt, ref, marzReference, status: 'initiating',
       date, time, createdAt: FieldValue.serverTimestamp()
     });
-    const mpData = await marzCollect({
-      amount: amt, phone, reference: marzReference, description: 'ChocoMCC deposit',
-      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
-    });
+    // Unlike withdrawals, a thrown/timed-out call here must NOT be treated
+    // as a clean failure: money hasn't moved on OUR side (nothing was
+    // debited yet — deposits only credit on confirmation), but MarzPay may
+    // have genuinely received and be processing the charge on THEIRS. If we
+    // marked this 'failed', a customer who WAS actually charged would never
+    // get credited (there's no marzTxUuid to poll against). So on a network
+    // exception the record stays 'initiating' — findable later by `ref` —
+    // and the user is told honestly rather than definitively "it failed".
+    let mpData;
+    try {
+      mpData = await marzCollect({
+        amount: amt, phone, reference: marzReference, description: 'ChocoMCC deposit',
+        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
+      });
+    } catch (netErr) {
+      console.error('MarzPay collect-money network error (ref ' + ref + '):', netErr.message);
+      return res.status(202).json({ status: 'error',
+        message: "We couldn't confirm this payment started. If your phone doesn't get a prompt shortly, try again — if you ARE charged, contact support with reference " + ref + '.' });
+    }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       // Log the RAW gateway response — marzUserMsg() below deliberately hides
       // this from the user behind a friendly message, so without this line
@@ -785,10 +813,23 @@ app.post('/withdraw/request', async (req, res) => {
       });
     }));
 
-    const mpData = await marzSendMoney({
-      amount: net, phone, reference: marzReference, description: 'ChocoMCC cash out',
-      callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
-    });
+    // The wallet is ALREADY debited above — from here on, every exit path
+    // must either confirm the payout was actually sent, or refund. A plain
+    // try/catch around this call (not the whole handler) means a network
+    // failure/timeout talking to MarzPay is treated exactly like a clean
+    // rejection below and flows through the same refund logic, instead of
+    // falling into the outer catch and leaving the user debited with
+    // nothing sent and no refund (a real gap this used to have).
+    let mpData;
+    try {
+      mpData = await marzSendMoney({
+        amount: net, phone, reference: marzReference, description: 'ChocoMCC cash out',
+        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
+      });
+    } catch (netErr) {
+      console.error('MarzPay send-money network error:', netErr.message);
+      mpData = { status: 'error', providerDown: true, message: netErr.message };
+    }
     const witRef = db.collection('withdrawals').doc(witId);
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       console.error('MarzPay send-money rejected:', JSON.stringify(mpData));
