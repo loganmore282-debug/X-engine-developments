@@ -1151,10 +1151,8 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="aEnabled" ${s.annEnabled?'checked':''} style="width:auto"></label></div>
       <label>Title (hero text)</label><input id="aTitle" value="${esc(v('annTitle','Notice'))}">
       <label>Body</label><textarea id="aBody" rows="7" placeholder="Write the announcement…">${esc(v('annBody',''))}</textarea>
-      <label>Button label (optional)</label><input id="aCtaLabel" value="${esc(v('annCtaLabel',''))}">
-      <label>Button link (optional)</label><input id="aCtaUrl" value="${esc(v('annCtaUrl',''))}">
       <button class="btn block" id="saveAnn">Save announcement</button>
-      <p class="muted" style="margin-top:10px">Saving re-shows the popup to everyone.</p>
+      <p class="muted" style="margin-top:10px">Shows every time a member opens the app, and every time they switch back to the Home tab from Shop, Rewards, Team or Me. The dialog's own two buttons are your Telegram Channel and Telegram Group links, set below under Support contacts — nothing to configure here for those.</p>
     </div>
 
     <h2 class="sec">Announcement banner image</h2>
@@ -1205,8 +1203,7 @@ async function renderSettings(){
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveAnn').addEventListener('click', async()=>{
-    const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value,
-      annCtaLabel:$('aCtaLabel').value.trim(), annCtaUrl:$('aCtaUrl').value.trim() };
+    const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('annBgFile').addEventListener('change', async e=>{

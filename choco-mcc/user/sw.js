@@ -42,7 +42,11 @@
 // wallet/upload-tray action icons, announcement dialog restructure, phone
 // input accepts 07xxxxxxxx or 7xxxxxxxx, Team screen levels are tappable,
 // referral links (?reg=CODE) now actually prefill the invite code.
-const CACHE = 'chocomcc-shell-v14';
+// v15: announcement dialog's close X now floats below the card; OK button
+// replaced with Telegram Channel/Group pill buttons (from Settings ->
+// Support contacts); the dialog re-shows every app open and every time
+// Home is switched into from Shop/Rewards/Team/Me (not Home -> Home).
+const CACHE = 'chocomcc-shell-v15';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

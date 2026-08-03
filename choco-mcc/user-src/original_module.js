@@ -377,32 +377,30 @@ function renderStaticPages(){
 }
 
 /* ====================== ANNOUNCEMENT ======================
-   Shown once per announcement (title+body hash) so an unchanged admin
-   message never nags on every app open, but a fresh edit surfaces again
-   for everyone — matching the admin panel's own "saving re-shows the
-   popup to everyone" promise. */
-function _annHash(s){ return (s.annTitle||'')+'|'+(s.annBody||'')+'|'+(s.annCtaLabel||'')+'|'+(s.annCtaUrl||''); }
+   Deliberately shows every qualifying time rather than being dismissed
+   once and remembered — every app open (called from enterApp), and every
+   time the Home tab is switched INTO from a different tab (see switchTab's
+   _lastTab tracking below). Switching Home -> Home (tapping Home while
+   already there) does not re-trigger it. */
+var ANN_TG_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3.5L3 10.8l6.3 2.3L11.8 21l3-5.4L21 3.5z"/><path d="M9.3 13.1L17 6.2"/></svg>';
 function maybeShowAnnouncement(){
   var s = getSettings();
   if(!s.annEnabled || !s.annBody) return;
-  var hash = _annHash(s);
-  var dismissed = '';
-  try{ dismissed = localStorage.getItem('choco_ann_dismissed')||''; }catch(e){}
-  if(dismissed === hash) return;
   document.getElementById('annTitle').textContent = s.annTitle || 'Notice';
   document.getElementById('annBody').innerHTML = nl2p(s.annBody);
   var img = document.getElementById('annImg');
   if(s.announcementBg){ img.src = s.announcementBg; img.style.display='block'; } else { img.style.display='none'; }
-  var cta = document.getElementById('annCtaBtn');
-  if(s.annCtaLabel && s.annCtaUrl){
-    cta.style.display='block'; cta.textContent = s.annCtaLabel;
-    cta.onclick = function(){ window.open(s.annCtaUrl,'_blank'); dismissAnnouncement(); };
-  } else { cta.style.display='none'; cta.onclick=null; }
+  // Same Telegram Channel/Group links already configured under Settings ->
+  // Support contacts — reused here rather than a separate admin field.
+  var btns = '';
+  if(s.telegramChannel) btns += '<button class="tg-pill" onclick="window.open(\''+esc(s.telegramChannel)+'\',\'_blank\')">'+ANN_TG_ICON+'Telegram Channel</button>';
+  if(s.telegramGroup) btns += '<button class="tg-pill" onclick="window.open(\''+esc(s.telegramGroup)+'\',\'_blank\')">'+ANN_TG_ICON+'Telegram Group</button>';
+  var tgRow = document.getElementById('annTgRow');
+  tgRow.innerHTML = btns;
+  tgRow.style.display = btns ? 'flex' : 'none';
   document.getElementById('announcementBg').classList.add('show');
 }
 function dismissAnnouncement(){
-  var s = getSettings();
-  try{ localStorage.setItem('choco_ann_dismissed', _annHash(s)); }catch(e){}
   document.getElementById('announcementBg').classList.remove('show');
 }
 
@@ -756,12 +754,21 @@ function renderRecords(){
 }
 
 /* ====================== TABS / OVERLAYS ====================== */
+// Home starts as the active tab in the static markup, so _lastTab is seeded
+// to 'home' up front — that's what makes a Home->Home tap (no real
+// navigation) correctly NOT re-trigger the announcement below.
+var _lastTab = 'home';
 function switchTab(name){
+  var enteringHomeFromElsewhere = (name==='home' && _lastTab!=='home');
   ['home','shop','rewards','team','account'].forEach(function(t){
     document.getElementById('view'+t.charAt(0).toUpperCase()+t.slice(1)).style.display = (t===name)?'block':'none';
   });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===name); });
   if(name==='rewards' || name==='team' || name==='home') renderAll();
+  // Shop -> Home, Team -> Home, Rewards -> Home, Me -> Home all re-show the
+  // announcement; Home -> Home (already there) does not.
+  if(enteringHomeFromElsewhere) maybeShowAnnouncement();
+  _lastTab = name;
 }
 function openOverlay(name){
   closeOverlay();
