@@ -717,6 +717,22 @@ async function refreshFromServer(){
   }
   saveState();
 }
+// Pulls the admin-driven economics/catalogue from the server so a change the
+// owner makes in the admin panel actually reaches real users, instead of
+// each device only ever seeing its own localStorage/hardcoded defaults.
+// Writes settings into the SAME localStorage key getSettings() already reads,
+// so no other call site needs to change; PRODUCTS is reassigned in place so
+// every renderShop()/dailyReturn() call downstream picks it up for free.
+async function syncPublicConfig(){
+  try{
+    var r = await api('/public/settings');
+    if(r && r.status==='success' && r.settings) localStorage.setItem('choco_admin_settings', JSON.stringify(r.settings));
+  }catch(e){}
+  try{
+    var r2 = await api('/public/products');
+    if(r2 && r2.status==='success' && Array.isArray(r2.products) && r2.products.length) PRODUCTS = r2.products;
+  }catch(e){}
+}
 function serverTodayKey(){
   var d = new Date(Date.now()+3*3600000);
   var p = function(n){ return String(n).padStart(2,'0'); };
@@ -840,7 +856,7 @@ function onFbAuthChanged(user){
   if(user && (!STATE || STATE.uid !== user.uid)){
     STATE = loadState(user.uid) || freshState(user.uid, 'Member', '');
     saveState();
-    refreshFromServer().then(enterApp);
+    Promise.all([refreshFromServer(), syncPublicConfig()]).then(enterApp);
   } else if(!user){
     STATE = null;
   }
