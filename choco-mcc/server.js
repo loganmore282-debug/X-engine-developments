@@ -673,6 +673,16 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
     const invRef = db.collection('investments').doc(investmentId);
     const invSnap = await invRef.get();
     if (!invSnap.exists) return;
+    // L1/L2/L3 commission is a ONE-TIME reward for landing a new investor —
+    // it only ever fires off a buyer's first-ever investment, stamped on the
+    // investment doc itself at creation time (see /invest/create). Every
+    // later purchase by that same buyer is real, valid investment activity
+    // (it still counts toward Task Center's active-referral and deposit-
+    // total milestones), but it never pays L1/L2/L3 again. Checked here
+    // rather than only at the call site so the periodic reconciler — which
+    // re-invokes this for any investment created recently, first or not —
+    // can never accidentally pay a later purchase.
+    if (invSnap.data().isFirstInvestment !== true) return;
     const paidLevels = invSnap.data().commissionPaidLevels || [];
 
     const sett = await getSettings();
@@ -1104,14 +1114,26 @@ app.post('/invest/create', async (req, res) => {
       if (fresh.data().status === 'banned') throw new Error('Account access paused');
       const bal = fresh.data().walletBalance || 0;
       if (bal < tier.price) throw new Error(`Need ${fmtUGX(tier.price)}, have ${fmtUGX(bal)}`);
+      // Referral commission is a one-time reward for the buyer's first-ever
+      // investment. firstInvestmentDone is the authoritative flag going
+      // forward, but it never existed on accounts that invested before this
+      // flag was introduced — falling back to their pre-existing
+      // totalInvested (only ever incremented by a real completed investment)
+      // means an existing investor's NEXT purchase is correctly recognised
+      // as a later one, not wrongly treated as "first" and double-paying
+      // their referrer. Read BEFORE incrementing totalInvested below.
+      const isFirstInvestment = !(fresh.data().firstInvestmentDone === true || (fresh.data().totalInvested || 0) > 0);
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
-      t.update(uRef, { walletBalance: FieldValue.increment(-tier.price), totalInvested: FieldValue.increment(tier.price) });
+      t.update(uRef, {
+        walletBalance: FieldValue.increment(-tier.price), totalInvested: FieldValue.increment(tier.price),
+        firstInvestmentDone: true
+      });
       const { date, time } = nowStr();
       t.set(invRef, {
         userId, tierKey: tier.key, tierLabel: tier.name, amount: tier.price, cycle, expectedReturn,
         status: 'active', dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-        commissionPaidLevels: [], date, time, createdAt: FieldValue.serverTimestamp()
+        isFirstInvestment, commissionPaidLevels: [], date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'investment', description: `Bought ${tier.name}`, amount: -tier.price,

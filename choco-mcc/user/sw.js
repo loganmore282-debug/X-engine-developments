@@ -46,7 +46,13 @@
 // replaced with Telegram Channel/Group pill buttons (from Settings ->
 // Support contacts); the dialog re-shows every app open and every time
 // Home is switched into from Shop/Rewards/Team/Me (not Home -> Home).
-const CACHE = 'chocomcc-shell-v15';
+// v16: tapping Cash Out without ever having invested now shows an upfront
+// toast and never opens the withdrawal form (server still enforces this
+// independently). Referral L1/L2/L3 commission now pays out only once per
+// referred member, on their first-ever investment — later purchases by the
+// same member no longer pay it again (they still count for Task Center's
+// active-referral and deposit-total milestones).
+const CACHE = 'chocomcc-shell-v16';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
