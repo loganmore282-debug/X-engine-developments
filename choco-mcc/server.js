@@ -142,7 +142,7 @@ const MARZ_TIMEOUT = 15000;
 // `settings`/`products` collections; these are only the boot fallback.
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
-  dailyCheckin: 250, commL1: 27, commL2: 2, commL3: 1,
+  dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
   returnMultiple: 3, cycleDays: 10, maintenanceMode: false, maintenanceMsg: ''
 };
 const DEFAULT_PRODUCTS = [
@@ -558,7 +558,7 @@ app.get('/public/settings', async (_req, res) => {
   const s = await getSettings();
   res.json({ status: 'success', settings: {
     withdrawFeePct: s.withdrawFeePct, minWithdraw: s.minWithdraw, minDeposit: s.minDeposit,
-    dailyCheckin: s.dailyCheckin, commL1: s.commL1, commL2: s.commL2, commL3: s.commL3,
+    dailyCheckin: s.dailyCheckin, welcomeBonus: s.welcomeBonus, commL1: s.commL1, commL2: s.commL2, commL3: s.commL3,
     returnMultiple: s.returnMultiple, cycleDays: s.cycleDays,
     maintenanceMode: !!s.maintenanceMode, maintenanceMsg: s.maintenanceMsg || ''
   } });
@@ -681,7 +681,9 @@ app.post('/register', async (req, res) => {
       }
 
       const myRefCode = await generateUniqueReferralCode();
-      const update = { registrationDone: true, referralCode: myRefCode };
+      const sett = await getSettings();
+      const WELCOME = Number(sett.welcomeBonus) || 0;
+      const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
       if (referrerId) {
         update.referredBy = referrerId;
         await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
@@ -689,8 +691,23 @@ app.post('/register', async (req, res) => {
         const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
         if (l2Id && l2Id !== referrerId) await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
       }
+      // The user's own doc (registrationDone + the actual wallet credit) is
+      // written FIRST, in one update. If the process dies right after this,
+      // the user is already fully and correctly paid and marked done — a
+      // retried /register hits the registrationDone guard above and stops
+      // immediately rather than re-running this block. The only possible
+      // casualty of an interruption is the ledger row below never getting
+      // written (cosmetic, not money) — never the reverse (a ledger row with
+      // no matching credit, or a double credit from a retry).
       await userRef.update(update);
-      res.json({ status: 'success', referrerId, referralCode: myRefCode });
+      if (WELCOME > 0) {
+        const { date, time } = nowStr();
+        await db.collection('transactions').add({
+          userId, type: 'admin_credit', description: 'Welcome gift',
+          amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });
+      }
+      res.json({ status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode });
     });
   } catch (e) {
     console.error('Register error:', e.message);

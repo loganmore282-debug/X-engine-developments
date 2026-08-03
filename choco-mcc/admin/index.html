@@ -308,6 +308,7 @@
         <div class="settings-grid">
           <div class="field"><label>Minimum deposit (UGX)</label><input id="s_minDeposit" type="number"></div>
           <div class="field"><label>Daily check-in reward (UGX)</label><input id="s_dailyCheckin" type="number"></div>
+          <div class="field"><label>Registration bonus (UGX)</label><input id="s_welcomeBonus" type="number"></div>
           <div class="field"><label>Return multiple (× price)</label><input id="s_returnMultiple" type="number"></div>
           <div class="field"><label>Cycle length (days)</label><input id="s_cycleDays" type="number"></div>
         </div>
@@ -391,7 +392,7 @@ var CHOCO_IMAGES = {"hersheys": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQAB
 var SERVER = 'https://mybusinessuganda.onrender.com';
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
-  dailyCheckin: 250, commL1: 27, commL2: 2, commL3: 1,
+  dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
   returnMultiple: 3, cycleDays: 10, maintenanceMode: false, maintenanceMsg: ''
 };
 var DEFAULT_PRODUCTS = [
