@@ -154,7 +154,12 @@
   .photo-banner.pb-sm{height:110px;}
   .photo-banner.pb-hero{height:170px;margin:14px 20px;border-radius:26px;}
   .photo-banner.pb-full{height:240px;}
-  .auth-banner{position:relative;overflow:hidden;height:230px;margin:-32px -26px 20px -26px;box-shadow:var(--shadow-lg);}
+  /* No box-shadow here on purpose — a drop shadow draws its own hard
+     rectangular edge right along the container's bottom regardless of
+     overflow:hidden or how soft the ::after fade below is, which is what
+     kept showing up as a visible line no matter how the gradient itself
+     was tuned. */
+  .auth-banner{position:relative;overflow:hidden;height:230px;margin:-32px -26px 20px -26px;}
   .auth-banner img{width:100%;height:100%;object-fit:cover;display:block;}
   /* No straight cutoff line where the photo meets the page — several
      off-center, differently-sized cream blobs dissolve the bottom edge

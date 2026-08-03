@@ -1243,9 +1243,15 @@ app.get('/transactions', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('transactions').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
-    res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    // Sort in JS after fetching, not orderBy in the query itself — same
+    // pattern Chronova's equivalent endpoint (/account/transactions) uses,
+    // ported here to remove any doubt about the where+orderBy+limit combo.
+    const snap = await db.collection('transactions').where('userId', '==', userId).limit(300).get();
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    res.json({ status: 'success', transactions: list.slice(0, 100) });
   } catch (e) {
+    console.error('Transactions list error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your transactions' });
   }
 });
@@ -1257,9 +1263,14 @@ app.get('/deposits', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('pendingDeposits').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
-    res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    // Same pattern as Chronova's /account/deposits — fetch by userId only
+    // and sort in JS, not orderBy in the Mongo query itself.
+    const snap = await db.collection('pendingDeposits').where('userId', '==', userId).limit(200).get();
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    res.json({ status: 'success', deposits: list.slice(0, 100) });
   } catch (e) {
+    console.error('Deposits list error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your top-ups' });
   }
 });
@@ -1268,9 +1279,12 @@ app.get('/withdrawals', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('withdrawals').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
-    res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    const snap = await db.collection('withdrawals').where('userId', '==', userId).limit(200).get();
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    res.json({ status: 'success', withdrawals: list.slice(0, 100) });
   } catch (e) {
+    console.error('Withdrawals list error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your cash-outs' });
   }
 });
