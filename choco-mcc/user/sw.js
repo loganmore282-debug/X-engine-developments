@@ -62,7 +62,11 @@
 // before, just a fresher look.
 // v19: overlay header separator line thickened (2px, higher-contrast) so it
 // reads clearly instead of nearly disappearing against the cream background.
-const CACHE = 'chocomcc-shell-v19';
+// v20: Cash Out no longer blocks at the tap-to-open stage — the withdrawal
+// form always opens. The invest-first check now runs (as it always has,
+// server-side, unbypassable) only when "Request Cash Out" is actually
+// submitted, surfacing the real server message in the form itself.
+const CACHE = 'chocomcc-shell-v20';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

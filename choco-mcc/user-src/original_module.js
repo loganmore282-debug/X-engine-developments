@@ -5,7 +5,7 @@ var CHOCO_BANNERS = {"bonbon": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABA
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 20, cycleDays: 180, requireInvestToWithdraw: true,
+  returnMultiple: 20, cycleDays: 180,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportWhatsapp: '', supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', brandTagline: '', aboutText: ''
@@ -780,18 +780,6 @@ function switchTab(name){
   _lastTab = name;
 }
 function openOverlay(name){
-  // Checked BEFORE the withdraw screen ever opens, not after the member has
-  // already filled in an amount and bank details — the server still enforces
-  // this independently on /withdraw/request (never trust a client-only
-  // check for money safety), but nobody should have to fill out the whole
-  // form just to be told at the very end that they needed to invest first.
-  if(name==='withdraw'){
-    var s = getSettings();
-    if(s.requireInvestToWithdraw!==false && (!STATE || (STATE.totalInvested||0)<=0)){
-      toast('Purchase at least one chocolate product before you can withdraw.');
-      return;
-    }
-  }
   closeOverlay();
   document.getElementById('ov'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('show');
   if(name==='bindbank') renderBankList();
