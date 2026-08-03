@@ -38,7 +38,7 @@
 // v11: Task Center now shows the loading spinner immediately on open
 // (was a silent blank screen while /team/stats loaded), and the Claim
 // button shows a "Claiming…" busy state instead of appearing unresponsive.
-const CACHE = 'chocomcc-shell-v12';
+const CACHE = 'chocomcc-shell-v13';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

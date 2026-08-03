@@ -827,6 +827,7 @@ async function renderProducts(){
 }
 function editProduct(p, order){
   p = p || {};
+  const defaultImg = (typeof CHOCO_IMAGES!=='undefined' && p.key) ? (CHOCO_IMAGES[p.key]||'') : '';
   openModal(`
     <h3>${p.key?'Edit product':'New product'}</h3>
     <label>Name</label><input id="pLabel" value="${esc(p.name||p.label||'')}" placeholder="e.g. Ferrero Rocher">
@@ -836,18 +837,18 @@ function editProduct(p, order){
       <div><label>Total payout (UGX)</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>
     </div>
     <div class="row">
-      <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||10}"></div>
+      <div><label>Cycle (days)</label><input id="pCycle" type="number" value="${p.cycle||180}"></div>
       <div><label>Order</label><input id="pOrder" type="number" value="${p.order!=null?p.order:(order||0)}"></div>
     </div>
     <label>Product image</label>
     <div class="img-picker">
-      <div class="img-prev" id="pImgPrev">${p.image?`<img src="${esc(p.image)}" alt="">`:'<span class="muted">No image</span>'}</div>
+      <div class="img-prev" id="pImgPrev">${(p.image||defaultImg)?`<img src="${esc(p.image||defaultImg)}" alt="">`:'<span class="muted">No image</span>'}</div>
       <div class="img-picker-actions">
         <label class="btn sm file-btn">Upload image<input type="file" id="pFile" accept="image/*" hidden></label>
         <button class="btn sm danger" id="pImgClear" type="button"${p.image?'':' style="display:none"'}>Remove</button>
       </div>
     </div>
-    <label class="muted" style="font-size:11px">…or paste a hosted image URL</label>
+    <label class="muted" style="font-size:11px">${p.image?'':(defaultImg?'Showing the built-in default photo — upload one to override it.':'')}…or paste a hosted image URL</label>
     <input id="pImage" value="${esc(p.image&&!/^data:/.test(p.image)?p.image:'')}" placeholder="https://…/product.png">
     <div class="switch-row" style="margin-top:10px"><span><b>Active</b> <span class="muted">(shown in the app)</span></span>
       <label style="width:auto;margin:0"><input type="checkbox" id="pActive" ${p.active!==false?'checked':''} style="width:auto"></label></div>
@@ -855,7 +856,11 @@ function editProduct(p, order){
       <label style="width:auto;margin:0"><input type="checkbox" id="pSoon" ${p.comingSoon?'checked':''} style="width:auto"></label></div>
     <button class="btn block" id="pSave">Save product</button>`);
   let imgData = p.image||'';
-  const setPrev = (src)=>{ $('pImgPrev').innerHTML = src?`<img src="${esc(src)}" alt="">`:'<span class="muted">No image</span>'; $('pImgClear').style.display = src?'':'none'; };
+  // Custom upload/URL wins; otherwise fall back to the built-in default photo
+  // for this key (same fallback renderProducts()'s list thumbnail already
+  // uses) — an untouched default product should never look like it has no
+  // photo just because it's never had a custom one uploaded.
+  const setPrev = (src)=>{ const shown = src || (typeof CHOCO_IMAGES!=='undefined' && p.key ? CHOCO_IMAGES[p.key] : '') || ''; $('pImgPrev').innerHTML = shown?`<img src="${esc(shown)}" alt="">`:'<span class="muted">No image</span>'; $('pImgClear').style.display = src?'':'none'; };
   $('pFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
     try{ imgData = await fileToDataUrl(f,640,0.7); $('pImage').value=''; setPrev(imgData); toast('Image ready — tap Save product','ok'); }

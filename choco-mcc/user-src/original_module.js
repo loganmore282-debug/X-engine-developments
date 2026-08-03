@@ -5,23 +5,26 @@ var CHOCO_BANNERS = {"bonbon": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABA
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 3, cycleDays: 10,
+  returnMultiple: 20, cycleDays: 180,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportWhatsapp: '', supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', brandTagline: '', aboutText: ''
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
+// Mirrors server.js's DEFAULT_PRODUCTS exactly (20x return, 180-day cycle,
+// stamped explicitly per product) — only ever used before syncPublicConfig()
+// has fetched the real, admin-editable catalogue, or if that fetch fails.
 var PRODUCTS = [
-  { key:'hersheys',  name:"Hershey's Milk Chocolate", price:15000  },
-  { key:'mars',      name:"Mars",                     price:30000  },
-  { key:'snickers',  name:"Snickers",                 price:50000  },
-  { key:'cadbury',   name:"Cadbury Dairy Milk",        price:80000  },
-  { key:'kitkat',    name:"KitKat Chunky",             price:120000 },
-  { key:'toblerone', name:"Toblerone",                 price:200000 },
-  { key:'rondnoir',  name:"Ferrero Rondnoir",          price:350000 },
-  { key:'rocher',    name:"Ferrero Rocher",            price:500000 },
-  { key:'raffaello', name:"Raffaello",                 price:750000 },
-  { key:'godiva',    name:"Godiva Gold Box",           price:1000000 }
+  { key:'hersheys',  name:"Hershey's Milk Chocolate", price:30000,   cycle:180, expectedReturn:600000   },
+  { key:'mars',      name:"Mars",                     price:90000,   cycle:180, expectedReturn:1800000  },
+  { key:'snickers',  name:"Snickers",                 price:200000,  cycle:180, expectedReturn:4000000  },
+  { key:'cadbury',   name:"Cadbury Dairy Milk",        price:350000,  cycle:180, expectedReturn:7000000  },
+  { key:'kitkat',    name:"KitKat Chunky",             price:500000,  cycle:180, expectedReturn:10000000 },
+  { key:'toblerone', name:"Toblerone",                 price:800000,  cycle:180, expectedReturn:16000000 },
+  { key:'rondnoir',  name:"Ferrero Rondnoir",          price:1000000, cycle:180, expectedReturn:20000000 },
+  { key:'rocher',    name:"Ferrero Rocher",            price:2000000, cycle:180, expectedReturn:40000000 },
+  { key:'raffaello', name:"Raffaello",                 price:3000000, cycle:180, expectedReturn:60000000 },
+  { key:'godiva',    name:"Godiva Gold Box",           price:4000000, cycle:180, expectedReturn:80000000 }
 ];
 // Fixed promo codes (server-issued codes come once the backend is wired up) — each redeemable once per member.
 var PROMO_CODES = { 'CHOCO50':5000, 'SWEET100':10000, 'CACAO25':2500 };
@@ -138,7 +141,15 @@ function getSettings(){
   try{ return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem('choco_admin_settings')||'{}')); }
   catch(e){ return DEFAULT_SETTINGS; }
 }
-function dailyReturn(price){ var s=getSettings(); return Math.round(price*s.returnMultiple/s.cycleDays); }
+// Mirrors server.js's /invest/create computation exactly (tier.expectedReturn/
+// tier.cycle win when the product sets its own; settings.returnMultiple/
+// cycleDays are only the fallback for a product that doesn't) — so what a
+// member sees before buying always matches what they'll actually be paid,
+// and an admin's per-product edit (Total payout / Cycle) actually changes
+// what's displayed instead of every tier showing the same global default.
+function productCycle(p){ return Number(p && p.cycle) || getSettings().cycleDays; }
+function productExpectedReturn(p){ return Number(p && p.expectedReturn) || Math.round((p ? p.price : 0) * getSettings().returnMultiple); }
+function dailyReturn(p){ return Math.round(productExpectedReturn(p) / productCycle(p)); }
 function ugx(n){ n=Math.round(Number(n)||0); return 'UGX ' + n.toLocaleString('en-US'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; }); }
 function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
@@ -567,7 +578,7 @@ function renderFeatured(){
       '<img class="choc-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<div class="choc-body"><div class="choc-name">'+p.name+'</div>'+
       '<div class="choc-price">'+ugx(p.price)+'</div>'+
-      '<div class="choc-ret">+'+ugx(dailyReturn(p.price))+'/day</div></div></button>';
+      '<div class="choc-ret">+'+ugx(dailyReturn(p))+'/day</div></div></button>';
   }).join('');
   document.getElementById('featStrip').innerHTML = html;
 }
@@ -578,7 +589,7 @@ function renderShop(){
       '<span class="prod-rank">Tier '+(i+1)+'</span></div>'+
       '<div class="prod-body"><div class="prod-info"><div class="prod-name">'+p.name+'</div>'+
       '<div class="prod-price">'+ugx(p.price)+'</div>'+
-      '<div class="prod-daily">+'+ugx(dailyReturn(p.price))+' / day</div></div>'+
+      '<div class="prod-daily">+'+ugx(dailyReturn(p))+' / day</div></div>'+
       '<div class="prod-arrow">'+ICON_CHEV+'</div></div></button>';
   }).join('');
   document.getElementById('shopGrid').innerHTML = html;
@@ -822,15 +833,14 @@ function renderWitBankBox(){
 
 function openProduct(key){
   var p = PRODUCTS.filter(function(x){return x.key===key;})[0];
-  var sett = getSettings();
   document.getElementById('pdTitle').textContent = p.name;
   document.getElementById('pdBody').innerHTML =
     '<img src="'+CHOCO_IMAGES[p.key]+'" style="width:100%;height:220px;object-fit:cover;border-radius:20px;margin:6px 20px 0;width:calc(100% - 40px)">'+
     '<div class="form-card">'+
       '<div class="kv"><span>Price</span><b>'+ugx(p.price)+'</b></div>'+
-      '<div class="kv"><span>Daily reward</span><b style="color:var(--mint)">'+ugx(dailyReturn(p.price))+'</b></div>'+
-      '<div class="kv"><span>Cycle</span><b>'+sett.cycleDays+' days</b></div>'+
-      '<div class="kv" style="border-bottom:none"><span>Total payout</span><b>'+ugx(p.price*sett.returnMultiple)+'</b></div>'+
+      '<div class="kv"><span>Daily reward</span><b style="color:var(--mint)">'+ugx(dailyReturn(p))+'</b></div>'+
+      '<div class="kv"><span>Cycle</span><b>'+productCycle(p)+' days</b></div>'+
+      '<div class="kv" style="border-bottom:none"><span>Total payout</span><b>'+ugx(productExpectedReturn(p))+'</b></div>'+
     '</div>'+
     '<div class="photo-banner pb-sm"><img src="'+CHOCO_BANNERS.snickerscookie+'"></div>'+
     '<div style="padding:4px 20px 20px"><button class="btn btn-primary btn-block" id="buyProductBtn" onclick="buyProduct(\''+p.key+'\')">Buy this chocolate</button></div>';

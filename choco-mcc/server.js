@@ -151,23 +151,28 @@ const MARZ_TIMEOUT = 15000;
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 3, cycleDays: 10, maintenanceMode: false, maintenanceMsg: '',
+  returnMultiple: 20, cycleDays: 180, maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportWhatsapp: '', supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', brandTagline: '', aboutText: ''
 };
+// Each tier pays exactly 20x its price over a fixed 180-day cycle (both
+// stamped explicitly per product, not left to the global returnMultiple/
+// cycleDays fallback) — matches the owner's approved pricing table exactly,
+// and keeps dailyPayout (expectedReturn/cycle, rounded server-side) a whole
+// number with no lingering fractional cents.
 const DEFAULT_PRODUCTS = [
-  { key: 'hersheys',  name: "Hershey's Milk Chocolate", price: 15000   },
-  { key: 'mars',      name: 'Mars',                     price: 30000  },
-  { key: 'snickers',  name: 'Snickers',                 price: 50000  },
-  { key: 'cadbury',   name: 'Cadbury Dairy Milk',        price: 80000  },
-  { key: 'kitkat',    name: 'KitKat Chunky',             price: 120000 },
-  { key: 'toblerone', name: 'Toblerone',                 price: 200000 },
-  { key: 'rondnoir',  name: 'Ferrero Rondnoir',          price: 350000 },
-  { key: 'rocher',    name: 'Ferrero Rocher',            price: 500000 },
-  { key: 'raffaello', name: 'Raffaello',                 price: 750000 },
-  { key: 'godiva',    name: 'Godiva Gold Box',           price: 1000000 }
+  { key: 'hersheys',  name: "Hershey's Milk Chocolate", price: 30000,   cycle: 180, expectedReturn: 600000   },
+  { key: 'mars',      name: 'Mars',                     price: 90000,   cycle: 180, expectedReturn: 1800000  },
+  { key: 'snickers',  name: 'Snickers',                 price: 200000,  cycle: 180, expectedReturn: 4000000  },
+  { key: 'cadbury',   name: 'Cadbury Dairy Milk',        price: 350000,  cycle: 180, expectedReturn: 7000000  },
+  { key: 'kitkat',    name: 'KitKat Chunky',             price: 500000,  cycle: 180, expectedReturn: 10000000 },
+  { key: 'toblerone', name: 'Toblerone',                 price: 800000,  cycle: 180, expectedReturn: 16000000 },
+  { key: 'rondnoir',  name: 'Ferrero Rondnoir',          price: 1000000, cycle: 180, expectedReturn: 20000000 },
+  { key: 'rocher',    name: 'Ferrero Rocher',            price: 2000000, cycle: 180, expectedReturn: 40000000 },
+  { key: 'raffaello', name: 'Raffaello',                 price: 3000000, cycle: 180, expectedReturn: 60000000 },
+  { key: 'godiva',    name: 'Godiva Gold Box',           price: 4000000, cycle: 180, expectedReturn: 80000000 }
 ];
 
 let _settingsCache = null, _settingsCacheTs = 0;
@@ -181,11 +186,26 @@ async function getSettings() {
   return _settingsCache;
 }
 let _productsCache = null, _productsCacheTs = 0;
+// The DEFAULT_PRODUCTS ladder only ever exists in memory until an admin
+// actually edits one of them — nothing seeds the `products` collection on
+// its own. Saving a single product used to make this return ONLY the saved
+// docs (snap.docs.map with no merge), so every other never-touched default
+// vanished from both the admin list and the user shop the moment anyone
+// edited one product. Fixed: always merge saved docs with whichever
+// DEFAULT_PRODUCTS keys were never saved. A saved doc marked `deleted:true`
+// (see /admin/products/delete) is dropped entirely rather than falling back
+// to its default, so deleting a default product doesn't just resurrect it
+// on the next read.
 async function getProducts() {
   if (Date.now() - _productsCacheTs < 60 * 1000 && _productsCache) return _productsCache;
   try {
     const snap = await db.collection('products').orderBy('order', 'asc').get();
-    _productsCache = snap.empty ? DEFAULT_PRODUCTS.slice() : snap.docs.map(d => d.data());
+    const saved = snap.docs.map(d => d.data());
+    const touchedKeys = new Set(saved.map(p => p.key));
+    const merged = saved.filter(p => !p.deleted)
+      .concat(DEFAULT_PRODUCTS.filter(p => !touchedKeys.has(p.key)));
+    merged.sort((a, b) => (a.order || 0) - (b.order || 0) || (a.price || 0) - (b.price || 0));
+    _productsCache = merged;
   } catch (_) { _productsCache = _productsCache || DEFAULT_PRODUCTS.slice(); }
   _productsCacheTs = Date.now();
   return _productsCache;
@@ -1859,7 +1879,16 @@ app.post('/admin/products/save', async (req, res) => {
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
     const batch = db.batch();
-    list.forEach((p, i) => batch.set(db.collection('products').doc(p.key), Object.assign({}, p, { order: i }), { merge: true }));
+    // `order` is preserved from the submitted product itself when given
+    // (the admin form always sends one) — indexing by array position would
+    // stamp every product 0 whenever only a single product is saved at a
+    // time, which is the normal case here.
+    // `deleted:false` clears any earlier soft-delete tombstone on this key
+    // (see /admin/products/delete) so re-saving a previously-deleted
+    // product actually brings it back instead of the merge silently
+    // reviving the old tombstone flag.
+    list.forEach((p, i) => batch.set(db.collection('products').doc(p.key),
+      Object.assign({}, p, { order: p.order != null ? Number(p.order) : i, deleted: false }), { merge: true }));
     await batch.commit();
     _productsCacheTs = 0;
     logAdminAction(req, 'products_saved', { count: list.length });
@@ -1868,12 +1897,17 @@ app.post('/admin/products/save', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not save products' });
   }
 });
+// Soft-delete: writes a tombstone rather than physically removing the doc.
+// getProducts() drops any doc with deleted:true and does NOT fall back to
+// its DEFAULT_PRODUCTS entry — a hard delete on a default product's key
+// would otherwise just resurrect it right back on the very next read, since
+// getProducts() fills in any key it's never seen a saved doc for.
 app.post('/admin/products/delete', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const key = String(req.body.key || '');
   if (!key) return res.status(400).json({ status: 'error', message: 'key required' });
   try {
-    await db.collection('products').doc(key).delete();
+    await db.collection('products').doc(key).set({ key, deleted: true }, { merge: false });
     _productsCacheTs = 0;
     logAdminAction(req, 'product_deleted', { key });
     res.json({ status: 'success' });
