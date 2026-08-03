@@ -448,9 +448,9 @@
         </div>
       </div>
       <div class="comm-row">
-        <div class="comm-tile"><b>27%</b><span>LEVEL 1</span></div>
-        <div class="comm-tile"><b>2%</b><span>LEVEL 2</span></div>
-        <div class="comm-tile"><b>1%</b><span>LEVEL 3</span></div>
+        <div class="comm-tile"><b id="commL1Pct">27%</b><span>LEVEL 1</span></div>
+        <div class="comm-tile"><b id="commL2Pct">2%</b><span>LEVEL 2</span></div>
+        <div class="comm-tile"><b id="commL3Pct">1%</b><span>LEVEL 3</span></div>
       </div>
       <div class="sec-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
       <div style="margin:0 20px" class="card" >
@@ -608,12 +608,12 @@
   <div class="overlay" id="ovWithdraw">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Cash Out</div></div>
     <div class="photo-banner" id="withdrawBanner"></div>
-    <div class="info-box">Minimum cash-out <b>UGX 10,000</b>. A service fee of <b>19%</b> applies to every cash-out. Up to <b><span id="witMaxPerDay">2</span> cash-outs</b> per day.</div>
+    <div class="info-box">Minimum cash-out <b id="witMinAmt">UGX 10,000</b>. A service fee of <b id="witFeePctInfo">19%</b> applies to every cash-out. Up to <b><span id="witMaxPerDay">2</span> cash-outs</b> per day.</div>
     <div id="witBankBox"></div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
       <input class="famt" id="witAmt" type="number" placeholder="0" oninput="renderWitCalc()">
-      <div class="calc-row"><span>Service fee (19%)</span><span id="witFee">UGX 0</span></div>
+      <div class="calc-row"><span>Service fee (<span id="witFeePctLabel">19%</span>)</span><span id="witFee">UGX 0</span></div>
       <div class="calc-row"><span>You receive</span><span id="witNet">UGX 0</span></div>
       <button class="btn btn-berry btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Cash Out</button>
     </div>

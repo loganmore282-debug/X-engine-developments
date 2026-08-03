@@ -517,6 +517,9 @@ function renderAll(){
   document.getElementById('teamComm').textContent = ugx(s.team.commission);
 
   var sett = getSettings();
+  document.getElementById('commL1Pct').textContent = sett.commL1+'%';
+  document.getElementById('commL2Pct').textContent = sett.commL2+'%';
+  document.getElementById('commL3Pct').textContent = sett.commL3+'%';
   document.getElementById('rewardsBanner').innerHTML = '<img src="'+CHOCO_BANNERS.cookies+'">';
   document.getElementById('giftCodeThumb').src = CHOCO_BANNERS.bonbon;
   document.getElementById('checkinAmt').textContent = sett.dailyCheckin;
@@ -847,8 +850,15 @@ async function saveBankAccount(){
 }
 function setDefaultBank(i){ STATE.defaultBankIdx = i; saveState(); renderBankList(); toast('Default account updated'); }
 function renderWitBankBox(){
+  var sett = getSettings();
   var maxEl = document.getElementById('witMaxPerDay');
-  if(maxEl){ var sett = getSettings(); maxEl.textContent = sett.maxWithdrawalsPerDay || 2; }
+  if(maxEl) maxEl.textContent = sett.maxWithdrawalsPerDay || 2;
+  var minEl = document.getElementById('witMinAmt');
+  if(minEl) minEl.textContent = ugx(sett.minWithdraw);
+  var feeInfoEl = document.getElementById('witFeePctInfo');
+  if(feeInfoEl) feeInfoEl.textContent = sett.withdrawFeePct+'%';
+  var feeLabelEl = document.getElementById('witFeePctLabel');
+  if(feeLabelEl) feeLabelEl.textContent = sett.withdrawFeePct+'%';
   var box = document.getElementById('witBankBox');
   if(!STATE.bankAccounts.length){
     box.innerHTML = '<div class="info-box" style="background:var(--berry-pale);color:var(--berry)">No bank account bound yet.'+
@@ -932,7 +942,6 @@ async function doWithdraw(){
   if(!STATE.bankAccounts.length){ toast('Bind a bank account first'); closeOverlay(); openOverlay('bindbank'); return; }
   var amt = parseInt(document.getElementById('witAmt').value,10)||0;
   if(amt < sett.minWithdraw){ toast('Minimum cash-out is '+ugx(sett.minWithdraw)); return; }
-  if(amt % 5000 !== 0){ toast('Amount must be a multiple of UGX 5,000'); return; }
   if(amt > STATE.balance){ toast('Insufficient balance'); return; }
   var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
   var btn = document.getElementById('witGoBtn'), label = btn.textContent;

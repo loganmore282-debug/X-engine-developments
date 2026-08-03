@@ -115,6 +115,16 @@ async function setupFundedUser(uid, phone, balance) {
   const htmlDoc = [...withdrawals().values()].filter(w => w.userId === A).slice(-1)[0];
   check('HTML tags in holder are stripped before storage', htmlDoc && !/<[^>]+>/.test(htmlDoc.holder), htmlDoc);
 
+  console.log('\n-- Any amount at or above the minimum is accepted — no "multiple of 5,000" restriction --');
+  // Reuses Alice (already set up above) rather than a fresh user, to add
+  // exactly one extra request instead of the three a new setupFundedUser()
+  // call would cost — this file's fake "uid:x" tokens don't parse as real
+  // JWTs, so every request in it shares ONE rate-limit bucket keyed by IP.
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 17000, holder: 'Alice', network: 'MTN Mobile Money', phone: '700111222' } });
+  check('17,000 (not a multiple of 5,000) is accepted', r.body?.status === 'success', r.body);
+  const oddAmountDoc = [...withdrawals().values()].find(w => w.userId === A && w.amount === 17000);
+  check('withdrawal stored with the exact amount requested (17,000)', !!oddAmountDoc, oddAmountDoc);
+
   console.log('\n== Daily withdrawal cap (default 2/day) ==');
   const B = 'bob-uid';
   await setupFundedUser(B, '0771000002', 1000000);

@@ -66,7 +66,13 @@
 // form always opens. The invest-first check now runs (as it always has,
 // server-side, unbypassable) only when "Request Cash Out" is actually
 // submitted, surfacing the real server message in the form itself.
-const CACHE = 'chocomcc-shell-v20';
+// v21: removed the "amount must be a multiple of UGX 5,000" restriction on
+// withdrawals entirely (any amount at or above the minimum is now
+// accepted). Fixed the withdrawal screen's fee/minimum text and the Team
+// screen's L1/L2/L3 commission tiles, which were hardcoded literal strings
+// that never reflected admin-changed settings — both now read live from
+// getSettings() every time their screen renders.
+const CACHE = 'chocomcc-shell-v21';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

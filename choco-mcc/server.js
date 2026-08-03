@@ -1394,7 +1394,6 @@ app.post('/withdraw/request', async (req, res) => {
   try {
     const sett = await getSettings();
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
-    if (amt % 5000 !== 0) return res.status(400).json({ status: 'error', message: 'Amount must be a multiple of UGX 5,000' });
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;
