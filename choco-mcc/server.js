@@ -919,6 +919,31 @@ app.get('/transactions', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not load your transactions' });
   }
 });
+// Own top-up (deposit) history, including ones still pending/failed — the
+// generic /transactions list only ever gets a row once a deposit is
+// actually credited, so this is the only place a user can see one that's
+// still processing or that never went through.
+app.get('/deposits', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('pendingDeposits').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
+    res.json({ status: 'success', deposits: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not load your top-ups' });
+  }
+});
+// Own cash-out history, including ones still processing/declined.
+app.get('/withdrawals', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('withdrawals').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
+    res.json({ status: 'success', withdrawals: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not load your cash-outs' });
+  }
+});
 
 // ═══════════════════════════════════════════
 // ADMIN (key-gated — no per-staff accounts yet, mirrors Voltra's original model)

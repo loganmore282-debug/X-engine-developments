@@ -159,6 +159,20 @@
   .uline-tab{background:none;border:none;padding:10px 2px;font-size:14px;font-weight:800;color:var(--cocoa-faint);
     border-bottom:2.5px solid transparent;margin-bottom:-1.5px;}
   .uline-tab.active{color:var(--caramel-deep);border-bottom-color:var(--caramel-deep);}
+
+  .rec-card{margin:0 20px;padding:14px 0;border-bottom:1px solid var(--line);}
+  .rec-card:last-child{border-bottom:none;}
+  .rec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px;}
+  .rec-ref{font-size:13.5px;font-weight:800;color:var(--cocoa);word-break:break-all;}
+  .rec-st{flex-shrink:0;font-size:12px;font-weight:800;}
+  .rec-st.ok{color:var(--mint);}
+  .rec-st.proc{color:var(--caramel-deep);}
+  .rec-st.bad{color:var(--berry);}
+  .rec-st.mut{color:var(--cocoa-faint);}
+  .rec-line{display:flex;align-items:baseline;gap:10px;padding:3px 0;}
+  .rec-line span{flex:0 0 70px;font-size:12px;color:var(--cocoa-faint);}
+  .rec-line span::after{content:":";}
+  .rec-line b{font-size:12.5px;font-weight:700;color:var(--cocoa);}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;}
   .cards .stat{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px;}
   .cards .stat .n{font-size:16px;font-weight:800;}
@@ -385,7 +399,7 @@
       </div>
       <div class="cards" style="margin:0 20px 18px">
         <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n" style="color:var(--mint)" id="acctBalNum">UGX 0</div><div class="l">Balance</div></div>
-        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('withdrawals')"><div class="n" style="color:var(--berry)" id="acctWitNum">UGX 0</div><div class="l">Cash Outs</div></div>
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n" style="color:var(--berry)" id="acctWitNum">UGX 0</div><div class="l">Cash Outs</div></div>
       </div>
       <div class="menu-grid">
         <button class="menu-tile" onclick="openOverlay('mychoc')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="3" y="7" width="18" height="12" rx="2.5"/><path d="M3 13h18M9 7v12M15 7v12"/></svg></div><div class="menu-tile-lbl">My Chocolates</div></button>
@@ -489,8 +503,9 @@
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Records</div></div>
     <div class="photo-banner pb-sm" id="recordsBanner"></div>
     <div class="uline-tabs">
-      <button class="uline-tab active" data-rt="balance" onclick="setRecordsTab('balance')">Balance</button>
-      <button class="uline-tab" data-rt="withdrawals" onclick="setRecordsTab('withdrawals')">Cash Outs</button>
+      <button class="uline-tab active" data-rt="accrued" onclick="setRecordsTab('accrued')">Accrued</button>
+      <button class="uline-tab" data-rt="topups" onclick="setRecordsTab('topups')">Topups</button>
+      <button class="uline-tab" data-rt="cashouts" onclick="setRecordsTab('cashouts')">Cash Outs</button>
     </div>
     <div class="cards" style="margin:14px 20px" id="recordsStats"></div>
     <div id="recordsList"></div>
@@ -669,6 +684,7 @@ function getSettings(){
 }
 function dailyReturn(price){ var s=getSettings(); return Math.round(price*s.returnMultiple/s.cycleDays); }
 function ugx(n){ n=Math.round(Number(n)||0); return 'UGX ' + n.toLocaleString('en-US'); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; }); }
 
 /* ====================== LOCAL STATE (per-account cache — keyed by the real Firebase uid; moves server-side once the backend is wired up) ====================== */
 function loadState(uid){
@@ -748,6 +764,9 @@ document.getElementById('authGo').onclick = async function(){
 function logout(){
   if(window.fbSignOut) window.fbSignOut();
   STATE = null;
+  // A shared device could sign a different member in next — never leave the
+  // previous member's cached top-up/cash-out records around to leak through.
+  _recordsLoaded = { accrued:true, topups:false, cashouts:false };
   document.getElementById('app').style.display='none';
   document.getElementById('authScreen').style.display='flex';
 }
@@ -870,31 +889,68 @@ function renderTicker(){
       '<b style="color:'+(pos?'var(--mint)':'var(--berry)')+'">'+(pos?'+':'')+ugx(t.amount)+'</b></div>';
   }).join('');
 }
-var _recordsTab = 'balance';
+// ── RECORDS — Accrued (income) / Topups (deposits) / Cash Outs (withdrawals) ──
+// Same statement-card shape as Chronova's Records screen: a reference/label
+// line with a status pill, then labelled fact lines underneath.
+var _recordsTab = 'accrued';
+var _recordsLoaded = { accrued:true, topups:false, cashouts:false };
+var INCOME_TYPES = ['checkin','cashback','commission','promocode'];
+var REC_TYPE_LABEL = { checkin:'Daily reward', cashback:'Chocolate cashback', commission:'Team reward', promocode:'Promo code' };
+function recStatusInfo(s){
+  s = String(s||'success').toLowerCase();
+  if(['success','matched','processed'].indexOf(s)!==-1) return { label:'Completed', cls:'ok' };
+  if(['initiating','pending','processing'].indexOf(s)!==-1) return { label:'Processing', cls:'proc' };
+  if(['failed','declined','cancelled','rejected','expired'].indexOf(s)!==-1) return { label:'Declined', cls:'bad' };
+  return { label: s.charAt(0).toUpperCase()+s.slice(1), cls:'mut' };
+}
 function setRecordsTab(t){
   _recordsTab = t;
   document.querySelectorAll('.uline-tab').forEach(function(b){ b.classList.toggle('active', b.dataset.rt===t); });
+  document.getElementById('recordsBanner').innerHTML = '<img src="'+(t==='accrued'?CHOCO_BANNERS.truffle:t==='topups'?CHOCO_BANNERS.darkbar:CHOCO_BANNERS.snickersplate)+'">';
   renderRecords();
+  loadRecordsTab(t).then(renderRecords);
+}
+async function loadRecordsTab(t){
+  if(_recordsLoaded[t]) return;
+  if(t==='topups'){
+    var r = await api('/deposits');
+    if(r.status==='success'){ STATE.depositRecords = r.deposits; _recordsLoaded.topups = true; }
+  } else if(t==='cashouts'){
+    var r2 = await api('/withdrawals');
+    if(r2.status==='success'){ STATE.withdrawalRecords = r2.withdrawals; _recordsLoaded.cashouts = true; }
+  }
 }
 function renderRecords(){
-  var s=STATE;
-  document.getElementById('recordsBanner').innerHTML = '<img src="'+(_recordsTab==='balance'?CHOCO_BANNERS.darkbar:CHOCO_BANNERS.snickersplate)+'">';
-  var list = s.transactions.filter(function(t){
-    return _recordsTab==='withdrawals' ? t.type==='withdraw' : t.type!=='withdraw';
-  });
-  var stats = _recordsTab==='balance'
-    ? '<div class="stat"><div class="n" style="color:var(--mint)">'+ugx(s.balance)+'</div><div class="l">Wallet balance</div></div>'+
-      '<div class="stat"><div class="n">'+ugx(s.totalDeposited)+'</div><div class="l">Added</div></div>'+
-      '<div class="stat"><div class="n">'+ugx(s.totalEarned)+'</div><div class="l">Earned</div></div>'
-    : '<div class="stat"><div class="n" style="color:var(--berry)">'+ugx(s.totalWithdrawn)+'</div><div class="l">Total cashed out</div></div>';
-  document.getElementById('recordsStats').innerHTML = stats;
-  if(!list.length){ document.getElementById('recordsList').innerHTML='<div class="empty">'+(_recordsTab==='withdrawals'?'No cash-outs yet.':'No activity yet — add funds or buy a chocolate to get started.')+'</div>'; return; }
-  var html = list.slice(0,50).map(function(t){
-    var pos = t.amount>=0;
-    return '<div class="kv" style="margin:0 20px"><span>'+t.desc+'<br><span class="muted" style="font-size:11px">'+new Date(t.when).toLocaleString()+'</span></span>'+
-      '<b style="color:'+(pos?'var(--mint)':'var(--berry)')+'">'+(pos?'+':'')+ugx(t.amount)+'</b></div>';
+  var s = STATE;
+  if(_recordsTab==='accrued'){
+    var rows = s.transactions.filter(function(t){ return INCOME_TYPES.indexOf(t.type)!==-1 && t.amount>0; });
+    var total = rows.reduce(function(sum,t){ return sum+t.amount; }, 0);
+    document.getElementById('recordsStats').innerHTML =
+      '<div class="stat"><div class="n" style="color:var(--mint)">'+ugx(total)+'</div><div class="l">Total accrued</div></div>';
+    if(!rows.length){ document.getElementById('recordsList').innerHTML = '<div class="empty">No accrued rewards yet — check in or buy a chocolate to start earning.</div>'; return; }
+    document.getElementById('recordsList').innerHTML = rows.slice(0,50).map(function(t){
+      return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(REC_TYPE_LABEL[t.type]||t.desc)+'</span><span class="rec-st ok">Completed</span></div>'+
+        '<div class="rec-line"><span>Amount</span><b>+'+ugx(t.amount)+'</b></div>'+
+        '<div class="rec-line"><span>Date</span><b>'+new Date(t.when).toLocaleString()+'</b></div></div>';
+    }).join('');
+    return;
+  }
+  var isTop = _recordsTab==='topups';
+  var list = isTop ? (s.depositRecords||[]) : (s.withdrawalRecords||[]);
+  if(!_recordsLoaded[_recordsTab]){ document.getElementById('recordsList').innerHTML = '<div class="empty">Loading…</div>'; document.getElementById('recordsStats').innerHTML=''; return; }
+  var total = list.reduce(function(sum,r){ return sum + (isTop ? (r.status==='matched'?Number(r.amount)||0:0) : (r.status==='processed'?Number(r.net||r.amount)||0:0)); }, 0);
+  document.getElementById('recordsStats').innerHTML =
+    '<div class="stat"><div class="n" style="color:'+(isTop?'var(--mint)':'var(--berry)')+'">'+ugx(total)+'</div><div class="l">Total '+(isTop?'topped up':'cashed out')+'</div></div>';
+  if(!list.length){ document.getElementById('recordsList').innerHTML = '<div class="empty">'+(isTop?'No top-ups yet.':'No cash-outs yet.')+'</div>'; return; }
+  document.getElementById('recordsList').innerHTML = list.slice(0,50).map(function(r){
+    var st = recStatusInfo(r.status);
+    var stamp = r.createdAt ? new Date(r.createdAt).toLocaleString() : ((r.date||'')+' '+(r.time||'')).trim();
+    return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(r.ref||'pending')+'</span><span class="rec-st '+st.cls+'">'+st.label+'</span></div>'+
+      '<div class="rec-line"><span>Amount</span><b>'+ugx(r.amount)+'</b></div>'+
+      (!isTop && r.net!=null ? '<div class="rec-line"><span>Received</span><b>'+ugx(r.net)+'</b></div>' : '')+
+      '<div class="rec-line"><span>Number</span><b>'+esc(r.phone||'')+'</b></div>'+
+      '<div class="rec-line"><span>Date</span><b>'+esc(stamp)+'</b></div></div>';
   }).join('');
-  document.getElementById('recordsList').innerHTML = html;
 }
 
 /* ====================== TABS / OVERLAYS ====================== */
@@ -910,7 +966,7 @@ function openOverlay(name){
   document.getElementById('ov'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('show');
   if(name==='bindbank') renderBankList();
   if(name==='withdraw') renderWitBankBox();
-  if(name==='records'){ setRecordsTab('balance'); }
+  if(name==='records'){ setRecordsTab('accrued'); }
   if(name==='mychoc') renderMyChoc();
   if(name==='earnings') renderEarnings();
   if(name==='deposit'){ var dp=document.getElementById('depPhone'); if(dp && !dp.value) dp.value = STATE.phone||''; }
