@@ -75,6 +75,12 @@
   .nav-item .ic{width:16px;display:inline-flex;justify-content:center;}
   .nav-item.active{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;}
   .nav-item:not(.active):hover{background:rgba(255,255,255,.08);}
+  .badge-n{display:inline-block;min-width:16px;padding:0 5px;margin-left:2px;background:var(--berry);color:#fff;
+    border-radius:20px;font-size:10px;font-weight:800;line-height:16px;text-align:center;}
+  .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .subtab{background:var(--card);border:1.5px solid var(--line);color:var(--cocoa-faint);border-radius:18px;
+    padding:7px 13px;font-size:12.5px;font-weight:700;}
+  .subtab.active{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;border-color:transparent;}
 
   .main{max-width:1280px;margin:0 auto;padding:26px 24px 60px;}
   .topline{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;gap:12px;flex-wrap:wrap;}
@@ -177,6 +183,7 @@
         </div>
         <div class="topbar-spacer"></div>
         <div class="who-mini" id="whoMini"></div>
+        <button class="topbar-btn" id="liveToggleBtn" onclick="toggleLive()" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mint);margin-right:2px"></span>Live</button>
         <button class="topbar-btn" id="pushToggleBtn" onclick="togglePush()"><span class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></span><span id="pushToggleLabel">Enable Push</span></button>
         <button class="topbar-btn" onclick="doLogout()"><span class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3.5"/><path d="M15 16l4-4-4-4"/><path d="M19 12H9.5"/></svg></span>Log out</button>
       </div>
@@ -184,7 +191,7 @@
         <button class="nav-item active" data-v="dash" onclick="go('dash')"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.6"/><rect x="13" y="3" width="8" height="5" rx="1.6"/><rect x="13" y="11" width="8" height="10" rx="1.6"/><rect x="3" y="14" width="8" height="7" rx="1.6"/></svg></span>Dashboard</button>
         <button class="nav-item" data-v="users" onclick="go('users')"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.2" r="3"/><path d="M3.2 20c0-3.3 2.6-6 5.8-6s5.8 2.7 5.8 6"/><circle cx="17.3" cy="9.2" r="2.4"/><path d="M15.9 14.3c2.5.4 4.3 2.5 4.3 5"/></svg></span>Users</button>
         <button class="nav-item" data-v="deposits" onclick="go('deposits')"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M7.5 12h9"/></svg></span>Deposits</button>
-        <button class="nav-item" data-v="withdrawals" onclick="go('withdrawals')"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v8M8.3 12L12 15.7 15.7 12"/></svg></span>Withdrawals</button>
+        <button class="nav-item" data-v="withdrawals" onclick="go('withdrawals')"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v8M8.3 12L12 15.7 15.7 12"/></svg></span>Withdrawals<span class="badge-n" id="wBadge" style="display:none"></span></button>
         <button class="nav-item" data-v="transactions" onclick="go('transactions')"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>Transactions</button>
         <button class="nav-item" data-v="referrals" onclick="go('referrals')"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="2.6"/><circle cx="17" cy="7" r="2.6"/><circle cx="12" cy="18" r="2.6"/><path d="M7 9.6V13M17 9.6V13M9 15L12 13M15 15L12 13"/></svg></span>Referrals</button>
         <button class="nav-item" data-v="promocodes" onclick="go('promocodes')"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v7a1 1 0 01-1 1H5a1 1 0 01-1-1v-7"/><rect x="3" y="7" width="18" height="5" rx="1"/><path d="M12 7v13M12 7c-1.5-3-5-4-5-1.5S9 7 12 7zM12 7c1.5-3 5-4 5-1.5S15 7 12 7z"/></svg></span>Promo Codes</button>
@@ -221,7 +228,8 @@
 
     <!-- DEPOSITS -->
     <div class="view" id="v-deposits">
-      <div class="topline"><h2>Deposits</h2><input class="search-in" placeholder="Search phone or ref…" oninput="filterList('deposits',this.value)"></div>
+      <div class="topline"><h2>Deposits</h2><input class="search-in" placeholder="Search phone, ref, or referral code…" oninput="filterList('deposits',this.value)"></div>
+      <div class="subtabs" id="depSubtabs"></div>
       <div class="panel" style="padding:0;overflow:hidden">
         <div class="table-wrap"><table><thead><tr><th>When</th><th>Phone</th><th>Amount</th><th>Reference</th><th>Status</th><th></th></tr></thead>
         <tbody id="depsBody"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody></table></div>
@@ -230,7 +238,8 @@
 
     <!-- WITHDRAWALS -->
     <div class="view" id="v-withdrawals">
-      <div class="topline"><h2>Withdrawals</h2><input class="search-in" placeholder="Search phone or ref…" oninput="filterList('withdrawals',this.value)"></div>
+      <div class="topline"><h2>Withdrawals</h2><input class="search-in" placeholder="Search phone, ref, or referral code…" oninput="filterList('withdrawals',this.value)"></div>
+      <div class="subtabs" id="witSubtabs"></div>
       <div class="panel" style="padding:0;overflow:hidden">
         <div class="table-wrap"><table><thead><tr><th>When</th><th>Phone</th><th>Amount</th><th>Net</th><th>Network</th><th>Status</th><th></th></tr></thead>
         <tbody id="witsBody"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody></table></div>
@@ -285,6 +294,10 @@
       </div>
       <div class="cards" id="analyticsCards"></div>
       <div class="panel">
+        <h3>Deposits vs withdrawals, by hour of day</h3>
+        <div id="analyticsHourBars"></div>
+      </div>
+      <div class="panel">
         <h3>Deposits vs withdrawals, by day</h3>
         <div id="analyticsDayBars"></div>
       </div>
@@ -310,8 +323,10 @@
 
     <!-- PRODUCTS (owner only) -->
     <div class="view owner-only" id="v-products">
-      <div class="topline"><h2>Products</h2><button class="btn btn-primary btn-sm" onclick="saveProducts()">Save changes</button></div>
-      <div class="note">Edit names and prices directly, then <b>Save changes</b>. These are the tiers shown in the user app's Shop — saved to the real database, live for every user immediately.</div>
+      <div class="topline"><h2>Products</h2>
+        <button class="btn btn-berry btn-sm" onclick="clearAllProducts()">Clear all</button>
+        <button class="btn btn-primary btn-sm" onclick="saveProducts()">Save changes</button></div>
+      <div class="note">Edit names and prices directly, then <b>Save changes</b>. These are the tiers shown in the user app's Shop — saved to the real database, live for every user immediately. "Remove" deletes that product immediately; "Clear all" wipes the whole catalogue back to the built-in defaults.</div>
       <div id="prodList"></div>
     </div>
 
@@ -504,6 +519,14 @@ var DEFAULT_PRODUCTS = [
   { key:'godiva',    name:"Godiva Gold Box",           price:1000000 }
 ];
 var PRODUCTS_CACHE = DEFAULT_PRODUCTS.slice();
+// Same clean wording the user app shows — never leak a raw internal type
+// string like "team_reward" into a screen a real person reads.
+var TX_LABELS = {
+  deposit: 'Deposit', withdraw: 'Cash out', commission: 'Commission', team_reward: 'Task Center reward',
+  checkin: 'Daily reward', cashback: 'Chocolate cashback', investment: 'Chocolate purchase',
+  promocode: 'Promo code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment'
+};
+function txLabel(t){ return TX_LABELS[t] || (t ? t.replace(/_/g,' ') : ''); }
 
 function ugx(n){ n=Math.round(Number(n)||0); return 'UGX ' + n.toLocaleString('en-US'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; }); }
@@ -514,6 +537,10 @@ function when(ts){
   return new Date(ms).toLocaleString();
 }
 function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(window._tt); window._tt=setTimeout(function(){t.classList.remove('show');},2600); }
+// Reduces any phone to its 9-digit national core so 0771…, +256771…,
+// 256771… and 771… all match each other regardless of which format a
+// search term or a stored record happens to use.
+function phoneCore(p){ var n=String(p||'').replace(/\D/g,''); if(n.indexOf('256')===0) n=n.slice(3); if(n.charAt(0)==='0'&&n.length>=10) n=n.slice(1); return n; }
 
 /* ====================== SESSION / API ====================== */
 function getToken(){ return sessionStorage.getItem('choco_admin_token')||''; }
@@ -585,7 +612,18 @@ async function doLogout(){
   document.getElementById('loginScreen').style.display = 'flex';
 }
 
+async function refreshBadges(){
+  var r = await api('/admin/badges');
+  var el = document.getElementById('wBadge');
+  if(!el) return;
+  if(r.status==='success' && r.pendingWithdrawals>0){ el.textContent = r.pendingWithdrawals; el.style.display=''; }
+  else el.style.display = 'none';
+}
+
+var CURRENT_TAB = 'dash';
 function go(v){
+  CURRENT_TAB = v;
+  try{ sessionStorage.setItem('choco_admin_tab', v); }catch(e){}
   document.querySelectorAll('.view').forEach(function(e){e.classList.remove('show');});
   document.getElementById('v-'+v).classList.add('show');
   document.querySelectorAll('.nav-item[data-v]').forEach(function(b){b.classList.toggle('active', b.dataset.v===v);});
@@ -604,14 +642,44 @@ function go(v){
   else if(v==='auditlog') loadAuditLog();
 }
 
+/* ====================== LIVE AUTO-REFRESH ======================
+   Re-pulls whichever data tab is on screen every 12s so new joins,
+   deposits, withdrawals, transactions and referrals appear on their own.
+   Skips owner-only edit tabs (products/banners/settings/admins/auditlog —
+   re-fetching those would just be wasted requests since nothing there
+   changes from outside admin action), skips entirely while the user-detail
+   modal is open (so a background repaint can't yank focus away from it),
+   and leaves each tab's own search box alone while it's actively focused. */
+var _live = true, _liveTimer = null;
+var LIVE_TABS = { dash:renderDashboard, users:loadUsers, deposits:loadDeposits, withdrawals:loadWithdrawals, transactions:loadTransactions, referrals:loadReferrals };
+function liveTick(){
+  if(document.hidden) return;
+  refreshBadges().catch(function(){});
+  if(!_live) return;
+  var modalOpen = document.getElementById('userModalBack').classList.contains('show');
+  if(modalOpen) return;
+  var fn = LIVE_TABS[CURRENT_TAB];
+  if(!fn) return;
+  var active = document.activeElement;
+  if(active && active.classList && active.classList.contains('search-in') && (active.value||'').trim()) return;
+  fn();
+}
+function toggleLive(){
+  _live = !_live;
+  document.getElementById('liveDot').style.background = _live ? 'var(--mint)' : 'var(--cocoa-faint)';
+  document.getElementById('liveToggleBtn').style.opacity = _live ? '1' : '.6';
+}
+function startLive(){ if(_liveTimer) return; _liveTimer = setInterval(liveTick, 12000); }
+
 /* A phone lookup map — several tabs need userId -> phone and none of the
    list endpoints besides Users itself carry every field, so this is built
    once from /admin/users and reused everywhere else that only has userId. */
 var PHONE_MAP = {};
+var REFCODE_MAP = {};
 async function ensurePhoneMap(){
   if(Object.keys(PHONE_MAP).length) return;
   var r = await api('/admin/users');
-  if(r.status==='success') r.users.forEach(function(u){ PHONE_MAP[u.id] = u.phone || ''; });
+  if(r.status==='success') r.users.forEach(function(u){ PHONE_MAP[u.id] = u.phone || ''; REFCODE_MAP[u.id] = u.referralCode || ''; });
 }
 
 /* ====================== DASHBOARD ====================== */
@@ -635,7 +703,7 @@ async function renderDashboard(){
   if(t.status!=='success' || !t.transactions.length){ body.innerHTML = '<tr class="empty-row"><td colspan="5">No transactions yet</td></tr>'; return; }
   await ensurePhoneMap();
   body.innerHTML = t.transactions.map(function(tx){
-    return '<tr><td>'+when(tx.createdAt)+'</td><td>'+esc(PHONE_MAP[tx.userId]||'—')+'</td><td>'+esc(tx.type)+'</td><td>'+esc(tx.description||'')+'</td>'+
+    return '<tr><td>'+when(tx.createdAt)+'</td><td>'+esc(PHONE_MAP[tx.userId]||'—')+'</td><td>'+esc(txLabel(tx.type))+'</td><td>'+esc(tx.description||'')+'</td>'+
       '<td style="color:'+(tx.amount<0?'var(--berry)':'var(--mint)')+'">'+ugx(tx.amount)+'</td></tr>';
   }).join('');
 }
@@ -647,12 +715,18 @@ async function loadUsers(){
   var r = await api('/admin/users');
   if(r.status!=='success'){ toast(r.message||'Could not load users'); return; }
   USERS_CACHE = r.users;
-  r.users.forEach(function(u){ PHONE_MAP[u.id] = u.phone || ''; });
+  r.users.forEach(function(u){ PHONE_MAP[u.id] = u.phone || ''; REFCODE_MAP[u.id] = u.referralCode || ''; });
   renderUsers('');
 }
 function renderUsers(filter){
   filter = (filter||'').toLowerCase();
-  var rows = USERS_CACHE.filter(function(u){ return !filter || (u.phone||'').toLowerCase().indexOf(filter)>=0; });
+  var core = phoneCore(filter);
+  var rows = USERS_CACHE.filter(function(u){
+    if(!filter) return true;
+    return (u.phone||'').toLowerCase().indexOf(filter)>=0 ||
+      (u.referralCode||'').toLowerCase().indexOf(filter)>=0 ||
+      (core && phoneCore(u.phone).indexOf(core)>=0);
+  });
   var body = document.getElementById('usersBody');
   if(!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="6">No users found</td></tr>'; return; }
   body.innerHTML = rows.map(function(u){
@@ -690,6 +764,18 @@ async function openUserModal(userId){
   html += (r.investments||[]).slice(0,6).map(function(iv){
     return '<div class="kv"><span>'+esc(iv.tierLabel||iv.tierKey)+' — '+iv.status+'</span><b>'+ugx(iv.amount)+'</b></div>';
   }).join('') || '<div class="muted" style="font-size:12.5px">No products purchased yet</div>';
+  html += '</div>';
+  html += '<div class="modal-section"><h3 style="font-size:14px;margin-bottom:8px">Saved cash-out accounts ('+(r.bankAccounts||[]).length+')</h3>';
+  html += (r.bankAccounts||[]).map(function(b){
+    var masked = (b.phone||'').length>4 ? b.phone.slice(0,4)+'•••'+b.phone.slice(-2) : (b.phone||'');
+    return '<div class="kv"><span>'+esc(b.holder||'Account')+'</span><b>'+esc(b.network||'')+' · '+esc(masked)+'</b></div>';
+  }).join('') || '<div class="muted" style="font-size:12.5px">None saved</div>';
+  html += '</div>';
+  html += '<div class="modal-section"><h3 style="font-size:14px;margin-bottom:8px">Recent transactions</h3>';
+  html += (r.transactions||[]).slice(0,15).map(function(tx){
+    return '<div class="kv"><span>'+when(tx.createdAt)+' — '+esc(TX_LABELS[tx.type]||tx.type)+'</span>'+
+      '<b style="color:'+((tx.amount||0)<0?'var(--berry)':'var(--mint)')+'">'+((tx.amount||0)>=0?'+':'−')+ugx(Math.abs(tx.amount||0))+'</b></div>';
+  }).join('') || '<div class="muted" style="font-size:12.5px">No transactions yet</div>';
   html += '</div>';
   document.getElementById('umStats').innerHTML = html;
 }
@@ -732,20 +818,39 @@ async function userDelete(){
 /* ====================== DEPOSITS ====================== */
 var DEPOSITS_CACHE = [];
 var STATUS_CLASS = { matched:'t-ok', processed:'t-ok', pending:'t-warn', processing:'t-warn', initiating:'t-warn', failed:'t-bad', declined:'t-bad' };
+var _depFilter = 'pending';
+var DEP_GROUPS = { pending:['initiating','pending'], processing:['processing'], matched:['matched'], failed:['failed'] };
 async function loadDeposits(){
   document.getElementById('depsBody').innerHTML = '<tr class="empty-row"><td colspan="6">Loading…</td></tr>';
+  await ensurePhoneMap();
   var r = await api('/admin/deposits/list');
   if(r.status!=='success'){ toast(r.message||'Could not load deposits'); return; }
   DEPOSITS_CACHE = r.deposits;
-  renderDeposits(DEPOSITS_CACHE);
+  renderDepSubtabs();
+  drawDeposits();
+}
+function renderDepSubtabs(){
+  var groupCount = function(k){ return DEPOSITS_CACHE.filter(function(d){ return (DEP_GROUPS[k]||[]).indexOf(d.status)>=0; }).length; };
+  var subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
+  document.getElementById('depSubtabs').innerHTML = subs.map(function(s){
+    var count = s[0]==='all' ? DEPOSITS_CACHE.length : groupCount(s[0]);
+    return '<button class="subtab'+(_depFilter===s[0]?' active':'')+'" onclick="setDepFilter(\''+s[0]+'\')">'+s[1]+' ('+count+')</button>';
+  }).join('');
+}
+var _depSearchVal = '';
+function setDepFilter(k){ _depFilter = k; renderDepSubtabs(); drawDeposits(); }
+function drawDeposits(){
+  var list = _depFilter==='all' ? DEPOSITS_CACHE : DEPOSITS_CACHE.filter(function(d){ return (DEP_GROUPS[_depFilter]||[]).indexOf(d.status)>=0; });
+  renderDeposits(searchFilter(list, _depSearchVal, 'accountPhone', 'ref', 'userId'));
 }
 function renderDeposits(rows){
   var body = document.getElementById('depsBody');
-  if(!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="6">No deposits yet</td></tr>'; return; }
+  if(!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="6">No deposits</td></tr>'; return; }
   body.innerHTML = rows.map(function(d){
     var cls = STATUS_CLASS[d.status] || 't-warn';
-    var stuck = d.status==='initiating' || d.status==='pending';
-    return '<tr><td>'+when(d.createdAt)+'</td><td>'+esc(d.accountPhone||d.phone||'—')+'</td><td>'+ugx(d.amount)+'</td><td>'+esc(d.ref||'—')+'</td>'+
+    var stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed';
+    var code = REFCODE_MAP[d.userId];
+    return '<tr><td>'+when(d.createdAt)+'</td><td>'+esc(d.accountPhone||d.phone||'—')+(code?'<br><span class="muted" style="font-size:11px">'+esc(code)+'</span>':'')+'</td><td>'+ugx(d.amount)+'</td><td>'+esc(d.ref||'—')+'</td>'+
       '<td><span class="pill-tag '+cls+'">'+esc(d.status)+'</span></td>'+
       '<td class="owner-only">'+(stuck?'<button class="btn btn-mint btn-sm" onclick="forceCreditDeposit(\''+d.id+'\')">Force-credit</button>':'')+'</td></tr>';
   }).join('');
@@ -759,19 +864,37 @@ async function forceCreditDeposit(id){
 
 /* ====================== WITHDRAWALS ====================== */
 var WITHDRAWALS_CACHE = [];
+var _witFilter = 'processing';
 async function loadWithdrawals(){
   document.getElementById('witsBody').innerHTML = '<tr class="empty-row"><td colspan="7">Loading…</td></tr>';
+  await ensurePhoneMap();
   var r = await api('/admin/withdrawals/list');
   if(r.status!=='success'){ toast(r.message||'Could not load withdrawals'); return; }
   WITHDRAWALS_CACHE = r.withdrawals;
-  renderWithdrawals(WITHDRAWALS_CACHE);
+  renderWitSubtabs();
+  drawWithdrawals();
+  refreshBadges();
+}
+function renderWitSubtabs(){
+  var subs = [['processing','Processing'],['processed','Processed'],['declined','Declined'],['all','All']];
+  document.getElementById('witSubtabs').innerHTML = subs.map(function(s){
+    var count = s[0]==='all' ? WITHDRAWALS_CACHE.length : WITHDRAWALS_CACHE.filter(function(w){return w.status===s[0];}).length;
+    return '<button class="subtab'+(_witFilter===s[0]?' active':'')+'" onclick="setWitFilter(\''+s[0]+'\')">'+s[1]+' ('+count+')</button>';
+  }).join('');
+}
+var _witSearchVal = '';
+function setWitFilter(k){ _witFilter = k; renderWitSubtabs(); drawWithdrawals(); }
+function drawWithdrawals(){
+  var list = _witFilter==='all' ? WITHDRAWALS_CACHE : WITHDRAWALS_CACHE.filter(function(w){ return w.status===_witFilter; });
+  renderWithdrawals(searchFilter(list, _witSearchVal, 'accountPhone', 'ref', 'userId'));
 }
 function renderWithdrawals(rows){
   var body = document.getElementById('witsBody');
-  if(!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="7">No withdrawals yet</td></tr>'; return; }
+  if(!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="7">No withdrawals</td></tr>'; return; }
   body.innerHTML = rows.map(function(w){
     var cls = STATUS_CLASS[w.status] || 't-warn';
-    return '<tr><td>'+when(w.createdAt)+'</td><td>'+esc(w.accountPhone||w.phone||'—')+'</td><td>'+ugx(w.amount)+'</td><td>'+ugx(w.net)+'</td><td>'+esc(w.network||'—')+'</td>'+
+    var code = REFCODE_MAP[w.userId];
+    return '<tr><td>'+when(w.createdAt)+'</td><td>'+esc(w.accountPhone||w.phone||'—')+(code?'<br><span class="muted" style="font-size:11px">'+esc(code)+'</span>':'')+'</td><td>'+ugx(w.amount)+'</td><td>'+ugx(w.net)+'</td><td>'+esc(w.network||'—')+'</td>'+
       '<td><span class="pill-tag '+cls+'">'+esc(w.status)+'</span></td>'+
       '<td class="owner-only">'+(w.status==='processing'?'<button class="btn btn-berry btn-sm" onclick="rejectWithdrawal(\''+w.id+'\')">Force-decline</button>':'')+'</td></tr>';
   }).join('');
@@ -782,6 +905,21 @@ async function rejectWithdrawal(id){
   var r = await api('/admin/withdraw/reject', { withdrawalId: id, reason: reason });
   toast(r.message || (r.status==='success' ? 'Declined and refunded' : 'Could not decline'));
   if(r.status==='success') loadWithdrawals();
+}
+/* Shared search: matches a plain substring against any of the given row
+   fields, PLUS a phoneCore-normalised match against the phone-shaped field,
+   PLUS the referrer's own referral code (via REFCODE_MAP keyed off the
+   user-id field named last). */
+function searchFilter(list, raw, phoneField, refField, userIdField){
+  raw = (raw||'').trim();
+  if(!raw) return list;
+  var q = raw.toLowerCase(), core = phoneCore(raw);
+  return list.filter(function(row){
+    return (String(row[phoneField]||'')).toLowerCase().indexOf(q)>=0 ||
+      (String(row[refField]||'')).toLowerCase().indexOf(q)>=0 ||
+      (core && phoneCore(row[phoneField]).indexOf(core)>=0) ||
+      ((REFCODE_MAP[row[userIdField]]||'').toLowerCase().indexOf(q)>=0);
+  });
 }
 
 /* ====================== TRANSACTIONS ====================== */
@@ -798,22 +936,18 @@ function renderTransactions(rows){
   var body = document.getElementById('txBody');
   if(!rows.length){ body.innerHTML = '<tr class="empty-row"><td colspan="5">No transactions yet</td></tr>'; return; }
   body.innerHTML = rows.map(function(tx){
-    return '<tr><td>'+when(tx.createdAt)+'</td><td>'+esc(PHONE_MAP[tx.userId]||'—')+'</td><td>'+esc(tx.type)+'</td><td>'+esc(tx.description||'')+'</td>'+
+    return '<tr><td>'+when(tx.createdAt)+'</td><td>'+esc(PHONE_MAP[tx.userId]||'—')+'</td><td>'+esc(txLabel(tx.type))+'</td><td>'+esc(tx.description||'')+'</td>'+
       '<td style="color:'+(tx.amount<0?'var(--berry)':'var(--mint)')+'">'+ugx(tx.amount)+'</td></tr>';
   }).join('');
 }
 
 /* ====================== SEARCH (shared by deposits/withdrawals/transactions) ====================== */
 function filterList(kind, v){
-  v = (v||'').toLowerCase();
-  if(kind==='deposits'){
-    var rows = DEPOSITS_CACHE.filter(function(d){ return !v || (d.accountPhone||'').toLowerCase().indexOf(v)>=0 || (d.ref||'').toLowerCase().indexOf(v)>=0; });
-    renderDeposits(rows);
-  } else if(kind==='withdrawals'){
-    var rows2 = WITHDRAWALS_CACHE.filter(function(w){ return !v || (w.accountPhone||'').toLowerCase().indexOf(v)>=0 || (w.ref||'').toLowerCase().indexOf(v)>=0; });
-    renderWithdrawals(rows2);
-  } else if(kind==='transactions'){
-    var rows3 = TX_CACHE.filter(function(tx){ return !v || (PHONE_MAP[tx.userId]||'').toLowerCase().indexOf(v)>=0 || (tx.type||'').toLowerCase().indexOf(v)>=0; });
+  if(kind==='deposits'){ _depSearchVal = v; drawDeposits(); }
+  else if(kind==='withdrawals'){ _witSearchVal = v; drawWithdrawals(); }
+  else if(kind==='transactions'){
+    var q = (v||'').toLowerCase();
+    var rows3 = TX_CACHE.filter(function(tx){ return !q || (PHONE_MAP[tx.userId]||'').toLowerCase().indexOf(q)>=0 || (tx.type||'').toLowerCase().indexOf(q)>=0 || (REFCODE_MAP[tx.userId]||'').toLowerCase().indexOf(q)>=0; });
     renderTransactions(rows3);
   }
 }
@@ -874,7 +1008,23 @@ async function renderAnalytics(){
     '<div class="stat"><div class="l">Net flow</div><div class="n">'+ugx(r.kpis.netFlow)+'</div></div>'+
     '<div class="stat"><div class="l">New users ('+days+'d)</div><div class="n">'+r.kpis.newUsers+'</div></div>'+
     '<div class="stat"><div class="l">Active investors</div><div class="n">'+r.kpis.activeInvestors+'</div></div>'+
+    '<div class="stat"><div class="l">Total invested</div><div class="n">'+ugx(r.kpis.investedAmount)+'</div></div>'+
+    '<div class="stat"><div class="l">Referral commissions paid</div><div class="n">'+ugx(r.kpis.commissionsPaid)+'</div></div>'+
+    '<div class="stat"><div class="l">Task Center rewards paid</div><div class="n">'+ugx(r.kpis.teamRewardsPaid)+'</div></div>'+
     '<div class="stat"><div class="l">Busiest time</div><div class="n" style="text-transform:capitalize">'+r.busiestBand+'</div></div>';
+
+  var h12 = function(x){ var ap = x<12?'am':'pm'; var h=x%12; if(h===0)h=12; return h+ap; };
+  var maxH = Math.max(1, Math.max.apply(null, r.byHour.map(function(h){ return Math.max(h.depAmt, h.witAmt); })));
+  document.getElementById('analyticsHourBars').innerHTML =
+    '<div class="legend" style="display:flex;gap:16px;font-size:12px;color:var(--cocoa-faint);margin-bottom:8px">'+
+    '<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--mint);margin-right:5px"></i>Deposits</span>'+
+    '<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--berry);margin-right:5px"></i>Withdrawals</span></div>'+
+    r.byHour.map(function(h){
+      return '<div class="bar-row" title="'+h12(h.h)+' — deposits '+ugx(h.depAmt)+' ('+h.depCnt+'), withdrawals '+ugx(h.witAmt)+' ('+h.witCnt+')">'+
+        '<span class="lbl">'+h12(h.h)+'</span><div class="bar-track">'+
+        '<div class="bar-dep" style="width:'+(h.depAmt/maxH*50)+'%"></div><div class="bar-wit" style="width:'+(h.witAmt/maxH*50)+'%"></div></div></div>';
+    }).join('') +
+    '<p class="muted" style="margin-top:8px;font-size:12px">Busiest deposit time: <b>'+h12(r.peakDepositHour)+'</b> · busiest withdrawal time: <b>'+h12(r.peakWithdrawHour)+'</b></p>';
 
   var maxV = Math.max(1, Math.max.apply(null, r.byDay.map(function(d){ return Math.max(d.dep, d.wit); })));
   document.getElementById('analyticsDayBars').innerHTML = r.byDay.map(function(d){
@@ -922,7 +1072,22 @@ function addProduct(){
   PRODUCTS_CACHE.push({ key: 'item' + Date.now(), name: 'New chocolate tier', price: 10000 });
   renderProductList();
 }
-function removeProduct(i){ PRODUCTS_CACHE.splice(i,1); renderProductList(); }
+async function removeProduct(i){
+  var p = PRODUCTS_CACHE[i];
+  if(!confirm('Delete "'+p.name+'"? This removes it from the database immediately.')) return;
+  PRODUCTS_CACHE.splice(i,1);
+  renderProductList();
+  if(p.key){
+    var r = await api('/admin/products/delete', { key: p.key });
+    if(r.status!=='success') toast(r.message||'Could not delete this product');
+  }
+}
+async function clearAllProducts(){
+  if(!confirm('Delete EVERY product? The catalogue reverts to the built-in defaults until you add new ones. This cannot be undone.')) return;
+  var r = await api('/admin/products/clear', {});
+  toast(r.status==='success' ? ('Removed '+r.removed+' product(s) — reverted to defaults') : (r.message||'Could not clear products'));
+  if(r.status==='success') loadProducts();
+}
 async function saveProducts(){
   var r = await api('/admin/products/save', { products: PRODUCTS_CACHE });
   toast(r.status==='success' ? 'Products saved — live for every user' : (r.message||'Could not save products'));
@@ -1072,7 +1237,16 @@ function boot(){
   document.getElementById('whoMini').textContent = 'Signed in as ' + getUser() + ' (' + getRole() + ')';
   document.body.classList.toggle('role-staff', getRole() !== 'owner');
   updatePushButton();
-  renderDashboard();
+  var lastTab = 'dash';
+  try{
+    var saved = sessionStorage.getItem('choco_admin_tab');
+    var isOwner = getRole() === 'owner';
+    var ownerOnly = { products:1, banners:1, settings:1, admins:1, auditlog:1 };
+    if(saved && document.getElementById('v-'+saved) && (isOwner || !ownerOnly[saved])) lastTab = saved;
+  }catch(e){}
+  go(lastTab);
+  refreshBadges();
+  startLive();
 }
 // Restore an existing session on reload (sessionStorage survives a refresh,
 // not a new tab) instead of forcing a re-login every time the page reloads.

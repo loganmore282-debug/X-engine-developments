@@ -1784,6 +1784,32 @@ app.post('/admin/products/save', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not save products' });
   }
 });
+app.post('/admin/products/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const key = String(req.body.key || '');
+  if (!key) return res.status(400).json({ status: 'error', message: 'key required' });
+  try {
+    await db.collection('products').doc(key).delete();
+    _productsCacheTs = 0;
+    logAdminAction(req, 'product_deleted', { key });
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not delete this product' });
+  }
+});
+app.post('/admin/products/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('products').get();
+    let removed = 0;
+    for (const d of snap.docs) { await d.ref.delete(); removed++; }
+    _productsCacheTs = 0;
+    logAdminAction(req, 'products_cleared', { removed });
+    res.json({ status: 'success', removed });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not clear products' });
+  }
+});
 
 // ═══════════════════════════════════════════
 // ADMIN — USERS (any admin can view; wallet credit/debit/ban/reset/delete
@@ -1803,15 +1829,17 @@ app.post('/admin/user/detail', async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const [snap, invSnap, txSnap] = await Promise.all([
+    const [snap, invSnap, txSnap, bankSnap] = await Promise.all([
       db.collection('users').doc(userId).get(),
       db.collection('investments').where('userId', '==', userId).limit(50).get(),
       db.collection('transactions').where('userId', '==', userId).limit(50).get(),
+      db.collection('bankAccounts').where('userId', '==', userId).get(),
     ]);
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const investments = invSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
     const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
-    res.json({ status: 'success', user: { id: snap.id, ...snap.data() }, investments, transactions });
+    const bankAccounts = bankSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ status: 'success', user: { id: snap.id, ...snap.data() }, investments, transactions, bankAccounts });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/deposit', async (req, res) => {
@@ -2213,16 +2241,26 @@ app.post('/admin/analytics', async (req, res) => {
     });
     bigWits.sort((a, b) => b.amount - a.amount);
 
-    let totalUsers = 0, newUsers = 0, activeInvestors = 0;
+    let totalUsers = 0, newUsers = 0, activeInvestors = 0, investedAmount = 0, commissionsPaid = 0;
     const referrers = [], depositors = [];
     usersSnap.forEach(d => {
       const u = d.data(); totalUsers++;
       const ms = tsMillis(u.createdAt);
       if (ms >= sinceMs) { newUsers++; const { day } = eatParts(u.createdAt); ensureDay(day).users++; }
       if ((u.totalInvested || 0) > 0) activeInvestors++;
+      investedAmount += u.totalInvested || 0;
+      commissionsPaid += u.teamCommission || 0;
       if ((u.teamL1Count || 0) > 0 || (u.teamCommission || 0) > 0)
         referrers.push({ phone: u.phone || '', team: u.teamL1Count || 0, earned: u.teamCommission || 0 });
       if ((u.totalDeposited || 0) > 0) depositors.push({ phone: u.phone || '', amount: u.totalDeposited || 0 });
+    });
+    // Task Center rewards paid so far (both milestone ladders), summed
+    // straight off each user's own claim flags rather than a separate ledger.
+    let teamRewardsPaid = 0;
+    usersSnap.forEach(d => {
+      const u = d.data();
+      TEAM_MILESTONES.forEach(m => { if (u['milestoneClaimed_' + m.target]) teamRewardsPaid += m.reward; });
+      TEAM_DEPOSIT_MILESTONES.forEach(m => { if (u['depositMilestoneClaimed_' + m.target]) teamRewardsPaid += m.reward; });
     });
     referrers.sort((a, b) => (b.team - a.team) || (b.earned - a.earned));
     depositors.sort((a, b) => b.amount - a.amount);
@@ -2241,7 +2279,8 @@ app.post('/admin/analytics', async (req, res) => {
       kpis: {
         depositsAmount: depAmount, depositsCount: depCount,
         withdrawalsAmount: witAmount, withdrawalsCount: witCount,
-        netFlow: depAmount - witAmount, totalUsers, newUsers, activeInvestors
+        netFlow: depAmount - witAmount, totalUsers, newUsers, activeInvestors,
+        investedAmount, commissionsPaid, teamRewardsPaid
       },
       byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand,
       topReferrers: referrers.slice(0, 10), topDepositors: depositors.slice(0, 10), biggestWithdrawals: bigWits.slice(0, 10)
