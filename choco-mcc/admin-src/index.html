@@ -92,6 +92,16 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
   .t-mut{background:var(--line);color:var(--sub)}
   .table-scroll{overflow-x:auto}
   .empty{color:var(--sub);font-size:13px;padding:18px;text-align:center}
+  /* Same loading spinner as the user app — replaces plain "Loading…" text. */
+  .cm-spin-wrap{display:flex;align-items:center;justify-content:center;padding:40px 0;}
+  .cm-spinner{width:34px;height:34px;color:var(--gold-deep);animation:cmSpinRotate 1.4s linear infinite;}
+  .cm-spinner circle{stroke:currentColor;stroke-linecap:round;fill:none;stroke-width:3.6;animation:cmSpinDash 1.4s ease-in-out infinite;}
+  @keyframes cmSpinRotate{100%{transform:rotate(360deg);}}
+  @keyframes cmSpinDash{
+    0%{stroke-dasharray:1px,200px;stroke-dashoffset:0px;}
+    50%{stroke-dasharray:100px,200px;stroke-dashoffset:-15px;}
+    100%{stroke-dasharray:100px,200px;stroke-dashoffset:-125px;}
+  }
 
   .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
   .prod{border:1.5px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}
@@ -220,6 +230,7 @@ function clearSession(){
 
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
 function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
@@ -391,7 +402,7 @@ function switchTab(name){
   _tab=name;
   try { sessionStorage.setItem('choco_admin_tab', name); } catch (_) {}
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
-  const c=$('content'); c.innerHTML='<div class="empty">Loading…</div>';
+  const c=$('content'); c.innerHTML=spinnerHtml();
   ({ dashboard:renderDashboard, analytics:renderAnalytics, users:renderUsers, deposits:renderDeposits, withdrawals:renderWithdrawals,
      products:renderProducts, banners:renderBanners, promocodes:renderPromoCodes, transactions:renderTransactions,
      referrals:renderReferrals, settings:renderSettings, admins:renderAdmins, auditlog:renderAuditLog }[name])();
@@ -449,7 +460,7 @@ async function renderDashboard(){
     </div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Recent transactions</h2>
-      <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th></tr></thead><tbody id="dashTx"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody></table></div>
+      <div class="table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th></tr></thead><tbody id="dashTx"><tr><td colspan="3">${spinnerHtml()}</td></tr></tbody></table></div>
     </div>`;
   const r = await api('/admin/transactions/list', { limit: 12 });
   if(staleTab('dashboard')) return;
@@ -643,7 +654,7 @@ async function openUser(uid){
     <h4 style="margin:18px 0 8px;font-size:14px">Saved cash-out accounts</h4>
     ${(r.bankAccounts||[]).length?(r.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holder||'Account')}</span><span>${esc(a.network||'')} · ${esc(a.phone||'')}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
-    <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td class="empty">Loading…</td></tr></tbody></table></div>`);
+    <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td>${spinnerHtml()}</td></tr></tbody></table></div>`);
   const tx=(r.transactions||[]).slice(0,25);
   $('userTx').innerHTML = tx.length?tx.map(t=>`<tr><td style="white-space:nowrap">${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap;text-align:right">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td class="empty">No transactions</td></tr>';
