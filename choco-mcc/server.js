@@ -71,7 +71,14 @@ app.use('/admin/', async (req, _res, next) => {
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
-app.use(express.json({ limit: '64kb' }));
+// Every route gets a tight 64kb JSON cap by default — plenty for any normal
+// request, and it keeps a stray huge payload from tying up the process.
+// Banner uploads are the one legitimate exception (a base64 image can run
+// into the megabytes), so that single route gets its own larger parser
+// instead of loosening the limit for everything else.
+const smallJsonParser  = express.json({ limit: '64kb' });
+const bannerJsonParser = express.json({ limit: '4mb' });
+app.use((req, res, next) => (req.path === '/admin/banners/set' ? bannerJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
 
@@ -184,6 +191,20 @@ async function getProductByKey(key) {
   const list = await getProducts();
   return list.find(p => p.key === key) || null;
 }
+// Admin-uploaded banner overrides, keyed by BANNER_KEYS slot name. Only
+// slots the owner has actually replaced are ever returned to clients — an
+// unset slot means "keep showing the app's own baked-in default image",
+// never an empty/broken src.
+let _bannersCache = null, _bannersCacheTs = 0;
+async function getBannerOverrides() {
+  if (Date.now() - _bannersCacheTs < 60 * 1000 && _bannersCache) return _bannersCache;
+  try {
+    const snap = await db.collection('banners').doc('main').get();
+    _bannersCache = snap.exists ? snap.data() : {};
+  } catch (_) { _bannersCache = _bannersCache || {}; }
+  _bannersCacheTs = Date.now();
+  return _bannersCache;
+}
 
 // ── HELPERS ──
 function fmtUGX(n) { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
@@ -223,6 +244,22 @@ function cleanPhone(raw) {
 // value can never reach storage, break the NETWORK_COLORS badge lookup in
 // the UI, or masquerade as a network the payment gateway doesn't recognise.
 const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
+
+// Admin-editable banner slots — every named key the client's baked-in
+// CHOCO_BANNERS object ships with a default for. An admin override is
+// merged over the client's own default at load time (GET /public/banners),
+// so leaving a slot untouched keeps showing the shipped default forever —
+// nothing breaks if the owner never uploads anything.
+const BANNER_KEYS = new Set([
+  'assortment', 'lavacake', 'barstack', 'giftbox', 'basket', 'marscrate',
+  'ganache', 'factory2', 'factory1', 'darkbar', 'rocherstack', 'cookies',
+  'bonbon', 'truffle', 'snickersplate', 'snickerscookie'
+]);
+// Hard cap on a single banner's stored size (raw data-URI string length) —
+// keeps one oversized upload from bloating the M0 free-tier database or
+// slowing down every client's /public/banners fetch. ~2MB of actual image
+// bytes, accounting for base64's ~37% overhead.
+const BANNER_MAX_LEN = 2_800_000;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 ambiguity
 function randCode(n = 6) {
   return Array.from(crypto.randomBytes(n)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
@@ -421,6 +458,60 @@ function logAdminAction(req, action, meta) {
     createdAt: FieldValue.serverTimestamp()
   }).catch(() => {});
 }
+
+// ── ADMIN PUSH NOTIFICATIONS ──
+// Fired on exactly two events: a new withdrawal request, and a deposit
+// completing. Every registered admin/staff device gets both equally — no
+// owner-vs-staff distinction here. Reuses the SAME Firebase project as user
+// login (public client config, safe to duplicate into admin.html) — no
+// separate Firebase project needed. A push failure must never break the
+// money flow that triggered it, so this never throws.
+async function sendAdminPush(title, body, data) {
+  try {
+    const snap = await db.collection('adminPushTokens').get();
+    if (snap.empty) return;
+    const tokens = snap.docs.map(d => d.id);
+    const resp = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      data: data || {},
+    });
+    // Prune tokens Firebase reports as dead/unregistered so the list doesn't
+    // grow stale forever.
+    if (resp && Array.isArray(resp.responses)) {
+      resp.responses.forEach((r, i) => {
+        if (!r.success && /registration-token-not-registered|invalid-registration-token/.test(String(r.error?.code || '')))
+          db.collection('adminPushTokens').doc(tokens[i]).delete().catch(() => {});
+      });
+    }
+  } catch (e) {
+    console.error('Admin push error:', e.message);
+  }
+}
+app.post('/admin/push/register', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const token = String(req.body.token || '');
+  if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
+  try {
+    await db.collection('adminPushTokens').doc(token).set({
+      username: req.adminUser?.username || 'owner', updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not register for push' });
+  }
+});
+app.post('/admin/push/unregister', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const token = String(req.body.token || '');
+  if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
+  try {
+    await db.collection('adminPushTokens').doc(token).delete();
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not unregister' });
+  }
+});
 
 // ── MARZPAY (deposits via collect-money, withdrawals via send-money) ──
 const PROVIDER_BUSY_MSG = 'The mobile-money service is temporarily busy. Please try again shortly.';
@@ -721,6 +812,15 @@ app.get('/public/settings', async (_req, res) => {
 });
 app.get('/public/products', async (_req, res) => {
   res.json({ status: 'success', products: await getProducts() });
+});
+app.get('/public/banners', async (_req, res) => {
+  const overrides = await getBannerOverrides();
+  // Only ever return keys the owner actually set — anything absent/null
+  // means the client keeps its own shipped default, so this endpoint being
+  // empty (the common case, nothing uploaded yet) changes nothing at all.
+  const banners = {};
+  for (const k of BANNER_KEYS) if (overrides[k]) banners[k] = overrides[k];
+  res.json({ status: 'success', banners });
 });
 
 // ── ACTIVITY FEED — simulated, NOT real transactions (same as Chronova's
@@ -1064,7 +1164,7 @@ async function creditDeposit(depDoc) {
   if (_creditingDeposits.has(depDoc.id)) return false;
   _creditingDeposits.add(depDoc.id);
   try {
-    let credited = false;
+    let credited = false, justCredited = false, creditedAmount = 0;
     await withLock('dep:' + depDoc.id, async () => {
       const fresh = await depDoc.ref.get();
       if (!fresh.exists || fresh.data().status === 'matched') { credited = fresh.exists; return; }
@@ -1079,8 +1179,12 @@ async function creditDeposit(depDoc) {
           createdAt: FieldValue.serverTimestamp()
         });
       });
-      credited = true;
+      credited = true; justCredited = true; creditedAmount = fresh.data().amount;
     });
+    // Only on a REAL new credit (never on an idempotent replay/no-op) —
+    // otherwise a retried webhook would fire a duplicate notification for
+    // money that was already credited long ago.
+    if (justCredited) sendAdminPush('Deposit completed', `${fmtUGX(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id });
     return credited;
   } finally { _creditingDeposits.delete(depDoc.id); }
 }
@@ -1269,6 +1373,7 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not process the cash-out right now. Please try again.') });
     }
     await witRef.update({ marzTxUuid: mpData.data?.transaction?.uuid || null });
+    sendAdminPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)})`, { type: 'withdrawal', withdrawalId: witId });
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested — net ${fmtUGX(net)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', message: e.message });
@@ -1621,6 +1726,44 @@ app.post('/admin/settings/update', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save settings' });
+  }
+});
+app.get('/admin/banners', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const overrides = await getBannerOverrides();
+  const banners = {};
+  for (const k of BANNER_KEYS) banners[k] = overrides[k] || null;
+  res.json({ status: 'success', banners });
+});
+app.post('/admin/banners/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const key = String(req.body.key || '');
+  const image = String(req.body.image || '');
+  if (!BANNER_KEYS.has(key)) return res.status(400).json({ status: 'error', message: 'Unknown banner slot' });
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(image))
+    return res.status(400).json({ status: 'error', message: 'Upload a PNG, JPEG, WEBP or GIF image' });
+  if (image.length > BANNER_MAX_LEN)
+    return res.status(400).json({ status: 'error', message: 'Image is too large — please use a smaller file (~2MB max)' });
+  try {
+    await db.collection('banners').doc('main').set({ [key]: image }, { merge: true });
+    _bannersCacheTs = 0;
+    logAdminAction(req, 'banner_set', { key });
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not save this banner' });
+  }
+});
+app.post('/admin/banners/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const key = String(req.body.key || '');
+  if (!BANNER_KEYS.has(key)) return res.status(400).json({ status: 'error', message: 'Unknown banner slot' });
+  try {
+    await db.collection('banners').doc('main').update({ [key]: FieldValue.delete() });
+    _bannersCacheTs = 0;
+    logAdminAction(req, 'banner_cleared', { key });
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not revert this banner' });
   }
 });
 app.get('/admin/products', async (req, res) => {
@@ -2202,6 +2345,18 @@ function runReconciler() {
 }
 
 app.get('/', (_req, res) => res.json({ status: 'ok', service: 'ChocoMCC backend' }));
+
+// Catches body-parser failures (oversized payload, malformed JSON) that
+// would otherwise fall through to Express's default HTML error page — every
+// response from this API, success or failure, should be JSON.
+app.use((err, _req, res, _next) => {
+  if (err && err.type === 'entity.too.large')
+    return res.status(413).json({ status: 'error', message: 'Request is too large' });
+  if (err && err.type === 'entity.parse.failed')
+    return res.status(400).json({ status: 'error', message: 'Malformed request body' });
+  console.error('Unhandled request error:', err && err.message);
+  res.status(500).json({ status: 'error', message: 'Something went wrong' });
+});
 
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';

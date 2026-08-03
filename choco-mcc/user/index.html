@@ -873,6 +873,14 @@ async function syncPublicConfig(){
     var r2 = await api('/public/products');
     if(r2 && r2.status==='success' && Array.isArray(r2.products) && r2.products.length) PRODUCTS = r2.products;
   }catch(e){}
+  // Admin-uploaded banner overrides merge over the shipped CHOCO_BANNERS
+  // defaults in place — an untouched slot is simply absent from the
+  // response, so nothing here ever replaces a default with something
+  // missing/blank.
+  try{
+    var r3 = await api('/public/banners');
+    if(r3 && r3.status==='success' && r3.banners) Object.assign(CHOCO_BANNERS, r3.banners);
+  }catch(e){}
 }
 function serverTodayKey(){
   var d = new Date(Date.now()+3*3600000);

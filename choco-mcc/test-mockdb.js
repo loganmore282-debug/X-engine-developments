@@ -23,7 +23,8 @@ function applyPatch(target, patch) {
       const arr = Array.isArray(target[k]) ? target[k] : [];
       for (const item of v.vs) if (!arr.some(x => JSON.stringify(x) === JSON.stringify(item))) arr.push(item);
       target[k] = arr;
-    } else target[k] = clone(v);
+    } else if (v && typeof v === 'object' && v[OP] === 'del') delete target[k];
+    else target[k] = clone(v);
   }
 }
 
@@ -135,6 +136,7 @@ const FieldValue = {
   increment: n => ({ [OP]: 'inc', n }),
   serverTimestamp: () => ({ [OP]: 'ts' }),
   arrayUnion: (...vs) => ({ [OP]: 'union', vs }),
+  delete: () => ({ [OP]: 'del' }),
 };
 
 module.exports = {

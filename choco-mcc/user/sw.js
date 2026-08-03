@@ -32,7 +32,10 @@
 // current/target counts (0/5, 1/5, …), claim button below each card.
 // v9: app-wide loading spinner replaces plain "Loading…" text; withdraw
 // screen shows the (admin-editable) daily cash-out cap.
-const CACHE = 'chocomcc-shell-v9';
+// v10: admin-uploaded banner overrides now merge over the app's own
+// baked-in CHOCO_BANNERS images (GET /public/banners) — no visible change
+// until an admin actually uploads one.
+const CACHE = 'chocomcc-shell-v10';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
