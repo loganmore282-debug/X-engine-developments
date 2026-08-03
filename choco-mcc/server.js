@@ -574,6 +574,19 @@ app.get('/public/products', async (_req, res) => {
 // feed — global/synchronized is the point, not authenticity. Never swap
 // this for real transaction data.
 const _WIRE_STEP = 5000, _WIRE_CAP = 500000; // matches the real min-withdraw multiple/ceiling
+// A broad spread of realistic deposit sizes — was previously just the raw
+// product-price list (as few as 7-10 distinct numbers), so an 18-row feed
+// kept reusing the same handful of amounts and visibly looked like it was
+// "just rotating" instead of a real, varied stream of people topping up.
+// This ladder covers the whole realistic range at the round numbers a
+// mobile-money top-up actually comes in (including odd-looking-but-real
+// ones like 150,000/180,000), and is unioned with the live product prices
+// below so a purchase-sized deposit still shows up too.
+const _DEPOSIT_LADDER = [
+  10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000, 60000,
+  70000, 80000, 90000, 100000, 120000, 150000, 180000, 200000, 250000,
+  300000, 350000, 400000, 450000, 500000, 600000, 700000, 800000, 900000, 1000000
+];
 // Draws a masked number never yet used in THIS batch (`used`) — plain
 // Math.random() draws let the same last-4-digits show up twice in one
 // 18-row feed often enough to be noticeable, which looked like the same
@@ -586,12 +599,12 @@ function maskedMsisdn(used) {
   return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
 }
 async function buildActivityFeed() {
-  let depositPool = [];
+  let depositPool = _DEPOSIT_LADDER.slice();
   try {
     const products = await getProducts();
-    depositPool = products.map(p => Number(p.price)).filter(n => n > 0);
+    const prices = products.map(p => Number(p.price)).filter(n => n > 0);
+    depositPool = Array.from(new Set(depositPool.concat(prices)));
   } catch (_) {}
-  if (!depositPool.length) depositPool = [30000, 90000, 200000];
   const withdrawPool = [];
   for (let a = _WIRE_STEP; a <= _WIRE_CAP; a += _WIRE_STEP) withdrawPool.push(a);
   const rows = [];
