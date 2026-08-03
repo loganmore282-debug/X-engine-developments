@@ -290,7 +290,7 @@ async function setupFundedUser(uid, phone, balance) {
   check('verify never changes totalWithdrawn', userDoc(G).totalWithdrawn === totalWithdrawnBeforeVerify, userDoc(G).totalWithdrawn);
 
   console.log('\n-- /admin/badges counts "pending" (awaiting-approval), not "processing" --');
-  const badgesR = await realFetch(BASE + '/admin/badges', { method: 'POST', headers: adminHeaders2, body: '{}' });
+  const badgesR = await realFetch(BASE + '/admin/badges', { method: 'GET', headers: adminHeaders2 });
   const badgesBody = await badgesR.json();
   const stillPending = [...withdrawals().values()].filter(w => w.status === 'pending').length;
   check('pendingWithdrawals badge reflects "pending" count', badgesBody?.pendingWithdrawals === stillPending, { badgesBody, stillPending });

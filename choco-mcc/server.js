@@ -2423,7 +2423,7 @@ app.post('/admin/promocodes/deactivate', async (req, res) => {
 // ═══════════════════════════════════════════
 // ADMIN — DASHBOARD STATS / ANALYTICS / BADGES
 // ═══════════════════════════════════════════
-app.post('/admin/stats', async (req, res) => {
+app.get('/admin/stats', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const [usersSnap, pendingWitSnap, activeInvSnap] = await Promise.all([
@@ -2461,7 +2461,7 @@ app.post('/admin/stats', async (req, res) => {
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.post('/admin/badges', async (req, res) => {
+app.get('/admin/badges', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('withdrawals').where('status', '==', 'pending').get();
