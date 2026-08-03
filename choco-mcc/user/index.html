@@ -490,6 +490,16 @@
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Add Funds</div></div>
     <div class="photo-banner" id="depositBanner"></div>
     <div class="info-box">Funds are added to your wallet once your mobile-money payment is confirmed.</div>
+    <div class="info-box" style="background:var(--cream-deep);color:var(--cocoa-soft)">
+      <b style="color:var(--cocoa);display:block;margin-bottom:2px;font-size:12.5px">Deposit procedure</b>
+      <ul class="pay-steps" style="margin-top:6px">
+        <li>Enter the amount you want to add</li>
+        <li>Choose your mobile-money network</li>
+        <li>Enter the number you're paying from (no leading 0)</li>
+        <li>Tap Add Funds, then confirm the prompt on your phone</li>
+        <li>Your wallet updates automatically once confirmed</li>
+      </ul>
+    </div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
       <input class="famt" id="depAmt" type="number" placeholder="0">
@@ -520,10 +530,10 @@
   <div class="overlay" id="ovDepositStatus">
     <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Add Funds</div></div>
     <div class="pay-status-card">
-      <div class="pay-status-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg></div>
-      <h3>Payment Initiated Successfully!</h3>
+      <div class="pay-status-ic" id="depStatusIc"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg></div>
+      <h3 id="depStatusTitle">Payment Initiated Successfully!</h3>
       <p class="muted" id="depStatusPhone" style="font-size:13.5px;margin-top:6px">You will receive a payment prompt on your phone shortly.</p>
-      <ul class="pay-steps">
+      <ul class="pay-steps" id="depStatusSteps">
         <li>Check your phone for the payment request</li>
         <li>Enter your mobile-money PIN to confirm</li>
         <li>We'll verify the payment automatically</li>
@@ -539,7 +549,7 @@
         <span class="verify-spin" id="depVerifySpin" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>
         <span id="depVerifyLabel">Verify Payment</span>
       </button>
-      <div style="text-align:center;margin-top:14px"><span class="muted" onclick="cancelDepositStatus()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
+      <div style="text-align:center;margin-top:14px" id="depCancelRow"><span class="muted" onclick="cancelDepositStatus()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
       <div style="text-align:center;margin-top:8px" class="muted" id="depStatusAttempt" style="font-size:11.5px"></div>
     </div>
   </div>
@@ -1504,17 +1514,39 @@ async function redeemGiftCode(){
 }
 
 /* ====================== DEPOSIT STATUS (auto-verifying) ====================== */
-var _depPollTimer = null, _depPollAttempt = 0, _depPollMax = 120, _depPollId = null;
+var _depPollTimer = null, _depPollAttempt = 0, _depPollMax = 120, _depPollId = null, _depConfirmed = false;
+var _depIcPending = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg>';
+var _depIcSuccess = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
 function openDepositStatus(depositId, reference, phone){
-  _depPollId = depositId; _depPollAttempt = 0;
+  _depPollId = depositId; _depPollAttempt = 0; _depConfirmed = false;
+  document.getElementById('depStatusIc').innerHTML = _depIcPending;
+  document.getElementById('depStatusTitle').textContent = 'Payment Initiated Successfully!';
   document.getElementById('depStatusPhone').textContent = 'You will receive a payment prompt on '+phone+' shortly.';
+  document.getElementById('depStatusSteps').style.display = '';
   document.getElementById('depStatusRef').textContent = reference;
   setDepStatusMsg('pending', 'Payment initiated — check your phone.');
   document.getElementById('depStatusAttempt').textContent = '';
+  document.getElementById('depCancelRow').style.display = '';
+  var btn = document.getElementById('depVerifyBtn');
+  btn.onclick = manualVerifyDeposit;
+  setVerifySpinning(false);
   openOverlay('depositStatus');
   clearInterval(_depPollTimer);
   _depPollTimer = setInterval(pollDepositStatus, 3000);
   pollDepositStatus();
+}
+function showDepositSuccess(){
+  _depConfirmed = true;
+  document.getElementById('depStatusIc').innerHTML = _depIcSuccess;
+  document.getElementById('depStatusTitle').textContent = 'Payment Successful!';
+  document.getElementById('depStatusPhone').textContent = 'Your wallet has been credited.';
+  document.getElementById('depStatusSteps').style.display = 'none';
+  document.getElementById('depStatusAttempt').textContent = '';
+  document.getElementById('depCancelRow').style.display = 'none';
+  var btn = document.getElementById('depVerifyBtn');
+  document.getElementById('depVerifyLabel').textContent = 'Continue to Dashboard';
+  btn.disabled = false;
+  btn.onclick = function(){ closeOverlay(); renderAll(); };
 }
 function setDepStatusMsg(kind, text){
   var el = document.getElementById('depStatusMsg');
@@ -1532,7 +1564,7 @@ function setVerifySpinning(on){
   var spin = document.getElementById('depVerifySpin');
   var label = document.getElementById('depVerifyLabel');
   if(spin) spin.style.display = on ? 'inline-flex' : 'none';
-  if(label) label.textContent = on ? 'Verifying…' : 'Verify Payment';
+  if(label && !_depConfirmed) label.textContent = on ? 'Verifying…' : 'Verify Payment';
 }
 async function pollDepositStatus(manual){
   if(!_depPollId || _depPollChecking) return;
@@ -1549,6 +1581,7 @@ async function pollDepositStatus(manual){
       if(r.state==='matched'){
         clearInterval(_depPollTimer); _depPollTimer=null;
         setDepStatusMsg('matched', 'Payment confirmed — funds added to your wallet.');
+        showDepositSuccess();
         if(manual) toast('Successful — funds added to your wallet');
         await refreshFromServer(); renderAll();
         return;
