@@ -674,7 +674,7 @@ app.post('/team/milestone/claim', async (req, res) => {
       await db.runTransaction(async t => {
         const uRef = db.collection('users').doc(userId);
         const fresh = await t.get(uRef);
-        if (!fresh.exists || fresh.data()[claimFlag]) return;
+        if (!fresh.exists || fresh.data()[claimFlag] || fresh.data().status === 'banned') return;
         const { date, time } = nowStr();
         t.update(uRef, {
           walletBalance: FieldValue.increment(m.reward),
@@ -1382,6 +1382,9 @@ app.post('/redeem', async (req, res) => {
     // through one place, or two concurrent redemptions could both read the
     // same usedBy array below maxUses and both slip through.
     await withLock('redeem:' + code, async () => {
+      const userSnap = await db.collection('users').doc(userId).get();
+      if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+      if (userSnap.data().status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
       const codeSnap = await db.collection('promoCodes').where('code', '==', code).limit(1).get();
       if (codeSnap.empty) return res.status(400).json({ status: 'error', message: "That code isn't valid" });
       const codeDoc = codeSnap.docs[0];
