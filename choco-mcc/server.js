@@ -443,6 +443,48 @@ app.get('/public/products', async (_req, res) => {
   res.json({ status: 'success', products: await getProducts() });
 });
 
+// ── ACTIVITY FEED — simulated, NOT real transactions (same as Chronova's
+// wireHtml()/buildActivityFeed(), explicitly the approved pattern for this
+// product line). Built ONCE here, server-side, and shared by every client
+// (cached ~25s) so everyone watching at the same moment sees the identical
+// feed — global/synchronized is the point, not authenticity. Never swap
+// this for real transaction data.
+const _WIRE_STEP = 5000, _WIRE_CAP = 500000; // matches the real min-withdraw multiple/ceiling
+function maskedMsisdn() { return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0'); }
+async function buildActivityFeed() {
+  let depositPool = [];
+  try {
+    const products = await getProducts();
+    depositPool = products.map(p => Number(p.price)).filter(n => n > 0);
+  } catch (_) {}
+  if (!depositPool.length) depositPool = [30000, 90000, 200000];
+  const withdrawPool = [];
+  for (let a = _WIRE_STEP; a <= _WIRE_CAP; a += _WIRE_STEP) withdrawPool.push(a);
+  const rows = [];
+  for (let i = 0; i < 18; i++) {
+    const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
+    const pool = kind === 'deposit' ? depositPool : withdrawPool;
+    rows.push({ kind, phone: maskedMsisdn(), amount: pool[Math.floor(Math.random() * pool.length)] });
+  }
+  return rows;
+}
+let _activityFeed = [], _activityTs = 0, _activityBuilding = false;
+app.get('/public/activity-feed', async (_req, res) => {
+  if (!_activityFeed.length && !_activityBuilding) {
+    _activityBuilding = true;
+    try { _activityFeed = await buildActivityFeed(); _activityTs = Date.now(); }
+    catch (e) { console.error('Activity feed error:', e.message); }
+    finally { _activityBuilding = false; }
+  } else if (!_activityBuilding && Date.now() - _activityTs > 25000) {
+    _activityBuilding = true;
+    buildActivityFeed()
+      .then(f => { _activityFeed = f; _activityTs = Date.now(); })
+      .catch(e => console.error('Activity feed error:', e.message))
+      .finally(() => { _activityBuilding = false; });
+  }
+  res.json({ status: 'success', feed: _activityFeed });
+});
+
 // ═══════════════════════════════════════════
 // ACCOUNT / REGISTER / CHECK-IN
 // ═══════════════════════════════════════════
@@ -1039,11 +1081,75 @@ app.post('/admin/products/save', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// PENDING-PAYMENT RECONCILER
+// A deposit/withdrawal's status was previously ONLY ever updated by: (a) the
+// client polling while the "Payment Initiated" screen happens to be open, or
+// (b) MarzPay's webhook actually arriving. Close either screen or miss the
+// webhook and the record just sat at 'pending'/'processing' forever, looking
+// stuck even though MarzPay itself had long since resolved it. This sweep
+// (same role as Chronova's pollPendingPayments) periodically re-checks every
+// still-open record against MarzPay's own status endpoint, independent of
+// whether any client is even looking.
+async function reconcilePendingDeposits() {
+  try {
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(50).get();
+    for (const doc of snap.docs) {
+      const dep = doc.data();
+      if (!dep.marzTxUuid) continue;
+      const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
+      if (SUCCESS_STATUSES.has(marzStatus)) await creditDeposit(doc);
+      else if (FAILED_STATUSES.has(marzStatus)) await doc.ref.update({ status: 'failed', failureReason: 'Payment was not completed' }).catch(() => {});
+    }
+  } catch (e) { console.error('Reconcile deposits error:', e.message); }
+}
+// A deposit stuck at 'initiating' with no marzTxUuid never got a usable
+// response from MarzPay (the network-exception path in /deposit/marzpay
+// deliberately leaves it this way rather than guessing) — there is no uuid
+// to poll, so it can never resolve on its own. Only give up on it once it's
+// old enough that a real in-flight payment would have long since settled.
+async function reconcileStuckInitiating() {
+  try {
+    const cutoff = new Date(Date.now() - 5 * 60000);
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'initiating').where('createdAt', '<', cutoff).limit(50).get();
+    for (const doc of snap.docs) {
+      await doc.ref.update({ status: 'failed', failureReason: 'Payment could not be confirmed' }).catch(() => {});
+    }
+  } catch (e) { console.error('Reconcile stuck deposits error:', e.message); }
+}
+async function reconcilePendingWithdrawals() {
+  try {
+    const snap = await db.collection('withdrawals').where('status', '==', 'processing').limit(50).get();
+    for (const doc of snap.docs) {
+      const wit = doc.data();
+      if (!wit.marzTxUuid) continue;
+      const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
+      if (SUCCESS_STATUSES.has(marzStatus)) {
+        await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
+      } else if (FAILED_STATUSES.has(marzStatus)) {
+        await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {
+          const fresh = await t.get(doc.ref);
+          if (!fresh.exists || fresh.data().status !== 'processing') return;
+          const uRef = db.collection('users').doc(wit.userId);
+          t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
+          t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
+        }));
+      }
+    }
+  } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
+}
+function runReconciler() {
+  reconcilePendingDeposits().then(reconcileStuckInitiating).then(reconcilePendingWithdrawals).catch(() => {});
+}
+
 app.get('/', (_req, res) => res.json({ status: 'ok', service: 'ChocoMCC backend' }));
 
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
 if (!MONGODB_URI) { console.error('MONGODB_URI env var is required'); process.exit(1); }
 connectMongo(MONGODB_URI)
-  .then(() => app.listen(PORT, () => console.log(`ChocoMCC backend listening on :${PORT}`)))
+  .then(() => {
+    app.listen(PORT, () => console.log(`ChocoMCC backend listening on :${PORT}`));
+    setInterval(runReconciler, 30 * 1000);
+    setTimeout(runReconciler, 15 * 1000);
+  })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

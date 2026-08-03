@@ -102,7 +102,9 @@
   .choc-price{font-size:12px;color:var(--caramel-deep);font-weight:800;margin-top:3px;}
   .choc-ret{font-size:10.5px;color:var(--mint);font-weight:700;margin-top:2px;}
 
-  .ticker{margin:0 20px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:6px 0;overflow:hidden;}
+  .ticker{margin:0 20px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;height:224px;}
+  .ticker-track{display:flex;flex-direction:column;animation:tickerFlow 36s linear infinite;}
+  @keyframes tickerFlow{from{transform:translateY(-50%)}to{transform:translateY(0)}}
   .ticker-row{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:12.5px;border-bottom:1px solid var(--line);}
   .ticker-row:last-child{border-bottom:none;}
   .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
@@ -800,6 +802,7 @@ function logout(){
   // A shared device could sign a different member in next — never leave the
   // previous member's cached top-up/cash-out records around to leak through.
   _recordsLoaded = { accrued:true, topups:false, cashouts:false };
+  stopActivityFeed();
   document.getElementById('app').style.display='none';
   document.getElementById('authScreen').style.display='flex';
 }
@@ -808,6 +811,7 @@ function enterApp(){
   document.getElementById('authScreen').style.display='none';
   document.getElementById('app').style.display='block';
   renderAll();
+  startActivityFeed();
 }
 
 // Fires once Firebase resolves whether a session is already signed in (silent
@@ -912,15 +916,34 @@ function renderEarnings(){
       '</div>';
   }).join('');
 }
+// Simulated global activity, NOT the signed-in member's own transactions —
+// same "not real, and not supposed to be" pattern as Chronova's ticker.
+// Fetched once from the server (shared/synchronized across every viewer,
+// not fabricated independently per device) and refreshed periodically; the
+// track is rendered TWICE back to back and animated from -50% to 0% so it
+// flows continuously downward and loops without a visible seam.
+var _activityFeed = [];
+var _activityFeedTimer = null;
+async function refreshActivityFeed(){
+  var r = await api('/public/activity-feed');
+  if(r.status==='success'){ _activityFeed = r.feed||[]; renderTicker(); }
+}
+function startActivityFeed(){
+  refreshActivityFeed();
+  clearInterval(_activityFeedTimer);
+  _activityFeedTimer = setInterval(refreshActivityFeed, 27000);
+}
+function stopActivityFeed(){ clearInterval(_activityFeedTimer); _activityFeedTimer = null; }
 function renderTicker(){
-  var list = STATE.transactions.slice(0,6);
-  if(!list.length){ document.getElementById('tickerBox').innerHTML = '<div class="empty">No activity yet.</div>'; return; }
-  document.getElementById('tickerBox').innerHTML = list.map(function(t){
-    var pos = t.amount>=0;
-    return '<div class="ticker-row"><span class="dot" style="background:'+(pos?'var(--mint)':'var(--berry)')+'"></span>'+
-      '<span style="flex:1">'+t.desc+'</span>'+
-      '<b style="color:'+(pos?'var(--mint)':'var(--berry)')+'">'+(pos?'+':'')+ugx(t.amount)+'</b></div>';
+  var box = document.getElementById('tickerBox');
+  if(!_activityFeed.length){ box.innerHTML = ''; return; }
+  var rows = _activityFeed.map(function(f){
+    var isDep = f.kind==='deposit';
+    return '<div class="ticker-row"><span class="dot" style="background:'+(isDep?'var(--mint)':'var(--berry)')+'"></span>'+
+      '<span style="flex:1">'+f.phone+' '+(isDep?'added funds':'cashed out')+'</span>'+
+      '<b style="color:'+(isDep?'var(--mint)':'var(--berry)')+'">'+(isDep?'+':'-')+ugx(f.amount).replace('UGX ','')+'</b></div>';
   }).join('');
+  box.innerHTML = '<div class="ticker-track">'+rows+rows+'</div>';
 }
 // ── RECORDS — Accrued (income) / Topups (deposits) / Cash Outs (withdrawals) ──
 // Same statement-card shape as Chronova's Records screen: a reference/label
