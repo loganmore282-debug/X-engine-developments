@@ -921,27 +921,68 @@ app.post('/deposit/marzpay/status', async (req, res) => {
   }
 });
 
-// MarzPay webhook — never trusted blindly; re-confirms via marzGetCollectStatus
-// before crediting anything, so a forged callback body is worthless.
+// MarzPay webhook. Respond 200 immediately (MarzPay retries on anything
+// else, and slow processing here shouldn't hold the connection open), then
+// do the real work async.
+//
+// FIXED BUG: this used to require a stored marzTxUuid before it would do
+// ANYTHING — `if (uuid) { ...only path that credits or fails... }` with no
+// else branch. Whenever the initial collect-money response didn't hand back
+// a uuid (happens; MarzPay's docs don't guarantee it on every response
+// shape), the deposit had NO possible path to ever resolve: the reconciler
+// below also skips docs with no marzTxUuid (nothing to poll), so the record
+// sat at 'pending' — shown to the user as "Processing" — forever, even
+// though the customer really paid. That is the exact "successful deposit,
+// no record moves off Processing" bug.
+//
+// Fix (mirrors Chronova's handleDepositCallback, the same product line's
+// already-proven pattern): read the webhook's OWN reported status/uuid
+// directly. If we already have a stored uuid, still re-confirm via a real
+// GET before crediting (defense in depth against a forged callback body).
+// If we don't have one yet, trust the webhook's status — but the anti-forgery
+// protection isn't "require a uuid", it's "always credit OUR OWN stored
+// amount, never anything from the callback body" (creditDeposit() already
+// only ever reads amount off our own doc). A terminal-state doc (already
+// matched/failed) is never touched again either way.
 app.post('/deposit/callback', async (req, res) => {
+  res.status(200).json({ status: 'ok' });
   try {
-    const reference = req.body?.data?.reference || req.body?.reference;
-    if (!reference) return res.status(200).json({ status: 'ignored' });
+    const body = req.body || {};
+    const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
+    if (!reference) return;
+    const rawStatus = String(
+      body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || ''
+    ).toLowerCase();
+    const isSuccess = SUCCESS_STATUSES.has(rawStatus);
+    const isFailed  = FAILED_STATUSES.has(rawStatus);
+    if (!isSuccess && !isFailed) return;
     // MarzPay echoes back the UUID we sent as `reference` — that's our
     // marzReference field, not the B-format display `ref`.
     const depSnap = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
-    if (depSnap.empty) return res.status(200).json({ status: 'ignored' });
+    if (depSnap.empty) return;
     const doc = depSnap.docs[0];
-    const uuid = doc.data().marzTxUuid;
-    if (uuid) {
-      const marzStatus = await marzGetCollectStatus(uuid);
-      if (SUCCESS_STATUSES.has(marzStatus)) await creditDeposit(doc);
-      else if (FAILED_STATUSES.has(marzStatus)) await doc.ref.update({ status: 'failed', failureReason: 'Payment was not completed' }).catch(() => {});
+    const dep = doc.data();
+    if (dep.status !== 'pending' && dep.status !== 'initiating') return; // already resolved — never downgrade
+    // Self-heal a uuid we never captured, if the webhook body happens to
+    // carry one — helps the polling reconciler on any future retry too.
+    const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
+    if (!dep.marzTxUuid && webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
+    const uuid = dep.marzTxUuid || webhookUuid;
+    if (isSuccess) {
+      if (uuid) {
+        const marzStatus = await marzGetCollectStatus(uuid);
+        if (marzStatus && !SUCCESS_STATUSES.has(marzStatus)) return; // webhook disagrees with a real re-check — don't credit
+      }
+      await creditDeposit(doc);
+    } else if (isFailed) {
+      if (uuid) {
+        const marzStatus = await marzGetCollectStatus(uuid);
+        if (marzStatus && !FAILED_STATUSES.has(marzStatus)) return; // a transient/ambiguous re-check — leave it pending, don't decline
+      }
+      await doc.ref.update({ status: 'failed', failureReason: 'Payment was not completed' }).catch(() => {});
     }
-    res.status(200).json({ status: 'ok' });
   } catch (e) {
     console.error('Deposit callback error:', e.message);
-    res.status(200).json({ status: 'error' }); // still 200 — MarzPay retries on non-2xx
   }
 });
 
@@ -1059,23 +1100,55 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
   }
 });
 
+// Same self-heal fix as /deposit/callback — required marzTxUuid before doing
+// anything at all, so a payout whose initial send-money response omitted a
+// uuid could never be marked processed by this webhook. Success now goes off
+// the webhook's own reported status (with a real GET re-check as a
+// cross-check whenever a uuid IS available). Failure stays strict — it is
+// NEVER trusted without a stored uuid and a re-check confirming it, because
+// the wallet is already debited by this point; a forged "failed" webhook
+// refunding a payout that actually went out would be double money leaving
+// the platform.
 app.post('/withdraw/callback', async (req, res) => {
+  res.status(200).json({ status: 'ok' });
   try {
-    const reference = req.body?.data?.reference || req.body?.reference;
-    if (!reference) return res.status(200).json({ status: 'ignored' });
-    // MarzPay echoes back the UUID we sent as `reference` — that's marzReference.
+    const body = req.body || {};
+    const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
+    if (!reference) return;
+    const rawStatus = String(
+      body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || ''
+    ).toLowerCase();
+    const isSuccess = SUCCESS_STATUSES.has(rawStatus);
+    const isFailed  = FAILED_STATUSES.has(rawStatus);
+    if (!isSuccess && !isFailed) return;
     const witSnap = await db.collection('withdrawals').where('marzReference', '==', reference).limit(1).get();
-    if (witSnap.empty) return res.status(200).json({ status: 'ignored' });
+    if (witSnap.empty) return;
     const doc = witSnap.docs[0];
-    const uuid = doc.data().marzTxUuid;
-    if (uuid) {
+    const wit = doc.data();
+    if (wit.status !== 'processing') return; // already resolved — never downgrade
+    const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
+    if (!wit.marzTxUuid && webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
+    const uuid = wit.marzTxUuid || webhookUuid;
+    if (isSuccess) {
+      if (uuid) {
+        const marzStatus = await marzGetSendStatus(uuid);
+        if (marzStatus && !SUCCESS_STATUSES.has(marzStatus)) return;
+      }
+      await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
+    } else if (isFailed) {
+      if (!uuid) return; // nothing verifiable to re-check — leave it processing for the sweep/admin
       const marzStatus = await marzGetSendStatus(uuid);
-      if (SUCCESS_STATUSES.has(marzStatus)) await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
+      if (!FAILED_STATUSES.has(marzStatus)) return;
+      await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {
+        const fresh = await t.get(doc.ref);
+        if (!fresh.exists || fresh.data().status !== 'processing') return;
+        const uRef = db.collection('users').doc(wit.userId);
+        t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
+        t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
+      }));
     }
-    res.status(200).json({ status: 'ok' });
   } catch (e) {
     console.error('Withdraw callback error:', e.message);
-    res.status(200).json({ status: 'error' });
   }
 });
 
@@ -1832,17 +1905,15 @@ async function reconcilePendingDeposits() {
 // A deposit stuck at 'initiating' with no marzTxUuid never got a usable
 // response from MarzPay (the network-exception path in /deposit/marzpay
 // deliberately leaves it this way rather than guessing) — there is no uuid
-// to poll, so it can never resolve on its own. Only give up on it once it's
-// old enough that a real in-flight payment would have long since settled.
-async function reconcileStuckInitiating() {
-  try {
-    const cutoff = new Date(Date.now() - 5 * 60000);
-    const snap = await db.collection('pendingDeposits').where('status', '==', 'initiating').where('createdAt', '<', cutoff).limit(50).get();
-    for (const doc of snap.docs) {
-      await doc.ref.update({ status: 'failed', failureReason: 'Payment could not be confirmed' }).catch(() => {});
-    }
-  } catch (e) { console.error('Reconcile stuck deposits error:', e.message); }
-}
+// to poll it with directly. This used to auto-decline it after 5 minutes,
+// but that is exactly the "the server should not cancel my payment" bug:
+// mobile-money approval prompts can be actioned late, and the owner
+// confirmed a genuinely-late approval must still be able to settle rather
+// than being force-declined by a clock. So this no longer marks anything
+// failed on a timeout — it only ever resolves via truth: the webhook above
+// (now self-healing even with no stored uuid) or an admin's own
+// force-credit/force-decline call from the Deposits tab for a record that
+// genuinely never resolves.
 async function reconcilePendingWithdrawals() {
   try {
     const snap = await db.collection('withdrawals').where('status', '==', 'processing').limit(50).get();
@@ -1881,7 +1952,7 @@ async function reconcileCommissions() {
   } catch (e) { console.error('Reconcile commissions error:', e.message); }
 }
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcileStuckInitiating).then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
+  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
 }
 
 app.get('/', (_req, res) => res.json({ status: 'ok', service: 'ChocoMCC backend' }));

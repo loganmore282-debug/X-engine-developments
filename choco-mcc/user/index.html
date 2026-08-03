@@ -46,8 +46,10 @@
   .btn-dark{background:var(--cocoa);color:#fff;}
   .btn-ghost{background:var(--cream-deep);color:var(--cocoa);}
   .btn-berry{background:linear-gradient(135deg,var(--berry),#9c2c3a);color:#fff;box-shadow:0 10px 20px -8px rgba(194,59,75,.5);}
-  .btn-block{width:100%;}
+  .btn-block{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;}
   .btn-sm{padding:9px 14px;font-size:13px;border-radius:12px;}
+  .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
+  @keyframes verifySpin{to{transform:rotate(360deg);}}
 
   /* ---------- Auth ---------- */
   #authScreen{min-height:100vh;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 26px;background:
@@ -447,7 +449,7 @@
 
   <!-- OVERLAYS -->
   <div class="overlay" id="ovDeposit">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Add Funds</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Add Funds</div></div>
     <div class="photo-banner" id="depositBanner"></div>
     <div class="info-box">Funds are added to your wallet once your mobile-money payment is confirmed.</div>
     <div class="form-card">
@@ -465,7 +467,7 @@
   </div>
 
   <div class="overlay" id="ovDepositStatus">
-    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Add Funds</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Add Funds</div></div>
     <div class="pay-status-card">
       <div class="pay-status-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg></div>
       <h3>Payment Initiated Successfully!</h3>
@@ -482,14 +484,17 @@
     </div>
     <div class="info-box" id="depStatusMsg" style="background:var(--caramel-pale);color:var(--caramel-deep)">Payment initiated — check your phone.</div>
     <div style="padding:0 20px">
-      <button class="btn btn-primary btn-block" id="depVerifyBtn" onclick="manualVerifyDeposit()">Verify Payment</button>
+      <button class="btn btn-primary btn-block" id="depVerifyBtn" onclick="manualVerifyDeposit()">
+        <span class="verify-spin" id="depVerifySpin" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>
+        <span id="depVerifyLabel">Verify Payment</span>
+      </button>
       <div style="text-align:center;margin-top:14px"><span class="muted" onclick="cancelDepositStatus()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
       <div style="text-align:center;margin-top:8px" class="muted" id="depStatusAttempt" style="font-size:11.5px"></div>
     </div>
   </div>
 
   <div class="overlay" id="ovWithdraw">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Cash Out</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Cash Out</div></div>
     <div class="photo-banner" id="withdrawBanner"></div>
     <div class="info-box">Minimum cash-out <b>UGX 10,000</b>. A service fee of <b>19%</b> applies to every cash-out.</div>
     <div id="witBankBox"></div>
@@ -503,7 +508,7 @@
   </div>
 
   <div class="overlay" id="ovSupport">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Customer Care</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Customer Care</div></div>
     <div class="photo-banner" id="supportBanner"></div>
     <div style="padding:6px 20px">
       <button class="menu-item" style="margin:0 0 10px" onclick="toast('Opens WhatsApp — wire your number in later')"><div class="menu-ic" style="background:var(--mint-pale);color:var(--mint)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4.5 20l1.3-3.7A8 8 0 1112 20a8 8 0 01-4.5-1.4L4.5 20z"/><path d="M9 10.3c0 2.8 2 4.7 4.7 4.7"/></svg></div><div class="menu-lbl">WhatsApp us</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
@@ -513,7 +518,7 @@
   </div>
 
   <div class="overlay" id="ovAbout">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">About ChocoMCC</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">About ChocoMCC</div></div>
     <div class="photo-banner" id="aboutBanner"></div>
     <div style="padding:6px 20px 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)">
       <p>ChocoMCC lets members build a stash of the world's best-loved chocolate tiers — from the everyday favourites to the boxed-gold classics — each paying a daily reward until it matures.</p><br>
@@ -522,7 +527,7 @@
   </div>
 
   <div class="overlay" id="ovRecords">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Records</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Records</div></div>
     <div class="photo-banner pb-sm" id="recordsBanner"></div>
     <div class="uline-tabs">
       <button class="uline-tab active" data-rt="accrued" onclick="setRecordsTab('accrued')">Accrued</button>
@@ -534,7 +539,7 @@
   </div>
 
   <div class="overlay" id="ovBindbank">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Bind Bank Card</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Bind Bank Card</div></div>
     <div class="photo-banner" id="bindbankBanner"></div>
     <div class="info-box">Save the mobile-money account you want cash-outs sent to. You can bind more than one and pick which to use at cash-out time.</div>
     <div id="bankList" style="padding:0 20px"></div>
@@ -542,13 +547,13 @@
   </div>
 
   <div class="overlay" id="ovMychoc">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">My Chocolates</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">My Chocolates</div></div>
     <div class="info-box">Every chocolate tier you own, running until it matures.</div>
     <div id="mychocList" style="padding:0 20px"></div>
   </div>
 
   <div class="overlay" id="ovEarnings">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title">Accrued Earnings</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Accrued Earnings</div></div>
     <div class="cards" style="margin:16px 20px"><div class="stat"><div class="n" style="color:var(--mint)" id="earningsTotal">UGX 0</div><div class="l">Total accrued so far</div></div></div>
     <div id="earningsList" style="padding:0 20px"></div>
   </div>
@@ -579,7 +584,7 @@
   </div>
 
   <div class="overlay" id="ovProduct">
-    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M15 5l-7 7 7 7"/></svg></button><div class="ov-title" id="pdTitle">Chocolate</div></div>
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title" id="pdTitle">Chocolate</div></div>
     <div id="pdBody"></div>
   </div>
 
@@ -1001,7 +1006,7 @@ var REC_TYPE_LABEL = { checkin:'Daily reward', cashback:'Chocolate cashback', co
 function recStatusInfo(s){
   s = String(s||'success').toLowerCase();
   if(['success','matched','processed'].indexOf(s)!==-1) return { label:'Completed', cls:'ok' };
-  if(['initiating','pending','processing'].indexOf(s)!==-1) return { label:'Processing', cls:'proc' };
+  if(['initiating','pending','processing'].indexOf(s)!==-1) return { label:'Settling', cls:'proc' };
   if(['failed','declined','cancelled','rejected','expired'].indexOf(s)!==-1) return { label:'Declined', cls:'bad' };
   return { label: s.charAt(0).toUpperCase()+s.slice(1), cls:'mut' };
 }
@@ -1012,8 +1017,16 @@ function setRecordsTab(t){
   renderRecords();
   loadRecordsTab(t).then(renderRecords);
 }
+// FIXED BUG: this used to `if(_recordsLoaded[t]) return;` — fetch the
+// Topups/Cash Outs list ONCE per app session and never again. Once you'd
+// opened Records > Topups a single time, every later visit this same
+// session showed that exact first snapshot forever, even after making a
+// brand-new deposit or a stuck one finally resolving server-side — it just
+// looked like "no record was created" / "still stuck on Processing" when
+// really the record was fine and simply never re-fetched. Now it always
+// asks the server fresh; _recordsLoaded stays only to gate the one-time
+// "Loading…" placeholder in renderRecords() below.
 async function loadRecordsTab(t){
-  if(_recordsLoaded[t]) return;
   if(t==='topups'){
     var r = await api('/deposits');
     if(r.status==='success'){ STATE.depositRecords = r.deposits; _recordsLoaded.topups = true; }
@@ -1261,11 +1274,18 @@ function setDepStatusMsg(kind, text){
 // but without this two requests can land back-to-back and briefly show a
 // stale attempt count or flicker the status message.
 var _depPollChecking = false;
+function setVerifySpinning(on){
+  var spin = document.getElementById('depVerifySpin');
+  var label = document.getElementById('depVerifyLabel');
+  if(spin) spin.style.display = on ? 'inline-flex' : 'none';
+  if(label) label.textContent = on ? 'Verifying…' : 'Verify Payment';
+}
 async function pollDepositStatus(manual){
   if(!_depPollId || _depPollChecking) return;
   _depPollChecking = true;
   var btn = document.getElementById('depVerifyBtn');
   if(btn) btn.disabled = true;
+  setVerifySpinning(true);
   try{
     _depPollAttempt++;
     var attEl = document.getElementById('depStatusAttempt');
@@ -1297,6 +1317,7 @@ async function pollDepositStatus(manual){
   } finally {
     _depPollChecking = false;
     if(btn) btn.disabled = false;
+    setVerifySpinning(false);
   }
 }
 function manualVerifyDeposit(){ pollDepositStatus(true); }
