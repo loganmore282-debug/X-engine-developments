@@ -12,8 +12,26 @@ const coll = name => {
   if (!store.has(name)) store.set(name, new Map());
   return store.get(name);
 };
-const clone = v => JSON.parse(JSON.stringify(v, (k, val) => val instanceof Date ? { __date: val.toISOString() } : val),
-  (k, val) => (val && val.__date) ? new Date(val.__date) : val);
+// A naive JSON.stringify(v, replacer)/JSON.parse(json, reviver) round-trip
+// can't preserve Date fields the way it looks like it should: Date has its
+// own .toJSON() (returns an ISO string), and JSON.stringify calls THAT
+// before the replacer ever sees the value — so `val instanceof Date` inside
+// the replacer is always false, and every Date field silently becomes a
+// plain string. That's invisible for code that only reads amounts/status,
+// but it broke settle-on-read date math (tsMillis() doesn't parse a plain
+// string) as soon anything needed to manipulate/re-read a timestamp field
+// through .data(). Walk the object manually instead of relying on
+// JSON.stringify's replacer for this.
+function clone(v) {
+  if (v instanceof Date) return new Date(v.getTime());
+  if (Array.isArray(v)) return v.map(clone);
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v)) out[k] = clone(v[k]);
+    return out;
+  }
+  return v;
+}
 
 function applyPatch(target, patch) {
   for (const [k, v] of Object.entries(patch)) {
