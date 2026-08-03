@@ -1071,7 +1071,7 @@ function renderBankList(){
     var masked = b.phone.length>4 ? b.phone.slice(0,4)+'•••'+b.phone.slice(-2) : b.phone;
     return '<div class="bank-row" onclick="setDefaultBank('+i+')" style="cursor:pointer">'+
       '<div class="bank-net-badge" style="background:'+nc.color+';color:'+nc.textColor+'">'+initials+'</div>'+
-      '<div class="bank-info"><b>'+b.holder+'</b><span>'+b.network+' · '+masked+'</span></div>'+
+      '<div class="bank-info"><b>'+esc(b.holder)+'</b><span>'+esc(b.network)+' · '+masked+'</span></div>'+
       (i===STATE.defaultBankIdx ? '<span class="bank-default">Default</span>' : '')+
       '</div>';
   }).join('');
@@ -1117,7 +1117,7 @@ function renderWitBankBox(){
   var masked = b.phone.length>4 ? b.phone.slice(0,4)+'•••'+b.phone.slice(-2) : b.phone;
   box.innerHTML = '<div class="bank-row" style="margin:16px 20px 0">'+
     '<div class="bank-net-badge" style="background:'+nc.color+';color:'+nc.textColor+'">'+b.network.charAt(0)+'</div>'+
-    '<div class="bank-info"><b>Cash out to '+b.holder+'</b><span>'+b.network+' · '+masked+'</span></div>'+
+    '<div class="bank-info"><b>Cash out to '+esc(b.holder)+'</b><span>'+esc(b.network)+' · '+masked+'</span></div>'+
     '<b style="font-size:12px;color:var(--caramel-deep);cursor:pointer" onclick="closeOverlay();openOverlay(\'bindbank\')">Change</b></div>';
 }
 

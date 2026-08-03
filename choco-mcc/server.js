@@ -171,6 +171,10 @@ async function getProductByKey(key) {
 
 // ── HELPERS ──
 function fmtUGX(n) { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
+// Bank-account holder name is the one piece of free text a user can store
+// and later see rendered back (Records/Bind Bank Card) — strip any HTML so
+// a name like '<img onerror=...>' can never execute when displayed.
+function stripHtml(s) { return String(s || '').replace(/<[^>]*>/g, '').trim(); }
 function eatNow()  { return new Date(Date.now() + 3 * 3600000); } // Kampala (UTC+3)
 function nowStr() {
   const d = eatNow();
@@ -982,8 +986,9 @@ app.post('/withdraw/callback', async (req, res) => {
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { holder, network, phone: rawPhone } = req.body;
-  const phone = cleanPhone(rawPhone || '');
+  const holder = stripHtml(req.body.holder);
+  const network = req.body.network;
+  const phone = cleanPhone(req.body.phone || '');
   if (!holder || !network || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   try {
     await db.collection('bankAccounts').add({ userId, holder, network, phone, createdAt: FieldValue.serverTimestamp() });
