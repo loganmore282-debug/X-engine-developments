@@ -14,7 +14,10 @@
 // FIRST member's cached data — a real, reproducible cross-account data leak,
 // not a database or Firebase problem. The bump to v2 also forces every
 // already-affected device to drop its poisoned v1 cache on next load.
-const CACHE = 'chocomcc-shell-v2';
+// v3: new app icon shipped (icon-192/512 + maskable variants) — bumped so
+// every device (including ones already on v2) re-fetches the precached
+// SHELL list below instead of keeping the old icon cached indefinitely.
+const CACHE = 'chocomcc-shell-v3';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
