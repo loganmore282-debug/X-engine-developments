@@ -620,19 +620,42 @@ var NETWORK_COLORS = { 'MTN Mobile Money':{color:'#FFCC08',textColor:'#3B2416'},
 
 /* ====================== SERVER API ====================== */
 var SERVER = 'https://mybusinessuganda.onrender.com';
-async function api(path, body, method){
+// Render's free tier spins the server down after ~15 minutes idle; the next
+// request has to wait for it to cold-boot (can take 30s+), and a plain
+// fetch() either hangs past what feels broken or the platform's own
+// "waking up" response isn't valid JSON, both of which used to surface as
+// an immediate, confusing "Could not reach the server". Same fix Voltra
+// already uses: retry idempotent READS with backoff, but NEVER retry a
+// money-moving call — a retried deposit/withdraw/checkin/redeem could
+// submit twice. Reads are the GET calls (no body); every money action here
+// is a POST with a body, so the default already routes correctly without
+// every call site needing to opt in/out explicitly.
+var _wokenUp = false;
+async function api(path, body, method, retry){
   method = method || (body ? 'POST' : 'GET');
-  var headers = {};
-  if(window.fbGetIdToken){
-    try{ var tok = await window.fbGetIdToken(); if(tok) headers['Authorization'] = 'Bearer '+tok; }catch(e){}
-  }
-  var opts = { method: method, headers: headers };
-  if(body){ headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  try{
-    var resp = await fetch(SERVER+path, opts);
-    return await resp.json();
-  }catch(e){
-    return { status:'error', message:'Network error — check your connection' };
+  if(retry === undefined) retry = (method === 'GET');
+  var delays = [0, 3000, 8000, 20000];
+  var attempts = retry ? delays.length : 1;
+  for(var i=0; i<attempts; i++){
+    if(i>0){
+      if(!_wokenUp) toast('Waking up the server — this can take a moment…');
+      await new Promise(function(r){ setTimeout(r, delays[i]); });
+    }
+    var headers = {};
+    if(window.fbGetIdToken){
+      try{ var tok = await window.fbGetIdToken(); if(tok) headers['Authorization'] = 'Bearer '+tok; }catch(e){}
+    }
+    var opts = { method: method, headers: headers, signal: AbortSignal.timeout(15000) };
+    if(body){ headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    try{
+      var resp = await fetch(SERVER+path, opts);
+      var data = await resp.json();
+      _wokenUp = true;
+      return data;
+    }catch(e){
+      if(i === attempts-1) return { status:'error', message:'Network error — check your connection' };
+      // else: fall through and retry
+    }
   }
 }
 // Pulls the live account/investments/bank accounts/transactions from the
@@ -745,8 +768,11 @@ document.getElementById('authGo').onclick = async function(){
       cred = await window.fbCreateUser(email, pass);
       STATE = freshState(cred.user.uid, 'Member', phone);
       saveState();
-      await api('/account/create-profile', { phone: phone });
-      await api('/register', { referralCode: ref });
+      // Both idempotent (create-profile checks doc existence, register checks
+      // registrationDone) and never touch a payment gateway — safe to retry
+      // through a cold server start, unlike the money endpoints.
+      await api('/account/create-profile', { phone: phone }, 'POST', true);
+      await api('/register', { referralCode: ref }, 'POST', true);
       await refreshFromServer();
       toast('Account created — welcome!');
     } else {
