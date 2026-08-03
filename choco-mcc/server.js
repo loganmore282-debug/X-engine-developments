@@ -715,6 +715,7 @@ app.post('/checkin', async (req, res) => {
       const snap = await ref.get();
       if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
       const u = snap.data();
+      if (u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
       const today = nowStr().date;
       if (u.lastCheckin === today) return res.status(400).json({ status: 'error', message: 'Already checked in today' });
       const yesterday = new Date(eatNow().getTime() - 86400000);
@@ -754,6 +755,7 @@ app.post('/invest/create', async (req, res) => {
       const uRef = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       if (!fresh.exists) throw new Error('User not found');
+      if (fresh.data().status === 'banned') throw new Error('Account access paused');
       const bal = fresh.data().walletBalance || 0;
       if (bal < tier.price) throw new Error(`Need ${fmtUGX(tier.price)}, have ${fmtUGX(bal)}`);
       const invRef = db.collection('investments').doc();
@@ -805,6 +807,7 @@ app.post('/deposit/marzpay', async (req, res) => {
   try {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
     const phone = cleanPhone(req.body.phone || uSnap.data().phone || '');
     if (!phone || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
@@ -1015,6 +1018,7 @@ app.post('/withdraw/request', async (req, res) => {
       const uRef = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       if (!fresh.exists) throw new Error('User not found');
+      if (fresh.data().status === 'banned') throw new Error('Account access paused');
       const bal = fresh.data().walletBalance || 0;
       if (bal < amt) throw new Error(`Not enough balance — you have ${fmtUGX(bal)}`);
       const witRef = db.collection('withdrawals').doc();
@@ -1890,7 +1894,10 @@ app.post('/admin/analytics', async (req, res) => {
 // (same role as Chronova's pollPendingPayments) periodically re-checks every
 // still-open record against MarzPay's own status endpoint, independent of
 // whether any client is even looking.
+let _sweepingDeposits = false;
 async function reconcilePendingDeposits() {
+  if (_sweepingDeposits) return;
+  _sweepingDeposits = true;
   try {
     const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(50).get();
     for (const doc of snap.docs) {
@@ -1900,7 +1907,24 @@ async function reconcilePendingDeposits() {
       if (SUCCESS_STATUSES.has(marzStatus)) await creditDeposit(doc);
       else if (FAILED_STATUSES.has(marzStatus)) await doc.ref.update({ status: 'failed', failureReason: 'Payment was not completed' }).catch(() => {});
     }
+    // A deposit marked 'failed' isn't necessarily really dead (same lesson as
+    // Chronova's pollPendingPayments): a member who insists "I paid but never
+    // got credited" is usually right that the charge cleared late — a slow
+    // confirmation, a transient hiccup at the exact moment we last checked.
+    // creditDeposit() already only ever refuses an already-'matched' doc, so
+    // reviving a 'failed' one here is safe; this just widens the sweep to
+    // recheck recent failures too, bounded to the last 48h so it can never
+    // turn into hammering MarzPay with ancient history.
+    const cutoffMs = Date.now() - 48 * 3600000;
+    const failedSnap = await db.collection('pendingDeposits').where('status', '==', 'failed').limit(80).get();
+    for (const doc of failedSnap.docs) {
+      const dep = doc.data();
+      if (!dep.marzTxUuid || tsMillis(dep.createdAt) < cutoffMs) continue;
+      const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
+      if (SUCCESS_STATUSES.has(marzStatus)) await creditDeposit(doc);
+    }
   } catch (e) { console.error('Reconcile deposits error:', e.message); }
+  finally { _sweepingDeposits = false; }
 }
 // A deposit stuck at 'initiating' with no marzTxUuid never got a usable
 // response from MarzPay (the network-exception path in /deposit/marzpay
