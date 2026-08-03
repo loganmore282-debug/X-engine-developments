@@ -1219,19 +1219,26 @@ function renderMilestoneCard(m){
         '<div><b>'+tgtTxt+'</b><span>Target</span></div>'+
         '<div><b>'+progTxt+'</b><span>Progress</span></div>'+
       '</div>'+
-      '<button type="button" class="tk-pill '+pillClass+'"'+(clickable?(' onclick="claimMilestone('+m.target+',\''+m.type+'\')"'):'')+(clickable?'':' disabled')+'>'+pillLabel+'</button>'+
+      '<button type="button" class="tk-pill '+pillClass+'"'+(clickable?(' onclick="claimMilestone(this,'+m.target+',\''+m.type+'\')"'):'')+(clickable?'':' disabled')+'>'+pillLabel+'</button>'+
     '</div>';
 }
 async function loadTaskCenter(){
   var box = document.getElementById('taskCenterList');
   if(!box) return;
+  box.innerHTML = spinnerHtml();
   var r = await api('/team/stats');
-  if(r.status!=='success' || !r.milestones){ return; }
+  if(r.status!=='success' || !r.milestones){ box.innerHTML = '<div class="empty">Could not load the Task Center — pull down to try again.</div>'; return; }
   box.innerHTML = r.milestones.map(renderMilestoneCard).join('');
 }
-async function claimMilestone(target, type){
+async function claimMilestone(btn, target, type){
+  var label = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Claiming…'; }
   var r = await api('/team/milestone/claim', { target: target, type: type });
-  if(r.status!=='success'){ toast(r.message||'Could not claim this reward'); return; }
+  if(r.status!=='success'){
+    toast(r.message||'Could not claim this reward');
+    if(btn){ btn.disabled = false; btn.textContent = label; }
+    return;
+  }
   toast(r.message||'Reward added to your wallet');
   await refreshFromServer();
   renderAll();

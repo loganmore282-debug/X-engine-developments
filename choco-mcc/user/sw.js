@@ -35,7 +35,10 @@
 // v10: admin-uploaded banner overrides now merge over the app's own
 // baked-in CHOCO_BANNERS images (GET /public/banners) — no visible change
 // until an admin actually uploads one.
-const CACHE = 'chocomcc-shell-v10';
+// v11: Task Center now shows the loading spinner immediately on open
+// (was a silent blank screen while /team/stats loaded), and the Claim
+// button shows a "Claiming…" busy state instead of appearing unresponsive.
+const CACHE = 'chocomcc-shell-v11';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
