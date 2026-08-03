@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ChocoMCC</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#3B2416">
+<style>
+  :root{
+    --cream:#FBF2E4; --cream-deep:#F3E1C3; --card:#FFFFFF;
+    --cocoa:#3B2416; --cocoa-soft:#6B4A34; --cocoa-faint:#9C8271;
+    --caramel:#E08A2C; --caramel-deep:#C06F1C; --caramel-pale:#FCE6C4;
+    --berry:#C23B4B; --berry-pale:#F8DEE1;
+    --mint:#2F9E68; --mint-pale:#DCF0E4;
+    --line:#EADFC9;
+    --shadow: 0 10px 24px -12px rgba(59,36,22,.28);
+    --shadow-lg: 0 20px 44px -16px rgba(59,36,22,.35);
+    --radius: 20px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:var(--cream); color:var(--cocoa);
+    min-height:100%;
+  }
+  #root{max-width:480px;margin:0 auto;min-height:100vh;background:var(--cream);position:relative;padding-bottom:86px;}
+  img{max-width:100%;display:block;}
+  button{font-family:inherit;cursor:pointer;}
+  input{font-family:inherit;}
+  h1,h2,h3,h4{margin:0;font-weight:800;letter-spacing:.2px;}
+  p{margin:0;}
+  .muted{color:var(--cocoa-faint);}
+  .row{display:flex;align-items:center;}
+  .btw{display:flex;align-items:center;justify-content:space-between;}
+  .pill{border-radius:999px;}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);}
+
+  /* ---------- Buttons ---------- */
+  .btn{border:none;border-radius:16px;padding:14px 18px;font-weight:800;font-size:15px;transition:transform .08s ease;}
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;box-shadow:0 10px 20px -8px rgba(224,138,44,.55);}
+  .btn-dark{background:var(--cocoa);color:#fff;}
+  .btn-ghost{background:var(--cream-deep);color:var(--cocoa);}
+  .btn-berry{background:linear-gradient(135deg,var(--berry),#9c2c3a);color:#fff;box-shadow:0 10px 20px -8px rgba(194,59,75,.5);}
+  .btn-block{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .btn-sm{padding:9px 14px;font-size:13px;border-radius:12px;}
+  .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
+  @keyframes verifySpin{to{transform:rotate(360deg);}}
+
+  /* App-wide loading spinner — replaces plain "Loading…" text everywhere. */
+  .cm-spin-wrap{display:flex;align-items:center;justify-content:center;padding:40px 0;}
+  .cm-spinner{width:36px;height:36px;color:var(--caramel-deep);animation:cmSpinRotate 1.4s linear infinite;}
+  .cm-spinner circle{stroke:currentColor;stroke-linecap:round;fill:none;stroke-width:3.6;animation:cmSpinDash 1.4s ease-in-out infinite;}
+  @keyframes cmSpinRotate{100%{transform:rotate(360deg);}}
+  @keyframes cmSpinDash{
+    0%{stroke-dasharray:1px,200px;stroke-dashoffset:0px;}
+    50%{stroke-dasharray:100px,200px;stroke-dashoffset:-15px;}
+    100%{stroke-dasharray:100px,200px;stroke-dashoffset:-125px;}
+  }
+
+  /* ---------- Auth ---------- */
+  #authScreen{min-height:100vh;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 26px;background:
+    radial-gradient(circle at 15% -10%, var(--caramel-pale), transparent 55%),
+    radial-gradient(circle at 110% 10%, var(--mint-pale), transparent 45%),
+    var(--cream);}
+  .auth-mark{width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));
+    display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-lg);margin-bottom:18px;}
+  .auth-title{font-size:28px;margin-bottom:6px;}
+  .auth-sub{color:var(--cocoa-faint);font-size:14.5px;margin-bottom:28px;line-height:1.5;}
+  .field{position:relative;margin-bottom:14px;}
+  .field input{width:100%;padding:16px 16px 16px 46px;border-radius:16px;border:1.5px solid var(--line);background:var(--card);
+    font-size:15px;color:var(--cocoa);outline:none;}
+  .field input:focus{border-color:var(--caramel);}
+  .field .ic{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.65;color:var(--cocoa-soft);display:flex;}
+  .phone-prefix{position:absolute;left:44px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:700;color:var(--cocoa-soft);pointer-events:none;}
+  #fPhone,#depPhone{padding-left:84px;}
+  .net-chip-row{display:flex;gap:10px;margin-bottom:14px;}
+  .net-chip{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 10px;border-radius:14px;
+    border:1.5px solid var(--line);background:var(--cream);color:var(--cocoa-soft);font-weight:800;font-size:13.5px;}
+  .net-chip-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+  .net-chip.active{border-color:var(--caramel);background:var(--caramel-pale);color:var(--caramel-deep);}
+  .auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--cocoa-faint);}
+  .auth-switch b{color:var(--caramel-deep);font-weight:800;}
+  .auth-tag{display:inline-block;background:var(--mint-pale);color:var(--mint);font-weight:800;font-size:11.5px;
+    padding:4px 10px;border-radius:999px;margin-bottom:14px;letter-spacing:.3px;}
+
+  /* ---------- App shell ---------- */
+  #app{display:none;}
+  .topbar{padding:20px 20px 8px;}
+  .greet{font-size:13.5px;color:var(--cocoa-faint);margin-bottom:2px;}
+  .hello{font-size:20px;}
+
+  .balance-hero{margin:14px 20px;padding:22px;border-radius:26px;background:linear-gradient(150deg,#4A2A17,#2C160C);color:#fff;
+    box-shadow:var(--shadow-lg);position:relative;overflow:hidden;}
+  .balance-hero::after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;border-radius:50%;
+    background:radial-gradient(circle, rgba(224,138,44,.35), transparent 70%);}
+  .balance-label{font-size:12.5px;color:#E8CBAE;letter-spacing:.3px;text-transform:uppercase;font-weight:700;}
+  .balance-num{font-size:32px;font-weight:800;margin-top:6px;letter-spacing:.2px;}
+  .balance-sub{display:flex;gap:18px;margin-top:16px;}
+  .balance-sub div{font-size:11.5px;color:#CBAB8B;}
+  .balance-sub b{display:block;color:#fff;font-size:14.5px;margin-top:2px;font-weight:800;}
+
+  .actions-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 20px;}
+  .act-chip{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:14px 6px;text-align:center;border:none;}
+  .act-ic{width:38px;height:38px;border-radius:12px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;}
+  .act-lbl{font-size:11.5px;font-weight:700;color:var(--cocoa-soft);}
+
+  .sec-head{display:flex;align-items:center;justify-content:space-between;margin:22px 20px 12px;}
+  .sec-head h3{font-size:16.5px;}
+  .sec-head a{font-size:12.5px;color:var(--caramel-deep);font-weight:800;text-decoration:none;}
+
+  .strip{display:flex;gap:12px;overflow-x:auto;padding:0 20px 6px;scrollbar-width:none;}
+  .strip::-webkit-scrollbar{display:none;}
+  .choc-card{flex:0 0 132px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;border:none;text-align:left;}
+  .choc-img{width:100%;height:110px;object-fit:cover;background:var(--cream-deep);}
+  .choc-body{padding:10px 12px 12px;}
+  .choc-name{font-size:12.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .choc-price{font-size:12px;color:var(--caramel-deep);font-weight:800;margin-top:3px;}
+  .choc-ret{font-size:10.5px;color:var(--mint);font-weight:700;margin-top:2px;}
+
+  .ticker{margin:0 20px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;height:224px;}
+  .ticker-track{display:flex;flex-direction:column;animation:tickerFlow 36s linear infinite;}
+  @keyframes tickerFlow{from{transform:translateY(-50%)}to{transform:translateY(0)}}
+  .ticker-row{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:12.5px;border-bottom:1px solid var(--line);}
+  .ticker-row:last-child{border-bottom:none;}
+  .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
+
+  /* ---------- Grid / Shop ---------- */
+  .view-pad{padding:18px 20px 10px;}
+  .view-title{font-size:22px;margin-bottom:4px;}
+  .prod-grid{display:flex;flex-direction:column;gap:16px;padding:6px 20px 10px;}
+  .prod-card{background:var(--card);border-radius:24px;box-shadow:var(--shadow);overflow:hidden;border:none;text-align:left;padding:0;width:100%;}
+  .prod-img-wrap{position:relative;}
+  .prod-img{width:100%;height:190px;object-fit:cover;background:var(--cream-deep);display:block;}
+  .prod-rank{position:absolute;top:12px;left:12px;background:rgba(59,36,22,.72);color:#fff;font-size:11px;font-weight:800;
+    padding:5px 11px;border-radius:999px;letter-spacing:.3px;}
+  .prod-body{padding:16px 18px 18px;display:flex;align-items:center;gap:14px;}
+  .prod-info{flex:1;}
+  .prod-name{font-size:16.5px;font-weight:800;}
+  .prod-price{font-size:15px;color:var(--caramel-deep);font-weight:800;margin-top:6px;}
+  .prod-daily{font-size:12px;color:var(--mint);font-weight:700;margin-top:4px;}
+  .prod-arrow{width:38px;height:38px;border-radius:12px;background:var(--caramel-pale);color:var(--caramel-deep);
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+
+  /* ---------- Bottom nav ---------- */
+  .tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;width:calc(100% - 32px);max-width:448px;
+    background:var(--cocoa);border-radius:24px;display:flex;box-shadow:0 16px 32px -12px rgba(59,36,22,.55);padding:8px;z-index:40;}
+  .tab{flex:1;text-align:center;padding:9px 4px;border:none;background:none;color:#C7AF9B;border-radius:16px;font-size:10.5px;font-weight:700;}
+  .tab.active{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;}
+  .tab .ti{display:block;margin:0 auto 3px;}
+
+  /* ---------- Overlay pages ---------- */
+  .overlay{position:fixed;inset:0;background:var(--cream);z-index:80;display:none;overflow-y:auto;}
+  .overlay.show{display:block;}
+  .ov-top{display:flex;align-items:center;gap:12px;padding:18px 20px 6px;position:sticky;top:0;background:var(--cream);z-index:5;}
+  .ov-back{width:38px;height:38px;border-radius:12px;background:var(--card);box-shadow:var(--shadow);border:none;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .ov-title{font-size:17px;font-weight:800;}
+
+  .info-box{margin:16px 20px;background:var(--caramel-pale);border-radius:16px;padding:14px 16px;font-size:12.5px;color:var(--caramel-deep);line-height:1.5;font-weight:600;}
+  .photo-banner{position:relative;margin:16px 20px;border-radius:22px;overflow:hidden;box-shadow:var(--shadow);height:150px;background:var(--cream-deep);}
+  .photo-banner img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photo-banner .pb-tint{position:absolute;inset:0;background:linear-gradient(0deg,rgba(36,19,11,.72),rgba(36,19,11,0) 65%);display:flex;align-items:flex-end;padding:14px 18px;}
+  .photo-banner .pb-tint span{color:#fff;font-weight:800;font-size:14px;letter-spacing:.2px;}
+  .photo-banner .pb-tint.pb-btn-row{background:linear-gradient(0deg,rgba(36,19,11,.82),rgba(36,19,11,.1));align-items:center;justify-content:space-between;gap:10px;padding:0 16px;}
+  .pb-action-btn{flex:1;background:rgba(255,255,255,.16);backdrop-filter:blur(2px);border:1.5px solid rgba(255,255,255,.4);
+    color:#fff;font-weight:800;font-size:12.5px;padding:12px 10px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .photo-banner.pb-flush{margin:0;border-radius:0;}
+  .photo-banner#homeBanner{border-radius:0 0 26px 26px;}
+  .photo-banner.pb-sm{height:110px;}
+  .photo-banner.pb-hero{height:170px;margin:14px 20px;border-radius:26px;}
+  .photo-banner.pb-full{height:240px;}
+  /* No box-shadow here on purpose — a drop shadow draws its own hard
+     rectangular edge right along the container's bottom regardless of
+     overflow:hidden or how soft the ::after fade below is, which is what
+     kept showing up as a visible line no matter how the gradient itself
+     was tuned. */
+  .auth-banner{position:relative;overflow:hidden;height:230px;margin:-32px -26px 20px -26px;}
+  .auth-banner img{width:100%;height:100%;object-fit:cover;display:block;}
+  /* No straight cutoff line where the photo meets the page — several
+     off-center, differently-sized cream blobs dissolve the bottom edge
+     unevenly (a "badge curve" melt) on top of a long straight fade, so the
+     color sheds into the background gradually and irregularly rather than
+     stopping dead at one flat horizontal line. */
+  .auth-banner::after{content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(ellipse 55% 90% at 14% 108%, var(--cream) 0%, rgba(251,242,228,0) 62%),
+      radial-gradient(ellipse 65% 100% at 78% 112%, var(--cream) 0%, rgba(251,242,228,0) 58%),
+      radial-gradient(ellipse 45% 85% at 48% 104%, var(--cream) 0%, rgba(251,242,228,0) 55%),
+      linear-gradient(0deg, var(--cream) 0%, rgba(251,242,228,0) 48%),
+      linear-gradient(160deg, rgba(224,138,44,.32), rgba(59,36,22,.38) 70%);}
+  .uline-tabs{display:flex;gap:22px;margin:4px 20px 0;border-bottom:1.5px solid var(--line);}
+  .uline-tab{background:none;border:none;padding:10px 2px;font-size:14px;font-weight:800;color:var(--cocoa-faint);
+    border-bottom:2.5px solid transparent;margin-bottom:-1.5px;}
+  .uline-tab.active{color:var(--caramel-deep);border-bottom-color:var(--caramel-deep);}
+
+  /* Each record reads as its own boxed card now — the same dashed-line
+     "surrounded" treatment as .link-box (the referral-link/reference boxes),
+     just applied per-field: the header is set off from the body by a dashed
+     caramel rule, and every field below it (Description/Amount/Number/Date)
+     is separated from the next by a dashed line instead of running together
+     in one flat block. */
+  .rec-card{margin:0 20px 12px;padding:14px 16px;border-radius:16px;background:var(--cream-deep);}
+  .rec-card:last-child{margin-bottom:0;}
+  .rec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1.5px dashed var(--caramel);}
+  .rec-ref{font-size:13.5px;font-weight:800;color:var(--cocoa);word-break:break-all;}
+  .rec-st{flex-shrink:0;font-size:12px;font-weight:800;}
+  .rec-st.ok{color:var(--mint);}
+  .rec-st.proc{color:var(--caramel-deep);}
+  .rec-st.bad{color:var(--berry);}
+  .rec-st.mut{color:var(--cocoa-faint);}
+  .rec-line{display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);}
+  .rec-line:last-child{border-bottom:none;padding-bottom:0;}
+  .rec-line span{flex:0 0 82px;font-size:12px;color:var(--cocoa-faint);}
+  .rec-line span::after{content:":";}
+  .rec-line b{font-size:12.5px;font-weight:700;color:var(--cocoa);}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;}
+  .cards .stat{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px;}
+  .cards .stat .n{font-size:16px;font-weight:800;}
+  .cards .stat .l{font-size:11px;color:var(--cocoa-faint);font-weight:700;margin-top:4px;}
+  .form-card{margin:6px 20px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:18px;}
+  .flabel{font-size:12px;font-weight:800;color:var(--cocoa-soft);margin-bottom:8px;display:block;}
+  .famt{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:14px;font-size:20px;font-weight:800;color:var(--cocoa);outline:none;margin-bottom:14px;}
+  .quick-amt-row{display:flex;gap:8px;margin:-6px 0 14px;}
+  .quick-amt-chip{flex:1;padding:10px 4px;border-radius:12px;border:1.5px solid var(--line);background:var(--cream);color:var(--cocoa-soft);font-weight:700;font-size:12.5px;}
+  .quick-amt-chip:active{transform:scale(.97);}
+  .famt:focus{border-color:var(--caramel);}
+  .calc-row{display:flex;justify-content:space-between;font-size:13px;padding:9px 0;border-bottom:1px dashed var(--line);}
+  .calc-row:last-child{border-bottom:none;font-weight:800;font-size:14.5px;}
+
+  /* Every notify (check-in, gift code, sign-in, errors, etc.) opens from the
+     centre of the screen now, not as a bottom snackbar — a small floating
+     card that fades/scales in over a dim backdrop, same as every other
+     popup in the app. */
+  .toast-bg{position:fixed;inset:0;background:rgba(59,36,22,0);z-index:200;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;transition:background .2s;padding:20px;}
+  .toast-bg.show{background:rgba(59,36,22,.35);pointer-events:auto;}
+  .toast{background:var(--cocoa);color:#fff;padding:18px 26px;max-width:320px;text-align:center;
+    border-radius:18px;font-size:14px;font-weight:700;line-height:1.4;box-shadow:var(--shadow-lg);opacity:0;transform:scale(.9);transition:opacity .2s,transform .2s;}
+  .toast-bg.show .toast{opacity:1;transform:scale(1);}
+
+  .kv{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
+  .kv b{font-weight:800;}
+  .menu-item{display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--card);border-radius:18px;margin:0 20px 10px;box-shadow:var(--shadow);border:none;width:calc(100% - 40px);text-align:left;}
+  .menu-ic{width:36px;height:36px;border-radius:11px;background:var(--caramel-pale);color:var(--caramel-deep);display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .menu-lbl{font-size:14px;font-weight:700;flex:1;}
+  .menu-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 20px 14px;}
+  .menu-tile{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:10px;padding:20px 8px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);border:none;text-align:center;}
+  .menu-tile-ic{width:48px;height:48px;border-radius:14px;background:var(--caramel-pale);color:var(--caramel-deep);display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .menu-tile-lbl{font-size:12.5px;font-weight:700;line-height:1.3;}
+
+  .profile-card{margin:16px 20px;padding:20px;border-radius:22px;background:linear-gradient(150deg,#4A2A17,#2C160C);color:#fff;box-shadow:var(--shadow-lg);}
+  .acct-cover{position:relative;height:170px;margin-bottom:46px;}
+  .acct-cover img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;}
+  /* z-index above the ::after fade below — without it, the fade (always the
+     LAST painted layer of .acct-cover, generated content or not) would sit
+     on top of and wash out the card instead of just melting the photo. No
+     overflow:hidden here either — .acct-card deliberately hangs mostly
+     below this box (bottom:-32px) to overlap onto the page; clipping the
+     container would clip the card too. */
+  .acct-cover::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:
+      radial-gradient(ellipse 55% 95% at 12% 110%, var(--cream) 0%, rgba(251,242,228,0) 60%),
+      radial-gradient(ellipse 60% 100% at 82% 105%, var(--cream) 0%, rgba(251,242,228,0) 58%),
+      linear-gradient(0deg, var(--cream) 0%, rgba(251,242,228,0) 42%);}
+  .acct-card{position:absolute;left:20px;right:20px;bottom:-32px;z-index:2;background:linear-gradient(150deg,#4A2A17,#2C160C);
+    border-radius:20px;box-shadow:var(--shadow-lg);padding:16px 18px;display:flex;align-items:center;gap:14px;color:#fff;}
+  .acct-icon{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .acct-num{font-size:16px;font-weight:800;}
+  .avatar{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;}
+
+  .link-box{background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px 20px;}
+  .link-row{display:flex;align-items:center;gap:10px;}
+  .link-row span{flex:1;font-size:12.5px;font-weight:700;color:var(--cocoa-soft);}
+
+  .pay-status-card{margin:16px 20px;background:var(--mint-pale);border-radius:20px;padding:22px 20px;text-align:center;}
+  .pay-status-ic{width:52px;height:52px;border-radius:16px;background:var(--mint);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+  .pay-status-card h3{font-size:17px;color:var(--cocoa);}
+  .pay-steps{list-style:none;margin:16px 0 0;padding:0;text-align:left;}
+  .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:var(--cocoa-soft);font-weight:600;}
+  .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--mint);}
+  .code-box b{font-size:16px;letter-spacing:1.5px;}
+  .comm-row{display:flex;gap:10px;margin:0 20px 16px;}
+  .comm-tile{flex:1;background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px 10px;text-align:center;}
+  .tm-task-link{display:flex;align-items:center;gap:2px;background:none;border:0;padding:0;color:var(--caramel-deep);font:inherit;font-size:13.5px;font-weight:800;}
+  .tk-lead{margin:6px 20px 16px;font-size:13px;color:var(--cocoa-soft);line-height:1.5;}
+  .tk-row{margin:0 20px 14px;padding:18px;border-radius:20px;background:var(--card);box-shadow:var(--shadow);}
+  .tk-desc{font-size:14px;color:var(--cocoa);line-height:1.5;margin-bottom:16px;}
+  .tk-desc b{color:var(--cocoa);}
+  .tk-desc em{color:var(--caramel-deep);font-style:normal;font-weight:800;}
+  .tk-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;margin-bottom:16px;}
+  .tk-stats b{display:block;font-size:17px;font-weight:800;color:var(--cocoa);font-variant-numeric:tabular-nums;}
+  .tk-stats span{display:block;font-size:11px;color:var(--cocoa-faint);margin-top:3px;}
+  .tk-pill{width:100%;padding:13px;border:0;border-radius:14px;background:var(--cream-deep);color:var(--cocoa-faint);font:inherit;font-size:13.5px;font-weight:800;}
+  .tk-pill.is-ready{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;}
+  .tk-pill.is-done{background:var(--mint-pale);color:var(--mint);}
+  .comm-tile b{display:block;font-size:19px;color:var(--caramel-deep);}
+  .comm-tile span{font-size:10.5px;color:var(--cocoa-faint);font-weight:700;}
+
+  .checkin-wrap{padding:30px 24px;text-align:center;}
+  .checkin-ring{width:170px;height:170px;border-radius:50%;margin:20px auto;background:conic-gradient(var(--caramel) var(--pct,0%), var(--cream-deep) 0);
+    display:flex;align-items:center;justify-content:center;position:relative;}
+  .checkin-ring::before{content:"";position:absolute;inset:10px;border-radius:50%;background:var(--cream);}
+  .checkin-inner{position:relative;z-index:2;}
+  .checkin-inner b{font-size:26px;display:block;}
+  .streak-dots{display:flex;justify-content:center;gap:7px;margin:18px 0 26px;}
+  .streak-dots i{width:9px;height:9px;border-radius:50%;background:var(--line);}
+  .streak-dots i.on{background:var(--caramel);}
+
+  .empty{text-align:center;padding:40px 20px;color:var(--cocoa-faint);font-size:13.5px;}
+  /* Opens from the centre of the screen (a real popup, not a bottom sheet) —
+     fades/scales in over the dim backdrop like every other popup here. */
+  .modal-bg{position:fixed;inset:0;background:rgba(59,36,22,0);z-index:150;display:none;align-items:center;justify-content:center;padding:20px;transition:background .2s;}
+  .modal-bg.show{display:flex;background:rgba(59,36,22,.5);}
+  .modal-sheet{background:var(--cream);width:100%;max-width:440px;margin:0 auto;border-radius:26px;padding:22px;max-height:88vh;overflow-y:auto;
+    opacity:0;transform:scale(.92);transition:opacity .2s,transform .2s;}
+  .modal-bg.show .modal-sheet{opacity:1;transform:scale(1);}
+  .modal-sheet h3{margin-bottom:14px;}
+  .net-row{display:flex;align-items:center;gap:12px;width:100%;background:var(--card);border-radius:16px;box-shadow:var(--shadow);
+    padding:15px 16px;margin-bottom:10px;border:none;text-align:left;}
+  .net-dot{width:14px;height:14px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 3px var(--cream-deep);}
+  .net-name{flex:1;font-size:14.5px;font-weight:800;}
+  .bank-row{display:flex;align-items:center;gap:14px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:15px 16px;margin-bottom:10px;}
+  .bank-net-badge{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:0 0 auto;}
+  .bank-info{flex:1;}
+  .bank-info b{display:block;font-size:14px;}
+  .bank-info span{font-size:12px;color:var(--cocoa-faint);}
+  .bank-default{font-size:10.5px;font-weight:800;color:var(--mint);background:var(--mint-pale);padding:4px 9px;border-radius:999px;}
+</style>
+</head>
+<body>
+<div id="root">
+
+  <!-- AUTH -->
+  <div id="authScreen">
+    <div class="auth-banner" id="authBanner"><img src=""></div>
+    <div class="auth-mark">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M12 2c-3 3-5 6-5 9a5 5 0 0010 0c0-3-2-6-5-9z" fill="#fff"/><circle cx="12" cy="15" r="1.6" fill="#C06F1C"/></svg>
+    </div>
+    <div class="auth-title" id="authTitle">Welcome to ChocoMCC</div>
+    <div class="auth-sub" id="authSub">Sign in to grow your stash of the world's finest chocolate brands.</div>
+    <div class="field">
+      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 10.5c1.2 2.6 3.4 4.8 6 6l1.8-1.8c.3-.3.7-.4 1-.3 1 .3 2.1.5 3.2.5.6 0 1 .4 1 1v2.7c0 .6-.4 1-1 1C10.7 19.6 4.4 13.3 4.4 5.5c0-.6.4-1 1-1H8c.6 0 1 .4 1 1 0 1.1.2 2.2.5 3.2.1.4 0 .8-.3 1L6.5 10.5z"/></svg></span>
+      <span class="phone-prefix">+256</span>
+      <input id="fPhone" placeholder="123456789" inputmode="tel" maxlength="9">
+    </div>
+    <div class="field">
+      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
+      <input id="fPass" placeholder="Password" type="password">
+    </div>
+    <div id="regPassConfirmField" class="field" style="display:none">
+      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
+      <input id="fPassConfirm" placeholder="Confirm password" type="password">
+    </div>
+    <div id="regCodeField" class="field" style="display:none">
+      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M10 14a5 5 0 007 0l2-2a5 5 0 00-7-7l-1 1"/><path d="M14 10a5 5 0 00-7 0l-2 2a5 5 0 007 7l1-1"/></svg></span>
+      <input id="fCode" placeholder="Invite code (optional)">
+    </div>
+    <button class="btn btn-primary btn-block" id="authGo">Continue</button>
+    <div class="auth-switch" id="authSwitch">New here? <b id="authSwitchBtn">Sign up</b></div>
+  </div>
+
+  <!-- APP -->
+  <div id="app">
+    <!-- HOME -->
+    <div id="viewHome">
+      <div class="photo-banner pb-flush pb-full" id="homeBanner"></div>
+
+      <div class="actions-row">
+        <button class="act-chip" onclick="openOverlay('deposit')">
+          <div class="act-ic" style="background:var(--mint-pale);color:var(--mint)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M7.5 12h9"/></svg></div>
+          <div class="act-lbl">Add Funds</div>
+        </button>
+        <button class="act-chip" onclick="openOverlay('withdraw')">
+          <div class="act-ic" style="background:var(--berry-pale);color:var(--berry)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="9"/><path d="M12 7v8M8.3 12L12 15.7 15.7 12"/></svg></div>
+          <div class="act-lbl">Cash Out</div>
+        </button>
+        <button class="act-chip" onclick="switchTab('rewards')">
+          <div class="act-ic" style="background:var(--caramel-pale);color:var(--caramel-deep)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 9l6-6 12 12-6 6L3 9z"/><path d="M6 6l3 3M9 3l3 3M12 12l3 3M15 9l3 3"/><path d="M9 12l1.5-3 3 .5 1-2.5" stroke-linejoin="round"/></svg></div>
+          <div class="act-lbl">Daily Reward</div>
+        </button>
+        <button class="act-chip" onclick="openOverlay('support')">
+          <div class="act-ic" style="background:#E4E9FB;color:#4C63C7"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 13v-1a8 8 0 0116 0v1"/><rect x="2.5" y="13" width="4" height="6" rx="1.5"/><rect x="17.5" y="13" width="4" height="6" rx="1.5"/><path d="M19.5 19v1a2 2 0 01-2 2h-3"/></svg></div>
+          <div class="act-lbl">Support</div>
+        </button>
+      </div>
+
+      <div class="sec-head"><h3>Featured chocolates</h3><a href="#" onclick="switchTab('shop');return false;">See all</a></div>
+      <div class="strip" id="featStrip"></div>
+
+      <div class="sec-head"><h3>Transaction History</h3></div>
+      <div class="ticker" id="tickerBox"></div>
+      <div style="height:14px"></div>
+    </div>
+
+    <!-- SHOP -->
+    <div id="viewShop" style="display:none">
+      <div class="photo-banner pb-flush pb-full" id="shopBanner">
+        <img id="shopBannerImg" src="">
+        <div class="pb-tint pb-btn-row">
+          <button class="pb-action-btn" onclick="openOverlay('mychoc')">My Chocolates <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+          <button class="pb-action-btn" onclick="openOverlay('earnings')">Accrued earnings <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
+      </div>
+      <div class="view-pad">
+        <div class="view-title">The Shop</div>
+        <div class="muted" style="font-size:13px">Every tier pays a daily reward until it matures.</div>
+      </div>
+      <div class="prod-grid" id="shopGrid"></div>
+      <div style="height:14px"></div>
+    </div>
+
+    <!-- TEAM -->
+    <div id="viewTeam" style="display:none">
+      <div class="photo-banner" id="teamBanner"></div>
+      <div class="view-pad">
+        <div class="view-title">My Team</div>
+        <div class="muted" style="font-size:13px">Share your code, earn on every level.</div>
+      </div>
+      <div class="link-box">
+        <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">YOUR REFERRAL LINK</div>
+        <div class="link-row">
+          <span id="teamLink" style="word-break:break-all">https://choco-mcc.com/?reg=</span>
+          <button class="btn btn-dark btn-sm" onclick="copyCode()">Copy</button>
+        </div>
+      </div>
+      <div class="comm-row">
+        <div class="comm-tile"><b>27%</b><span>LEVEL 1</span></div>
+        <div class="comm-tile"><b>2%</b><span>LEVEL 2</span></div>
+        <div class="comm-tile"><b>1%</b><span>LEVEL 3</span></div>
+      </div>
+      <div class="sec-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
+      <div style="margin:0 20px" class="card" >
+        <div style="padding:6px 16px">
+          <div class="kv"><span>Level 1 members</span><b id="teamL1">0</b></div>
+          <div class="kv"><span>Level 2 members</span><b id="teamL2">0</b></div>
+          <div class="kv"><span>Level 3 members</span><b id="teamL3">0</b></div>
+          <div class="kv" style="border-bottom:none"><span>Commission earned</span><b id="teamComm">UGX 0</b></div>
+        </div>
+      </div>
+      <div style="height:14px"></div>
+    </div>
+
+    <!-- CHECK-IN -->
+    <div id="viewRewards" style="display:none">
+      <div class="photo-banner pb-hero" id="rewardsBanner"></div>
+      <div class="checkin-wrap" style="padding-top:6px">
+        <span class="auth-tag" style="background:var(--mint-pale);color:var(--mint)">DAILY REWARD</span>
+        <h2 style="font-size:20px;margin-top:10px">Tap in, get chocolate money</h2>
+        <p class="muted" style="font-size:13px;margin-top:6px">One tap a day. UGX <span id="checkinAmt">250</span> straight to your wallet.</p>
+        <div class="checkin-ring" id="checkinRing">
+          <div class="checkin-inner">
+            <b id="streakNum">0</b>
+            <span class="muted" style="font-size:11.5px">day streak</span>
+          </div>
+        </div>
+        <div class="streak-dots" id="streakDots"></div>
+        <button class="btn btn-primary btn-block" id="checkinBtn" onclick="doCheckin()">Check in — UGX 250</button>
+      </div>
+      <div class="sec-head"><h3>Redeem a Promo Code</h3></div>
+      <div class="form-card" style="margin:0 20px 20px;display:flex;gap:12px;align-items:center">
+        <img src="" id="giftCodeThumb" style="width:52px;height:52px;border-radius:14px;object-fit:cover;flex:0 0 auto">
+        <div style="flex:1">
+          <input class="famt" id="giftCodeInput" style="font-size:15px;padding:12px;margin-bottom:10px;text-transform:uppercase" placeholder="Enter promo code">
+          <button class="btn btn-primary btn-block" id="redeemBtn" onclick="redeemGiftCode()">Redeem</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCOUNT -->
+    <div id="viewAccount" style="display:none">
+      <div class="acct-cover">
+        <img src="" id="accountBanner">
+        <div class="acct-card">
+          <div class="acct-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2c-3 3-5 6-5 9a5 5 0 0010 0c0-3-2-6-5-9z" fill="#fff"/></svg></div>
+          <div class="acct-num" id="acctPhone">0700 000 000</div>
+        </div>
+      </div>
+      <div class="cards" style="margin:0 20px 18px">
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n" style="color:var(--mint)" id="acctBalNum">UGX 0</div><div class="l">Balance</div></div>
+        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n" style="color:var(--berry)" id="acctWitNum">UGX 0</div><div class="l">Cash Outs</div></div>
+      </div>
+      <div class="menu-grid">
+        <button class="menu-tile" onclick="openOverlay('mychoc')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 9l6-6 12 12-6 6L3 9z"/><path d="M6 6l3 3M9 3l3 3M12 12l3 3M15 9l3 3"/><path d="M9 12l1.5-3 3 .5 1-2.5" stroke-linejoin="round"/></svg></div><div class="menu-tile-lbl">My Chocolates</div></button>
+        <button class="menu-tile" onclick="openOverlay('records')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 3h11v18l-2.2-1.6L13 21l-2.3-1.6L8.5 21l-2-1.6V3z"/><path d="M9 8.2h6M9 12h6"/></svg></div><div class="menu-tile-lbl">Records</div></button>
+        <button class="menu-tile" onclick="switchTab('team')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="5.5" r="2.5"/><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M10 7L7.5 15M14 7l2.5 8"/></svg></div><div class="menu-tile-lbl">Referrals & Team</div></button>
+        <button class="menu-tile" onclick="openOverlay('bindbank')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="2.5" y="5.5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6 15h4"/></svg></div><div class="menu-tile-lbl">Bind Bank Card</div></button>
+        <button class="menu-tile" onclick="openOverlay('changepass')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></div><div class="menu-tile-lbl">Change Password</div></button>
+        <button class="menu-tile" onclick="openOverlay('about')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="9"/><path d="M12 8.2h.01"/><path d="M10.8 12H12v5h1.2"/></svg></div><div class="menu-tile-lbl">About ChocoMCC</div></button>
+        <button class="menu-tile" onclick="openOverlay('rules')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 3h11v18l-2.2-1.6L13 21l-2.3-1.6L8.5 21l-2-1.6V3z"/><path d="M9 8.2h6M9 12h4"/></svg></div><div class="menu-tile-lbl">Rules & Regulation</div></button>
+        <button class="menu-tile" onclick="openOverlay('support')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 13v-1a8 8 0 0116 0v1"/><rect x="2.5" y="13" width="4" height="6" rx="1.5"/><rect x="17.5" y="13" width="4" height="6" rx="1.5"/><path d="M19.5 19v1a2 2 0 01-2 2h-3"/></svg></div><div class="menu-tile-lbl">Customer Care</div></button>
+        <button class="menu-tile" id="downloadAppTile" style="display:none" onclick="openInstallSheet()"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M4 17v2.5A1.5 1.5 0 005.5 21h13a1.5 1.5 0 001.5-1.5V17"/></svg></div><div class="menu-tile-lbl">Download App</div></button>
+        <button class="menu-tile" onclick="if(confirm('Log out?')) logout()"><div class="menu-tile-ic" style="background:var(--berry-pale);color:var(--berry)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 4.5L5 6v12l6 1.5V4.5z"/><circle cx="8.3" cy="12" r="0.9" fill="currentColor" stroke="none"/><path d="M13 9h4.5M13 15h4.5"/><path d="M13.5 12h5.5m0 0l-2.2-2.2m2.2 2.2l-2.2 2.2"/></svg></div><div class="menu-tile-lbl" style="color:var(--berry)">Log out</div></button>
+      </div>
+      <div style="height:14px"></div>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tabbar">
+      <button class="tab active" data-tab="home" onclick="switchTab('home')"><span class="ti"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3.5 11l8.5-7 8.5 7"/><path d="M5.5 9.7V20h5v-6.3h3V20h5V9.7"/></svg></span>Home</button>
+      <button class="tab" data-tab="shop" onclick="switchTab('shop')"><span class="ti"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 9l6-6 12 12-6 6L3 9z"/><path d="M6 6l3 3M9 3l3 3M12 12l3 3M15 9l3 3"/><path d="M9 12l1.5-3 3 .5 1-2.5" stroke-linejoin="round"/></svg></span>Shop</button>
+      <button class="tab" data-tab="rewards" onclick="switchTab('rewards')"><span class="ti"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.5 9"/></svg></span>Rewards</button>
+      <button class="tab" data-tab="team" onclick="switchTab('team')"><span class="ti"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="5.5" r="2.5"/><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M10 7L7.5 15M14 7l2.5 8"/></svg></span>Team</button>
+      <button class="tab" data-tab="account" onclick="switchTab('account')"><span class="ti"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4.1 3.4-7.5 7.5-7.5s7.5 3.4 7.5 7.5"/></svg></span>Me</button>
+    </div>
+  </div>
+
+  <!-- OVERLAYS -->
+  <div class="overlay" id="ovDeposit">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Add Funds</div></div>
+    <div class="photo-banner" id="depositBanner"></div>
+    <div class="info-box">Funds are added to your wallet once your mobile-money payment is confirmed.</div>
+    <div class="form-card">
+      <span class="flabel">Amount (UGX)</span>
+      <input class="famt" id="depAmt" type="number" placeholder="0">
+      <div class="quick-amt-row">
+        <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=30000">UGX 30,000</button>
+        <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=90000">UGX 90,000</button>
+        <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=200000">UGX 200,000</button>
+      </div>
+      <span class="flabel">Choose network</span>
+      <div class="net-chip-row" id="depNetworkRow">
+        <button type="button" class="net-chip" data-net="MTN Mobile Money" onclick="selectDepNetwork('MTN Mobile Money')">
+          <span class="net-chip-dot" style="background:#FFCC08"></span>MTN
+        </button>
+        <button type="button" class="net-chip" data-net="Airtel Money" onclick="selectDepNetwork('Airtel Money')">
+          <span class="net-chip-dot" style="background:#ED1C24"></span>Airtel
+        </button>
+      </div>
+      <span class="flabel">Mobile-money number to pay from</span>
+      <div class="field" style="margin-bottom:14px">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 10.5c1.2 2.6 3.4 4.8 6 6l1.8-1.8c.3-.3.7-.4 1-.3 1 .3 2.1.5 3.2.5.6 0 1 .4 1 1v2.7c0 .6-.4 1-1 1C10.7 19.6 4.4 13.3 4.4 5.5c0-.6.4-1 1-1H8c.6 0 1 .4 1 1 0 1.1.2 2.2.5 3.2.1.4 0 .8-.3 1L6.5 10.5z"/></svg></span>
+        <span class="phone-prefix">+256</span>
+        <input id="depPhone" type="tel" placeholder="123456789" maxlength="9">
+      </div>
+      <button class="btn btn-primary btn-block" id="depGoBtn" onclick="doDeposit()">Add Funds</button>
+    </div>
+    <div class="info-box" style="background:var(--cream-deep);color:var(--cocoa-soft)">
+      <b style="color:var(--cocoa);display:block;margin-bottom:2px;font-size:12.5px">Deposit procedure</b>
+      <ul class="pay-steps" style="margin-top:6px">
+        <li>Enter the amount you want to add</li>
+        <li>Choose your mobile-money network</li>
+        <li>Enter the number you're paying from (no leading 0)</li>
+        <li>Tap Add Funds, then confirm the prompt on your phone</li>
+        <li>Your wallet updates automatically once confirmed</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovDepositStatus">
+    <div class="ov-top"><button class="ov-back" onclick="cancelDepositStatus()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Add Funds</div></div>
+    <div class="pay-status-card">
+      <div class="pay-status-ic" id="depStatusIc"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg></div>
+      <h3 id="depStatusTitle">Payment Initiated Successfully!</h3>
+      <p class="muted" id="depStatusPhone" style="font-size:13.5px;margin-top:6px">You will receive a payment prompt on your phone shortly.</p>
+      <ul class="pay-steps" id="depStatusSteps">
+        <li>Check your phone for the payment request</li>
+        <li>Enter your mobile-money PIN to confirm</li>
+        <li>We'll verify the payment automatically</li>
+      </ul>
+    </div>
+    <div class="link-box">
+      <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">TRANSACTION REFERENCE</div>
+      <div class="link-row"><span id="depStatusRef" style="word-break:break-all">—</span><button class="btn btn-dark btn-sm" onclick="copyDepositRef()">Copy</button></div>
+    </div>
+    <div class="info-box" id="depStatusMsg" style="background:var(--caramel-pale);color:var(--caramel-deep)">Payment initiated — check your phone.</div>
+    <div style="padding:0 20px">
+      <button class="btn btn-primary btn-block" id="depVerifyBtn" onclick="manualVerifyDeposit()">
+        <span class="verify-spin" id="depVerifySpin" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>
+        <span id="depVerifyLabel">Verify Payment</span>
+      </button>
+      <div style="text-align:center;margin-top:14px" id="depCancelRow"><span class="muted" onclick="cancelDepositStatus()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Cancel</span></div>
+      <div style="text-align:center;margin-top:8px" class="muted" id="depStatusAttempt" style="font-size:11.5px"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovWithdraw">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Cash Out</div></div>
+    <div class="photo-banner" id="withdrawBanner"></div>
+    <div class="info-box">Minimum cash-out <b>UGX 10,000</b>. A service fee of <b>19%</b> applies to every cash-out. Up to <b><span id="witMaxPerDay">2</span> cash-outs</b> per day.</div>
+    <div id="witBankBox"></div>
+    <div class="form-card">
+      <span class="flabel">Amount (UGX)</span>
+      <input class="famt" id="witAmt" type="number" placeholder="0" oninput="renderWitCalc()">
+      <div class="calc-row"><span>Service fee (19%)</span><span id="witFee">UGX 0</span></div>
+      <div class="calc-row"><span>You receive</span><span id="witNet">UGX 0</span></div>
+      <button class="btn btn-berry btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Cash Out</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovSupport">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Customer Care</div></div>
+    <div class="photo-banner" id="supportBanner"></div>
+    <div style="padding:6px 20px" id="supportLinks"></div>
+  </div>
+
+  <div class="overlay" id="ovAbout">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">About ChocoMCC</div></div>
+    <div class="photo-banner" id="aboutBanner"></div>
+    <div style="padding:6px 20px 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="aboutBody">
+      <p>ChocoMCC lets members build a stash of the world's best-loved chocolate tiers — from the everyday favourites to the boxed-gold classics — each paying a daily reward until it matures.</p><br>
+      <p>This is a local design preview: every number on this screen is a placeholder your admin can adjust before launch.</p>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovRules">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Rules &amp; Regulation</div></div>
+    <div style="padding:16px 20px 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="rulesBody">
+      <div class="empty">Nothing published yet.</div>
+    </div>
+  </div>
+
+  <!-- ANNOUNCEMENT -->
+  <div class="modal-bg" id="announcementBg" onclick="if(event.target===this) dismissAnnouncement()">
+    <div class="modal-sheet" id="announcementSheet">
+      <button class="ov-back" style="position:absolute;top:14px;right:14px;background:var(--cream-deep)" onclick="dismissAnnouncement()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <img id="annImg" style="display:none;width:100%;border-radius:16px;margin-bottom:14px;object-fit:cover;max-height:160px">
+      <h3 id="annTitle">Notice</h3>
+      <div id="annBody" style="font-size:13.5px;line-height:1.7;color:var(--cocoa-soft);margin-bottom:16px"></div>
+      <button class="btn btn-primary btn-block" id="annCtaBtn" style="display:none"></button>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovRecords">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Records</div></div>
+    <div class="photo-banner pb-sm" id="recordsBanner"></div>
+    <div class="uline-tabs">
+      <button class="uline-tab active" data-rt="accrued" onclick="setRecordsTab('accrued')">Accrued</button>
+      <button class="uline-tab" data-rt="topups" onclick="setRecordsTab('topups')">Topups</button>
+      <button class="uline-tab" data-rt="cashouts" onclick="setRecordsTab('cashouts')">Cash Outs</button>
+    </div>
+    <div class="cards" style="margin:14px 20px" id="recordsStats"></div>
+    <div id="recordsList"></div>
+  </div>
+
+  <div class="overlay" id="ovBindbank">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Bind Bank Card</div></div>
+    <div class="photo-banner" id="bindbankBanner"></div>
+    <div class="info-box">Save the mobile-money account you want cash-outs sent to. You can bind more than one and pick which to use at cash-out time.</div>
+    <div id="bankList" style="padding:0 20px"></div>
+    <div style="padding:6px 20px 20px"><button class="btn btn-primary btn-block" onclick="openNetworkPicker()">+ Bind a new account</button></div>
+  </div>
+
+  <div class="overlay" id="ovChangepass">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Change Password</div></div>
+    <div class="info-box">Enter your current password once, then choose a new one.</div>
+    <div class="form-card">
+      <span class="flabel">Current password</span>
+      <div class="field" style="margin-bottom:14px">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
+        <input id="pwCur" type="password" placeholder="Current password">
+      </div>
+      <span class="flabel">New password</span>
+      <div class="field" style="margin-bottom:14px">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
+        <input id="pwNew" type="password" placeholder="At least 6 characters">
+      </div>
+      <span class="flabel">Confirm new password</span>
+      <div class="field" style="margin-bottom:0">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
+        <input id="pwNew2" type="password" placeholder="Re-enter new password">
+      </div>
+    </div>
+    <div style="padding:6px 20px 20px"><button class="btn btn-primary btn-block" id="changePassBtn" onclick="doChangePassword()">Update password</button></div>
+  </div>
+
+  <div class="overlay" id="ovMychoc">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">My Chocolates</div></div>
+    <div class="info-box">Every chocolate tier you own, running until it matures.</div>
+    <div id="mychocList" style="padding:0 20px"></div>
+  </div>
+
+  <div class="overlay" id="ovEarnings">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Accrued Earnings</div></div>
+    <div class="cards" style="margin:16px 20px"><div class="stat"><div class="n" style="color:var(--mint)" id="earningsTotal">UGX 0</div><div class="l">Total accrued so far</div></div></div>
+    <div id="earningsList" style="padding:0 20px"></div>
+  </div>
+
+  <div class="overlay" id="ovTaskcenter">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Task Center</div></div>
+    <p class="tk-lead">Invite friends with your referral code. Once enough Level 1 members join or deposit, claim the reward for that milestone.</p>
+    <div id="taskCenterList"></div>
+    <div style="height:14px"></div>
+  </div>
+
+  <div class="modal-bg" id="networkPickerBg" onclick="if(event.target===this) closeNetworkPicker()">
+    <div class="modal-sheet">
+      <h3 id="npTitle">Choose network</h3>
+      <div id="npStep1">
+        <button class="net-row" onclick="pickNetwork('MTN Mobile Money','#FFCC08','#3B2416')">
+          <span class="net-dot" style="background:#FFCC08"></span><span class="net-name">MTN Mobile Money</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+        <button class="net-row" onclick="pickNetwork('Airtel Money','#ED1C24','#fff')">
+          <span class="net-dot" style="background:#ED1C24"></span><span class="net-name">Airtel Money</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+      <div id="npStep2" style="display:none">
+        <div class="form-card" style="margin:0 0 14px;padding:16px">
+          <span class="flabel">Account holder name</span>
+          <input class="famt" id="npName" style="font-size:15px;padding:12px" placeholder="Full name">
+          <span class="flabel">Mobile-money phone number</span>
+          <input class="famt" id="npPhone" style="font-size:15px;padding:12px" placeholder="07xxxxxxxx">
+        </div>
+        <button class="btn btn-primary btn-block" onclick="saveBankAccount()">Save account</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="installSheetBg" onclick="if(event.target===this) dismissInstallSheet()">
+    <div class="modal-sheet" style="text-align:center">
+      <img src="/icon-192.png" alt="" style="width:72px;height:72px;border-radius:20px;box-shadow:var(--shadow-lg);margin:4px auto 16px">
+      <h3 style="margin-bottom:6px">Install ChocoMCC</h3>
+      <p class="muted" style="font-size:13.5px;margin-bottom:20px">Add ChocoMCC to your home screen for one-tap access, faster loading, and a full-screen app experience — no browser bars.</p>
+      <div id="installManualSteps" style="display:none;text-align:left;background:var(--cream-deep);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--cocoa-soft)"></div>
+      <button class="btn btn-primary btn-block" id="installNowBtn" onclick="doInstallApp()">Install now</button>
+      <div style="text-align:center;margin-top:14px"><span class="muted" onclick="dismissInstallSheet()" style="cursor:pointer;text-decoration:underline;font-size:13.5px">Maybe later</span></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovProduct">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title" id="pdTitle">Chocolate</div></div>
+    <div id="pdBody"></div>
+  </div>
+
+</div>
+
+<div class="toast-bg" id="toastBg"><div class="toast" id="toast"></div></div>
+
+<script type="module">
+  import { initializeApp, getApps }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+  // ChocoMCC — Firebase web config (choco-mcc project).
+  const firebaseConfig = {
+    apiKey: "AIzaSyAqWs_sYu2UiruVuGN_JI0SbeD1gQeV3Ys",
+    authDomain: "choco-mcc.firebaseapp.com",
+    projectId: "choco-mcc",
+    storageBucket: "choco-mcc.firebasestorage.app",
+    messagingSenderId: "995451846958",
+    appId: "1:995451846958:web:ef722c1484ff99daa3babf",
+    measurementId: "G-0K1SD548TF"
+  };
+  const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  window.fbCreateUser = (email, pass) => createUserWithEmailAndPassword(auth, email, pass);
+  window.fbSignIn     = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+  window.fbSignOut    = () => signOut(auth);
+  window.fbGetIdToken = () => auth.currentUser ? auth.currentUser.getIdToken() : Promise.resolve(null);
+  // Password changes require a RECENT sign-in per Firebase's own rule — an
+  // old session throws auth/requires-recent-login otherwise. Re-authenticate
+  // with the current password first, every time, so it always succeeds
+  // regardless of how long ago the member last signed in.
+  window.fbChangePassword = async (currentPassword, newPassword) => {
+    var user = auth.currentUser;
+    if (!user) throw Object.assign(new Error('Not signed in'), { code: 'auth/no-user' });
+    var cred = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, cred);
+    await updatePassword(user, newPassword);
+  };
+  onAuthStateChanged(auth, user => { if (window.onFbAuthChanged) window.onFbAuthChanged(user); });
+</script>
+
+<script data-nx-assets></script>
+<script data-nx-core></script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}</script>
+</body>
+</html>
