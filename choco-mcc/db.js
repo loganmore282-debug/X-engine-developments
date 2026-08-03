@@ -61,6 +61,9 @@ async function ensureIndexes() {
     ['pendingDeposits', { status: 1 }],
     ['promoCodes',      { code: 1 }],
     ['products',        { key: 1 }],
+    ['bankAccounts',    { userId: 1 }],
+    ['adminSessions',   { username: 1 }],
+    ['adminAuditLog',   { createdAt: -1 }],
   ];
   // ONE AT A TIME — M0's free tier has very little real concurrency headroom.
   // Firing all of these at once (Promise.all/allSettled) queued many simultaneous
