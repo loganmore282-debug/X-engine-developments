@@ -55,7 +55,12 @@
 // v17: every overlay screen's header (.ov-top) now has a thin separator line
 // under it, cleanly dividing the back-arrow/title bar from the content below
 // on every single screen that opens.
-const CACHE = 'chocomcc-shell-v17';
+// v18: Task Center milestone cards redesigned — each now leads with a type
+// icon (people for referral-count milestones, wallet for deposit-target
+// milestones) + label, and a slim progress bar under the description. Same
+// Current/Target/Progress numbers and Claim/In Progress/Received button as
+// before, just a fresher look.
+const CACHE = 'chocomcc-shell-v18';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

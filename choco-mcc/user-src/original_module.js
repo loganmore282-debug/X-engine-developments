@@ -539,6 +539,8 @@ function renderAll(){
 // a client-side calculation trusted for payout. No progress bars — just the
 // plain current/target count (0/5, 1/5, 2/5 … 5/5) so it always reads exactly
 // like the numbers the server holds.
+var TK_ICON_REF = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c0-4.1 3.4-7.5 7.5-7.5s7.5 3.4 7.5 7.5"/></svg>';
+var TK_ICON_DEP = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.5" width="18" height="12" rx="2.5"/><path d="M3 10h18"/><circle cx="7.2" cy="14.5" r="1" fill="currentColor" stroke="none"/></svg>';
 function renderMilestoneCard(m){
   var isDeposit = m.type === 'deposit';
   var desc = isDeposit
@@ -547,15 +549,22 @@ function renderMilestoneCard(m){
   var current = Math.min(m.current, m.target);
   var curTxt = isDeposit ? ugx(current) : String(current);
   var tgtTxt = isDeposit ? ugx(m.target) : String(m.target);
+  var pct = m.target > 0 ? Math.min(100, Math.floor(current/m.target*100)) : 0;
   // Money targets wrap awkwardly as "current/target" on a phone screen, so the
   // deposit ladder's Progress column shows a percentage instead — the Current
   // and Target columns still carry the full UGX figures either way.
-  var progTxt = isDeposit ? (Math.min(100, Math.floor(current/m.target*100))+'%') : (current+'/'+m.target);
+  var progTxt = isDeposit ? (pct+'%') : (current+'/'+m.target);
   var pillClass = m.claimed ? 'is-done' : (m.achieved ? 'is-ready' : '');
   var pillLabel = m.claimed ? 'Received' : (m.achieved ? 'Claim' : 'In Progress');
   var clickable = !m.claimed && m.achieved;
-  return '<div class="tk-row">'+
+  var typeLbl = isDeposit ? 'Level 1 Deposits' : 'Level 1 Referrals';
+  return '<div class="tk-card">'+
+      '<div class="tk-head">'+
+        '<div class="tk-ic '+(isDeposit?'tk-ic-dep':'tk-ic-ref')+'">'+(isDeposit?TK_ICON_DEP:TK_ICON_REF)+'</div>'+
+        '<div class="tk-type">'+typeLbl+'</div>'+
+      '</div>'+
       '<div class="tk-desc">'+desc+'</div>'+
+      '<div class="tk-bar"><div class="tk-bar-fill'+(m.claimed?' is-done':'')+'" style="width:'+pct+'%"></div></div>'+
       '<div class="tk-stats">'+
         '<div><b>'+curTxt+'</b><span>Current</span></div>'+
         '<div><b>'+tgtTxt+'</b><span>Target</span></div>'+
