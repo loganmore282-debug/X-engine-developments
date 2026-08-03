@@ -301,6 +301,7 @@
         <div class="settings-grid">
           <div class="field"><label>Withdrawal fee (%)</label><input id="s_withdrawFeePct" type="number"></div>
           <div class="field"><label>Minimum withdrawal (UGX)</label><input id="s_minWithdraw" type="number"></div>
+          <div class="field"><label>Max withdrawals per day (per account)</label><input id="s_maxWithdrawalsPerDay" type="number"></div>
         </div>
       </div>
       <div class="panel">
@@ -393,7 +394,8 @@ var SERVER = 'https://mybusinessuganda.onrender.com';
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 3, cycleDays: 10, maintenanceMode: false, maintenanceMsg: ''
+  returnMultiple: 3, cycleDays: 10, maintenanceMode: false, maintenanceMsg: '',
+  maxWithdrawalsPerDay: 2
 };
 var DEFAULT_PRODUCTS = [
   { key:'hersheys',  name:"Hershey's Milk Chocolate", price:15000  },

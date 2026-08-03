@@ -66,7 +66,8 @@ app.use('/admin/', async (req, _res, next) => {
   }
   next();
 });
-['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/redeem', '/bank/save']
+['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/redeem', '/bank/save',
+ '/account/create-profile', '/register']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -143,7 +144,8 @@ const MARZ_TIMEOUT = 15000;
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 3, cycleDays: 10, maintenanceMode: false, maintenanceMsg: ''
+  returnMultiple: 3, cycleDays: 10, maintenanceMode: false, maintenanceMsg: '',
+  maxWithdrawalsPerDay: 2
 };
 const DEFAULT_PRODUCTS = [
   { key: 'hersheys',  name: "Hershey's Milk Chocolate", price: 15000   },
@@ -215,6 +217,12 @@ function cleanPhone(raw) {
   if (s.length === 12 && s.startsWith('256')) return '+' + s;
   return '+256' + s;
 }
+// Whitelisted mobile-money networks — every endpoint that stores a `network`
+// value (deposit, bank-account binding, withdrawal) validates against this
+// SAME set rather than trusting the client's string verbatim, so a forged
+// value can never reach storage, break the NETWORK_COLORS badge lookup in
+// the UI, or masquerade as a network the payment gateway doesn't recognise.
+const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 ambiguity
 function randCode(n = 6) {
   return Array.from(crypto.randomBytes(n)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
@@ -707,7 +715,7 @@ app.get('/public/settings', async (_req, res) => {
   res.json({ status: 'success', settings: {
     withdrawFeePct: s.withdrawFeePct, minWithdraw: s.minWithdraw, minDeposit: s.minDeposit,
     dailyCheckin: s.dailyCheckin, welcomeBonus: s.welcomeBonus, commL1: s.commL1, commL2: s.commL2, commL3: s.commL3,
-    returnMultiple: s.returnMultiple, cycleDays: s.cycleDays,
+    returnMultiple: s.returnMultiple, cycleDays: s.cycleDays, maxWithdrawalsPerDay: s.maxWithdrawalsPerDay,
     maintenanceMode: !!s.maintenanceMode, maintenanceMsg: s.maintenanceMsg || ''
   } });
 });
@@ -1003,7 +1011,6 @@ app.post('/deposit/marzpay', async (req, res) => {
     // they said they were paying from) — MarzPay itself detects it from the
     // phone number, not from this field — so whitelist it rather than
     // storing whatever arbitrary string the client sends.
-    const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
     const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
     // Write BEFORE calling the gateway — marzCollect() below can trigger a
     // REAL mobile-money charge; if the process dies right after that call
@@ -1180,9 +1187,10 @@ app.post('/withdraw/request', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const amt = parseInt(req.body.amount, 10);
-  const { holder, network, phone: bankPhone } = req.body;
+  const holder = stripHtml(req.body.holder);
+  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  const phone = cleanPhone(bankPhone || '');
+  const phone = cleanPhone(req.body.phone || '');
   if (!holder || !network || !phone || phone.length < 10)
     return res.status(400).json({ status: 'error', message: 'Bind a mobile-money account first.' });
   try {
@@ -1205,6 +1213,19 @@ app.post('/withdraw/request', async (req, res) => {
       if (fresh.data().status === 'banned') throw new Error('Account access paused');
       const bal = fresh.data().walletBalance || 0;
       if (bal < amt) throw new Error(`Not enough balance — you have ${fmtUGX(bal)}`);
+      // Daily cash-out cap, admin-editable (settings.maxWithdrawalsPerDay).
+      // Counted and enforced HERE, inside the same per-user withLock('bal:'+
+      // userId) every withdrawal already serialises through — two requests
+      // racing to sneak in a 3rd cash-out can never both pass this check,
+      // since the second one only runs after the first's count-and-create
+      // has already committed. 0 or unset disables the cap entirely.
+      const maxPerDay = Number(sett.maxWithdrawalsPerDay) || 0;
+      if (maxPerDay > 0) {
+        const today = nowStr().date;
+        const todaySnap = await t.get(db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today));
+        if (todaySnap.size >= maxPerDay)
+          throw new Error(`You've reached today's limit of ${maxPerDay} cash-out${maxPerDay === 1 ? '' : 's'}. Try again tomorrow.`);
+      }
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
       t.update(uRef, { walletBalance: FieldValue.increment(-amt), totalWithdrawn: FieldValue.increment(net) });
@@ -1347,7 +1368,7 @@ app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const holder = stripHtml(req.body.holder);
-  const network = req.body.network;
+  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
   const phone = cleanPhone(req.body.phone || '');
   if (!holder || !network || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   try {

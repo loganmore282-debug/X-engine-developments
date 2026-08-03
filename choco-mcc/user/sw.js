@@ -30,7 +30,9 @@
 // v8: Task Center moved to its own dedicated screen (a "Task Center ›" link
 // on the Team screen opens it) — bigger cards, no progress bars, plain
 // current/target counts (0/5, 1/5, …), claim button below each card.
-const CACHE = 'chocomcc-shell-v8';
+// v9: app-wide loading spinner replaces plain "Loading…" text; withdraw
+// screen shows the (admin-editable) daily cash-out cap.
+const CACHE = 'chocomcc-shell-v9';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

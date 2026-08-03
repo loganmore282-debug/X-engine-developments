@@ -51,6 +51,17 @@
   .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
   @keyframes verifySpin{to{transform:rotate(360deg);}}
 
+  /* App-wide loading spinner — replaces plain "Loading…" text everywhere. */
+  .cm-spin-wrap{display:flex;align-items:center;justify-content:center;padding:40px 0;}
+  .cm-spinner{width:36px;height:36px;color:var(--caramel-deep);animation:cmSpinRotate 1.4s linear infinite;}
+  .cm-spinner circle{stroke:currentColor;stroke-linecap:round;fill:none;stroke-width:3.6;animation:cmSpinDash 1.4s ease-in-out infinite;}
+  @keyframes cmSpinRotate{100%{transform:rotate(360deg);}}
+  @keyframes cmSpinDash{
+    0%{stroke-dasharray:1px,200px;stroke-dashoffset:0px;}
+    50%{stroke-dasharray:100px,200px;stroke-dashoffset:-15px;}
+    100%{stroke-dasharray:100px,200px;stroke-dashoffset:-125px;}
+  }
+
   /* ---------- Auth ---------- */
   #authScreen{min-height:100vh;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 26px;background:
     radial-gradient(circle at 15% -10%, var(--caramel-pale), transparent 55%),
@@ -569,7 +580,7 @@
   <div class="overlay" id="ovWithdraw">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Cash Out</div></div>
     <div class="photo-banner" id="withdrawBanner"></div>
-    <div class="info-box">Minimum cash-out <b>UGX 10,000</b>. A service fee of <b>19%</b> applies to every cash-out.</div>
+    <div class="info-box">Minimum cash-out <b>UGX 10,000</b>. A service fee of <b>19%</b> applies to every cash-out. Up to <b><span id="witMaxPerDay">2</span> cash-outs</b> per day.</div>
     <div id="witBankBox"></div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
@@ -876,6 +887,7 @@ function getSettings(){
 function dailyReturn(price){ var s=getSettings(); return Math.round(price*s.returnMultiple/s.cycleDays); }
 function ugx(n){ n=Math.round(Number(n)||0); return 'UGX ' + n.toLocaleString('en-US'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; }); }
+function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
 
 /* ====================== LOCAL STATE (per-account cache — keyed by the real Firebase uid; moves server-side once the backend is wired up) ====================== */
 function loadState(uid){
@@ -1366,7 +1378,7 @@ function renderRecords(){
   }
   var isTop = _recordsTab==='topups';
   var list = isTop ? (s.depositRecords||[]) : (s.withdrawalRecords||[]);
-  if(!_recordsLoaded[_recordsTab]){ document.getElementById('recordsList').innerHTML = '<div class="empty">Loading…</div>'; document.getElementById('recordsStats').innerHTML=''; return; }
+  if(!_recordsLoaded[_recordsTab]){ document.getElementById('recordsList').innerHTML = spinnerHtml(); document.getElementById('recordsStats').innerHTML=''; return; }
   var total = list.reduce(function(sum,r){ return sum + (isTop ? (r.status==='matched'?Number(r.amount)||0:0) : (r.status==='processed'?Number(r.net||r.amount)||0:0)); }, 0);
   document.getElementById('recordsStats').innerHTML =
     '<div class="stat"><div class="n" style="color:'+(isTop?'var(--mint)':'var(--berry)')+'">'+ugx(total)+'</div><div class="l">Total '+(isTop?'topped up':'cashed out')+'</div></div>';
@@ -1460,6 +1472,8 @@ async function saveBankAccount(){
 }
 function setDefaultBank(i){ STATE.defaultBankIdx = i; saveState(); renderBankList(); toast('Default account updated'); }
 function renderWitBankBox(){
+  var maxEl = document.getElementById('witMaxPerDay');
+  if(maxEl){ var sett = getSettings(); maxEl.textContent = sett.maxWithdrawalsPerDay || 2; }
   var box = document.getElementById('witBankBox');
   if(!STATE.bankAccounts.length){
     box.innerHTML = '<div class="info-box" style="background:var(--berry-pale);color:var(--berry)">No bank account bound yet.'+
