@@ -22,7 +22,10 @@
 // the fresh index.html instead of the cached shell.
 // v5: moved the deposit-procedure box below the Add Funds form (was
 // above it, pushing the payment fields down).
-const CACHE = 'chocomcc-shell-v5';
+// v6: referral codes are now a plain 6-character alphanumeric string (no
+// "CHM" prefix) — updated the two cosmetic client-side placeholders that
+// referenced the old format.
+const CACHE = 'chocomcc-shell-v6';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

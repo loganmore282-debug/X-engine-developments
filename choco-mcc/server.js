@@ -219,13 +219,17 @@ const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 ambiguity
 function randCode(n = 6) {
   return Array.from(crypto.randomBytes(n)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 }
+// 6-character alphanumeric, cryptographically random (crypto.randomBytes),
+// checked against every existing user's referralCode for global uniqueness,
+// then written onto that user's own doc only — one code is permanently
+// bound to exactly one account uid.
 async function generateUniqueReferralCode() {
-  for (let attempt = 0; attempt < 15; attempt++) {
-    const code = 'CHM' + randCode(4);
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const code = randCode(6);
     const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
     if (exists.empty) return code;
   }
-  return 'CHM' + randCode(8);
+  return randCode(8);
 }
 // Transaction reference: a type letter, timestamp to the second, four random
 // digits — same shape used across the rest of the product line (Chronova/
