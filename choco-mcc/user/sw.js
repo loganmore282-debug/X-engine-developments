@@ -20,7 +20,9 @@
 // v4: deposit screen procedure box + curved home banner + clear
 // success state on the deposit-status screen — bumped so devices pull
 // the fresh index.html instead of the cached shell.
-const CACHE = 'chocomcc-shell-v4';
+// v5: moved the deposit-procedure box below the Add Funds form (was
+// above it, pushing the payment fields down).
+const CACHE = 'chocomcc-shell-v5';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
