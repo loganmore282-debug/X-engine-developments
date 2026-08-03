@@ -72,7 +72,12 @@
 // screen's L1/L2/L3 commission tiles, which were hardcoded literal strings
 // that never reflected admin-changed settings — both now read live from
 // getSettings() every time their screen renders.
-const CACHE = 'chocomcc-shell-v21';
+// v22: renamed several Account menu tiles for clarity — Records->History,
+// Referrals & Team->My Team, Bind Bank Card->Payout Account, Change
+// Password->Security, About ChocoMCC->About Us, Rules & Regulation->Terms
+// & Rules, Customer Care->Support, Log out->Sign Out. Matching screen
+// titles updated too so opening a renamed tile shows the same new name.
+const CACHE = 'chocomcc-shell-v22';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
