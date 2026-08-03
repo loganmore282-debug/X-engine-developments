@@ -44,7 +44,7 @@ function collMap(name) {
   txs.set('t4', { userId: 'u1', type: 'withdraw', amount: -100 });
 
   console.log('\n== /admin/users/recount ==');
-  let r = await realFetch(BASE + '/admin/users/recount', { method: 'POST', headers: adminHeaders, body: '{}' });
+  let r = await realFetch(BASE + '/admin/users/recount', { method: 'GET', headers: adminHeaders });
   let body = await r.json();
   check('recount succeeds', body.status === 'success', body);
   check('recount rebuilt totalDeposited from ledger (60000)', users.get('u1').totalDeposited === 60000, users.get('u1'));
@@ -52,7 +52,7 @@ function collMap(name) {
   check('recount never touched walletBalance', users.get('u1').walletBalance === 100, users.get('u1').walletBalance);
 
   console.log('\n== /admin/integrity ==');
-  r = await realFetch(BASE + '/admin/integrity', { method: 'POST', headers: adminHeaders, body: '{}' });
+  r = await realFetch(BASE + '/admin/integrity', { method: 'GET', headers: adminHeaders });
   body = await r.json();
   check('integrity succeeds', body.status === 'success', body);
   check('flags negative balance for u2', body.alerts.some(a => a.kind === 'negative_balance' && a.userId === 'u2'), body.alerts);
@@ -61,9 +61,9 @@ function collMap(name) {
   check('not reported healthy given real issues exist', body.healthy === false, body);
 
   console.log('\n== Non-owner cannot call either endpoint ==');
-  r = await realFetch(BASE + '/admin/users/recount', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  r = await realFetch(BASE + '/admin/users/recount', { method: 'GET' });
   check('recount rejects unauthenticated', r.status === 401, await r.text());
-  r = await realFetch(BASE + '/admin/integrity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  r = await realFetch(BASE + '/admin/integrity', { method: 'GET' });
   check('integrity rejects unauthenticated', r.status === 401, await r.text());
 
   console.log(`\n${pass} passed, ${fail} failed`);

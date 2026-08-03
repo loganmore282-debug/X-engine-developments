@@ -98,7 +98,7 @@ const users = () => mockdb.__store.get('users');
   users().get('root').teamL3Count = 99;
   users().get('a').teamL2Count = 0;
 
-  r = await call('POST', '/admin/users/recount', { token: 'test-admin-key' });
+  r = await call('GET', '/admin/users/recount', { token: 'test-admin-key' });
   check('recount succeeds', r.body?.status === 'success', r.body);
   check('root.teamL1Count rebuilt to 1', users().get('root').teamL1Count === 1, users().get('root').teamL1Count);
   check('root.teamL2Count rebuilt to 1', users().get('root').teamL2Count === 1, users().get('root').teamL2Count);

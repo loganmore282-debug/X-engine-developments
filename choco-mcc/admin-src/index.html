@@ -818,7 +818,7 @@ async function renderProducts(){
   $('clearProd').addEventListener('click',async()=>{
     if(!confirm('Delete EVERY product? The app catalogue reverts to the built-in defaults until you add new ones. This cannot be undone.'))return;
     const b=$('clearProd'); b.disabled=true; b.textContent='Clearing…';
-    const d=await api('/admin/products/clear');
+    const d=await api('/admin/products/clear', {});
     toast(d.status==='success'?`Removed ${d.removed} product${d.removed===1?'':'s'}`:(d.message||'Failed'),d.status==='success'?'ok':'err');
     renderProducts();
   });

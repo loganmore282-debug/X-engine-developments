@@ -1788,7 +1788,7 @@ app.post('/admin/logout', async (req, res) => {
 });
 
 // ── ADMIN ACCOUNT MANAGEMENT (owner only) ──
-app.post('/admin/admins/list', async (req, res) => {
+app.get('/admin/admins/list', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('adminUsers').get();
@@ -1987,7 +1987,7 @@ app.post('/admin/products/clear', async (req, res) => {
 // are owner-only — the same class of irreversible, user-harming action as
 // minting gift codes)
 // ═══════════════════════════════════════════
-app.post('/admin/users', async (req, res) => {
+app.get('/admin/users', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('users').limit(10000).get();
@@ -2004,7 +2004,7 @@ app.post('/admin/users', async (req, res) => {
 // used to only ever be incremented at registration time (L3 wasn't even
 // incremented at all, only ever decremented on delete), so any account that
 // existed before that fix, or drifted for any other reason, is corrected here.
-app.post('/admin/users/recount', async (req, res) => {
+app.get('/admin/users/recount', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const txSnap = await db.collection('transactions').limit(200000).get();
@@ -2054,7 +2054,7 @@ app.post('/admin/users/recount', async (req, res) => {
 // without a usable gateway reference or left pending too long for an admin
 // to have missed. Never writes anything — it only reports what it finds so
 // an admin can decide what to do about it.
-app.post('/admin/integrity', async (req, res) => {
+app.get('/admin/integrity', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const [usersSnap, txSnap, witSnap] = await Promise.all([
@@ -2369,7 +2369,7 @@ app.post('/admin/transactions/list', async (req, res) => {
 });
 // Built from the live referredBy graph — ChocoMCC has no separate
 // `referrals` collection, referral links are just the field on each user.
-app.post('/admin/referrals/list', async (req, res) => {
+app.get('/admin/referrals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const usersSnap = await db.collection('users').limit(10000).get();
@@ -2424,7 +2424,7 @@ app.post('/admin/promocodes/generate', async (req, res) => {
     res.json({ status: 'success', codes: made, count: made.length });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.post('/admin/promocodes/list', async (req, res) => {
+app.get('/admin/promocodes/list', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('promoCodes').orderBy('createdAt', 'desc').limit(300).get();
@@ -2738,7 +2738,7 @@ function runReconciler() {
 // waiting for the background 30s sweep. Same functions the automatic
 // background job uses, so this can never settle anything differently or
 // double-pay — it just runs them on demand.
-app.post('/admin/payments/sync', async (req, res) => {
+app.get('/admin/payments/sync', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const depositsSettled = await reconcilePendingDeposits();
