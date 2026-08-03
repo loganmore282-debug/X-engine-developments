@@ -851,12 +851,18 @@ app.post('/deposit/marzpay', async (req, res) => {
     const marzReference = crypto.randomUUID();
     const { date, time } = nowStr();
     const depRef = db.collection('pendingDeposits').doc();
+    // The network is only ever shown back to the member/admin (which network
+    // they said they were paying from) — MarzPay itself detects it from the
+    // phone number, not from this field — so whitelist it rather than
+    // storing whatever arbitrary string the client sends.
+    const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
+    const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
     // Write BEFORE calling the gateway — marzCollect() below can trigger a
     // REAL mobile-money charge; if the process dies right after that call
     // succeeds, the doc must already exist so a reconciler can find it by
     // OUR OWN reference even without MarzPay's uuid yet.
     await depRef.set({
-      userId, phone, amount: amt, ref, marzReference, status: 'initiating',
+      userId, phone, network, amount: amt, ref, marzReference, status: 'initiating',
       date, time, createdAt: FieldValue.serverTimestamp()
     });
     // Unlike withdrawals, a thrown/timed-out call here must NOT be treated

@@ -66,7 +66,12 @@
   .field input:focus{border-color:var(--caramel);}
   .field .ic{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.65;color:var(--cocoa-soft);display:flex;}
   .phone-prefix{position:absolute;left:44px;top:50%;transform:translateY(-50%);font-size:15px;font-weight:700;color:var(--cocoa-soft);pointer-events:none;}
-  #fPhone{padding-left:84px;}
+  #fPhone,#depPhone{padding-left:84px;}
+  .net-chip-row{display:flex;gap:10px;margin-bottom:14px;}
+  .net-chip{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 10px;border-radius:14px;
+    border:1.5px solid var(--line);background:var(--cream);color:var(--cocoa-soft);font-weight:800;font-size:13.5px;}
+  .net-chip-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+  .net-chip.active{border-color:var(--caramel);background:var(--caramel-pale);color:var(--caramel-deep);}
   .auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--cocoa-faint);}
   .auth-switch b{color:var(--caramel-deep);font-weight:800;}
   .auth-tag{display:inline-block;background:var(--mint-pale);color:var(--mint);font-weight:800;font-size:11.5px;
@@ -153,6 +158,7 @@
   .pb-action-btn{flex:1;background:rgba(255,255,255,.16);backdrop-filter:blur(2px);border:1.5px solid rgba(255,255,255,.4);
     color:#fff;font-weight:800;font-size:12.5px;padding:12px 10px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:6px;}
   .photo-banner.pb-flush{margin:0;border-radius:0;}
+  .photo-banner#homeBanner{border-radius:0 0 26px 26px;}
   .photo-banner.pb-sm{height:110px;}
   .photo-banner.pb-hero{height:170px;margin:14px 20px;border-radius:26px;}
   .photo-banner.pb-full{height:240px;}
@@ -492,8 +498,21 @@
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=90000">UGX 90,000</button>
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=200000">UGX 200,000</button>
       </div>
+      <span class="flabel">Choose network</span>
+      <div class="net-chip-row" id="depNetworkRow">
+        <button type="button" class="net-chip" data-net="MTN Mobile Money" onclick="selectDepNetwork('MTN Mobile Money')">
+          <span class="net-chip-dot" style="background:#FFCC08"></span>MTN
+        </button>
+        <button type="button" class="net-chip" data-net="Airtel Money" onclick="selectDepNetwork('Airtel Money')">
+          <span class="net-chip-dot" style="background:#ED1C24"></span>Airtel
+        </button>
+      </div>
       <span class="flabel">Mobile-money number to pay from</span>
-      <input class="famt" id="depPhone" type="tel" placeholder="0771234567" style="font-size:16px">
+      <div class="field" style="margin-bottom:14px">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 10.5c1.2 2.6 3.4 4.8 6 6l1.8-1.8c.3-.3.7-.4 1-.3 1 .3 2.1.5 3.2.5.6 0 1 .4 1 1v2.7c0 .6-.4 1-1 1C10.7 19.6 4.4 13.3 4.4 5.5c0-.6.4-1 1-1H8c.6 0 1 .4 1 1 0 1.1.2 2.2.5 3.2.1.4 0 .8-.3 1L6.5 10.5z"/></svg></span>
+        <span class="phone-prefix">+256</span>
+        <input id="depPhone" type="tel" placeholder="123456789" maxlength="9">
+      </div>
       <button class="btn btn-primary btn-block" id="depGoBtn" onclick="doDeposit()">Add Funds</button>
     </div>
   </div>
@@ -1304,7 +1323,17 @@ function openOverlay(name){
   if(name==='records'){ setRecordsTab('accrued'); }
   if(name==='mychoc') renderMyChoc();
   if(name==='earnings') renderEarnings();
-  if(name==='deposit'){ var dp=document.getElementById('depPhone'); if(dp && !dp.value) dp.value = STATE.phone||''; }
+  // FIXED: this used to auto-fill depPhone with the member's own account
+  // number — but a deposit can genuinely come from a DIFFERENT mobile-money
+  // number than the one the account was registered with, and pre-filling it
+  // made that easy to miss. The field (and the network choice) now always
+  // starts blank, every time this screen opens, so the number paying is
+  // always one the member actually typed themselves.
+  if(name==='deposit'){
+    document.getElementById('depPhone').value = '';
+    _depNetwork = null;
+    document.querySelectorAll('#depNetworkRow .net-chip').forEach(function(b){ b.classList.remove('active'); });
+  }
 }
 function closeOverlay(){ document.querySelectorAll('.overlay').forEach(function(o){o.classList.remove('show');}); }
 
@@ -1401,15 +1430,22 @@ async function buyProduct(key){
 }
 
 /* ====================== ACTIONS ====================== */
+var _depNetwork = null;
+function selectDepNetwork(name){
+  _depNetwork = name;
+  document.querySelectorAll('#depNetworkRow .net-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.net===name); });
+}
 async function doDeposit(){
   var amt = parseInt(document.getElementById('depAmt').value,10);
   var phone = document.getElementById('depPhone').value.trim();
   var sett = getSettings();
   if(!amt || amt < sett.minDeposit){ toast('Minimum amount is '+ugx(sett.minDeposit)); return; }
+  if(!_depNetwork){ toast('Choose MTN or Airtel'); return; }
   if(!phone){ toast('Enter the mobile-money number to pay from'); return; }
+  if(phone.charAt(0)==='0'){ toast("Don't start with 0 — just enter your number after +256"); return; }
   var btn = document.getElementById('depGoBtn'), label = btn.textContent;
   btn.disabled = true; btn.textContent = 'Please wait…';
-  var r = await api('/deposit/marzpay', { amount:amt, phone:phone });
+  var r = await api('/deposit/marzpay', { amount:amt, phone:phone, network:_depNetwork });
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not start the payment'); return; }
   document.getElementById('depAmt').value='';
