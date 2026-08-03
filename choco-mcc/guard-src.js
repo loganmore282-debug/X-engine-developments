@@ -1,19 +1,20 @@
 (function(){
   "use strict";
-  // No confirmed custom domain in render.yaml at build time — only Render's
-  // own default subdomains are known-good. If a custom domain gets bought
-  // later, add it to ALLOW below and rebuild (node build-core.js), or every
-  // real visitor on that domain gets wiped and bounced by this same check.
-  var REAL = "https://chocomcc-app.onrender.com/";
+  // Owner's real custom domain (choco-mcc.com) — the canonical home a
+  // cloned/rehosted copy gets bounced to.
+  var REAL = "https://choco-mcc.com/";
   // DOMAIN LOCK — only these exact hosts (plus any *.onrender.com
-  // subdomain) may run the app. A cloned/rehosted phishing copy on any
-  // other domain wipes itself and bounces to REAL. Fails OPEN on any error
-  // so real users are never wrongly locked out.
+  // subdomain, kept as a fallback while the custom domain is still being
+  // set up/propagated) may run the app. A cloned/rehosted phishing copy on
+  // any other domain wipes itself and bounces to REAL. Fails OPEN on any
+  // error so real users are never wrongly locked out.
   function hostOk(){
     try {
       var h = (location.hostname || "").toLowerCase();
       if (!h) return true; // installed PWA / file:// — don't wipe
       var ALLOW = [
+        "choco-mcc.com",
+        "www.choco-mcc.com",
         "localhost",
         "127.0.0.1"
       ];
