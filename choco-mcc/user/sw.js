@@ -60,7 +60,9 @@
 // milestones) + label, and a slim progress bar under the description. Same
 // Current/Target/Progress numbers and Claim/In Progress/Received button as
 // before, just a fresher look.
-const CACHE = 'chocomcc-shell-v18';
+// v19: overlay header separator line thickened (2px, higher-contrast) so it
+// reads clearly instead of nearly disappearing against the cream background.
+const CACHE = 'chocomcc-shell-v19';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

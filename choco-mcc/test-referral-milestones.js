@@ -127,6 +127,15 @@ const userDoc = id => users().get(id);
   check('exactly ONE of two concurrent claims on the same tier succeeds', successes === 1, { r1: r1.body, r2: r2.body });
   check('wallet credited exactly once (UGX 2,000)', userDoc(REF).walletBalance === BAL + 2000, userDoc(REF).walletBalance);
 
+  console.log('\n-- A banned L1 referral no longer pads the referrer\'s Task Center numbers --');
+  users().set('l1-5', Object.assign({}, userDoc('l1-5'), { status: 'banned' }));
+  r = await call('GET', '/team/stats', { token: 'uid:' + REF });
+  check('l1ActiveCount drops from 5 to 4 once that referral is banned', r.body?.l1ActiveCount === 4, r.body?.l1ActiveCount);
+  check('l1DepositTotal drops by the banned referral\'s 500,000 (1,500,000 -> 1,000,000)', r.body?.l1DepositTotal === 1000000, r.body?.l1DepositTotal);
+  users().set('l1-5', Object.assign({}, userDoc('l1-5'), { status: 'active' }));
+  r = await call('GET', '/team/stats', { token: 'uid:' + REF });
+  check('unbanning restores the count and deposit total', r.body?.l1ActiveCount === 5 && r.body?.l1DepositTotal === 1500000, r.body);
+
   console.log('\n-- Auth / validation guards --');
   r = await call('POST', '/team/milestone/claim', { body: { target: 5 } });
   check('no token -> 401', r.code === 401, r.code);

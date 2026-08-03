@@ -349,17 +349,22 @@ const TEAM_DEPOSIT_MILESTONES = [
   { target: 5000000, reward: 150000 },
 ];
 // Recomputed live on every /team/stats read and every claim — never stored,
-// never trusted from the client, so a milestone can never be forged.
+// never trusted from the client, so a milestone can never be forged. Both
+// exclude a banned L1 referral's activity: an account gets banned for real
+// abuse (duplicate accounts, chargebacks, fraud), and letting its
+// investment/deposits keep padding the REFERRER's Task Center milestones
+// after that would still be a live miscalculation even though the money
+// itself was never double-paid.
 async function activeL1Count(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
   let n = 0;
-  snap.forEach(d => { if ((d.data().totalInvested || 0) > 0) n += 1; });
+  snap.forEach(d => { const v = d.data(); if (v.status !== 'banned' && (v.totalInvested || 0) > 0) n += 1; });
   return n;
 }
 async function l1TeamDeposits(userId) {
   const snap = await db.collection('users').where('referredBy', '==', userId).get();
   let total = 0;
-  snap.forEach(d => { total += Number(d.data().totalDeposited || 0); });
+  snap.forEach(d => { const v = d.data(); if (v.status !== 'banned') total += Number(v.totalDeposited || 0); });
   return total;
 }
 
