@@ -38,7 +38,11 @@
 // v11: Task Center now shows the loading spinner immediately on open
 // (was a silent blank screen while /team/stats loaded), and the Claim
 // button shows a "Claiming…" busy state instead of appearing unresponsive.
-const CACHE = 'chocomcc-shell-v13';
+// v14: deposit failure reason, real MTN/Airtel network cards + checkmark,
+// wallet/upload-tray action icons, announcement dialog restructure, phone
+// input accepts 07xxxxxxxx or 7xxxxxxxx, Team screen levels are tappable,
+// referral links (?reg=CODE) now actually prefill the invite code.
+const CACHE = 'chocomcc-shell-v14';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -198,16 +198,33 @@ function toggleAuth(){
     : 'New here? <b onclick="toggleAuth()">Sign up</b>';
 }
 document.getElementById('authSwitchBtn').onclick = toggleAuth;
+// A referral link is https://choco-mcc.com/?reg=CODE (see teamLink below) — if
+// someone arrives with that in the URL, land them straight on Sign Up with
+// the invite code already filled in. Before this, the code was captured
+// nowhere: every referral link opened the plain sign-in screen with an empty
+// invite field, so it silently did nothing unless the visitor happened to
+// retype the code by hand. Runs AFTER the switch button above is wired —
+// toggleAuth() replaces #authSwitch's innerHTML, so calling it any earlier
+// would tear out authSwitchBtn before its onclick is even attached.
+(function prefillReferralFromUrl(){
+  var qs = new URLSearchParams(location.search);
+  var code = (qs.get('reg') || qs.get('ref') || '').trim();
+  if(!code) return;
+  if(authMode==='login') toggleAuth();
+  var f = document.getElementById('fCode');
+  if(f) f.value = code;
+})();
 
 document.getElementById('authGo').onclick = async function(){
   var phone = document.getElementById('fPhone').value.trim();
   var pass = document.getElementById('fPass').value.trim();
   var ref = document.getElementById('fCode') ? document.getElementById('fCode').value.trim() : '';
   if(!phone || !pass){ toast('Enter your phone and password'); return; }
-  // +256 is shown as a fixed prefix now — the field itself only ever holds
-  // the local 9 digits, so a leading 0 means the member typed the old
-  // "0xxxxxxxxx" format into the wrong place.
-  if(phone.charAt(0)==='0'){ toast("Don't start with 0 — just enter your number after +256"); return; }
+  // +256 is shown as a fixed prefix, so the field only needs the local 9
+  // digits — but people habitually type the old "0xxxxxxxxx" format out of
+  // habit. Rather than reject and make them fix it, just strip the leading
+  // 0 ourselves so either form works with no friction.
+  if(phone.charAt(0)==='0') phone = phone.slice(1);
   if(pass.length < 6){ toast('Password must be at least 6 characters'); return; }
   if(authMode==='register'){
     var passConfirm = document.getElementById('fPassConfirm').value.trim();
@@ -764,7 +781,7 @@ function openOverlay(name){
   if(name==='deposit'){
     document.getElementById('depPhone').value = '';
     _depNetwork = null;
-    document.querySelectorAll('#depNetworkRow .net-chip').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelectorAll('#depNetworkRow .net-card').forEach(function(b){ b.classList.remove('active'); });
   }
 }
 function closeOverlay(){ document.querySelectorAll('.overlay').forEach(function(o){o.classList.remove('show');}); }
@@ -866,7 +883,7 @@ async function buyProduct(key){
 var _depNetwork = null;
 function selectDepNetwork(name){
   _depNetwork = name;
-  document.querySelectorAll('#depNetworkRow .net-chip').forEach(function(b){ b.classList.toggle('active', b.dataset.net===name); });
+  document.querySelectorAll('#depNetworkRow .net-card').forEach(function(b){ b.classList.toggle('active', b.dataset.net===name); });
 }
 async function doDeposit(){
   var amt = parseInt(document.getElementById('depAmt').value,10);
@@ -875,7 +892,10 @@ async function doDeposit(){
   if(!amt || amt < sett.minDeposit){ toast('Minimum amount is '+ugx(sett.minDeposit)); return; }
   if(!_depNetwork){ toast('Choose MTN or Airtel'); return; }
   if(!phone){ toast('Enter the mobile-money number to pay from'); return; }
-  if(phone.charAt(0)==='0'){ toast("Don't start with 0 — just enter your number after +256"); return; }
+  // Accept either 07XXXXXXXX or 7XXXXXXXXX with no friction — people type
+  // both interchangeably out of habit, and the server's own cleanPhone()
+  // already normalises whichever form arrives.
+  if(phone.charAt(0)==='0') phone = phone.slice(1);
   var btn = document.getElementById('depGoBtn'), label = btn.textContent;
   btn.disabled = true; btn.textContent = 'Please wait…';
   var r = await api('/deposit/marzpay', { amount:amt, phone:phone, network:_depNetwork });
@@ -1041,6 +1061,32 @@ function copyCode(){
   var link = 'https://choco-mcc.com/?reg='+STATE.referralCode;
   if(navigator.clipboard) navigator.clipboard.writeText(link).catch(function(){});
   toast('Referral link copied');
+}
+// Tapping a Level 1/2/3 row on the Team screen opens the actual member
+// list for that level — walked fresh from the server's own referredBy
+// graph (/team/members?level=N), never just the count already on screen.
+async function openTeamLevel(level){
+  openOverlay('teamlevel');
+  document.getElementById('teamLevelTitle').textContent = 'Level '+level+' members';
+  document.getElementById('teamLevelList').innerHTML = spinnerHtml();
+  var r = await api('/team/members?level='+level);
+  if(r.status!=='success'){
+    document.getElementById('teamLevelList').innerHTML = '<div class="empty">Could not load this list — try again.</div>';
+    return;
+  }
+  var list = r.members||[];
+  if(!list.length){
+    document.getElementById('teamLevelList').innerHTML = '<div class="empty">No Level '+level+' members yet.</div>';
+    return;
+  }
+  document.getElementById('teamLevelList').innerHTML = list.map(function(m){
+    var masked = m.phone && m.phone.length>4 ? m.phone.slice(0,4)+'•••'+m.phone.slice(-2) : (m.phone||'—');
+    var joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+    return '<div class="bank-row">'+
+      '<div class="bank-net-badge" style="background:'+(m.hasInvested?'var(--mint-pale)':'var(--cream-deep)')+';color:'+(m.hasInvested?'var(--mint)':'var(--cocoa-faint)')+'">'+esc(masked.slice(0,2))+'</div>'+
+      '<div class="bank-info"><b>'+esc(masked)+'</b><span>Joined '+esc(joined)+(m.hasInvested?' · Invested '+ugx(m.totalInvested):' · Not invested yet')+'</span></div>'+
+      '</div>';
+  }).join('');
 }
 function toast(msg){
   var bg=document.getElementById('toastBg'); document.getElementById('toast').textContent=msg; bg.classList.add('show');

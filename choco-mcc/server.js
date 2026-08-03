@@ -538,6 +538,13 @@ app.post('/admin/push/unregister', async (req, res) => {
 
 // ── MARZPAY (deposits via collect-money, withdrawals via send-money) ──
 const PROVIDER_BUSY_MSG = 'The mobile-money service is temporarily busy. Please try again shortly.';
+// Shown when MarzPay itself reports the collection failed/declined with no
+// specific reason of its own to pass along (marzUserMsg() already surfaces
+// MarzPay's own message when one exists — this is only the fallback for
+// when it doesn't). Insufficient balance on the paying line is by far the
+// most common real-world cause, so naming it directly is far more useful
+// than a bare "not completed" that leaves the member guessing.
+const DEPOSIT_FAILED_MSG = 'Payment was not completed — this is usually because the mobile-money account did not have enough balance. Check your balance and try again.';
 function marzUserMsg(mp, fallback) {
   const raw = mp && (mp.message || mp.data?.message || mp.error || mp.data?.error);
   if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
@@ -721,24 +728,39 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
 // ═══════════════════════════════════════════
 // TEAM + TASK CENTER
 // ═══════════════════════════════════════════
+// Returns the caller's own Level 1 (direct), Level 2 (their referrals'
+// referrals), or Level 3 team — ?level=1|2|3, defaulting to 1 for backward
+// compatibility. Walked one hop at a time from the caller's own id rather
+// than trusting any stored "level" field, so it's always derived fresh from
+// the live referredBy graph and can never be spoofed by passing someone
+// else's id anywhere in the chain.
 app.get('/team/members', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const level = Math.min(3, Math.max(1, parseInt(req.query.level, 10) || 1));
   try {
-    const snap = await db.collection('users').where('referredBy', '==', userId).get();
-    const members = [];
-    snap.forEach(doc => {
-      const d = doc.data();
-      members.push({
-        id: doc.id, phone: d.phone || '',
-        joinedAt: d.createdAt ? new Date(tsMillis(d.createdAt)).toISOString() : null,
-        hasInvested: (d.totalInvested || 0) > 0,
-        totalInvested: d.totalInvested || 0,
-        deposited: d.totalDeposited || 0,
+    let parentIds = [userId];
+    let members = [];
+    for (let l = 1; l <= level; l++) {
+      if (!parentIds.length) { members = []; break; }
+      const snap = await db.collection('users').where('referredBy', 'in', parentIds).get();
+      const nextIds = [];
+      members = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        nextIds.push(doc.id);
+        members.push({
+          id: doc.id, phone: d.phone || '',
+          joinedAt: d.createdAt ? new Date(tsMillis(d.createdAt)).toISOString() : null,
+          hasInvested: (d.totalInvested || 0) > 0,
+          totalInvested: d.totalInvested || 0,
+          deposited: d.totalDeposited || 0,
+        });
       });
-    });
+      parentIds = nextIds;
+    }
     members.sort((a, b) => (b.joinedAt || '') > (a.joinedAt || '') ? 1 : -1);
-    res.json({ status: 'success', members });
+    res.json({ status: 'success', level, members });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -974,7 +996,12 @@ app.post('/register', async (req, res) => {
         await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
         const l1Snap = await db.collection('users').doc(referrerId).get();
         const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
-        if (l2Id && l2Id !== referrerId) await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+        if (l2Id && l2Id !== referrerId) {
+          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+          const l2Snap = await db.collection('users').doc(l2Id).get();
+          const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
+          if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+        }
       }
       // The user's own doc (registrationDone + the actual wallet credit) is
       // written FIRST, in one update. If the process dies right after this,
@@ -1242,8 +1269,8 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: 'matched' });
     }
     if (FAILED_STATUSES.has(marzStatus)) {
-      await depSnap.ref.update({ status: 'failed', failureReason: 'Payment was not completed' }).catch(() => {});
-      return res.json({ status: 'success', state: 'failed', message: 'Payment was not completed' });
+      await depSnap.ref.update({ status: 'failed', failureReason: DEPOSIT_FAILED_MSG }).catch(() => {});
+      return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
     }
     res.json({ status: 'success', state: 'pending' });
   } catch (e) {
@@ -1310,7 +1337,7 @@ app.post('/deposit/callback', async (req, res) => {
         const marzStatus = await marzGetCollectStatus(uuid);
         if (marzStatus && !FAILED_STATUSES.has(marzStatus)) return; // a transient/ambiguous re-check — leave it pending, don't decline
       }
-      await doc.ref.update({ status: 'failed', failureReason: 'Payment was not completed' }).catch(() => {});
+      await doc.ref.update({ status: 'failed', failureReason: DEPOSIT_FAILED_MSG }).catch(() => {});
     }
   } catch (e) {
     console.error('Deposit callback error:', e.message);
@@ -1949,8 +1976,12 @@ app.post('/admin/users', async (req, res) => {
 // Rebuilds every user's deposit/earning totals straight from the transaction
 // ledger — the source of truth — rather than trusting whatever incremental
 // counters have drifted to over time. Never touches walletBalance itself
-// (that's real money in flight, not a derived stat), only the two read-only
-// summary fields the dashboard/analytics show.
+// (that's real money in flight, not a derived stat), only the read-only
+// summary fields the dashboard/analytics/Team screen show. Also rebuilds the
+// teamL1/L2/L3Count fields straight from the live referredBy graph — these
+// used to only ever be incremented at registration time (L3 wasn't even
+// incremented at all, only ever decremented on delete), so any account that
+// existed before that fix, or drifted for any other reason, is corrected here.
 app.post('/admin/users/recount', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -1964,11 +1995,30 @@ app.post('/admin/users/recount', async (req, res) => {
       else if (t.type === 'cashback') row.earned += Number(t.amount) || 0;
     });
     const usersSnap = await db.collection('users').limit(10000).get();
+    const referredByMap = {}; // userId -> their own referredBy
+    usersSnap.forEach(d => { referredByMap[d.id] = d.data().referredBy || null; });
+    const teamCounts = {}; // userId -> { l1, l2, l3 }
+    const bump = (id, field) => { if (!id) return; (teamCounts[id] || (teamCounts[id] = { l1: 0, l2: 0, l3: 0 }))[field]++; };
+    Object.keys(referredByMap).forEach(uid => {
+      const l1Id = referredByMap[uid];
+      if (!l1Id) return;
+      bump(l1Id, 'l1');
+      const l2Id = referredByMap[l1Id];
+      if (l2Id && l2Id !== l1Id) {
+        bump(l2Id, 'l2');
+        const l3Id = referredByMap[l2Id];
+        if (l3Id && l3Id !== l2Id && l3Id !== l1Id) bump(l3Id, 'l3');
+      }
+    });
     const batch = db.batch();
     let updated = 0;
     usersSnap.forEach(d => {
       const row = totals[d.id] || { deposited: 0, earned: 0 };
-      batch.update(d.ref, { totalDeposited: row.deposited, totalEarned: row.earned });
+      const team = teamCounts[d.id] || { l1: 0, l2: 0, l3: 0 };
+      batch.update(d.ref, {
+        totalDeposited: row.deposited, totalEarned: row.earned,
+        teamL1Count: team.l1, teamL2Count: team.l2, teamL3Count: team.l3
+      });
       updated++;
     });
     await batch.commit();
@@ -2582,7 +2632,7 @@ async function reconcilePendingDeposits() {
       if (!dep.marzTxUuid) continue;
       const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
       if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(doc); settled++; }
-      else if (FAILED_STATUSES.has(marzStatus)) await doc.ref.update({ status: 'failed', failureReason: 'Payment was not completed' }).catch(() => {});
+      else if (FAILED_STATUSES.has(marzStatus)) await doc.ref.update({ status: 'failed', failureReason: DEPOSIT_FAILED_MSG }).catch(() => {});
     }
     // A deposit marked 'failed' isn't necessarily really dead (same lesson as
     // Chronova's pollPendingPayments): a member who insists "I paid but never
