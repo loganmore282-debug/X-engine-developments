@@ -1097,9 +1097,9 @@ app.post('/invest/create', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const tier = await getProductByKey(req.body.tierKey);
   if (!tier) return res.status(400).json({ status: 'error', message: 'Unknown product' });
-  // The shop only ever shows active, non-sold-out products, but that's a
+  // The shop only ever shows active, non-coming-soon products, but that's a
   // client-side filter — nothing stopped a direct API call from buying a
-  // product an admin deliberately turned off or marked sold out.
+  // product an admin deliberately turned off or marked coming soon.
   if (tier.active === false || tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This product is not available right now.' });
   try {
     const sett = await getSettings();
