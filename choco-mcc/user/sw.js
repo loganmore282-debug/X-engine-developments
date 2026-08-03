@@ -52,7 +52,10 @@
 // referred member, on their first-ever investment — later purchases by the
 // same member no longer pay it again (they still count for Task Center's
 // active-referral and deposit-total milestones).
-const CACHE = 'chocomcc-shell-v16';
+// v17: every overlay screen's header (.ov-top) now has a thin separator line
+// under it, cleanly dividing the back-arrow/title bar from the content below
+// on every single screen that opens.
+const CACHE = 'chocomcc-shell-v17';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
