@@ -1287,6 +1287,13 @@ app.post('/deposit/callback', async (req, res) => {
 // ═══════════════════════════════════════════
 // WITHDRAWAL (MarzPay send-money)
 // ═══════════════════════════════════════════
+// Guards the actual MONEY-SEND step (MarzPay send-money) — shared by the
+// admin "Send via MarzPay" action and admin "Reject". Two admins acting on
+// the same withdrawal at once (or an admin racing a reject) could otherwise
+// both touch it — checked-and-set with no await in between, so it can't
+// race even though M0 gives no real transaction locking.
+const _withdrawInFlight = new Set();
+
 app.post('/withdraw/request', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -1304,11 +1311,7 @@ app.post('/withdraw/request', async (req, res) => {
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;
-    // Same split as deposits: `ref` is our own display reference, `marzReference`
-    // is a UUID sent to MarzPay's `reference` field (recommended UUID, max 50
-    // chars per their docs — never reuse our own B-format string for it).
     const ref = await uniqueRef('withdrawals', 'B');
-    const marzReference = crypto.randomUUID();
     let witId;
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef = db.collection('users').doc(userId);
@@ -1332,52 +1335,119 @@ app.post('/withdraw/request', async (req, res) => {
       }
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
-      t.update(uRef, { walletBalance: FieldValue.increment(-amt), totalWithdrawn: FieldValue.increment(net) });
+      // Only the wallet is reserved here — totalWithdrawn is credited once an
+      // admin actually sends the payout (see /admin/withdraw/process), never
+      // at request time, since nothing has left the platform yet.
+      t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
       const { date, time } = nowStr();
       t.set(witRef, {
-        userId, amount: amt, fee, net, holder, network, phone, ref, marzReference,
-        status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
+        userId, amount: amt, fee, net, holder, network, phone, ref,
+        status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'withdraw', description: `Cash out to ${holder} (${network}) — net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee`,
-        amount: -amt, status: 'success', date, time, ref, createdAt: FieldValue.serverTimestamp()
+        userId, type: 'withdraw', description: `Cash out to ${holder} (${network}) — net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee — awaiting admin approval`,
+        amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
 
-    // The wallet is ALREADY debited above — from here on, every exit path
-    // must either confirm the payout was actually sent, or refund. A plain
-    // try/catch around this call (not the whole handler) means a network
-    // failure/timeout talking to MarzPay is treated exactly like a clean
-    // rejection below and flows through the same refund logic, instead of
-    // falling into the outer catch and leaving the user debited with
-    // nothing sent and no refund (a real gap this used to have).
+    sendAdminPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}) — awaiting approval`, { type: 'withdrawal', withdrawalId: witId });
+    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested — awaiting admin approval` });
+  } catch (e) {
+    res.status(400).json({ status: 'error', message: e.message });
+  }
+});
+
+// Admin manually approves & sends a pending cash-out via MarzPay. This is the
+// gate the owner wants: no withdrawal reaches the gateway until an admin
+// acts here. On success the record moves to 'processing' (or straight to
+// 'processed' for a sandbox response); on a clean gateway rejection it stays
+// 'pending' untouched — no money moved either way, so the admin can just
+// retry. Money-safety notes mirror /withdraw/request's old auto-send path:
+// the "sending" marker is written BEFORE the gateway call so a crash right
+// after marzSendMoney() succeeds can never leave this silently stuck.
+app.post('/admin/withdraw/process', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const withdrawalId = String(req.body.withdrawalId || '');
+  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+  if (_withdrawInFlight.has(withdrawalId))
+    return res.status(409).json({ status: 'error', message: 'Another admin is already acting on this withdrawal — check the list in a moment.' });
+  _withdrawInFlight.add(withdrawalId);
+  try {
+    const witRef = db.collection('withdrawals').doc(withdrawalId);
+    const witSnap = await witRef.get();
+    if (!witSnap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    const wit = witSnap.data();
+    if (wit.status !== 'pending') return res.status(400).json({ status: 'error', message: `Cannot send, the status is '${wit.status}'` });
+
+    const marzReference = crypto.randomUUID();
+    const processedBy = req.adminUser?.username || 'owner-key';
+    await witRef.update({ status: 'sending', sendingReference: marzReference, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+
     let mpData;
     try {
       mpData = await marzSendMoney({
-        amount: net, phone, reference: marzReference, description: 'ChocoMCC cash out',
+        amount: wit.net, phone: wit.phone, reference: marzReference, description: 'ChocoMCC cash out',
         callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
       });
     } catch (netErr) {
       console.error('MarzPay send-money network error:', netErr.message);
       mpData = { status: 'error', providerDown: true, message: netErr.message };
     }
-    const witRef = db.collection('withdrawals').doc(witId);
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
-      console.error('MarzPay send-money rejected:', JSON.stringify(mpData));
-      // Gateway rejected outright — refund immediately, nothing left in flight.
-      await db.runTransaction(async t => {
-        const uRef = db.collection('users').doc(userId);
-        t.update(uRef, { walletBalance: FieldValue.increment(amt), totalWithdrawn: FieldValue.increment(-net) });
-        t.update(witRef, { status: 'declined', failureReason: marzUserMsg(mpData, 'Payout could not be started') });
-      });
-      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not process the cash-out right now. Please try again.') });
+      // Gateway rejected outright — nothing moved, so it's safe to put this
+      // back to 'pending' exactly as before and let the admin retry.
+      await witRef.update({ status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched — try again in a moment.') });
     }
-    await witRef.update({ marzTxUuid: mpData.data?.transaction?.uuid || null });
-    sendAdminPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)})`, { type: 'withdrawal', withdrawalId: witId });
-    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested — net ${fmtUGX(net)}` });
+    const marzTxUuid = mpData.data?.transaction?.uuid || null;
+    const sandbox = mpData.status === 'sandbox';
+    if (sandbox) {
+      await Promise.all([
+        witRef.update({ status: 'processed', marzReference, marzTxUuid, processedBy, processedAt: FieldValue.serverTimestamp() }),
+        db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) })
+      ]);
+    } else {
+      await Promise.all([
+        witRef.update({ status: 'processing', marzReference, marzTxUuid, processedBy, processedAt: FieldValue.serverTimestamp() }),
+        db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) })
+      ]);
+    }
+    try {
+      const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: sandbox ? 'success' : 'processing' });
+    } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+    logAdminAction(req, 'withdrawal_processed', { withdrawalId, amount: wit.net, phone: wit.phone, userId: wit.userId });
+    res.json({ status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete — ${fmtUGX(wit.net)} to ${wit.phone}` : `Sending ${fmtUGX(wit.net)} to ${wit.phone}` });
   } catch (e) {
-    res.status(400).json({ status: 'error', message: e.message });
-  }
+    console.error('Process withdrawal error:', e.message);
+    res.status(500).json({ status: 'error', message: e.message });
+  } finally { _withdrawInFlight.delete(withdrawalId); }
+});
+
+// Read-only re-check of a still-processing withdrawal against MarzPay's own
+// records — never moves money, only reports the gateway's verdict so the
+// admin can tell a real outage apart from something worth investigating.
+app.post('/admin/withdraw/verify', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const withdrawalId = String(req.body.withdrawalId || '');
+  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+  try {
+    const snap = await db.collection('withdrawals').doc(withdrawalId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    const w = snap.data();
+    if (!w.marzTxUuid)
+      return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This payout never reached MarzPay (no gateway reference) — nothing was sent.' });
+    const marzStatus = await marzGetSendStatus(w.marzTxUuid);
+    const sent = SUCCESS_STATUSES.has(marzStatus);
+    const failed = FAILED_STATUSES.has(marzStatus);
+    let message;
+    if (!marzStatus) message = 'MarzPay did not respond just now — try Verify again in a moment.';
+    else if (sent && w.status !== 'processed') message = `MarzPay says this payout was SENT, but our record is "${w.status}". Check the recipient before doing anything else.`;
+    else if (sent) message = 'MarzPay confirms the payout was SENT and our record already shows it processed.';
+    else if (failed) message = `MarzPay says this payout FAILED (status: ${marzStatus}).`;
+    else message = `MarzPay reports status: ${marzStatus || 'unknown'}.`;
+    res.json({ status: 'success', ourStatus: w.status, marzStatus: marzStatus || 'unknown', message });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 app.post('/withdraw/marzpay/status', async (req, res) => {
@@ -1388,7 +1458,7 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
     if (!witSnap.exists || witSnap.data().userId !== userId)
       return res.status(404).json({ status: 'error', message: 'Cash-out not found' });
     const wit = witSnap.data();
-    if (wit.status === 'processed' || wit.status === 'declined') return res.json({ status: 'success', state: wit.status });
+    if (wit.status !== 'processing') return res.json({ status: 'success', state: wit.status });
     if (!wit.marzTxUuid) return res.json({ status: 'success', state: 'processing' });
 
     const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
@@ -2017,28 +2087,38 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     res.json({ status: 'success', withdrawals: rows, counts, total: rows.length });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Force-decline a still-processing withdrawal and refund it — same locked
-// transaction/key as the client status-poll and reconciler refund paths, so
-// this can never double-refund alongside either of them.
+// Reject a withdrawal and refund it — either still 'pending' (never sent,
+// so only the reserved wallet balance is returned) or 'processing' (a send
+// was attempted, so totalWithdrawn is reversed too). Same lock key as
+// /admin/withdraw/process and the client status-poll/reconciler refund
+// paths, so this can never double-refund alongside any of them.
 app.post('/admin/withdraw/reject', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const witId = String(req.body.withdrawalId || '');
+  if (_withdrawInFlight.has(witId))
+    return res.status(409).json({ status: 'error', message: 'This withdrawal is being sent right now — check the list in a moment.' });
+  _withdrawInFlight.add(witId);
   try {
     const ref = db.collection('withdrawals').doc(witId);
     const snap = await ref.get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
-    if (w.status !== 'processing') return res.status(400).json({ status: 'error', message: 'Only a still-processing withdrawal can be force-declined' });
+    if (w.status !== 'pending' && w.status !== 'processing')
+      return res.status(400).json({ status: 'error', message: `Only a pending or still-processing withdrawal can be declined (this one is '${w.status}')` });
+    const wasProcessing = w.status === 'processing';
     await withLock('bal:' + w.userId, () => db.runTransaction(async t => {
       const fresh = await t.get(ref);
-      if (fresh.data().status !== 'processing') return;
+      if (fresh.data().status !== w.status) return;
       const uRef = db.collection('users').doc(w.userId);
-      t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
+      const refund = { walletBalance: FieldValue.increment(fresh.data().amount) };
+      if (wasProcessing) refund.totalWithdrawn = FieldValue.increment(-fresh.data().net);
+      t.update(uRef, refund);
       t.update(ref, { status: 'declined', failureReason: String(req.body.reason || 'Declined by admin') });
     }));
     logAdminAction(req, 'withdraw_force_declined', { withdrawalId: witId, reason: req.body.reason });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  finally { _withdrawInFlight.delete(witId); }
 });
 
 // ═══════════════════════════════════════════
@@ -2176,7 +2256,7 @@ app.post('/admin/stats', async (req, res) => {
 app.post('/admin/badges', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('withdrawals').where('status', '==', 'processing').get();
+    const snap = await db.collection('withdrawals').where('status', '==', 'pending').get();
     res.json({ status: 'success', pendingWithdrawals: snap.size });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -2300,15 +2380,16 @@ app.post('/admin/analytics', async (req, res) => {
 // whether any client is even looking.
 let _sweepingDeposits = false;
 async function reconcilePendingDeposits() {
-  if (_sweepingDeposits) return;
+  if (_sweepingDeposits) return 0;
   _sweepingDeposits = true;
+  let settled = 0;
   try {
     const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(50).get();
     for (const doc of snap.docs) {
       const dep = doc.data();
       if (!dep.marzTxUuid) continue;
       const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
-      if (SUCCESS_STATUSES.has(marzStatus)) await creditDeposit(doc);
+      if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(doc); settled++; }
       else if (FAILED_STATUSES.has(marzStatus)) await doc.ref.update({ status: 'failed', failureReason: 'Payment was not completed' }).catch(() => {});
     }
     // A deposit marked 'failed' isn't necessarily really dead (same lesson as
@@ -2325,10 +2406,11 @@ async function reconcilePendingDeposits() {
       const dep = doc.data();
       if (!dep.marzTxUuid || tsMillis(dep.createdAt) < cutoffMs) continue;
       const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
-      if (SUCCESS_STATUSES.has(marzStatus)) await creditDeposit(doc);
+      if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(doc); settled++; }
     }
   } catch (e) { console.error('Reconcile deposits error:', e.message); }
   finally { _sweepingDeposits = false; }
+  return settled;
 }
 // A deposit stuck at 'initiating' with no marzTxUuid never got a usable
 // response from MarzPay (the network-exception path in /deposit/marzpay
@@ -2343,6 +2425,7 @@ async function reconcilePendingDeposits() {
 // force-credit/force-decline call from the Deposits tab for a record that
 // genuinely never resolves.
 async function reconcilePendingWithdrawals() {
+  let settled = 0;
   try {
     const snap = await db.collection('withdrawals').where('status', '==', 'processing').limit(50).get();
     for (const doc of snap.docs) {
@@ -2351,6 +2434,7 @@ async function reconcilePendingWithdrawals() {
       const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
       if (SUCCESS_STATUSES.has(marzStatus)) {
         await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
+        settled++;
       } else if (FAILED_STATUSES.has(marzStatus)) {
         await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {
           const fresh = await t.get(doc.ref);
@@ -2359,9 +2443,11 @@ async function reconcilePendingWithdrawals() {
           t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
           t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
         }));
+        settled++;
       }
     }
   } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
+  return settled;
 }
 // Re-invokes commission crediting for recent purchases — safe to call
 // repeatedly since creditReferralCommission() skips any level already
@@ -2382,6 +2468,20 @@ async function reconcileCommissions() {
 function runReconciler() {
   reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
 }
+
+// Manual "Sync MarzPay" button in the admin panel — re-checks every in-flight
+// deposit AND withdrawal against the real gateway right now, instead of
+// waiting for the background 30s sweep. Same functions the automatic
+// background job uses, so this can never settle anything differently or
+// double-pay — it just runs them on demand.
+app.post('/admin/payments/sync', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const depositsSettled = await reconcilePendingDeposits();
+    const withdrawalsSettled = await reconcilePendingWithdrawals();
+    res.json({ status: 'success', settled: (depositsSettled || 0) + (withdrawalsSettled || 0), depositsSettled: depositsSettled || 0, withdrawalsSettled: withdrawalsSettled || 0 });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 
 app.get('/', (_req, res) => res.json({ status: 'ok', service: 'ChocoMCC backend' }));
 

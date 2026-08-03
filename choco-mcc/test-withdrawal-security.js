@@ -43,10 +43,12 @@ require.cache[faPath] = faMod;
 
 const realFetch = global.fetch;
 let marzN = 0;
+let marzSendShouldFail = false;
 global.fetch = async (url, opts) => {
   const u = String(url);
   const json = body => ({ ok: true, status: 200, json: async () => body });
   if (u.includes('wearemarz.com') && u.endsWith('/send-money')) {
+    if (marzSendShouldFail) return json({ status: 'error', message: 'Gateway busy' });
     return json({ status: 'success', data: { transaction: { uuid: 'WTX-' + (++marzN), status: 'pending' } } });
   }
   return realFetch(url, opts);
@@ -172,6 +174,107 @@ async function setupFundedUser(uid, phone, balance) {
   r = await call('POST', '/withdraw/request', { token: 'uid:' + F, body: { amount: 20000, holder: 'Frank', network: 'MTN Mobile Money', phone: '700111222' } });
   check('banned account withdrawal rejected', r.code === 400 && /paused/i.test(r.body?.message || ''), r.body);
   check('banned account wallet unchanged', userDoc(F).walletBalance === frankStart, userDoc(F).walletBalance);
+
+  console.log('\n== Admin manual withdrawal approval gate ==');
+  const adminHeaders2 = { 'Content-Type': 'application/json', Authorization: 'Bearer test-admin-key' };
+  async function adminCall(p, body) {
+    const rr = await realFetch(BASE + p, { method: 'POST', headers: adminHeaders2, body: JSON.stringify(body || {}) });
+    let j = null; try { j = await rr.json(); } catch (_) {}
+    return { code: rr.status, body: j };
+  }
+
+  console.log('\n-- A fresh withdrawal request never reaches MarzPay, stays "pending" --');
+  const G = 'grace-uid';
+  await setupFundedUser(G, '0771000007', 1000000);
+  const graceStart = userDoc(G).walletBalance;
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + G, body: { amount: 20000, holder: 'Grace', network: 'MTN Mobile Money', phone: '700111222' } });
+  check('withdraw/request succeeds without touching MarzPay', r.body?.status === 'success', r.body);
+  const graceWitId = r.body?.withdrawalId;
+  const graceWit = withdrawals().get(graceWitId);
+  check('withdrawal doc created with status "pending"', graceWit?.status === 'pending', graceWit);
+  check('wallet balance reserved (debited) at request time', userDoc(G).walletBalance === graceStart - 20000, userDoc(G).walletBalance);
+  check('totalWithdrawn NOT credited yet (nothing sent)', !userDoc(G).totalWithdrawn, userDoc(G).totalWithdrawn);
+
+  console.log('\n-- A non-admin cannot approve/send a withdrawal --');
+  r = await call('POST', '/admin/withdraw/process', { body: { withdrawalId: graceWitId } });
+  check('unauthenticated process call rejected', r.code === 401, r.body);
+
+  console.log('\n-- Gateway rejection leaves the withdrawal pending and untouched --');
+  marzSendShouldFail = true;
+  let ar = await adminCall('/admin/withdraw/process', { withdrawalId: graceWitId });
+  check('gateway-rejected process call returns an error', ar.code === 400, ar.body);
+  check('withdrawal reverted to "pending" (not stuck at "sending")', withdrawals().get(graceWitId)?.status === 'pending', withdrawals().get(graceWitId));
+  check('wallet unaffected by the failed attempt', userDoc(G).walletBalance === graceStart - 20000, userDoc(G).walletBalance);
+  marzSendShouldFail = false;
+
+  console.log('\n-- Admin approves & sends: moves to "processing", totalWithdrawn credited --');
+  ar = await adminCall('/admin/withdraw/process', { withdrawalId: graceWitId });
+  check('admin process succeeds', ar.body?.status === 'success', ar.body);
+  const graceWitAfter = withdrawals().get(graceWitId);
+  check('withdrawal now "processing"', graceWitAfter?.status === 'processing', graceWitAfter);
+  check('totalWithdrawn credited with net amount once actually sent', userDoc(G).totalWithdrawn === graceWitAfter.net, userDoc(G).totalWithdrawn);
+
+  console.log('\n-- Cannot re-process an already-processing withdrawal --');
+  ar = await adminCall('/admin/withdraw/process', { withdrawalId: graceWitId });
+  check('re-processing a non-pending withdrawal is rejected', ar.code === 400, ar.body);
+
+  console.log('\n-- Two admins racing to process the same pending withdrawal: only one wins --');
+  const H = 'henry-uid';
+  await setupFundedUser(H, '0771000008', 1000000);
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + H, body: { amount: 20000, holder: 'Henry', network: 'MTN Mobile Money', phone: '700111222' } });
+  const henryWitId = r.body?.withdrawalId;
+  const [pr1, pr2] = await Promise.all([
+    adminCall('/admin/withdraw/process', { withdrawalId: henryWitId }),
+    adminCall('/admin/withdraw/process', { withdrawalId: henryWitId }),
+  ]);
+  const processWins = [pr1, pr2].filter(x => x.body?.status === 'success').length;
+  // The in-flight guard means the loser gets either a 409 (true overlap) or a
+  // clean 400 "not pending anymore" (the winner's DB write landed first) —
+  // either way the real invariant is that MarzPay is never hit twice for the
+  // same withdrawal, i.e. exactly one call ever succeeds.
+  check('exactly one concurrent process call succeeds, never both', processWins === 1, { pr1: pr1.body, pr2: pr2.body });
+
+  console.log('\n-- Rejecting a still-pending withdrawal refunds ONLY the wallet, no totalWithdrawn change --');
+  const I = 'ivy-uid';
+  await setupFundedUser(I, '0771000009', 1000000);
+  const ivyStart = userDoc(I).walletBalance;
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 20000, holder: 'Ivy', network: 'MTN Mobile Money', phone: '700111222' } });
+  const ivyWitId = r.body?.withdrawalId;
+  ar = await adminCall('/admin/withdraw/reject', { withdrawalId: ivyWitId, reason: 'test reject while pending' });
+  check('reject-while-pending succeeds', ar.body?.status === 'success', ar.body);
+  check('wallet fully refunded', userDoc(I).walletBalance === ivyStart, userDoc(I).walletBalance);
+  check('totalWithdrawn untouched (nothing was ever sent)', !userDoc(I).totalWithdrawn, userDoc(I).totalWithdrawn);
+  check('withdrawal doc marked declined', withdrawals().get(ivyWitId)?.status === 'declined', withdrawals().get(ivyWitId));
+
+  console.log('\n-- Rejecting an already-processing withdrawal reverses totalWithdrawn too --');
+  const J = 'jack-uid';
+  await setupFundedUser(J, '0771000010', 1000000);
+  const jackStart = userDoc(J).walletBalance;
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + J, body: { amount: 20000, holder: 'Jack', network: 'MTN Mobile Money', phone: '700111222' } });
+  const jackWitId = r.body?.withdrawalId;
+  await adminCall('/admin/withdraw/process', { withdrawalId: jackWitId });
+  check('jack totalWithdrawn credited after send', userDoc(J).totalWithdrawn > 0, userDoc(J).totalWithdrawn);
+  ar = await adminCall('/admin/withdraw/reject', { withdrawalId: jackWitId, reason: 'test reject while processing' });
+  check('reject-while-processing succeeds', ar.body?.status === 'success', ar.body);
+  check('wallet fully refunded after processing-stage reject', userDoc(J).walletBalance === jackStart, userDoc(J).walletBalance);
+  check('totalWithdrawn reversed back to zero', userDoc(J).totalWithdrawn === 0, userDoc(J).totalWithdrawn);
+
+  console.log('\n-- Cannot reject an already-settled (declined) withdrawal twice --');
+  ar = await adminCall('/admin/withdraw/reject', { withdrawalId: jackWitId, reason: 'double reject' });
+  check('double reject on an already-declined withdrawal is rejected', ar.code === 400, ar.body);
+
+  console.log('\n-- /admin/withdraw/verify is read-only and never moves money --');
+  const balBeforeVerify = userDoc(G).walletBalance, totalWithdrawnBeforeVerify = userDoc(G).totalWithdrawn;
+  ar = await adminCall('/admin/withdraw/verify', { withdrawalId: graceWitId });
+  check('verify call succeeds', ar.body?.status === 'success', ar.body);
+  check('verify never changes wallet balance', userDoc(G).walletBalance === balBeforeVerify, userDoc(G).walletBalance);
+  check('verify never changes totalWithdrawn', userDoc(G).totalWithdrawn === totalWithdrawnBeforeVerify, userDoc(G).totalWithdrawn);
+
+  console.log('\n-- /admin/badges counts "pending" (awaiting-approval), not "processing" --');
+  const badgesR = await realFetch(BASE + '/admin/badges', { method: 'POST', headers: adminHeaders2, body: '{}' });
+  const badgesBody = await badgesR.json();
+  const stillPending = [...withdrawals().values()].filter(w => w.status === 'pending').length;
+  check('pendingWithdrawals badge reflects "pending" count', badgesBody?.pendingWithdrawals === stillPending, { badgesBody, stillPending });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
