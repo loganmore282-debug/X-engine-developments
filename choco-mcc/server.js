@@ -619,7 +619,13 @@ app.post('/deposit/marzpay', async (req, res) => {
     const phone = cleanPhone(req.body.phone || uSnap.data().phone || '');
     if (!phone || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
 
-    const reference = await uniqueRef('pendingDeposits', 'B');
+    // Two different references on purpose: `ref` is OUR display reference
+    // (the B<timestamp> format shown to the user/Records), `marzReference`
+    // is what actually goes to MarzPay's `reference` field — their API
+    // requires that to be a UUID v4 for collections, so it can never be the
+    // same string as our own format.
+    const ref = await uniqueRef('pendingDeposits', 'B');
+    const marzReference = crypto.randomUUID();
     const { date, time } = nowStr();
     const depRef = db.collection('pendingDeposits').doc();
     // Write BEFORE calling the gateway — marzCollect() below can trigger a
@@ -627,11 +633,11 @@ app.post('/deposit/marzpay', async (req, res) => {
     // succeeds, the doc must already exist so a reconciler can find it by
     // OUR OWN reference even without MarzPay's uuid yet.
     await depRef.set({
-      userId, phone, amount: amt, ref: reference, status: 'initiating',
+      userId, phone, amount: amt, ref, marzReference, status: 'initiating',
       date, time, createdAt: FieldValue.serverTimestamp()
     });
     const mpData = await marzCollect({
-      amount: amt, phone, reference, description: 'ChocoMCC deposit',
+      amount: amt, phone, reference: marzReference, description: 'ChocoMCC deposit',
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
     });
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
@@ -645,7 +651,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
     await depRef.update({ status: 'pending', marzTxUuid });
-    res.json({ status: 'success', depositId: depRef.id, reference, message: 'Payment initiated — check your phone.' });
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated — check your phone.' });
   } catch (e) {
     console.error('Deposit error:', e.message);
     res.status(500).json({ status: 'error', message: PROVIDER_BUSY_MSG });
@@ -670,7 +676,7 @@ async function creditDeposit(depDoc) {
         const { date, time } = nowStr();
         t.set(db.collection('transactions').doc(), {
           userId: fresh.data().userId, type: 'deposit', description: 'Added funds to wallet',
-          amount: fresh.data().amount, status: 'success', date, time, marzReference: fresh.data().ref,
+          amount: fresh.data().amount, status: 'success', date, time, ref: fresh.data().ref,
           createdAt: FieldValue.serverTimestamp()
         });
       });
@@ -716,7 +722,9 @@ app.post('/deposit/callback', async (req, res) => {
   try {
     const reference = req.body?.data?.reference || req.body?.reference;
     if (!reference) return res.status(200).json({ status: 'ignored' });
-    const depSnap = await db.collection('pendingDeposits').where('ref', '==', reference).limit(1).get();
+    // MarzPay echoes back the UUID we sent as `reference` — that's our
+    // marzReference field, not the B-format display `ref`.
+    const depSnap = await db.collection('pendingDeposits').where('marzReference', '==', reference).limit(1).get();
     if (depSnap.empty) return res.status(200).json({ status: 'ignored' });
     const doc = depSnap.docs[0];
     const uuid = doc.data().marzTxUuid;
@@ -751,7 +759,11 @@ app.post('/withdraw/request', async (req, res) => {
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;
-    const reference = await uniqueRef('withdrawals', 'B');
+    // Same split as deposits: `ref` is our own display reference, `marzReference`
+    // is a UUID sent to MarzPay's `reference` field (recommended UUID, max 50
+    // chars per their docs — never reuse our own B-format string for it).
+    const ref = await uniqueRef('withdrawals', 'B');
+    const marzReference = crypto.randomUUID();
     let witId;
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef = db.collection('users').doc(userId);
@@ -764,17 +776,17 @@ app.post('/withdraw/request', async (req, res) => {
       t.update(uRef, { walletBalance: FieldValue.increment(-amt), totalWithdrawn: FieldValue.increment(net) });
       const { date, time } = nowStr();
       t.set(witRef, {
-        userId, amount: amt, fee, net, holder, network, phone, ref: reference,
+        userId, amount: amt, fee, net, holder, network, phone, ref, marzReference,
         status: 'processing', date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'withdraw', description: `Cash out to ${holder} (${network}) — net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee`,
-        amount: -amt, status: 'success', date, time, marzReference: reference, createdAt: FieldValue.serverTimestamp()
+        amount: -amt, status: 'success', date, time, ref, createdAt: FieldValue.serverTimestamp()
       });
     }));
 
     const mpData = await marzSendMoney({
-      amount: net, phone, reference, description: 'ChocoMCC cash out',
+      amount: net, phone, reference: marzReference, description: 'ChocoMCC cash out',
       callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
     });
     const witRef = db.collection('withdrawals').doc(witId);
@@ -789,7 +801,7 @@ app.post('/withdraw/request', async (req, res) => {
       return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not process the cash-out right now. Please try again.') });
     }
     await witRef.update({ marzTxUuid: mpData.data?.transaction?.uuid || null });
-    res.json({ status: 'success', withdrawalId: witId, reference, net, message: `Cash-out requested — net ${fmtUGX(net)}` });
+    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested — net ${fmtUGX(net)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', message: e.message });
   }
@@ -833,7 +845,8 @@ app.post('/withdraw/callback', async (req, res) => {
   try {
     const reference = req.body?.data?.reference || req.body?.reference;
     if (!reference) return res.status(200).json({ status: 'ignored' });
-    const witSnap = await db.collection('withdrawals').where('ref', '==', reference).limit(1).get();
+    // MarzPay echoes back the UUID we sent as `reference` — that's marzReference.
+    const witSnap = await db.collection('withdrawals').where('marzReference', '==', reference).limit(1).get();
     if (witSnap.empty) return res.status(200).json({ status: 'ignored' });
     const doc = witSnap.docs[0];
     const uuid = doc.data().marzTxUuid;
