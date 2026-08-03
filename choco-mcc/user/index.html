@@ -275,6 +275,18 @@
   .code-box b{font-size:16px;letter-spacing:1.5px;}
   .comm-row{display:flex;gap:10px;margin:0 20px 16px;}
   .comm-tile{flex:1;background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px 10px;text-align:center;}
+  .milestone-card{margin:0 20px 10px;padding:14px 16px;border-radius:16px;background:var(--card);box-shadow:var(--shadow);display:flex;align-items:center;gap:12px;}
+  .milestone-info{flex:1;min-width:0;}
+  .milestone-info b{display:block;font-size:13.5px;color:var(--cocoa);}
+  .milestone-info .ms-progress{font-size:11.5px;color:var(--cocoa-faint);margin-top:3px;}
+  .milestone-bar{height:6px;border-radius:3px;background:var(--cream-deep);margin-top:8px;overflow:hidden;}
+  .milestone-bar-fill{height:100%;background:var(--mint);border-radius:3px;}
+  .milestone-side{flex:0 0 auto;text-align:right;}
+  .milestone-reward{font-size:12.5px;font-weight:800;color:var(--caramel-deep);margin-bottom:6px;white-space:nowrap;}
+  .milestone-btn{padding:8px 14px;border-radius:12px;font-size:11.5px;font-weight:800;border:none;white-space:nowrap;}
+  .milestone-btn.claim{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;}
+  .milestone-btn.pending{background:var(--cream-deep);color:var(--cocoa-faint);}
+  .milestone-btn.done{background:var(--mint-pale);color:var(--mint);}
   .comm-tile b{display:block;font-size:19px;color:var(--caramel-deep);}
   .comm-tile span{font-size:10.5px;color:var(--cocoa-faint);font-weight:700;}
 
@@ -419,6 +431,9 @@
           <div class="kv" style="border-bottom:none"><span>Commission earned</span><b id="teamComm">UGX 0</b></div>
         </div>
       </div>
+      <div class="sec-head"><h3>Task Center</h3></div>
+      <div class="info-box" style="background:var(--cream-deep);color:var(--cocoa-soft)">Invite Level 1 members and grow your team's deposits to unlock these one-time rewards.</div>
+      <div id="taskCenterList"></div>
       <div style="height:14px"></div>
     </div>
 
@@ -1151,6 +1166,49 @@ function renderAll(){
   renderFeatured(); renderTicker(); renderShop(); renderRecords();
 }
 
+/* ====================== TASK CENTER (referral milestones) ====================== */
+// Server always recomputes both progress numbers and reward amounts itself
+// on every load and every claim (/team/stats, /team/milestone/claim) — what
+// renders here is purely a display of what the server just returned, never
+// a client-side calculation trusted for payout.
+function renderMilestoneCard(m){
+  var isDeposit = m.type === 'deposit';
+  var title = isDeposit ? ('Level 1 team deposits '+ugx(m.target)) : ('Invite '+m.target+' Level 1 referrals');
+  var progressText = isDeposit
+    ? (ugx(Math.min(m.current, m.target))+' / '+ugx(m.target))
+    : (Math.min(m.current, m.target)+' / '+m.target+' active');
+  var pct = m.target > 0 ? Math.max(0, Math.min(100, Math.round((m.current/m.target)*100))) : 0;
+  var btnClass = m.claimed ? 'done' : (m.achieved ? 'claim' : 'pending');
+  var btnLabel = m.claimed ? 'Received' : (m.achieved ? 'Claim' : 'In Progress');
+  var clickable = !m.claimed && m.achieved;
+  return '<div class="milestone-card">'+
+      '<div class="milestone-info">'+
+        '<b>'+title+'</b>'+
+        '<div class="ms-progress">'+progressText+'</div>'+
+        '<div class="milestone-bar"><div class="milestone-bar-fill" style="width:'+pct+'%"></div></div>'+
+      '</div>'+
+      '<div class="milestone-side">'+
+        '<div class="milestone-reward">'+ugx(m.reward)+'</div>'+
+        '<button type="button" class="milestone-btn '+btnClass+'"'+(clickable?(' onclick="claimMilestone('+m.target+',\''+m.type+'\')"'):'')+(clickable?'':' disabled')+'>'+btnLabel+'</button>'+
+      '</div>'+
+    '</div>';
+}
+async function loadTaskCenter(){
+  var box = document.getElementById('taskCenterList');
+  if(!box) return;
+  var r = await api('/team/stats');
+  if(r.status!=='success' || !r.milestones){ return; }
+  box.innerHTML = r.milestones.map(renderMilestoneCard).join('');
+}
+async function claimMilestone(target, type){
+  var r = await api('/team/milestone/claim', { target: target, type: type });
+  if(r.status!=='success'){ toast(r.message||'Could not claim this reward'); return; }
+  toast(r.message||'Reward added to your wallet');
+  await refreshFromServer();
+  renderAll();
+  await loadTaskCenter();
+}
+
 function renderFeatured(){
   var html = PRODUCTS.slice(0,6).map(function(p){
     return '<button class="choc-card" onclick="openProduct(\''+p.key+'\')">'+
@@ -1324,6 +1382,7 @@ function switchTab(name){
   });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===name); });
   if(name==='rewards' || name==='team' || name==='home') renderAll();
+  if(name==='team') loadTaskCenter();
 }
 function openOverlay(name){
   closeOverlay();

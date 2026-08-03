@@ -25,7 +25,9 @@
 // v6: referral codes are now a plain 6-character alphanumeric string (no
 // "CHM" prefix) — updated the two cosmetic client-side placeholders that
 // referenced the old format.
-const CACHE = 'chocomcc-shell-v6';
+// v7: Task Center — referral milestone rewards (active-L1-count ladder +
+// level-1-team-deposits ladder) added to the Team screen.
+const CACHE = 'chocomcc-shell-v7';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

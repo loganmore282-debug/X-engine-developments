@@ -250,6 +250,51 @@ async function uniqueRef(collection, letter) {
   return stampRef(letter) + String(Math.floor(Math.random() * 100)).padStart(2, '0');
 }
 
+// TASK CENTER — milestone rewards on the COUNT of a user's ACTIVE level-1
+// referrals (an active referral = one who has invested at least once, i.e.
+// totalInvested > 0). This is separate from and on top of the ordinary
+// L1/L2/L3 % commission paid on every investment (creditReferralCommission
+// below) — commission pays per purchase, these milestones pay once each,
+// the first time a referral-count threshold is reached. Each tier is
+// claimed explicitly (never auto-credited) via /team/milestone/claim, which
+// always recomputes the live count itself server-side — the client-reported
+// progress is informational only and is never trusted for the actual payout.
+const TEAM_MILESTONES = [
+  { target:   5, reward:  10000 },
+  { target:  10, reward:  20000 },
+  { target:  20, reward:  50000 },
+  { target:  25, reward:  60000 },
+  { target:  50, reward: 100000 },
+  { target: 100, reward: 200000 },
+];
+// Second Task Center ladder: total money this user's LEVEL 1 referrals
+// (never L2/L3) have deposited, summed across their accounts. Same
+// manual-claim, server-recomputed pattern as TEAM_MILESTONES, but its own
+// claim-flag namespace so the two ladders can never collide or double-pay
+// each other.
+const TEAM_DEPOSIT_MILESTONES = [
+  { target:   90000, reward:   2000 },
+  { target:  270000, reward:   6000 },
+  { target:  500000, reward:  12000 },
+  { target: 1000000, reward:  25000 },
+  { target: 2000000, reward:  50000 },
+  { target: 5000000, reward: 150000 },
+];
+// Recomputed live on every /team/stats read and every claim — never stored,
+// never trusted from the client, so a milestone can never be forged.
+async function activeL1Count(userId) {
+  const snap = await db.collection('users').where('referredBy', '==', userId).get();
+  let n = 0;
+  snap.forEach(d => { if ((d.data().totalInvested || 0) > 0) n += 1; });
+  return n;
+}
+async function l1TeamDeposits(userId) {
+  const snap = await db.collection('users').where('referredBy', '==', userId).get();
+  let total = 0;
+  snap.forEach(d => { total += Number(d.data().totalDeposited || 0); });
+  return total;
+}
+
 // ── PER-KEY MUTEX ──
 // M0 has NO real transactions: two parallel requests can both read the same
 // balance and both write it — a double-spend. Every debit/credit path below
@@ -550,6 +595,105 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
     }
   });
 }
+
+// ═══════════════════════════════════════════
+// TEAM + TASK CENTER
+// ═══════════════════════════════════════════
+app.get('/team/members', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('users').where('referredBy', '==', userId).get();
+    const members = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      members.push({
+        id: doc.id, phone: d.phone || '',
+        joinedAt: d.createdAt ? new Date(tsMillis(d.createdAt)).toISOString() : null,
+        hasInvested: (d.totalInvested || 0) > 0,
+        totalInvested: d.totalInvested || 0,
+        deposited: d.totalDeposited || 0,
+      });
+    });
+    members.sort((a, b) => (b.joinedAt || '') > (a.joinedAt || '') ? 1 : -1);
+    res.json({ status: 'success', members });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Team + Task Center stats. Milestones here are informational — actually
+// claiming only happens via /team/milestone/claim, which recomputes both
+// progress numbers itself, so nothing read here is ever trusted for payout.
+app.get('/team/stats', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const l1ActiveCount = await activeL1Count(userId);
+    const l1DepositTotal = await l1TeamDeposits(userId);
+    const uSnap = await db.collection('users').doc(userId).get();
+    const u = uSnap.exists ? uSnap.data() : {};
+    const milestones = [
+      ...TEAM_MILESTONES.map(m => ({
+        type: 'count', target: m.target, reward: m.reward,
+        current: l1ActiveCount, achieved: l1ActiveCount >= m.target,
+        claimed: !!u['milestoneClaimed_' + m.target],
+      })),
+      ...TEAM_DEPOSIT_MILESTONES.map(m => ({
+        type: 'deposit', target: m.target, reward: m.reward,
+        current: l1DepositTotal, achieved: l1DepositTotal >= m.target,
+        claimed: !!u['depositMilestoneClaimed_' + m.target],
+      })),
+    ];
+    const teamRewards = TEAM_MILESTONES.reduce((s, m) => s + (u['milestoneClaimed_' + m.target] ? m.reward : 0), 0)
+                       + TEAM_DEPOSIT_MILESTONES.reduce((s, m) => s + (u['depositMilestoneClaimed_' + m.target] ? m.reward : 0), 0);
+    res.json({
+      status: 'success', l1ActiveCount, l1DepositTotal, milestones,
+      counts: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
+      commission: u.teamCommission || 0, teamRewards
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+app.post('/team/milestone/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const target = Number(req.body.target);
+  const isDeposit = req.body.type === 'deposit';
+  const table = isDeposit ? TEAM_DEPOSIT_MILESTONES : TEAM_MILESTONES;
+  const m = table.find(x => x.target === target);
+  if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
+  try {
+    const progress = isDeposit ? await l1TeamDeposits(userId) : await activeL1Count(userId);
+    if (progress < m.target) {
+      const need = isDeposit ? fmtUGX(m.target) : m.target;
+      const have = isDeposit ? fmtUGX(progress) : progress;
+      return res.status(400).json({ status: 'error', message: `You need ${need} to claim this — you have ${have}.` });
+    }
+    const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
+    let done = false;
+    await withLock('milestoneclaim:' + userId + ':' + claimFlag, async () => {
+      await db.runTransaction(async t => {
+        const uRef = db.collection('users').doc(userId);
+        const fresh = await t.get(uRef);
+        if (!fresh.exists || fresh.data()[claimFlag]) return;
+        const { date, time } = nowStr();
+        t.update(uRef, {
+          walletBalance: FieldValue.increment(m.reward),
+          totalEarned: FieldValue.increment(m.reward),
+          [claimFlag]: true
+        });
+        t.set(db.collection('transactions').doc(), {
+          userId, type: 'team_reward',
+          description: isDeposit ? `Task Center — level 1 team deposits ${fmtUGX(m.target)}` : `Task Center — ${m.target} active referrals`,
+          amount: m.reward, milestone: m.target, status: 'success',
+          date, time, createdAt: FieldValue.serverTimestamp()
+        });
+        done = true;
+      });
+    });
+    if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
+    res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 
 // ═══════════════════════════════════════════
 // PUBLIC
