@@ -414,11 +414,9 @@ var SERVER = 'https://mybusinessuganda.onrender.com';
 
 /* ====================== ADMIN PUSH NOTIFICATIONS ======================
    Reuses the SAME Firebase project as user login (choco-mcc) — this is
-   public client config, safe to duplicate here. VAPID_KEY is the one piece
-   still needed from you: Firebase Console -> Project Settings -> Cloud
-   Messaging -> Web Push certificates -> generate a key pair, then paste it
-   below. Until it's filled in, "Enable Push" will show a clear error
-   instead of silently failing. */
+   public client config, safe to duplicate here. VAPID_KEY below is the
+   real Web Push certificate key (Firebase Console -> Project Settings ->
+   Cloud Messaging -> Web Push certificates) — push is fully wired up. */
 var FIREBASE_CONFIG = {
   apiKey: "AIzaSyAqWs_sYu2UiruVuGN_JI0SbeD1gQeV3Ys",
   authDomain: "choco-mcc.firebaseapp.com",
@@ -428,7 +426,7 @@ var FIREBASE_CONFIG = {
   appId: "1:995451846958:web:ef722c1484ff99daa3babf",
   measurementId: "G-0K1SD548TF"
 };
-var VAPID_KEY = ''; // <-- paste your Web Push certificate key here
+var VAPID_KEY = 'BEmkKs7qNaFzNyCy0h1XhlAtIwhEXsgPxh-npYmUFKWZIjp8Z4f8-i78ycOtisZTMcOay4AJcVai5-ld2tWWJEA';
 var _pushMessaging = null;
 function _pushApp(){
   if(typeof firebase === 'undefined') return null;
