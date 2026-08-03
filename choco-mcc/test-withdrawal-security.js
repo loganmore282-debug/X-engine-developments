@@ -82,6 +82,10 @@ async function setupFundedUser(uid, phone, balance) {
   await call('POST', '/account/create-profile', { token: 'uid:' + uid, body: { phone } });
   await call('POST', '/register', { token: 'uid:' + uid, body: {} });
   userDoc(uid).walletBalance = balance;
+  // requireInvestToWithdraw (default true) blocks a withdrawal from anyone
+  // who has never bought a product — simulate that precondition here so
+  // these withdrawal tests exercise the cap/security logic, not this gate.
+  userDoc(uid).totalInvested = balance;
   await call('POST', '/bank/save', { token: 'uid:' + uid, body: { holder: 'Test Holder', network: 'MTN Mobile Money', phone: '700111222' } });
 }
 
@@ -174,6 +178,21 @@ async function setupFundedUser(uid, phone, balance) {
   r = await call('POST', '/withdraw/request', { token: 'uid:' + F, body: { amount: 20000, holder: 'Frank', network: 'MTN Mobile Money', phone: '700111222' } });
   check('banned account withdrawal rejected', r.code === 400 && /paused/i.test(r.body?.message || ''), r.body);
   check('banned account wallet unchanged', userDoc(F).walletBalance === frankStart, userDoc(F).walletBalance);
+
+  console.log('\n== requireInvestToWithdraw (default: on) ==');
+  const K = 'kim-uid';
+  await call('POST', '/account/create-profile', { token: 'uid:' + K, body: { phone: '0771000011' } });
+  await call('POST', '/register', { token: 'uid:' + K, body: {} });
+  userDoc(K).walletBalance = 1000000; // funded, but never invested
+  await call('POST', '/bank/save', { token: 'uid:' + K, body: { holder: 'Kim', network: 'MTN Mobile Money', phone: '700111222' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + K, body: { amount: 20000, holder: 'Kim', network: 'MTN Mobile Money', phone: '700111222' } });
+  check('withdrawal blocked for a user who never invested', r.code === 400 && /chocolate|invest/i.test(r.body?.message || ''), r.body);
+  check('wallet untouched by the blocked attempt', userDoc(K).walletBalance === 1000000, userDoc(K).walletBalance);
+
+  await realFetch(BASE + '/admin/settings/update', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ settings: { requireInvestToWithdraw: false } }) });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + K, body: { amount: 20000, holder: 'Kim', network: 'MTN Mobile Money', phone: '700111222' } });
+  check('withdrawal allowed once requireInvestToWithdraw is turned off', r.body?.status === 'success', r.body);
+  await realFetch(BASE + '/admin/settings/update', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ settings: { requireInvestToWithdraw: true } }) });
 
   console.log('\n== Admin manual withdrawal approval gate ==');
   const adminHeaders2 = { 'Content-Type': 'application/json', Authorization: 'Bearer test-admin-key' };

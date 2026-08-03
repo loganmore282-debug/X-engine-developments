@@ -152,7 +152,10 @@ const DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
   returnMultiple: 3, cycleDays: 10, maintenanceMode: false, maintenanceMsg: '',
-  maxWithdrawalsPerDay: 2
+  maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
+  annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
+  supportWhatsapp: '', supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
+  rulesText: '', brandTagline: '', aboutText: ''
 };
 const DEFAULT_PRODUCTS = [
   { key: 'hersheys',  name: "Hershey's Milk Chocolate", price: 15000   },
@@ -807,7 +810,13 @@ app.get('/public/settings', async (_req, res) => {
     withdrawFeePct: s.withdrawFeePct, minWithdraw: s.minWithdraw, minDeposit: s.minDeposit,
     dailyCheckin: s.dailyCheckin, welcomeBonus: s.welcomeBonus, commL1: s.commL1, commL2: s.commL2, commL3: s.commL3,
     returnMultiple: s.returnMultiple, cycleDays: s.cycleDays, maxWithdrawalsPerDay: s.maxWithdrawalsPerDay,
-    maintenanceMode: !!s.maintenanceMode, maintenanceMsg: s.maintenanceMsg || ''
+    maintenanceMode: !!s.maintenanceMode, maintenanceMsg: s.maintenanceMsg || '',
+    requireInvestToWithdraw: s.requireInvestToWithdraw !== false,
+    annEnabled: !!s.annEnabled, annTitle: s.annTitle || '', annBody: s.annBody || '',
+    annCtaLabel: s.annCtaLabel || '', annCtaUrl: s.annCtaUrl || '', announcementBg: s.announcementBg || '',
+    supportWhatsapp: s.supportWhatsapp || '', supportTelegram: s.supportTelegram || '',
+    telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
+    rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || ''
   } });
 });
 app.get('/public/products', async (_req, res) => {
@@ -1318,6 +1327,11 @@ app.post('/withdraw/request', async (req, res) => {
       const fresh = await t.get(uRef);
       if (!fresh.exists) throw new Error('User not found');
       if (fresh.data().status === 'banned') throw new Error('Account access paused');
+      // Anti-abuse, admin-toggleable (settings.requireInvestToWithdraw, default
+      // required): stops someone registering, taking the welcome bonus, and
+      // cashing out without ever buying a product.
+      if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
+        throw new Error('Purchase at least one chocolate product before you can cash out.');
       const bal = fresh.data().walletBalance || 0;
       if (bal < amt) throw new Error(`Not enough balance — you have ${fmtUGX(bal)}`);
       // Daily cash-out cap, admin-editable (settings.maxWithdrawalsPerDay).
@@ -1894,6 +1908,90 @@ app.post('/admin/users', async (req, res) => {
     res.json({ status: 'success', users, count: users.length });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Rebuilds every user's deposit/earning totals straight from the transaction
+// ledger — the source of truth — rather than trusting whatever incremental
+// counters have drifted to over time. Never touches walletBalance itself
+// (that's real money in flight, not a derived stat), only the two read-only
+// summary fields the dashboard/analytics show.
+app.post('/admin/users/recount', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const txSnap = await db.collection('transactions').limit(200000).get();
+    const totals = {}; // userId -> { deposited, earned }
+    txSnap.forEach(d => {
+      const t = d.data();
+      if (!t.userId) return;
+      const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
+      if (t.type === 'deposit') row.deposited += Number(t.amount) || 0;
+      else if (t.type === 'cashback') row.earned += Number(t.amount) || 0;
+    });
+    const usersSnap = await db.collection('users').limit(10000).get();
+    const batch = db.batch();
+    let updated = 0;
+    usersSnap.forEach(d => {
+      const row = totals[d.id] || { deposited: 0, earned: 0 };
+      batch.update(d.ref, { totalDeposited: row.deposited, totalEarned: row.earned });
+      updated++;
+    });
+    await batch.commit();
+    logAdminAction(req, 'users_recounted', { updated });
+    res.json({ status: 'success', updated });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Read-only sweep for real money-safety problems: negative balances, the same
+// payment reference credited more than once, a wallet that no longer matches
+// what its own transaction ledger says it should, and withdrawals stuck
+// without a usable gateway reference or left pending too long for an admin
+// to have missed. Never writes anything — it only reports what it finds so
+// an admin can decide what to do about it.
+app.post('/admin/integrity', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [usersSnap, txSnap, witSnap] = await Promise.all([
+      db.collection('users').limit(10000).get(),
+      db.collection('transactions').limit(200000).get(),
+      db.collection('withdrawals').limit(10000).get(),
+    ]);
+    const alerts = [];
+    const ledgerByUser = {};
+    const refSeen = {}; // `${userId}::${ref}` -> count, only for money-crediting types
+    txSnap.forEach(d => {
+      const t = d.data();
+      if (!t.userId) return;
+      ledgerByUser[t.userId] = (ledgerByUser[t.userId] || 0) + (Number(t.amount) || 0);
+      if (t.ref && (t.type === 'deposit' || t.type === 'promocode')) {
+        const key = t.userId + '::' + t.ref;
+        refSeen[key] = (refSeen[key] || 0) + 1;
+      }
+    });
+    Object.entries(refSeen).forEach(([key, times]) => {
+      if (times > 1) {
+        const [userId, ref] = key.split('::');
+        alerts.push({ kind: 'duplicate_credit', userId, ref, times });
+      }
+    });
+    usersSnap.forEach(d => {
+      const u = d.data();
+      const bal = Number(u.walletBalance) || 0;
+      if (bal < 0) alerts.push({ kind: 'negative_balance', userId: d.id, phone: u.phone, balance: bal });
+      const ledger = ledgerByUser[d.id] || 0;
+      const diff = Math.round(bal - ledger);
+      if (Math.abs(diff) > 1) alerts.push({ kind: 'balance_mismatch', userId: d.id, phone: u.phone, balance: bal, ledger, diff });
+    });
+    const now = Date.now();
+    witSnap.forEach(d => {
+      const w = d.data();
+      const ageHours = (now - tsMillis(w.createdAt)) / 3600000;
+      if (w.status === 'processing' && !w.marzTxUuid)
+        alerts.push({ kind: 'withdrawal_no_gateway_ref', userId: w.userId, withdrawalId: d.id, amount: w.amount, hours: Math.round(ageHours) });
+      else if (w.status === 'pending' && ageHours > 48)
+        alerts.push({ kind: 'withdrawal_stuck', userId: w.userId, withdrawalId: d.id, amount: w.amount, hours: Math.round(ageHours) });
+    });
+    const phones = {}; usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
+    alerts.forEach(a => { if (a.userId && !a.phone) a.phone = phones[a.userId] || a.userId; });
+    res.json({ status: 'success', usersChecked: usersSnap.size, healthy: alerts.length === 0, alertCount: alerts.length, alerts, ranAt: new Date().toISOString() });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 app.post('/admin/user/detail', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId } = req.body;
@@ -2050,8 +2148,19 @@ app.post('/admin/deposits/list', async (req, res) => {
     const phones = {}; usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
     const counts = {};
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    rows.forEach(r => { r.accountPhone = phones[r.userId] || ''; counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1; });
-    res.json({ status: 'success', deposits: rows, counts, total: rows.length });
+    const dayMap = {};
+    rows.forEach(r => {
+      r.accountPhone = phones[r.userId] || '';
+      counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1;
+      if (r.status === 'matched') {
+        const { day } = eatParts(r.createdAt);
+        const row = dayMap[day] || (dayMap[day] = { day, count: 0, amount: 0 });
+        row.count++; row.amount += Number(r.amount) || 0;
+      }
+    });
+    const processedByDay = Object.values(dayMap).sort((a, b) => a.day < b.day ? -1 : 1);
+    const processedAmount = processedByDay.reduce((s, d) => s + d.amount, 0);
+    res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // OWNER-ONLY: unlike the client's own status poll (which only credits after
@@ -2083,8 +2192,19 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     const phones = {}; usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
     const counts = {};
     const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    rows.forEach(w => { w.accountPhone = phones[w.userId] || ''; counts[w.status] = (counts[w.status] || 0) + 1; });
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length });
+    const dayMap = {};
+    rows.forEach(w => {
+      w.accountPhone = phones[w.userId] || '';
+      counts[w.status] = (counts[w.status] || 0) + 1;
+      if (w.status === 'processed') {
+        const { day } = eatParts(w.createdAt);
+        const row = dayMap[day] || (dayMap[day] = { day, count: 0, amount: 0 });
+        row.count++; row.amount += Number(w.net) || 0;
+      }
+    });
+    const processedByDay = Object.values(dayMap).sort((a, b) => a.day < b.day ? -1 : 1);
+    const processedAmount = processedByDay.reduce((s, d) => s + d.amount, 0);
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Reject a withdrawal and refund it — either still 'pending' (never sent,
@@ -2280,10 +2400,12 @@ app.post('/admin/analytics', async (req, res) => {
   const days = Math.min(Math.max(parseInt(req.body.days) || 30, 1), 180);
   const sinceMs = Date.now() - days * 86400000;
   try {
-    const [depSnap, witSnap, usersSnap] = await Promise.all([
+    const [depSnap, witSnap, usersSnap, activeInvSnap, sett] = await Promise.all([
       db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(10000).get(),
       db.collection('withdrawals').orderBy('createdAt', 'desc').limit(10000).get(),
       db.collection('users').limit(10000).get(),
+      db.collection('investments').where('status', '==', 'active').limit(10000).get(),
+      getSettings(),
     ]);
     const byHour = Array.from({ length: 24 }, (_, h) => ({ h, depAmt: 0, depCnt: 0, witAmt: 0, witCnt: 0 }));
     const bands  = { morning: { dep: 0, wit: 0 }, afternoon: { dep: 0, wit: 0 }, evening: { dep: 0, wit: 0 }, night: { dep: 0, wit: 0 } };
@@ -2354,6 +2476,38 @@ app.post('/admin/analytics', async (req, res) => {
     const peakWithdrawHour = byHour.reduce((p, c) => c.witCnt > p.witCnt ? c : p, byHour[0]).h;
     const busiestBand = Object.entries(bands).reduce((p, c) => (c[1].dep + c[1].wit) > (p[1].dep + p[1].wit) ? c : p)[0];
 
+    // ── TOMORROW'S ESTIMATE — read from real platform state (who's actually
+    // maturing, who's actually mid-signup-funnel), not just a straight trend
+    // line. Explicitly labelled an estimate to the admin, never a promise.
+    const trailing = byDay.slice(-Math.min(7, byDay.length));
+    const trailN = trailing.length || 1;
+    const witTrend = trailing.reduce((s, d) => s + d.wit, 0) / trailN;
+    const depTrend = trailing.reduce((s, d) => s + d.dep, 0) / trailN;
+    let maturingCount = 0, maturingPayout = 0;
+    activeInvSnap.forEach(d => {
+      const inv = d.data();
+      const paidOut = Number(inv.paidOut) || 0, dailyPayout = Number(inv.dailyPayout) || 0, expected = Number(inv.expectedReturn) || 0;
+      if (expected > 0 && paidOut + dailyPayout >= expected) { maturingCount++; maturingPayout += Math.max(0, expected - paidOut); }
+    });
+    const REINVEST_RATE_PCT = 35;
+    const CONVERSION_RATE_PCT = 20;
+    const pipelineCutoff = Date.now() - 3 * 86400000;
+    let pipelineUserCount = 0;
+    usersSnap.forEach(d => {
+      const u = d.data();
+      if (tsMillis(u.createdAt) >= pipelineCutoff && (u.totalDeposited || 0) === 0) pipelineUserCount++;
+    });
+    const pipelineEstimate = Math.round(pipelineUserCount * (sett.minDeposit || 0) * (CONVERSION_RATE_PCT / 100));
+    const maturingReinvestEstimate = Math.round(maturingPayout * (REINVEST_RATE_PCT / 100));
+    const forecast = {
+      withdrawals: { estimate: Math.round(witTrend), likelyWithdrawerCount: maturingCount, trendReference: Math.round(witTrend) },
+      deposits: {
+        estimate: Math.round(depTrend + maturingReinvestEstimate + pipelineEstimate),
+        organicTrend: Math.round(depTrend), maturingReinvestEstimate, maturingCount, reinvestRatePct: REINVEST_RATE_PCT,
+        pipelineEstimate, pipelineUserCount, conversionRatePct: CONVERSION_RATE_PCT
+      }
+    };
+
     res.json({
       status: 'success', period: days,
       kpis: {
@@ -2362,7 +2516,7 @@ app.post('/admin/analytics', async (req, res) => {
         netFlow: depAmount - witAmount, totalUsers, newUsers, activeInvestors,
         investedAmount, commissionsPaid, teamRewardsPaid
       },
-      byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand,
+      byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand, forecast,
       topReferrers: referrers.slice(0, 10), topDepositors: depositors.slice(0, 10), biggestWithdrawals: bigWits.slice(0, 10)
     });
   } catch (e) { console.error('Analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }

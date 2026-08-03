@@ -111,6 +111,7 @@ const pushTokens = () => collMap('adminPushTokens');
   await call('POST', '/account/create-profile', { token: 'uid:' + A, body: { phone: '0771000001' } });
   await call('POST', '/register', { token: 'uid:' + A, body: {} });
   userDoc(A).walletBalance = 1000000;
+  userDoc(A).totalInvested = 1000000; // requireInvestToWithdraw (default true) gates on this
   await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: 'Alice', network: 'MTN Mobile Money', phone: '700111222' } });
 
   const pushCountBefore = sentPushes.length;

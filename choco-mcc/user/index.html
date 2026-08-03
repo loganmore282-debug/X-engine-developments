@@ -491,6 +491,7 @@
         <button class="menu-tile" onclick="openOverlay('bindbank')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="2.5" y="5.5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6 15h4"/></svg></div><div class="menu-tile-lbl">Bind Bank Card</div></button>
         <button class="menu-tile" onclick="openOverlay('changepass')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></div><div class="menu-tile-lbl">Change Password</div></button>
         <button class="menu-tile" onclick="openOverlay('about')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="9"/><path d="M12 8.2h.01"/><path d="M10.8 12H12v5h1.2"/></svg></div><div class="menu-tile-lbl">About ChocoMCC</div></button>
+        <button class="menu-tile" onclick="openOverlay('rules')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 3h11v18l-2.2-1.6L13 21l-2.3-1.6L8.5 21l-2-1.6V3z"/><path d="M9 8.2h6M9 12h4"/></svg></div><div class="menu-tile-lbl">Rules & Regulation</div></button>
         <button class="menu-tile" onclick="openOverlay('support')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 13v-1a8 8 0 0116 0v1"/><rect x="2.5" y="13" width="4" height="6" rx="1.5"/><rect x="17.5" y="13" width="4" height="6" rx="1.5"/><path d="M19.5 19v1a2 2 0 01-2 2h-3"/></svg></div><div class="menu-tile-lbl">Customer Care</div></button>
         <button class="menu-tile" id="downloadAppTile" style="display:none" onclick="openInstallSheet()"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5"/><path d="M4 17v2.5A1.5 1.5 0 005.5 21h13a1.5 1.5 0 001.5-1.5V17"/></svg></div><div class="menu-tile-lbl">Download App</div></button>
         <button class="menu-tile" onclick="if(confirm('Log out?')) logout()"><div class="menu-tile-ic" style="background:var(--berry-pale);color:var(--berry)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M11 4.5L5 6v12l6 1.5V4.5z"/><circle cx="8.3" cy="12" r="0.9" fill="currentColor" stroke="none"/><path d="M13 9h4.5M13 15h4.5"/><path d="M13.5 12h5.5m0 0l-2.2-2.2m2.2 2.2l-2.2 2.2"/></svg></div><div class="menu-tile-lbl" style="color:var(--berry)">Log out</div></button>
@@ -594,19 +595,33 @@
   <div class="overlay" id="ovSupport">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Customer Care</div></div>
     <div class="photo-banner" id="supportBanner"></div>
-    <div style="padding:6px 20px">
-      <button class="menu-item" style="margin:0 0 10px" onclick="toast('Opens WhatsApp — wire your number in later')"><div class="menu-ic" style="background:var(--mint-pale);color:var(--mint)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4.5 20l1.3-3.7A8 8 0 1112 20a8 8 0 01-4.5-1.4L4.5 20z"/><path d="M9 10.3c0 2.8 2 4.7 4.7 4.7"/></svg></div><div class="menu-lbl">WhatsApp us</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
-      <button class="menu-item" style="margin:0 0 10px" onclick="toast('Opens Telegram — wire your channel in later')"><div class="menu-ic" style="background:#DCEAFB;color:#2E6FBF"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M21 3.5L3 10.8l6.3 2.3L11.8 21l3-5.4L21 3.5z"/><path d="M9.3 13.1L17 6.2"/></svg></div><div class="menu-lbl">Telegram channel</div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 5l7 7-7 7"/></svg></button>
-      <div class="kv" style="margin:0 20px"><span>Support hours</span><b>8am – 9pm</b></div>
-    </div>
+    <div style="padding:6px 20px" id="supportLinks"></div>
   </div>
 
   <div class="overlay" id="ovAbout">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">About ChocoMCC</div></div>
     <div class="photo-banner" id="aboutBanner"></div>
-    <div style="padding:6px 20px 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)">
+    <div style="padding:6px 20px 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="aboutBody">
       <p>ChocoMCC lets members build a stash of the world's best-loved chocolate tiers — from the everyday favourites to the boxed-gold classics — each paying a daily reward until it matures.</p><br>
       <p>This is a local design preview: every number on this screen is a placeholder your admin can adjust before launch.</p>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovRules">
+    <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Rules &amp; Regulation</div></div>
+    <div style="padding:16px 20px 20px;font-size:13.5px;line-height:1.7;color:var(--cocoa-soft)" id="rulesBody">
+      <div class="empty">Nothing published yet.</div>
+    </div>
+  </div>
+
+  <!-- ANNOUNCEMENT -->
+  <div class="modal-bg" id="announcementBg" onclick="if(event.target===this) dismissAnnouncement()">
+    <div class="modal-sheet" id="announcementSheet">
+      <button class="ov-back" style="position:absolute;top:14px;right:14px;background:var(--cream-deep)" onclick="dismissAnnouncement()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <img id="annImg" style="display:none;width:100%;border-radius:16px;margin-bottom:14px;object-fit:cover;max-height:160px">
+      <h3 id="annTitle">Notice</h3>
+      <div id="annBody" style="font-size:13.5px;line-height:1.7;color:var(--cocoa-soft);margin-bottom:16px"></div>
+      <button class="btn btn-primary btn-block" id="annCtaBtn" style="display:none"></button>
     </div>
   </div>
 
@@ -762,7 +777,10 @@ var CHOCO_BANNERS = {"bonbon": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABA
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 3, cycleDays: 10
+  returnMultiple: 3, cycleDays: 10,
+  annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
+  supportWhatsapp: '', supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
+  rulesText: '', brandTagline: '', aboutText: ''
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 var PRODUCTS = [
@@ -1060,6 +1078,76 @@ function enterApp(){
   renderAll();
   startActivityFeed();
   updateDownloadTileVisibility();
+  renderStaticPages();
+  maybeShowAnnouncement();
+}
+
+/* ====================== ADMIN-DRIVEN STATIC PAGES ======================
+   About / Rules / Support all read straight from getSettings() (synced
+   server-side by syncPublicConfig() before enterApp() ever runs) — an admin
+   edit reaches every user's next app open with no separate endpoint. */
+function nl2p(text){
+  var paras = String(text||'').split(/\n\s*\n/).filter(function(p){return p.trim();});
+  if(!paras.length) return '';
+  return paras.map(function(p){ return '<p>'+esc(p).replace(/\n/g,'<br>')+'</p>'; }).join('<br>');
+}
+function waLink(v){
+  v = String(v||'').trim();
+  if(!v) return '';
+  if(/^https?:\/\//i.test(v)) return v;
+  var digits = v.replace(/[^\d]/g,'');
+  if(!digits) return '';
+  if(digits.charAt(0)==='0') digits = '256'+digits.slice(1);
+  return 'https://wa.me/'+digits;
+}
+function renderStaticPages(){
+  var s = getSettings();
+  // About page: admin text if set, otherwise keep the shipped placeholder.
+  if(s.aboutText){
+    var tagline = s.brandTagline ? '<p style="font-style:italic;color:var(--caramel-deep);margin-bottom:10px">'+esc(s.brandTagline)+'</p>' : '';
+    document.getElementById('aboutBody').innerHTML = tagline + nl2p(s.aboutText);
+  }
+  // Rules & Regulation: entirely admin-authored, empty until set.
+  document.getElementById('rulesBody').innerHTML = s.rulesText ? nl2p(s.rulesText) : '<div class="empty">Nothing published yet.</div>';
+  // Support links: only show a tile for a channel the admin actually configured.
+  var wa = waLink(s.supportWhatsapp);
+  var tg = s.telegramChannel || s.supportTelegram || s.telegramGroup || '';
+  var rows = '';
+  if(wa) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+wa+'\',\'_blank\')"><div class="menu-ic" style="background:var(--mint-pale);color:var(--mint)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4.5 20l1.3-3.7A8 8 0 1112 20a8 8 0 01-4.5-1.4L4.5 20z"/><path d="M9 10.3c0 2.8 2 4.7 4.7 4.7"/></svg></div><div class="menu-lbl">WhatsApp us</div>'+ICON_CHEV+'</button>';
+  if(tg) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(tg)+'\',\'_blank\')"><div class="menu-ic" style="background:#DCEAFB;color:#2E6FBF"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M21 3.5L3 10.8l6.3 2.3L11.8 21l3-5.4L21 3.5z"/><path d="M9.3 13.1L17 6.2"/></svg></div><div class="menu-lbl">Telegram</div>'+ICON_CHEV+'</button>';
+  if(!wa && !tg) rows += '<div class="empty">Contact details are not set up yet.</div>';
+  rows += '<div class="kv" style="margin:0 20px"><span>Support hours</span><b>'+esc(s.supportHours||'8am – 9pm')+'</b></div>';
+  document.getElementById('supportLinks').innerHTML = rows;
+}
+
+/* ====================== ANNOUNCEMENT ======================
+   Shown once per announcement (title+body hash) so an unchanged admin
+   message never nags on every app open, but a fresh edit surfaces again
+   for everyone — matching the admin panel's own "saving re-shows the
+   popup to everyone" promise. */
+function _annHash(s){ return (s.annTitle||'')+'|'+(s.annBody||'')+'|'+(s.annCtaLabel||'')+'|'+(s.annCtaUrl||''); }
+function maybeShowAnnouncement(){
+  var s = getSettings();
+  if(!s.annEnabled || !s.annBody) return;
+  var hash = _annHash(s);
+  var dismissed = '';
+  try{ dismissed = localStorage.getItem('choco_ann_dismissed')||''; }catch(e){}
+  if(dismissed === hash) return;
+  document.getElementById('annTitle').textContent = s.annTitle || 'Notice';
+  document.getElementById('annBody').innerHTML = nl2p(s.annBody);
+  var img = document.getElementById('annImg');
+  if(s.announcementBg){ img.src = s.announcementBg; img.style.display='block'; } else { img.style.display='none'; }
+  var cta = document.getElementById('annCtaBtn');
+  if(s.annCtaLabel && s.annCtaUrl){
+    cta.style.display='block'; cta.textContent = s.annCtaLabel;
+    cta.onclick = function(){ window.open(s.annCtaUrl,'_blank'); dismissAnnouncement(); };
+  } else { cta.style.display='none'; cta.onclick=null; }
+  document.getElementById('announcementBg').classList.add('show');
+}
+function dismissAnnouncement(){
+  var s = getSettings();
+  try{ localStorage.setItem('choco_ann_dismissed', _annHash(s)); }catch(e){}
+  document.getElementById('announcementBg').classList.remove('show');
 }
 
 /* ====================== PWA INSTALL PROMPT ====================== */
