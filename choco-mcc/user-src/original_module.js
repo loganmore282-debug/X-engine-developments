@@ -790,7 +790,7 @@ function stopActivityFeed(){ clearInterval(_activityFeedTimer); _activityFeedTim
 // foregrounded again rather than waiting out the rest of the interval.
 var _accountPollTimer = null;
 var _accountPollRunning = false;
-var ACCOUNT_POLL_MS = 10000;
+var ACCOUNT_POLL_MS = 5000;
 function scheduleAccountPoll(){
   clearTimeout(_accountPollTimer);
   if(!STATE || document.hidden) return;

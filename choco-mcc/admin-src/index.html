@@ -431,19 +431,31 @@ async function refreshBadges(){
 }
 
 // ── LIVE AUTO-REFRESH ──
+// Every tab auto-refreshes on its own, nobody should ever need to hit
+// Refresh (or worse, reload the page) to see current data. Two guards keep
+// this from ever clobbering something the admin is mid-typing: modalOpen()
+// (edit dialogs live in the modal, e.g. products/gift codes) and
+// contentHasFocus() (a plain input sitting right on the tab itself, e.g.
+// Settings' rate fields or the Admins tab's "create admin" form) -- a tick
+// that would touch either just skips silently and tries again next cycle.
 let _live=true, _liveTimer=null;
-const LIVE_TABS=new Set(['dashboard','users','deposits','withdrawals','transactions','referrals']);
-const RENDERERS={ dashboard:()=>renderDashboard(), users:()=>renderUsers(), deposits:()=>renderDeposits(),
-  withdrawals:()=>renderWithdrawals(), transactions:()=>renderTransactions(), referrals:()=>renderReferrals() };
+const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','promocodes','transactions','referrals','settings','admins','auditlog']);
+const RENDERERS={ dashboard:()=>renderDashboard(), analytics:()=>renderAnalytics(), users:()=>renderUsers(), deposits:()=>renderDeposits(),
+  withdrawals:()=>renderWithdrawals(), products:()=>renderProducts(), banners:()=>renderBanners(),
+  promocodes:()=>renderPromoCodes(), transactions:()=>renderTransactions(), referrals:()=>renderReferrals(),
+  settings:()=>renderSettings(), admins:()=>renderAdmins(), auditlog:()=>renderAuditLog() };
 function modalOpen(){ const m=$('modalRoot'); return m && !m.classList.contains('hidden'); }
+function contentHasFocus(){
+  const c=$('content'), el=document.activeElement;
+  return !!(c && el && el!==document.body && c.contains(el));
+}
 function liveTick(){
   if(document.hidden) return;
   refreshBadges().catch(()=>{});
-  if(!_live || modalOpen() || !LIVE_TABS.has(_tab)) return;
-  if(_tab==='users'){ const s=$('userSearch'); if(s && (s.value.trim() || document.activeElement===s)) return; }
+  if(!_live || modalOpen() || contentHasFocus() || !LIVE_TABS.has(_tab)) return;
   (RENDERERS[_tab]||(()=>{}))();
 }
-function startLive(){ if(_liveTimer) return; _liveTimer=setInterval(liveTick, 12000); }
+function startLive(){ if(_liveTimer) return; _liveTimer=setInterval(liveTick, 5000); }
 function setLive(on){ _live=on; const d=$('liveDot'); if(d) d.style.background = on ? 'var(--ok)' : 'var(--sub)';
   $('liveBtn').style.opacity = on ? '1' : '.6'; }
 

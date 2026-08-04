@@ -266,7 +266,7 @@ async function setupUser(uid, phone) {
   // failure seen in production.
   const balBeforeE = userDoc(E).walletBalance;
   r = await call('POST', '/withdraw/callback', { body: { data: { reference: refE, transaction: { status: 'successful' } } } });
-  await new Promise(r2 => setTimeout(r2, 3200)); // covers the 3-attempt retry inside the live check
+  await new Promise(r2 => setTimeout(r2, 1500)); // covers the 2-attempt retry + /transactions fallback inside the live check
   check('a genuine success webhook still marks it processed even though the live re-check kept failing', collMap('withdrawals').get(witId).status === 'processed', collMap('withdrawals').get(witId).status);
   check('...and never moves money in doing so (wallet unchanged by marking-processed itself)', userDoc(E).walletBalance === balBeforeE, userDoc(E).walletBalance);
 

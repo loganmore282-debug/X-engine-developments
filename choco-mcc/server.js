@@ -617,7 +617,13 @@ function _marzExtractTx(d) {
 }
 async function _marzFetchTxStatus(path, uuid, label) {
   let lastErr = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  // 2 attempts, 350ms apart, then straight to the /transactions fallback
+  // below -- a genuine transient blip almost always clears on the first
+  // retry (proven by test-withdrawal-stuck-auto-resolve.js), so burning
+  // several extra seconds on a 3rd attempt before ever trying a second,
+  // different endpoint just made every "Verify"/status click feel stuck for
+  // no real benefit.
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const resp = await fetch(`${MARZPAY_BASE}${path}`, {
         signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
@@ -630,7 +636,7 @@ async function _marzFetchTxStatus(path, uuid, label) {
         return _marzExtractTx(d);
       }
     } catch (e) { lastErr = e; console.error(`${label}(${uuid}) attempt ${attempt} failed:`, e.message); }
-    if (attempt < 3) await new Promise(r => setTimeout(r, 800));
+    if (attempt < 2) await new Promise(r => setTimeout(r, 350));
   }
   // Real production case: MarzPay's own /send-money/{uuid} resource threw a
   // server-side error on ITS end (HTTP 422 "Undefined variable $currency" --
@@ -657,7 +663,7 @@ async function _marzFetchTxStatus(path, uuid, label) {
       console.error(`${label}(${uuid}) /transactions fallback: HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
     }
   } catch (e) { console.error(`${label}(${uuid}) /transactions fallback failed:`, e.message); }
-  console.error(`${label}(${uuid}): gave up after 3 attempts + fallback, last error:`, lastErr && lastErr.message);
+  console.error(`${label}(${uuid}): gave up after 2 attempts + fallback, last error:`, lastErr && lastErr.message);
   return { status: '', reference: null };
 }
 // Returns the full transaction resource (status + whatever identifying
