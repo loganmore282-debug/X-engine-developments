@@ -1133,6 +1133,20 @@ app.post('/invest/create', async (req, res) => {
     const dailyPayout = Math.round(expectedReturn / cycle);
     let invId;
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
+      // Re-checked again, right here, immediately before any money actually
+      // moves -- the check above (line ~1128) runs at the top of the
+      // request, but this is the moment that actually matters. getProductByKey()
+      // re-reads live (its cache is invalidated the instant an admin saves
+      // ANY product change), so if this exact product got turned off or
+      // marked coming-soon in the gap between the two checks -- a client
+      // showing a stale "buy" button mid-sync, two requests racing, or
+      // anything else that could ever land a request here after the fact
+      // -- it's caught and refused HERE too, not just at the door. This is
+      // a pure purchase-time gate: it never touches or reverses an
+      // investment someone already legitimately holds from before the
+      // product was paused, only blocks a brand new one from being created.
+      const liveTier = await getProductByKey(tier.key);
+      if (!liveTier || liveTier.active === false || liveTier.comingSoon) throw new Error('This product is not available right now.');
       const uRef = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       if (!fresh.exists) throw new Error('User not found');
