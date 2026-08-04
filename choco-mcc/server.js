@@ -600,9 +600,23 @@ async function marzGetCollectTx(uuid) {
     });
     const d = await resp.json();
     const tx = d?.data?.transaction || d?.transaction || d || {};
+    // Logged, not silently swallowed — a withdrawal/deposit that never
+    // settles with NO trace in the logs of why is exactly the failure mode
+    // that made a real stuck payout impossible to diagnose (see the
+    // send-money version of this function for the full story).
+    if (!resp.ok) console.error(`marzGetCollectTx(${uuid}): HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
     return { status: String(tx.status || d?.status || '').toLowerCase(), reference: tx.reference || null };
-  } catch (_) { return { status: '', reference: null }; }
+  } catch (e) { console.error(`marzGetCollectTx(${uuid}) failed:`, e.message); return { status: '', reference: null }; }
 }
+// FIXED BUG (diagnosability): this used to swallow every failure with a
+// bare `catch(_){}` — a real one hit where MarzPay's own SMS + the
+// recipient's own bank confirmed a payout genuinely arrived, but our
+// status-check kept returning '' (empty) forever, so /withdraw/callback,
+// the 30s reconciler, and even the admin's on-demand "Sync MarzPay" all
+// silently kept treating it as still-processing with ZERO trace in the
+// server logs of why the lookup itself was failing (network error? wrong
+// endpoint? an auth hiccup? a status string MarzPay uses that isn't in
+// SUCCESS_STATUSES?  there was no way to tell after the fact). Now logged.
 async function marzGetSendTx(uuid) {
   try {
     const resp = await fetch(`${MARZPAY_BASE}/send-money/${uuid}`, {
@@ -610,8 +624,9 @@ async function marzGetSendTx(uuid) {
     });
     const d = await resp.json();
     const tx = d?.data?.transaction || d?.transaction || d || {};
+    if (!resp.ok) console.error(`marzGetSendTx(${uuid}): HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
     return { status: String(tx.status || d?.status || '').toLowerCase(), reference: tx.reference || null };
-  } catch (_) { return { status: '', reference: null }; }
+  } catch (e) { console.error(`marzGetSendTx(${uuid}) failed:`, e.message); return { status: '', reference: null }; }
 }
 async function marzGetCollectStatus(uuid) { return (await marzGetCollectTx(uuid)).status; }
 async function marzGetSendStatus(uuid) { return (await marzGetSendTx(uuid)).status; }
@@ -1610,6 +1625,49 @@ app.post('/admin/withdraw/verify', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// FIXED real bug: a payout genuinely arrived (confirmed by the recipient's
+// own MTN Mobile Money SMS) but our own status-check kept failing/timing
+// out against MarzPay's API, so /withdraw/callback, the 30s reconciler, and
+// the on-demand "Sync MarzPay" all kept the record stuck on 'processing'
+// indefinitely with no way to resolve it. The ONLY existing action on a
+// still-processing withdrawal besides waiting was Reject -- which REFUNDS
+// the wallet and reverses totalWithdrawn. Using that here would have paid
+// the member TWICE (their real MTN transfer plus a wallet refund they could
+// withdraw again). This is the safe alternative: an owner who has
+// independently confirmed the payout really happened can mark it processed
+// directly. It never touches the wallet or totalWithdrawn a second time --
+// those were already updated once, at send time, in /admin/withdraw/process
+// -- this only corrects the STATUS LABEL to match reality.
+app.post('/admin/withdraw/force-processed', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const withdrawalId = String(req.body.withdrawalId || '');
+  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+  if (_withdrawInFlight.has(withdrawalId))
+    return res.status(409).json({ status: 'error', message: 'This withdrawal is being acted on right now. Check the list in a moment.' });
+  _withdrawInFlight.add(withdrawalId);
+  try {
+    const witRef = db.collection('withdrawals').doc(withdrawalId);
+    const snap = await witRef.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    const w = snap.data();
+    if (w.status === 'processed') return res.json({ status: 'success', message: 'Already marked processed, nothing to do.' });
+    if (w.status !== 'processing' && w.status !== 'sending')
+      return res.status(400).json({ status: 'error', message: `Can only force-confirm a still-processing payout (this one is '${w.status}').` });
+    await witRef.update({
+      status: 'processed', processedAt: FieldValue.serverTimestamp(),
+      forceConfirmedBy: req.adminUser?.username || 'owner-key',
+      forceConfirmNote: String(req.body.note || '').slice(0, 300)
+    });
+    try {
+      const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'success' });
+    } catch (txErr) { console.warn('Force-processed tx update (non-critical):', txErr.message); }
+    logAdminAction(req, 'withdrawal_force_processed', { withdrawalId, amount: w.net, phone: w.phone, userId: w.userId, note: req.body.note || '' });
+    res.json({ status: 'success', message: 'Marked as processed. Wallet and totals were not touched again.' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  finally { _withdrawInFlight.delete(withdrawalId); }
+});
+
 app.post('/withdraw/marzpay/status', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -2182,6 +2240,16 @@ app.get('/admin/integrity', async (req, res) => {
       const ageHours = (now - tsMillis(w.createdAt)) / 3600000;
       if (w.status === 'processing' && !w.marzTxUuid)
         alerts.push({ kind: 'withdrawal_no_gateway_ref', userId: w.userId, withdrawalId: d.id, amount: w.amount, hours: Math.round(ageHours) });
+      // A payout WITH a gateway reference that's still 'processing' after a
+      // generous window past the callback/30s-reconciler/on-demand-sync all
+      // having had many chances to settle it is exactly the failure mode
+      // that left a real, confirmed-arrived payout stuck indefinitely with
+      // no visible trace of anything being wrong -- surfaced here now so it
+      // gets found without the member (or owner) having to notice and ask.
+      // Tap Verify (shows MarzPay's real status) then Mark Sent if
+      // confirmed, on the Withdrawals tab.
+      else if (w.status === 'processing' && w.marzTxUuid && ageHours > 0.25)
+        alerts.push({ kind: 'withdrawal_processing_stuck', userId: w.userId, withdrawalId: d.id, amount: w.amount, hours: Math.round(ageHours * 10) / 10 });
       else if (w.status === 'pending' && ageHours > 48)
         alerts.push({ kind: 'withdrawal_stuck', userId: w.userId, withdrawalId: d.id, amount: w.amount, hours: Math.round(ageHours) });
     });
