@@ -77,7 +77,13 @@
 // Password->Security, About ChocoMCC->About Us, Rules & Regulation->Terms
 // & Rules, Customer Care->Support, Log out->Sign Out. Matching screen
 // titles updated too so opening a renamed tile shows the same new name.
-const CACHE = 'chocomcc-shell-v22';
+// v23: auth screen redesigned — Sign In/Sign Up is now a real segmented tab
+// control instead of a plain text link, and all fields are grouped into one
+// card with row dividers instead of separate floating boxes. Same content
+// (titles, placeholders, button label) in both modes, same architecture for
+// both — login and register share the identical card/tab/button styling,
+// just with 2 vs 4 rows showing.
+const CACHE = 'chocomcc-shell-v23';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

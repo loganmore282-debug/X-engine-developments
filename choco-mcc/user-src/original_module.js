@@ -177,40 +177,36 @@ function phoneToEmail(phone){ return phone.replace(/\D/g,'').replace(/^0+/,'') +
 
 var authMode='login';
 document.querySelector('#authBanner img').src = CHOCO_BANNERS.assortment;
-// BUG FIXED: this used to re-fetch #authSwitchBtn by id and copy its
-// .onclick — but the very first toggle replaces #authSwitch's innerHTML,
-// destroying that original element, so every toggle AFTER the first called
-// .onclick on a null element and threw silently (no visible error, the tap
-// just did nothing — exactly "Sign up works once, Sign in back does
-// nothing"). toggleAuth() is now the single source of truth; both the
-// static button and every regenerated one call it directly by name, so
-// there's never a stale element reference to go stale.
-function toggleAuth(){
-  authMode = authMode==='login' ? 'register':'login';
-  document.querySelector('#authBanner img').src = authMode==='register' ? CHOCO_BANNERS.lavacake : CHOCO_BANNERS.assortment;
-  document.getElementById('regCodeField').style.display = authMode==='register' ? 'block':'none';
-  document.getElementById('regPassConfirmField').style.display = authMode==='register' ? 'block':'none';
+// Sign In / Sign Up is a real segmented tab control (#tabSignin/#tabSignup)
+// rather than a plain text link — both tabs are static elements with fixed
+// onclick handlers set once in the HTML, never innerHTML-replaced, so
+// there's no way for either to go stale the way the old text-link version
+// once did (it rebuilt its own clickable child every toggle, which broke
+// after the first tap). setAuthMode() takes the target mode directly
+// instead of toggling relative to current state, so every call site is
+// explicit about which mode it wants.
+function setAuthMode(mode){
+  authMode = mode;
+  document.getElementById('tabSignin').classList.toggle('active', mode==='login');
+  document.getElementById('tabSignup').classList.toggle('active', mode==='register');
+  document.querySelector('#authBanner img').src = mode==='register' ? CHOCO_BANNERS.lavacake : CHOCO_BANNERS.assortment;
+  document.getElementById('regCodeField').style.display = mode==='register' ? 'block':'none';
+  document.getElementById('regPassConfirmField').style.display = mode==='register' ? 'block':'none';
   document.getElementById('fPassConfirm').value = '';
-  document.getElementById('authTitle').textContent = authMode==='register' ? 'Create your account':'Welcome to ChocoMCC';
-  document.getElementById('authSub').textContent = authMode==='register' ? 'Join and start stacking chocolate tiers today.' : 'Sign in to grow your stash of the world\'s finest chocolate brands.';
-  document.getElementById('authSwitch').innerHTML = authMode==='register'
-    ? 'Already a member? <b onclick="toggleAuth()">Sign in</b>'
-    : 'New here? <b onclick="toggleAuth()">Sign up</b>';
+  document.getElementById('authTitle').textContent = mode==='register' ? 'Create your account':'Welcome to ChocoMCC';
+  document.getElementById('authSub').textContent = mode==='register' ? 'Join and start stacking chocolate tiers today.' : 'Sign in to grow your stash of the world\'s finest chocolate brands.';
 }
-document.getElementById('authSwitchBtn').onclick = toggleAuth;
 // A referral link is https://choco-mcc.com/?reg=CODE (see teamLink below) — if
 // someone arrives with that in the URL, land them straight on Sign Up with
 // the invite code already filled in. Before this, the code was captured
 // nowhere: every referral link opened the plain sign-in screen with an empty
 // invite field, so it silently did nothing unless the visitor happened to
-// retype the code by hand. Runs AFTER the switch button above is wired —
-// toggleAuth() replaces #authSwitch's innerHTML, so calling it any earlier
-// would tear out authSwitchBtn before its onclick is even attached.
+// retype the code by hand.
 (function prefillReferralFromUrl(){
   var qs = new URLSearchParams(location.search);
   var code = (qs.get('reg') || qs.get('ref') || '').trim();
   if(!code) return;
-  if(authMode==='login') toggleAuth();
+  setAuthMode('register');
   var f = document.getElementById('fCode');
   if(f) f.value = code;
 })();
@@ -274,7 +270,7 @@ document.getElementById('authGo').onclick = async function(){
       // already an account. Switch to Sign In with the phone kept, so
       // whatever the member sees next is unmistakably THAT existing
       // account, not something that looks like a fresh, empty signup.
-      toggleAuth();
+      setAuthMode('login');
       document.getElementById('fPhone').value = phone;
       document.getElementById('fPass').value = '';
       toast('This phone number already has an account — sign in instead');

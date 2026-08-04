@@ -71,6 +71,28 @@
     display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-lg);margin-bottom:18px;}
   .auth-title{font-size:28px;margin-bottom:6px;}
   .auth-sub{color:var(--cocoa-faint);font-size:14.5px;margin-bottom:28px;line-height:1.5;}
+  /* Segmented Sign In / Sign Up tab control — replaces the old plain-text
+     "New here? Sign up" link. Static elements with fixed onclick handlers
+     (never innerHTML-replaced), so there's no risk of the "works once,
+     stops working" stale-reference bug the old text-link version had. */
+  .auth-tabs{display:flex;background:var(--cream-deep);border-radius:16px;padding:4px;margin-bottom:22px;}
+  .auth-tab{flex:1;border:none;background:none;padding:12px 8px;border-radius:12px;font-size:14px;font-weight:800;
+    color:var(--cocoa-faint);cursor:pointer;transition:background .15s,color .15s;}
+  .auth-tab.active{background:var(--card);color:var(--cocoa);box-shadow:var(--shadow);}
+  /* All auth fields grouped into one card with row dividers, instead of
+     separate floating boxes — same icons/inputs/placeholders, just a
+     single unified container for both Sign In and Sign Up alike. */
+  .auth-card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:2px 18px;margin-bottom:22px;}
+  .auth-card .field{margin-bottom:0;padding:15px 0;}
+  .auth-card .field:not(:first-child){border-top:1px solid var(--line);}
+  .auth-card .field input{width:100%;border:none;background:none;padding:0 0 0 32px;font-size:15px;color:var(--cocoa);outline:none;}
+  .auth-card .field .ic{left:0;}
+  .auth-card .phone-prefix{left:26px;}
+  .auth-card #fPhone{padding-left:66px;}
+  .auth-btn{width:100%;border:none;border-radius:999px;padding:16px;font-weight:800;font-size:15.5px;color:#fff;
+    background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));box-shadow:0 12px 24px -10px rgba(224,138,44,.6);
+    cursor:pointer;transition:transform .08s ease;}
+  .auth-btn:active{transform:scale(.97);}
   .field{position:relative;margin-bottom:14px;}
   .field input{width:100%;padding:16px 16px 16px 46px;border-radius:16px;border:1.5px solid var(--line);background:var(--card);
     font-size:15px;color:var(--cocoa);outline:none;}
@@ -87,8 +109,6 @@
   .net-card .net-check{display:none;position:absolute;bottom:-6px;right:-6px;width:22px;height:22px;border-radius:50%;
     background:var(--caramel);color:#fff;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(59,36,22,.3);}
   .net-card.active .net-check{display:flex;}
-  .auth-switch{text-align:center;margin-top:20px;font-size:14px;color:var(--cocoa-faint);}
-  .auth-switch b{color:var(--caramel-deep);font-weight:800;}
   .auth-tag{display:inline-block;background:var(--mint-pale);color:var(--mint);font-weight:800;font-size:11.5px;
     padding:4px 10px;border-radius:999px;margin-bottom:14px;letter-spacing:.3px;}
 
@@ -362,25 +382,30 @@
     </div>
     <div class="auth-title" id="authTitle">Welcome to ChocoMCC</div>
     <div class="auth-sub" id="authSub">Sign in to grow your stash of the world's finest chocolate brands.</div>
-    <div class="field">
-      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 10.5c1.2 2.6 3.4 4.8 6 6l1.8-1.8c.3-.3.7-.4 1-.3 1 .3 2.1.5 3.2.5.6 0 1 .4 1 1v2.7c0 .6-.4 1-1 1C10.7 19.6 4.4 13.3 4.4 5.5c0-.6.4-1 1-1H8c.6 0 1 .4 1 1 0 1.1.2 2.2.5 3.2.1.4 0 .8-.3 1L6.5 10.5z"/></svg></span>
-      <span class="phone-prefix">+256</span>
-      <input id="fPhone" placeholder="123456789" inputmode="tel" maxlength="10">
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab active" id="tabSignin" onclick="setAuthMode('login')">Sign In</button>
+      <button type="button" class="auth-tab" id="tabSignup" onclick="setAuthMode('register')">Sign Up</button>
     </div>
-    <div class="field">
-      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
-      <input id="fPass" placeholder="Password" type="password">
+    <div class="auth-card">
+      <div class="field">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 10.5c1.2 2.6 3.4 4.8 6 6l1.8-1.8c.3-.3.7-.4 1-.3 1 .3 2.1.5 3.2.5.6 0 1 .4 1 1v2.7c0 .6-.4 1-1 1C10.7 19.6 4.4 13.3 4.4 5.5c0-.6.4-1 1-1H8c.6 0 1 .4 1 1 0 1.1.2 2.2.5 3.2.1.4 0 .8-.3 1L6.5 10.5z"/></svg></span>
+        <span class="phone-prefix">+256</span>
+        <input id="fPhone" placeholder="123456789" inputmode="tel" maxlength="10">
+      </div>
+      <div class="field">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
+        <input id="fPass" placeholder="Password" type="password">
+      </div>
+      <div id="regPassConfirmField" class="field" style="display:none">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
+        <input id="fPassConfirm" placeholder="Confirm password" type="password">
+      </div>
+      <div id="regCodeField" class="field" style="display:none">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M10 14a5 5 0 007 0l2-2a5 5 0 00-7-7l-1 1"/><path d="M14 10a5 5 0 00-7 0l-2 2a5 5 0 007 7l1-1"/></svg></span>
+        <input id="fCode" placeholder="Invite code (optional)">
+      </div>
     </div>
-    <div id="regPassConfirmField" class="field" style="display:none">
-      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V7.5a4 4 0 118 0V11"/><circle cx="12" cy="14.7" r="1.3" fill="currentColor" stroke="none"/><path d="M12 16v1.8"/></svg></span>
-      <input id="fPassConfirm" placeholder="Confirm password" type="password">
-    </div>
-    <div id="regCodeField" class="field" style="display:none">
-      <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M10 14a5 5 0 007 0l2-2a5 5 0 00-7-7l-1 1"/><path d="M14 10a5 5 0 00-7 0l-2 2a5 5 0 007 7l1-1"/></svg></span>
-      <input id="fCode" placeholder="Invite code (optional)">
-    </div>
-    <button class="btn btn-primary btn-block" id="authGo">Continue</button>
-    <div class="auth-switch" id="authSwitch">New here? <b id="authSwitchBtn">Sign up</b></div>
+    <button class="auth-btn" id="authGo">Continue</button>
   </div>
 
   <!-- APP -->
