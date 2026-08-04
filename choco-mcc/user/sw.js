@@ -146,7 +146,13 @@
 // Every Telegram link app-wide (Support screen + announcement dialog)
 // now uses the real Telegram brand mark (blue disc + paper-plane) instead
 // of a generic themed outline icon.
-const CACHE = 'chocomcc-shell-v32';
+// v33: Shop screen's sold-out/coming-soon products fixed per feedback --
+// "Sold out" corner badge replaced with a "Coming Soon" banner spanning
+// the full width of the product image (not a small aside pill), and the
+// whole card is now a real disabled button with no onclick at all, so
+// tapping it does nothing instead of opening a product page. Server-side
+// purchase blocking (already in place) re-verified unchanged.
+const CACHE = 'chocomcc-shell-v33';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -625,12 +625,18 @@ function renderFeatured(){
   document.getElementById('featStrip').innerHTML = html;
 }
 function renderShop(){
+  // Sold-out/coming-soon tiers render fully dimmed with a banner spanning
+  // the whole image (not a small corner badge), and the card itself is a
+  // real disabled <button> — no onclick at all, so tapping it does
+  // nothing rather than opening a product page it can't buy from anyway.
+  // Server-side, /invest/create independently re-checks active/comingSoon
+  // on every purchase attempt regardless of what the client shows.
   var html = PRODUCTS.map(function(p, i){
     var soldOut = isProductSoldOut(p);
-    return '<button class="prod-card'+(soldOut?' is-soldout':'')+'" onclick="openProduct(\''+p.key+'\')">'+
+    return '<button class="prod-card'+(soldOut?' is-soldout':'')+'"'+(soldOut?' disabled':' onclick="openProduct(\''+p.key+'\')"')+'>'+
       '<div class="prod-img-wrap"><img class="prod-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<span class="prod-rank">Tier '+(i+1)+'</span>'+
-      (soldOut?'<span class="prod-soldout-badge">Sold out</span>':'')+'</div>'+
+      (soldOut?'<span class="prod-soldout-banner">Coming Soon</span>':'')+'</div>'+
       '<div class="prod-body"><div class="prod-info"><div class="prod-name">'+p.name+'</div>'+
       '<div class="prod-price">'+ugx(p.price)+'</div>'+
       '<div class="prod-daily">+'+ugx(dailyReturn(p))+' / day</div></div>'+
@@ -903,7 +909,7 @@ function openProduct(key){
   document.getElementById('pdTitle').textContent = p.name;
   document.getElementById('pdBody').innerHTML =
     '<img src="'+CHOCO_IMAGES[p.key]+'" style="width:100%;height:220px;object-fit:cover;border-radius:20px;margin:6px 20px 0;width:calc(100% - 40px)'+(soldOut?';filter:grayscale(.5);opacity:.7':'')+'">'+
-    (soldOut?'<div class="info-box" style="margin:16px 20px 0;background:var(--berry-pale);color:var(--berry)">This chocolate isn\'t available to buy right now. Check back soon.</div>':'')+
+    (soldOut?'<div class="info-box" style="margin:16px 20px 0;background:var(--berry-pale);color:var(--berry)">Coming soon. This chocolate isn\'t available to buy yet.</div>':'')+
     '<div class="form-card">'+
       '<div class="kv"><span>Price</span><b>'+ugx(p.price)+'</b></div>'+
       '<div class="kv"><span>Daily reward</span><b style="color:var(--mint)">'+ugx(dailyReturn(p))+'</b></div>'+
@@ -912,7 +918,7 @@ function openProduct(key){
     '</div>'+
     '<div class="photo-banner pb-sm"><img src="'+CHOCO_BANNERS.snickerscookie+'"></div>'+
     '<div style="padding:4px 20px 20px">'+(soldOut
-      ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed">Sold out</button>'
+      ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed">Coming soon</button>'
       : '<button class="btn btn-primary btn-block" id="buyProductBtn" onclick="buyProduct(\''+p.key+'\')">Buy this chocolate</button>')+'</div>';
   openOverlay('product');
 }
