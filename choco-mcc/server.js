@@ -2187,7 +2187,17 @@ app.post('/admin/deposit', async (req, res) => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
-      t.update(uRef, { walletBalance: FieldValue.increment(amt) });
+      // Counts toward totalDeposited (and therefore the referrer's Task
+      // Center "Level 1 team deposits" milestone via l1TeamDeposits) by
+      // deliberate choice — an admin credit is most often standing in for
+      // a real payment MarzPay's own gateway declined, so from the
+      // member's (and their referrer's) side it should behave exactly
+      // like the deposit it's replacing, not vanish from every deposit
+      // total. This does mean a staff member with owner-level access could
+      // use it to hand a referrer free milestone progress — verifyOwner()
+      // already gates this endpoint for exactly that reason (see the
+      // owner-only role check), same trust boundary as any other credit.
+      t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'admin_credit', description: note || 'ChocoMCC credit',
         amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
