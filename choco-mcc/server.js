@@ -1218,6 +1218,17 @@ app.post('/deposit/marzpay', async (req, res) => {
       userId, phone, network, amount: amt, ref, marzReference, status: 'initiating',
       date, time, createdAt: FieldValue.serverTimestamp()
     });
+    // Respond the instant OUR OWN write lands — do not make the member wait
+    // on MarzPay's own API round-trip (which can legitimately take several
+    // seconds) before they see any confirmation at all. MarzPay pushes the
+    // real mobile-money PIN prompt to their phone on ITS OWN timeline
+    // regardless of when our response arrives, so the fix is to stop
+    // blocking our screen on that round-trip — not to make the round-trip
+    // itself faster (that part isn't ours to control). The actual gateway
+    // call below runs in the background; the status screen's own polling
+    // (which starts immediately and repeats every 3s) picks up whatever it
+    // resolves to — pending, matched, or failed — within moments either way.
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
     // Unlike withdrawals, a thrown/timed-out call here must NOT be treated
     // as a clean failure: money hasn't moved on OUR side (nothing was
     // debited yet — deposits only credit on confirmation), but MarzPay may
@@ -1225,7 +1236,8 @@ app.post('/deposit/marzpay', async (req, res) => {
     // marked this 'failed', a customer who WAS actually charged would never
     // get credited (there's no marzTxUuid to poll against). So on a network
     // exception the record stays 'initiating' — findable later by `ref` —
-    // and the user is told honestly rather than definitively "it failed".
+    // and the status screen just keeps polling rather than showing a
+    // definitive "it failed".
     let mpData;
     try {
       mpData = await marzCollect({
@@ -1234,8 +1246,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       });
     } catch (netErr) {
       console.error('MarzPay collect-money network error (ref ' + ref + '):', netErr.message);
-      return res.status(202).json({ status: 'error',
-        message: "We couldn't confirm this payment started. If your phone doesn't get a prompt shortly, try again. If you ARE charged, contact support with reference " + ref + '.' });
+      return;
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       // Log the RAW gateway response — marzUserMsg() below deliberately hides
@@ -1244,14 +1255,13 @@ app.post('/deposit/marzpay', async (req, res) => {
       // outage apart from staring at Render's logs and seeing nothing.
       console.error('MarzPay collect-money rejected:', JSON.stringify(mpData));
       await depRef.update({ status: 'failed', failureReason: marzUserMsg(mpData, 'Could not start the payment') }).catch(() => {});
-      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'Could not start the payment right now. Please try again.') });
+      return;
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
     await depRef.update({ status: 'pending', marzTxUuid });
-    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
   } catch (e) {
     console.error('Deposit error:', e.message);
-    res.status(500).json({ status: 'error', message: PROVIDER_BUSY_MSG });
+    if (!res.headersSent) res.status(500).json({ status: 'error', message: PROVIDER_BUSY_MSG });
   }
 });
 
