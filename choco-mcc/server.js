@@ -610,6 +610,11 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
 // identically), so a real completed transaction is far less likely to be
 // missed just because the status landed in a spot the old single-path
 // lookup didn't check.
+function _marzExtractTx(d) {
+  const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
+  const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || d?.status || '';
+  return { status: String(rawStatus).toLowerCase(), reference: tx.reference || tx.transaction_reference || null };
+}
 async function _marzFetchTxStatus(path, uuid, label) {
   let lastErr = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -622,14 +627,37 @@ async function _marzFetchTxStatus(path, uuid, label) {
         console.error(`${label}(${uuid}) attempt ${attempt}: HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
         lastErr = new Error(`HTTP ${resp.status}`);
       } else {
-        const tx = d?.data?.transaction || d?.transaction || d?.data || d || {};
-        const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || d?.status || '';
-        return { status: String(rawStatus).toLowerCase(), reference: tx.reference || tx.transaction_reference || null };
+        return _marzExtractTx(d);
       }
     } catch (e) { lastErr = e; console.error(`${label}(${uuid}) attempt ${attempt} failed:`, e.message); }
     if (attempt < 3) await new Promise(r => setTimeout(r, 800));
   }
-  console.error(`${label}(${uuid}): gave up after 3 attempts, last error:`, lastErr && lastErr.message);
+  // Real production case: MarzPay's own /send-money/{uuid} resource threw a
+  // server-side error on ITS end (HTTP 422 "Undefined variable $currency" --
+  // a bug in their code, not ours, confirmed reproducing identically on
+  // every single attempt, not a transient network flake) for one specific
+  // transaction. Their own docs list GET /transactions/{uuid} as a
+  // documented fallback "when webhooks are delayed" -- it's a different
+  // resource/code path on their side, so a bug specific to the send-money
+  // formatter doesn't necessarily also break this one. One extra try here
+  // before giving up, reusing the exact same parsing since it returns the
+  // same transaction shape.
+  try {
+    const resp = await fetch(`${MARZPAY_BASE}/transactions/${uuid}`, {
+      signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+    });
+    const d = await resp.json().catch(() => ({}));
+    if (resp.ok) {
+      const parsed = _marzExtractTx(d);
+      if (parsed.status) {
+        console.log(`${label}(${uuid}): resolved via /transactions/{uuid} fallback after the primary endpoint kept failing`);
+        return parsed;
+      }
+    } else {
+      console.error(`${label}(${uuid}) /transactions fallback: HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
+    }
+  } catch (e) { console.error(`${label}(${uuid}) /transactions fallback failed:`, e.message); }
+  console.error(`${label}(${uuid}): gave up after 3 attempts + fallback, last error:`, lastErr && lastErr.message);
   return { status: '', reference: null };
 }
 // Returns the full transaction resource (status + whatever identifying

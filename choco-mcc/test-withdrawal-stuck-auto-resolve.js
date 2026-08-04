@@ -71,10 +71,23 @@ const realFetch = global.fetch;
 // Per-uuid scripted behavior for GET .../send-money/{uuid}, so each test
 // case can simulate a different real-world provider response shape.
 const _sendStatusScript = new Map(); // uuid -> { calls: 0, script: fn(callNum) => {ok, status, body} }
+// Separate script for the GET .../transactions/{uuid} fallback endpoint.
+const _transactionsScript = new Map(); // uuid -> { calls: 0, script: fn(callNum) => {ok, status, body} }
 global.fetch = async (url, opts) => {
   const u = String(url);
+  const isGet = !opts || opts.method === undefined || opts.method === 'GET';
+  const tm = u.match(/\/transactions\/([^/?]+)/);
+  if (u.includes('wearemarz.com') && tm && isGet) {
+    const uuid = tm[1];
+    const entry = _transactionsScript.get(uuid);
+    if (entry) {
+      entry.calls++;
+      const r = entry.script(entry.calls);
+      return { ok: r.ok, status: r.ok ? 200 : (r.httpStatus || 500), json: async () => r.body };
+    }
+  }
   const m = u.match(/\/send-money\/([^/?]+)/);
-  if (u.includes('wearemarz.com') && m && (!opts || opts.method === undefined || opts.method === 'GET')) {
+  if (u.includes('wearemarz.com') && m && isGet) {
     const uuid = m[1];
     const entry = _sendStatusScript.get(uuid);
     if (entry) {
@@ -144,6 +157,25 @@ async function syncNow() { return ownerCall('GET', '/admin/payments/sync'); }
   _sendStatusScript.set('MTX-ALTFIELD', { calls: 0, script: () => ({ ok: true, body: { data: { transaction: { state: 'completed', reference: 'REF-wit-altfield' } } } }) });
   await syncNow();
   check('resolved automatically reading the status from tx.state instead of tx.status', withdrawals().get('wit-altfield').status === 'processed', withdrawals().get('wit-altfield'));
+
+  console.log('\n== Real production case: MarzPay\'s own /send-money/{uuid} throws a server-side bug on EVERY attempt (HTTP 422 "Undefined variable $currency") -- the /transactions/{uuid} fallback still resolves it ==');
+  // Confirmed live in Render logs for a real stuck payout: not a transient
+  // network blip (retries don't help, it's deterministic), a genuine bug in
+  // MarzPay's own send-money status code. Their docs list GET
+  // /transactions/{uuid} as the documented fallback "when webhooks are
+  // delayed" -- a different resource/code path on their side.
+  seedProcessingWithdrawal('wit-marzbug', A, { amount: 8000, net: 6800, marzTxUuid: 'MTX-MARZBUG', ageMs: 60000 });
+  _sendStatusScript.set('MTX-MARZBUG', { calls: 0, script: () => ({ ok: false, httpStatus: 422, body: { status: 'error', message: 'Undefined variable $currency', error_code: 'REQUEST_ERROR' } }) });
+  _transactionsScript.set('MTX-MARZBUG', { calls: 0, script: () => ({ ok: true, body: { data: { transaction: { status: 'completed', reference: 'REF-wit-marzbug' } } } }) });
+  await syncNow();
+  check('resolved automatically via the /transactions/{uuid} fallback despite the primary endpoint being permanently broken', withdrawals().get('wit-marzbug').status === 'processed', withdrawals().get('wit-marzbug'));
+
+  console.log('\n== ...and if BOTH the primary endpoint AND the fallback are broken, it correctly stays unresolved (never guesses) ==');
+  seedProcessingWithdrawal('wit-bothbroken', A, { amount: 9000, net: 7650, marzTxUuid: 'MTX-BOTHBROKEN', ageMs: 60000 });
+  _sendStatusScript.set('MTX-BOTHBROKEN', { calls: 0, script: () => ({ ok: false, httpStatus: 422, body: { error: 'Undefined variable $currency' } }) });
+  _transactionsScript.set('MTX-BOTHBROKEN', { calls: 0, script: () => ({ ok: false, httpStatus: 500, body: { error: 'also broken' } }) });
+  await syncNow();
+  check('stays "processing", not falsely resolved, when neither endpoint answers', withdrawals().get('wit-bothbroken').status === 'processing', withdrawals().get('wit-bothbroken'));
 
   console.log('\n== A genuinely failed payout is still correctly declined and refunded (not incorrectly marked processed) ==');
   const balBeforeFail = userDoc(A).walletBalance;
