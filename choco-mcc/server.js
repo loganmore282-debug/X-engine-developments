@@ -1348,28 +1348,36 @@ app.post('/deposit/callback', async (req, res) => {
     const doc = depSnap.docs[0];
     const dep = doc.data();
     if (dep.status !== 'pending' && dep.status !== 'initiating') return; // already resolved — never downgrade
-    // Self-heal a uuid we never captured, if the webhook body happens to
-    // carry one — helps the polling reconciler on any future retry too.
-    const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
-    if (!dep.marzTxUuid && webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
-    const uuid = dep.marzTxUuid || webhookUuid;
     // SECURITY: this endpoint has no signature/secret verification — MarzPay
     // sends no shared secret we can check, so anyone who obtains a
     // marzReference (a member can see their OWN one via /deposits) can POST
     // a forged body here. The webhook's claimed status is NEVER trusted by
     // itself; crediting/declining only ever happens after an INDEPENDENT
-    // live re-check against MarzPay's own API confirms it. If there's no
-    // uuid to check (never captured) or the live check comes back
-    // empty/ambiguous, this now does NOTHING and leaves the deposit exactly
-    // as it was — for an admin to resolve via /admin/deposit/force-credit
-    // after checking MarzPay's own dashboard, not an anonymous POST to
-    // decide unilaterally. FIXED A REAL EXPLOIT: the old code fell through
-    // to crediting/declining whenever `uuid` was falsy OR the live check
-    // came back empty — "can't verify" was being treated as "assume
-    // legitimate" instead of "don't act." Confirmed live: a forged callback
-    // with no uuid against a real pending deposit credited the full amount
-    // to the attacker's own wallet with zero actual payment.
-    if (!uuid) return;
+    // live re-check against MarzPay's own API confirms it.
+    //
+    // CRITICAL: the uuid used for that live re-check must ONLY ever be
+    // `dep.marzTxUuid` — the value WE captured ourselves from OUR OWN
+    // outbound marzCollect() call — NEVER a uuid read out of the incoming
+    // webhook body. FIXED A SECOND, DEEPER EXPLOIT on top of the first: the
+    // previous fix still fell back to a webhook-supplied uuid whenever
+    // dep.marzTxUuid was unset, then treated a live "successful" result for
+    // THAT uuid as proof. But marzGetCollectStatus() only ever checks
+    // whether SOME transaction with that uuid succeeded — it never confirms
+    // that transaction is actually the one that paid THIS reference. That
+    // let an attacker pay for a small, real deposit of their own (getting a
+    // genuine, real, "successful" uuid), then forge a callback for a
+    // SEPARATE, unpaid, much larger deposit's reference, supplying their
+    // real-but-unrelated uuid as if it belonged to that one. Confirmed
+    // live: an attacker legitimately paid nothing for a 1,000,000 UGX
+    // deposit and got it fully credited by reusing an unrelated real uuid.
+    // No self-heal of a webhook-supplied uuid happens anymore either — with
+    // no dep.marzTxUuid, there is NO safe uuid to check, so this now does
+    // nothing at all and leaves the deposit exactly as it was, for an
+    // admin to resolve via /admin/deposit/force-credit after checking
+    // MarzPay's own dashboard directly — never an anonymous POST deciding
+    // unilaterally, and never data the anonymous POST itself supplied.
+    if (!dep.marzTxUuid) return;
+    const uuid = dep.marzTxUuid;
     if (isSuccess) {
       const marzStatus = await marzGetCollectStatus(uuid);
       if (!SUCCESS_STATUSES.has(marzStatus)) return; // not independently confirmed — never credit on the webhook's word alone
@@ -1588,15 +1596,15 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
   }
 });
 
-// Same self-heal fix as /deposit/callback — required marzTxUuid before doing
-// anything at all, so a payout whose initial send-money response omitted a
-// uuid could never be marked processed by this webhook. Success now goes off
-// the webhook's own reported status (with a real GET re-check as a
-// cross-check whenever a uuid IS available). Failure stays strict — it is
-// NEVER trusted without a stored uuid and a re-check confirming it, because
-// the wallet is already debited by this point; a forged "failed" webhook
-// refunding a payout that actually went out would be double money leaving
-// the platform.
+// SECURITY (same fix as /deposit/callback, see its comment for the full
+// exploit trail): the uuid used to independently re-verify a claim here is
+// ONLY EVER `wit.marzTxUuid` — the value captured from OUR OWN outbound
+// marzSendMoney() call — NEVER a uuid read out of the incoming webhook
+// body. A webhook-supplied uuid could belong to some OTHER real, genuinely
+// successful transaction and would pass a live re-check without actually
+// proving anything about THIS withdrawal. No uuid captured means nothing
+// verifiable exists, so this does nothing and leaves the record exactly as
+// it was, for the admin/reconciler to resolve for real.
 app.post('/withdraw/callback', async (req, res) => {
   res.status(200).json({ status: 'ok' });
   try {
@@ -1614,19 +1622,8 @@ app.post('/withdraw/callback', async (req, res) => {
     const doc = witSnap.docs[0];
     const wit = doc.data();
     if (wit.status !== 'processing') return; // already resolved — never downgrade
-    const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
-    if (!wit.marzTxUuid && webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
-    const uuid = wit.marzTxUuid || webhookUuid;
-    // SECURITY: same fix as /deposit/callback — this endpoint has no
-    // signature verification, so the webhook's claimed status is never
-    // trusted alone. A forged "success" here doesn't hand an attacker new
-    // money (the wallet was already debited at request time), but it WOULD
-    // falsely mark a real payout "processed" — the recipient never gets
-    // their cash, totalWithdrawn is corrupted, and nobody investigates
-    // because the record looks complete. Only an independent live
-    // MarzPay re-check can mark this processed now; "can't verify" leaves
-    // it exactly as-is for the admin/reconciler, never assumes success.
-    if (!uuid) return;
+    if (!wit.marzTxUuid) return;
+    const uuid = wit.marzTxUuid;
     if (isSuccess) {
       const marzStatus = await marzGetSendStatus(uuid);
       if (!SUCCESS_STATUSES.has(marzStatus)) return;

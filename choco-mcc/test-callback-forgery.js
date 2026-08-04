@@ -3,23 +3,34 @@
    endpoints — MarzPay sends no shared secret to check, so anyone who
    obtains a marzReference can POST a forged body. The only real defense is
    never trusting the webhook's own claimed status without an independent
-   live re-check against MarzPay's real API first.
+   live re-check against MarzPay's real API first, using ONLY a uuid we
+   captured ourselves — never one read out of the incoming webhook body.
 
-   CONFIRMED LIVE (before this fix): a user creates a real deposit, reads
-   their own marzReference back off their own /deposits history (a normal,
-   intended, authenticated call), then POSTs a forged /deposit/callback
-   claiming success. If MarzPay's initial collect-money response happened
-   not to include a transaction uuid — a real, documented possibility, not
-   attacker-controlled — the old code skipped live verification entirely
-   whenever there was no uuid to check, and credited the wallet purely on
-   the forged webhook's say-so. Verified exploit: 30,000 UGX credited with
-   zero actual payment. This is the exact "people waking up with huge
-   funds" scenario raised earlier.
+   Two real exploits were found and closed here, confirmed live before each
+   fix, not just reasoned about:
 
-   This file proves the fix holds: a forged webhook with no verifiable uuid
-   now credits/declines NOTHING, on both deposits and withdrawals, while a
-   forged webhook that DOES carry a real, verifiable uuid still can't
-   override what MarzPay's own live status check actually says.
+   1. When a deposit's marzTxUuid was never captured (a real, documented
+      MarzPay behavior — their collect response doesn't always include one,
+      not attacker-controlled), the old code skipped live verification
+      entirely and credited purely on the forged webhook's say-so.
+      Confirmed: 30,000 UGX credited with zero actual payment.
+
+   2. The FIRST fix still fell back to a uuid supplied by the webhook body
+      itself whenever our own marzTxUuid was unset, then trusted a live
+      "successful" result for THAT uuid as proof. But the live check only
+      confirms SOME transaction with that uuid succeeded — never that it's
+      the one that paid THIS reference. An attacker who legitimately paid
+      for one small real deposit (getting a genuine, real, successful uuid)
+      could forge a callback for a completely different, unpaid, much
+      larger deposit and supply their real-but-unrelated uuid as if it
+      belonged to it. Confirmed: 1,000,000 UGX credited by reusing an
+      unrelated real transaction's uuid, paying nothing for that deposit.
+
+   The final contract: the uuid used for verification is ALWAYS and ONLY
+   the one captured server-side at deposit/withdrawal creation, from OUR
+   OWN outbound call to MarzPay. Nothing in the incoming webhook body is
+   ever trusted to supply or substitute that identity. No self-captured
+   uuid means nothing verifiable exists, so the callback does nothing.
 
    Run: node test-callback-forgery.js   (exits 0 = all green)               */
 
@@ -47,17 +58,16 @@ require.cache[faPath] = faMod;
 
 const realFetch = global.fetch;
 let marzN = 0;
-// Controls what the live "GET /collect-money/:uuid" and "GET /send-money/:uuid"
-// status checks report, per test scenario below.
+// Controls what the initial collect-money/send-money call returns a uuid
+// as, and what the live "GET .../:uuid" status checks report for it, per
+// test scenario below.
+let collectUuidToIssue = null; // null = simulates MarzPay omitting the uuid
 let collectStatusForUuid = {};
-let sendStatusForUuid = {};
 global.fetch = async (url, opts) => {
   const u = String(url);
   const json = body => ({ ok: true, status: 200, json: async () => body });
   if (u.includes('wearemarz.com') && u.endsWith('/collect-money')) {
-    // Simulates the real, documented MarzPay behavior of sometimes NOT
-    // returning a transaction uuid on the initial collect response.
-    return json({ status: 'success', data: { transaction: {} } });
+    return json({ status: 'success', data: { transaction: collectUuidToIssue ? { uuid: collectUuidToIssue } : {} } });
   }
   if (u.includes('wearemarz.com') && u.endsWith('/send-money')) {
     return json({ status: 'success', data: { transaction: { uuid: 'WTX-' + (++marzN), status: 'pending' } } });
@@ -66,13 +76,6 @@ global.fetch = async (url, opts) => {
   if (collectMatch) {
     const uuid = collectMatch[1];
     const status = collectStatusForUuid[uuid];
-    if (status === undefined) return json({ status: 'error', message: 'transaction not found' });
-    return json({ status: 'success', data: { transaction: { status } } });
-  }
-  const sendMatch = u.match(/\/send-money\/([^/?]+)/);
-  if (sendMatch) {
-    const uuid = sendMatch[1];
-    const status = sendStatusForUuid[uuid];
     if (status === undefined) return json({ status: 'error', message: 'transaction not found' });
     return json({ status: 'success', data: { transaction: { status } } });
   }
@@ -109,7 +112,8 @@ async function setupUser(uid, phone) {
 (async () => {
   await new Promise(r => setTimeout(r, 600));
 
-  console.log('\n== The exact confirmed exploit: forged deposit callback, no captured uuid ==');
+  console.log('\n== Exploit #1 (confirmed, now fixed): forged callback, no captured uuid ==');
+  collectUuidToIssue = null;
   const A = 'forge-victim-a';
   await setupUser(A, '0771000401');
   const balBefore = userDoc(A).walletBalance;
@@ -123,51 +127,67 @@ async function setupUser(uid, phone) {
   r = await call('POST', '/deposit/callback', { body: { data: { reference: leakedRef, transaction: { status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
   check('forged callback response still 200 (ack-immediately pattern, unrelated to whether it credited anything)', r.code === 200, r.body);
-  check('SECURITY: wallet NOT credited by a forged webhook with no verifiable uuid', userDoc(A).walletBalance === balBefore, userDoc(A).walletBalance);
+  check('SECURITY: wallet NOT credited by a forged webhook with no captured uuid', userDoc(A).walletBalance === balBefore, userDoc(A).walletBalance);
   check('deposit stays pending, not falsely matched', collMap('pendingDeposits').get(depId).status === 'pending', collMap('pendingDeposits').get(depId).status);
 
-  console.log('\n== A forged callback CAN\'T override what MarzPay\'s real status actually says ==');
+  console.log('\n== Exploit #2 (confirmed, now fixed): reusing a real, unrelated uuid to fake a DIFFERENT deposit ==');
+  collectUuidToIssue = null; // this deposit also gets no uuid captured
   const B = 'forge-victim-b';
   await setupUser(B, '0771000402');
   const balBeforeB = userDoc(B).walletBalance;
-  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + B, body: { amount: 40000, phone: '0771000402', network: 'MTN Mobile Money' } });
+  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + B, body: { amount: 1000000, phone: '0771000402', network: 'MTN Mobile Money' } });
   const depIdB = r.body.depositId;
-  // Self-heal path: webhook supplies a uuid we never captured. Real MarzPay
-  // status for THAT uuid is "pending" (not actually paid yet) — a forged
-  // "successful" claim in the webhook body must not win over the live check.
-  collectStatusForUuid['FAKE-UUID-1'] = 'pending';
-  r = await call('POST', '/deposit/callback', { body: { data: { reference: collMap('pendingDeposits').get(depIdB).marzReference, transaction: { uuid: 'FAKE-UUID-1', status: 'successful' } } } });
+  const refB = collMap('pendingDeposits').get(depIdB).marzReference;
+  // A REAL, genuinely successful uuid the attacker legitimately obtained
+  // from a completely separate, actually-paid transaction of theirs.
+  collectStatusForUuid['REAL-BUT-UNRELATED-UUID'] = 'successful';
+  r = await call('POST', '/deposit/callback', { body: { data: { reference: refB, transaction: { uuid: 'REAL-BUT-UNRELATED-UUID', status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
-  check('SECURITY: webhook claiming success is REJECTED when the live re-check says pending', userDoc(B).walletBalance === balBeforeB, userDoc(B).walletBalance);
+  check('SECURITY: a real-but-unrelated uuid from the webhook body cannot credit an unpaid, different deposit', userDoc(B).walletBalance === balBeforeB, userDoc(B).walletBalance);
+  check('the 1,000,000 UGX deposit stays pending, not falsely matched', collMap('pendingDeposits').get(depIdB).status === 'pending', collMap('pendingDeposits').get(depIdB).status);
 
-  console.log('\n== A genuine webhook (real uuid, live check actually confirms it) still credits normally ==');
-  const C = 'legit-depositor';
+  console.log('\n== Even with OUR OWN captured uuid, a forged "successful" claim can\'t beat a live "pending" ==');
+  collectUuidToIssue = 'OWN-UUID-C';
+  const C = 'forge-victim-c';
   await setupUser(C, '0771000403');
   const balBeforeC = userDoc(C).walletBalance;
-  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + C, body: { amount: 25000, phone: '0771000403', network: 'MTN Mobile Money' } });
+  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + C, body: { amount: 40000, phone: '0771000403', network: 'MTN Mobile Money' } });
   const depIdC = r.body.depositId;
-  const refC = collMap('pendingDeposits').get(depIdC).marzReference;
-  collectStatusForUuid['REAL-UUID-C'] = 'successful';
-  r = await call('POST', '/deposit/callback', { body: { data: { reference: refC, transaction: { uuid: 'REAL-UUID-C', status: 'successful' } } } });
+  check('this deposit DID capture its own real uuid', collMap('pendingDeposits').get(depIdC).marzTxUuid === 'OWN-UUID-C', collMap('pendingDeposits').get(depIdC));
+  collectStatusForUuid['OWN-UUID-C'] = 'pending'; // not actually paid yet
+  r = await call('POST', '/deposit/callback', { body: { data: { reference: collMap('pendingDeposits').get(depIdC).marzReference, transaction: { uuid: 'OWN-UUID-C', status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
-  check('a genuinely confirmable webhook still credits the wallet normally', userDoc(C).walletBalance === balBeforeC + 25000, userDoc(C).walletBalance);
-  check('deposit correctly marked matched', collMap('pendingDeposits').get(depIdC).status === 'matched', collMap('pendingDeposits').get(depIdC).status);
+  check('SECURITY: webhook lying "successful" is rejected when the live check on OUR OWN uuid says pending', userDoc(C).walletBalance === balBeforeC, userDoc(C).walletBalance);
 
-  console.log('\n== Withdrawal callback: forged "processed" with no verifiable uuid is ignored ==');
-  const D = 'forge-victim-d';
+  console.log('\n== A genuine webhook (our own uuid, live check actually confirms it) still credits normally ==');
+  collectUuidToIssue = 'OWN-UUID-D';
+  const D = 'legit-depositor';
   await setupUser(D, '0771000404');
-  userDoc(D).walletBalance = 100000; userDoc(D).totalInvested = 100000;
-  await call('POST', '/bank/save', { token: 'uid:' + D, body: { holder: 'D', network: 'MTN Mobile Money', phone: '0771000404' } });
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + D, body: { amount: 20000, holder: 'D', network: 'MTN Mobile Money', phone: '0771000404' } });
+  const balBeforeD = userDoc(D).walletBalance;
+  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + D, body: { amount: 25000, phone: '0771000404', network: 'MTN Mobile Money' } });
+  const depIdD = r.body.depositId;
+  const refD = collMap('pendingDeposits').get(depIdD).marzReference;
+  collectStatusForUuid['OWN-UUID-D'] = 'successful';
+  r = await call('POST', '/deposit/callback', { body: { data: { reference: refD, transaction: { uuid: 'OWN-UUID-D', status: 'successful' } } } });
+  await new Promise(r2 => setTimeout(r2, 200));
+  check('a genuinely confirmable webhook still credits the wallet normally', userDoc(D).walletBalance === balBeforeD + 25000, userDoc(D).walletBalance);
+  check('deposit correctly marked matched', collMap('pendingDeposits').get(depIdD).status === 'matched', collMap('pendingDeposits').get(depIdD).status);
+
+  console.log('\n== Withdrawal callback: forged "processed" with no captured uuid is ignored ==');
+  const E = 'forge-victim-e';
+  await setupUser(E, '0771000405');
+  userDoc(E).walletBalance = 100000; userDoc(E).totalInvested = 100000;
+  await call('POST', '/bank/save', { token: 'uid:' + E, body: { holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + E, body: { amount: 20000, holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' } });
   const witId = r.body.withdrawalId;
   // Force it into 'processing' the way /admin/withdraw/process would, but
   // WITHOUT ever capturing a real marzTxUuid (simulating the same gap).
   collMap('withdrawals').get(witId).status = 'processing';
-  const refD = collMap('withdrawals').get(witId).marzReference || 'WD-REF-D';
-  collMap('withdrawals').get(witId).marzReference = refD;
-  r = await call('POST', '/withdraw/callback', { body: { data: { reference: refD, transaction: { status: 'successful' } } } });
+  const refE = collMap('withdrawals').get(witId).marzReference || 'WD-REF-E';
+  collMap('withdrawals').get(witId).marzReference = refE;
+  r = await call('POST', '/withdraw/callback', { body: { data: { reference: refE, transaction: { status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
-  check('SECURITY: withdrawal NOT falsely marked processed by a forged webhook with no verifiable uuid', collMap('withdrawals').get(witId).status === 'processing', collMap('withdrawals').get(witId).status);
+  check('SECURITY: withdrawal NOT falsely marked processed by a forged webhook with no captured uuid', collMap('withdrawals').get(witId).status === 'processing', collMap('withdrawals').get(witId).status);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
