@@ -1713,8 +1713,13 @@ app.get('/bank/list', async (req, res) => {
 app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  const code = String(req.body.code || '').trim().toUpperCase();
-  if (!code) return res.status(400).json({ status: 'error', message: 'Enter a promo code' });
+  // Bounded + shape-checked before it ever touches a query: no raw operator
+  // keys survive this (only A-Z0-9 and dashes pass), and stripMongoOperators
+  // (global middleware, app.use above) already strips any '$'/'.' key on
+  // every request body regardless, so this is defense-in-depth, not the
+  // only guard.
+  const code = String(req.body.code || '').trim().toUpperCase().slice(0, 32);
+  if (!code || !/^[A-Z0-9-]+$/.test(code)) return res.status(400).json({ status: 'error', message: 'Enter a promo code' });
   try {
     // Locked per-CODE (not per user+code) — a shared multi-use code being
     // redeemed by several different users at once must still serialise
@@ -2459,7 +2464,26 @@ app.get('/admin/referrals/list', async (req, res) => {
 // like manually crediting a wallet: anyone who can mint one can redeem it
 // through any personal account and withdraw the payout)
 // ═══════════════════════════════════════════
-function genPromoCode() { return randCode(6); }
+// XXX-XXXX-XXXX — a 3-letter brand-style prefix from a curated pool, then two
+// 4-character blocks from the same unambiguous CODE_CHARS alphabet used for
+// referral codes. Every character (including the prefix pick) comes from
+// crypto.randomBytes, never Math.random(), so a code can't be guessed or
+// predicted from timing/seed. Uniqueness is never assumed from randomness
+// alone: generateUniquePromoCode() below re-queries the DB per candidate,
+// same pattern as generateUniqueReferralCode().
+const PROMO_CODE_PREFIXES = ['GFT', 'RWD', 'CHC', 'MCX', 'BNS', 'VIP', 'RDM', 'GFC', 'XTR', 'CHO', 'GLD', 'BON'];
+function genPromoCode() {
+  const prefix = PROMO_CODE_PREFIXES[crypto.randomBytes(1)[0] % PROMO_CODE_PREFIXES.length];
+  return `${prefix}-${randCode(4)}-${randCode(4)}`;
+}
+async function generateUniquePromoCode() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const code = genPromoCode();
+    const exists = await db.collection('promoCodes').where('code', '==', code).limit(1).get();
+    if (exists.empty) return code;
+  }
+  throw new Error('Could not generate a unique code right now, please try again');
+}
 app.post('/admin/promocodes/generate', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { count = 1, minAmount, maxAmount, maxUses } = req.body;
@@ -2469,25 +2493,25 @@ app.post('/admin/promocodes/generate', async (req, res) => {
   if (min > max) return res.status(400).json({ status: 'error', message: 'minAmount cannot exceed maxAmount' });
   const n = Math.min(Math.max(parseInt(count) || 1, 1), 50);
   try {
-    const existingSnap = await db.collection('promoCodes').get();
-    const existing = new Set(existingSnap.docs.map(d => String(d.data().code || '').toUpperCase()));
-    const made = [];
-    let attempts = 0;
-    while (made.length < n && attempts < n * 10) {
-      attempts++;
-      const code = genPromoCode();
-      if (existing.has(code)) continue;
-      existing.add(code);
-      const reward = Math.round(min + Math.random() * (max - min));
-      await db.collection('promoCodes').add({
-        code, reward, active: true, usedBy: [],
-        maxUses: maxUses ? Math.max(1, parseInt(maxUses)) : 1,
-        createdAt: FieldValue.serverTimestamp(), createdBy: req.adminUser?.username || 'owner-key'
-      });
-      made.push({ code, reward });
-    }
-    logAdminAction(req, 'promocodes_generated', { count: made.length, minAmount: min, maxAmount: max });
-    res.json({ status: 'success', codes: made, count: made.length });
+    // Whole batch runs under one lock — check-then-add isn't atomic on M0
+    // (no real transactions), so without this two admins generating at the
+    // same moment could theoretically both pick the same free code before
+    // either had written it.
+    await withLock('promocode-generate', async () => {
+      const made = [];
+      for (let i = 0; i < n; i++) {
+        const code = await generateUniquePromoCode();
+        const reward = Math.round(min + Math.random() * (max - min));
+        await db.collection('promoCodes').add({
+          code, reward, active: true, usedBy: [],
+          maxUses: maxUses ? Math.max(1, parseInt(maxUses)) : 1,
+          createdAt: FieldValue.serverTimestamp(), createdBy: req.adminUser?.username || 'owner-key'
+        });
+        made.push({ code, reward });
+      }
+      logAdminAction(req, 'promocodes_generated', { count: made.length, minAmount: min, maxAmount: max });
+      res.json({ status: 'success', codes: made, count: made.length });
+    });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/promocodes/list', async (req, res) => {

@@ -136,7 +136,11 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
     padding:11px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.2)}
   .toast.ok{background:var(--ok)} .toast.err{background:var(--danger)}
   .codebox{background:var(--bg);border-radius:10px;padding:12px;margin-top:12px;font-family:monospace;
-    font-size:15px;letter-spacing:1px;word-spacing:6px;line-height:1.9}
+    font-size:15px;display:flex;flex-wrap:wrap;gap:8px}
+  .mono{font-family:monospace;letter-spacing:.5px}
+  .code-chip{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);
+    border-radius:8px;padding:5px 6px 5px 10px}
+  .code-chip .btn{padding:5px 10px;font-size:12px;border-radius:6px}
   .switch-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
   .seg{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
   .seg button{padding:6px 14px;border-radius:20px;border:1px solid var(--line);background:var(--card);
@@ -230,6 +234,14 @@ function clearSession(){
 
 const $ = id => document.getElementById(id);
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function copyText(str, btn){
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(str); }
+    else { const ta=document.createElement('textarea'); ta.value=str; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+    if (btn) { const prev=btn.textContent; btn.textContent='Copied'; btn.disabled=true; setTimeout(()=>{ btn.textContent=prev; btn.disabled=false; }, 1200); }
+    toast('Copied to clipboard','ok');
+  } catch (e) { toast('Could not copy','err'); }
+}
 function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
 function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
@@ -973,7 +985,7 @@ async function renderPromoCodes(){
     </div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward</th><th>Used</th><th>Status</th><th>Created</th><th></th></tr></thead>
     <tbody>${list.length?list.map(c=>`
-      <tr><td><b>${esc(c.code)}</b></td><td>${ugx(c.reward)}</td><td>${c.usedCount||0} / ${c.maxUses||1}</td>
+      <tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${ugx(c.reward)}</td><td>${c.usedCount||0} / ${c.maxUses||1}</td>
       <td><span class="pill-tag ${c.active!==false?'t-ok':'t-mut'}">${c.active!==false?'Active':'Off'}</span></td>
       <td>${fdate(c.createdAt)}</td>
       <td>${c.active!==false?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No codes yet</td></tr>'}
@@ -986,10 +998,22 @@ async function renderPromoCodes(){
     const b=$('genBtn'); b.disabled=true;b.textContent='Generating…';
     const d=await api('/admin/promocodes/generate',{ minAmount, maxAmount, count, maxUses });
     b.disabled=false;b.textContent='Generate codes';
-    if(d.status==='success'){ $('genOut').innerHTML=`<div class="codebox">${(d.codes||[]).map(c=>esc(c.code)).join('  ')}</div><div class="muted" style="margin-top:6px">${d.codes.length} code(s) generated, each paying ${ugx(minAmount)} – ${ugx(maxAmount)} at random</div>`; setTimeout(renderPromoCodes,1200); }
+    if(d.status==='success'){
+      const codes=(d.codes||[]).map(c=>c.code);
+      $('genOut').innerHTML=`<div class="codebox">${codes.map(code=>`<span class="code-chip"><b class="mono">${esc(code)}</b><button class="btn sm ghost" data-copy="${esc(code)}" title="Copy code">Copy</button></span>`).join('')}</div>
+        <button class="btn sm ghost" id="copyAllBtn" data-copyall="${esc(codes.join('\\n'))}" style="margin-top:6px">Copy all</button>
+        <div class="muted" style="margin-top:6px">${d.codes.length} code(s) generated, each paying ${ugx(minAmount)} – ${ugx(maxAmount)} at random</div>`;
+      wireCopyButtons();
+      setTimeout(renderPromoCodes,1200);
+    }
     else toast(d.message||'Failed','err');
   });
   document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ const d=await api('/admin/promocodes/deactivate',{codeId:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderPromoCodes(); }));
+  wireCopyButtons();
+  function wireCopyButtons(){
+    document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>copyText(b.dataset.copy,b));
+    document.querySelectorAll('[data-copyall]').forEach(b=>b.onclick=()=>copyText(b.dataset.copyall,b));
+  }
 }
 
 // ── ADMINS (owner only) ──
