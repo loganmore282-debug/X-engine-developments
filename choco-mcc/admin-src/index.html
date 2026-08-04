@@ -836,7 +836,7 @@ function drawWits(){
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.net)}</b></td><td>${esc(w.network||'Not set')}</td>
     <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
-      :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn ok sm" data-frc="${esc(w.id)}" title="Only if you've independently confirmed the payout actually arrived (e.g. a MoMo SMS) -- marks it processed WITHOUT touching the wallet again">Mark Sent</button> <button class="btn danger sm" data-rej="${esc(w.id)}" title="Refunds the wallet -- do NOT use this if the payout actually went through, use Mark Sent instead">Reject</button>`:''}`
+      :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :''}</td></tr>`;
   }).join(''):'<tr><td colspan="7" class="empty">No withdrawals</td></tr>';
   // Tapping anywhere on the row opens the SAME full user-detail modal as
@@ -851,20 +851,6 @@ function drawWits(){
   document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm('Send this payout through MarzPay now?'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); const reason=prompt('Reason for rejection? (funds are refunded to the user)','Rejected by admin'); if(reason===null)return; const d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ alert(`MarzPay verify\n\nOur record: ${d.ourStatus}\nMarzPay says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));
-  // Only for a payout that's stuck on Processing when the admin has
-  // independently confirmed it actually arrived (e.g. the recipient's own
-  // MoMo SMS) -- corrects the status label only, never touches the wallet
-  // or totalWithdrawn again (those were already updated once at send time).
-  document.querySelectorAll('[data-frc]').forEach(b=>b.addEventListener('click',async(e)=>{
-    e.stopPropagation();
-    if(!confirm("Only confirm this if you've independently verified the payout actually reached the recipient (e.g. a MoMo SMS or bank statement). This marks it processed and does NOT touch the wallet again. Proceed?"))return;
-    const note = prompt('Optional note (e.g. "confirmed via MoMo SMS 17:36")','') || '';
-    b.disabled=true; const t=b.textContent; b.textContent='Marking…';
-    const d=await api('/admin/withdraw/force-processed',{withdrawalId:b.dataset.frc,note});
-    b.disabled=false; b.textContent=t;
-    toast(d.message||d.status, d.status==='success'?'ok':'err');
-    if(d.status==='success'){ renderWithdrawals(); refreshBadges(); }
-  }));
 }
 
 // ── PRODUCTS ──
