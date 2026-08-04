@@ -245,7 +245,23 @@
 // full phone number, unmasked. Level 2/3 members (referrals of referrals --
 // never directly invited by this member) keep the masked "+256•••82"
 // format. Previously all three levels used the same masked format.
-const CACHE = 'chocomcc-shell-v42';
+// v43: fixed a real bug -- server.js writes Task Center milestone claims
+// as transaction type 'team_reward', but History -> Accrued only ever
+// filtered for 'commission' (the separate, automatic Level 1/2/3 referral
+// payout paid when your downline invests). Every Task Center claim was
+// landing correctly in the wallet server-side but never appearing in
+// Accrued at all. Both types are now included, and given genuinely
+// distinct labels -- "Referral commission" vs "Task Center reward" --
+// since both were confusingly labelled "Team reward" before, which is
+// exactly why referral commissions ALSO looked like they weren't showing
+// anywhere: a commission payout and a Task Center claim are different
+// things and now read as different things. Each Accrued entry also shows
+// the server's own specific description (which level, which milestone)
+// as a Details line, not just the generic category. No change to how
+// live this screen already was -- it was already reading from the same
+// account-poll-refreshed data as everything else, silently, no spinner;
+// the transactions were simply never being counted as income at all.
+const CACHE = 'chocomcc-shell-v43';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

@@ -834,8 +834,20 @@ var _recordsLoaded = { accrued:true, topups:false, cashouts:false };
 // nowhere. The member's balance would visibly jump with zero explanation
 // in their own History. Added here so it's honestly visible, labelled for
 // what it is rather than folded into "Chocolate cashback".
-var INCOME_TYPES = ['checkin','cashback','commission','promocode','admin_credit'];
-var REC_TYPE_LABEL = { checkin:'Daily reward', cashback:'Chocolate cashback', commission:'Team reward', promocode:'Promo code', admin_credit:'Account credit' };
+// FIXED BUG (2): server.js writes TWO distinct reward types --
+// 'commission' (a Level 1/2/3 referral payout, paid automatically the
+// moment someone in your downline invests) and 'team_reward' (a Task
+// Center milestone you actively claimed, either the active-referrals
+// ladder or the level-1-deposits ladder). Only 'commission' was ever in
+// this list -- every Task Center claim was landing correctly in the
+// wallet server-side but never showing up in Accrued at all. Both are
+// listed now, and given genuinely distinct labels (they were BOTH
+// mislabelled "Team reward" before, which is exactly why referral
+// commissions looked like they "weren't showing anywhere" too -- a
+// commission payout and a Task Center claim are different things and
+// must read as different things).
+var INCOME_TYPES = ['checkin','cashback','commission','team_reward','promocode','admin_credit'];
+var REC_TYPE_LABEL = { checkin:'Daily reward', cashback:'Chocolate cashback', commission:'Referral commission', team_reward:'Task Center reward', promocode:'Promo code', admin_credit:'Account credit' };
 function recStatusInfo(s){
   s = String(s||'success').toLowerCase();
   if(['success','matched','processed'].indexOf(s)!==-1) return { label:'Completed', cls:'ok' };
@@ -877,7 +889,16 @@ function renderRecords(){
       '<div class="stat"><div class="n" style="color:var(--mint)">'+ugx(total)+'</div><div class="l">Total accrued</div></div>';
     if(!rows.length){ document.getElementById('recordsList').innerHTML = '<div class="empty">No accrued rewards yet. Check in or buy a chocolate to start earning.</div>'; return; }
     document.getElementById('recordsList').innerHTML = rows.slice(0,50).map(function(t){
-      return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(REC_TYPE_LABEL[t.type]||t.desc)+'</span><span class="rec-st ok">Completed</span></div>'+
+      var label = REC_TYPE_LABEL[t.type]||t.desc||'Reward';
+      // The server's own description (e.g. "Level 1 reward", "Task Center:
+      // 5 active referrals") is more specific than the category label above
+      // it -- shown as its own line whenever it actually adds detail, so a
+      // referral commission still says WHICH level, and a Task Center claim
+      // still says which milestone, instead of every one just reading the
+      // same generic category name.
+      var detail = (t.desc && t.desc!==label) ? '<div class="rec-line"><span>Details</span><b>'+esc(t.desc)+'</b></div>' : '';
+      return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(label)+'</span><span class="rec-st ok">Completed</span></div>'+
+        detail+
         '<div class="rec-line"><span>Amount</span><b>+'+ugx(t.amount)+'</b></div>'+
         '<div class="rec-line"><span>Date</span><b>'+new Date(t.when).toLocaleString()+'</b></div></div>';
     }).join('');
