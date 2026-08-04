@@ -2464,17 +2464,23 @@ app.get('/admin/referrals/list', async (req, res) => {
 // like manually crediting a wallet: anyone who can mint one can redeem it
 // through any personal account and withdraw the payout)
 // ═══════════════════════════════════════════
-// XXX-XXXX-XXXX — a 3-letter brand-style prefix from a curated pool, then two
-// 4-character blocks from the same unambiguous CODE_CHARS alphabet used for
-// referral codes. Every character (including the prefix pick) comes from
-// crypto.randomBytes, never Math.random(), so a code can't be guessed or
-// predicted from timing/seed. Uniqueness is never assumed from randomness
-// alone: generateUniquePromoCode() below re-queries the DB per candidate,
-// same pattern as generateUniqueReferralCode().
-const PROMO_CODE_PREFIXES = ['GFT', 'RWD', 'CHC', 'MCX', 'BNS', 'VIP', 'RDM', 'GFC', 'XTR', 'CHO', 'GLD', 'BON'];
+// XXX-XXXX-XXXX — no fixed word list for the prefix: all three segments,
+// prefix included, are generated fresh from crypto.randomBytes every time
+// (never Math.random(), never picked from a stored array), so nothing about
+// a code is drawn from a limited/predictable set. The prefix uses a
+// letters-only unambiguous alphabet (no I/L/O, matching CODE_CHARS' letters)
+// so it still reads like the XXX-XXXX-XXXX shape; the two 4-char blocks use
+// the same full CODE_CHARS alphabet as referral codes. A code is
+// "recognized" purely by an exact match against what the server itself
+// generated and stored — generateUniquePromoCode() below re-queries the DB
+// per candidate (same pattern as generateUniqueReferralCode()) so recognition
+// never depends on the prefix or shape, only on a real DB record existing.
+const PROMO_PREFIX_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ'; // letters only, no I/L/O ambiguity
+function randPrefix(n = 3) {
+  return Array.from(crypto.randomBytes(n)).map(b => PROMO_PREFIX_CHARS[b % PROMO_PREFIX_CHARS.length]).join('');
+}
 function genPromoCode() {
-  const prefix = PROMO_CODE_PREFIXES[crypto.randomBytes(1)[0] % PROMO_CODE_PREFIXES.length];
-  return `${prefix}-${randCode(4)}-${randCode(4)}`;
+  return `${randPrefix(3)}-${randCode(4)}-${randCode(4)}`;
 }
 async function generateUniquePromoCode() {
   for (let attempt = 0; attempt < 20; attempt++) {

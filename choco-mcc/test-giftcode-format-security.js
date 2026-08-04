@@ -73,9 +73,9 @@ function collMap(name) {
   if (!mockdb.__store.has(name)) mockdb.__store.set(name, new Map());
   return mockdb.__store.get(name);
 }
-const APPROVED_PREFIXES = ['GFT', 'RWD', 'CHC', 'MCX', 'BNS', 'VIP', 'RDM', 'GFC', 'XTR', 'CHO', 'GLD', 'BON'];
+const PREFIX_ALPHABET = '[ABCDEFGHJKMNPQRSTUVWXYZ]{3}'; // must mirror server.js PROMO_PREFIX_CHARS exactly (letters only)
 const CODE_ALPHABET = '[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}'; // must mirror server.js CODE_CHARS exactly
-const FORMAT_RE = new RegExp(`^([A-Z]{3})-${CODE_ALPHABET}-${CODE_ALPHABET}$`);
+const FORMAT_RE = new RegExp(`^(${PREFIX_ALPHABET})-${CODE_ALPHABET}-${CODE_ALPHABET}$`);
 
 async function setupUser(uid, phone) {
   await call('POST', '/account/create-profile', { token: 'uid:' + uid, body: { phone } });
@@ -89,14 +89,15 @@ async function setupUser(uid, phone) {
   let r = await ownerCall('/admin/promocodes/generate', { minAmount: 1000, maxAmount: 5000, count: 20, maxUses: 1 });
   check('generate succeeds', r.body?.status === 'success' && r.body.codes.length === 20, r.body);
   const batch1 = r.body.codes.map(c => c.code);
-  let allMatch = true, allPrefixesApproved = true;
+  let allMatch = true;
+  const prefixesSeen = new Set();
   for (const code of batch1) {
     const m = FORMAT_RE.exec(code);
     if (!m) { allMatch = false; continue; }
-    if (!APPROVED_PREFIXES.includes(m[1])) allPrefixesApproved = false;
+    prefixesSeen.add(m[1]);
   }
   check('every generated code matches XXX-XXXX-XXXX using the unambiguous alphabet', allMatch, batch1);
-  check('every prefix comes from the approved pool', allPrefixesApproved, batch1.map(c => c.slice(0, 3)));
+  check('prefixes are NOT drawn from a small fixed pool -- 20 codes produce well over a handful of distinct prefixes', prefixesSeen.size >= 10, [...prefixesSeen]);
 
   console.log('\n== Bulk generation (150 codes, 3 calls) has zero duplicates, none colliding with existing DB codes ==');
   const seenBefore = new Set(batch1);
