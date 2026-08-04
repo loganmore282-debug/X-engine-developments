@@ -190,6 +190,15 @@ function dailyReturn(p){ return Math.round(productExpectedReturn(p) / productCyc
 function ugx(n){ n=Math.round(Number(n)||0); return 'UGX ' + n.toLocaleString('en-US'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]; }); }
 function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>'; }
+// Same small spinning-arc icon already used on the deposit status screen's
+// Verify Payment button (.verify-spin) -- reused here as one shared helper
+// so every "Please wait…" busy state app-wide (sign in/register, redeem
+// gift code, check-in, Task Center claim, save bank account, deposit,
+// withdraw, change password) actually spins instead of just swapping text
+// with no visual motion at all.
+function btnBusyHtml(text){
+  return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text);
+}
 
 /* ====================== LOCAL STATE (per-account cache — keyed by the real Firebase uid; moves server-side once the backend is wired up) ====================== */
 function loadState(uid){
@@ -267,7 +276,7 @@ document.getElementById('authGo').onclick = async function(){
   if(!window.fbSignIn){ toast('Still connecting, try again in a moment'); return; }
   var email = phoneToEmail(phone);
   var btn = this, label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Please wait…';
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
   // BUG FIXED: fbCreateUser()/fbSignIn() below make Firebase fire its own
   // onAuthStateChanged event (onFbAuthChanged), which used to run its OWN
   // independent STATE-load + refreshFromServer() + enterApp() sequence at
@@ -343,7 +352,7 @@ async function doChangePassword(){
   if(nw !== nw2){ toast('The new passwords do not match'); return; }
   if(!window.fbChangePassword){ toast('Still connecting, try again in a moment'); return; }
   var btn = document.getElementById('changePassBtn'), label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Please wait…';
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
   try{
     await window.fbChangePassword(cur, nw);
     document.getElementById('pwCur').value = '';
@@ -572,9 +581,8 @@ function renderAll(){
   document.getElementById('acctWitNum').textContent = ugx(s.totalWithdrawn);
   document.getElementById('teamLink').textContent = 'https://choco-mcc.com/?reg='+s.referralCode;
   document.getElementById('teamL1').textContent = s.team.l1;
-  // Level 2 / Level 3 counts are deliberately not shown anywhere in the UI
-  // (see the Team overview markup) -- s.team.l2/l3 still exist in STATE for
-  // any future non-UI use, just never bound to the page.
+  document.getElementById('teamL2').textContent = s.team.l2;
+  document.getElementById('teamL3').textContent = s.team.l3;
   document.getElementById('teamComm').textContent = ugx(s.team.commission);
 
   var sett = getSettings();
@@ -647,7 +655,7 @@ async function loadTaskCenter(){
 }
 async function claimMilestone(btn, target, type){
   var label = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = 'Please wait…'; }
+  if(btn){ btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…'); }
   var r = await api('/team/milestone/claim', { target: target, type: type });
   if(r.status!=='success'){
     toast(r.message||'Could not claim this reward');
@@ -999,7 +1007,7 @@ async function saveBankAccount(){
   var phone = document.getElementById('npPhone').value.trim();
   if(!holder || !phone){ toast('Enter the account holder name and phone'); return; }
   var btn = document.getElementById('npSaveBtn'), label = btn ? btn.textContent : '';
-  if(btn){ if(btn.disabled) return; btn.disabled = true; btn.textContent = 'Please wait…'; }
+  if(btn){ if(btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…'); }
   try{
     var r = await api('/bank/save', { holder:holder, network:_pickedNetwork.network, phone:phone });
     if(r.status!=='success'){ toast(r.message||'Could not save the account'); return; }
@@ -1093,7 +1101,7 @@ async function doDeposit(){
   // already normalises whichever form arrives.
   if(phone.charAt(0)==='0') phone = phone.slice(1);
   var btn = document.getElementById('depGoBtn'), label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Please wait…';
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
   var r = await api('/deposit/marzpay', { amount:amt, phone:phone, network:_depNetwork });
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not start the payment'); return; }
@@ -1115,7 +1123,7 @@ async function doWithdraw(){
   if(amt > STATE.balance){ toast('Insufficient balance'); return; }
   var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
   var btn = document.getElementById('witGoBtn'), label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Please wait…';
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
   var r = await api('/withdraw/request', { amount:amt, holder:b.holder, network:b.network, phone:b.phone });
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not process the cash-out'); return; }
@@ -1125,7 +1133,7 @@ async function doWithdraw(){
 }
 async function doCheckin(){
   var btn = document.getElementById('checkinBtn');
-  if(btn){ if(btn.disabled) return; btn.disabled = true; btn.textContent = 'Please wait…'; }
+  if(btn){ if(btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…'); }
   try{
     var r = await api('/checkin', {});
     if(r.status!=='success'){ toast(r.message||'Check-in failed'); if(btn) btn.disabled = false; renderAll(); return; }
@@ -1139,8 +1147,12 @@ async function doCheckin(){
 async function redeemGiftCode(){
   var raw = document.getElementById('giftCodeInput').value.trim().toUpperCase();
   if(!raw){ toast('Enter a code'); return; }
-  var btn = document.getElementById('redeemBtn');
-  if(btn){ if(btn.disabled) return; btn.disabled = true; }
+  var btn = document.getElementById('redeemBtn'), label = btn ? btn.textContent : '';
+  // FIXED BUG: this used to only disable the button with zero visual
+  // feedback -- no text change, no spinner, nothing -- so redeeming a code
+  // looked like it did nothing until the toast finally appeared. Same
+  // spinner+"Please wait…" busy state every other action button uses.
+  if(btn){ if(btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…'); }
   try{
     var r = await api('/redeem', { code:raw });
     if(r.status!=='success'){ toast(r.message||"That code isn't valid"); return; }
@@ -1148,7 +1160,7 @@ async function redeemGiftCode(){
     await refreshFromServer();
     renderAll(); toast('+'+ugx(r.reward)+' credited!');
   } finally {
-    if(btn) btn.disabled = false;
+    if(btn){ btn.disabled = false; btn.textContent = label; }
   }
 }
 

@@ -261,7 +261,19 @@
 // live this screen already was -- it was already reading from the same
 // account-poll-refreshed data as everything else, silently, no spinner;
 // the transactions were simply never being counted as income at all.
-const CACHE = 'chocomcc-shell-v43';
+// v44: two fixes, both per feedback. (1) Reverted the Level 2/3 masked
+// "•••" count on the Team overview back to the real number -- kept for
+// under a day before being asked to undo it; Level 1/2/3 all show real
+// counts again now, same as before that change. (2) Every "Please wait…"
+// busy button app-wide (sign in/register, change password, Task Center
+// claim, save bank account, deposit, withdraw, check-in) now shows the
+// same small spinning-arc icon already used on the deposit Verify Payment
+// button, not just swapped text with no motion. Redeem Gift Code
+// specifically had NO busy feedback at all before (button just silently
+// disabled) -- it now gets the same spinner + text as everything else, so
+// a redemption in flight is visibly happening instead of looking like
+// nothing responded until the toast appears.
+const CACHE = 'chocomcc-shell-v44';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
