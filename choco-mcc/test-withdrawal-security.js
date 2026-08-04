@@ -186,7 +186,7 @@ async function setupFundedUser(uid, phone, balance) {
   userDoc(F).status = 'banned';
   const frankStart = userDoc(F).walletBalance;
   r = await call('POST', '/withdraw/request', { token: 'uid:' + F, body: { amount: 20000, holder: 'Frank', network: 'MTN Mobile Money', phone: '700111222' } });
-  check('banned account withdrawal rejected', r.code === 400 && /paused/i.test(r.body?.message || ''), r.body);
+  check('banned account withdrawal rejected', r.code === 400 && r.body?.code === 'BANNED', r.body);
   check('banned account wallet unchanged', userDoc(F).walletBalance === frankStart, userDoc(F).walletBalance);
 
   console.log('\n== requireInvestToWithdraw (default: on) ==');

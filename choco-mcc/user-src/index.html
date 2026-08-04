@@ -103,6 +103,16 @@
   @keyframes onAutoFillCancel{from{opacity:.9999}to{opacity:1}}
   #fPhone:-webkit-autofill,#fPass:-webkit-autofill{animation-name:onAutoFillStart;animation-duration:1ms;}
   #fPhone:not(:-webkit-autofill),#fPass:not(:-webkit-autofill){animation-name:onAutoFillCancel;animation-duration:1ms;}
+  .auth-err{color:var(--berry);background:var(--berry-pale);border-radius:12px;padding:11px 14px;font-size:13.5px;font-weight:700;margin:0 0 14px;text-align:center;}
+  .lockout-screen{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;
+    padding:24px;background:var(--cocoa);}
+  .lockout-screen.show{display:flex;}
+  .lockout-card{max-width:340px;width:100%;text-align:center;color:var(--cream);}
+  .lockout-ic{color:var(--caramel);margin:0 auto 22px;display:flex;align-items:center;justify-content:center;}
+  .lockout-title{font-size:21px;font-weight:800;margin-bottom:10px;color:#fff;}
+  .lockout-msg{font-size:14.5px;line-height:1.5;color:var(--cocoa-faint);margin-bottom:22px;}
+  .lockout-cta{border:none;border-radius:999px;padding:14px 22px;font-weight:800;font-size:14.5px;color:#fff;
+    background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));cursor:pointer;width:100%;}
   .auth-btn{width:100%;border:none;border-radius:999px;padding:16px;font-weight:800;font-size:15.5px;color:#fff;
     background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));box-shadow:0 12px 24px -10px rgba(224,138,44,.6);
     cursor:pointer;transition:transform .08s ease;}
@@ -479,6 +489,7 @@
         <input id="fCode" placeholder="Invite code (optional)">
       </div>
     </div>
+    <div id="authErr" class="auth-err" style="display:none"></div>
     <button class="auth-btn" id="authGo">Continue</button>
     <button type="button" class="auth-switch-btn" id="authSwitchBtn" onclick="setAuthMode(authMode==='login'?'register':'login')">New here? <b>Create Account</b></button>
   </div>
@@ -854,6 +865,16 @@
     <div id="pdBody"></div>
   </div>
 
+</div>
+
+<!-- LOCKOUT (maintenance / banned) — full-screen, not dismissible, covers everything underneath -->
+<div class="lockout-screen" id="lockoutScreen">
+  <div class="lockout-card">
+    <div class="lockout-ic" id="lockoutIc"></div>
+    <div class="lockout-title" id="lockoutTitle"></div>
+    <div class="lockout-msg" id="lockoutMsg"></div>
+    <button class="lockout-cta" id="lockoutCta" style="display:none"></button>
+  </div>
 </div>
 
 <div class="toast-bg" id="toastBg"><div class="toast" id="toast"></div></div>

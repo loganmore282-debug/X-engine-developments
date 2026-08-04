@@ -110,7 +110,7 @@ async function setupFundedUser(uid, phone, balance) {
   await setupFundedUser(C, '0771000003', 1000000);
   userDoc(C).status = 'banned';
   r = await call('POST', '/invest/create', { token: 'uid:' + C, body: { tierKey: 'hersheys' } });
-  check('banned account cannot buy', r.code === 400 && /paused/i.test(r.body?.message || ''), r.body);
+  check('banned account cannot buy', r.code === 400 && r.body?.code === 'BANNED', r.body);
   check('banned account wallet untouched', userDoc(C).walletBalance === 1000000, userDoc(C).walletBalance);
 
   console.log('\n-- Unknown product key is rejected --');

@@ -53,6 +53,57 @@ var NETWORK_COLORS = { 'MTN Mobile Money':{color:'#FFCC08',textColor:'#3B2416'},
 
 /* ====================== SERVER API ====================== */
 var SERVER = 'https://mybusinessuganda.onrender.com';
+// Crossed wrench + screwdriver, filled silhouette (matches the owner-supplied
+// reference icon) -- the notch cut into the wrench head is a plain rect
+// painted the same cocoa as the lockout screen's background, not a real cutout.
+var LOCKOUT_IC_MAINT = '<svg viewBox="0 0 100 100" width="72" height="72" fill="currentColor">'+
+  '<g transform="rotate(45 50 50)"><rect x="45" y="6" width="10" height="70" rx="5"/><rect x="38" y="72" width="24" height="20" rx="6"/></g>'+
+  '<g transform="rotate(-45 50 50)"><rect x="45" y="18" width="10" height="60" rx="5"/><circle cx="50" cy="12" r="14"/><rect x="42" y="5" width="16" height="11" rx="3" fill="#3B2416"/></g>'+
+'</svg>';
+var LOCKOUT_IC_BANNED = '<svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
+  '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1.6" fill="currentColor" stroke="none"/>'+
+'</svg>';
+// Complete, immediate closure -- triggered from the single choke point every
+// network call passes through (api(), below), so an action already in
+// flight (buying, depositing, withdrawing, checking in) gets shut down the
+// instant the server refuses it, with no reload needed anywhere. Not
+// dismissible -- there is deliberately no close button, matching "complete
+// closure of access", not a toast that quietly goes away.
+function showLockout(kind, message){
+  var scr = document.getElementById('lockoutScreen');
+  if(!scr) return;
+  var ic = document.getElementById('lockoutIc');
+  var title = document.getElementById('lockoutTitle');
+  var msg = document.getElementById('lockoutMsg');
+  var cta = document.getElementById('lockoutCta');
+  if(kind==='banned'){
+    ic.innerHTML = LOCKOUT_IC_BANNED;
+    title.textContent = 'Account Suspended';
+    msg.textContent = message || 'Account suspended. Contact customer service.';
+    var s = (typeof getSettings==='function') ? getSettings() : {};
+    var link = s.supportTelegram || s.telegramChannel || s.telegramGroup;
+    if(link){
+      cta.style.display = '';
+      cta.textContent = 'Contact Customer Service';
+      cta.onclick = function(){ window.open(link, '_blank'); };
+    } else {
+      cta.style.display = 'none';
+    }
+    // A banned account gets fully signed out, not just visually blocked --
+    // there is nothing left it should be able to do, including sitting
+    // authenticated in the background while this screen is up.
+    if(window.fbSignOut) window.fbSignOut();
+    STATE = null;
+    stopActivityFeed();
+    stopAccountPoll();
+  } else {
+    ic.innerHTML = LOCKOUT_IC_MAINT;
+    title.textContent = 'Under Maintenance';
+    msg.textContent = message || 'ChocoMCC is under maintenance. Please check back shortly.';
+    cta.style.display = 'none';
+  }
+  scr.classList.add('show');
+}
 // Render's free tier spins the server down after ~15 minutes idle; the next
 // request has to wait for it to cold-boot (can take 30s+), and a plain
 // fetch() either hangs past what feels broken or the platform's own
@@ -84,6 +135,17 @@ async function api(path, body, method, retry){
       var resp = await fetch(SERVER+path, opts);
       var data = await resp.json();
       _wokenUp = true;
+      // Single choke point every network call passes through -- catching
+      // MAINTENANCE/BANNED here means an action already in flight (buying,
+      // depositing, withdrawing, checking in) gets shut down the instant the
+      // server refuses it, with no reload and no separate check needed at
+      // each call site. MAINTENANCE fires even before sign-in (blocks the
+      // login/register attempt itself, true "complete closure"); BANNED only
+      // triggers the full takeover once the member is already inside the app
+      // -- at the login screen itself a banned account gets the inline red
+      // message instead (see authGo's own check), not this takeover.
+      if(data && data.code==='MAINTENANCE') showLockout('maintenance', data.message);
+      else if(data && data.code==='BANNED' && _appEntered) showLockout('banned', data.message);
       return data;
     }catch(e){
       if(i === attempts-1) return { status:'error', message:'Network error. Check your connection' };
@@ -111,12 +173,10 @@ async function refreshFromServer(){
     STATE.totalInvested = a.totalInvested; STATE.checkinStreak = a.checkinStreak;
     STATE.lastCheckin = a.lastCheckin; STATE.referralCode = a.referralCode || STATE.referralCode;
     STATE.team = a.team;
-  } else if(accR.code==='MAINTENANCE'){
-    // A generic "could not reach the server" toast is actively misleading
-    // here — the server IS reachable, it's deliberately paused. Show the
-    // admin's real maintenance message instead so a member doesn't think
-    // their connection or the app itself is broken.
-    toast(accR.message || 'ChocoMCC is under maintenance. Please check back shortly.');
+  } else if(accR.code==='MAINTENANCE' || accR.code==='BANNED'){
+    // Both are handled by the global full-screen lockout triggered inside
+    // api() itself (see showLockout) -- no separate toast needed here, that
+    // would just double up on top of the takeover screen.
   } else {
     toast('Could not reach the server, showing your last known balance');
   }
@@ -140,6 +200,7 @@ async function refreshFromServer(){
     });
   }
   saveState();
+  return accR;
 }
 // Pulls the admin-driven economics/catalogue from the server so a change the
 // owner makes in the admin panel actually reaches real users, instead of
@@ -206,6 +267,12 @@ function loadState(uid){
 }
 function saveState(){ if(STATE && STATE.uid) localStorage.setItem('choco_user_state_'+STATE.uid, JSON.stringify(STATE)); }
 var STATE = null;
+// Gates whether api() escalates a BANNED response to the full-screen
+// takeover (see showLockout) -- false while still on the auth screen, since
+// a banned account signing in gets the inline red message there instead
+// (see authGo's own check). MAINTENANCE always escalates regardless, login
+// screen included -- that one really does mean nothing works right now.
+var _appEntered = false;
 
 function freshState(uid, name, phone){
   return {
@@ -263,6 +330,7 @@ document.getElementById('authGo').onclick = async function(){
   var pass = document.getElementById('fPass').value.trim();
   var ref = document.getElementById('fCode') ? document.getElementById('fCode').value.trim() : '';
   if(!phone || !pass){ toast('Enter your phone and password'); return; }
+  var errBox = document.getElementById('authErr'); errBox.style.display='none';
   // +256 is shown as a fixed prefix, so the field only needs the local 9
   // digits — but people habitually type the old "0xxxxxxxxx" format out of
   // habit. Rather than reject and make them fix it, just strip the leading
@@ -315,7 +383,20 @@ document.getElementById('authGo').onclick = async function(){
       cred = await window.fbSignIn(email, pass);
       STATE = loadState(cred.user.uid) || freshState(cred.user.uid, 'Member', phone);
       saveState();
-      await refreshFromServer();
+      var acc = await refreshFromServer();
+      // A banned account authenticates fine with Firebase (it has no idea
+      // about our own 'banned' status, that only lives in Mongo) -- this is
+      // the actual gate: caught here, before enterApp() ever runs, so a
+      // banned member never sees the app itself, just this message right on
+      // the sign-in form. _appEntered is still false at this point, so
+      // api()'s own global lockout stayed out of the way for this call.
+      if(acc && acc.code==='BANNED'){
+        if(window.fbSignOut) window.fbSignOut();
+        STATE = null;
+        errBox.textContent = 'Account locked.';
+        errBox.style.display = '';
+        return;
+      }
       toast('Signed in successfully, welcome back!');
     }
     enterApp();
@@ -402,6 +483,7 @@ function logout(){
 }
 
 function enterApp(){
+  _appEntered = true;
   document.getElementById('authScreen').style.display='none';
   document.getElementById('app').style.display='block';
   renderAll();

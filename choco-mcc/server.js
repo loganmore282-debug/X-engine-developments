@@ -1144,6 +1144,15 @@ app.get('/account', async (req, res) => {
     const snap = await db.collection('users').doc(uid).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = snap.data();
+    // SECURITY (real bug, confirmed live): every WRITE endpoint (checkin,
+    // invest, deposit, withdraw, bank/save, redeem) already refused a banned
+    // account, but /account itself -- the one endpoint that runs on every
+    // login and every background poll, and decides whether the app lets
+    // someone in at all -- had no ban check whatsoever. A banned account
+    // could sign in and use the app normally as long as it never happened to
+    // hit one of those specific write endpoints. This is the actual gate.
+    if (u.status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: u.walletBalance || 0, totalDeposited: u.totalDeposited || 0,
       totalEarned: u.totalEarned || 0, totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
@@ -1166,7 +1175,7 @@ app.post('/checkin', async (req, res) => {
       const snap = await ref.get();
       if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
       const u = snap.data();
-      if (u.status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
+      if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
       const today = nowStr().date;
       if (u.lastCheckin === today) return res.status(400).json({ status: 'error', message: 'Already checked in today' });
       const yesterday = new Date(eatNow().getTime() - 86400000);
@@ -1224,7 +1233,7 @@ app.post('/invest/create', async (req, res) => {
       const uRef = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       if (!fresh.exists) throw new Error('User not found');
-      if (fresh.data().status === 'banned') throw new Error('Account access paused');
+      if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       const bal = fresh.data().walletBalance || 0;
       if (bal < tier.price) throw new Error(`Need ${fmtUGX(tier.price)}, have ${fmtUGX(bal)}`);
       // Referral commission is a one-time reward for the buyer's first-ever
@@ -1256,7 +1265,7 @@ app.post('/invest/create', async (req, res) => {
     creditReferralCommission(invId, userId, tier.price).catch(e => console.error('Commission error:', e.message));
     res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.name} for ${fmtUGX(tier.price)}` });
   } catch (e) {
-    res.status(400).json({ status: 'error', message: e.message });
+    res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
 });
 
@@ -1288,7 +1297,7 @@ app.post('/deposit/marzpay', async (req, res) => {
   try {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
     const phone = cleanPhone(req.body.phone || uSnap.data().phone || '');
     if (!phone || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
@@ -1547,7 +1556,7 @@ app.post('/withdraw/request', async (req, res) => {
       const uRef = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       if (!fresh.exists) throw new Error('User not found');
-      if (fresh.data().status === 'banned') throw new Error('Account access paused');
+      if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       // Anti-abuse, admin-toggleable (settings.requireInvestToWithdraw, default
       // required): stops someone registering, taking the welcome bonus, and
       // cashing out without ever buying a product.
@@ -1588,7 +1597,7 @@ app.post('/withdraw/request', async (req, res) => {
     sendAdminPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}), awaiting approval`, { type: 'withdrawal', withdrawalId: witId });
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested, awaiting admin approval` });
   } catch (e) {
-    res.status(400).json({ status: 'error', message: e.message });
+    res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
 });
 
@@ -1849,7 +1858,7 @@ app.post('/bank/save', async (req, res) => {
   if (!holder || !network || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   try {
     const uSnap = await db.collection('users').doc(userId).get();
-    if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
+    if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     await db.collection('bankAccounts').add({ userId, holder, network, phone, createdAt: FieldValue.serverTimestamp() });
     res.json({ status: 'success' });
   } catch (e) {
@@ -1888,7 +1897,7 @@ app.post('/redeem', async (req, res) => {
     await withLock('redeem:' + code, async () => {
       const userSnap = await db.collection('users').doc(userId).get();
       if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-      if (userSnap.data().status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
+      if (userSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
       const codeSnap = await db.collection('promoCodes').where('code', '==', code).limit(1).get();
       if (codeSnap.empty) return res.status(400).json({ status: 'error', message: "That code isn't valid" });
       const codeDoc = codeSnap.docs[0];

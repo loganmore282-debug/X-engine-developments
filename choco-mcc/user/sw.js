@@ -273,8 +273,14 @@
 // disabled) -- it now gets the same spinner + text as everything else, so
 // a redemption in flight is visibly happening instead of looking like
 // nothing responded until the toast appears.
-// v49: Account tab's "History" menu tile + screen title renamed to "Ledger".
-const CACHE = 'chocomcc-shell-v49';
+// v50: (1) SECURITY FIX -- /account had no banned-account check at all, the
+// one real gap that let a banned member keep using the app normally. (2)
+// Maintenance/ban are now a real full-screen, non-dismissible takeover
+// (crossed wrench+screwdriver / padlock) triggered instantly from api()
+// itself, so an action already in flight gets shut down immediately, no
+// reload needed. (3) A banned account signing in now sees "Account locked"
+// right on the sign-in form instead of getting into the app at all.
+const CACHE = 'chocomcc-shell-v50';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

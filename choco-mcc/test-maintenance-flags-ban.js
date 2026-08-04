@@ -109,6 +109,38 @@ async function setupUser(uid, phone) {
   const savedAccounts = [...collMap('bankAccounts').values()].filter(a => a.userId === F);
   check('no bank account was actually saved for the banned attempt', savedAccounts.length === 0, savedAccounts);
 
+  console.log('\n== The actual bug the owner found: a banned account could still use /account and get into the app ==');
+  // Every WRITE endpoint (checkin, invest, deposit, withdraw, bank/save,
+  // redeem) already refused a banned account -- but /account itself, the
+  // one endpoint that runs on every login and every background poll and
+  // decides whether the app lets someone in at all, had no ban check
+  // whatsoever. A banned account could sign in and use the app normally for
+  // as long as it never happened to hit one of those specific write
+  // endpoints. Proven here against the real server, not just the diff.
+  const H = 'banned-account-user';
+  await setupUser(H, '0771000205');
+  r = await call('GET', '/account', { token: 'uid:' + H });
+  check('a banned account can still reach /account before being banned (sanity check)', r.body?.status === 'success', r.body);
+  userDoc(H).status = 'banned';
+  r = await call('GET', '/account', { token: 'uid:' + H });
+  check('SECURITY: /account now refuses a banned account (403/BANNED) -- this was the real gap', r.code === 403 && r.body?.code === 'BANNED', r.body);
+
+  console.log('\n== code: \'BANNED\' is consistent across every endpoint, not just some ==');
+  const I = 'banned-everywhere-user';
+  await setupUser(I, '0771000206');
+  userDoc(I).walletBalance = 5000000;
+  userDoc(I).status = 'banned';
+  r = await call('POST', '/checkin', { token: 'uid:' + I, body: {} });
+  check('checkin: code is BANNED', r.body?.code === 'BANNED', r.body);
+  r = await call('POST', '/invest/create', { token: 'uid:' + I, body: { tierKey: 'hersheys' } });
+  check('invest/create (thrown inside a transaction): code still reaches BANNED', r.body?.code === 'BANNED', r.body);
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 20000, holder: 'x', network: 'MTN Mobile Money', phone: '0771000206' } });
+  check('withdraw/request (thrown inside a transaction): code still reaches BANNED', r.body?.code === 'BANNED', r.body);
+  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + I, body: { amount: 30000, phone: '0771000206', network: 'MTN Mobile Money' } });
+  check('deposit/marzpay: code is BANNED', r.body?.code === 'BANNED', r.body);
+  r = await call('POST', '/redeem', { token: 'uid:' + I, body: { code: 'WHATEVER' } });
+  check('redeem: code is BANNED', r.body?.code === 'BANNED', r.body);
+
   console.log('\n-- An active (non-banned) account can still bind normally --');
   const G = 'active-bank-user';
   await setupUser(G, '0771000204');
