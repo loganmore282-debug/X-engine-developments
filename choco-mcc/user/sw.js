@@ -133,7 +133,11 @@
 // descriptions) — replaced with plain commas/periods/colons per plain
 // sentence instead. Code comments were left alone since they're never
 // shown to anyone using the app. Same sweep also applied to admin.html.
-const CACHE = 'chocomcc-shell-v30';
+// v31: About Us article no longer name-checks Kampala, Gulu, Mbale, or
+// Uganda specifically — those city/country call-outs are removed from
+// the copy (the "boda stage" line too); the rest of the article is
+// unchanged.
+const CACHE = 'chocomcc-shell-v31';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
