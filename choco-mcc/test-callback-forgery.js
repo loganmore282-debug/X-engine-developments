@@ -59,10 +59,10 @@ require.cache[faPath] = faMod;
 const realFetch = global.fetch;
 let marzN = 0;
 // Controls what the initial collect-money/send-money call returns a uuid
-// as, and what the live "GET .../:uuid" status checks report for it, per
-// test scenario below.
+// as, and what the live "GET .../:uuid" status checks report (status AND
+// reference) for it, per test scenario below.
 let collectUuidToIssue = null; // null = simulates MarzPay omitting the uuid
-let collectStatusForUuid = {};
+let collectTxForUuid = {}; // uuid -> { status, reference }
 global.fetch = async (url, opts) => {
   const u = String(url);
   const json = body => ({ ok: true, status: 200, json: async () => body });
@@ -75,9 +75,9 @@ global.fetch = async (url, opts) => {
   const collectMatch = u.match(/\/collect-money\/([^/?]+)/);
   if (collectMatch) {
     const uuid = collectMatch[1];
-    const status = collectStatusForUuid[uuid];
-    if (status === undefined) return json({ status: 'error', message: 'transaction not found' });
-    return json({ status: 'success', data: { transaction: { status } } });
+    const tx = collectTxForUuid[uuid];
+    if (!tx) return json({ status: 'error', message: 'transaction not found' });
+    return json({ status: 'success', data: { transaction: { status: tx.status, reference: tx.reference } } });
   }
   return realFetch(url, opts);
 };
@@ -112,7 +112,7 @@ async function setupUser(uid, phone) {
 (async () => {
   await new Promise(r => setTimeout(r, 600));
 
-  console.log('\n== Exploit #1 (confirmed, now fixed): forged callback, no captured uuid ==');
+  console.log('\n== Exploit #1 (confirmed, now fixed): forged callback, no captured uuid, no reference to check ==');
   collectUuidToIssue = null;
   const A = 'forge-victim-a';
   await setupUser(A, '0771000401');
@@ -124,10 +124,12 @@ async function setupUser(uid, phone) {
   const depR = await call('GET', '/deposits', { token: 'uid:' + A });
   const leakedRef = depR.body.deposits.find(d => d.id === depId).marzReference;
 
+  // No uuid AT ALL in the forged body — nothing to even attempt a self-heal
+  // check with, so this must do nothing.
   r = await call('POST', '/deposit/callback', { body: { data: { reference: leakedRef, transaction: { status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
   check('forged callback response still 200 (ack-immediately pattern, unrelated to whether it credited anything)', r.code === 200, r.body);
-  check('SECURITY: wallet NOT credited by a forged webhook with no captured uuid', userDoc(A).walletBalance === balBefore, userDoc(A).walletBalance);
+  check('SECURITY: wallet NOT credited by a forged webhook with no uuid to verify at all', userDoc(A).walletBalance === balBefore, userDoc(A).walletBalance);
   check('deposit stays pending, not falsely matched', collMap('pendingDeposits').get(depId).status === 'pending', collMap('pendingDeposits').get(depId).status);
 
   console.log('\n== Exploit #2 (confirmed, now fixed): reusing a real, unrelated uuid to fake a DIFFERENT deposit ==');
@@ -139,12 +141,32 @@ async function setupUser(uid, phone) {
   const depIdB = r.body.depositId;
   const refB = collMap('pendingDeposits').get(depIdB).marzReference;
   // A REAL, genuinely successful uuid the attacker legitimately obtained
-  // from a completely separate, actually-paid transaction of theirs.
-  collectStatusForUuid['REAL-BUT-UNRELATED-UUID'] = 'successful';
+  // from a completely separate, actually-paid transaction of theirs — its
+  // OWN real reference is that OTHER transaction's, not this deposit's.
+  collectTxForUuid['REAL-BUT-UNRELATED-UUID'] = { status: 'successful', reference: 'some-other-real-marzreference-entirely' };
   r = await call('POST', '/deposit/callback', { body: { data: { reference: refB, transaction: { uuid: 'REAL-BUT-UNRELATED-UUID', status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
-  check('SECURITY: a real-but-unrelated uuid from the webhook body cannot credit an unpaid, different deposit', userDoc(B).walletBalance === balBeforeB, userDoc(B).walletBalance);
+  check('SECURITY: a real-but-unrelated uuid whose own reference does not match is rejected, not credited', userDoc(B).walletBalance === balBeforeB, userDoc(B).walletBalance);
   check('the 1,000,000 UGX deposit stays pending, not falsely matched', collMap('pendingDeposits').get(depIdB).status === 'pending', collMap('pendingDeposits').get(depIdB).status);
+  check('the poisoning-risk uuid was never persisted onto this deposit', !collMap('pendingDeposits').get(depIdB).marzTxUuid, collMap('pendingDeposits').get(depIdB));
+
+  console.log('\n== NEW: a webhook-supplied uuid whose live reference genuinely MATCHES safely self-heals and credits — instantly, no admin needed ==');
+  collectUuidToIssue = null; // MarzPay's initial response omitted the uuid, same real-world gap
+  const F = 'legit-self-heal';
+  await setupUser(F, '0771000406');
+  const balBeforeF = userDoc(F).walletBalance;
+  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + F, body: { amount: 60000, phone: '0771000406', network: 'MTN Mobile Money' } });
+  const depIdF = r.body.depositId;
+  const refF = collMap('pendingDeposits').get(depIdF).marzReference;
+  // MarzPay's own webhook DOES carry the real uuid this time, and the live
+  // re-check for that uuid genuinely reports back OUR OWN marzReference —
+  // proving it's really the transaction that paid this deposit.
+  collectTxForUuid['GENUINE-LATE-UUID'] = { status: 'successful', reference: refF };
+  r = await call('POST', '/deposit/callback', { body: { data: { reference: refF, transaction: { uuid: 'GENUINE-LATE-UUID', status: 'successful' } } } });
+  await new Promise(r2 => setTimeout(r2, 200));
+  check('a genuinely matching self-heal credits the wallet immediately, no manual admin step needed', userDoc(F).walletBalance === balBeforeF + 60000, userDoc(F).walletBalance);
+  check('deposit marked matched', collMap('pendingDeposits').get(depIdF).status === 'matched', collMap('pendingDeposits').get(depIdF).status);
+  check('the verified uuid IS persisted once proven to genuinely belong here', collMap('pendingDeposits').get(depIdF).marzTxUuid === 'GENUINE-LATE-UUID', collMap('pendingDeposits').get(depIdF));
 
   console.log('\n== Even with OUR OWN captured uuid, a forged "successful" claim can\'t beat a live "pending" ==');
   collectUuidToIssue = 'OWN-UUID-C';
@@ -154,7 +176,7 @@ async function setupUser(uid, phone) {
   r = await call('POST', '/deposit/marzpay', { token: 'uid:' + C, body: { amount: 40000, phone: '0771000403', network: 'MTN Mobile Money' } });
   const depIdC = r.body.depositId;
   check('this deposit DID capture its own real uuid', collMap('pendingDeposits').get(depIdC).marzTxUuid === 'OWN-UUID-C', collMap('pendingDeposits').get(depIdC));
-  collectStatusForUuid['OWN-UUID-C'] = 'pending'; // not actually paid yet
+  collectTxForUuid['OWN-UUID-C'] = { status: 'pending', reference: collMap('pendingDeposits').get(depIdC).marzReference }; // not actually paid yet
   r = await call('POST', '/deposit/callback', { body: { data: { reference: collMap('pendingDeposits').get(depIdC).marzReference, transaction: { uuid: 'OWN-UUID-C', status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
   check('SECURITY: webhook lying "successful" is rejected when the live check on OUR OWN uuid says pending', userDoc(C).walletBalance === balBeforeC, userDoc(C).walletBalance);
@@ -167,7 +189,7 @@ async function setupUser(uid, phone) {
   r = await call('POST', '/deposit/marzpay', { token: 'uid:' + D, body: { amount: 25000, phone: '0771000404', network: 'MTN Mobile Money' } });
   const depIdD = r.body.depositId;
   const refD = collMap('pendingDeposits').get(depIdD).marzReference;
-  collectStatusForUuid['OWN-UUID-D'] = 'successful';
+  collectTxForUuid['OWN-UUID-D'] = { status: 'successful', reference: refD };
   r = await call('POST', '/deposit/callback', { body: { data: { reference: refD, transaction: { uuid: 'OWN-UUID-D', status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
   check('a genuinely confirmable webhook still credits the wallet normally', userDoc(D).walletBalance === balBeforeD + 25000, userDoc(D).walletBalance);
