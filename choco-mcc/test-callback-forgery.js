@@ -75,6 +75,7 @@ let marzN = 0;
 // reference) for it, per test scenario below.
 let collectUuidToIssue = null; // null = simulates MarzPay omitting the uuid
 let collectTxForUuid = {}; // uuid -> { status, reference }
+let sendTxForUuid = {}; // uuid -> status string, for GET /send-money/{uuid} (withdrawal live re-check)
 global.fetch = async (url, opts) => {
   const u = String(url);
   const json = body => ({ ok: true, status: 200, json: async () => body });
@@ -90,6 +91,13 @@ global.fetch = async (url, opts) => {
     const tx = collectTxForUuid[uuid];
     if (!tx) return json({ status: 'error', message: 'transaction not found' });
     return json({ status: 'success', data: { transaction: { status: tx.status, reference: tx.reference } } });
+  }
+  const sendMatch = u.match(/\/send-money\/([^/?]+)/);
+  if (sendMatch) {
+    const uuid = sendMatch[1];
+    const status = sendTxForUuid[uuid];
+    if (status === undefined) return { ok: false, status: 500, json: async () => ({ error: 'simulated failure' }) };
+    return json({ status: 'success', data: { transaction: { status } } });
   }
   return realFetch(url, opts);
 };
@@ -207,20 +215,23 @@ async function setupUser(uid, phone) {
   check('a genuinely confirmable webhook still credits the wallet normally', userDoc(D).walletBalance === balBeforeD + 25000, userDoc(D).walletBalance);
   check('deposit correctly marked matched', collMap('pendingDeposits').get(depIdD).status === 'matched', collMap('pendingDeposits').get(depIdD).status);
 
-  console.log('\n== Withdrawal callback SUCCESS: trusted directly on a genuine reference match, no live re-check needed ==');
+  console.log('\n== Withdrawal callback SUCCESS: trusted on a genuine reference match, even when the live re-check is unavailable ==');
   // A real production incident: MarzPay's own "disbursement.completed"
   // webhook arrived correctly (confirmed against the real payload -- the
   // recipient's own MTN SMS proved the money genuinely arrived), but the
-  // OLD code still required an extra, independent live re-check against
-  // MarzPay's GET /send-money/{uuid} before trusting it -- and THAT
-  // round-trip is what kept failing in production, leaving a
-  // genuinely-completed payout stuck on "Processing" indefinitely. That
-  // extra check bought no real security: marking a withdrawal 'processed'
-  // never moves money by itself (the wallet/totalWithdrawn were already
-  // updated once, at send time). The webhook already proves genuine
-  // correspondence via the marzReference match (our own crypto.randomUUID(),
-  // set only by us) -- so SUCCESS is now trusted straight from the webhook,
-  // with no dependency on a second round-trip that has proven unreliable.
+  // OLD code treated the live re-check against MarzPay's GET
+  // /send-money/{uuid} FAILING (network hiccup, timeout, anything) as
+  // equivalent to the payout being unconfirmed -- and THAT round-trip is
+  // what kept failing in production, leaving a genuinely-completed payout
+  // stuck on "Processing" indefinitely. Pattern confirmed against
+  // Chronova's own already-proven /withdraw/callback: still ATTEMPT the
+  // live check as a best-effort extra layer, but only let it VETO the
+  // webhook if it actually comes back with a real, contradicting status --
+  // a failed/empty check is not evidence of anything and must never block
+  // an otherwise-genuine success. Marking 'processed' also never moves
+  // money by itself (wallet/totalWithdrawn were already updated once, at
+  // send time) -- the webhook's authority to do even that rests on the
+  // marzReference match (our own crypto.randomUUID(), set only by us).
   const E = 'forge-victim-e';
   await setupUser(E, '0771000405');
   userDoc(E).walletBalance = 100000; userDoc(E).totalInvested = 100000;
@@ -228,13 +239,38 @@ async function setupUser(uid, phone) {
   r = await call('POST', '/withdraw/request', { token: 'uid:' + E, body: { amount: 20000, holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' } });
   const witId = r.body.withdrawalId;
   collMap('withdrawals').get(witId).status = 'processing';
+  collMap('withdrawals').get(witId).marzTxUuid = 'MTX-E-UNAVAILABLE'; // captured at send time, but the live GET for it is about to fail
   const refE = collMap('withdrawals').get(witId).marzReference || 'WD-REF-E';
   collMap('withdrawals').get(witId).marzReference = refE;
+  // sendTxForUuid['MTX-E-UNAVAILABLE'] deliberately left unset -> the mock
+  // GET /send-money/{uuid} above returns a 500, simulating the exact live
+  // failure seen in production.
   const balBeforeE = userDoc(E).walletBalance;
   r = await call('POST', '/withdraw/callback', { body: { data: { reference: refE, transaction: { status: 'successful' } } } });
-  await new Promise(r2 => setTimeout(r2, 200));
-  check('a genuine success webhook (matching reference) marks it processed, even with no live re-check', collMap('withdrawals').get(witId).status === 'processed', collMap('withdrawals').get(witId).status);
+  await new Promise(r2 => setTimeout(r2, 3200)); // covers the 3-attempt retry inside the live check
+  check('a genuine success webhook still marks it processed even though the live re-check kept failing', collMap('withdrawals').get(witId).status === 'processed', collMap('withdrawals').get(witId).status);
   check('...and never moves money in doing so (wallet unchanged by marking-processed itself)', userDoc(E).walletBalance === balBeforeE, userDoc(E).walletBalance);
+
+  console.log('\n== Withdrawal callback SUCCESS: VETOED when the live re-check actually works and explicitly disagrees ==');
+  // The other half of the same fix: the live check is still real defense,
+  // not decorative -- if it DOES respond, and reports something other than
+  // success, that's trusted over the webhook's own claim.
+  const H = 'forge-victim-h';
+  await setupUser(H, '0771000407');
+  userDoc(H).walletBalance = 100000; userDoc(H).totalInvested = 100000;
+  await call('POST', '/bank/save', { token: 'uid:' + H, body: { holder: 'H', network: 'MTN Mobile Money', phone: '0771000407' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + H, body: { amount: 12000, holder: 'H', network: 'MTN Mobile Money', phone: '0771000407' } });
+  const witIdH = r.body.withdrawalId;
+  collMap('withdrawals').get(witIdH).status = 'processing';
+  collMap('withdrawals').get(witIdH).marzTxUuid = 'MTX-H-DISAGREES';
+  sendTxForUuid['MTX-H-DISAGREES'] = 'pending'; // MarzPay's own live records say NOT actually done yet
+  const refH = collMap('withdrawals').get(witIdH).marzReference || 'WD-REF-H';
+  collMap('withdrawals').get(witIdH).marzReference = refH;
+  const balBeforeH = userDoc(H).walletBalance;
+  r = await call('POST', '/withdraw/callback', { body: { data: { reference: refH, transaction: { status: 'successful' } } } });
+  await new Promise(r2 => setTimeout(r2, 200));
+  check('SECURITY: a success webhook is REJECTED when a WORKING live check explicitly says otherwise', collMap('withdrawals').get(witIdH).status === 'processing', collMap('withdrawals').get(witIdH).status);
+  check('wallet untouched either way', userDoc(H).walletBalance === balBeforeH, userDoc(H).walletBalance);
 
   console.log('\n== Withdrawal callback FAILURE: still requires independent live confirmation before any refund ==');
   // This is the one branch where trusting the webhook alone WOULD move

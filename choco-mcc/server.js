@@ -1699,31 +1699,44 @@ app.post('/withdraw/callback', async (req, res) => {
     const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
 
     if (isSuccess) {
-      // FIXED real bug: a payout's own success webhook arrived correctly
+      // FIXED real bug, pattern confirmed against Chronova's own proven
+      // /withdraw/callback: a payout's own success webhook arrived correctly
       // (confirmed against a real production payload — MarzPay POSTs
       // event_type:"disbursement.completed" with transaction.status,
-      // transaction.reference, transaction.uuid all present) but this used
-      // to require an extra, independent live re-check against MarzPay's
-      // GET /send-money/{uuid} before trusting it -- and THAT round-trip is
-      // what kept failing, leaving a genuinely-completed payout stuck on
-      // "Processing" indefinitely despite the correct webhook already
-      // having arrived.
+      // transaction.reference, transaction.uuid all present), but this used
+      // to REQUIRE an independent live re-check against MarzPay's GET
+      // /send-money/{uuid} to succeed before trusting it -- and treated that
+      // check FAILING (network hiccup, timeout, anything) as equivalent to
+      // the payout being unconfirmed. That's backwards: a failed check is
+      // not evidence of anything, it's just a failed check. It left a
+      // genuinely-completed payout stuck on "Processing" indefinitely
+      // despite the correct webhook already having arrived.
       //
-      // That extra check bought no real safety here and never did: marking
-      // a withdrawal 'processed' never moves money by itself -- the wallet
-      // and totalWithdrawn were already updated once, at send time, in
-      // /admin/withdraw/process. The webhook already proved genuine
-      // correspondence to THIS exact withdrawal via the `marzReference`
-      // match in the query above (our own crypto.randomUUID(), set only by
-      // us, not something an outside party can produce a matching webhook
-      // for on a guess). So SUCCESS is now trusted directly from the
-      // webhook, no round-trip required.
+      // Now: the live check is still attempted, best-effort, as an EXTRA
+      // layer of defense — but it only VETOES the webhook if it actually
+      // comes back with a real, contradicting status. An empty/failed check
+      // is silently ignored, not treated as a rejection. This is strictly
+      // safer than dropping the check entirely: a forged success webhook is
+      // still caught whenever the live check happens to work and disagrees,
+      // while a working payout is never blocked by the check being broken.
+      // Trusting the webhook at all still rests on it having matched
+      // `marzReference` in the query above (our own crypto.randomUUID(),
+      // set only by us) — genuine correspondence to THIS exact withdrawal,
+      // not a guess. Marking 'processed' also never moves money by itself:
+      // the wallet and totalWithdrawn were already updated once, at send
+      // time, in /admin/withdraw/process.
       //
-      // FAILED is handled differently, below -- refunding a withdrawal
-      // that actually succeeded WOULD let the recipient collect it twice
-      // (their real payout plus a refunded wallet balance), so that path
-      // still requires the independent, live re-check before any money
-      // moves.
+      // FAILED is handled differently, below — refunding a withdrawal that
+      // actually succeeded WOULD let the recipient collect it twice (their
+      // real payout plus a refunded wallet balance), so that path still
+      // REQUIRES the independent live re-check to positively confirm
+      // failure before any money moves; an unavailable check there means no
+      // refund, not a default-safe one either way.
+      const uuidForCheck = wit.marzTxUuid || webhookUuid;
+      if (uuidForCheck) {
+        const liveStatus = await marzGetSendStatus(uuidForCheck); // best-effort — '' on any failure
+        if (liveStatus && !SUCCESS_STATUSES.has(liveStatus)) return; // explicit contradiction from a WORKING check — do not trust the webhook
+      }
       if (webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
       await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
     } else if (isFailed) {
