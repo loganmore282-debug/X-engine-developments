@@ -179,7 +179,19 @@
 // (server computes payoutsMade as floor(real elapsed ms since that same
 // createdAt / one day), freshly on every read), so the two can never show
 // out-of-sync values.
-const CACHE = 'chocomcc-shell-v36';
+// v37: fixed real slowness -- returning-user auto sign-in (silent Firebase
+// session restore) used to block the whole screen behind a full network
+// round-trip (/account + /investments + /bank + /transactions + public
+// settings) before showing anything, which is what made it feel like a
+// ~3s wait. It now enters the app immediately using this device's own
+// last-saved snapshot for that uid (localStorage, written by the previous
+// session's own refreshFromServer()), then refreshes from the server in
+// the background and re-renders the instant real numbers arrive -- so a
+// returning sign-in now paints instantly instead of waiting on the network,
+// same "fast paint, safe background reconciliation" pattern already used
+// for deposits. A first-ever sign-in (nothing cached yet) is unaffected --
+// there's nothing to show early, so it still waits on the real fetch.
+const CACHE = 'chocomcc-shell-v37';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

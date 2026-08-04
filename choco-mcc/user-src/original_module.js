@@ -508,9 +508,24 @@ var _authInProgress = false;
 function onFbAuthChanged(user){
   if(_authInProgress) return;
   if(user && (!STATE || STATE.uid !== user.uid)){
-    STATE = loadState(user.uid) || freshState(user.uid, 'Member', '');
+    // loadState() reads this device's own last-saved snapshot for this uid
+    // straight out of localStorage -- nothing else touches that key, so it's
+    // exactly what refreshFromServer() wrote there last time this same
+    // account was open on this device (see saveState(), called at the end of
+    // every refreshFromServer()). Entering the app on that cached snapshot
+    // immediately, instead of waiting on a fresh network round-trip first,
+    // is what makes returning sign-in feel instant; the background refresh
+    // below still runs right away and re-renders the moment real numbers
+    // arrive, so a stale cached figure is never shown for more than a beat
+    // and is always overwritten by the server's own authoritative value.
+    var cached = loadState(user.uid);
+    STATE = cached || freshState(user.uid, 'Member', '');
     saveState();
-    Promise.all([refreshFromServer(), syncPublicConfig()]).then(enterApp);
+    if(cached) enterApp();
+    Promise.all([refreshFromServer(), syncPublicConfig()]).then(function(){
+      if(cached){ renderAll(); renderStaticPages(); }
+      else enterApp();
+    });
   } else if(!user){
     STATE = null;
   }
