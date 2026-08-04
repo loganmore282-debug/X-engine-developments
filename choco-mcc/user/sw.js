@@ -240,7 +240,12 @@
 // reverted here: Level 2/3 rows are back, still tappable, still open the
 // real member list exactly like Level 1 does; /team/members answers all
 // three levels again, same as before v40.
-const CACHE = 'chocomcc-shell-v41';
+// v42: correction to v40/v41's masking direction -- Level 1 members (the
+// people the member personally, directly invited) now show their real,
+// full phone number, unmasked. Level 2/3 members (referrals of referrals --
+// never directly invited by this member) keep the masked "+256•••82"
+// format. Previously all three levels used the same masked format.
+const CACHE = 'chocomcc-shell-v42';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

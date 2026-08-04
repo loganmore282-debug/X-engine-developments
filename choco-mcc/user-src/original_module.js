@@ -1258,13 +1258,20 @@ async function openTeamLevel(level){
   // is a real number straight off the server (m.totalInvested), never a
   // vague "not invested yet" phrase -- a member who hasn't invested simply
   // shows UGX 0, same field, same formatting as one who has.
+  // Level 1 (direct referrals) shows the real, full phone number -- these
+  // are the people the member themselves personally invited, so who they
+  // are should be plainly visible. Level 2/3 (referrals of referrals --
+  // people the member never directly invited) stay masked.
+  var isL1 = level === 1;
   var rows = list.map(function(m){
-    var masked = m.phone && m.phone.length>4 ? m.phone.slice(0,4)+'•••'+m.phone.slice(-2) : (m.phone||'Not set');
+    var display = isL1
+      ? (m.phone || 'Not set')
+      : (m.phone && m.phone.length>4 ? m.phone.slice(0,4)+'•••'+m.phone.slice(-2) : (m.phone||'Not set'));
     var joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : 'Unknown';
     var invested = Number(m.totalInvested)||0;
     return '<div class="flat-row">'+
-      '<div class="flat-avatar'+(invested>0?' on':'')+'">'+esc(masked.slice(0,2))+'</div>'+
-      '<div class="flat-main"><b>'+esc(masked)+'</b><span>Joined '+esc(joined)+'</span></div>'+
+      '<div class="flat-avatar'+(invested>0?' on':'')+'">'+esc(display.slice(0,2))+'</div>'+
+      '<div class="flat-main"><b>'+esc(display)+'</b><span>Joined '+esc(joined)+'</span></div>'+
       '<div class="flat-amt'+(invested>0?' pos':' zero')+'">'+ugx(invested)+'</div>'+
       '</div>';
   }).join('');
