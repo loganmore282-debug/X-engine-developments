@@ -137,7 +137,16 @@
 // Uganda specifically — those city/country call-outs are removed from
 // the copy (the "boda stage" line too); the rest of the article is
 // unchanged.
-const CACHE = 'chocomcc-shell-v31';
+// v32: Support screen fixed a real bug — it collapsed Telegram Channel,
+// Telegram Group, and the direct-contact Telegram field into ONE row
+// (whichever was set first), so configuring more than one meant the
+// others silently never showed. Now each configured destination gets its
+// own row. WhatsApp support removed entirely (button, admin Settings
+// field, and the settings field itself) — Telegram-only going forward.
+// Every Telegram link app-wide (Support screen + announcement dialog)
+// now uses the real Telegram brand mark (blue disc + paper-plane) instead
+// of a generic themed outline icon.
+const CACHE = 'chocomcc-shell-v32';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

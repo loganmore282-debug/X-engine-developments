@@ -154,7 +154,7 @@ const DEFAULT_SETTINGS = {
   returnMultiple: 20, cycleDays: 180, maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
-  supportWhatsapp: '', supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
+  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', brandTagline: '', aboutText: ''
 };
 // Each tier pays exactly 20x its price over a fixed 180-day cycle (both
@@ -882,7 +882,7 @@ app.get('/public/settings', async (_req, res) => {
     requireInvestToWithdraw: s.requireInvestToWithdraw !== false,
     annEnabled: !!s.annEnabled, annTitle: s.annTitle || '', annBody: s.annBody || '',
     annCtaLabel: s.annCtaLabel || '', annCtaUrl: s.annCtaUrl || '', announcementBg: s.announcementBg || '',
-    supportWhatsapp: s.supportWhatsapp || '', supportTelegram: s.supportTelegram || '',
+    supportTelegram: s.supportTelegram || '',
     telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
     rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || ''
   } });

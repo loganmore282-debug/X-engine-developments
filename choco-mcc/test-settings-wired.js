@@ -63,7 +63,7 @@ const NEW = {
   returnMultiple: 9, cycleDays: 45, maxWithdrawalsPerDay: 5,
   requireInvestToWithdraw: false, maintenanceMode: false, maintenanceMsg: 'test maint msg',
   annEnabled: true, annTitle: 'Test Title', annBody: 'Test Body',
-  supportWhatsapp: '+256700000099', telegramGroup: 'https://t.me/testgroup',
+  telegramGroup: 'https://t.me/testgroup',
   telegramChannel: 'https://t.me/testchannel', supportHours: '9am-5pm test',
   rulesText: 'Test rules text', brandTagline: 'Test tagline', aboutText: 'Test about text',
 };

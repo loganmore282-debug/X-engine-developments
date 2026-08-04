@@ -7,7 +7,7 @@ var DEFAULT_SETTINGS = {
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
   returnMultiple: 20, cycleDays: 180,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
-  supportWhatsapp: '', supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
+  supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', brandTagline: '', aboutText: ''
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
@@ -360,15 +360,12 @@ function nl2p(text){
   if(!paras.length) return '';
   return paras.map(function(p){ return '<p>'+esc(p).replace(/\n/g,'<br>')+'</p>'; }).join('<br>');
 }
-function waLink(v){
-  v = String(v||'').trim();
-  if(!v) return '';
-  if(/^https?:\/\//i.test(v)) return v;
-  var digits = v.replace(/[^\d]/g,'');
-  if(!digits) return '';
-  if(digits.charAt(0)==='0') digits = '256'+digits.slice(1);
-  return 'https://wa.me/'+digits;
-}
+// Real Telegram brand mark (blue disc + paper-plane glyph), not a generic
+// themed outline icon — used everywhere the app links out to Telegram. A
+// plain white-glyph variant covers spots (like .tg-pill) that already sit
+// on a solid Telegram-blue background, where the full disc would double up.
+var TG_ICON = '<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#26A5E4"/><path fill="#fff" d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.3-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71l-4.14-3.05-2 1.93c-.23.23-.42.42-.83.42z"/></svg>';
+var TG_ICON_WHITE = '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#fff" d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.3-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71l-4.14-3.05-2 1.93c-.23.23-.42.42-.83.42z"/></svg>';
 function renderStaticPages(){
   var s = getSettings();
   // About page: admin text if set, otherwise keep the shipped placeholder.
@@ -378,13 +375,16 @@ function renderStaticPages(){
   }
   // Rules & Regulation: entirely admin-authored, empty until set.
   document.getElementById('rulesBody').innerHTML = s.rulesText ? nl2p(s.rulesText) : '<div class="empty">Nothing published yet.</div>';
-  // Support links: only show a tile for a channel the admin actually configured.
-  var wa = waLink(s.supportWhatsapp);
-  var tg = s.telegramChannel || s.supportTelegram || s.telegramGroup || '';
+  // Support links: WhatsApp removed entirely (Telegram-only support now) —
+  // every configured Telegram destination (Channel, Group, direct contact)
+  // gets its own row with the real Telegram brand icon, instead of
+  // collapsing all three into one generic "Telegram" link that only ever
+  // showed whichever field happened to be set first.
   var rows = '';
-  if(wa) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+wa+'\',\'_blank\')"><div class="menu-ic" style="background:var(--mint-pale);color:var(--mint)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4.5 20l1.3-3.7A8 8 0 1112 20a8 8 0 01-4.5-1.4L4.5 20z"/><path d="M9 10.3c0 2.8 2 4.7 4.7 4.7"/></svg></div><div class="menu-lbl">WhatsApp us</div>'+ICON_CHEV+'</button>';
-  if(tg) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(tg)+'\',\'_blank\')"><div class="menu-ic" style="background:#DCEAFB;color:#2E6FBF"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M21 3.5L3 10.8l6.3 2.3L11.8 21l3-5.4L21 3.5z"/><path d="M9.3 13.1L17 6.2"/></svg></div><div class="menu-lbl">Telegram</div>'+ICON_CHEV+'</button>';
-  if(!wa && !tg) rows += '<div class="empty">Contact details are not set up yet.</div>';
+  if(s.telegramChannel) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(s.telegramChannel)+'\',\'_blank\')"><div class="menu-ic" style="background:transparent">'+TG_ICON+'</div><div class="menu-lbl">Telegram Channel</div>'+ICON_CHEV+'</button>';
+  if(s.telegramGroup) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(s.telegramGroup)+'\',\'_blank\')"><div class="menu-ic" style="background:transparent">'+TG_ICON+'</div><div class="menu-lbl">Telegram Group</div>'+ICON_CHEV+'</button>';
+  if(s.supportTelegram) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(s.supportTelegram)+'\',\'_blank\')"><div class="menu-ic" style="background:transparent">'+TG_ICON+'</div><div class="menu-lbl">Message us on Telegram</div>'+ICON_CHEV+'</button>';
+  if(!s.telegramChannel && !s.telegramGroup && !s.supportTelegram) rows += '<div class="empty">Contact details are not set up yet.</div>';
   rows += '<div class="kv" style="margin:0 20px"><span>Support hours</span><b>'+esc(s.supportHours||'8am – 9pm')+'</b></div>';
   document.getElementById('supportLinks').innerHTML = rows;
 }
@@ -395,7 +395,6 @@ function renderStaticPages(){
    time the Home tab is switched INTO from a different tab (see switchTab's
    _lastTab tracking below). Switching Home -> Home (tapping Home while
    already there) does not re-trigger it. */
-var ANN_TG_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3.5L3 10.8l6.3 2.3L11.8 21l3-5.4L21 3.5z"/><path d="M9.3 13.1L17 6.2"/></svg>';
 function maybeShowAnnouncement(){
   var s = getSettings();
   if(!s.annEnabled || !s.annBody) return;
@@ -406,8 +405,8 @@ function maybeShowAnnouncement(){
   // Same Telegram Channel/Group links already configured under Settings ->
   // Support contacts — reused here rather than a separate admin field.
   var btns = '';
-  if(s.telegramChannel) btns += '<button class="tg-pill" onclick="window.open(\''+esc(s.telegramChannel)+'\',\'_blank\')">'+ANN_TG_ICON+'Telegram Channel</button>';
-  if(s.telegramGroup) btns += '<button class="tg-pill" onclick="window.open(\''+esc(s.telegramGroup)+'\',\'_blank\')">'+ANN_TG_ICON+'Telegram Group</button>';
+  if(s.telegramChannel) btns += '<button class="tg-pill" onclick="window.open(\''+esc(s.telegramChannel)+'\',\'_blank\')">'+TG_ICON_WHITE+'Telegram Channel</button>';
+  if(s.telegramGroup) btns += '<button class="tg-pill" onclick="window.open(\''+esc(s.telegramGroup)+'\',\'_blank\')">'+TG_ICON_WHITE+'Telegram Group</button>';
   var tgRow = document.getElementById('annTgRow');
   tgRow.innerHTML = btns;
   tgRow.style.display = btns ? 'flex' : 'none';

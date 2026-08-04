@@ -1179,7 +1179,6 @@ async function renderSettings(){
 
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
-      <label>WhatsApp number or link</label><input id="spWa" value="${esc(v('supportWhatsapp',''))}" placeholder="+256700000000 or https://wa.me/256700000000">
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
       <label>Telegram channel</label><input id="spTgChan" value="${esc(v('telegramChannel',''))}" placeholder="https://t.me/yourchannel">
       <label>Direct contact (Telegram)</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/youragent">
@@ -1234,7 +1233,7 @@ async function renderSettings(){
     if (d.status==='success') renderSettings();
   });
   $('saveSupport').addEventListener('click', async()=>{
-    const upd = { supportWhatsapp:$('spWa').value.trim(), supportTelegram:$('spTg').value.trim(),
+    const upd = { supportTelegram:$('spTg').value.trim(),
       telegramGroup:$('spTgGroup').value.trim(), telegramChannel:$('spTgChan').value.trim(),
       supportHours:$('spHours').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
