@@ -1353,17 +1353,30 @@ app.post('/deposit/callback', async (req, res) => {
     const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
     if (!dep.marzTxUuid && webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
     const uuid = dep.marzTxUuid || webhookUuid;
+    // SECURITY: this endpoint has no signature/secret verification — MarzPay
+    // sends no shared secret we can check, so anyone who obtains a
+    // marzReference (a member can see their OWN one via /deposits) can POST
+    // a forged body here. The webhook's claimed status is NEVER trusted by
+    // itself; crediting/declining only ever happens after an INDEPENDENT
+    // live re-check against MarzPay's own API confirms it. If there's no
+    // uuid to check (never captured) or the live check comes back
+    // empty/ambiguous, this now does NOTHING and leaves the deposit exactly
+    // as it was — for an admin to resolve via /admin/deposit/force-credit
+    // after checking MarzPay's own dashboard, not an anonymous POST to
+    // decide unilaterally. FIXED A REAL EXPLOIT: the old code fell through
+    // to crediting/declining whenever `uuid` was falsy OR the live check
+    // came back empty — "can't verify" was being treated as "assume
+    // legitimate" instead of "don't act." Confirmed live: a forged callback
+    // with no uuid against a real pending deposit credited the full amount
+    // to the attacker's own wallet with zero actual payment.
+    if (!uuid) return;
     if (isSuccess) {
-      if (uuid) {
-        const marzStatus = await marzGetCollectStatus(uuid);
-        if (marzStatus && !SUCCESS_STATUSES.has(marzStatus)) return; // webhook disagrees with a real re-check — don't credit
-      }
+      const marzStatus = await marzGetCollectStatus(uuid);
+      if (!SUCCESS_STATUSES.has(marzStatus)) return; // not independently confirmed — never credit on the webhook's word alone
       await creditDeposit(doc);
     } else if (isFailed) {
-      if (uuid) {
-        const marzStatus = await marzGetCollectStatus(uuid);
-        if (marzStatus && !FAILED_STATUSES.has(marzStatus)) return; // a transient/ambiguous re-check — leave it pending, don't decline
-      }
+      const marzStatus = await marzGetCollectStatus(uuid);
+      if (!FAILED_STATUSES.has(marzStatus)) return; // not independently confirmed — never decline on the webhook's word alone
       await doc.ref.update({ status: 'failed', failureReason: DEPOSIT_FAILED_MSG }).catch(() => {});
     }
   } catch (e) {
@@ -1604,14 +1617,21 @@ app.post('/withdraw/callback', async (req, res) => {
     const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
     if (!wit.marzTxUuid && webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
     const uuid = wit.marzTxUuid || webhookUuid;
+    // SECURITY: same fix as /deposit/callback — this endpoint has no
+    // signature verification, so the webhook's claimed status is never
+    // trusted alone. A forged "success" here doesn't hand an attacker new
+    // money (the wallet was already debited at request time), but it WOULD
+    // falsely mark a real payout "processed" — the recipient never gets
+    // their cash, totalWithdrawn is corrupted, and nobody investigates
+    // because the record looks complete. Only an independent live
+    // MarzPay re-check can mark this processed now; "can't verify" leaves
+    // it exactly as-is for the admin/reconciler, never assumes success.
+    if (!uuid) return;
     if (isSuccess) {
-      if (uuid) {
-        const marzStatus = await marzGetSendStatus(uuid);
-        if (marzStatus && !SUCCESS_STATUSES.has(marzStatus)) return;
-      }
+      const marzStatus = await marzGetSendStatus(uuid);
+      if (!SUCCESS_STATUSES.has(marzStatus)) return;
       await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
     } else if (isFailed) {
-      if (!uuid) return; // nothing verifiable to re-check — leave it processing for the sweep/admin
       const marzStatus = await marzGetSendStatus(uuid);
       if (!FAILED_STATUSES.has(marzStatus)) return;
       await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {

@@ -59,6 +59,14 @@ global.fetch = async (url, opts) => {
   if (u.includes('wearemarz.com') && u.endsWith('/send-money')) {
     return json({ status: 'success', data: { transaction: { uuid: 'WTX-' + (++marzN), status: 'pending' } } });
   }
+  // /deposit/callback now REQUIRES an independent live re-check against
+  // MarzPay before crediting anything (a webhook's own claimed status is
+  // never trusted alone — see server.js's security fix). Stub the
+  // collect-money status-check endpoint so a webhook carrying a real
+  // captured uuid can actually verify, matching test-deposit-concurrency.js.
+  if (u.includes('wearemarz.com') && u.includes('/collect-money/')) {
+    return json({ status: 'success', data: { transaction: { status: 'successful' } } });
+  }
   return realFetch(url, opts);
 };
 
@@ -126,11 +134,11 @@ const pushTokens = () => collMap('adminPushTokens');
   console.log('\n-- A deposit crediting fires exactly one push, never a duplicate on replay --');
   collMap('pendingDeposits').set('dep-1', {
     userId: A, phone: '+256700111222', network: 'MTN Mobile Money', amount: 50000,
-    ref: 'B999', marzReference: 'MZ-REF-1', status: 'initiating',
+    ref: 'B999', marzReference: 'MZ-REF-1', marzTxUuid: 'DTX-dep-1', status: 'initiating',
   });
   const depBalBefore = userDoc(A).walletBalance;
   const pushCountBeforeDep = sentPushes.length;
-  const webhookBody = { data: { reference: 'MZ-REF-1', transaction: { status: 'completed' } } };
+  const webhookBody = { data: { reference: 'MZ-REF-1', transaction: { uuid: 'DTX-dep-1', status: 'completed' } } };
   r = await call('POST', '/deposit/callback', { body: webhookBody });
   await sleep(200); // callback responds immediately, credits asynchronously
   check('deposit credited exactly once', userDoc(A).walletBalance === depBalBefore + 50000, userDoc(A).walletBalance);
