@@ -143,7 +143,7 @@ const PUBLIC_URL  = (() => {
 })();
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
-const MARZ_TIMEOUT = 15000;
+const MARZ_TIMEOUT = 20000; // matches Chronova's proven value — a short timeout here just means more retries on a slow-but-real MarzPay response
 
 // Product/economics defaults — mirrors DEFAULT_SETTINGS in the client
 // (choco-mcc/user/index.html). Admin panel overrides live in the
@@ -1685,9 +1685,19 @@ app.post('/withdraw/callback', async (req, res) => {
     const body = req.body || {};
     const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
     if (!reference) return;
-    const rawStatus = String(
+    let rawStatus = String(
       body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || ''
     ).toLowerCase();
+    // Chronova-pattern defense-in-depth: MarzPay's real disbursement webhooks
+    // always carry event_type ("disbursement.completed"/"disbursement.failed")
+    // alongside transaction.status, but don't assume every delivery shapes the
+    // status field the same way twice — fall back to event_type rather than
+    // silently dropping an otherwise-genuine webhook with no status this code
+    // recognizes.
+    if (!rawStatus) {
+      if (body.event_type === 'disbursement.completed') rawStatus = 'completed';
+      else if (body.event_type === 'disbursement.failed') rawStatus = 'failed';
+    }
     const isSuccess = SUCCESS_STATUSES.has(rawStatus);
     const isFailed  = FAILED_STATUSES.has(rawStatus);
     if (!isSuccess && !isFailed) return;

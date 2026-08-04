@@ -272,6 +272,23 @@ async function setupUser(uid, phone) {
   check('SECURITY: a success webhook is REJECTED when a WORKING live check explicitly says otherwise', collMap('withdrawals').get(witIdH).status === 'processing', collMap('withdrawals').get(witIdH).status);
   check('wallet untouched either way', userDoc(H).walletBalance === balBeforeH, userDoc(H).walletBalance);
 
+  console.log('\n== Withdrawal callback SUCCESS: resolves from event_type alone when transaction.status is absent (Chronova-pattern fallback) ==');
+  // A genuine MarzPay disbursement webhook always carries event_type
+  // ("disbursement.completed") -- don't assume transaction.status is always
+  // present/shaped the same way and silently drop an otherwise-genuine delivery.
+  const I = 'forge-victim-i';
+  await setupUser(I, '0771000408');
+  userDoc(I).walletBalance = 100000; userDoc(I).totalInvested = 100000;
+  await call('POST', '/bank/save', { token: 'uid:' + I, body: { holder: 'I', network: 'MTN Mobile Money', phone: '0771000408' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 12000, holder: 'I', network: 'MTN Mobile Money', phone: '0771000408' } });
+  const witIdI = r.body.withdrawalId;
+  collMap('withdrawals').get(witIdI).status = 'processing';
+  const refI = collMap('withdrawals').get(witIdI).marzReference || 'WD-REF-I';
+  collMap('withdrawals').get(witIdI).marzReference = refI;
+  r = await call('POST', '/withdraw/callback', { body: { event_type: 'disbursement.completed', transaction: { reference: refI } } });
+  await new Promise(r2 => setTimeout(r2, 200));
+  check('marked processed from event_type alone, no transaction.status field needed', collMap('withdrawals').get(witIdI).status === 'processed', collMap('withdrawals').get(witIdI).status);
+
   console.log('\n== Withdrawal callback FAILURE: still requires independent live confirmation before any refund ==');
   // This is the one branch where trusting the webhook alone WOULD move
   // money -- refunding a withdrawal that actually succeeded would let the
