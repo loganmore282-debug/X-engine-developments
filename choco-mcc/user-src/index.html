@@ -71,14 +71,6 @@
     display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-lg);margin-bottom:18px;}
   .auth-title{font-size:28px;margin-bottom:6px;}
   .auth-sub{color:var(--cocoa-faint);font-size:14.5px;margin-bottom:28px;line-height:1.5;}
-  /* Segmented Sign In / Sign Up tab control — replaces the old plain-text
-     "New here? Sign up" link. Static elements with fixed onclick handlers
-     (never innerHTML-replaced), so there's no risk of the "works once,
-     stops working" stale-reference bug the old text-link version had. */
-  .auth-tabs{display:flex;background:var(--cream-deep);border-radius:16px;padding:4px;margin-bottom:22px;}
-  .auth-tab{flex:1;border:none;background:none;padding:12px 8px;border-radius:12px;font-size:14px;font-weight:800;
-    color:var(--cocoa-faint);cursor:pointer;transition:background .15s,color .15s;}
-  .auth-tab.active{background:var(--card);color:var(--cocoa);box-shadow:var(--shadow);}
   /* All auth fields grouped into one card with row dividers, instead of
      separate floating boxes — same icons/inputs/placeholders, just a
      single unified container for both Sign In and Sign Up alike. */
@@ -93,6 +85,14 @@
     background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));box-shadow:0 12px 24px -10px rgba(224,138,44,.6);
     cursor:pointer;transition:transform .08s ease;}
   .auth-btn:active{transform:scale(.97);}
+  /* Single contextual switch action — only ever ONE of "Create Account" or
+     "Sign In" is shown at a time (never both together), matching whichever
+     mode isn't currently active. A static, never-destroyed button whose
+     text is updated in place by setAuthMode() — the onclick lives on this
+     same persistent element, so there's no stale-reference risk. */
+  .auth-switch-btn{display:block;width:100%;text-align:center;margin-top:16px;padding:14px;border-radius:16px;
+    border:1.5px dashed var(--line);background:none;font-size:14px;color:var(--cocoa-faint);cursor:pointer;}
+  .auth-switch-btn b{color:var(--caramel-deep);font-weight:800;}
   .field{position:relative;margin-bottom:14px;}
   .field input{width:100%;padding:16px 16px 16px 46px;border-radius:16px;border:1.5px solid var(--line);background:var(--card);
     font-size:15px;color:var(--cocoa);outline:none;}
@@ -382,10 +382,6 @@
     </div>
     <div class="auth-title" id="authTitle">Welcome to ChocoMCC</div>
     <div class="auth-sub" id="authSub">Sign in to grow your stash of the world's finest chocolate brands.</div>
-    <div class="auth-tabs">
-      <button type="button" class="auth-tab active" id="tabSignin" onclick="setAuthMode('login')">Sign In</button>
-      <button type="button" class="auth-tab" id="tabSignup" onclick="setAuthMode('register')">Sign Up</button>
-    </div>
     <div class="auth-card">
       <div class="field">
         <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 10.5c1.2 2.6 3.4 4.8 6 6l1.8-1.8c.3-.3.7-.4 1-.3 1 .3 2.1.5 3.2.5.6 0 1 .4 1 1v2.7c0 .6-.4 1-1 1C10.7 19.6 4.4 13.3 4.4 5.5c0-.6.4-1 1-1H8c.6 0 1 .4 1 1 0 1.1.2 2.2.5 3.2.1.4 0 .8-.3 1L6.5 10.5z"/></svg></span>
@@ -406,6 +402,7 @@
       </div>
     </div>
     <button class="auth-btn" id="authGo">Continue</button>
+    <button type="button" class="auth-switch-btn" id="authSwitchBtn" onclick="setAuthMode(authMode==='login'?'register':'login')">New here? <b>Create Account</b></button>
   </div>
 
   <!-- APP -->

@@ -83,7 +83,13 @@
 // (titles, placeholders, button label) in both modes, same architecture for
 // both — login and register share the identical card/tab/button styling,
 // just with 2 vs 4 rows showing.
-const CACHE = 'chocomcc-shell-v23';
+// v24: reverted the v23 two-tab (Sign In | Sign Up both visible at once)
+// switcher — back to a single contextual switch action showing only
+// whichever mode ISN'T currently active, per feedback that both options
+// shouldn't appear together. Kept the unified field card and pill button
+// from v23; the switch is now one static dashed-border button whose text
+// updates in place instead of two side-by-side tabs.
+const CACHE = 'chocomcc-shell-v24';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

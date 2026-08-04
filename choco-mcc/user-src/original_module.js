@@ -177,24 +177,25 @@ function phoneToEmail(phone){ return phone.replace(/\D/g,'').replace(/^0+/,'') +
 
 var authMode='login';
 document.querySelector('#authBanner img').src = CHOCO_BANNERS.assortment;
-// Sign In / Sign Up is a real segmented tab control (#tabSignin/#tabSignup)
-// rather than a plain text link — both tabs are static elements with fixed
-// onclick handlers set once in the HTML, never innerHTML-replaced, so
-// there's no way for either to go stale the way the old text-link version
-// once did (it rebuilt its own clickable child every toggle, which broke
-// after the first tap). setAuthMode() takes the target mode directly
-// instead of toggling relative to current state, so every call site is
-// explicit about which mode it wants.
+// Only ONE contextual switch action is ever shown — "Create Account" while
+// on Sign In, "Sign In" while on Create Account — never both at once. The
+// button itself is a single static element (#authSwitchBtn) whose text
+// gets updated in place; its onclick lives on that same never-destroyed
+// element, so there's no way for it to go stale the way the old
+// innerHTML-rebuilding version once did. setAuthMode() takes the target
+// mode directly rather than toggling relative to current state, so every
+// call site is explicit about which mode it wants.
 function setAuthMode(mode){
   authMode = mode;
-  document.getElementById('tabSignin').classList.toggle('active', mode==='login');
-  document.getElementById('tabSignup').classList.toggle('active', mode==='register');
   document.querySelector('#authBanner img').src = mode==='register' ? CHOCO_BANNERS.lavacake : CHOCO_BANNERS.assortment;
   document.getElementById('regCodeField').style.display = mode==='register' ? 'block':'none';
   document.getElementById('regPassConfirmField').style.display = mode==='register' ? 'block':'none';
   document.getElementById('fPassConfirm').value = '';
   document.getElementById('authTitle').textContent = mode==='register' ? 'Create your account':'Welcome to ChocoMCC';
   document.getElementById('authSub').textContent = mode==='register' ? 'Join and start stacking chocolate tiers today.' : 'Sign in to grow your stash of the world\'s finest chocolate brands.';
+  document.getElementById('authSwitchBtn').innerHTML = mode==='register'
+    ? 'Already a member? <b>Sign In</b>'
+    : 'New here? <b>Create Account</b>';
 }
 // A referral link is https://choco-mcc.com/?reg=CODE (see teamLink below) — if
 // someone arrives with that in the URL, land them straight on Sign Up with
