@@ -152,7 +152,19 @@
 // whole card is now a real disabled button with no onclick at all, so
 // tapping it does nothing instead of opening a product page. Server-side
 // purchase blocking (already in place) re-verified unchanged.
-const CACHE = 'chocomcc-shell-v33';
+// v34: two real bugs fixed. (1) An admin manually crediting a member's
+// wallet (e.g. compensating a declined MarzPay payment) was recorded
+// server-side but never shown ANYWHERE in the app's own History — not in
+// Accrued, not in Topups (which only ever reads real deposit records).
+// The balance would visibly jump with zero explanation. Now shows as
+// "Account credit" under History -> Accrued. (2) balance/History never
+// refreshed while the app just sat open — only after the member's OWN
+// action (buy/deposit/checkin). An admin credit is out-of-band, so it
+// could sit unseen until the member backed out and reopened the app.
+// Added a self-scheduling 10s background refresh (paused while the tab
+// is backgrounded, catches up instantly on foreground) so balance and
+// History update on their own without needing a manual trigger.
+const CACHE = 'chocomcc-shell-v34';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

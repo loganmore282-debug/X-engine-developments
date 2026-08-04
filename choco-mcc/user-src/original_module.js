@@ -337,6 +337,7 @@ function logout(){
   // previous member's cached top-up/cash-out records around to leak through.
   _recordsLoaded = { accrued:true, topups:false, cashouts:false };
   stopActivityFeed();
+  stopAccountPoll();
   document.getElementById('app').style.display='none';
   document.getElementById('authScreen').style.display='flex';
 }
@@ -346,6 +347,7 @@ function enterApp(){
   document.getElementById('app').style.display='block';
   renderAll();
   startActivityFeed();
+  startAccountPoll();
   updateDownloadTileVisibility();
   renderStaticPages();
   maybeShowAnnouncement();
@@ -702,6 +704,48 @@ function startActivityFeed(){
   _activityFeedTimer = setInterval(refreshActivityFeed, 27000);
 }
 function stopActivityFeed(){ clearInterval(_activityFeedTimer); _activityFeedTimer = null; }
+
+// FIXED BUG: balance/History never updated while the app just sat open —
+// refreshFromServer() only ever ran on initial load or right after an
+// action the member THEMSELVES triggered (buy, deposit, checkin...). An
+// admin crediting a wallet from the admin panel is an OUT-OF-BAND change;
+// with no periodic refresh, a member already inside the app had no way to
+// see it short of backing out and reopening. Self-scheduling (setTimeout,
+// not setInterval) so a slow request can never pile up a second one on top
+// of itself; paused via the Page Visibility API while the tab/app is
+// backgrounded so this never spends M0's free-tier resources on a screen
+// nobody is looking at, and catches up immediately the moment it's
+// foregrounded again rather than waiting out the rest of the interval.
+var _accountPollTimer = null;
+var _accountPollRunning = false;
+var ACCOUNT_POLL_MS = 10000;
+function scheduleAccountPoll(){
+  clearTimeout(_accountPollTimer);
+  if(!STATE || document.hidden) return;
+  _accountPollTimer = setTimeout(runAccountPoll, ACCOUNT_POLL_MS);
+}
+async function runAccountPoll(){
+  if(!STATE || document.hidden || _accountPollRunning){ scheduleAccountPoll(); return; }
+  _accountPollRunning = true;
+  try{
+    await refreshFromServer();
+    renderAll();
+    // An open History screen's Topups/Cash Outs tab has its own separate
+    // fetch (not part of refreshFromServer) — keep it live too if it's the
+    // screen currently on-screen, same reasoning as the Accrued tab above.
+    var recOv = document.getElementById('ovRecords');
+    if(recOv && recOv.classList.contains('show') && _recordsTab!=='accrued'){
+      loadRecordsTab(_recordsTab).then(renderRecords);
+    }
+  } catch(e){}
+  _accountPollRunning = false;
+  scheduleAccountPoll();
+}
+function startAccountPoll(){ scheduleAccountPoll(); }
+function stopAccountPoll(){ clearTimeout(_accountPollTimer); _accountPollTimer = null; }
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden && STATE) runAccountPoll(); // catch up the instant the app is foregrounded again
+});
 function renderTicker(){
   var box = document.getElementById('tickerBox');
   if(!_activityFeed.length){ box.innerHTML = ''; return; }
@@ -719,8 +763,15 @@ function renderTicker(){
 // line with a status pill, then labelled fact lines underneath.
 var _recordsTab = 'accrued';
 var _recordsLoaded = { accrued:true, topups:false, cashouts:false };
-var INCOME_TYPES = ['checkin','cashback','commission','promocode'];
-var REC_TYPE_LABEL = { checkin:'Daily reward', cashback:'Chocolate cashback', commission:'Team reward', promocode:'Promo code' };
+// FIXED BUG: 'admin_credit' (a manual balance credit from the admin panel —
+// e.g. compensating a member for a payment MarzPay's own gateway declined)
+// was recorded server-side but never shown ANYWHERE in the app — not here,
+// not in Topups (that tab only ever reads real pendingDeposits records),
+// nowhere. The member's balance would visibly jump with zero explanation
+// in their own History. Added here so it's honestly visible, labelled for
+// what it is rather than folded into "Chocolate cashback".
+var INCOME_TYPES = ['checkin','cashback','commission','promocode','admin_credit'];
+var REC_TYPE_LABEL = { checkin:'Daily reward', cashback:'Chocolate cashback', commission:'Team reward', promocode:'Promo code', admin_credit:'Account credit' };
 function recStatusInfo(s){
   s = String(s||'success').toLowerCase();
   if(['success','matched','processed'].indexOf(s)!==-1) return { label:'Completed', cls:'ok' };
