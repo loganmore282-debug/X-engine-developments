@@ -583,7 +583,7 @@ async function loadTaskCenter(){
 }
 async function claimMilestone(btn, target, type){
   var label = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = 'Claiming…'; }
+  if(btn){ btn.disabled = true; btn.textContent = 'Please wait…'; }
   var r = await api('/team/milestone/claim', { target: target, type: type });
   if(r.status!=='success'){
     toast(r.message||'Could not claim this reward');
@@ -836,14 +836,20 @@ async function saveBankAccount(){
   var holder = document.getElementById('npName').value.trim();
   var phone = document.getElementById('npPhone').value.trim();
   if(!holder || !phone){ toast('Enter the account holder name and phone'); return; }
-  var r = await api('/bank/save', { holder:holder, network:_pickedNetwork.network, phone:phone });
-  if(r.status!=='success'){ toast(r.message||'Could not save the account'); return; }
-  var bankR = await api('/bank/list');
-  if(bankR.status==='success') STATE.bankAccounts = bankR.accounts;
-  if(STATE.bankAccounts.length===1) STATE.defaultBankIdx = 0;
-  saveState();
-  closeNetworkPicker(); renderBankList(); renderWitBankBox();
-  toast('Account bound');
+  var btn = document.getElementById('npSaveBtn'), label = btn ? btn.textContent : '';
+  if(btn){ if(btn.disabled) return; btn.disabled = true; btn.textContent = 'Please wait…'; }
+  try{
+    var r = await api('/bank/save', { holder:holder, network:_pickedNetwork.network, phone:phone });
+    if(r.status!=='success'){ toast(r.message||'Could not save the account'); return; }
+    var bankR = await api('/bank/list');
+    if(bankR.status==='success') STATE.bankAccounts = bankR.accounts;
+    if(STATE.bankAccounts.length===1) STATE.defaultBankIdx = 0;
+    saveState();
+    closeNetworkPicker(); renderBankList(); renderWitBankBox();
+    toast('Account bound');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = label; }
+  }
 }
 function setDefaultBank(i){ STATE.defaultBankIdx = i; saveState(); renderBankList(); toast('Default account updated'); }
 function renderWitBankBox(){
@@ -952,14 +958,15 @@ async function doWithdraw(){
 }
 async function doCheckin(){
   var btn = document.getElementById('checkinBtn');
-  if(btn){ if(btn.disabled) return; btn.disabled = true; }
+  if(btn){ if(btn.disabled) return; btn.disabled = true; btn.textContent = 'Please wait…'; }
   try{
     var r = await api('/checkin', {});
-    if(r.status!=='success'){ toast(r.message||'Check-in failed'); if(btn) btn.disabled = false; return; }
+    if(r.status!=='success'){ toast(r.message||'Check-in failed'); if(btn) btn.disabled = false; renderAll(); return; }
     await refreshFromServer();
     renderAll(); toast('+'+ugx(r.bonus)+' — see you tomorrow!');
   } catch(e) {
     if(btn) btn.disabled = false;
+    renderAll();
   }
 }
 async function redeemGiftCode(){

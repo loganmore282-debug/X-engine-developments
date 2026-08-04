@@ -93,7 +93,13 @@
 // one appears — auth screen (password + confirm password), the Security
 // menu tile, and all three fields on the Security (change password)
 // screen.
-const CACHE = 'chocomcc-shell-v25';
+// v26: "Please wait…" busy states added where actions previously gave no
+// feedback while a request was in flight — Task Center Claim (was
+// "Claiming…", now matches the same wording everywhere else), Daily
+// Check-in, and Bind Bank Card's Save account button (had NO busy state
+// at all before). All three now disable the button and show "Please
+// wait…" until the server responds, then restore the normal label.
+const CACHE = 'chocomcc-shell-v26';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
