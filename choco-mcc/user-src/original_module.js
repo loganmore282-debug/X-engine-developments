@@ -100,9 +100,16 @@ async function refreshFromServer(){
     toast('Could not reach the server, showing your last known balance');
   }
   if(invR.status==='success'){
+    // Every figure here (accrued, dailyIncome, totalIncome, daysElapsed) is
+    // read straight off the server's own record for this investment, never
+    // recomputed client-side -- the server already settles/rounds it once
+    // (settleAllForUser, called on every /investments read) so the app can
+    // only ever display the authoritative number, not risk drifting from it.
     STATE.investments = invR.investments.map(function(iv){
       return { id: iv.id, key: iv.tierKey, name: iv.tierLabel, price: iv.amount,
-        cycleDays: iv.payoutsTotal, daysElapsed: iv.payoutsMade, accrued: iv.paidOut, matured: iv.status==='matured' };
+        cycleDays: iv.payoutsTotal, daysElapsed: iv.payoutsMade, accrued: iv.paidOut, matured: iv.status==='matured',
+        dailyIncome: iv.dailyPayout, totalIncome: iv.expectedReturn,
+        purchasedAt: iv.createdAt ? new Date(iv.createdAt).getTime() : null };
     });
   }
   if(bankR.status==='success') STATE.bankAccounts = bankR.accounts;
@@ -657,11 +664,23 @@ function renderMyChoc(){
   var rows = investmentStats();
   if(!rows.length){ document.getElementById('mychocList').innerHTML = '<div class="empty">No chocolates running yet. Buy one from the Shop to start earning.</div>'; return; }
   document.getElementById('mychocList').innerHTML = rows.map(function(r){
-    return '<div class="bank-row">'+
-      '<img src="'+CHOCO_IMAGES[r.inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
-      '<div class="bank-info"><b>'+r.inv.name+'</b><span>Day '+r.daysElapsed+' of '+r.cycleDays+' · '+ugx(r.inv.price)+'</span></div>'+
-      '<span class="'+(r.matured?'bank-default':'')+'" style="font-size:10.5px;font-weight:800;color:'+(r.matured?'var(--mint)':'var(--cocoa-faint)')+'">'+(r.matured?'Matured':'Ongoing')+'</span>'+
-      '</div>';
+    var purchased = r.inv.purchasedAt ? new Date(r.inv.purchasedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Unknown';
+    var pct = r.cycleDays>0 ? Math.min(100, Math.round(r.daysElapsed/r.cycleDays*100)) : 0;
+    return '<div class="choc-hold-card">'+
+      '<div class="choc-hold-top">'+
+        '<img src="'+CHOCO_IMAGES[r.inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
+        '<div class="bank-info"><b>'+r.inv.name+'</b><span>'+ugx(r.inv.price)+'</span></div>'+
+        '<span class="'+(r.matured?'bank-default':'')+'" style="font-size:10.5px;font-weight:800;color:'+(r.matured?'var(--mint)':'var(--cocoa-faint)')+'">'+(r.matured?'Matured':'Ongoing')+'</span>'+
+      '</div>'+
+      '<div class="choc-hold-progress"><div class="choc-hold-progress-fill" style="width:'+pct+'%"></div></div>'+
+      '<div class="choc-hold-daylbl">'+r.daysElapsed+' / '+r.cycleDays+' days</div>'+
+      '<div class="choc-hold-grid">'+
+        '<div class="choc-hold-item"><span>Purchase date &amp; time</span><b>'+purchased+'</b></div>'+
+        '<div class="choc-hold-item"><span>Daily income</span><b>'+ugx(r.inv.dailyIncome)+'</b></div>'+
+        '<div class="choc-hold-item"><span>Accrued income</span><b style="color:var(--mint)">'+ugx(r.accrued)+'</b></div>'+
+        '<div class="choc-hold-item"><span>Total income</span><b>'+ugx(r.inv.totalIncome)+'</b></div>'+
+      '</div>'+
+    '</div>';
   }).join('');
 }
 function renderEarnings(){

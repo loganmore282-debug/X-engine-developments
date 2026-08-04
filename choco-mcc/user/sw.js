@@ -164,7 +164,15 @@
 // Added a self-scheduling 10s background refresh (paused while the tab
 // is backgrounded, catches up instantly on foreground) so balance and
 // History update on their own without needing a manual trigger.
-const CACHE = 'chocomcc-shell-v34';
+// v35: My Chocolates redesigned per feedback -- each holding was only
+// showing "Day X of Y" and price, nothing about what it was actually
+// earning. Now shows purchase date & time, a day-progress bar (X/Y days),
+// daily income, accrued income so far, and total income at maturity --
+// every figure read straight from the server's own investment record
+// (dailyPayout/expectedReturn/paidOut/payoutsMade, already settled
+// server-side on every read), never recomputed client-side, so nothing
+// here can drift from what the server actually owes.
+const CACHE = 'chocomcc-shell-v35';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
