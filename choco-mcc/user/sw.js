@@ -110,7 +110,19 @@
 // covered Task Center claims (/team/*) — money could still move during a
 // declared maintenance window — now fixed; and a banned account could
 // still rebind its payout (bank) account — now blocked too.
-const CACHE = 'chocomcc-shell-v27';
+// v28: found by going back over deposits/withdrawals/history a second
+// time. Two real gaps, both maintenance-mode related: (1) registration
+// during maintenance mode used to lie — /account/create-profile and
+// /register both fail (blocked, by design), but the app ignored that and
+// showed "Account created — welcome!" anyway, leaving a real Firebase
+// login with NO server-side profile behind it, permanently ("User not
+// found" even after maintenance lifted). Now a failure here is shown
+// honestly and the user is told to try again shortly, not waved through.
+// (2) refreshFromServer() showed a generic "Could not reach the server"
+// toast when maintenance mode was actually the reason /account failed —
+// misleading, since the server IS reachable, it's deliberately paused.
+// Now shows the admin's real maintenance message in that case.
+const CACHE = 'chocomcc-shell-v28';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

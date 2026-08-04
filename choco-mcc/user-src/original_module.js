@@ -90,6 +90,12 @@ async function refreshFromServer(){
     STATE.totalInvested = a.totalInvested; STATE.checkinStreak = a.checkinStreak;
     STATE.lastCheckin = a.lastCheckin; STATE.referralCode = a.referralCode || STATE.referralCode;
     STATE.team = a.team;
+  } else if(accR.code==='MAINTENANCE'){
+    // A generic "could not reach the server" toast is actively misleading
+    // here — the server IS reachable, it's deliberately paused. Show the
+    // admin's real maintenance message instead so a member doesn't think
+    // their connection or the app itself is broken.
+    toast(accR.message || 'ChocoMCC is under maintenance. Please check back shortly.');
   } else {
     toast('Could not reach the server — showing your last known balance');
   }
@@ -251,8 +257,18 @@ document.getElementById('authGo').onclick = async function(){
       // Both idempotent (create-profile checks doc existence, register checks
       // registrationDone) and never touch a payment gateway — safe to retry
       // through a cold server start, unlike the money endpoints.
-      await api('/account/create-profile', { phone: phone }, 'POST', true);
-      await api('/register', { referralCode: ref }, 'POST', true);
+      var cpR = await api('/account/create-profile', { phone: phone }, 'POST', true);
+      // FIXED BUG: these two results used to be ignored entirely — if either
+      // failed (most commonly maintenance mode, which blocks both), the code
+      // fell straight through to "Account created — welcome!" anyway. The
+      // Firebase login this created was real, but no ChocoMCC profile ever
+      // existed behind it — even after maintenance lifted, /account came
+      // back "User not found" for that person permanently. Now a failure
+      // here is treated as a real registration failure, not silently waved
+      // through.
+      if(cpR.status!=='success'){ toast(cpR.message||'Could not create your account right now — try again shortly'); return; }
+      var regR = await api('/register', { referralCode: ref }, 'POST', true);
+      if(regR.status!=='success'){ toast(regR.message||'Could not finish setting up your account — try again shortly'); return; }
       await refreshFromServer();
       toast('Account created — welcome!');
     } else {
