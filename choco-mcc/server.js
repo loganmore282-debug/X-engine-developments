@@ -566,7 +566,7 @@ async function _marzParse(resp) {
 }
 async function marzCollect({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
-    description: description || 'ChocoMCC deposit' };
+    description: description || 'Mobile Money' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/collect-money`, {
     method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
@@ -577,7 +577,7 @@ async function marzCollect({ amount, phone, reference, description, callbackUrl 
 }
 async function marzSendMoney({ amount, phone, reference, description, callbackUrl }) {
   const payload = { amount: Number(amount), phone_number: phone, country: 'UG', reference,
-    description: description || 'ChocoMCC payout' };
+    description: description || 'Mobile Money' };
   if (callbackUrl) payload.callback_url = callbackUrl;
   const resp = await fetch(`${MARZPAY_BASE}/send-money`, {
     method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
@@ -1304,7 +1304,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     let mpData;
     try {
       mpData = await marzCollect({
-        amount: amt, phone, reference: marzReference, description: 'ChocoMCC deposit',
+        amount: amt, phone, reference: marzReference, description: 'Mobile Money',
         callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/deposit/callback' : undefined
       });
     } catch (netErr) {
@@ -1604,7 +1604,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
     let ambiguous = false;
     try {
       mpData = await marzSendMoney({
-        amount: wit.net, phone: wit.phone, reference: marzReference, description: 'ChocoMCC cash out',
+        amount: wit.net, phone: wit.phone, reference: marzReference, description: 'Mobile Money',
         callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
       });
     } catch (netErr) {
