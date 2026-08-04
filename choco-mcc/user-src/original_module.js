@@ -596,8 +596,11 @@ async function claimMilestone(btn, target, type){
   await loadTaskCenter();
 }
 
+function isProductSoldOut(p){ return p.active===false || !!p.comingSoon; }
 function renderFeatured(){
-  var html = PRODUCTS.slice(0,6).map(function(p){
+  // Sold-out/coming-soon tiers are never featured on Home — no point steering
+  // anyone toward something they can't actually buy yet.
+  var html = PRODUCTS.filter(function(p){ return !isProductSoldOut(p); }).slice(0,6).map(function(p){
     return '<button class="choc-card" onclick="openProduct(\''+p.key+'\')">'+
       '<img class="choc-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<div class="choc-body"><div class="choc-name">'+p.name+'</div>'+
@@ -608,9 +611,11 @@ function renderFeatured(){
 }
 function renderShop(){
   var html = PRODUCTS.map(function(p, i){
-    return '<button class="prod-card" onclick="openProduct(\''+p.key+'\')">'+
+    var soldOut = isProductSoldOut(p);
+    return '<button class="prod-card'+(soldOut?' is-soldout':'')+'" onclick="openProduct(\''+p.key+'\')">'+
       '<div class="prod-img-wrap"><img class="prod-img" src="'+CHOCO_IMAGES[p.key]+'">'+
-      '<span class="prod-rank">Tier '+(i+1)+'</span></div>'+
+      '<span class="prod-rank">Tier '+(i+1)+'</span>'+
+      (soldOut?'<span class="prod-soldout-badge">Sold out</span>':'')+'</div>'+
       '<div class="prod-body"><div class="prod-info"><div class="prod-name">'+p.name+'</div>'+
       '<div class="prod-price">'+ugx(p.price)+'</div>'+
       '<div class="prod-daily">+'+ugx(dailyReturn(p))+' / day</div></div>'+
@@ -879,9 +884,11 @@ function renderWitBankBox(){
 
 function openProduct(key){
   var p = PRODUCTS.filter(function(x){return x.key===key;})[0];
+  var soldOut = isProductSoldOut(p);
   document.getElementById('pdTitle').textContent = p.name;
   document.getElementById('pdBody').innerHTML =
-    '<img src="'+CHOCO_IMAGES[p.key]+'" style="width:100%;height:220px;object-fit:cover;border-radius:20px;margin:6px 20px 0;width:calc(100% - 40px)">'+
+    '<img src="'+CHOCO_IMAGES[p.key]+'" style="width:100%;height:220px;object-fit:cover;border-radius:20px;margin:6px 20px 0;width:calc(100% - 40px)'+(soldOut?';filter:grayscale(.5);opacity:.7':'')+'">'+
+    (soldOut?'<div class="info-box" style="margin:16px 20px 0;background:var(--berry-pale);color:var(--berry)">This chocolate isn\'t available to buy right now — check back soon.</div>':'')+
     '<div class="form-card">'+
       '<div class="kv"><span>Price</span><b>'+ugx(p.price)+'</b></div>'+
       '<div class="kv"><span>Daily reward</span><b style="color:var(--mint)">'+ugx(dailyReturn(p))+'</b></div>'+
@@ -889,11 +896,14 @@ function openProduct(key){
       '<div class="kv" style="border-bottom:none"><span>Total payout</span><b>'+ugx(productExpectedReturn(p))+'</b></div>'+
     '</div>'+
     '<div class="photo-banner pb-sm"><img src="'+CHOCO_BANNERS.snickerscookie+'"></div>'+
-    '<div style="padding:4px 20px 20px"><button class="btn btn-primary btn-block" id="buyProductBtn" onclick="buyProduct(\''+p.key+'\')">Buy this chocolate</button></div>';
+    '<div style="padding:4px 20px 20px">'+(soldOut
+      ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed">Sold out</button>'
+      : '<button class="btn btn-primary btn-block" id="buyProductBtn" onclick="buyProduct(\''+p.key+'\')">Buy this chocolate</button>')+'</div>';
   openOverlay('product');
 }
 async function buyProduct(key){
   var p = PRODUCTS.filter(function(x){return x.key===key;})[0];
+  if(isProductSoldOut(p)){ toast('This chocolate is not available to buy right now'); return; }
   if(STATE.balance < p.price){ toast('Not enough balance — add funds first'); return; }
   var btn = document.getElementById('buyProductBtn');
   if(btn){ if(btn.disabled) return; btn.disabled = true; }

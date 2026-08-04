@@ -99,7 +99,18 @@
 // Check-in, and Bind Bank Card's Save account button (had NO busy state
 // at all before). All three now disable the button and show "Please
 // wait…" until the server responds, then restore the normal label.
-const CACHE = 'chocomcc-shell-v26';
+// v27: fixed a real bug — a product flagged "Coming soon"/sold-out in
+// admin still rendered as a fully live, tappable tile everywhere in the
+// app (Home, Shop, product detail) because the client never read the
+// comingSoon/active flag at all, even though the server already blocked
+// the purchase itself. Sold-out products now show a "Sold out" badge on
+// their Shop tile, are dimmed, are dropped from Home's featured strip
+// entirely, and their detail page shows a disabled "Sold out" button
+// instead of "Buy this chocolate". Server-side: maintenance mode never
+// covered Task Center claims (/team/*) — money could still move during a
+// declared maintenance window — now fixed; and a banned account could
+// still rebind its payout (bank) account — now blocked too.
+const CACHE = 'chocomcc-shell-v27';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -105,7 +105,7 @@ function stripMongoOperators(obj, depth = 0) {
 app.use((req, _res, next) => { try { stripMongoOperators(req.body); } catch (_) {} next(); });
 
 // ── MAINTENANCE GATE ──
-const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/checkin', '/redeem', '/register', '/bank'];
+const MAINTENANCE_BLOCK = ['/account', '/invest', '/deposit', '/withdraw', '/checkin', '/redeem', '/register', '/bank', '/team'];
 const GUARD_EXEMPT = new Set(['/', '/health', '/deposit/callback', '/withdraw/callback']);
 app.use(async (req, res, next) => {
   if (GUARD_EXEMPT.has(req.path)) return next();
@@ -1638,6 +1638,8 @@ app.post('/bank/save', async (req, res) => {
   const phone = cleanPhone(req.body.phone || '');
   if (!holder || !network || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
   try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', message: 'Account access paused' });
     await db.collection('bankAccounts').add({ userId, holder, network, phone, createdAt: FieldValue.serverTimestamp() });
     res.json({ status: 'success' });
   } catch (e) {
