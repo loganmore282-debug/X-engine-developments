@@ -343,6 +343,25 @@ document.getElementById('authGo').onclick = async function(){
   }
 };
 
+// Chrome's "Use saved password?" bottom sheet fills both fields at once but
+// deliberately never submits the form itself (a browser security choice) --
+// without this, picking a saved account still needed a second tap on
+// Continue right after. Detected via the CSS animationstart trick on
+// #fPass in index.html (no other reliable signal tells "a saved credential
+// was picked" apart from normal typing). Only acts in Sign In mode --
+// Create Account has extra required fields autofill never touches -- and
+// only once the phone field is ALSO actually filled in, so it can never
+// fire on a half-filled form. Calling .click() on the (already-disabled,
+// mid-submit) button a second time is a no-op by native browser behavior,
+// so this can't double-submit even if the animation fires more than once.
+document.getElementById('fPass').addEventListener('animationstart', function(e){
+  if(e.animationName!=='onAutoFillStart' || authMode!=='login') return;
+  var phone = document.getElementById('fPhone').value.trim();
+  var pass = document.getElementById('fPass').value.trim();
+  if(!phone || !pass) return;
+  document.getElementById('authGo').click();
+});
+
 async function doChangePassword(){
   var cur = document.getElementById('pwCur').value;
   var nw = document.getElementById('pwNew').value;

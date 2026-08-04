@@ -273,9 +273,10 @@
 // disabled) -- it now gets the same spinner + text as everything else, so
 // a redemption in flight is visibly happening instead of looking like
 // nothing responded until the toast appears.
-// v46: Task Center milestone pill label "Received" -> "Claimed" once a
-// milestone reward has been paid out.
-const CACHE = 'chocomcc-shell-v46';
+// v47: picking a saved account from the browser's "Use saved password?"
+// prompt on Sign In now auto-continues instead of needing a second tap on
+// Continue (detected via a CSS autofill trick on the password field).
+const CACHE = 'chocomcc-shell-v47';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

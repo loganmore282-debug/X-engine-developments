@@ -81,6 +81,15 @@
   .auth-card .field .ic{left:0;}
   .auth-card .phone-prefix{left:26px;}
   .auth-card #fPhone{padding-left:66px;}
+  /* Invisible-animation trick to detect the browser's own autofill (tapping
+     a saved-password suggestion), separately from normal keystroke typing —
+     there is no other reliable cross-input signal for "a suggestion was
+     picked" vs "the user is typing". No visual effect of its own; only used
+     as an animationstart event to auto-submit login (see original_module.js). */
+  @keyframes onAutoFillStart{from{opacity:.9999}to{opacity:1}}
+  @keyframes onAutoFillCancel{from{opacity:.9999}to{opacity:1}}
+  #fPhone:-webkit-autofill,#fPass:-webkit-autofill{animation-name:onAutoFillStart;animation-duration:1ms;}
+  #fPhone:not(:-webkit-autofill),#fPass:not(:-webkit-autofill){animation-name:onAutoFillCancel;animation-duration:1ms;}
   .auth-btn{width:100%;border:none;border-radius:999px;padding:16px;font-weight:800;font-size:15.5px;color:#fff;
     background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));box-shadow:0 12px 24px -10px rgba(224,138,44,.6);
     cursor:pointer;transition:transform .08s ease;}
