@@ -67,7 +67,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 ['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/redeem', '/bank/save',
- '/account/create-profile', '/register']
+ '/account/create-profile', '/register', '/team/milestone/claim']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -872,23 +872,32 @@ app.get('/health', async (_req, res) => {
   const dbOk = await pingDb().catch(() => false);
   res.json({ status: dbOk ? 'ok' : 'degraded', db: dbOk });
 });
+// Both public GET routes below are reachable with no auth at all -- an
+// async throw here with no try/catch would be an unhandled rejection
+// Express never turns into a response (only logged, per the process-level
+// safety net at the top of this file), leaving the request hanging
+// forever instead of failing cleanly. Wrapped so a DB hiccup is a normal
+// 500, not a stuck connection an anonymous caller could pile up for free.
 app.get('/public/settings', async (_req, res) => {
-  const s = await getSettings();
-  res.json({ status: 'success', settings: {
-    withdrawFeePct: s.withdrawFeePct, minWithdraw: s.minWithdraw, minDeposit: s.minDeposit,
-    dailyCheckin: s.dailyCheckin, welcomeBonus: s.welcomeBonus, commL1: s.commL1, commL2: s.commL2, commL3: s.commL3,
-    returnMultiple: s.returnMultiple, cycleDays: s.cycleDays, maxWithdrawalsPerDay: s.maxWithdrawalsPerDay,
-    maintenanceMode: !!s.maintenanceMode, maintenanceMsg: s.maintenanceMsg || '',
-    requireInvestToWithdraw: s.requireInvestToWithdraw !== false,
-    annEnabled: !!s.annEnabled, annTitle: s.annTitle || '', annBody: s.annBody || '',
-    annCtaLabel: s.annCtaLabel || '', annCtaUrl: s.annCtaUrl || '', announcementBg: s.announcementBg || '',
-    supportTelegram: s.supportTelegram || '',
-    telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
-    rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || ''
-  } });
+  try {
+    const s = await getSettings();
+    res.json({ status: 'success', settings: {
+      withdrawFeePct: s.withdrawFeePct, minWithdraw: s.minWithdraw, minDeposit: s.minDeposit,
+      dailyCheckin: s.dailyCheckin, welcomeBonus: s.welcomeBonus, commL1: s.commL1, commL2: s.commL2, commL3: s.commL3,
+      returnMultiple: s.returnMultiple, cycleDays: s.cycleDays, maxWithdrawalsPerDay: s.maxWithdrawalsPerDay,
+      maintenanceMode: !!s.maintenanceMode, maintenanceMsg: s.maintenanceMsg || '',
+      requireInvestToWithdraw: s.requireInvestToWithdraw !== false,
+      annEnabled: !!s.annEnabled, annTitle: s.annTitle || '', annBody: s.annBody || '',
+      annCtaLabel: s.annCtaLabel || '', annCtaUrl: s.annCtaUrl || '', announcementBg: s.announcementBg || '',
+      supportTelegram: s.supportTelegram || '',
+      telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
+      rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || ''
+    } });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });
 app.get('/public/products', async (_req, res) => {
-  res.json({ status: 'success', products: await getProducts() });
+  try { res.json({ status: 'success', products: await getProducts() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load products' }); }
 });
 app.get('/public/banners', async (_req, res) => {
   const overrides = await getBannerOverrides();
@@ -1932,7 +1941,8 @@ app.post('/admin/audit-log', async (req, res) => {
 // ═══════════════════════════════════════════
 app.get('/admin/settings', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  res.json({ status: 'success', settings: await getSettings() });
+  try { res.json({ status: 'success', settings: await getSettings() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -1948,10 +1958,12 @@ app.post('/admin/settings/update', async (req, res) => {
 });
 app.get('/admin/banners', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const overrides = await getBannerOverrides();
-  const banners = {};
-  for (const k of BANNER_KEYS) banners[k] = overrides[k] || null;
-  res.json({ status: 'success', banners });
+  try {
+    const overrides = await getBannerOverrides();
+    const banners = {};
+    for (const k of BANNER_KEYS) banners[k] = overrides[k] || null;
+    res.json({ status: 'success', banners });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/banners/set', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -1986,7 +1998,8 @@ app.post('/admin/banners/clear', async (req, res) => {
 });
 app.get('/admin/products', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  res.json({ status: 'success', products: await getProducts() });
+  try { res.json({ status: 'success', products: await getProducts() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/products/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
