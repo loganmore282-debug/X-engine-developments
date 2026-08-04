@@ -273,10 +273,8 @@
 // disabled) -- it now gets the same spinner + text as everything else, so
 // a redemption in flight is visibly happening instead of looking like
 // nothing responded until the toast appears.
-// v48: added Open Graph / Twitter Card link-preview tags + link-preview.jpg,
-// so sharing choco-mcc.com in WhatsApp/Telegram/etc. shows a real image
-// instead of a bare link.
-const CACHE = 'chocomcc-shell-v48';
+// v49: Account tab's "History" menu tile + screen title renamed to "Ledger".
+const CACHE = 'chocomcc-shell-v49';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
