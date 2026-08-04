@@ -273,10 +273,10 @@
 // disabled) -- it now gets the same spinner + text as everything else, so
 // a redemption in flight is visibly happening instead of looking like
 // nothing responded until the toast appears.
-// v47: picking a saved account from the browser's "Use saved password?"
-// prompt on Sign In now auto-continues instead of needing a second tap on
-// Continue (detected via a CSS autofill trick on the password field).
-const CACHE = 'chocomcc-shell-v47';
+// v48: added Open Graph / Twitter Card link-preview tags + link-preview.jpg,
+// so sharing choco-mcc.com in WhatsApp/Telegram/etc. shows a real image
+// instead of a bare link.
+const CACHE = 'chocomcc-shell-v48';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
