@@ -2208,11 +2208,27 @@ app.post('/admin/user/detail', async (req, res) => {
     res.json({ status: 'success', user: { id: snap.id, ...snap.data() }, investments, transactions, bankAccounts });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// FIXED BUG: an owner reported a manual admin credit landing TWICE on the
+// same user (unclear whether it was a network retry or a double-tap in the
+// admin panel -- and it doesn't actually matter which, since neither this
+// endpoint nor the panel's Credit button had ANY protection against it).
+// Same debounce pattern already used for /deposit/marzpay: the check-and-set
+// below runs synchronously with no await in between, so it's safe even
+// against two requests landing genuinely back-to-back, not just a slow
+// double-click. Paired with a client-side fix (the Credit/Debit buttons
+// now disable themselves immediately instead of staying clickable while
+// the first request is still in flight).
+const _adminCreditDebounce = new Map();
+const _adminDebitDebounce = new Map();
 app.post('/admin/deposit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, amount, note } = req.body;
   const amt = parseFloat(amount || 0);
   if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  const lastCredit = _adminCreditDebounce.get(userId) || 0;
+  if (Date.now() - lastCredit < 10000)
+    return res.status(429).json({ status: 'error', message: 'This user was just credited seconds ago. Wait a moment before crediting again, to rule out a double-submit.' });
+  _adminCreditDebounce.set(userId, Date.now());
   try {
     const { date, time } = nowStr();
     await db.runTransaction(async t => {
@@ -2244,6 +2260,10 @@ app.post('/admin/debit', async (req, res) => {
   const { userId, amount, note } = req.body;
   const amt = Math.abs(parseFloat(amount || 0));
   if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  const lastDebit = _adminDebitDebounce.get(userId) || 0;
+  if (Date.now() - lastDebit < 10000)
+    return res.status(429).json({ status: 'error', message: 'This user was just debited seconds ago. Wait a moment before debiting again, to rule out a double-submit.' });
+  _adminDebitDebounce.set(userId, Date.now());
   try {
     let newBal = 0;
     const { date, time } = nowStr();
