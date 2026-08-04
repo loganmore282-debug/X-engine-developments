@@ -8,7 +8,8 @@ var DEFAULT_SETTINGS = {
   returnMultiple: 20, cycleDays: 180,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
-  rulesText: '', brandTagline: '', aboutText: ''
+  rulesText: '', brandTagline: '', aboutText: '',
+  homeBannerTitle: '', homeBannerText: ''
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Mirrors server.js's DEFAULT_PRODUCTS exactly (20x return, 180-day cycle,
@@ -668,7 +669,13 @@ function onFbAuthChanged(user){
 /* ====================== RENDER ====================== */
 function renderAll(){
   var s = STATE;
-  document.getElementById('homeBanner').innerHTML = '<img src="'+CHOCO_BANNERS.barstack+'">';
+  var hbSett = getSettings();
+  var hbTitle = (hbSett.homeBannerTitle||'').trim(), hbText = (hbSett.homeBannerText||'').trim();
+  document.getElementById('homeBanner').innerHTML = '<img src="'+CHOCO_BANNERS.barstack+'">'+
+    ((hbTitle||hbText) ? ('<div class="pb-tint pb-text">'+
+      (hbTitle?'<b class="pb-tint-title">'+esc(hbTitle)+'</b>':'')+
+      (hbText?'<span>'+esc(hbText)+'</span>':'')+
+    '</div>') : '');
   document.getElementById('teamBanner').innerHTML = '<img src="'+CHOCO_BANNERS.giftbox+'">';
   document.getElementById('depositBanner').innerHTML = '<img src="'+CHOCO_BANNERS.basket+'">';
   document.getElementById('withdrawBanner').innerHTML = '<img src="'+CHOCO_BANNERS.marscrate+'">';
@@ -1208,6 +1215,16 @@ async function doDeposit(){
   if(r.status!=='success'){ toast(r.message||'Could not start the payment'); return; }
   document.getElementById('depAmt').value='';
   openDepositStatus(r.depositId, r.reference, phone);
+}
+// Tapping a quick-amount chip must feel identical to typing it: fill the
+// field AND recompute the fee/net right away. The bug the owner hit was
+// the chip only ever setting witAmt.value with no matching input event, so
+// the fee/net calc row stayed frozen at UGX 0 (looked like the tap did
+// nothing / "swapped back to default") until the user typed something.
+function witQuickAmt(v){
+  var amt = (v==='max') ? Math.max(0, Math.floor(STATE.balance||0)) : v;
+  document.getElementById('witAmt').value = amt;
+  renderWitCalc();
 }
 function renderWitCalc(){
   var sett = getSettings();

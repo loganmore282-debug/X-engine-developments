@@ -232,6 +232,9 @@
   .photo-banner .pb-tint{position:absolute;inset:0;background:linear-gradient(0deg,rgba(36,19,11,.72),rgba(36,19,11,0) 65%);display:flex;align-items:flex-end;padding:14px 18px;}
   .photo-banner .pb-tint span{color:#fff;font-weight:800;font-size:14px;letter-spacing:.2px;}
   .photo-banner .pb-tint.pb-btn-row{background:linear-gradient(0deg,rgba(36,19,11,.82),rgba(36,19,11,.1));align-items:center;justify-content:space-between;gap:10px;padding:0 16px;}
+  .photo-banner .pb-tint.pb-text{flex-direction:column;align-items:flex-start;gap:3px;}
+  .photo-banner .pb-tint-title{color:#fff;font-weight:800;font-size:18px;letter-spacing:.1px;}
+  .photo-banner .pb-tint.pb-text span{font-weight:600;font-size:13px;opacity:.92;}
   .pb-action-btn{flex:1;background:rgba(255,255,255,.16);backdrop-filter:blur(2px);border:1.5px solid rgba(255,255,255,.4);
     color:#fff;font-weight:800;font-size:12.5px;padding:12px 10px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:6px;}
   .photo-banner.pb-flush{margin:0;border-radius:0;}
@@ -724,6 +727,11 @@
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
       <input class="famt" id="witAmt" type="number" placeholder="0" oninput="renderWitCalc()">
+      <div class="quick-amt-row">
+        <button type="button" class="quick-amt-chip" onclick="witQuickAmt(20000)">UGX 20,000</button>
+        <button type="button" class="quick-amt-chip" onclick="witQuickAmt(50000)">UGX 50,000</button>
+        <button type="button" class="quick-amt-chip" onclick="witQuickAmt('max')">Max</button>
+      </div>
       <div class="calc-row"><span>Service fee (<span id="witFeePctLabel">19%</span>)</span><span id="witFee">UGX 0</span></div>
       <div class="calc-row"><span>You receive</span><span id="witNet">UGX 0</span></div>
       <button class="btn btn-berry btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Cash Out</button>

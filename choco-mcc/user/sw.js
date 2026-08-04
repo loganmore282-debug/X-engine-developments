@@ -280,7 +280,16 @@
 // itself, so an action already in flight gets shut down immediately, no
 // reload needed. (3) A banned account signing in now sees "Account locked"
 // right on the sign-in form instead of getting into the app at all.
-const CACHE = 'chocomcc-shell-v50';
+// v51: (1) Cash Out screen gets tap-to-fill quick-amount chips (UGX
+// 20,000 / UGX 50,000 / Max) -- the bug was that a chip only ever set
+// witAmt's value with no matching input event, so the fee/net calc row
+// stayed frozen at UGX 0 after a tap (looked like it "swapped back to
+// default"); tapping now recomputes the fee/net immediately so the user
+// can go straight to Request Cash Out. (2) Home screen banner now
+// supports an admin-set title + sentence overlaid on the image (Admin ->
+// Settings -> Home screen banner), server-side setting, blank by default
+// so nothing shows unless the owner adds text.
+const CACHE = 'chocomcc-shell-v51';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

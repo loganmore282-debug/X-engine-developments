@@ -155,7 +155,8 @@ const DEFAULT_SETTINGS = {
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
-  rulesText: '', brandTagline: '', aboutText: ''
+  rulesText: '', brandTagline: '', aboutText: '',
+  homeBannerTitle: '', homeBannerText: ''
 };
 // Each tier pays exactly 20x its price over a fixed 180-day cycle (both
 // stamped explicitly per product, not left to the global returnMultiple/
@@ -965,7 +966,8 @@ app.get('/public/settings', async (_req, res) => {
       annCtaLabel: s.annCtaLabel || '', annCtaUrl: s.annCtaUrl || '', announcementBg: s.announcementBg || '',
       supportTelegram: s.supportTelegram || '',
       telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
-      rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || ''
+      rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || '',
+      homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || ''
     } });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });

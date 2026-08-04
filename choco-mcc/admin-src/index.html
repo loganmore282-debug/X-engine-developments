@@ -1273,6 +1273,14 @@ async function renderSettings(){
       <label>About text (shown on the app's About page)</label>
       <textarea id="abText" rows="8" placeholder="Describe ChocoMCC for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
       <button class="btn block" id="saveAbout">Save about page</button>
+    </div>
+
+    <h2 class="sec">Home screen banner</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Optional title + sentence shown over the Home screen's banner image. Leave both blank to show just the image, no text.</p>
+      <label>Title</label><input id="hbTitle" value="${esc(v('homeBannerTitle',''))}" placeholder="e.g. Welcome to ChocoMCC">
+      <label>Sentence</label><input id="hbText" value="${esc(v('homeBannerText',''))}" placeholder="e.g. Grow your money with chocolate.">
+      <button class="btn block" id="saveHomeBanner">Save home banner text</button>
     </div>`;
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
@@ -1319,6 +1327,10 @@ async function renderSettings(){
   $('saveAbout').addEventListener('click', async()=>{
     const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'About saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveHomeBanner').addEventListener('click', async()=>{
+    const upd = { homeBannerTitle:$('hbTitle').value.trim(), homeBannerText:$('hbText').value.trim() };
+    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Home banner saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }
 
