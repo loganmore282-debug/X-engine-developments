@@ -284,10 +284,10 @@ async function api(path, body, method){
     if (r.status === 401 && path !== '/admin/login' && path !== '/admin/check-key') {
       clearSession();
       $('shell').classList.add('hidden'); $('loginView').classList.remove('hidden');
-      $('loginErr').textContent = 'Your session ended — sign in again.';
+      $('loginErr').textContent = 'Your session ended. Sign in again.';
     }
     return d;
-  }catch(e){ return { status:'error', message: e.name==='TimeoutError'?'Server is waking up — try again in a moment.':'Network error' }; }
+  }catch(e){ return { status:'error', message: e.name==='TimeoutError'?'Server is waking up. Try again in a moment.':'Network error' }; }
 }
 
 // ── LOGIN ──
@@ -303,7 +303,7 @@ async function doLogin(){
     const d = await r.json();
     if(d.status==='success'){ storeSession(d.token, d.username, d.role); openShell(); }
     else { $('loginErr').textContent = d.message || 'Invalid credentials.'; }
-  }catch(e){ $('loginErr').textContent = 'Network error — try again.'; }
+  }catch(e){ $('loginErr').textContent = 'Network error. Try again.'; }
   btn.disabled=false; btn.textContent='Sign in';
 }
 $('loginBtn').addEventListener('click', doLogin);
@@ -358,7 +358,7 @@ function setPushUIState(on){
   const btn = $('pushBtn'); if (!btn) return;
   btn.classList.toggle('ok', on); btn.classList.toggle('ghost', !on);
   btn.textContent = on ? 'Notify: on' : 'Notify';
-  btn.title = on ? 'Push notifications on — click to disable' : 'Enable push notifications';
+  btn.title = on ? 'Push notifications on, click to disable' : 'Enable push notifications';
 }
 async function enablePush(){
   if (!VAPID_KEY) return toast('Push notifications are not configured yet', 'err');
@@ -489,11 +489,11 @@ async function renderAnalytics(){
   const maxHour = Math.max(1, ...a.byHour.map(h=>Math.max(h.depAmt,h.witAmt)));
   const maxDay  = Math.max(1, ...a.byDay.map(d=>Math.max(d.dep,d.wit)));
   const hourChart = `<div class="chart">${a.byHour.map(h=>`
-     <div class="chart-col" title="${h12(h.h)} — deposits ${ugx(h.depAmt)} (${h.depCnt}), withdrawals ${ugx(h.witAmt)} (${h.witCnt})">
+     <div class="chart-col" title="${h12(h.h)}: deposits ${ugx(h.depAmt)} (${h.depCnt}), withdrawals ${ugx(h.witAmt)} (${h.witCnt})">
        <div class="chart-bars"><i style="height:${Math.round(h.depAmt/maxHour*100)}%;background:var(--ok)"></i><i style="height:${Math.round(h.witAmt/maxHour*100)}%;background:var(--danger)"></i></div>
        <div class="chart-x">${h.h}</div></div>`).join('')}</div>`;
   const dayChart = `<div class="chart">${a.byDay.map(d=>`
-     <div class="chart-col" title="${d.day} — deposits ${ugx(d.dep)}, withdrawals ${ugx(d.wit)}, new users ${d.users}">
+     <div class="chart-col" title="${d.day}: deposits ${ugx(d.dep)}, withdrawals ${ugx(d.wit)}, new users ${d.users}">
        <div class="chart-bars"><i style="height:${Math.round(d.dep/maxDay*100)}%;background:var(--ok)"></i><i style="height:${Math.round(d.wit/maxDay*100)}%;background:var(--danger)"></i></div>
        <div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>`;
   const bandCard=(key,label)=>{const b=a.bands[key]||{dep:0,wit:0};const on=a.busiestBand===key;
@@ -504,7 +504,7 @@ async function renderAnalytics(){
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
     <div class="panel-card">
       <h2 class="sec" style="margin-top:0">Tomorrow's estimate</h2>
-      <p class="muted" style="margin-top:0">Not a guarantee — read member by member from real platform state, not just a trend line.</p>
+      <p class="muted" style="margin-top:0">Not a guarantee, read member by member from real platform state, not just a trend line.</p>
       <div class="cards">
         <div class="stat"><div class="n" style="color:var(--danger)">${ugx(fw.estimate)}</div><div class="l">Estimated withdrawals to process tomorrow</div>
           <div class="muted" style="margin-top:4px;font-size:11px">${fw.likelyWithdrawerCount||0} chocolate(s) likely maturing &nbsp;·&nbsp; trend says ${ugx(fw.trendReference)}</div></div>
@@ -523,7 +523,7 @@ async function renderAnalytics(){
       <div class="stat"><div class="n">${ugx(k.teamRewardsPaid)}</div><div class="l">Task Center rewards paid</div></div>
     </div>
     <div class="panel-card">
-      <h2 class="sec" style="margin-top:0">When people transact — by hour of day</h2>
+      <h2 class="sec" style="margin-top:0">When people transact, by hour of day</h2>
       <div class="legend"><span><i style="background:var(--ok)"></i>Deposits</span><span><i style="background:var(--danger)"></i>Withdrawals</span></div>
       ${hourChart}
       <p class="muted" style="margin:10px 0 0">Busiest deposit time: <b>${h12(a.peakDepositHour)}</b> &nbsp;·&nbsp; busiest withdrawal time: <b>${h12(a.peakWithdrawHour)}</b></p>
@@ -578,7 +578,7 @@ async function renderUsers(){
         withdrawal_no_gateway_ref:'Withdrawal has no gateway reference',withdrawal_stuck:'Withdrawal stuck pending too long'};
       openModal(`<h3>Integrity audit</h3>
         <div class="muted" style="margin-bottom:10px">${d.usersChecked} user(s) checked · ${fdate(d.ranAt)}</div>
-        ${d.healthy?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear — every balance matches its ledger. No duplicates, no stuck payouts.</div>`
+        ${d.healthy?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance matches its ledger. No duplicates, no stuck payouts.</div>`
         :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${d.alertCount} issue(s) found</div>`+
           d.alerts.map(a=>`<div class="kv"><span class="k">${K[a.kind]||a.kind}${a.phone?' · '+esc(a.phone):''}</span>
             <span>${a.kind==='balance_mismatch'?`wallet ${ugx(a.balance)} vs ledger ${ugx(a.ledger)} (diff ${ugx(a.diff)})`
@@ -609,7 +609,7 @@ function drawUsers(){
     ? `<tr><td colspan="5" class="empty">Showing first 500 of ${_users.length}. Search by phone or code to find anyone.</td></tr>` : '';
   $('userRows').innerHTML = (list.length ? list.map(u=>`
     <tr class="clickable" data-uid="${esc(u.id)}">
-      <td><b>${esc(u.phone||'—')}</b></td><td>${esc(u.referralCode||'—')}</td>
+      <td><b>${esc(u.phone||'Not set')}</b></td><td>${esc(u.referralCode||'Not set')}</td>
       <td>${ugx(u.walletBalance)}</td><td>${ugx(u.totalInvested)}</td>
       <td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td>
     </tr>`).join('') : '<tr><td colspan="5" class="empty">No matching users</td></tr>') + note;
@@ -621,14 +621,14 @@ async function openUser(uid){
   const u=r.user;
   openModal(`
     <h3>${esc(u.phone||'')}</h3>
-    <div class="muted" style="margin-bottom:10px">Referral code: ${esc(u.referralCode||'—')}</div>
+    <div class="muted" style="margin-bottom:10px">Referral code: ${esc(u.referralCode||'Not set')}</div>
     <div class="kv"><span class="k">Wallet balance</span><b>${ugx(u.walletBalance)}</b></div>
     <div class="kv"><span class="k">Deposited</span><span>${ugx(u.totalDeposited)}</span></div>
     <div class="kv"><span class="k">Invested</span><span>${ugx(u.totalInvested)}</span></div>
     <div class="kv"><span class="k">Withdrawn</span><span>${ugx(u.totalWithdrawn)}</span></div>
     <div class="kv"><span class="k">Cashback earned</span><span>${ugx(u.totalEarned)}</span></div>
     <div class="kv"><span class="k">Team commission</span><span>${ugx(u.teamCommission)}</span></div>
-    <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'—')}</span></div>
+    <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
     <div class="kv"><span class="k">Check-in streak</span><span>${u.checkinStreak||0}</span></div>
     ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned</div>`:''}
@@ -669,13 +669,13 @@ async function openUser(uid){
     const b=$('pwBtn'); b.disabled=true; b.textContent='Resetting…';
     const d=await api('/admin/user/reset-password',{userId:uid,newPassword:np});
     b.disabled=false; b.textContent='Reset password';
-    toast(d.status==='success'?'Password reset — give it to the user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    toast(d.status==='success'?'Password reset, give it to the user':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success') $('pwNew').value='';
   });
   $('delBtn')?.addEventListener('click', async()=>{
-    const typed = prompt(`This PERMANENTLY deletes ${u.phone} and ALL their data — deposits, withdrawals, chocolates, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
+    const typed = prompt(`This PERMANENTLY deletes ${u.phone} and ALL their data: deposits, withdrawals, chocolates, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
     if (typed === null) return;
-    if (typed.trim() !== 'DELETE') return toast('Not deleted — you must type DELETE exactly','err');
+    if (typed.trim() !== 'DELETE') return toast('Not deleted, you must type DELETE exactly','err');
     const b=$('delBtn'); b.disabled=true; b.textContent='Deleting…';
     const d=await api('/admin/user/delete',{userId:uid,confirm:'DELETE'});
     toast(d.status==='success'?'Account and all data deleted':(d.message||'Failed'), d.status==='success'?'ok':'err');
@@ -690,7 +690,7 @@ async function syncMarzPay(btn, afterFn){
   const d = await api('/admin/payments/sync');
   btn.disabled=false; btn.textContent=t;
   if(d.status==='success'){
-    toast(d.settled>0 ? `Synced — settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced — nothing was waiting on MarzPay', 'ok');
+    toast(d.settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced, nothing was waiting on MarzPay', 'ok');
     afterFn();
   } else toast(d.message||'Sync failed','err');
 }
@@ -710,7 +710,7 @@ async function renderDeposits(){
     <div class="muted"><b>${grp('matched')}</b> processed all-time · ${ugx(r.processedAmount||0)} received</div></div>
     <div class="chart">${dpbd.map(d=>`<div class="chart-col" title="${dayLabel(d.day)}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/dMaxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
     <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Deposits processed</th><th>Amount received</th></tr></thead>
-    <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'—'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+    <tbody>${dRows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync MarzPay</button></div>
@@ -737,9 +737,9 @@ function drawDeps(){
     const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed';
     const code = u(d.userId).referralCode;
     return `<tr><td>${fdate(d.createdAt)}</td>
-      <td>${esc(d.accountPhone||d.phone||'—')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
+      <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
       <td><b>${ugx(d.amount)}</b></td>
-      <td>${esc(d.ref||'—')}</td>
+      <td>${esc(d.ref||'Not set')}</td>
       <td>${statusPill(d.status)}</td>
       <td>${stuck?`<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`:''}</td></tr>`;
   }).join(''):'<tr><td colspan="6" class="empty">No deposits</td></tr>';
@@ -766,11 +766,11 @@ async function renderWithdrawals(){
     <div class="muted"><b>${counts.processed||0}</b> processed all-time · ${ugx(r.processedAmount||0)} paid out</div></div>
     <div class="chart">${pbd.map(d=>`<div class="chart-col" title="${dayLabel(d.day)}: ${d.count} processed · ${ugx(d.amount)}"><div class="chart-bars"><i style="height:${Math.round(d.count/maxP*100)}%;background:var(--ok)"></i></div><div class="chart-x">${d.day.slice(8)}</div></div>`).join('')}</div>
     <div class="table-scroll" style="max-height:340px;margin-top:10px"><table><thead><tr><th>Day</th><th>Withdrawals processed</th><th>Amount paid</th></tr></thead>
-    <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'—'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
+    <tbody>${rows.map(d=>`<tr><td>${dayLabel(d.day)}</td><td><b style="font-size:16px">${d.count}</b></td><td>${d.amount?ugx(d.amount):'Not set'}</td></tr>`).join('')}</tbody></table></div></div>` : '';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
       <button class="btn sm ghost" id="witSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it — nothing reaches MarzPay on its own. Tap <b>Send via MarzPay</b> to release it.</p>
+    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own. Tap <b>Send via MarzPay</b> to release it.</p>
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
@@ -796,7 +796,7 @@ function drawWits(){
   $('witRows').innerHTML = list.length?list.map(w=>{
     const code = u(w.userId).referralCode;
     return `<tr><td>${fdate(w.createdAt)}</td><td>${esc(w.holder||'')}${code?`<br><span class="muted">${esc(code)}</span>`:''}<br><span class="muted">${esc(w.phone||'')}</span></td>
-    <td>${ugx(w.amount)}</td><td><b>${ugx(w.net)}</b></td><td>${esc(w.network||'—')}</td>
+    <td>${ugx(w.amount)}</td><td><b>${ugx(w.net)}</b></td><td>${esc(w.network||'Not set')}</td>
     <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`:w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`:''}</td></tr>`;
   }).join(''):'<tr><td colspan="7" class="empty">No withdrawals</td></tr>';
@@ -824,7 +824,7 @@ async function renderProducts(){
           <div class="pr">Pays ${ugx(p.expectedReturn)}</div>
           <div class="pa"><button class="btn sm ghost" data-edit="${esc(p.key)}">Edit</button><button class="btn sm danger" data-del="${esc(p.key)}">Delete</button></div>
         </div>
-      </div>`).join(''):'<div class="empty">No products yet — the app catalogue reverts to defaults until you add one.</div>'}</div>`;
+      </div>`).join(''):'<div class="empty">No products yet. The app catalogue reverts to defaults until you add one.</div>'}</div>`;
   $('newProd').addEventListener('click',()=>editProduct(null,list.length));
   $('clearProd').addEventListener('click',async()=>{
     if(!confirm('Delete EVERY product? The app catalogue reverts to the built-in defaults until you add new ones. This cannot be undone.'))return;
@@ -842,7 +842,7 @@ function editProduct(p, order){
   openModal(`
     <h3>${p.key?'Edit product':'New product'}</h3>
     <label>Name</label><input id="pLabel" value="${esc(p.name||p.label||'')}" placeholder="e.g. Ferrero Rocher">
-    <label>Key (slug, lowercase — leave blank to auto)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="rocher" ${p.key?'disabled':''}>
+    <label>Key (slug, lowercase, leave blank to auto)</label><input id="pKey" value="${esc(p.key||'')}" placeholder="rocher" ${p.key?'disabled':''}>
     <div class="row">
       <div><label>Price (UGX)</label><input id="pPrice" type="number" value="${p.price||''}" placeholder="500000"></div>
       <div><label>Total payout (UGX)</label><input id="pRet" type="number" value="${p.expectedReturn||''}" placeholder="1500000"></div>

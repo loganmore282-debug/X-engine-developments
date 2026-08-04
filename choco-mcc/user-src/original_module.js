@@ -50,7 +50,7 @@ async function api(path, body, method, retry){
   var attempts = retry ? delays.length : 1;
   for(var i=0; i<attempts; i++){
     if(i>0){
-      if(!_wokenUp) toast('Waking up the server — this can take a moment…');
+      if(!_wokenUp) toast('Waking up the server, this can take a moment…');
       await new Promise(function(r){ setTimeout(r, delays[i]); });
     }
     var headers = {};
@@ -65,7 +65,7 @@ async function api(path, body, method, retry){
       _wokenUp = true;
       return data;
     }catch(e){
-      if(i === attempts-1) return { status:'error', message:'Network error — check your connection' };
+      if(i === attempts-1) return { status:'error', message:'Network error. Check your connection' };
       // else: fall through and retry
     }
   }
@@ -97,7 +97,7 @@ async function refreshFromServer(){
     // their connection or the app itself is broken.
     toast(accR.message || 'ChocoMCC is under maintenance. Please check back shortly.');
   } else {
-    toast('Could not reach the server — showing your last known balance');
+    toast('Could not reach the server, showing your last known balance');
   }
   if(invR.status==='success'){
     STATE.investments = invR.investments.map(function(iv){
@@ -233,7 +233,7 @@ document.getElementById('authGo').onclick = async function(){
     var passConfirm = document.getElementById('fPassConfirm').value.trim();
     if(pass !== passConfirm){ toast('Passwords do not match'); return; }
   }
-  if(!window.fbSignIn){ toast('Still connecting — try again in a moment'); return; }
+  if(!window.fbSignIn){ toast('Still connecting, try again in a moment'); return; }
   var email = phoneToEmail(phone);
   var btn = this, label = btn.textContent;
   btn.disabled = true; btn.textContent = 'Please wait…';
@@ -260,28 +260,28 @@ document.getElementById('authGo').onclick = async function(){
       var cpR = await api('/account/create-profile', { phone: phone }, 'POST', true);
       // FIXED BUG: these two results used to be ignored entirely — if either
       // failed (most commonly maintenance mode, which blocks both), the code
-      // fell straight through to "Account created — welcome!" anyway. The
+      // fell straight through to "Account created, welcome!" anyway. The
       // Firebase login this created was real, but no ChocoMCC profile ever
       // existed behind it — even after maintenance lifted, /account came
       // back "User not found" for that person permanently. Now a failure
       // here is treated as a real registration failure, not silently waved
       // through.
-      if(cpR.status!=='success'){ toast(cpR.message||'Could not create your account right now — try again shortly'); return; }
+      if(cpR.status!=='success'){ toast(cpR.message||'Could not create your account right now, try again shortly'); return; }
       var regR = await api('/register', { referralCode: ref }, 'POST', true);
-      if(regR.status!=='success'){ toast(regR.message||'Could not finish setting up your account — try again shortly'); return; }
+      if(regR.status!=='success'){ toast(regR.message||'Could not finish setting up your account, try again shortly'); return; }
       await refreshFromServer();
-      toast('Account created — welcome!');
+      toast('Account created, welcome!');
     } else {
       cred = await window.fbSignIn(email, pass);
       STATE = loadState(cred.user.uid) || freshState(cred.user.uid, 'Member', phone);
       saveState();
       await refreshFromServer();
-      toast('Signed in successfully — welcome back!');
+      toast('Signed in successfully, welcome back!');
     }
     enterApp();
     if(authMode==='register') maybeOfferInstallAfterSignup();
   } catch(e){
-    var msg = 'Something went wrong — try again';
+    var msg = 'Something went wrong, try again';
     if(e.code==='auth/email-already-in-use'){
       // Was just a silent "sign up went nowhere" — the phone is genuinely
       // already an account. Switch to Sign In with the phone kept, so
@@ -290,7 +290,7 @@ document.getElementById('authGo').onclick = async function(){
       setAuthMode('login');
       document.getElementById('fPhone').value = phone;
       document.getElementById('fPass').value = '';
-      toast('This phone number already has an account — sign in instead');
+      toast('This phone number already has an account, sign in instead');
       return;
     }
     else if(e.code==='auth/invalid-credential' || e.code==='auth/wrong-password' || e.code==='auth/user-not-found') msg = 'Incorrect phone or password';
@@ -310,7 +310,7 @@ async function doChangePassword(){
   if(!cur || !nw){ toast('Fill in both password fields'); return; }
   if(nw.length < 6){ toast('New password must be at least 6 characters'); return; }
   if(nw !== nw2){ toast('The new passwords do not match'); return; }
-  if(!window.fbChangePassword){ toast('Still connecting — try again in a moment'); return; }
+  if(!window.fbChangePassword){ toast('Still connecting, try again in a moment'); return; }
   var btn = document.getElementById('changePassBtn'), label = btn.textContent;
   btn.disabled = true; btn.textContent = 'Please wait…';
   try{
@@ -321,7 +321,7 @@ async function doChangePassword(){
     toast('Password updated');
     closeOverlay();
   }catch(e){
-    var msg = 'Could not update password — try again';
+    var msg = 'Could not update password, try again';
     if(e.code==='auth/wrong-password' || e.code==='auth/invalid-credential') msg = 'Current password is incorrect';
     else if(e.code==='auth/weak-password') msg = 'Password must be at least 6 characters';
     toast(msg);
@@ -520,7 +520,7 @@ function renderAll(){
   document.getElementById('bindbankBanner').innerHTML = '<img src="'+CHOCO_BANNERS.factory1+'">';
   document.getElementById('shopBannerImg').src = CHOCO_BANNERS.darkbar;
   document.getElementById('accountBanner').src = CHOCO_BANNERS.rocherstack;
-  document.getElementById('acctPhone').textContent = s.phone || '—';
+  document.getElementById('acctPhone').textContent = s.phone || 'Not set';
   document.getElementById('acctBalNum').textContent = ugx(s.balance);
   document.getElementById('acctWitNum').textContent = ugx(s.totalWithdrawn);
   document.getElementById('teamLink').textContent = 'https://choco-mcc.com/?reg='+s.referralCode;
@@ -538,7 +538,7 @@ function renderAll(){
   document.getElementById('checkinAmt').textContent = sett.dailyCheckin;
   var done = s.lastCheckin === serverTodayKey();
   var btn = document.getElementById('checkinBtn');
-  btn.innerHTML = done ? '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12l4.5 4.5L19.5 6"/></svg>Claimed today</span>' : ('Check in — UGX ' + sett.dailyCheckin);
+  btn.innerHTML = done ? '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12l4.5 4.5L19.5 6"/></svg>Claimed today</span>' : ('Check in for UGX ' + sett.dailyCheckin);
   btn.disabled = done; btn.style.opacity = done?'.55':'1';
   document.getElementById('streakNum').textContent = s.checkinStreak;
   document.getElementById('checkinRing').style.setProperty('--pct', Math.min(100,(s.checkinStreak%7)/7*100)+'%');
@@ -594,7 +594,7 @@ async function loadTaskCenter(){
   if(!box) return;
   box.innerHTML = spinnerHtml();
   var r = await api('/team/stats');
-  if(r.status!=='success' || !r.milestones){ box.innerHTML = '<div class="empty">Could not load the Task Center — pull down to try again.</div>'; return; }
+  if(r.status!=='success' || !r.milestones){ box.innerHTML = '<div class="empty">Could not load the Task Center. Pull down to try again.</div>'; return; }
   box.innerHTML = r.milestones.map(renderMilestoneCard).join('');
 }
 async function claimMilestone(btn, target, type){
@@ -648,7 +648,7 @@ function investmentStats(){
 }
 function renderMyChoc(){
   var rows = investmentStats();
-  if(!rows.length){ document.getElementById('mychocList').innerHTML = '<div class="empty">No chocolates running yet — buy one from the Shop to start earning.</div>'; return; }
+  if(!rows.length){ document.getElementById('mychocList').innerHTML = '<div class="empty">No chocolates running yet. Buy one from the Shop to start earning.</div>'; return; }
   document.getElementById('mychocList').innerHTML = rows.map(function(r){
     return '<div class="bank-row">'+
       '<img src="'+CHOCO_IMAGES[r.inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
@@ -661,7 +661,7 @@ function renderEarnings(){
   var rows = investmentStats();
   var total = rows.reduce(function(s,r){ return s+r.accrued; }, 0);
   document.getElementById('earningsTotal').textContent = ugx(total);
-  if(!rows.length){ document.getElementById('earningsList').innerHTML = '<div class="empty">No chocolates running yet — buy one from the Shop to start earning.</div>'; return; }
+  if(!rows.length){ document.getElementById('earningsList').innerHTML = '<div class="empty">No chocolates running yet. Buy one from the Shop to start earning.</div>'; return; }
   document.getElementById('earningsList').innerHTML = rows.map(function(r){
     return '<div class="bank-row">'+
       '<img src="'+CHOCO_IMAGES[r.inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
@@ -755,7 +755,7 @@ function renderRecords(){
     var total = rows.reduce(function(sum,t){ return sum+t.amount; }, 0);
     document.getElementById('recordsStats').innerHTML =
       '<div class="stat"><div class="n" style="color:var(--mint)">'+ugx(total)+'</div><div class="l">Total accrued</div></div>';
-    if(!rows.length){ document.getElementById('recordsList').innerHTML = '<div class="empty">No accrued rewards yet — check in or buy a chocolate to start earning.</div>'; return; }
+    if(!rows.length){ document.getElementById('recordsList').innerHTML = '<div class="empty">No accrued rewards yet. Check in or buy a chocolate to start earning.</div>'; return; }
     document.getElementById('recordsList').innerHTML = rows.slice(0,50).map(function(t){
       return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(REC_TYPE_LABEL[t.type]||t.desc)+'</span><span class="rec-st ok">Completed</span></div>'+
         '<div class="rec-line"><span>Amount</span><b>+'+ugx(t.amount)+'</b></div>'+
@@ -826,7 +826,7 @@ function closeOverlay(){ document.querySelectorAll('.overlay').forEach(function(
 /* ====================== BIND BANK CARD ====================== */
 function renderBankList(){
   var list = STATE.bankAccounts;
-  if(!list.length){ document.getElementById('bankList').innerHTML = '<div class="empty">No accounts bound yet — add one below.</div>'; return; }
+  if(!list.length){ document.getElementById('bankList').innerHTML = '<div class="empty">No accounts bound yet. Add one below.</div>'; return; }
   document.getElementById('bankList').innerHTML = list.map(function(b,i){
     var nc = NETWORK_COLORS[b.network] || {color:'#EADFC9',textColor:'#3B2416'};
     var initials = b.network.split(' ').map(function(w){return w.charAt(0);}).join('').slice(0,2);
@@ -904,7 +904,7 @@ function openProduct(key){
   document.getElementById('pdTitle').textContent = p.name;
   document.getElementById('pdBody').innerHTML =
     '<img src="'+CHOCO_IMAGES[p.key]+'" style="width:100%;height:220px;object-fit:cover;border-radius:20px;margin:6px 20px 0;width:calc(100% - 40px)'+(soldOut?';filter:grayscale(.5);opacity:.7':'')+'">'+
-    (soldOut?'<div class="info-box" style="margin:16px 20px 0;background:var(--berry-pale);color:var(--berry)">This chocolate isn\'t available to buy right now — check back soon.</div>':'')+
+    (soldOut?'<div class="info-box" style="margin:16px 20px 0;background:var(--berry-pale);color:var(--berry)">This chocolate isn\'t available to buy right now. Check back soon.</div>':'')+
     '<div class="form-card">'+
       '<div class="kv"><span>Price</span><b>'+ugx(p.price)+'</b></div>'+
       '<div class="kv"><span>Daily reward</span><b style="color:var(--mint)">'+ugx(dailyReturn(p))+'</b></div>'+
@@ -920,7 +920,7 @@ function openProduct(key){
 async function buyProduct(key){
   var p = PRODUCTS.filter(function(x){return x.key===key;})[0];
   if(isProductSoldOut(p)){ toast('This chocolate is not available to buy right now'); return; }
-  if(STATE.balance < p.price){ toast('Not enough balance — add funds first'); return; }
+  if(STATE.balance < p.price){ toast('Not enough balance, add funds first'); return; }
   var btn = document.getElementById('buyProductBtn');
   if(btn){ if(btn.disabled) return; btn.disabled = true; }
   toast('Processing…');
@@ -989,7 +989,7 @@ async function doCheckin(){
     var r = await api('/checkin', {});
     if(r.status!=='success'){ toast(r.message||'Check-in failed'); if(btn) btn.disabled = false; renderAll(); return; }
     await refreshFromServer();
-    renderAll(); toast('+'+ugx(r.bonus)+' — see you tomorrow!');
+    renderAll(); toast('+'+ugx(r.bonus)+', see you tomorrow!');
   } catch(e) {
     if(btn) btn.disabled = false;
     renderAll();
@@ -1022,7 +1022,7 @@ function openDepositStatus(depositId, reference, phone){
   document.getElementById('depStatusPhone').textContent = 'You will receive a payment prompt on '+phone+' shortly.';
   document.getElementById('depStatusSteps').style.display = '';
   document.getElementById('depStatusRef').textContent = reference;
-  setDepStatusMsg('pending', 'Payment initiated — check your phone.');
+  setDepStatusMsg('pending', 'Payment initiated. Check your phone.');
   document.getElementById('depStatusAttempt').textContent = '';
   document.getElementById('depCancelRow').style.display = '';
   var btn = document.getElementById('depVerifyBtn');
@@ -1078,26 +1078,26 @@ async function pollDepositStatus(manual){
     if(r.status==='success'){
       if(r.state==='matched'){
         clearInterval(_depPollTimer); _depPollTimer=null;
-        setDepStatusMsg('matched', 'Payment confirmed — funds added to your wallet.');
+        setDepStatusMsg('matched', 'Payment confirmed. Funds added to your wallet.');
         showDepositSuccess();
-        if(manual) toast('Successful — funds added to your wallet');
+        if(manual) toast('Successful. Funds added to your wallet');
         await refreshFromServer(); renderAll();
         return;
       }
       if(r.state==='failed'){
         clearInterval(_depPollTimer); _depPollTimer=null;
         setDepStatusMsg('failed', r.message || 'Payment was not completed.');
-        if(manual) toast('Declined — '+(r.message||'payment was not completed'));
+        if(manual) toast('Declined: '+(r.message||'payment was not completed'));
         return;
       }
       // state === 'pending' and neither matched nor failed yet.
-      if(manual) toast('Still pending — check your phone for the prompt');
+      if(manual) toast('Still pending, check your phone for the prompt');
     } else if(manual){
       toast(r.message || 'Could not check the payment status right now');
     }
     if(_depPollAttempt>=_depPollMax){
       clearInterval(_depPollTimer); _depPollTimer=null;
-      setDepStatusMsg('failed', "We couldn't confirm this payment automatically — tap Verify Payment or contact support.");
+      setDepStatusMsg('failed', "We couldn't confirm this payment automatically. Tap Verify Payment or contact support.");
     }
   } finally {
     _depPollChecking = false;
@@ -1126,7 +1126,7 @@ async function openTeamLevel(level){
   document.getElementById('teamLevelList').innerHTML = spinnerHtml();
   var r = await api('/team/members?level='+level);
   if(r.status!=='success'){
-    document.getElementById('teamLevelList').innerHTML = '<div class="empty">Could not load this list — try again.</div>';
+    document.getElementById('teamLevelList').innerHTML = '<div class="empty">Could not load this list. Try again.</div>';
     return;
   }
   var list = r.members||[];
@@ -1135,8 +1135,8 @@ async function openTeamLevel(level){
     return;
   }
   document.getElementById('teamLevelList').innerHTML = list.map(function(m){
-    var masked = m.phone && m.phone.length>4 ? m.phone.slice(0,4)+'•••'+m.phone.slice(-2) : (m.phone||'—');
-    var joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+    var masked = m.phone && m.phone.length>4 ? m.phone.slice(0,4)+'•••'+m.phone.slice(-2) : (m.phone||'Not set');
+    var joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : 'Unknown';
     return '<div class="bank-row">'+
       '<div class="bank-net-badge" style="background:'+(m.hasInvested?'var(--mint-pale)':'var(--cream-deep)')+';color:'+(m.hasInvested?'var(--mint)':'var(--cocoa-faint)')+'">'+esc(masked.slice(0,2))+'</div>'+
       '<div class="bank-info"><b>'+esc(masked)+'</b><span>Joined '+esc(joined)+(m.hasInvested?' · Invested '+ugx(m.totalInvested):' · Not invested yet')+'</span></div>'+

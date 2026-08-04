@@ -549,7 +549,7 @@ const PROVIDER_BUSY_MSG = 'The mobile-money service is temporarily busy. Please 
 // when it doesn't). Insufficient balance on the paying line is by far the
 // most common real-world cause, so naming it directly is far more useful
 // than a bare "not completed" that leaves the member guessing.
-const DEPOSIT_FAILED_MSG = 'Payment was not completed — this is usually because the mobile-money account did not have enough balance. Check your balance and try again.';
+const DEPOSIT_FAILED_MSG = 'Payment was not completed. This is usually because the mobile-money account did not have enough balance. Check your balance and try again.';
 function marzUserMsg(mp, fallback) {
   const raw = mp && (mp.message || mp.data?.message || mp.error || mp.data?.error);
   if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
@@ -836,7 +836,7 @@ app.post('/team/milestone/claim', async (req, res) => {
     if (progress < m.target) {
       const need = isDeposit ? fmtUGX(m.target) : m.target;
       const have = isDeposit ? fmtUGX(progress) : progress;
-      return res.status(400).json({ status: 'error', message: `You need ${need} to claim this — you have ${have}.` });
+      return res.status(400).json({ status: 'error', message: `You need ${need} to claim this, you have ${have}.` });
     }
     const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
     let done = false;
@@ -853,7 +853,7 @@ app.post('/team/milestone/claim', async (req, res) => {
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'team_reward',
-          description: isDeposit ? `Task Center — level 1 team deposits ${fmtUGX(m.target)}` : `Task Center — ${m.target} active referrals`,
+          description: isDeposit ? `Task Center: level 1 team deposits ${fmtUGX(m.target)}` : `Task Center: ${m.target} active referrals`,
           amount: m.reward, milestone: m.target, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -1235,7 +1235,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     } catch (netErr) {
       console.error('MarzPay collect-money network error (ref ' + ref + '):', netErr.message);
       return res.status(202).json({ status: 'error',
-        message: "We couldn't confirm this payment started. If your phone doesn't get a prompt shortly, try again — if you ARE charged, contact support with reference " + ref + '.' });
+        message: "We couldn't confirm this payment started. If your phone doesn't get a prompt shortly, try again. If you ARE charged, contact support with reference " + ref + '.' });
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       // Log the RAW gateway response — marzUserMsg() below deliberately hides
@@ -1248,7 +1248,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
     await depRef.update({ status: 'pending', marzTxUuid });
-    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated — check your phone.' });
+    res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
   } catch (e) {
     console.error('Deposit error:', e.message);
     res.status(500).json({ status: 'error', message: PROVIDER_BUSY_MSG });
@@ -1446,7 +1446,7 @@ app.post('/withdraw/request', async (req, res) => {
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
         throw new Error('Purchase at least one chocolate product before you can cash out.');
       const bal = fresh.data().walletBalance || 0;
-      if (bal < amt) throw new Error(`Not enough balance — you have ${fmtUGX(bal)}`);
+      if (bal < amt) throw new Error(`Not enough balance, you have ${fmtUGX(bal)}`);
       // Daily cash-out cap, admin-editable (settings.maxWithdrawalsPerDay).
       // Counted and enforced HERE, inside the same per-user withLock('bal:'+
       // userId) every withdrawal already serialises through — two requests
@@ -1472,13 +1472,13 @@ app.post('/withdraw/request', async (req, res) => {
         status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'withdraw', description: `Cash out to ${holder} (${network}) — net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee — awaiting admin approval`,
+        userId, type: 'withdraw', description: `Cash out to ${holder} (${network}), net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, awaiting admin approval`,
         amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
 
-    sendAdminPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}) — awaiting approval`, { type: 'withdrawal', withdrawalId: witId });
-    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested — awaiting admin approval` });
+    sendAdminPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}), awaiting approval`, { type: 'withdrawal', withdrawalId: witId });
+    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested, awaiting admin approval` });
   } catch (e) {
     res.status(400).json({ status: 'error', message: e.message });
   }
@@ -1497,7 +1497,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
   const withdrawalId = String(req.body.withdrawalId || '');
   if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
   if (_withdrawInFlight.has(withdrawalId))
-    return res.status(409).json({ status: 'error', message: 'Another admin is already acting on this withdrawal — check the list in a moment.' });
+    return res.status(409).json({ status: 'error', message: 'Another admin is already acting on this withdrawal. Check the list in a moment.' });
   _withdrawInFlight.add(withdrawalId);
   try {
     const witRef = db.collection('withdrawals').doc(withdrawalId);
@@ -1524,7 +1524,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
       // Gateway rejected outright — nothing moved, so it's safe to put this
       // back to 'pending' exactly as before and let the admin retry.
       await witRef.update({ status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
-      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched — try again in a moment.') });
+      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') });
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
     const sandbox = mpData.status === 'sandbox';
@@ -1544,7 +1544,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
       if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: sandbox ? 'success' : 'processing' });
     } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
     logAdminAction(req, 'withdrawal_processed', { withdrawalId, amount: wit.net, phone: wit.phone, userId: wit.userId });
-    res.json({ status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete — ${fmtUGX(wit.net)} to ${wit.phone}` : `Sending ${fmtUGX(wit.net)} to ${wit.phone}` });
+    res.json({ status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtUGX(wit.net)} to ${wit.phone}` : `Sending ${fmtUGX(wit.net)} to ${wit.phone}` });
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
     res.status(500).json({ status: 'error', message: e.message });
@@ -1563,12 +1563,12 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
     if (!w.marzTxUuid)
-      return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This payout never reached MarzPay (no gateway reference) — nothing was sent.' });
+      return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This payout never reached MarzPay (no gateway reference). Nothing was sent.' });
     const marzStatus = await marzGetSendStatus(w.marzTxUuid);
     const sent = SUCCESS_STATUSES.has(marzStatus);
     const failed = FAILED_STATUSES.has(marzStatus);
     let message;
-    if (!marzStatus) message = 'MarzPay did not respond just now — try Verify again in a moment.';
+    if (!marzStatus) message = 'MarzPay did not respond just now. Try Verify again in a moment.';
     else if (sent && w.status !== 'processed') message = `MarzPay says this payout was SENT, but our record is "${w.status}". Check the recipient before doing anything else.`;
     else if (sent) message = 'MarzPay confirms the payout was SENT and our record already shows it processed.';
     else if (failed) message = `MarzPay says this payout FAILED (status: ${marzStatus}).`;
@@ -1728,7 +1728,7 @@ app.post('/redeem', async (req, res) => {
       await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
       const { date, time } = nowStr();
       await db.collection('transactions').add({
-        userId, type: 'promocode', description: `Promo code redeemed — ${code}`,
+        userId, type: 'promocode', description: `Promo code redeemed: ${code}`,
         amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
       res.json({ status: 'success', reward });
@@ -1946,7 +1946,7 @@ app.post('/admin/banners/set', async (req, res) => {
   if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(image))
     return res.status(400).json({ status: 'error', message: 'Upload a PNG, JPEG, WEBP or GIF image' });
   if (image.length > BANNER_MAX_LEN)
-    return res.status(400).json({ status: 'error', message: 'Image is too large — please use a smaller file (~2MB max)' });
+    return res.status(400).json({ status: 'error', message: 'Image is too large, please use a smaller file (~2MB max)' });
   try {
     await db.collection('banners').doc('main').set({ [key]: image }, { merge: true });
     _bannersCacheTs = 0;
@@ -2372,7 +2372,7 @@ app.post('/admin/withdraw/reject', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const witId = String(req.body.withdrawalId || '');
   if (_withdrawInFlight.has(witId))
-    return res.status(409).json({ status: 'error', message: 'This withdrawal is being sent right now — check the list in a moment.' });
+    return res.status(409).json({ status: 'error', message: 'This withdrawal is being sent right now. Check the list in a moment.' });
   _withdrawInFlight.add(witId);
   try {
     const ref = db.collection('withdrawals').doc(witId);
@@ -2424,8 +2424,8 @@ app.get('/admin/referrals/list', async (req, res) => {
     usersSnap.forEach(u => {
       const d = u.data();
       if (d.referredBy) rows.push({
-        referrerId: d.referredBy, referrerPhone: phones[d.referredBy] || '—',
-        referredId: u.id, referredPhone: d.phone || '—',
+        referrerId: d.referredBy, referrerPhone: phones[d.referredBy] || 'Not set',
+        referredId: u.id, referredPhone: d.phone || 'Not set',
         referredInvested: d.totalInvested || 0, createdAt: d.createdAt || null
       });
     });

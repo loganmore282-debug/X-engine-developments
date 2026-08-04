@@ -128,7 +128,12 @@
 // frames), covering the brands' real heritage/locations, how ChocoMCC's
 // own product tiers are named in their honour, and the platform's
 // mission — plus a trademark/non-affiliation credit line at the bottom.
-const CACHE = 'chocomcc-shell-v29';
+// v30: removed every em-dash ("—") from user-visible text app-wide (toasts,
+// button labels, empty-state messages, the About Us article, transaction
+// descriptions) — replaced with plain commas/periods/colons per plain
+// sentence instead. Code comments were left alone since they're never
+// shown to anyone using the app. Same sweep also applied to admin.html.
+const CACHE = 'chocomcc-shell-v30';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
