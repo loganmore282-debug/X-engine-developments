@@ -26,6 +26,27 @@ var PRODUCTS = [
   { key:'raffaello', name:"Raffaello",                 price:3000000, cycle:180, expectedReturn:60000000 },
   { key:'godiva',    name:"Godiva Gold Box",           price:4000000, cycle:180, expectedReturn:80000000 }
 ];
+// FIXED BUG: the array above has no active/comingSoon flags at all (it's
+// just a price/cycle fallback shape), so on EVERY fresh page load -- not
+// only a brand-new install -- Home/Shop/product-detail were rendering
+// products as fully available for however long syncPublicConfig()'s network
+// round-trip took, before silently re-rendering once the real, admin-set
+// comingSoon status arrived. That window was real and reproducible (visibly
+// different screenshots taken a minute apart), and it's what let a
+// coming-soon tier render as a normal, tappable product in the meantime.
+// The actual purchase was never actually exploitable -- /invest/create
+// re-checks active/comingSoon server-side on every attempt regardless of
+// what the client shows -- but the UI itself must never show a stale,
+// wrong status. This mirrors the pattern already used for STATE and
+// settings: cache the last real synced catalogue in localStorage and load
+// it back BEFORE anything ever renders, so even the very first paint of
+// a returning visit already reflects the last known-correct status, not
+// a generic guess. Only a genuinely first-ever visit (nothing cached yet,
+// same as STATE/settings) still has to wait on the real fetch.
+try{
+  var _cachedProducts = JSON.parse(localStorage.getItem('choco_products_cache')||'null');
+  if(Array.isArray(_cachedProducts) && _cachedProducts.length) PRODUCTS = _cachedProducts;
+}catch(e){}
 // Fixed promo codes (server-issued codes come once the backend is wired up) — each redeemable once per member.
 var PROMO_CODES = { 'CHOCO50':5000, 'SWEET100':10000, 'CACAO25':2500 };
 var NETWORK_COLORS = { 'MTN Mobile Money':{color:'#FFCC08',textColor:'#3B2416'}, 'Airtel Money':{color:'#ED1C24',textColor:'#fff'} };
@@ -133,7 +154,10 @@ async function syncPublicConfig(){
   }catch(e){}
   try{
     var r2 = await api('/public/products');
-    if(r2 && r2.status==='success' && Array.isArray(r2.products) && r2.products.length) PRODUCTS = r2.products;
+    if(r2 && r2.status==='success' && Array.isArray(r2.products) && r2.products.length){
+      PRODUCTS = r2.products;
+      localStorage.setItem('choco_products_cache', JSON.stringify(PRODUCTS));
+    }
   }catch(e){}
   // Admin-uploaded banner overrides merge over the shipped CHOCO_BANNERS
   // defaults in place — an untouched slot is simply absent from the

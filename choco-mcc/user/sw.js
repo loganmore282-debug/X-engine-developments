@@ -207,7 +207,25 @@
 // code does, so a normal shell version bump (which happens on most
 // deploys) must not wipe them and pay that network cost again right after
 // every single update.
-const CACHE = 'chocomcc-shell-v38';
+// v39: fixed a real, reproducible bug (caught on two screenshots taken a
+// minute apart showing the same Shop screen two different ways) -- the
+// products list has NO persistence of its own (unlike account state and
+// admin settings, which are both cached in localStorage): every single
+// page load starts from a hardcoded fallback array with no active/
+// comingSoon information at all, and only gets the real, admin-set status
+// once /public/products resolves over the network. In that window, a
+// coming-soon tier rendered as a completely normal, tappable product --
+// looked exactly like it could be bought. It never actually COULD be
+// bought (server.js's /invest/create independently re-checks active/
+// comingSoon on every purchase attempt regardless of what the client
+// shows, so no money was ever actually at risk), but the UI itself must
+// never show a wrong status. Now the last real synced product list is
+// cached in localStorage too, exactly like account state already is, and
+// loaded back before anything ever renders -- so even the very first
+// paint of a returning visit already shows the correct status, not a
+// generic guess. Only a genuinely first-ever visit still waits on the
+// real fetch, same accepted case as account state.
+const CACHE = 'chocomcc-shell-v39';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
