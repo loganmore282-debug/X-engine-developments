@@ -763,7 +763,14 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
 app.get('/team/members', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const level = Math.min(3, Math.max(1, parseInt(req.query.level, 10) || 1));
+  // Member-level browsing is Level 1 only, by design -- a member can see
+  // WHO their own direct (Level 1) referrals are, never who's in their
+  // Level 2/3 downline (those stay commission-only: the rate and the
+  // running total earned are still visible, just not the people). Enforced
+  // HERE, not just left off the UI, so a raw ?level=2/3 API call can't read
+  // it either -- the app itself only ever asks for level=1 now.
+  const level = parseInt(req.query.level, 10) || 1;
+  if (level !== 1) return res.status(403).json({ status: 'error', message: 'Only Level 1 members can be viewed' });
   try {
     let parentIds = [userId];
     let members = [];

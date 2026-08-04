@@ -572,8 +572,9 @@ function renderAll(){
   document.getElementById('acctWitNum').textContent = ugx(s.totalWithdrawn);
   document.getElementById('teamLink').textContent = 'https://choco-mcc.com/?reg='+s.referralCode;
   document.getElementById('teamL1').textContent = s.team.l1;
-  document.getElementById('teamL2').textContent = s.team.l2;
-  document.getElementById('teamL3').textContent = s.team.l3;
+  // Level 2 / Level 3 counts are deliberately not shown anywhere in the UI
+  // (see the Team overview markup) -- s.team.l2/l3 still exist in STATE for
+  // any future non-UI use, just never bound to the page.
   document.getElementById('teamComm').textContent = ugx(s.team.commission);
 
   var sett = getSettings();
@@ -1253,14 +1254,23 @@ async function openTeamLevel(level){
     document.getElementById('teamLevelList').innerHTML = '<div class="empty">No Level '+level+' members yet.</div>';
     return;
   }
-  document.getElementById('teamLevelList').innerHTML = list.map(function(m){
+  // Flat divided list -- no per-row card box/shadow, no tabs. Every amount
+  // is a real number straight off the server (m.totalInvested), never a
+  // vague "not invested yet" phrase -- a member who hasn't invested simply
+  // shows UGX 0, same field, same formatting as one who has.
+  var rows = list.map(function(m){
     var masked = m.phone && m.phone.length>4 ? m.phone.slice(0,4)+'•••'+m.phone.slice(-2) : (m.phone||'Not set');
     var joined = m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : 'Unknown';
-    return '<div class="bank-row">'+
-      '<div class="bank-net-badge" style="background:'+(m.hasInvested?'var(--mint-pale)':'var(--cream-deep)')+';color:'+(m.hasInvested?'var(--mint)':'var(--cocoa-faint)')+'">'+esc(masked.slice(0,2))+'</div>'+
-      '<div class="bank-info"><b>'+esc(masked)+'</b><span>Joined '+esc(joined)+(m.hasInvested?' · Invested '+ugx(m.totalInvested):' · Not invested yet')+'</span></div>'+
+    var invested = Number(m.totalInvested)||0;
+    return '<div class="flat-row">'+
+      '<div class="flat-avatar'+(invested>0?' on':'')+'">'+esc(masked.slice(0,2))+'</div>'+
+      '<div class="flat-main"><b>'+esc(masked)+'</b><span>Joined '+esc(joined)+'</span></div>'+
+      '<div class="flat-amt'+(invested>0?' pos':' zero')+'">'+ugx(invested)+'</div>'+
       '</div>';
   }).join('');
+  document.getElementById('teamLevelList').innerHTML =
+    '<div class="muted" style="font-size:12px;margin-bottom:2px">'+list.length+' member'+(list.length===1?'':'s')+'</div>'+
+    '<div class="flat-list">'+rows+'</div>';
 }
 function toast(msg){
   var bg=document.getElementById('toastBg'); document.getElementById('toast').textContent=msg; bg.classList.add('show');

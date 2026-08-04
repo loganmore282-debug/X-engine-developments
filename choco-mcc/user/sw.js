@@ -225,7 +225,19 @@
 // paint of a returning visit already shows the correct status, not a
 // generic guess. Only a genuinely first-ever visit still waits on the
 // real fetch, same accepted case as account state.
-const CACHE = 'chocomcc-shell-v39';
+// v40: My Team, per feedback. (1) A team member's row in the Level 1 list
+// showed "Not invested yet" as vague text -- now shows a real UGX amount
+// (UGX 0 when they haven't invested, the real total otherwise), same field
+// as everyone else, no special-cased wording. (2) Level 2 and Level 3
+// member LISTS are no longer browsable anywhere -- only Level 1 (direct
+// referrals) can be viewed; those rows were removed from the Team overview
+// entirely (rates and the running earned total for L2/L3 are still shown,
+// just not who's in them), and the server now refuses a raw ?level=2/3 API
+// call too (403), not just an app that no longer asks for one. (3) The
+// member list itself was redesigned off individually-boxed white/shadowed
+// "card" rows onto a single flat divided list (hairline between rows, no
+// per-row box) -- no tabs anywhere in it either.
+const CACHE = 'chocomcc-shell-v40';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

@@ -299,6 +299,25 @@
 
   .kv{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
   .kv b{font-weight:800;}
+
+  /* Flat divided list -- deliberately NOT a card/box per row (no background,
+     no border-radius, no shadow) and NOT tabs. Used for the Level 1 members
+     list: a plain vertical list on the page's own background, each entry
+     separated only by a hairline, matching .kv's own flat-row language
+     elsewhere on this same Team screen instead of introducing a second,
+     boxed visual language for what is really the same kind of data. */
+  .flat-list{padding:0}
+  .flat-row{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);}
+  .flat-row:last-child{border-bottom:none}
+  .flat-avatar{width:34px;height:34px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    font-size:11.5px;font-weight:800;background:var(--cream-deep);color:var(--cocoa-faint);}
+  .flat-avatar.on{background:var(--mint-pale);color:var(--mint)}
+  .flat-main{flex:1;min-width:0}
+  .flat-main b{display:block;font-size:14px;}
+  .flat-main span{font-size:12px;color:var(--cocoa-faint);}
+  .flat-amt{font-size:13.5px;font-weight:800;text-align:right;flex:0 0 auto;}
+  .flat-amt.zero{color:var(--cocoa-faint);font-weight:700}
+  .flat-amt.pos{color:var(--mint)}
   .menu-item{display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--card);border-radius:18px;margin:0 20px 10px;box-shadow:var(--shadow);border:none;width:calc(100% - 40px);text-align:left;}
   .menu-ic{width:36px;height:36px;border-radius:11px;background:var(--caramel-pale);color:var(--caramel-deep);display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
   .menu-lbl{font-size:14px;font-weight:700;flex:1;}
@@ -515,8 +534,10 @@
       <div style="margin:0 20px" class="card" >
         <div style="padding:6px 16px">
           <div class="kv" style="cursor:pointer" onclick="openTeamLevel(1)"><span>Level 1 members</span><span style="display:flex;align-items:center"><b id="teamL1">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
-          <div class="kv" style="cursor:pointer" onclick="openTeamLevel(2)"><span>Level 2 members</span><span style="display:flex;align-items:center"><b id="teamL2">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
-          <div class="kv" style="cursor:pointer" onclick="openTeamLevel(3)"><span>Level 3 members</span><span style="display:flex;align-items:center"><b id="teamL3">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
+          <!-- Level 2 / Level 3 member counts and drill-down are intentionally
+               not shown here -- only Level 1's own direct referrals are
+               browsable; deeper levels stay commission-only (rates still
+               shown above in comm-row, earned total still shown below). -->
           <div class="kv" style="border-bottom:none"><span>Commission earned</span><b id="teamComm">UGX 0</b></div>
         </div>
       </div>
