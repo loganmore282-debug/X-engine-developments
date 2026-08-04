@@ -122,7 +122,13 @@
 // toast when maintenance mode was actually the reason /account failed —
 // misleading, since the server IS reachable, it's deliberately paused.
 // Now shows the admin's real maintenance message in that case.
-const CACHE = 'chocomcc-shell-v28';
+// v29: About Us rewritten as a long-form newspaper-style feature — real
+// chocolate-brand photos (Mars, Snickers, KitKat Chunky, Cadbury Dairy
+// Milk, Ferrero Rocher) in sharp-cornered "box card" tiles (no curved
+// frames), covering the brands' real heritage/locations, how ChocoMCC's
+// own product tiers are named in their honour, and the platform's
+// mission — plus a trademark/non-affiliation credit line at the bottom.
+const CACHE = 'chocomcc-shell-v29';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
