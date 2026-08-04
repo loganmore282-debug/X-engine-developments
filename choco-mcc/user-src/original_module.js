@@ -664,15 +664,20 @@ function renderMyChoc(){
   var rows = investmentStats();
   if(!rows.length){ document.getElementById('mychocList').innerHTML = '<div class="empty">No chocolates running yet. Buy one from the Shop to start earning.</div>'; return; }
   document.getElementById('mychocList').innerHTML = rows.map(function(r){
-    var purchased = r.inv.purchasedAt ? new Date(r.inv.purchasedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Unknown';
-    var pct = r.cycleDays>0 ? Math.min(100, Math.round(r.daysElapsed/r.cycleDays*100)) : 0;
+    // r.inv.purchasedAt and r.daysElapsed both come from the very same
+    // /investments record in the very same server response -- the server
+    // computes daysElapsed (payoutsMade) as floor(realElapsedMs since this
+    // exact createdAt / 1 day) fresh on every read (settleAllForUser runs
+    // before responding), so the day counter can never drift out of sync
+    // with the purchase timestamp shown next to it; there's no separate
+    // client-side clock or math that could disagree with it.
+    var purchased = r.inv.purchasedAt ? new Date(r.inv.purchasedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : 'Unknown';
     return '<div class="choc-hold-card">'+
       '<div class="choc-hold-top">'+
         '<img src="'+CHOCO_IMAGES[r.inv.key]+'" style="width:48px;height:48px;border-radius:12px;object-fit:cover;flex:0 0 auto">'+
         '<div class="bank-info"><b>'+r.inv.name+'</b><span>'+ugx(r.inv.price)+'</span></div>'+
         '<span class="'+(r.matured?'bank-default':'')+'" style="font-size:10.5px;font-weight:800;color:'+(r.matured?'var(--mint)':'var(--cocoa-faint)')+'">'+(r.matured?'Matured':'Ongoing')+'</span>'+
       '</div>'+
-      '<div class="choc-hold-progress"><div class="choc-hold-progress-fill" style="width:'+pct+'%"></div></div>'+
       '<div class="choc-hold-daylbl">'+r.daysElapsed+' / '+r.cycleDays+' days</div>'+
       '<div class="choc-hold-grid">'+
         '<div class="choc-hold-item"><span>Purchase date &amp; time</span><b>'+purchased+'</b></div>'+

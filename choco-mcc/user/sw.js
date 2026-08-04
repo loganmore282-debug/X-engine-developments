@@ -172,7 +172,14 @@
 // (dailyPayout/expectedReturn/paidOut/payoutsMade, already settled
 // server-side on every read), never recomputed client-side, so nothing
 // here can drift from what the server actually owes.
-const CACHE = 'chocomcc-shell-v35';
+// v36: My Chocolates tweak per feedback -- removed the visual progress bar
+// (wasn't asked for), purchase date & time now include seconds. The day
+// counter (X / Y days) and the purchase timestamp shown next to it always
+// come from the exact same /investments record in the exact same response
+// (server computes payoutsMade as floor(real elapsed ms since that same
+// createdAt / one day), freshly on every read), so the two can never show
+// out-of-sync values.
+const CACHE = 'chocomcc-shell-v36';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
