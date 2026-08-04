@@ -89,7 +89,11 @@
 // shouldn't appear together. Kept the unified field card and pill button
 // from v23; the switch is now one static dashed-border button whose text
 // updates in place instead of two side-by-side tabs.
-const CACHE = 'chocomcc-shell-v24';
+// v25: password field icons switched from a padlock to a key, everywhere
+// one appears — auth screen (password + confirm password), the Security
+// menu tile, and all three fields on the Security (change password)
+// screen.
+const CACHE = 'chocomcc-shell-v25';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
