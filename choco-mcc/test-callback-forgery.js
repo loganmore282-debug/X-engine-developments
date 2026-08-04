@@ -32,6 +32,18 @@
    ever trusted to supply or substitute that identity. No self-captured
    uuid means nothing verifiable exists, so the callback does nothing.
 
+   This ENTIRELY applies to /deposit/callback, and to the REFUND branch of
+   /withdraw/callback (a false "failed" claim must never trigger a refund
+   on its own word -- that would let a real payout's recipient collect it
+   twice). The SUCCESS branch of /withdraw/callback is the one deliberate
+   exception: marking a withdrawal 'processed' never moves money by itself
+   (the wallet/totalWithdrawn were already updated once, at send time), so
+   a genuine marzReference match is trusted directly, with no live
+   re-check requirement -- fixed after a real production incident where a
+   confirmed-correct success webhook arrived but the follow-up live
+   re-check kept failing, leaving a genuinely-completed payout stuck
+   indefinitely for no real security benefit.
+
    Run: node test-callback-forgery.js   (exits 0 = all green)               */
 
 process.env.MONGODB_URI = 'mongodb://mock';
@@ -195,21 +207,55 @@ async function setupUser(uid, phone) {
   check('a genuinely confirmable webhook still credits the wallet normally', userDoc(D).walletBalance === balBeforeD + 25000, userDoc(D).walletBalance);
   check('deposit correctly marked matched', collMap('pendingDeposits').get(depIdD).status === 'matched', collMap('pendingDeposits').get(depIdD).status);
 
-  console.log('\n== Withdrawal callback: forged "processed" with no captured uuid is ignored ==');
+  console.log('\n== Withdrawal callback SUCCESS: trusted directly on a genuine reference match, no live re-check needed ==');
+  // A real production incident: MarzPay's own "disbursement.completed"
+  // webhook arrived correctly (confirmed against the real payload -- the
+  // recipient's own MTN SMS proved the money genuinely arrived), but the
+  // OLD code still required an extra, independent live re-check against
+  // MarzPay's GET /send-money/{uuid} before trusting it -- and THAT
+  // round-trip is what kept failing in production, leaving a
+  // genuinely-completed payout stuck on "Processing" indefinitely. That
+  // extra check bought no real security: marking a withdrawal 'processed'
+  // never moves money by itself (the wallet/totalWithdrawn were already
+  // updated once, at send time). The webhook already proves genuine
+  // correspondence via the marzReference match (our own crypto.randomUUID(),
+  // set only by us) -- so SUCCESS is now trusted straight from the webhook,
+  // with no dependency on a second round-trip that has proven unreliable.
   const E = 'forge-victim-e';
   await setupUser(E, '0771000405');
   userDoc(E).walletBalance = 100000; userDoc(E).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + E, body: { holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' } });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + E, body: { amount: 20000, holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' } });
   const witId = r.body.withdrawalId;
-  // Force it into 'processing' the way /admin/withdraw/process would, but
-  // WITHOUT ever capturing a real marzTxUuid (simulating the same gap).
   collMap('withdrawals').get(witId).status = 'processing';
   const refE = collMap('withdrawals').get(witId).marzReference || 'WD-REF-E';
   collMap('withdrawals').get(witId).marzReference = refE;
+  const balBeforeE = userDoc(E).walletBalance;
   r = await call('POST', '/withdraw/callback', { body: { data: { reference: refE, transaction: { status: 'successful' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
-  check('SECURITY: withdrawal NOT falsely marked processed by a forged webhook with no captured uuid', collMap('withdrawals').get(witId).status === 'processing', collMap('withdrawals').get(witId).status);
+  check('a genuine success webhook (matching reference) marks it processed, even with no live re-check', collMap('withdrawals').get(witId).status === 'processed', collMap('withdrawals').get(witId).status);
+  check('...and never moves money in doing so (wallet unchanged by marking-processed itself)', userDoc(E).walletBalance === balBeforeE, userDoc(E).walletBalance);
+
+  console.log('\n== Withdrawal callback FAILURE: still requires independent live confirmation before any refund ==');
+  // This is the one branch where trusting the webhook alone WOULD move
+  // money -- refunding a withdrawal that actually succeeded would let the
+  // recipient collect it twice (their real payout plus a refunded wallet
+  // balance). A forged/unconfirmable "failed" claim must never trigger
+  // that refund on its own say-so.
+  const G = 'forge-victim-g';
+  await setupUser(G, '0771000406');
+  userDoc(G).walletBalance = 100000; userDoc(G).totalInvested = 100000;
+  await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771000406' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + G, body: { amount: 15000, holder: 'G', network: 'MTN Mobile Money', phone: '0771000406' } });
+  const witIdG = r.body.withdrawalId;
+  collMap('withdrawals').get(witIdG).status = 'processing';
+  const refG = collMap('withdrawals').get(witIdG).marzReference || 'WD-REF-G';
+  collMap('withdrawals').get(witIdG).marzReference = refG;
+  const balBeforeG = userDoc(G).walletBalance;
+  r = await call('POST', '/withdraw/callback', { body: { data: { reference: refG, transaction: { status: 'failed' } } } });
+  await new Promise(r2 => setTimeout(r2, 200));
+  check('SECURITY: a "failed" claim with no captured uuid to independently verify is refused (no refund, no double-pay risk)', collMap('withdrawals').get(witIdG).status === 'processing', collMap('withdrawals').get(witIdG).status);
+  check('wallet NOT refunded on the unconfirmed forged failure claim', userDoc(G).walletBalance === balBeforeG, userDoc(G).walletBalance);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -1697,24 +1697,49 @@ app.post('/withdraw/callback', async (req, res) => {
     const wit = doc.data();
     if (wit.status !== 'processing') return; // already resolved — never downgrade
     const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
-    let uuid = wit.marzTxUuid;
-    let tx = null;
-    if (uuid) {
-      tx = await marzGetSendTx(uuid);
-    } else if (webhookUuid) {
-      const candidate = await marzGetSendTx(webhookUuid);
-      if (candidate.reference && candidate.reference === wit.marzReference) {
-        uuid = webhookUuid;
-        tx = candidate;
-        doc.ref.update({ marzTxUuid: uuid }).catch(() => {});
-      }
-    }
-    if (!uuid || !tx) return;
+
     if (isSuccess) {
-      if (!SUCCESS_STATUSES.has(tx.status)) return;
+      // FIXED real bug: a payout's own success webhook arrived correctly
+      // (confirmed against a real production payload — MarzPay POSTs
+      // event_type:"disbursement.completed" with transaction.status,
+      // transaction.reference, transaction.uuid all present) but this used
+      // to require an extra, independent live re-check against MarzPay's
+      // GET /send-money/{uuid} before trusting it -- and THAT round-trip is
+      // what kept failing, leaving a genuinely-completed payout stuck on
+      // "Processing" indefinitely despite the correct webhook already
+      // having arrived.
+      //
+      // That extra check bought no real safety here and never did: marking
+      // a withdrawal 'processed' never moves money by itself -- the wallet
+      // and totalWithdrawn were already updated once, at send time, in
+      // /admin/withdraw/process. The webhook already proved genuine
+      // correspondence to THIS exact withdrawal via the `marzReference`
+      // match in the query above (our own crypto.randomUUID(), set only by
+      // us, not something an outside party can produce a matching webhook
+      // for on a guess). So SUCCESS is now trusted directly from the
+      // webhook, no round-trip required.
+      //
+      // FAILED is handled differently, below -- refunding a withdrawal
+      // that actually succeeded WOULD let the recipient collect it twice
+      // (their real payout plus a refunded wallet balance), so that path
+      // still requires the independent, live re-check before any money
+      // moves.
+      if (webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
       await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
     } else if (isFailed) {
-      if (!FAILED_STATUSES.has(tx.status)) return;
+      let uuid = wit.marzTxUuid;
+      let tx = null;
+      if (uuid) {
+        tx = await marzGetSendTx(uuid);
+      } else if (webhookUuid) {
+        const candidate = await marzGetSendTx(webhookUuid);
+        if (candidate.reference && candidate.reference === wit.marzReference) {
+          uuid = webhookUuid;
+          tx = candidate;
+          doc.ref.update({ marzTxUuid: uuid }).catch(() => {});
+        }
+      }
+      if (!uuid || !tx || !FAILED_STATUSES.has(tx.status)) return; // not independently confirmed — never refund on the webhook's word alone
       await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {
         const fresh = await t.get(doc.ref);
         if (!fresh.exists || fresh.data().status !== 'processing') return;
