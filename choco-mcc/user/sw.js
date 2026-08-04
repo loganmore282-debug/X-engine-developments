@@ -191,7 +191,24 @@
 // same "fast paint, safe background reconciliation" pattern already used
 // for deposits. A first-ever sign-in (nothing cached yet) is unaffected --
 // there's nothing to show early, so it still waits on the real fetch.
-const CACHE = 'chocomcc-shell-v37';
+// v38: found the remaining chunk of sign-in latency the v37 fix didn't
+// touch -- index.html imports the Firebase Auth SDK live from gstatic.com
+// on every single app open (that's what Firebase's own sign-in check runs
+// on top of), and the service worker was explicitly routing ALL
+// cross-origin requests straight to the network with no caching at all.
+// So even after v37 made the app's OWN data instant from cache, sign-in
+// itself still couldn't start until ~150KB+ of Firebase SDK JS finished
+// downloading fresh, every time. Added one narrow, safe exception: those
+// specific gstatic.com/firebasejs/... SDK files (public static library
+// code, no per-user data, version-pinned in the URL) are now cache-first,
+// so the second app open onward skips that network fetch entirely. Kept
+// in its OWN cache bucket (VENDOR_CACHE, below), separate from the
+// versioned shell cache -- these files don't change when the app's own
+// code does, so a normal shell version bump (which happens on most
+// deploys) must not wipe them and pay that network cost again right after
+// every single update.
+const CACHE = 'chocomcc-shell-v38';
+const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -201,17 +218,40 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== VENDOR_CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
 // Network-first for navigations (always try to get the freshest app shell),
 // falling back to cache when offline. Cache-first for the static shell
-// assets ONLY. Anything cross-origin (every API call to the backend) goes
-// straight to the network, every time, with NO caching whatsoever — those
-// responses are per-user and must never be shared between sessions/devices.
+// assets ONLY. Anything else cross-origin (every API call to the backend)
+// goes straight to the network, every time, with NO caching whatsoever —
+// those responses are per-user and must never be shared between
+// sessions/devices (this is the v2 fix above).
+//
+// ONE deliberate, narrow exception: Firebase Auth's own SDK script files
+// (imported live from gstatic.com in index.html so sign-in can even start).
+// They're public static library code — no Authorization header, no
+// per-user data whatsoever, and version-pinned right in the URL itself
+// (.../firebasejs/10.12.0/...), so a version bump is a different URL, not
+// a stale-cache risk. Fetching ~150KB+ of JS from gstatic.com on every
+// single app open, before Firebase can even fire its sign-in callback, was
+// real added latency on top of everything else already fixed for fast
+// returning sign-in. Cache-first here removes that network round-trip
+// entirely from the second app open onward.
+const FIREBASE_SDK_PREFIX = 'https://www.gstatic.com/firebasejs/';
 self.addEventListener('fetch', e => {
+  if (e.request.url.indexOf(FIREBASE_SDK_PREFIX) === 0) {
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
+        const copy = resp.clone();
+        caches.open(VENDOR_CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        return resp;
+      }))
+    );
+    return;
+  }
   const reqUrl = new URL(e.request.url);
   if (reqUrl.origin !== self.location.origin) {
     e.respondWith(fetch(e.request));
