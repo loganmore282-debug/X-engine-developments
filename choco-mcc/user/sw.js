@@ -273,11 +273,9 @@
 // disabled) -- it now gets the same spinner + text as everything else, so
 // a redemption in flight is visibly happening instead of looking like
 // nothing responded until the toast appears.
-// v45: account/wallet auto-refresh sped up from every 10s to every 5s, so a
-// withdrawal moving to processed/declined, an admin credit, or anything
-// else changed server-side shows up on-screen without the member ever
-// needing to back out and reopen the app.
-const CACHE = 'chocomcc-shell-v45';
+// v46: Task Center milestone pill label "Received" -> "Claimed" once a
+// milestone reward has been paid out.
+const CACHE = 'chocomcc-shell-v46';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

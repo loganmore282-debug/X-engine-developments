@@ -627,7 +627,7 @@ function renderMilestoneCard(m){
   // and Target columns still carry the full UGX figures either way.
   var progTxt = isDeposit ? (pct+'%') : (current+'/'+m.target);
   var pillClass = m.claimed ? 'is-done' : (m.achieved ? 'is-ready' : '');
-  var pillLabel = m.claimed ? 'Received' : (m.achieved ? 'Claim' : 'In Progress');
+  var pillLabel = m.claimed ? 'Claimed' : (m.achieved ? 'Claim' : 'In Progress');
   var clickable = !m.claimed && m.achieved;
   var typeLbl = isDeposit ? 'Level 1 Deposits' : 'Level 1 Referrals';
   return '<div class="tk-card">'+
