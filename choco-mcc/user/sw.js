@@ -228,16 +228,19 @@
 // v40: My Team, per feedback. (1) A team member's row in the Level 1 list
 // showed "Not invested yet" as vague text -- now shows a real UGX amount
 // (UGX 0 when they haven't invested, the real total otherwise), same field
-// as everyone else, no special-cased wording. (2) Level 2 and Level 3
-// member LISTS are no longer browsable anywhere -- only Level 1 (direct
-// referrals) can be viewed; those rows were removed from the Team overview
-// entirely (rates and the running earned total for L2/L3 are still shown,
-// just not who's in them), and the server now refuses a raw ?level=2/3 API
-// call too (403), not just an app that no longer asks for one. (3) The
-// member list itself was redesigned off individually-boxed white/shadowed
-// "card" rows onto a single flat divided list (hairline between rows, no
-// per-row box) -- no tabs anywhere in it either.
-const CACHE = 'chocomcc-shell-v40';
+// as everyone else, no special-cased wording. (2) The member list itself
+// was redesigned off individually-boxed white/shadowed "card" rows onto a
+// single flat divided list (hairline between rows, no per-row box) -- no
+// tabs anywhere in it either.
+// v41: correction to v40 -- the ask was only to mask the raw COUNT DIGIT
+// shown for Level 2/3 on the Team overview (now shows "•••" there instead
+// of a number), never to remove the ability to actually open and browse
+// the Level 2/3 member lists. v40 wrongly did the latter (removed the rows
+// entirely and had the server reject ?level=2/3 outright) -- both are
+// reverted here: Level 2/3 rows are back, still tappable, still open the
+// real member list exactly like Level 1 does; /team/members answers all
+// three levels again, same as before v40.
+const CACHE = 'chocomcc-shell-v41';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
