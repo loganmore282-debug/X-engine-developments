@@ -593,7 +593,9 @@ async function renderUsers(){
       if(d.status!=='success'){ toast(d.message||'Audit failed','err'); return; }
       const K={negative_balance:'Negative balance',duplicate_credit:'DUPLICATE CREDIT',balance_mismatch:'Balance ≠ ledger',
         withdrawal_no_gateway_ref:'Withdrawal has no gateway reference',withdrawal_stuck:'Withdrawal stuck pending too long',
-        withdrawal_processing_stuck:'Payout stuck on Processing -- check Verify, may already have been sent'};
+        withdrawal_processing_stuck:'Payout stuck on Processing -- check Verify, may already have been sent',
+        withdrawal_stuck_sending:'Lost contact with MarzPay mid-payout -- check this reference on the MarzPay dashboard before doing anything, the user may already have been paid',
+        deposit_stuck_initiating:'Lost contact with MarzPay mid-deposit -- check this reference on the MarzPay dashboard, the member may already have been charged'};
       openModal(`<h3>Integrity audit</h3>
         <div class="muted" style="margin-bottom:10px">${d.usersChecked} user(s) checked · ${fdate(d.ranAt)}</div>
         ${d.healthy?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance matches its ledger. No duplicates, no stuck payouts.</div>`

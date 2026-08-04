@@ -645,6 +645,18 @@ async function marzGetCollectStatus(uuid) { return (await marzGetCollectTx(uuid)
 async function marzGetSendStatus(uuid) { return (await marzGetSendTx(uuid)).status; }
 const SUCCESS_STATUSES = new Set(['success', 'successful', 'completed']);
 const FAILED_STATUSES  = new Set(['failed', 'declined', 'cancelled', 'canceled', 'rejected', 'expired']);
+// MarzPay's webhooks always carry event_type (collection.completed/failed/
+// cancelled for deposits, disbursement.completed/failed for withdrawals,
+// plus a generic success/failure on some dashboard-configured webhooks) —
+// used as a fallback whenever transaction.status is missing or shaped
+// somewhere this code doesn't already check, so a genuine webhook is never
+// silently dropped just because the status field wasn't where expected.
+function marzEventTypeFallback(eventType) {
+  const e = String(eventType || '');
+  if (e === 'success' || /\.completed$/.test(e)) return 'completed';
+  if (e === 'failure' || /\.(failed|cancelled|canceled)$/.test(e)) return 'failed';
+  return '';
+}
 
 // ── DAILY CASHBACK (settle-on-read, no cron in this MVP) ──
 // Each chocolate tier pays price*returnMultiple/cycleDays per elapsed day,
@@ -1408,9 +1420,10 @@ app.post('/deposit/callback', async (req, res) => {
     const body = req.body || {};
     const reference = body.data?.reference || body.reference || body.data?.transaction?.reference || body.transaction?.reference;
     if (!reference) return;
-    const rawStatus = String(
+    let rawStatus = String(
       body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || ''
     ).toLowerCase();
+    if (!rawStatus) rawStatus = marzEventTypeFallback(body.event_type); // collection.completed/failed/cancelled
     const isSuccess = SUCCESS_STATUSES.has(rawStatus);
     const isFailed  = FAILED_STATUSES.has(rawStatus);
     if (!isSuccess && !isFailed) return;
@@ -1571,19 +1584,42 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const processedBy = req.adminUser?.username || 'owner-key';
     await witRef.update({ status: 'sending', sendingReference: marzReference, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
 
+    // SECURITY/MONEY-SAFETY (found comparing against Chronova's proven
+    // /admin/withdraw/process): a network exception here (timeout, dropped
+    // connection, malformed response) means we genuinely don't know whether
+    // MarzPay received and acted on the send-money request before we lost
+    // the response -- that's a real, well-known distributed-systems failure
+    // mode, not the same thing as a clean rejection. The OLD code folded
+    // this into the same branch as a definitive gateway rejection and
+    // reverted the withdrawal straight back to 'pending', inviting an admin
+    // retry -- if MarzPay HAD actually received and processed the first
+    // request, a retry would send the SAME payout a second time, paying the
+    // recipient twice. Chronova's own equivalent deliberately does NOT
+    // revert to 'pending' on this ambiguous case; it leaves the record at
+    // 'sending' (blocking any further /admin/withdraw/process call, since
+    // that requires status 'pending') and lets /admin/integrity surface it
+    // for the owner to check directly on MarzPay's own dashboard, rather
+    // than guessing. Ported the same distinction here.
     let mpData;
+    let ambiguous = false;
     try {
       mpData = await marzSendMoney({
         amount: wit.net, phone: wit.phone, reference: marzReference, description: 'ChocoMCC cash out',
         callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
       });
     } catch (netErr) {
-      console.error('MarzPay send-money network error:', netErr.message);
+      console.error('MarzPay send-money network error (ambiguous, NOT reverting to pending):', netErr.message);
+      ambiguous = true;
       mpData = { status: 'error', providerDown: true, message: netErr.message };
     }
+    if (ambiguous) {
+      return res.status(500).json({ status: 'error', message: 'Lost contact with MarzPay mid-request -- we cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly; check this reference on the MarzPay dashboard before doing anything else.', sendingReference: marzReference });
+    }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
-      // Gateway rejected outright — nothing moved, so it's safe to put this
-      // back to 'pending' exactly as before and let the admin retry.
+      // A real, complete HTTP round-trip that MarzPay itself answered with
+      // an explicit rejection (validation error, insufficient balance, etc.)
+      // -- this one genuinely never moved money, so it's safe to put it back
+      // to 'pending' and let the admin retry.
       await witRef.update({ status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
       return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') });
     }
@@ -1688,16 +1724,7 @@ app.post('/withdraw/callback', async (req, res) => {
     let rawStatus = String(
       body.data?.transaction?.status || body.transaction?.status || body.data?.status || body.status || ''
     ).toLowerCase();
-    // Chronova-pattern defense-in-depth: MarzPay's real disbursement webhooks
-    // always carry event_type ("disbursement.completed"/"disbursement.failed")
-    // alongside transaction.status, but don't assume every delivery shapes the
-    // status field the same way twice — fall back to event_type rather than
-    // silently dropping an otherwise-genuine webhook with no status this code
-    // recognizes.
-    if (!rawStatus) {
-      if (body.event_type === 'disbursement.completed') rawStatus = 'completed';
-      else if (body.event_type === 'disbursement.failed') rawStatus = 'failed';
-    }
+    if (!rawStatus) rawStatus = marzEventTypeFallback(body.event_type); // disbursement.completed/failed
     const isSuccess = SUCCESS_STATUSES.has(rawStatus);
     const isFailed  = FAILED_STATUSES.has(rawStatus);
     if (!isSuccess && !isFailed) return;
@@ -2221,10 +2248,11 @@ app.get('/admin/users/recount', async (req, res) => {
 app.get('/admin/integrity', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [usersSnap, txSnap, witSnap] = await Promise.all([
+    const [usersSnap, txSnap, witSnap, depSnap] = await Promise.all([
       db.collection('users').limit(10000).get(),
       db.collection('transactions').limit(200000).get(),
       db.collection('withdrawals').limit(10000).get(),
+      db.collection('pendingDeposits').limit(10000).get(),
     ]);
     const alerts = [];
     const ledgerByUser = {};
@@ -2270,6 +2298,26 @@ app.get('/admin/integrity', async (req, res) => {
         alerts.push({ kind: 'withdrawal_processing_stuck', userId: w.userId, withdrawalId: d.id, amount: w.amount, hours: Math.round(ageHours * 10) / 10 });
       else if (w.status === 'pending' && ageHours > 48)
         alerts.push({ kind: 'withdrawal_stuck', userId: w.userId, withdrawalId: d.id, amount: w.amount, hours: Math.round(ageHours) });
+      // A withdrawal left at 'sending' means /admin/withdraw/process lost
+      // contact with MarzPay mid-request (network exception, not a clean
+      // rejection) and deliberately did NOT revert it to 'pending' -- doing
+      // that would invite a retry that could pay the recipient twice if
+      // MarzPay actually received the first request. Report-only, same as
+      // Chronova's equivalent: the owner checks this reference on MarzPay's
+      // own dashboard directly rather than the server guessing.
+      else if (w.status === 'sending' && (now - tsMillis(w.sendingAt || w.createdAt)) / 60000 >= 2)
+        alerts.push({ kind: 'withdrawal_stuck_sending', userId: w.userId, withdrawalId: d.id, amount: w.amount, reference: w.sendingReference || null, minutes: Math.round((now - tsMillis(w.sendingAt || w.createdAt)) / 60000) });
+    });
+    // A deposit left at 'initiating' means /deposit/marzpay never got a
+    // usable response from MarzPay's collect-money call either (same
+    // ambiguous-network-failure window, collection side) -- the member may
+    // genuinely have been charged. Report-only, same reasoning as above.
+    depSnap.forEach(d => {
+      const p = d.data();
+      if (p.status !== 'initiating') return;
+      const ageMin = (now - tsMillis(p.createdAt)) / 60000;
+      if (ageMin >= 2)
+        alerts.push({ kind: 'deposit_stuck_initiating', userId: p.userId, depositId: d.id, amount: p.amount, reference: p.marzReference || null, minutes: Math.round(ageMin) });
     });
     const phones = {}; usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
     alerts.forEach(a => { if (a.userId && !a.phone) a.phone = phones[a.userId] || a.userId; });

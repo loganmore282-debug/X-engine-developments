@@ -215,6 +215,25 @@ async function setupUser(uid, phone) {
   check('a genuinely confirmable webhook still credits the wallet normally', userDoc(D).walletBalance === balBeforeD + 25000, userDoc(D).walletBalance);
   check('deposit correctly marked matched', collMap('pendingDeposits').get(depIdD).status === 'matched', collMap('pendingDeposits').get(depIdD).status);
 
+  console.log('\n== Deposit callback: resolves from event_type alone when transaction.status is absent (same Chronova-pattern fallback as withdrawals) ==');
+  // Real MarzPay collection webhooks carry event_type ("collection.completed")
+  // -- don't assume transaction.status is always present/shaped the same way
+  // and silently drop an otherwise-genuine delivery. Independent live
+  // re-check is still required to actually credit -- this only proves the
+  // event still gets RECOGNIZED as a success/fail signal worth checking.
+  collectUuidToIssue = 'OWN-UUID-J';
+  const J = 'legit-depositor-j';
+  await setupUser(J, '0771000409');
+  const balBeforeJ = userDoc(J).walletBalance;
+  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + J, body: { amount: 15000, phone: '0771000409', network: 'MTN Mobile Money' } });
+  const depIdJ = r.body.depositId;
+  const refJ = collMap('pendingDeposits').get(depIdJ).marzReference;
+  collectTxForUuid['OWN-UUID-J'] = { status: 'successful', reference: refJ };
+  r = await call('POST', '/deposit/callback', { body: { event_type: 'collection.completed', data: { reference: refJ, transaction: { uuid: 'OWN-UUID-J' } } } });
+  await new Promise(r2 => setTimeout(r2, 200));
+  check('credited from event_type alone, no transaction.status field needed', userDoc(J).walletBalance === balBeforeJ + 15000, userDoc(J).walletBalance);
+  check('deposit correctly marked matched', collMap('pendingDeposits').get(depIdJ).status === 'matched', collMap('pendingDeposits').get(depIdJ).status);
+
   console.log('\n== Withdrawal callback SUCCESS: trusted on a genuine reference match, even when the live re-check is unavailable ==');
   // A real production incident: MarzPay's own "disbursement.completed"
   // webhook arrived correctly (confirmed against the real payload -- the
