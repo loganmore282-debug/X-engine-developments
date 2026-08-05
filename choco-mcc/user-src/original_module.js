@@ -597,8 +597,21 @@ function renderStaticPages(){
    once and remembered — every app open (called from enterApp), and every
    time the Home tab is switched INTO from a different tab (see switchTab's
    _lastTab tracking below). Switching Home -> Home (tapping Home while
-   already there) does not re-trigger it. */
-function maybeShowAnnouncement(){
+   already there) does not re-trigger it.
+
+   The Telegram Channel/Group buttons' glow+shake is a plain 3s CSS loop
+   (see .tg-pill in index.html) that spends most of its cycle calm and
+   only bursts near the end -- fine for the app-open/registration showing,
+   where there's no particular moment to draw the eye to, but landing on
+   Home via the bottom nav (Me/Team/Rewards/Shop -> Home) IS such a
+   moment, and the owner wants the burst to happen right then rather than
+   however far into the loop the CSS happens to be. immediateShake does
+   that by phase-shifting the animation to start already at its burst
+   point (a negative animation-delay), touched ONLY when explicitly
+   requested from switchTab() below -- the enterApp()/registration call
+   passes nothing, so that showing is intentionally left on the plain,
+   untouched cyclic loop. */
+function maybeShowAnnouncement(immediateShake){
   var s = getSettings();
   if(!s.annEnabled || !s.annBody) return;
   document.getElementById('annTitle').textContent = s.annTitle || 'Notice';
@@ -616,6 +629,9 @@ function maybeShowAnnouncement(){
   tgRow.innerHTML = btns;
   tgRow.style.display = btns ? 'flex' : 'none';
   document.getElementById('annDivider').style.display = btns ? 'block' : 'none';
+  if(immediateShake){
+    tgRow.querySelectorAll('.tg-pill').forEach(function(el){ el.style.animationDelay = '-2.4s, -2.4s'; });
+  }
   document.getElementById('announcementBg').classList.add('show');
 }
 function dismissAnnouncement(){
@@ -1140,8 +1156,10 @@ function switchTab(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===name); });
   if(name==='rewards' || name==='team' || name==='home') renderAll();
   // Shop -> Home, Team -> Home, Rewards -> Home, Me -> Home all re-show the
-  // announcement; Home -> Home (already there) does not.
-  if(enteringHomeFromElsewhere) maybeShowAnnouncement();
+  // announcement (with its Telegram buttons shaking right away -- see
+  // maybeShowAnnouncement's immediateShake); Home -> Home (already there)
+  // does not show it at all, so there's nothing to shake there either.
+  if(enteringHomeFromElsewhere) maybeShowAnnouncement(true);
   _lastTab = name;
 }
 // Home's Featured chocolates strip: switch to Shop and scroll straight to

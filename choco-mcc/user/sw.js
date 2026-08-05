@@ -459,7 +459,12 @@
 // admin approval" (now "processing"), and the cold-start retry toast
 // said "Waking up the server" (now "Connecting"). Copy only in all
 // three cases -- no backend behavior changed.
-const CACHE = 'chocomcc-shell-v82';
+// v83: Welcome dialog's Telegram buttons now shake immediately when the
+// dialog re-shows from navigating to Home via the bottom nav (Me/Team/
+// Rewards/Shop -> Home), instead of waiting up to ~2.4s into the glow's
+// own 3s loop. The app-open/registration showing is untouched -- still
+// the plain cyclic glow+shake with no forced immediate burst.
+const CACHE = 'chocomcc-shell-v83';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
