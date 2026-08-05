@@ -81,7 +81,7 @@ const USER_ROUTES = [
   ['POST', '/account/create-profile'], ['POST', '/register'], ['GET', '/account'],
   ['POST', '/checkin'], ['POST', '/invest/create'], ['GET', '/investments'],
   ['POST', '/deposit/marzpay'], ['POST', '/deposit/marzpay/status'], ['POST', '/withdraw/request'],
-  ['POST', '/withdraw/marzpay/status'], ['POST', '/bank/save'], ['GET', '/bank/list'],
+  ['POST', '/withdraw/marzpay/status'], ['POST', '/bank/save'], ['GET', '/bank/list'], ['POST', '/bank/delete'],
   ['POST', '/redeem'], ['GET', '/transactions'], ['GET', '/deposits'], ['GET', '/withdrawals']
 ];
 

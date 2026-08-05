@@ -67,7 +67,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 ['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/redeem', '/bank/save',
- '/account/create-profile', '/register', '/team/milestone/claim']
+ '/bank/delete', '/account/create-profile', '/register', '/team/milestone/claim']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -149,7 +149,7 @@ const MARZ_TIMEOUT = 20000; // matches Chronova's proven value — a short timeo
 // (choco-mcc/user/index.html). Admin panel overrides live in the
 // `settings`/`products` collections; these are only the boot fallback.
 const DEFAULT_SETTINGS = {
-  withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
+  withdrawFeePct: 15, minWithdraw: 5000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
   returnMultiple: 25, cycleDays: 180, maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
@@ -1875,6 +1875,24 @@ app.get('/bank/list', async (req, res) => {
     res.json({ status: 'success', accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not load bank accounts' });
+  }
+});
+app.post('/bank/delete', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const id = String(req.body.id || '');
+  if (!id) return res.status(400).json({ status: 'error', message: 'Missing account id' });
+  try {
+    const ref = db.collection('bankAccounts').doc(id);
+    const snap = await ref.get();
+    // Owner check matters here — an id is just a document id, not itself
+    // proof this account belongs to the caller; without this any signed-in
+    // user could delete anyone else's bound payout account by id.
+    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Account not found' });
+    await ref.delete();
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not remove the bank account' });
   }
 });
 

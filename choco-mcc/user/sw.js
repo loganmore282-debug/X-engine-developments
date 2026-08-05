@@ -445,7 +445,13 @@
 // resync from the server roughly once a minute during an open session,
 // instead of only once at app launch -- an admin changing a live value
 // used to never reach an already-open session at all.
-const CACHE = 'chocomcc-shell-v79';
+// v80: withdrawFeePct/minWithdraw code-level fallback corrected 19%/10,000
+// -> 15%/5,000 (was silently stale relative to the actual configured
+// values -- a device that had never synced the live admin settings, or
+// the admin panel's own empty-field placeholder, still showed the old
+// numbers). Payout Account: each bound account now has a delete button
+// (new /bank/delete endpoint, ownership-checked).
+const CACHE = 'chocomcc-shell-v80';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
