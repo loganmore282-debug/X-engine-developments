@@ -793,7 +793,7 @@ function renderFeatured(){
   // Sold-out/coming-soon tiers are never featured on Home — no point steering
   // anyone toward something they can't actually buy yet.
   var html = PRODUCTS.filter(function(p){ return !isProductSoldOut(p); }).slice(0,6).map(function(p){
-    return '<button class="choc-card" onclick="switchTab(\'shop\')">'+
+    return '<button class="choc-card" onclick="goToShopProduct(\''+p.key+'\')">'+
       '<img class="choc-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<div class="choc-body"><div class="choc-name">'+p.name+'</div>'+
       '<div class="choc-price">'+ugx(p.price)+'</div>'+
@@ -812,7 +812,7 @@ function renderShop(){
     var soldOut = isProductSoldOut(p);
     // Cheapest tier only -- everyone's real entry point.
     var ribbon = (!soldOut && i===0) ? 'Popular' : '';
-    return '<div class="prod-card'+(soldOut?' is-soldout':'')+'">'+
+    return '<div class="prod-card'+(soldOut?' is-soldout':'')+'" id="prodCard-'+p.key+'">'+
       '<div class="prod-img-wrap"><img class="prod-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<span class="prod-rank">Tier '+(i+1)+'</span>'+
       (ribbon?'<span class="prod-ribbon">'+ribbon+'</span>':'')+
@@ -1079,6 +1079,19 @@ function switchTab(name){
   // announcement; Home -> Home (already there) does not.
   if(enteringHomeFromElsewhere) maybeShowAnnouncement();
   _lastTab = name;
+}
+// Home's Featured chocolates strip: switch to Shop and scroll straight to
+// that product's own card instead of just landing on Shop's top and
+// making the member hunt for it. #shopGrid is already populated (Home's
+// own renderAll() call already ran renderShop() into the hidden view) --
+// the tiny delay is only so the browser has painted the tab switch
+// (display:none -> block) before scrollIntoView measures a real position.
+function goToShopProduct(key){
+  switchTab('shop');
+  setTimeout(function(){
+    var el = document.getElementById('prodCard-'+key);
+    if(el) el.scrollIntoView({ behavior:'smooth', block:'center' });
+  }, 50);
 }
 function openOverlay(name){
   closeOverlay();

@@ -398,7 +398,11 @@
 // late if the app was backgrounded right at the 24h mark. A new
 // company-wide reconciler sweep now runs every 30s independent of any
 // user's activity, so payouts land within ~30s of when they're due.
-const CACHE = 'chocomcc-shell-v66';
+// v67: Tapping a card in Home's "Featured chocolates" strip now switches
+// to Shop AND auto-scrolls straight to that exact product's own card
+// (smooth scroll, centered in view), instead of just landing on Shop's
+// top and leaving the member to hunt for it.
+const CACHE = 'chocomcc-shell-v67';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
