@@ -419,7 +419,10 @@
 // is a pure DB read+write with no external MarzPay call -- deposits and
 // withdrawals stayed on the 30s tick since polling MarzPay's API 30x
 // more often risks tripping its rate limiting.)
-const CACHE = 'chocomcc-shell-v73';
+// v74: Buy-button glow sweep slowed 1s->2s per cycle. Telegram
+// Channel/Group buttons on the welcome dialog now glow + shake
+// (periodic pulse + tilt wiggle) to draw the eye.
+const CACHE = 'chocomcc-shell-v74';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

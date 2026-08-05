@@ -64,7 +64,7 @@
   .btn-buy-glow{position:relative;overflow:hidden;}
   .btn-buy-glow::after{content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;
     background:linear-gradient(120deg,transparent,rgba(255,255,255,.55),transparent);
-    transform:skewX(-20deg);animation:btnGlowSweep 1s linear infinite;}
+    transform:skewX(-20deg);animation:btnGlowSweep 2s linear infinite;}
   @keyframes btnGlowSweep{0%{left:-60%;}100%{left:130%;}}
   .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
   @keyframes verifySpin{to{transform:rotate(360deg);}}
@@ -504,7 +504,10 @@
   .ann-p{margin:0 0 10px;}
   .ann-p:last-child{margin-bottom:0;}
   .tg-row{display:none;gap:8px;margin-top:2px;}
-  .tg-pill{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,#2AABEE,#229ED9);color:#fff;font-weight:800;font-size:12px;padding:11px 6px;border-radius:0;border:none;box-shadow:0 6px 14px rgba(34,158,217,.35);}
+  .tg-pill{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,#2AABEE,#229ED9);color:#fff;font-weight:800;font-size:12px;padding:11px 6px;border-radius:0;border:none;
+    box-shadow:0 6px 14px rgba(34,158,217,.35);animation:tgPillGlow 3s ease-in-out infinite, tgPillShake 3s ease-in-out infinite;}
+  @keyframes tgPillGlow{0%,60%,100%{box-shadow:0 6px 14px rgba(34,158,217,.35);}80%{box-shadow:0 6px 14px rgba(34,158,217,.35),0 0 16px 5px rgba(42,171,238,.85);}}
+  @keyframes tgPillShake{0%,80%,100%{transform:rotate(0deg);}82%{transform:rotate(-4deg);}84%{transform:rotate(4deg);}86%{transform:rotate(-4deg);}88%{transform:rotate(4deg);}90%{transform:rotate(-2deg);}92%{transform:rotate(2deg);}94%{transform:rotate(0deg);}}
   .bank-row{display:flex;align-items:center;gap:14px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:15px 16px;margin-bottom:10px;}
   .bank-net-badge{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:0 0 auto;}
   .bank-info{flex:1;}
