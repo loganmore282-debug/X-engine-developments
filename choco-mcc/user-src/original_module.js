@@ -261,6 +261,15 @@ function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner
 function btnBusyHtml(text){
   return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text);
 }
+// The bigger dash-spin circle (same animation as the full-section loading
+// spinner) instead of the small plain arc — used specifically on Add
+// Funds / Cash Out since those are the two buttons that move real money
+// and get an artificial minimum busy time (see minDelay) to feel like
+// something is actually happening.
+function btnBusyHtmlAlt(text){
+  return '<svg class="btn-spin" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg>'+esc(text);
+}
+function minDelay(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
 
 /* ====================== LOCAL STATE (per-account cache — keyed by the real Firebase uid; moves server-side once the backend is wired up) ====================== */
 function loadState(uid){
@@ -1101,10 +1110,9 @@ function renderBankList(){
     var nc = NETWORK_COLORS[b.network] || {color:'#EADFC9',textColor:'#3B2416'};
     var initials = b.network.split(' ').map(function(w){return w.charAt(0);}).join('').slice(0,2);
     var masked = b.phone.length>4 ? b.phone.slice(0,4)+'•••'+b.phone.slice(-2) : b.phone;
-    return '<div class="bank-row" onclick="setDefaultBank('+i+')" style="cursor:pointer">'+
+    return '<div class="bank-row" onclick="pickBankAccount('+i+')" style="cursor:pointer">'+
       '<div class="bank-net-badge" style="background:'+nc.color+';color:'+nc.textColor+'">'+initials+'</div>'+
       '<div class="bank-info"><b>'+esc(b.holder)+'</b><span>'+esc(b.network)+' · '+masked+'</span></div>'+
-      (i===STATE.defaultBankIdx ? '<span class="bank-default">Default</span>' : '')+
       '</div>';
   }).join('');
 }
@@ -1142,7 +1150,22 @@ async function saveBankAccount(){
     if(btn){ btn.disabled = false; btn.textContent = label; }
   }
 }
-function setDefaultBank(i){ STATE.defaultBankIdx = i; saveState(); renderBankList(); toast('Default account updated'); }
+// Payout Account is opened from two different places: standalone from the
+// Account tab (just managing bound accounts) and from mid-withdrawal
+// (Cash Out's "Change"/"Bind one now" link). This flag remembers which,
+// so a tap only auto-returns to Cash Out when that's actually where the
+// member came from -- picked here, not guessed.
+var _bindbankReturnToWithdraw = false;
+// A tap picks the account AND is the whole interaction -- no separate
+// "Default" label to explain, no confirmation toast. From the withdrawal
+// flow it drops straight back into Cash Out with the pick already applied;
+// from the standalone Account tab it just re-renders the (unlabelled) list.
+function pickBankAccount(i){
+  STATE.defaultBankIdx = i;
+  saveState();
+  if(_bindbankReturnToWithdraw){ _bindbankReturnToWithdraw = false; openOverlay('withdraw'); }
+  else { renderBankList(); }
+}
 function renderWitBankBox(){
   var sett = getSettings();
   var maxEl = document.getElementById('witMaxPerDay');
@@ -1156,7 +1179,7 @@ function renderWitBankBox(){
   var box = document.getElementById('witBankBox');
   if(!STATE.bankAccounts.length){
     box.innerHTML = '<div class="info-box" style="background:var(--berry-pale);color:var(--berry)">No bank account bound yet.'+
-      ' <b style="text-decoration:underline;cursor:pointer" onclick="closeOverlay();openOverlay(\'bindbank\')">Bind one now</b></div>';
+      ' <b style="text-decoration:underline;cursor:pointer" onclick="_bindbankReturnToWithdraw=true;closeOverlay();openOverlay(\'bindbank\')">Bind one now</b></div>';
     return;
   }
   var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
@@ -1165,7 +1188,7 @@ function renderWitBankBox(){
   box.innerHTML = '<div class="bank-row" style="margin:16px 20px 0">'+
     '<div class="bank-net-badge" style="background:'+nc.color+';color:'+nc.textColor+'">'+b.network.charAt(0)+'</div>'+
     '<div class="bank-info"><b>Cash out to '+esc(b.holder)+'</b><span>'+esc(b.network)+' · '+masked+'</span></div>'+
-    '<b style="font-size:12px;color:var(--caramel-deep);cursor:pointer" onclick="closeOverlay();openOverlay(\'bindbank\')">Change</b></div>';
+    '<b style="font-size:12px;color:var(--caramel-deep);cursor:pointer" onclick="_bindbankReturnToWithdraw=true;closeOverlay();openOverlay(\'bindbank\')">Change</b></div>';
 }
 
 function openProduct(key){
@@ -1222,8 +1245,11 @@ async function doDeposit(){
   // already normalises whichever form arrives.
   if(phone.charAt(0)==='0') phone = phone.slice(1);
   var btn = document.getElementById('depGoBtn'), label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-  var r = await api('/deposit/marzpay', { amount:amt, phone:phone, network:_depNetwork });
+  btn.disabled = true; btn.innerHTML = btnBusyHtmlAlt('Please wait…');
+  var r = (await Promise.all([
+    api('/deposit/marzpay', { amount:amt, phone:phone, network:_depNetwork }),
+    minDelay(3000)
+  ]))[0];
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not start the payment'); return; }
   document.getElementById('depAmt').value='';
@@ -1238,14 +1264,17 @@ function renderWitCalc(){
 }
 async function doWithdraw(){
   var sett = getSettings();
-  if(!STATE.bankAccounts.length){ toast('Bind a bank account first'); closeOverlay(); openOverlay('bindbank'); return; }
+  if(!STATE.bankAccounts.length){ toast('Bind a bank account first'); _bindbankReturnToWithdraw = true; closeOverlay(); openOverlay('bindbank'); return; }
   var amt = parseInt(document.getElementById('witAmt').value,10)||0;
   if(amt < sett.minWithdraw){ toast('Minimum cash-out is '+ugx(sett.minWithdraw)); return; }
   if(amt > STATE.balance){ toast('Insufficient balance'); return; }
   var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
   var btn = document.getElementById('witGoBtn'), label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-  var r = await api('/withdraw/request', { amount:amt, holder:b.holder, network:b.network, phone:b.phone });
+  btn.disabled = true; btn.innerHTML = btnBusyHtmlAlt('Please wait…');
+  var r = (await Promise.all([
+    api('/withdraw/request', { amount:amt, holder:b.holder, network:b.network, phone:b.phone }),
+    minDelay(3000)
+  ]))[0];
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not process the cash-out'); return; }
   document.getElementById('witAmt').value=''; renderWitCalc();

@@ -316,7 +316,19 @@
 // for the spacious About/Rules pages) to a new tight nl2pTight helper
 // with a small fixed margin between paragraphs -- same content now takes
 // noticeably less vertical space.
-const CACHE = 'chocomcc-shell-v55';
+// v56: (1) "How referrals work" card moved to below Team overview (was
+// above it). (2) Payout Account: removed the "Default" badge and its
+// confirmation toast entirely -- tapping an account now just picks it,
+// with no label to explain and no separate step. From the withdrawal
+// flow (Cash Out's "Change"/"Bind one now") the tap also drops straight
+// back into Cash Out automatically; from the standalone Account tab entry
+// it just re-renders the list in place. (3) Add Funds / Cash Out submit
+// buttons: swapped the small busy-arc icon for the bigger dash-spin
+// circle (same animation as the app's full-section loading spinner,
+// scaled down), and both now stay in that busy state for a minimum of 3
+// seconds even if the server answers faster (never longer than a
+// genuinely slow response, just never shorter than 3s).
+const CACHE = 'chocomcc-shell-v56';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

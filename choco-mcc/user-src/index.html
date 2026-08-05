@@ -74,6 +74,13 @@
     50%{stroke-dasharray:100px,200px;stroke-dashoffset:-15px;}
     100%{stroke-dasharray:100px,200px;stroke-dashoffset:-125px;}
   }
+  /* Same dash-spin animation as .cm-spinner above, sized down and using
+     currentColor so it drops inline into a button (white text on the
+     caramel/berry gradient buttons) — the bigger, more visible "processing"
+     look for the money-moving Add Funds / Cash Out buttons specifically,
+     distinct from the small plain arc (.verify-spin) used elsewhere. */
+  .btn-spin{display:inline-flex;vertical-align:-4px;margin-right:8px;width:16px;height:16px;animation:cmSpinRotate 1.4s linear infinite;}
+  .btn-spin circle{stroke:currentColor;stroke-linecap:round;fill:none;stroke-width:4;animation:cmSpinDash 1.4s ease-in-out infinite;}
 
   /* ---------- Auth ---------- */
   #authScreen{min-height:100vh;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 26px;background:
@@ -595,13 +602,6 @@
         <div class="comm-tile"><b id="commL2Pct">2%</b><span>LEVEL 2</span></div>
         <div class="comm-tile"><b id="commL3Pct">1%</b><span>LEVEL 3</span></div>
       </div>
-      <div class="howto-card">
-        <h4>How referrals work</h4>
-        <div class="howto-step"><span class="howto-num">1</span><p>Share your referral link above with friends and family.</p></div>
-        <div class="howto-step"><span class="howto-num">2</span><p>When someone signs up with your link and buys a chocolate product, you earn a commission straight away.</p></div>
-        <div class="howto-step"><span class="howto-num">3</span><p>You earn on <b>3 levels</b> — people you invite directly (Level 1), the people they invite (Level 2), and the people those invite (Level 3).</p></div>
-        <div class="howto-step"><span class="howto-num">4</span><p>Commissions land straight in your wallet balance — no waiting, no claiming.</p></div>
-      </div>
       <div class="sec-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
       <div style="margin:0 20px" class="card" >
         <div style="padding:6px 16px">
@@ -610,6 +610,13 @@
           <div class="kv" style="cursor:pointer" onclick="openTeamLevel(3)"><span>Level 3 members</span><span style="display:flex;align-items:center"><b id="teamL3">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
           <div class="kv" style="border-bottom:none"><span>Commission earned</span><b id="teamComm">UGX 0</b></div>
         </div>
+      </div>
+      <div class="howto-card" style="margin-top:16px">
+        <h4>How referrals work</h4>
+        <div class="howto-step"><span class="howto-num">1</span><p>Share your referral link above with friends and family.</p></div>
+        <div class="howto-step"><span class="howto-num">2</span><p>When someone signs up with your link and buys a chocolate product, you earn a commission straight away.</p></div>
+        <div class="howto-step"><span class="howto-num">3</span><p>You earn on <b>3 levels</b> — people you invite directly (Level 1), the people they invite (Level 2), and the people those invite (Level 3).</p></div>
+        <div class="howto-step"><span class="howto-num">4</span><p>Commissions land straight in your wallet balance — no waiting, no claiming.</p></div>
       </div>
       <div style="height:14px"></div>
     </div>
@@ -663,7 +670,7 @@
         <button class="menu-tile" onclick="openOverlay('mychoc')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 9l6-6 12 12-6 6L3 9z"/><path d="M6 6l3 3M9 3l3 3M12 12l3 3M15 9l3 3"/><path d="M9 12l1.5-3 3 .5 1-2.5" stroke-linejoin="round"/></svg></div><div class="menu-tile-lbl">My Chocolates</div></button>
         <button class="menu-tile" onclick="openOverlay('records')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 3h11v18l-2.2-1.6L13 21l-2.3-1.6L8.5 21l-2-1.6V3z"/><path d="M9 8.2h6M9 12h6"/></svg></div><div class="menu-tile-lbl">Ledger</div></button>
         <button class="menu-tile" onclick="switchTab('team')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="5.5" r="2.5"/><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M10 7L7.5 15M14 7l2.5 8"/></svg></div><div class="menu-tile-lbl">My Team</div></button>
-        <button class="menu-tile" onclick="openOverlay('bindbank')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="2.5" y="5.5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6 15h4"/></svg></div><div class="menu-tile-lbl">Payout Account</div></button>
+        <button class="menu-tile" onclick="_bindbankReturnToWithdraw=false;openOverlay('bindbank')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="2.5" y="5.5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6 15h4"/></svg></div><div class="menu-tile-lbl">Payout Account</div></button>
         <button class="menu-tile" onclick="openOverlay('changepass')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="7" cy="12" r="4"/><path d="M11 12h10M16.5 12v3M19.5 12v3"/></svg></div><div class="menu-tile-lbl">Security</div></button>
         <button class="menu-tile" onclick="openOverlay('about')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="12" cy="12" r="9"/><path d="M12 8.2h.01"/><path d="M10.8 12H12v5h1.2"/></svg></div><div class="menu-tile-lbl">About Us</div></button>
         <button class="menu-tile" onclick="openOverlay('rules')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 3h11v18l-2.2-1.6L13 21l-2.3-1.6L8.5 21l-2-1.6V3z"/><path d="M9 8.2h6M9 12h4"/></svg></div><div class="menu-tile-lbl">Terms & Rules</div></button>
