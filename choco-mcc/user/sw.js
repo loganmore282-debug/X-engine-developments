@@ -365,7 +365,13 @@
 // what they were before v60. Team's gold/silver/bronze medal badges and
 // Shop's "Popular" ribbon on the cheapest tier are KEPT (the "Premium"
 // ribbon on the priciest tier is dropped too -- only Popular stays).
-const CACHE = 'chocomcc-shell-v61';
+// v62: Product detail page (opens for every chocolate tapped in Shop)
+// redesigned -- same 4 numbers (Price, Daily reward, Cycle, Total
+// payout), same wording, same hero image/banner/Buy button, just a
+// different layout: Total payout is now a bold caramel-gradient hero
+// card, Price/Daily reward/Cycle sit as a 3-tile row below it, instead
+// of the old plain stacked list.
+const CACHE = 'chocomcc-shell-v62';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

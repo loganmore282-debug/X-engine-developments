@@ -313,6 +313,17 @@
   .cards .stat .n{font-size:16px;font-weight:800;}
   .cards .stat .l{font-size:11px;color:var(--cocoa-faint);font-weight:700;margin-top:4px;}
   .form-card{margin:6px 20px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:18px;}
+
+  /* ---------- Product detail: hero stat + supporting stat row ---------- */
+  .pd-hero-stat{margin:6px 20px 10px;padding:20px;border-radius:20px;text-align:center;
+    background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));box-shadow:0 14px 28px -12px rgba(192,111,28,.45);}
+  .pd-hero-stat-lbl{font-size:11.5px;color:rgba(255,255,255,.85);font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
+  .pd-hero-stat-val{font-size:25px;font-weight:800;color:#fff;margin-top:6px;}
+  .pd-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 20px 16px;}
+  .pd-stat{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px 8px;text-align:center;}
+  .pd-stat-lbl{font-size:10px;color:var(--cocoa-faint);font-weight:700;text-transform:uppercase;letter-spacing:.2px;}
+  .pd-stat-val{font-size:13.5px;font-weight:800;color:var(--cocoa);margin-top:6px;}
+  .pd-stat-val.is-mint{color:var(--mint);}
   .flabel{font-size:12px;font-weight:800;color:var(--cocoa-soft);margin-bottom:8px;display:block;}
   .famt{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:14px;font-size:20px;font-weight:800;color:var(--cocoa);outline:none;margin-bottom:14px;}
   .quick-amt-row{display:flex;gap:8px;margin:-6px 0 14px;}

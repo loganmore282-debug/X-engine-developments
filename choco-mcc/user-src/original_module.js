@@ -1191,11 +1191,11 @@ function openProduct(key){
   document.getElementById('pdBody').innerHTML =
     '<img src="'+CHOCO_IMAGES[p.key]+'" style="width:100%;height:220px;object-fit:cover;border-radius:20px;margin:6px 20px 0;width:calc(100% - 40px)'+(soldOut?';filter:grayscale(.5);opacity:.7':'')+'">'+
     (soldOut?'<div class="info-box" style="margin:16px 20px 0;background:var(--berry-pale);color:var(--berry)">Coming soon. This chocolate isn\'t available to buy yet.</div>':'')+
-    '<div class="form-card">'+
-      '<div class="kv"><span>Price</span><b>'+ugx(p.price)+'</b></div>'+
-      '<div class="kv"><span>Daily reward</span><b style="color:var(--mint)">'+ugx(dailyReturn(p))+'</b></div>'+
-      '<div class="kv"><span>Cycle</span><b>'+productCycle(p)+' days</b></div>'+
-      '<div class="kv" style="border-bottom:none"><span>Total payout</span><b>'+ugx(productExpectedReturn(p))+'</b></div>'+
+    '<div class="pd-hero-stat"><div class="pd-hero-stat-lbl">Total payout</div><div class="pd-hero-stat-val">'+ugx(productExpectedReturn(p))+'</div></div>'+
+    '<div class="pd-stats-row">'+
+      '<div class="pd-stat"><div class="pd-stat-lbl">Price</div><div class="pd-stat-val">'+ugx(p.price)+'</div></div>'+
+      '<div class="pd-stat"><div class="pd-stat-lbl">Daily reward</div><div class="pd-stat-val is-mint">'+ugx(dailyReturn(p))+'</div></div>'+
+      '<div class="pd-stat"><div class="pd-stat-lbl">Cycle</div><div class="pd-stat-val">'+productCycle(p)+' days</div></div>'+
     '</div>'+
     '<div class="photo-banner pb-sm"><img src="'+CHOCO_BANNERS.snickerscookie+'"></div>'+
     '<div style="padding:4px 20px 20px">'+(soldOut
