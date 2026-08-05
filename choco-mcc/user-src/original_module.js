@@ -261,15 +261,18 @@ function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner
 function btnBusyHtml(text){
   return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text);
 }
-// The bigger dash-spin circle (same animation as the full-section loading
-// spinner) instead of the small plain arc — used specifically on Add
-// Funds / Cash Out since those are the two buttons that move real money
-// and get an artificial minimum busy time (see minDelay) to feel like
-// something is actually happening.
-function btnBusyHtmlAlt(text){
-  return '<svg class="btn-spin" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg>'+esc(text);
+// Home screen's Add Funds / Cash Out chips: show the OTHER loader (the
+// bigger dash-spin circle, same one spinnerHtml() uses for full-section
+// loading — distinct from the small .verify-spin arc used on every
+// "Please wait…" button) for a fixed 3 seconds the moment the chip is
+// tapped, THEN open the actual Add Funds / Cash Out screen.
+function openOverlayWithLoader(name){
+  document.getElementById('chipLoaderBg').classList.add('show');
+  setTimeout(function(){
+    document.getElementById('chipLoaderBg').classList.remove('show');
+    openOverlay(name);
+  }, 3000);
 }
-function minDelay(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
 
 /* ====================== LOCAL STATE (per-account cache — keyed by the real Firebase uid; moves server-side once the backend is wired up) ====================== */
 function loadState(uid){
@@ -1245,11 +1248,8 @@ async function doDeposit(){
   // already normalises whichever form arrives.
   if(phone.charAt(0)==='0') phone = phone.slice(1);
   var btn = document.getElementById('depGoBtn'), label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtmlAlt('Please wait…');
-  var r = (await Promise.all([
-    api('/deposit/marzpay', { amount:amt, phone:phone, network:_depNetwork }),
-    minDelay(3000)
-  ]))[0];
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
+  var r = await api('/deposit/marzpay', { amount:amt, phone:phone, network:_depNetwork });
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not start the payment'); return; }
   document.getElementById('depAmt').value='';
@@ -1270,11 +1270,8 @@ async function doWithdraw(){
   if(amt > STATE.balance){ toast('Insufficient balance'); return; }
   var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
   var btn = document.getElementById('witGoBtn'), label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtmlAlt('Please wait…');
-  var r = (await Promise.all([
-    api('/withdraw/request', { amount:amt, holder:b.holder, network:b.network, phone:b.phone }),
-    minDelay(3000)
-  ]))[0];
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
+  var r = await api('/withdraw/request', { amount:amt, holder:b.holder, network:b.network, phone:b.phone });
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not process the cash-out'); return; }
   document.getElementById('witAmt').value=''; renderWitCalc();

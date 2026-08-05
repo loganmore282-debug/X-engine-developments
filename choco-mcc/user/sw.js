@@ -328,7 +328,18 @@
 // scaled down), and both now stay in that busy state for a minimum of 3
 // seconds even if the server answers faster (never longer than a
 // genuinely slow response, just never shorter than 3s).
-const CACHE = 'chocomcc-shell-v56';
+// v57: Corrected v56's loader misread. (1) Reverted the submit-button
+// spinner/3s-delay change entirely -- Add Funds / Cash Out's actual
+// "Request" buttons are back to the plain small arc + no artificial
+// delay. (2) The 3-second "other" loader (big dash-spin circle, full
+// screen) now shows the instant the HOME SCREEN'S Add Funds / Cash Out
+// chips are tapped, before that screen even opens -- which is what was
+// actually asked for. (3) Home banner title/sentence: was rendering in
+// white text sitting on the bright top part of the banner photo where
+// the bottom-anchored dark gradient never reaches, making it unreadable.
+// Switched to a dark chocolate color (var(--cocoa)/--cocoa-soft) so it
+// reads regardless of the gradient position.
+const CACHE = 'chocomcc-shell-v57';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
