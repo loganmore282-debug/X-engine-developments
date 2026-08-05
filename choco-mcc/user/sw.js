@@ -405,7 +405,8 @@
 // v68: Account (Me) screen -- added a small UGX coin icon beside the
 // Balance and Cash Outs figures, sized to sit neatly next to the text
 // without disturbing the tile layout.
-const CACHE = 'chocomcc-shell-v68';
+// v69: UGX coin icon on Account (Me) was too small -- sized up 15px->20px.
+const CACHE = 'chocomcc-shell-v69';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
