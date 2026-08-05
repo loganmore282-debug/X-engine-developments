@@ -402,7 +402,10 @@
 // to Shop AND auto-scrolls straight to that exact product's own card
 // (smooth scroll, centered in view), instead of just landing on Shop's
 // top and leaving the member to hunt for it.
-const CACHE = 'chocomcc-shell-v67';
+// v68: Account (Me) screen -- added a small UGX coin icon beside the
+// Balance and Cash Outs figures, sized to sit neatly next to the text
+// without disturbing the tile layout.
+const CACHE = 'chocomcc-shell-v68';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
