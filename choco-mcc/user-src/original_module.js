@@ -129,7 +129,7 @@ async function api(path, body, method, retry){
   var attempts = retry ? delays.length : 1;
   for(var i=0; i<attempts; i++){
     if(i>0){
-      if(!_wokenUp) toast('Waking up the server, this can take a moment…');
+      if(!_wokenUp) toast('Connecting, this can take a moment…');
       await new Promise(function(r){ setTimeout(r, delays[i]); });
     }
     var headers = {};

@@ -454,7 +454,12 @@
 // v81: Cash Out's "How cash-outs work" step 3 no longer mentions admin
 // approval -- reworded to present it as automatic. Copy only; the
 // backend approval step itself is unchanged.
-const CACHE = 'chocomcc-shell-v81';
+// v82: Two more places still said "admin"/"server" out loud: the
+// submission toast and the transaction ledger entry both said "awaiting
+// admin approval" (now "processing"), and the cold-start retry toast
+// said "Waking up the server" (now "Connecting"). Copy only in all
+// three cases -- no backend behavior changed.
+const CACHE = 'chocomcc-shell-v82';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

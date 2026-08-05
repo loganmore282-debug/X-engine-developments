@@ -1591,13 +1591,15 @@ app.post('/withdraw/request', async (req, res) => {
         status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'withdraw', description: `Cash out to ${holder} (${network}), net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, awaiting admin approval`,
+        userId, type: 'withdraw', description: `Cash out to ${holder} (${network}), net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, processing`,
         amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
 
+    // sendAdminPush is the owner's OWN push notification (not shown to the
+    // member) -- it's fine, and meant, to say "awaiting approval" here.
     sendAdminPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}), awaiting approval`, { type: 'withdrawal', withdrawalId: witId });
-    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested, awaiting admin approval` });
+    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested — processing now` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
