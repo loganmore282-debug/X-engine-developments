@@ -561,6 +561,59 @@ const PROVIDER_BUSY_MSG = 'The mobile-money service is temporarily busy. Please 
 // most common real-world cause, so naming it directly is far more useful
 // than a bare "not completed" that leaves the member guessing.
 const DEPOSIT_FAILED_MSG = 'Payment was not completed. This is usually because the mobile-money account did not have enough balance. Check your balance and try again.';
+// ── DEPOSIT ABUSE AUTO-BAN ──
+// Two independent automatic bans, both owner-requested:
+//  1) 5+ deposit REQUESTS from the same account within a rolling 60s window
+//     -- every hit to /deposit/marzpay counts, whether it succeeds, fails,
+//     or the member just backs out of the flow and taps it again. This is
+//     the signature of someone repeatedly tapping Add Funds then cancelling
+//     rather than a real payment attempt. A genuine member who deposits
+//     several times quickly is protected as long as at least ONE of those
+//     attempts actually clears (markDepositAttemptSucceeded, called from
+//     creditDeposit) -- only a burst where NONE ever settles successfully
+//     results in a ban.
+//  2) More than 20 FAILED deposits (status:'failed') from the same account
+//     in the same calendar day (EAT, matching nowStr()'s own `date` field
+//     already stamped on every deposit) -- repeated failures all day is
+//     either a broken payment method or someone testing many small charges
+//     against a mobile-money line that keeps declining them.
+// Both bans are a plain automatic `status:'banned'` on the user doc, same
+// field an admin's own manual ban already sets and the same BANNED code
+// path every other endpoint already enforces -- nothing new to check
+// elsewhere, and the admin panel's existing Users/ban tooling already
+// shows and can reverse it.
+const _depAttempts = new Map();
+const _depAttemptsSucceeded = new Set();
+function recordDepositAttempt(userId) {
+  const now = Date.now();
+  let arr = (_depAttempts.get(userId) || []).filter(t => now - t < 60000);
+  if (!arr.length) _depAttemptsSucceeded.delete(userId); // fresh window -- last burst's success no longer protects a new one
+  arr.push(now);
+  _depAttempts.set(userId, arr);
+  return arr.length;
+}
+function markDepositAttemptSucceeded(userId) { _depAttemptsSucceeded.add(userId); }
+async function banUserAutomatically(userId, reason) {
+  try {
+    await db.collection('users').doc(userId).update({ status: 'banned', banReason: reason, bannedAt: FieldValue.serverTimestamp() });
+    console.error(`Auto-ban: ${userId} -- ${reason}`);
+  } catch (e) { console.error('Auto-ban write error:', e.message); }
+}
+// Marks a pending deposit failed AND checks this user's failed-deposit count
+// for today, banning past 20. Centralized here so every place a deposit can
+// resolve to 'failed' (the initial gateway call, the status-poll fallback,
+// the webhook callback, and the background reconciler sweep) enforces the
+// same rule instead of four separately-maintained copies of it.
+async function markDepositFailed(depRef, userId, reason) {
+  await depRef.update({ status: 'failed', failureReason: reason }).catch(() => {});
+  if (!userId) return;
+  try {
+    const today = nowStr().date;
+    const snap = await db.collection('pendingDeposits')
+      .where('userId', '==', userId).where('status', '==', 'failed').where('date', '==', today).get();
+    if (snap.docs.length > 20) await banUserAutomatically(userId, 'Automatic: more than 20 failed deposits today');
+  } catch (e) { console.error('Deposit failure-count ban check error:', e.message); }
+}
 function marzUserMsg(mp, fallback) {
   const raw = mp && (mp.message || mp.data?.message || mp.error || mp.data?.error);
   if ((mp && (mp.providerDown || mp.error_code === 'DATABASE_ERROR')) ||
@@ -1320,14 +1373,27 @@ app.post('/deposit/marzpay', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  const lastDep = _depCreateDebounce.get(userId) || 0;
-  if (Date.now() - lastDep < 7000)
-    return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
-  _depCreateDebounce.set(userId, Date.now());
   try {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+
+    // Every request reaching here counts as a deposit attempt, INCLUDING
+    // ones about to be soft-rate-limited by the debounce right below --
+    // rapid clicking straight through the debounce wall is itself part of
+    // the abuse pattern this is watching for, not something that should
+    // escape counting just because it also got a 429.
+    const attemptCount = recordDepositAttempt(userId);
+    if (attemptCount >= 5 && !_depAttemptsSucceeded.has(userId)) {
+      await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    }
+
+    const lastDep = _depCreateDebounce.get(userId) || 0;
+    if (Date.now() - lastDep < 7000)
+      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+    _depCreateDebounce.set(userId, Date.now());
+
     if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
     const phone = cleanPhone(req.body.phone || uSnap.data().phone || '');
     if (!phone || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
@@ -1390,7 +1456,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       // there is no way to tell a bad MARZPAY_KEY apart from a real MarzPay
       // outage apart from staring at Render's logs and seeing nothing.
       console.error('MarzPay collect-money rejected:', JSON.stringify(mpData));
-      await depRef.update({ status: 'failed', failureReason: marzUserMsg(mpData, 'Could not start the payment') }).catch(() => {});
+      await markDepositFailed(depRef, userId, marzUserMsg(mpData, 'Could not start the payment'));
       return;
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
@@ -1428,7 +1494,10 @@ async function creditDeposit(depDoc) {
     // Only on a REAL new credit (never on an idempotent replay/no-op) —
     // otherwise a retried webhook would fire a duplicate notification for
     // money that was already credited long ago.
-    if (justCredited) sendAdminPush('Deposit completed', `${fmtUGX(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id });
+    if (justCredited) {
+      sendAdminPush('Deposit completed', `${fmtUGX(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id });
+      markDepositAttemptSucceeded(dep.userId);
+    }
     return credited;
   } finally { _creditingDeposits.delete(depDoc.id); }
 }
@@ -1453,7 +1522,7 @@ app.post('/deposit/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: 'matched' });
     }
     if (FAILED_STATUSES.has(marzStatus)) {
-      await depSnap.ref.update({ status: 'failed', failureReason: DEPOSIT_FAILED_MSG }).catch(() => {});
+      await markDepositFailed(depSnap.ref, userId, DEPOSIT_FAILED_MSG);
       return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
     }
     res.json({ status: 'success', state: 'pending' });
@@ -1547,7 +1616,7 @@ app.post('/deposit/callback', async (req, res) => {
       await creditDeposit(doc);
     } else if (isFailed) {
       if (!FAILED_STATUSES.has(tx.status)) return; // not independently confirmed — never decline on the webhook's word alone
-      await doc.ref.update({ status: 'failed', failureReason: DEPOSIT_FAILED_MSG }).catch(() => {});
+      await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
   } catch (e) {
     console.error('Deposit callback error:', e.message);
@@ -3070,7 +3139,7 @@ async function reconcilePendingDeposits() {
       if (!dep.marzTxUuid) continue;
       const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
       if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(doc); settled++; }
-      else if (FAILED_STATUSES.has(marzStatus)) await doc.ref.update({ status: 'failed', failureReason: DEPOSIT_FAILED_MSG }).catch(() => {});
+      else if (FAILED_STATUSES.has(marzStatus)) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
     // A deposit marked 'failed' isn't necessarily really dead (same lesson as
     // Chronova's pollPendingPayments): a member who insists "I paid but never
