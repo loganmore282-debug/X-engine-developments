@@ -451,7 +451,10 @@
 // the admin panel's own empty-field placeholder, still showed the old
 // numbers). Payout Account: each bound account now has a delete button
 // (new /bank/delete endpoint, ownership-checked).
-const CACHE = 'chocomcc-shell-v80';
+// v81: Cash Out's "How cash-outs work" step 3 no longer mentions admin
+// approval -- reworded to present it as automatic. Copy only; the
+// backend approval step itself is unchanged.
+const CACHE = 'chocomcc-shell-v81';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
