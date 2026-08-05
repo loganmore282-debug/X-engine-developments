@@ -377,7 +377,12 @@
 // directly on its Shop card. Home's small "Featured chocolates" cards
 // now jump to the Shop tab on tap (that's where full details + Buy
 // live) instead of a page that no longer exists.
-const CACHE = 'chocomcc-shell-v63';
+// v64: Shop card numbers were v63's gradient "hero stat" + 3-tile grid --
+// too box-heavy per feedback. Swapped for the classic plain list (same
+// .kv row pattern used elsewhere): Price/Daily reward/Cycle/Total payout
+// as simple label-left value-right rows with thin dividers, no
+// tiles/gradients. Same content, same Buy button, just plainer.
+const CACHE = 'chocomcc-shell-v64';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

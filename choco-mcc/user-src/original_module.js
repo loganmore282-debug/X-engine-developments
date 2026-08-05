@@ -819,15 +819,13 @@ function renderShop(){
       (soldOut?'<span class="prod-soldout-banner">Coming Soon</span>':'')+'</div>'+
       '<div class="prod-body-full">'+
         '<div class="prod-name">'+p.name+'</div>'+
-        '<div class="prod-hero-stat"><div class="prod-hero-lbl">Total payout</div><div class="prod-hero-val">'+ugx(productExpectedReturn(p))+'</div></div>'+
-        '<div class="prod-stats-row">'+
-          '<div class="prod-stat"><div class="prod-stat-lbl">Price</div><div class="prod-stat-val">'+ugx(p.price)+'</div></div>'+
-          '<div class="prod-stat"><div class="prod-stat-lbl">Daily reward</div><div class="prod-stat-val is-mint">'+ugx(dailyReturn(p))+'</div></div>'+
-          '<div class="prod-stat"><div class="prod-stat-lbl">Cycle</div><div class="prod-stat-val">'+productCycle(p)+' days</div></div>'+
-        '</div>'+
+        '<div class="kv"><span>Price</span><b>'+ugx(p.price)+'</b></div>'+
+        '<div class="kv"><span>Daily reward</span><b style="color:var(--mint)">'+ugx(dailyReturn(p))+'</b></div>'+
+        '<div class="kv"><span>Cycle</span><b>'+productCycle(p)+' days</b></div>'+
+        '<div class="kv" style="border-bottom:none"><span>Total payout</span><b>'+ugx(productExpectedReturn(p))+'</b></div>'+
         (soldOut
-          ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed">Coming soon</button>'
-          : '<button class="btn btn-primary btn-block" onclick="buyProduct(this,\''+p.key+'\')">Buy this chocolate</button>')+
+          ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:14px">Coming soon</button>'
+          : '<button class="btn btn-primary btn-block" style="margin-top:14px" onclick="buyProduct(this,\''+p.key+'\')">Buy this chocolate</button>')+
       '</div></div>';
   }).join('');
   document.getElementById('shopGrid').innerHTML = html;
