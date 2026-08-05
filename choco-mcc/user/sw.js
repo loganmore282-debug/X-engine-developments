@@ -371,7 +371,13 @@
 // different layout: Total payout is now a bold caramel-gradient hero
 // card, Price/Daily reward/Cycle sit as a 3-tile row below it, instead
 // of the old plain stacked list.
-const CACHE = 'chocomcc-shell-v62';
+// v63: The v62 detail page is GONE per feedback -- no more tapping into a
+// separate page for any chocolate. Every product's full numbers (Price,
+// Daily reward, Cycle, Total payout) plus its own Buy button now sit
+// directly on its Shop card. Home's small "Featured chocolates" cards
+// now jump to the Shop tab on tap (that's where full details + Buy
+// live) instead of a page that no longer exists.
+const CACHE = 'chocomcc-shell-v63';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

@@ -793,7 +793,7 @@ function renderFeatured(){
   // Sold-out/coming-soon tiers are never featured on Home — no point steering
   // anyone toward something they can't actually buy yet.
   var html = PRODUCTS.filter(function(p){ return !isProductSoldOut(p); }).slice(0,6).map(function(p){
-    return '<button class="choc-card" onclick="openProduct(\''+p.key+'\')">'+
+    return '<button class="choc-card" onclick="switchTab(\'shop\')">'+
       '<img class="choc-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<div class="choc-body"><div class="choc-name">'+p.name+'</div>'+
       '<div class="choc-price">'+ugx(p.price)+'</div>'+
@@ -803,24 +803,32 @@ function renderFeatured(){
 }
 function renderShop(){
   // Sold-out/coming-soon tiers render fully dimmed with a banner spanning
-  // the whole image (not a small corner badge), and the card itself is a
-  // real disabled <button> — no onclick at all, so tapping it does
-  // nothing rather than opening a product page it can't buy from anyway.
-  // Server-side, /invest/create independently re-checks active/comingSoon
-  // on every purchase attempt regardless of what the client shows.
+  // the whole image. Every chocolate's full numbers (price, daily reward,
+  // cycle, total payout) plus its own Buy button sit right on the card
+  // -- no detail page to tap through to anymore. Server-side,
+  // /invest/create independently re-checks active/comingSoon on every
+  // purchase attempt regardless of what the client shows.
   var html = PRODUCTS.map(function(p, i){
     var soldOut = isProductSoldOut(p);
     // Cheapest tier only -- everyone's real entry point.
     var ribbon = (!soldOut && i===0) ? 'Popular' : '';
-    return '<button class="prod-card'+(soldOut?' is-soldout':'')+'"'+(soldOut?' disabled':' onclick="openProduct(\''+p.key+'\')"')+'>'+
+    return '<div class="prod-card'+(soldOut?' is-soldout':'')+'">'+
       '<div class="prod-img-wrap"><img class="prod-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<span class="prod-rank">Tier '+(i+1)+'</span>'+
       (ribbon?'<span class="prod-ribbon">'+ribbon+'</span>':'')+
       (soldOut?'<span class="prod-soldout-banner">Coming Soon</span>':'')+'</div>'+
-      '<div class="prod-body"><div class="prod-info"><div class="prod-name">'+p.name+'</div>'+
-      '<div class="prod-price">'+ugx(p.price)+'</div>'+
-      '<div class="prod-daily">+'+ugx(dailyReturn(p))+' / day</div></div>'+
-      '<div class="prod-arrow">'+ICON_CHEV+'</div></div></button>';
+      '<div class="prod-body-full">'+
+        '<div class="prod-name">'+p.name+'</div>'+
+        '<div class="prod-hero-stat"><div class="prod-hero-lbl">Total payout</div><div class="prod-hero-val">'+ugx(productExpectedReturn(p))+'</div></div>'+
+        '<div class="prod-stats-row">'+
+          '<div class="prod-stat"><div class="prod-stat-lbl">Price</div><div class="prod-stat-val">'+ugx(p.price)+'</div></div>'+
+          '<div class="prod-stat"><div class="prod-stat-lbl">Daily reward</div><div class="prod-stat-val is-mint">'+ugx(dailyReturn(p))+'</div></div>'+
+          '<div class="prod-stat"><div class="prod-stat-lbl">Cycle</div><div class="prod-stat-val">'+productCycle(p)+' days</div></div>'+
+        '</div>'+
+        (soldOut
+          ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed">Coming soon</button>'
+          : '<button class="btn btn-primary btn-block" onclick="buyProduct(this,\''+p.key+'\')">Buy this chocolate</button>')+
+      '</div></div>';
   }).join('');
   document.getElementById('shopGrid').innerHTML = html;
 }
@@ -1184,37 +1192,17 @@ function renderWitBankBox(){
     '<b style="font-size:12px;color:var(--caramel-deep);cursor:pointer" onclick="_bindbankReturnToWithdraw=true;closeOverlay();openOverlay(\'bindbank\')">Change</b></div>';
 }
 
-function openProduct(key){
-  var p = PRODUCTS.filter(function(x){return x.key===key;})[0];
-  var soldOut = isProductSoldOut(p);
-  document.getElementById('pdTitle').textContent = p.name;
-  document.getElementById('pdBody').innerHTML =
-    '<img src="'+CHOCO_IMAGES[p.key]+'" style="width:100%;height:220px;object-fit:cover;border-radius:20px;margin:6px 20px 0;width:calc(100% - 40px)'+(soldOut?';filter:grayscale(.5);opacity:.7':'')+'">'+
-    (soldOut?'<div class="info-box" style="margin:16px 20px 0;background:var(--berry-pale);color:var(--berry)">Coming soon. This chocolate isn\'t available to buy yet.</div>':'')+
-    '<div class="pd-hero-stat"><div class="pd-hero-stat-lbl">Total payout</div><div class="pd-hero-stat-val">'+ugx(productExpectedReturn(p))+'</div></div>'+
-    '<div class="pd-stats-row">'+
-      '<div class="pd-stat"><div class="pd-stat-lbl">Price</div><div class="pd-stat-val">'+ugx(p.price)+'</div></div>'+
-      '<div class="pd-stat"><div class="pd-stat-lbl">Daily reward</div><div class="pd-stat-val is-mint">'+ugx(dailyReturn(p))+'</div></div>'+
-      '<div class="pd-stat"><div class="pd-stat-lbl">Cycle</div><div class="pd-stat-val">'+productCycle(p)+' days</div></div>'+
-    '</div>'+
-    '<div class="photo-banner pb-sm"><img src="'+CHOCO_BANNERS.snickerscookie+'"></div>'+
-    '<div style="padding:4px 20px 20px">'+(soldOut
-      ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed">Coming soon</button>'
-      : '<button class="btn btn-primary btn-block" id="buyProductBtn" onclick="buyProduct(\''+p.key+'\')">Buy this chocolate</button>')+'</div>';
-  openOverlay('product');
-}
-async function buyProduct(key){
+async function buyProduct(btn, key){
   var p = PRODUCTS.filter(function(x){return x.key===key;})[0];
   if(isProductSoldOut(p)){ toast('This chocolate is not available to buy right now'); return; }
   if(STATE.balance < p.price){ toast('Not enough balance, add funds first'); return; }
-  var btn = document.getElementById('buyProductBtn');
   if(btn){ if(btn.disabled) return; btn.disabled = true; }
   toast('Processing…');
   try{
     var r = await api('/invest/create', { tierKey:key });
     if(r.status!=='success'){ toast(r.message||'Purchase failed'); return; }
     await refreshFromServer();
-    closeOverlay(); renderAll(); toast('Purchased '+p.name+'!');
+    renderAll(); toast('Purchased '+p.name+'!');
   } finally {
     if(btn) btn.disabled = false;
   }
