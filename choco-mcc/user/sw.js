@@ -388,7 +388,17 @@
 // them -- "| | |") instead of 4 separate rows, same divider style
 // already used on Team's L1/L2/L3 row. Noticeably shorter card, same
 // content, same wording.
-const CACHE = 'chocomcc-shell-v65';
+// v66: Rewards tab was too tall/spaced -- Redeem a Promo Code sat below
+// the fold on most phones. Compressed the check-in block: banner
+// 170px->120px, ring 170px->132px, wrap padding 30px->16px, tighter
+// margins around the streak dots -- Redeem now sits in view without
+// scrolling as much. Unrelated to this, also fixed a real timing bug:
+// daily cashback used to only settle when the owning user's own
+// /account or /investments got read, so a payout could land minutes
+// late if the app was backgrounded right at the 24h mark. A new
+// company-wide reconciler sweep now runs every 30s independent of any
+// user's activity, so payouts land within ~30s of when they're due.
+const CACHE = 'chocomcc-shell-v66';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

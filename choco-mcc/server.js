@@ -3051,8 +3051,26 @@ async function reconcileCommissions() {
     }
   } catch (e) { console.error('Reconcile commissions error:', e.message); }
 }
+// settleInvestmentIfDue() above only ever runs when triggered -- until now
+// that was solely a user's own /account or /investments read, so when an
+// actual payout landed depended entirely on when that user's client next
+// happened to poll after the 24-hour mark passed. If the app was
+// backgrounded or the phone's screen was off right at the boundary, the
+// credit (and its transaction timestamp) could land minutes late instead
+// of on the dot. This sweep runs on the same 30s reconciler tick as
+// deposits/withdrawals/commissions, checking every active investment
+// company-wide, so a payout lands within ~30s of when it's actually due
+// regardless of what any individual user's client is doing.
+async function reconcileCashback() {
+  try {
+    const snap = await db.collection('investments').where('status', '==', 'active').limit(500).get();
+    for (const doc of snap.docs) {
+      await settleInvestmentIfDue(doc).catch(e => console.error('Reconcile cashback error:', e.message));
+    }
+  } catch (e) { console.error('Reconcile cashback error:', e.message); }
+}
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
+  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).then(reconcileCashback).catch(() => {});
 }
 
 // Manual "Sync MarzPay" button in the admin panel — re-checks every in-flight
