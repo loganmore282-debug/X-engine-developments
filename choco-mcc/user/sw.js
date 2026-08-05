@@ -360,7 +360,12 @@
 // promo code now shows a festive gift-badge pop-up with the amount
 // earned instead of a plain toast. Reversible as a unit -- this is one
 // commit on top of the previous known-good state.
-const CACHE = 'chocomcc-shell-v60';
+// v61: Design pass verdict -- Account hub (gradient balance card + invite
+// banner) and the Redeem gift-badge pop-up are OUT, reverted to exactly
+// what they were before v60. Team's gold/silver/bronze medal badges and
+// Shop's "Popular" ribbon on the cheapest tier are KEPT (the "Premium"
+// ribbon on the priciest tier is dropped too -- only Popular stays).
+const CACHE = 'chocomcc-shell-v61';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

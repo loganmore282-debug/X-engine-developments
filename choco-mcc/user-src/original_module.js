@@ -572,14 +572,6 @@ function maybeShowAnnouncement(){
 function dismissAnnouncement(){
   document.getElementById('announcementBg').classList.remove('show');
 }
-function showRedeemReward(amount){
-  document.getElementById('redeemRewardAmt').textContent = '+'+ugx(amount);
-  document.getElementById('redeemRewardBg').classList.add('show');
-}
-function closeRedeemReward(){
-  document.getElementById('redeemRewardBg').classList.remove('show');
-}
-
 /* ====================== PWA INSTALL PROMPT ====================== */
 // Chrome/Android fires this ahead of time so we can trigger the real native
 // install prompt later, on our own button tap, instead of the browser's own
@@ -818,10 +810,8 @@ function renderShop(){
   // on every purchase attempt regardless of what the client shows.
   var html = PRODUCTS.map(function(p, i){
     var soldOut = isProductSoldOut(p);
-    // Simple, defensible ribbon logic (no separate admin flag needed): the
-    // cheapest tier is everyone's real entry point, the priciest is the
-    // aspirational one -- badge those two, leave the rest plain.
-    var ribbon = soldOut ? '' : (i===0 ? 'Popular' : (i===PRODUCTS.length-1 ? 'Premium' : ''));
+    // Cheapest tier only -- everyone's real entry point.
+    var ribbon = (!soldOut && i===0) ? 'Popular' : '';
     return '<button class="prod-card'+(soldOut?' is-soldout':'')+'"'+(soldOut?' disabled':' onclick="openProduct(\''+p.key+'\')"')+'>'+
       '<div class="prod-img-wrap"><img class="prod-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<span class="prod-rank">Tier '+(i+1)+'</span>'+
@@ -1313,7 +1303,7 @@ async function redeemGiftCode(){
     if(r.status!=='success'){ toast(r.message||"That code isn't valid"); return; }
     document.getElementById('giftCodeInput').value='';
     await refreshFromServer();
-    renderAll(); showRedeemReward(r.reward);
+    renderAll(); toast('+'+ugx(r.reward)+' credited!');
   } finally {
     if(btn){ btn.disabled = false; btn.textContent = label; }
   }
