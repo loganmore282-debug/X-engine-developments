@@ -435,7 +435,11 @@
 // feature (kicker, headline, hero photo, paragraphs, image cards) fades
 // and rises into place as it enters view, instead of the whole article
 // sitting fully rendered from the start.
-const CACHE = 'chocomcc-shell-v77';
+// v78: About Us image reveals now vary by direction instead of all
+// rising from below -- the lead hero photo zooms in from the middle, a
+// grid's left card slides from the left and its right card from the
+// right, and full-width cards cycle left/right/middle in turn.
+const CACHE = 'chocomcc-shell-v78';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

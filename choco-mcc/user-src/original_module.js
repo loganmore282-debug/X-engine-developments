@@ -502,11 +502,16 @@ function enterApp(){
   initAboutReveal();
 }
 // About Us reads as a long newspaper feature -- this makes each block
-// (kicker, headline, hero photo, paragraph, image card...) fade and
-// rise into place the moment it scrolls into view, instead of the whole
-// article just sitting there fully rendered. Runs once per page load;
-// the elements are still hidden behind the closed overlay's display:none
-// at this point, so nothing is observed as "in view" yet -- opening the
+// (kicker, headline, hero photo, paragraph, image card...) fade into
+// place the moment it scrolls into view, instead of the whole article
+// just sitting there fully rendered. Text blocks rise up from below;
+// images get varied entrances instead of all doing the same thing --
+// the lead hero photo zooms in from the middle, a grid's left-hand card
+// slides in from the left and its right-hand card from the right, and
+// full-width cards cycle left/right/middle in turn so consecutive ones
+// never repeat the same direction. Runs once per page load; the
+// elements are still hidden behind the closed overlay's display:none at
+// this point, so nothing is observed as "in view" yet -- opening the
 // overlay later triggers the browser's own intersection re-check, which
 // is what makes the first screenful reveal immediately and the rest
 // reveal on scroll.
@@ -515,14 +520,28 @@ function initAboutReveal(){
   initAboutReveal._done = true;
   var root = document.getElementById('aboutBody');
   if(!root || typeof IntersectionObserver==='undefined') return;
-  var els = root.querySelectorAll('.np-kicker,.np-headline,.np-dek,.np-byline,.np-hero,.np-card,.np-section-label,p');
-  if(!els.length) return;
   var io = new IntersectionObserver(function(entries){
     entries.forEach(function(entry){
       if(entry.isIntersecting){ entry.target.classList.add('is-in'); io.unobserve(entry.target); }
     });
   }, { threshold:0.12 });
-  els.forEach(function(el){ el.classList.add('np-reveal'); io.observe(el); });
+  root.querySelectorAll('.np-kicker,.np-headline,.np-dek,.np-byline,.np-section-label,p').forEach(function(el){
+    el.classList.add('np-reveal'); io.observe(el);
+  });
+  root.querySelectorAll('.np-hero').forEach(function(el){
+    el.classList.add('np-reveal-mid'); io.observe(el);
+  });
+  var fullSeq = ['np-reveal-left','np-reveal-right','np-reveal-mid'], fullIdx = 0;
+  root.querySelectorAll('.np-card').forEach(function(el){
+    var cls;
+    if(el.classList.contains('np-full')){
+      cls = fullSeq[fullIdx % fullSeq.length]; fullIdx++;
+    } else {
+      var idx = Array.prototype.indexOf.call(el.parentElement.children, el);
+      cls = (idx % 2 === 0) ? 'np-reveal-left' : 'np-reveal-right';
+    }
+    el.classList.add(cls); io.observe(el);
+  });
 }
 
 /* ====================== ADMIN-DRIVEN STATIC PAGES ======================
