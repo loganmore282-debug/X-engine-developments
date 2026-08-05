@@ -289,7 +289,12 @@
 // supports an admin-set title + sentence overlaid on the image (Admin ->
 // Settings -> Home screen banner), server-side setting, blank by default
 // so nothing shows unless the owner adds text.
-const CACHE = 'chocomcc-shell-v51';
+// v52: Removed the rounded-corner "curved frame" from every banner image
+// EXCEPT the Home dashboard banner (Rewards, Team, Ledger/history,
+// Deposit, Cash Out, Support, Bind Bank all now sit square-edged, flush
+// with the page padding) -- Home keeps its curved bottom corners on
+// purpose, everything else is now straight-edged per feedback.
+const CACHE = 'chocomcc-shell-v52';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
