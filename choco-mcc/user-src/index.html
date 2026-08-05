@@ -74,12 +74,6 @@
     50%{stroke-dasharray:100px,200px;stroke-dashoffset:-15px;}
     100%{stroke-dasharray:100px,200px;stroke-dashoffset:-125px;}
   }
-  /* Full-screen loader shown for a fixed 3s the instant Add Funds / Cash
-     Out is tapped on Home, before that screen actually opens — the
-     .cm-spinner dash-circle (the "other" loader, distinct from the small
-     .verify-spin arc used on every in-form "Please wait…" button). */
-  .chip-loader-bg{position:fixed;inset:0;background:rgba(59,36,22,.5);z-index:200;display:none;align-items:center;justify-content:center;}
-  .chip-loader-bg.show{display:flex;}
 
   /* ---------- Auth ---------- */
   #authScreen{min-height:100vh;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 26px;background:
@@ -147,8 +141,8 @@
   .net-card .net-check{display:none;position:absolute;bottom:-6px;right:-6px;width:22px;height:22px;border-radius:50%;
     background:var(--caramel);color:#fff;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(59,36,22,.3);}
   .net-card.active .net-check{display:flex;}
-  .auth-tag{display:inline-block;background:var(--mint-pale);color:var(--mint);font-weight:800;font-size:11.5px;
-    padding:4px 10px;border-radius:999px;margin-bottom:14px;letter-spacing:.3px;}
+  .auth-tag{display:inline-block;color:var(--mint);font-weight:800;font-size:11.5px;
+    text-transform:uppercase;margin-bottom:14px;letter-spacing:.6px;}
 
   /* ---------- App shell ---------- */
   #app{display:none;}
@@ -400,8 +394,9 @@
   .pay-steps li{position:relative;padding:6px 0 6px 22px;font-size:12.5px;color:var(--cocoa-soft);font-weight:600;}
   .pay-steps li::before{content:"";position:absolute;left:2px;top:13px;width:6px;height:6px;border-radius:50%;background:var(--mint);}
   .code-box b{font-size:16px;letter-spacing:1.5px;}
-  .comm-row{display:flex;gap:10px;margin:0 20px 16px;}
-  .comm-tile{flex:1;background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px 10px;text-align:center;}
+  .comm-row{display:flex;margin:16px 20px;padding:14px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .comm-tile{flex:1;text-align:center;}
+  .comm-tile:not(:last-child){border-right:1px solid var(--line);}
   .tm-task-link{display:flex;align-items:center;gap:2px;background:none;border:0;padding:0;color:var(--caramel-deep);font:inherit;font-size:13.5px;font-weight:800;}
   .tk-lead{margin:6px 20px 16px;font-size:13px;color:var(--cocoa-soft);line-height:1.5;}
   .tk-card{margin:0 20px 14px;padding:18px;border-radius:20px;background:var(--card);box-shadow:var(--shadow);border:1px solid var(--line);}
@@ -429,6 +424,7 @@
 
   /* ---------- How it works — numbered instruction cards ---------- */
   .howto-card{margin:0 20px 16px;padding:16px 16px 4px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);}
+  .howto-card.howto-flat{background:none;box-shadow:none;padding:16px 0 4px;border-top:1px solid var(--line);}
   .howto-card h4{font-size:14px;font-weight:800;color:var(--cocoa);margin-bottom:10px;}
   .howto-step{display:flex;align-items:flex-start;gap:11px;margin-bottom:14px;}
   .howto-num{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--caramel-pale);color:var(--caramel-deep);
@@ -539,11 +535,11 @@
       <div class="photo-banner pb-flush pb-full" id="homeBanner"></div>
 
       <div class="actions-row">
-        <button class="act-chip" onclick="openOverlayWithLoader('deposit')">
+        <button class="act-chip" onclick="openOverlay('deposit')">
           <div class="act-ic" style="background:var(--caramel-pale);color:var(--caramel-deep)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M8 8.5L12 4.5L16 8.5"/><rect x="3" y="8.5" width="18" height="11" rx="3"/><path d="M15 12.5h3a2 2 0 010 4h-3a2 2 0 010-4z"/><circle cx="18.3" cy="14.5" r="0.6" fill="currentColor" stroke="none"/></svg></div>
           <div class="act-lbl">Add Funds</div>
         </button>
-        <button class="act-chip" onclick="openOverlayWithLoader('withdraw')">
+        <button class="act-chip" onclick="openOverlay('withdraw')">
           <div class="act-ic" style="background:var(--caramel-pale);color:var(--caramel-deep)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 3.5v8M8.5 7L12 3.5L15.5 7"/><path d="M4 11.5v6a2 2 0 002 2h12a2 2 0 002-2v-6"/><path d="M8 17h8"/></svg></div>
           <div class="act-lbl">Cash Out</div>
         </button>
@@ -589,7 +585,7 @@
         <div class="view-title">My Team</div>
         <div class="muted" style="font-size:13px">Share your code, earn on every level.</div>
       </div>
-      <div class="link-box">
+      <div style="margin:16px 20px 0;padding-bottom:16px;border-bottom:1px solid var(--line)">
         <div class="muted" style="font-size:11px;font-weight:700;margin-bottom:6px">YOUR REFERRAL LINK</div>
         <div class="link-row">
           <span id="teamLink" style="word-break:break-all">https://choco-mcc.com/?reg=</span>
@@ -602,15 +598,13 @@
         <div class="comm-tile"><b id="commL3Pct">1%</b><span>LEVEL 3</span></div>
       </div>
       <div class="sec-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
-      <div style="margin:0 20px" class="card" >
-        <div style="padding:6px 16px">
-          <div class="kv" style="cursor:pointer" onclick="openTeamLevel(1)"><span>Level 1 members</span><span style="display:flex;align-items:center"><b id="teamL1">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
-          <div class="kv" style="cursor:pointer" onclick="openTeamLevel(2)"><span>Level 2 members</span><span style="display:flex;align-items:center"><b id="teamL2">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
-          <div class="kv" style="cursor:pointer" onclick="openTeamLevel(3)"><span>Level 3 members</span><span style="display:flex;align-items:center"><b id="teamL3">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
-          <div class="kv" style="border-bottom:none"><span>Commission earned</span><b id="teamComm">UGX 0</b></div>
-        </div>
+      <div style="padding:0 20px">
+        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(1)"><span>Level 1 members</span><span style="display:flex;align-items:center"><b id="teamL1">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
+        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(2)"><span>Level 2 members</span><span style="display:flex;align-items:center"><b id="teamL2">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
+        <div class="kv" style="cursor:pointer" onclick="openTeamLevel(3)"><span>Level 3 members</span><span style="display:flex;align-items:center"><b id="teamL3">0</b><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:6px;color:var(--cocoa-faint)"><path d="M9 5l7 7-7 7"/></svg></span></div>
+        <div class="kv" style="border-bottom:none"><span>Commission earned</span><b id="teamComm">UGX 0</b></div>
       </div>
-      <div class="howto-card" style="margin-top:16px">
+      <div class="howto-card howto-flat" style="margin-top:6px">
         <h4>How referrals work</h4>
         <div class="howto-step"><span class="howto-num">1</span><p>Share your referral link above with friends and family.</p></div>
         <div class="howto-step"><span class="howto-num">2</span><p>When someone signs up with your link and buys a chocolate product, you earn a commission straight away.</p></div>
@@ -630,7 +624,7 @@
     <div id="viewRewards" style="display:none">
       <div class="photo-banner pb-hero" id="rewardsBanner"></div>
       <div class="checkin-wrap" style="padding-top:6px">
-        <span class="auth-tag" style="background:var(--mint-pale);color:var(--mint)">DAILY REWARD</span>
+        <span class="auth-tag">Daily Reward</span>
         <h2 style="font-size:20px;margin-top:10px">Tap in, get chocolate money</h2>
         <p class="muted" style="font-size:13px;margin-top:6px">One tap a day. UGX <span id="checkinAmt">250</span> straight to your wallet.</p>
         <div class="checkin-ring" id="checkinRing">
@@ -643,7 +637,7 @@
         <button class="btn btn-primary btn-block" id="checkinBtn" onclick="doCheckin()">Check in for UGX 250</button>
       </div>
       <div class="sec-head"><h3>Redeem a Promo Code</h3></div>
-      <div class="form-card" style="margin:0 20px 20px;display:flex;gap:12px;align-items:center">
+      <div style="margin:0 20px 20px;display:flex;gap:12px;align-items:center">
         <img src="" id="giftCodeThumb" style="width:52px;height:52px;border-radius:14px;object-fit:cover;flex:0 0 auto">
         <div style="flex:1">
           <input class="famt" id="giftCodeInput" style="font-size:15px;padding:12px;margin-bottom:10px;text-transform:uppercase" placeholder="Enter promo code">
@@ -697,7 +691,7 @@
     <div class="info-box">Funds are added to your wallet once your mobile-money payment is confirmed.</div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
-      <input class="famt" id="depAmt" type="number" placeholder="0">
+      <input class="famt" id="depAmt" type="number" placeholder="0" oninput="capAmountInput(this)">
       <div class="quick-amt-row">
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=30000">UGX 30,000</button>
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=90000">UGX 90,000</button>
@@ -768,7 +762,7 @@
     <div id="witBankBox"></div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
-      <input class="famt" id="witAmt" type="number" placeholder="0" oninput="renderWitCalc()">
+      <input class="famt" id="witAmt" type="number" placeholder="0" oninput="capAmountInput(this);renderWitCalc()">
       <div class="calc-row"><span>Service fee (<span id="witFeePctLabel">19%</span>)</span><span id="witFee">UGX 0</span></div>
       <div class="calc-row"><span>You receive</span><span id="witNet">UGX 0</span></div>
       <button class="btn btn-berry btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Cash Out</button>
@@ -800,9 +794,6 @@
       <div class="empty">Nothing published yet.</div>
     </div>
   </div>
-
-  <!-- CHIP LOADER (Add Funds / Cash Out — brief loader before the screen opens) -->
-  <div class="chip-loader-bg" id="chipLoaderBg"><svg class="cm-spinner" viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2"></circle></svg></div>
 
   <!-- ANNOUNCEMENT -->
   <div class="modal-bg" id="announcementBg" onclick="if(event.target===this) dismissAnnouncement()">

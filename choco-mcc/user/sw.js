@@ -340,7 +340,17 @@
 // Switched to a dark chocolate color (var(--cocoa)/--cocoa-soft) so it
 // reads regardless of the gradient position.
 // v58: Home chip loader (Add Funds / Cash Out) shortened from 3s to 2s.
-const CACHE = 'chocomcc-shell-v58';
+// v59: (1) Removed the Home chip loader entirely, per feedback -- Add
+// Funds / Cash Out open instantly again, no loader. (2) Fixed a real
+// bug: witAmt/depAmt had no upper bound, so mashing digits (or a
+// scanner) could type a 20+ digit figure that overflowed the fee/net
+// calculation -- both amount fields now cap at 10 digits. (3) Team and
+// Rewards screens: removed every white card/box/pill container (referral
+// link box, commission % tiles, Team overview card, How-referrals-works
+// card, the DAILY REWARD pill, Redeem-a-Promo-Code card) -- everything
+// now sits directly on the page separated by thin dividers, no boxes.
+// Cash Out's own "How cash-outs work" card is untouched (out of scope).
+const CACHE = 'chocomcc-shell-v59';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

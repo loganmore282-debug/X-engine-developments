@@ -261,18 +261,6 @@ function spinnerHtml(){ return '<div class="cm-spin-wrap"><svg class="cm-spinner
 function btnBusyHtml(text){
   return '<span class="verify-spin" style="margin-right:7px;vertical-align:-3px"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1.6 1.6 0 010 3.2A6.8 6.8 0 1018.8 12a1.6 1.6 0 013.2 0 10 10 0 11-10-10z"/></svg></span>'+esc(text);
 }
-// Home screen's Add Funds / Cash Out chips: show the OTHER loader (the
-// bigger dash-spin circle, same one spinnerHtml() uses for full-section
-// loading — distinct from the small .verify-spin arc used on every
-// "Please wait…" button) for a fixed 2 seconds the moment the chip is
-// tapped, THEN open the actual Add Funds / Cash Out screen.
-function openOverlayWithLoader(name){
-  document.getElementById('chipLoaderBg').classList.add('show');
-  setTimeout(function(){
-    document.getElementById('chipLoaderBg').classList.remove('show');
-    openOverlay(name);
-  }, 2000);
-}
 
 /* ====================== LOCAL STATE (per-account cache — keyed by the real Firebase uid; moves server-side once the backend is wired up) ====================== */
 function loadState(uid){
@@ -1254,6 +1242,14 @@ async function doDeposit(){
   if(r.status!=='success'){ toast(r.message||'Could not start the payment'); return; }
   document.getElementById('depAmt').value='';
   openDepositStatus(r.depositId, r.reference, phone);
+}
+// Money amount fields can't be left to type() alone -- a number input has
+// no real upper bound, and someone mashing digits (or a scanner) could
+// type a 20+ digit figure that overflows every downstream calculation
+// (fee, net, displayed totals). Caps at 10 digits (up to 9,999,999,999),
+// comfortably above any real UGX amount in this app.
+function capAmountInput(el){
+  if(el.value.length>10) el.value = el.value.slice(0,10);
 }
 function renderWitCalc(){
   var sett = getSettings();
