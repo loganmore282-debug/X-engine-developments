@@ -382,7 +382,13 @@
 // .kv row pattern used elsewhere): Price/Daily reward/Cycle/Total payout
 // as simple label-left value-right rows with thin dividers, no
 // tiles/gradients. Same content, same Buy button, just plainer.
-const CACHE = 'chocomcc-shell-v64';
+// v65: Shop card was still too tall with 4 stacked rows. Collapsed
+// Price/Daily reward/Cycle/Total payout into one compact divided row
+// (label above value in each of 4 cells, thin vertical dividers between
+// them -- "| | |") instead of 4 separate rows, same divider style
+// already used on Team's L1/L2/L3 row. Noticeably shorter card, same
+// content, same wording.
+const CACHE = 'chocomcc-shell-v65';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

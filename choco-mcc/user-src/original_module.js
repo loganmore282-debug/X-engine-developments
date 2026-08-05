@@ -819,10 +819,12 @@ function renderShop(){
       (soldOut?'<span class="prod-soldout-banner">Coming Soon</span>':'')+'</div>'+
       '<div class="prod-body-full">'+
         '<div class="prod-name">'+p.name+'</div>'+
-        '<div class="kv"><span>Price</span><b>'+ugx(p.price)+'</b></div>'+
-        '<div class="kv"><span>Daily reward</span><b style="color:var(--mint)">'+ugx(dailyReturn(p))+'</b></div>'+
-        '<div class="kv"><span>Cycle</span><b>'+productCycle(p)+' days</b></div>'+
-        '<div class="kv" style="border-bottom:none"><span>Total payout</span><b>'+ugx(productExpectedReturn(p))+'</b></div>'+
+        '<div class="prod-stats-line">'+
+          '<div class="prod-stat-cell"><div class="prod-stat-cell-lbl">Price</div><div class="prod-stat-cell-val">'+ugx(p.price)+'</div></div>'+
+          '<div class="prod-stat-cell"><div class="prod-stat-cell-lbl">Daily reward</div><div class="prod-stat-cell-val is-mint">'+ugx(dailyReturn(p))+'</div></div>'+
+          '<div class="prod-stat-cell"><div class="prod-stat-cell-lbl">Cycle</div><div class="prod-stat-cell-val">'+productCycle(p)+' days</div></div>'+
+          '<div class="prod-stat-cell"><div class="prod-stat-cell-lbl">Total payout</div><div class="prod-stat-cell-val">'+ugx(productExpectedReturn(p))+'</div></div>'+
+        '</div>'+
         (soldOut
           ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:14px">Coming soon</button>'
           : '<button class="btn btn-primary btn-block" style="margin-top:14px" onclick="buyProduct(this,\''+p.key+'\')">Buy this chocolate</button>')+
