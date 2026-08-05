@@ -422,7 +422,13 @@
 // v74: Buy-button glow sweep slowed 1s->2s per cycle. Telegram
 // Channel/Group buttons on the welcome dialog now glow + shake
 // (periodic pulse + tilt wiggle) to draw the eye.
-const CACHE = 'chocomcc-shell-v74';
+// v75: Add Funds / Request Cash Out buttons now fade in and out every
+// second while active (pauses while busy/disabled). Cash-out amount
+// field + button now shake and vibrate the device when a withdrawal is
+// rejected client-side, either below the minimum limit or above the
+// wallet balance. Redeem a Promo Code's thumbnail now shows the
+// owner-supplied gift-box/coupon artwork instead of the chocolate photo.
+const CACHE = 'chocomcc-shell-v75';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
