@@ -3057,20 +3057,31 @@ async function reconcileCommissions() {
 // happened to poll after the 24-hour mark passed. If the app was
 // backgrounded or the phone's screen was off right at the boundary, the
 // credit (and its transaction timestamp) could land minutes late instead
-// of on the dot. This sweep runs on the same 30s reconciler tick as
-// deposits/withdrawals/commissions, checking every active investment
-// company-wide, so a payout lands within ~30s of when it's actually due
-// regardless of what any individual user's client is doing.
+// of on the dot. This runs on its own 1s tick (see startup below) --
+// separate from the deposits/withdrawals/commissions tick -- because it
+// is a pure DB read+write with no external call, so a 1s cadence costs
+// nothing beyond one indexed Mongo query per tick. Deposits/withdrawals
+// stayed on the slower 30s tick deliberately: each open record there
+// means a live HTTP call to MarzPay, and polling a third-party payment
+// API 30x more often risks tripping its own rate limiting -- that would
+// break real payments to chase a cosmetic timing improvement nobody
+// asked for on that side. _sweepingCashback guards against a tick
+// overlapping a still-running previous one if the investments collection
+// ever grows large enough for the query itself to take over a second.
+let _sweepingCashback = false;
 async function reconcileCashback() {
+  if (_sweepingCashback) return;
+  _sweepingCashback = true;
   try {
     const snap = await db.collection('investments').where('status', '==', 'active').limit(500).get();
     for (const doc of snap.docs) {
       await settleInvestmentIfDue(doc).catch(e => console.error('Reconcile cashback error:', e.message));
     }
   } catch (e) { console.error('Reconcile cashback error:', e.message); }
+  finally { _sweepingCashback = false; }
 }
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).then(reconcileCashback).catch(() => {});
+  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
 }
 
 // Manual "Sync MarzPay" button in the admin panel — re-checks every in-flight
@@ -3109,5 +3120,7 @@ connectMongo(MONGODB_URI)
     app.listen(PORT, () => console.log(`ChocoMCC backend listening on :${PORT}`));
     setInterval(runReconciler, 30 * 1000);
     setTimeout(runReconciler, 15 * 1000);
+    setInterval(reconcileCashback, 1000);
+    setTimeout(reconcileCashback, 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

@@ -413,7 +413,13 @@
 // v72: Maintenance-mode lockout icon replaced -- was a filled crossed
 // wrench+screwdriver silhouette, now a thin-outline wrench crossed over
 // a gear (matches the owner-supplied reference icon style).
-const CACHE = 'chocomcc-shell-v72';
+// v73: "Buy this chocolate" buttons now have a repeating left-to-right
+// glow sweep every second. (Server-side: the cashback settlement sweep
+// moved from the shared 30s reconciler tick to its own 1s tick, since it
+// is a pure DB read+write with no external MarzPay call -- deposits and
+// withdrawals stayed on the 30s tick since polling MarzPay's API 30x
+// more often risks tripping its rate limiting.)
+const CACHE = 'chocomcc-shell-v73';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

@@ -61,6 +61,11 @@
   .btn-berry{background:linear-gradient(135deg,var(--berry),#9c2c3a);color:#fff;box-shadow:0 10px 20px -8px rgba(194,59,75,.5);}
   .btn-block{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;}
   .btn-sm{padding:9px 14px;font-size:13px;border-radius:12px;}
+  .btn-buy-glow{position:relative;overflow:hidden;}
+  .btn-buy-glow::after{content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;
+    background:linear-gradient(120deg,transparent,rgba(255,255,255,.55),transparent);
+    transform:skewX(-20deg);animation:btnGlowSweep 1s linear infinite;}
+  @keyframes btnGlowSweep{0%{left:-60%;}100%{left:130%;}}
   .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}
   @keyframes verifySpin{to{transform:rotate(360deg);}}
 
