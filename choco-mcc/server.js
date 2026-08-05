@@ -2235,6 +2235,42 @@ app.post('/admin/products/clear', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not clear products' });
   }
 });
+// A saved product doc (from any earlier per-product edit) permanently
+// overrides DEFAULT_PRODUCTS for that key — so bumping the code-level
+// pricing table (e.g. the 20x -> 25x rate change) silently does nothing
+// for any tier that was ever individually saved before, even though a
+// never-touched tier picks the new numbers up immediately. This walks
+// every one of the 10 built-in keys and, ONLY for ones with an existing
+// saved doc, overwrites just price/cycle/expectedReturn back to the
+// current DEFAULT_PRODUCTS values — every other admin customization on
+// that doc (custom image, active/comingSoon, order, name) is left
+// completely untouched. A never-saved tier is already correct and is
+// skipped entirely (nothing to sync).
+app.post('/admin/products/sync-pricing', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('products').get();
+    const saved = new Map(snap.docs.map(d => [d.id, d.data()]));
+    const batch = db.batch();
+    let synced = 0;
+    const keys = [];
+    for (const def of DEFAULT_PRODUCTS) {
+      const existing = saved.get(def.key);
+      if (!existing || existing.deleted) continue;
+      const alreadyMatches = existing.price === def.price && existing.cycle === def.cycle && existing.expectedReturn === def.expectedReturn;
+      if (alreadyMatches) continue;
+      batch.set(db.collection('products').doc(def.key),
+        { price: def.price, cycle: def.cycle, expectedReturn: def.expectedReturn }, { merge: true });
+      synced++; keys.push(def.key);
+    }
+    if (synced) await batch.commit();
+    _productsCacheTs = 0;
+    logAdminAction(req, 'products_pricing_synced', { synced, keys });
+    res.json({ status: 'success', synced, keys });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not sync product pricing' });
+  }
+});
 
 // ═══════════════════════════════════════════
 // ADMIN — USERS (any admin can view; wallet credit/debit/ban/reset/delete

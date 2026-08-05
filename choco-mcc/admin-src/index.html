@@ -875,6 +875,7 @@ async function renderProducts(){
   const list = (r.products||[]).sort((a,b)=>(a.order||0)-(b.order||0)||(a.price||0)-(b.price||0));
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Products (${list.length})</h2>
+      <button class="btn sm ghost" id="syncProdPricing" title="Updates price/cycle/expectedReturn on any saved product back to the current code defaults -- leaves images, active/coming-soon, and order untouched">Sync pricing to defaults</button>
       <button class="btn sm ghost" id="clearProd">Clear all</button>
       <button class="btn sm" id="newProd">+ New product</button></div>
     <div class="prod-grid">${list.length?list.map(p=>`
@@ -888,6 +889,14 @@ async function renderProducts(){
         </div>
       </div>`).join(''):'<div class="empty">No products yet. The app catalogue reverts to defaults until you add one.</div>'}</div>`;
   $('newProd').addEventListener('click',()=>editProduct(null,list.length));
+  $('syncProdPricing').addEventListener('click',async()=>{
+    if(!confirm('Update price/total-payout/cycle on every saved product to match the current built-in pricing table? Images, active/coming-soon, and order are left untouched. A product that was never individually saved is already correct and is skipped.'))return;
+    const b=$('syncProdPricing'); b.disabled=true; b.textContent='Syncing…';
+    const d=await api('/admin/products/sync-pricing', {});
+    b.disabled=false; b.textContent='Sync pricing to defaults';
+    toast(d.status==='success'?`Synced ${d.synced} product${d.synced===1?'':'s'}`:(d.message||'Failed'),d.status==='success'?'ok':'err');
+    renderProducts();
+  });
   $('clearProd').addEventListener('click',async()=>{
     if(!confirm('Delete EVERY product? The app catalogue reverts to the built-in defaults until you add new ones. This cannot be undone.'))return;
     const b=$('clearProd'); b.disabled=true; b.textContent='Clearing…';

@@ -122,7 +122,37 @@ function check(name, cond, extra) {
   const godivaAfterClear = r.products.find(p => p.key === 'godiva');
   check('the edited price is gone — reverted to the true default (4,000,000)', godivaAfterClear?.price === 4000000, godivaAfterClear);
 
-  console.log('\n-- Non-owner cannot save/delete/clear products --');
+  console.log('\n-- sync-pricing: the real-world bug -- a rate change (e.g. 20x -> 25x) does nothing for an already-saved tier --');
+  // Simulate exactly what actually happened live: mars got individually
+  // saved a while back (say, just to reorder it) while pricing was still
+  // 20x, so its saved doc is now stuck holding the OLD price/expectedReturn
+  // even though DEFAULT_PRODUCTS has since moved to the new 25x table.
+  // Give it a custom image + a deliberately different order too, to prove
+  // sync-pricing leaves everything except price/cycle/expectedReturn alone.
+  const staleMars = { key: 'mars', name: 'Mars', price: 90000, cycle: 180, expectedReturn: 1800000, order: 7, image: 'data:image/png;base64,CUSTOM' };
+  await adminCall('/admin/products/save', { products: [staleMars] });
+  r = await getProductsViaAdmin();
+  const marsBeforeSync = r.products.find(p => p.key === 'mars');
+  check('sanity: mars is stuck on the stale 20x figure before syncing', marsBeforeSync?.expectedReturn === 1800000, marsBeforeSync);
+  const snickersBeforeSync = r.products.find(p => p.key === 'snickers');
+  check('sanity: snickers (never individually saved) is already on the current default', snickersBeforeSync?.expectedReturn === 5000000, snickersBeforeSync);
+
+  const syncR = await adminCall('/admin/products/sync-pricing');
+  check('sync-pricing succeeds', syncR.body?.status === 'success', syncR.body);
+  check('exactly one product needed syncing (mars)', syncR.body?.synced === 1 && syncR.body?.keys?.[0] === 'mars', syncR.body);
+
+  r = await getProductsViaAdmin();
+  const marsAfterSync = r.products.find(p => p.key === 'mars');
+  check('mars price/expectedReturn/cycle now match the current default (25x)', marsAfterSync?.price === 90000 && marsAfterSync?.expectedReturn === 2250000 && marsAfterSync?.cycle === 180, marsAfterSync);
+  check('mars\' custom image and order were left completely untouched', marsAfterSync?.image === 'data:image/png;base64,CUSTOM' && marsAfterSync?.order === 7, marsAfterSync);
+  const snickersAfterSync = r.products.find(p => p.key === 'snickers');
+  check('an already-correct, never-saved product is unaffected (nothing to sync)', snickersAfterSync?.expectedReturn === 5000000, snickersAfterSync);
+
+  console.log('\n-- Re-running sync-pricing again is a safe no-op (idempotent) --');
+  const syncAgainR = await adminCall('/admin/products/sync-pricing');
+  check('second run reports zero synced (mars already matches, nothing else was ever saved)', syncAgainR.body?.synced === 0, syncAgainR.body);
+
+  console.log('\n-- Non-owner cannot save/delete/clear/sync products --');
   const noAuthHeaders = { 'Content-Type': 'application/json' };
   let nr = await realFetch(BASE + '/admin/products/save', { method: 'POST', headers: noAuthHeaders, body: JSON.stringify({ products: [{ key: 'x' }] }) });
   check('save rejects unauthenticated', nr.status === 401);
@@ -130,6 +160,8 @@ function check(name, cond, extra) {
   check('delete rejects unauthenticated', nr.status === 401);
   nr = await realFetch(BASE + '/admin/products/clear', { method: 'POST', headers: noAuthHeaders, body: '{}' });
   check('clear rejects unauthenticated', nr.status === 401);
+  nr = await realFetch(BASE + '/admin/products/sync-pricing', { method: 'POST', headers: noAuthHeaders, body: '{}' });
+  check('sync-pricing rejects unauthenticated', nr.status === 401);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
