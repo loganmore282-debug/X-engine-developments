@@ -471,7 +471,9 @@
 // already used for the activity ticker now keeps a freshly-recreated
 // button's sweep resuming exactly where it should be, so it reads as one
 // continuous, non-stop sweep regardless of how often Shop re-renders.
-const CACHE = 'chocomcc-shell-v84';
+// v85: Referral links now use ?ref= instead of ?reg= (old ?reg= links
+// still work -- both are accepted when prefilling the invite code).
+const CACHE = 'chocomcc-shell-v85';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

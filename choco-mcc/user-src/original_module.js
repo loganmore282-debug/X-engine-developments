@@ -317,15 +317,16 @@ function setAuthMode(mode){
     ? 'Already a member? <b>Sign In</b>'
     : 'New here? <b>Create Account</b>';
 }
-// A referral link is https://choco-mcc.com/?reg=CODE (see teamLink below) — if
+// A referral link is https://choco-mcc.com/?ref=CODE (see teamLink below) — if
 // someone arrives with that in the URL, land them straight on Sign Up with
 // the invite code already filled in. Before this, the code was captured
 // nowhere: every referral link opened the plain sign-in screen with an empty
 // invite field, so it silently did nothing unless the visitor happened to
-// retype the code by hand.
+// retype the code by hand. Still accepts the old `reg` param too, so any
+// link already shared before this switch keeps working.
 (function prefillReferralFromUrl(){
   var qs = new URLSearchParams(location.search);
-  var code = (qs.get('reg') || qs.get('ref') || '').trim();
+  var code = (qs.get('ref') || qs.get('reg') || '').trim();
   if(!code) return;
   setAuthMode('register');
   var f = document.getElementById('fCode');
@@ -764,7 +765,7 @@ function renderAll(){
   document.getElementById('acctPhone').textContent = s.phone || 'Not set';
   document.getElementById('acctBalNum').textContent = ugx(s.balance);
   document.getElementById('acctWitNum').textContent = ugx(s.totalWithdrawn);
-  document.getElementById('teamLink').textContent = 'https://choco-mcc.com/?reg='+s.referralCode;
+  document.getElementById('teamLink').textContent = 'https://choco-mcc.com/?ref='+s.referralCode;
   document.getElementById('teamL1').textContent = s.team.l1;
   document.getElementById('teamL2').textContent = s.team.l2;
   document.getElementById('teamL3').textContent = s.team.l3;
@@ -1554,7 +1555,7 @@ function copyDepositRef(){
   toast('Reference copied');
 }
 function copyCode(){
-  var link = 'https://choco-mcc.com/?reg='+STATE.referralCode;
+  var link = 'https://choco-mcc.com/?ref='+STATE.referralCode;
   if(navigator.clipboard) navigator.clipboard.writeText(link).catch(function(){});
   toast('Referral link copied');
 }

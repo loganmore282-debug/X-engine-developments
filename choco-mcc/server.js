@@ -1027,19 +1027,37 @@ function maskedMsisdn(used) {
   return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
 }
 async function buildActivityFeed() {
+  // Both floors are read live from admin-configured settings, never
+  // hardcoded — if the owner raises/lowers minDeposit or minWithdraw, this
+  // simulated feed reflects it on its very next rebuild (~25s), the same
+  // as every real deposit/withdrawal already does. A simulated top-up
+  // showing below the actual minimum deposit (or a payout below the actual
+  // minimum withdrawal) would be an obvious tell that the feed is fake and
+  // not even internally consistent with the app's own rules.
+  const sett = await getSettings();
+  const minDep = Number(sett.minDeposit) || 0;
+  const minWit = Number(sett.minWithdraw) || 0;
   let depositPool = _DEPOSIT_LADDER.slice();
   try {
     const products = await getProducts();
     const prices = products.map(p => Number(p.price)).filter(n => n > 0);
     depositPool = Array.from(new Set(depositPool.concat(prices)));
   } catch (_) {}
+  depositPool = depositPool.filter(n => n >= minDep);
   const withdrawPool = [];
   for (let a = _WIRE_STEP; a <= _WIRE_CAP; a += _WIRE_STEP) withdrawPool.push(a);
+  const withdrawPoolFiltered = withdrawPool.filter(n => n >= minWit);
+  // Guards against an admin setting a minimum so high it clears the whole
+  // static ladder/cap (e.g. minDeposit above 1,000,000 or minWithdraw above
+  // 500,000) -- falls back to just the floor itself rather than handing
+  // an empty pool to the random pick below.
+  if (!depositPool.length) depositPool = [minDep || 30000];
+  if (!withdrawPoolFiltered.length) withdrawPoolFiltered.push(minWit || 5000);
   const rows = [];
   const usedNumbers = new Set();
   for (let i = 0; i < 18; i++) {
     const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
-    const pool = kind === 'deposit' ? depositPool : withdrawPool;
+    const pool = kind === 'deposit' ? depositPool : withdrawPoolFiltered;
     rows.push({ kind, phone: maskedMsisdn(usedNumbers), amount: pool[Math.floor(Math.random() * pool.length)] });
   }
   return rows;
