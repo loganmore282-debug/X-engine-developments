@@ -301,7 +301,14 @@
 // per feedback. (3) Added "How it works" numbered instruction cards: one
 // on the Team screen (how referral commissions work) and one on the Cash
 // Out screen (how withdrawals get approved and paid).
-const CACHE = 'chocomcc-shell-v53';
+// v54: (1) The 4 Home action-chip icons (Add Funds, Cash Out, Rewards Hub,
+// Support) all use the same caramel color now instead of 4 different
+// colors. (2) "Daily Reward" action-chip label renamed to "Rewards Hub".
+// (3) Announcement dialog redesigned: caramel gradient hero band with a
+// gift-box badge (shown whenever the admin hasn't uploaded a custom
+// image), bolder centered title, a divider before the Telegram buttons --
+// no longer a flat plain card.
+const CACHE = 'chocomcc-shell-v54';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

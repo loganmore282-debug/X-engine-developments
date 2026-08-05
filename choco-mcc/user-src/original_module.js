@@ -545,7 +545,9 @@ function maybeShowAnnouncement(){
   document.getElementById('annTitle').textContent = s.annTitle || 'Notice';
   document.getElementById('annBody').innerHTML = nl2p(s.annBody);
   var img = document.getElementById('annImg');
-  if(s.announcementBg){ img.src = s.announcementBg; img.style.display='block'; } else { img.style.display='none'; }
+  var badge = document.getElementById('annBadge');
+  if(s.announcementBg){ img.src = s.announcementBg; img.style.display='block'; badge.style.display='none'; }
+  else { img.style.display='none'; badge.style.display='flex'; }
   // Same Telegram Channel/Group links already configured under Settings ->
   // Support contacts — reused here rather than a separate admin field.
   var btns = '';
@@ -554,6 +556,7 @@ function maybeShowAnnouncement(){
   var tgRow = document.getElementById('annTgRow');
   tgRow.innerHTML = btns;
   tgRow.style.display = btns ? 'flex' : 'none';
+  document.getElementById('annDivider').style.display = btns ? 'block' : 'none';
   document.getElementById('announcementBg').classList.add('show');
 }
 function dismissAnnouncement(){
