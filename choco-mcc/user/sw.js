@@ -473,7 +473,11 @@
 // continuous, non-stop sweep regardless of how often Shop re-renders.
 // v85: Referral links now use ?ref= instead of ?reg= (old ?reg= links
 // still work -- both are accepted when prefilling the invite code).
-const CACHE = 'chocomcc-shell-v85';
+// v86: Account (Me) menu icons -- Terms & Rules is now a gavel, Ledger is
+// now a receipt with a dollar-sign badge, matching the owner-supplied
+// reference icons (redrawn as thin-line icons to match the app's existing
+// icon style rather than the filled reference art directly).
+const CACHE = 'chocomcc-shell-v86';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
