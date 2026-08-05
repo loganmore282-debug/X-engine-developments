@@ -489,7 +489,11 @@
 // v88: Home screen's "Rewards Hub" quick-action tile now uses the same
 // gift-box icon as the Rewards nav tab (was the old diamond icon,
 // inconsistent with the tab it links to).
-const CACHE = 'chocomcc-shell-v88';
+// v89: Suspended-account screen's "Contact Customer Service" button now
+// only ever opens the direct support Telegram link (supportTelegram) --
+// it used to fall back to the Telegram channel/group link when the direct
+// contact wasn't set, which isn't customer service.
+const CACHE = 'chocomcc-shell-v89';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

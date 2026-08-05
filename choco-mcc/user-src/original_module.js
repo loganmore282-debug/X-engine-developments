@@ -88,7 +88,7 @@ function showLockout(kind, message){
     title.textContent = 'Account Suspended';
     msg.textContent = message || 'Account suspended. Contact customer service.';
     var s = (typeof getSettings==='function') ? getSettings() : {};
-    var link = s.supportTelegram || s.telegramChannel || s.telegramGroup;
+    var link = s.supportTelegram;
     if(link){
       cta.style.display = '';
       cta.textContent = 'Contact Customer Service';
