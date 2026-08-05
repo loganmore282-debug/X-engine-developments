@@ -866,6 +866,21 @@ function renderFeatured(){
   }).join('');
   document.getElementById('featStrip').innerHTML = html;
 }
+// Fixed reference point, same trick as TICKER_EPOCH above. renderShop()
+// rebuilds #shopGrid's innerHTML on every renderAll() (every account poll,
+// ~5s) -- destroying and recreating the Buy button elements each time,
+// which reset their glow-sweep CSS animation back to its start and made
+// it visibly stutter/restart instead of sweeping continuously. Stamping a
+// negative animation-delay equal to how far into the 2s cycle "now"
+// actually is makes a freshly-recreated button's sweep resume exactly
+// where the old one would be, so it never visibly breaks no matter how
+// often the Shop grid underneath it re-renders.
+var SWEEP_EPOCH = Date.now();
+var SWEEP_CYCLE = 2; // must match .btn-buy-glow::after's animation duration
+function syncSweepPhase(root){
+  var delay = -(((Date.now()-SWEEP_EPOCH)/1000) % SWEEP_CYCLE);
+  (root||document).querySelectorAll('.btn-buy-glow').forEach(function(el){ el.style.setProperty('--sweep-delay', delay+'s'); });
+}
 function renderShop(){
   // Sold-out/coming-soon tiers render fully dimmed with a banner spanning
   // the whole image. Every chocolate's full numbers (price, daily reward,
@@ -896,6 +911,7 @@ function renderShop(){
       '</div></div>';
   }).join('');
   document.getElementById('shopGrid').innerHTML = html;
+  syncSweepPhase(document.getElementById('shopGrid'));
 }
 function investmentStats(){
   // Accrual/maturity are computed and settled server-side (lazy daily

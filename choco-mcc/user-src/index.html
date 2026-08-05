@@ -64,7 +64,8 @@
   .btn-buy-glow{position:relative;overflow:hidden;}
   .btn-buy-glow::after{content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;
     background:linear-gradient(120deg,transparent,rgba(255,255,255,.55),transparent);
-    transform:skewX(-20deg);animation:btnGlowSweep 2s linear infinite;}
+    transform:skewX(-20deg);animation-name:btnGlowSweep;animation-duration:2s;animation-timing-function:linear;
+    animation-iteration-count:infinite;animation-delay:var(--sweep-delay,0s);}
   @keyframes btnGlowSweep{0%{left:-60%;}100%{left:130%;}}
   #depGoBtn,#witGoBtn{position:relative;overflow:hidden;}
   #depGoBtn::after,#witGoBtn::after{content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;

@@ -464,7 +464,14 @@
 // Rewards/Shop -> Home), instead of waiting up to ~2.4s into the glow's
 // own 3s loop. The app-open/registration showing is untouched -- still
 // the plain cyclic glow+shake with no forced immediate burst.
-const CACHE = 'chocomcc-shell-v83';
+// v84: Fixed the Buy button glow sweep visibly stuttering/restarting --
+// renderShop() rebuilds the whole grid's HTML on every account poll
+// (~5s), which recreated the Buy buttons and reset their sweep animation
+// to frame 0 each time. Same negative-animation-delay phase-sync trick
+// already used for the activity ticker now keeps a freshly-recreated
+// button's sweep resuming exactly where it should be, so it reads as one
+// continuous, non-stop sweep regardless of how often Shop re-renders.
+const CACHE = 'chocomcc-shell-v84';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
