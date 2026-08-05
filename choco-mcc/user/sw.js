@@ -308,7 +308,15 @@
 // gift-box badge (shown whenever the admin hasn't uploaded a custom
 // image), bolder centered title, a divider before the Telegram buttons --
 // no longer a flat plain card.
-const CACHE = 'chocomcc-shell-v54';
+// v55: Announcement popup, round 2 -- with the owner's real (long, 6-
+// paragraph) notice live it was still way too tall and still had rounded
+// corners everywhere. Squared off every corner (sheet, hero band, badge,
+// Telegram buttons, floating close button), shrank the hero band/badge,
+// and switched paragraph spacing from nl2p's full blank-line gaps (built
+// for the spacious About/Rules pages) to a new tight nl2pTight helper
+// with a small fixed margin between paragraphs -- same content now takes
+// noticeably less vertical space.
+const CACHE = 'chocomcc-shell-v55';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

@@ -504,6 +504,16 @@ function nl2p(text){
   if(!paras.length) return '';
   return paras.map(function(p){ return '<p>'+esc(p).replace(/\n/g,'<br>')+'</p>'; }).join('<br>');
 }
+// Same paragraph split as nl2p, but with tight CSS margin between
+// paragraphs instead of a full blank-line <br> gap — nl2p's spacing is
+// meant for the About/Rules full pages that have room to breathe; the
+// announcement is a small popup where that same spacing made a long
+// admin-written notice feel endless.
+function nl2pTight(text){
+  var paras = String(text||'').split(/\n\s*\n/).filter(function(p){return p.trim();});
+  if(!paras.length) return '';
+  return paras.map(function(p){ return '<p class="ann-p">'+esc(p).replace(/\n/g,'<br>')+'</p>'; }).join('');
+}
 // Real Telegram brand mark (blue disc + paper-plane glyph), not a generic
 // themed outline icon — used everywhere the app links out to Telegram. A
 // plain white-glyph variant covers spots (like .tg-pill) that already sit
@@ -543,7 +553,7 @@ function maybeShowAnnouncement(){
   var s = getSettings();
   if(!s.annEnabled || !s.annBody) return;
   document.getElementById('annTitle').textContent = s.annTitle || 'Notice';
-  document.getElementById('annBody').innerHTML = nl2p(s.annBody);
+  document.getElementById('annBody').innerHTML = nl2pTight(s.annBody);
   var img = document.getElementById('annImg');
   var badge = document.getElementById('annBadge');
   if(s.announcementBg){ img.src = s.announcementBg; img.style.display='block'; badge.style.display='none'; }
