@@ -486,7 +486,10 @@
 // reference's two-hands-holding-a-gift art was simplified to just the
 // gift box -- the hands became illegible noise at the actual 19px
 // nav-bar size).
-const CACHE = 'chocomcc-shell-v87';
+// v88: Home screen's "Rewards Hub" quick-action tile now uses the same
+// gift-box icon as the Rewards nav tab (was the old diamond icon,
+// inconsistent with the tab it links to).
+const CACHE = 'chocomcc-shell-v88';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
