@@ -431,7 +431,11 @@
 // v76: Add Funds / Request Cash Out fade-pulse (was changing the button's
 // color) replaced with the same left-to-right glow sweep used on the
 // Buy this chocolate buttons.
-const CACHE = 'chocomcc-shell-v76';
+// v77: About Us now reveals on scroll -- each block of the newspaper
+// feature (kicker, headline, hero photo, paragraphs, image cards) fades
+// and rises into place as it enters view, instead of the whole article
+// sitting fully rendered from the start.
+const CACHE = 'chocomcc-shell-v77';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
