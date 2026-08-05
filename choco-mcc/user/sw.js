@@ -407,7 +407,10 @@
 // without disturbing the tile layout.
 // v69: UGX coin icon on Account (Me) was too small -- sized up 15px->20px.
 // v70: Still too small -- sized up again, 20px->28px, gap 5px->6px.
-const CACHE = 'chocomcc-shell-v70';
+// v71: Still small -- jumped to 40px (gap 8px), checked against real
+// card width (grid minmax(120px,1fr) inside 20px page margins) so it
+// still fits "UGX 45,900" on one line without wrapping.
+const CACHE = 'chocomcc-shell-v71';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
