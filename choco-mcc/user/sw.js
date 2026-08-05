@@ -339,7 +339,8 @@
 // the bottom-anchored dark gradient never reaches, making it unreadable.
 // Switched to a dark chocolate color (var(--cocoa)/--cocoa-soft) so it
 // reads regardless of the gradient position.
-const CACHE = 'chocomcc-shell-v57';
+// v58: Home chip loader (Add Funds / Cash Out) shortened from 3s to 2s.
+const CACHE = 'chocomcc-shell-v58';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

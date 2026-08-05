@@ -264,14 +264,14 @@ function btnBusyHtml(text){
 // Home screen's Add Funds / Cash Out chips: show the OTHER loader (the
 // bigger dash-spin circle, same one spinnerHtml() uses for full-section
 // loading — distinct from the small .verify-spin arc used on every
-// "Please wait…" button) for a fixed 3 seconds the moment the chip is
+// "Please wait…" button) for a fixed 2 seconds the moment the chip is
 // tapped, THEN open the actual Add Funds / Cash Out screen.
 function openOverlayWithLoader(name){
   document.getElementById('chipLoaderBg').classList.add('show');
   setTimeout(function(){
     document.getElementById('chipLoaderBg').classList.remove('show');
     openOverlay(name);
-  }, 3000);
+  }, 2000);
 }
 
 /* ====================== LOCAL STATE (per-account cache — keyed by the real Firebase uid; moves server-side once the backend is wired up) ====================== */
