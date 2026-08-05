@@ -1166,20 +1166,45 @@ async function renderTransactions(){
   const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Chocolates'],['checkin','Check-in'],['promocode','Codes']];
   $('content').innerHTML = `
     <h2 class="sec">Transactions</h2>
-    <div class="panel-card"><input id="txSearch" placeholder="Search description, type or user id"></div>
+    <div class="panel-card"><input id="txSearch" placeholder="Search description, type, user id, or a reference (e.g. B260805...) -- press Enter to also check older transactions not in this list">
+      <div class="muted" id="txSearchStatus" style="font-size:12px;margin-top:6px"></div></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_txFilter===k?' active':''}" data-tf="${k}">${l}</button>`).join('')}</div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Description</th><th>Amount</th></tr></thead><tbody id="txRows"></tbody></table></div>`;
+    <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Description</th><th>Reference</th><th>Amount</th></tr></thead><tbody id="txRows"></tbody></table></div>`;
   document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>{ _txFilter=b.dataset.tf; drawTxns(); document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x.dataset.tf===_txFilter)); }));
   $('txSearch').addEventListener('input', drawTxns);
+  // A reference can be older than this tab's own 400-row window -- Enter
+  // asks the server for an exact match (a real, indexed lookup, not bounded
+  // by recency) and folds any find into the loaded list so it's visible
+  // right alongside everything else, instead of silently coming up empty
+  // just because it scrolled out of the initial batch.
+  $('txSearch').addEventListener('keydown', async (e)=>{
+    if(e.key!=='Enter') return;
+    const q = $('txSearch').value.trim();
+    if(!q) return;
+    const statusEl = $('txSearchStatus');
+    statusEl.textContent = 'Checking older transactions for that reference…';
+    const rr = await api('/admin/transactions/list', { ref: q });
+    if(staleTab('transactions')) return;
+    const found = rr.transactions||[];
+    if(found.length){
+      const knownIds = new Set(_txns.map(t=>t.id));
+      found.forEach(t=>{ if(!knownIds.has(t.id)){ _txns.unshift(t); knownIds.add(t.id); } });
+      statusEl.textContent = `Found ${found.length} matching this reference`;
+    } else {
+      statusEl.textContent = 'No transaction found with that exact reference';
+    }
+    drawTxns();
+  });
   drawTxns();
 }
 function drawTxns(){
   let list=_txFilter==='all'?_txns:_txns.filter(t=>t.type===_txFilter);
   const q=($('txSearch')?.value||'').toLowerCase().trim();
-  if(q) list=list.filter(t=>(t.description||'').toLowerCase().includes(q)||(t.type||'').includes(q)||(t.userId||'').toLowerCase().includes(q));
+  if(q) list=list.filter(t=>(t.description||'').toLowerCase().includes(q)||(t.type||'').includes(q)||(t.userId||'').toLowerCase().includes(q)||(t.ref||'').toLowerCase().includes(q));
   $('txRows').innerHTML = list.length?list.slice(0,300).map(t=>`
     <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
-    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No transactions</td></tr>';
+    <td style="font-family:monospace;font-size:12px;white-space:nowrap">${esc(t.ref||'—')}</td>
+    <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
   document.querySelectorAll('#txRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 

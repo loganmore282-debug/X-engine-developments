@@ -310,11 +310,21 @@ function stampRef(letter) {
               + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds());
   return letter + stamp + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
 }
-async function uniqueRef(collection, letter) {
+// Checked against BOTH pendingDeposits and withdrawals — a deposit and a
+// withdrawal both stamp the same 'B' letter, so checking only the caller's
+// own collection (the original bug) could in theory hand out the same
+// reference to a deposit and a withdrawal that happened to land in the
+// same second with the same random tail. Checking the union of both makes
+// a reference globally unique across every money-moving record, not just
+// unique within its own type.
+async function uniqueRef(letter) {
   for (let i = 0; i < 12; i++) {
     const ref = stampRef(letter);
-    const hit = await db.collection(collection).where('ref', '==', ref).limit(1).get();
-    if (hit.empty) return ref;
+    const [depHit, witHit] = await Promise.all([
+      db.collection('pendingDeposits').where('ref', '==', ref).limit(1).get(),
+      db.collection('withdrawals').where('ref', '==', ref).limit(1).get(),
+    ]);
+    if (depHit.empty && witHit.empty) return ref;
   }
   return stampRef(letter) + String(Math.floor(Math.random() * 100)).padStart(2, '0');
 }
@@ -1309,7 +1319,7 @@ app.post('/deposit/marzpay', async (req, res) => {
     // is what actually goes to MarzPay's `reference` field — their API
     // requires that to be a UUID v4 for collections, so it can never be the
     // same string as our own format.
-    const ref = await uniqueRef('pendingDeposits', 'B');
+    const ref = await uniqueRef('B');
     const marzReference = crypto.randomUUID();
     const { date, time } = nowStr();
     const depRef = db.collection('pendingDeposits').doc();
@@ -1552,7 +1562,7 @@ app.post('/withdraw/request', async (req, res) => {
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;
-    const ref = await uniqueRef('withdrawals', 'B');
+    const ref = await uniqueRef('B');
     let witId;
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef = db.collection('users').doc(userId);
@@ -2710,7 +2720,17 @@ app.post('/admin/withdraw/reject', async (req, res) => {
 app.post('/admin/transactions/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, limit: lim } = req.body;
+  const ref = String(req.body.ref || '').trim().toUpperCase();
   try {
+    // An exact reference lookup (the "B..." id shown on deposits/
+    // withdrawals) isn't bounded by recency like the plain list below —
+    // it finds the transaction regardless of how far back it was, which
+    // the admin panel's own client-side search over the recent window
+    // can't do for anything older than its last-loaded batch.
+    if (ref) {
+      const snap = await db.collection('transactions').where('ref', '==', ref).limit(20).get();
+      return res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    }
     if (userId) {
       const snap = await db.collection('transactions').where('userId', '==', userId).limit(100).get();
       const txs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
