@@ -477,7 +477,16 @@
 // now a receipt with a dollar-sign badge, matching the owner-supplied
 // reference icons (redrawn as thin-line icons to match the app's existing
 // icon style rather than the filled reference art directly).
-const CACHE = 'chocomcc-shell-v86';
+// v87: Redid the Terms & Rules gavel -- the previous attempt (two
+// separately-rotated pieces) didn't read as a gavel at all; rebuilt by
+// drawing the mallet upright first, then rotating the whole assembled
+// shape as one rigid piece, which reads correctly at real tile size.
+// Also swapped the Shop nav icon to a shopping cart and Rewards nav icon
+// to a gift box, matching the owner-supplied reference icons (the
+// reference's two-hands-holding-a-gift art was simplified to just the
+// gift box -- the hands became illegible noise at the actual 19px
+// nav-bar size).
+const CACHE = 'chocomcc-shell-v87';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
