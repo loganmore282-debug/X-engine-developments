@@ -77,7 +77,7 @@ function check(name, cond, extra) {
   check('the edited product actually reflects the new price', savedHersheys?.price === 35000, savedHersheys);
   const stillDefaultMars = r.products.find(p => p.key === 'mars');
   check('an untouched default (mars) is still there with its original price', stillDefaultMars?.price === 90000, stillDefaultMars);
-  check('untouched default (mars) still has its 180-day/20x fields', stillDefaultMars?.cycle === 180 && stillDefaultMars?.expectedReturn === 1800000, stillDefaultMars);
+  check('untouched default (mars) still has its 180-day/25x fields', stillDefaultMars?.cycle === 180 && stillDefaultMars?.expectedReturn === 2250000, stillDefaultMars);
 
   console.log('\n-- Same merge applies to the public (user-app) products endpoint --');
   const pub = await getPublicProducts();

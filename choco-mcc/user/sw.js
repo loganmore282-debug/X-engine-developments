@@ -439,7 +439,13 @@
 // rising from below -- the lead hero photo zooms in from the middle, a
 // grid's left card slides from the left and its right card from the
 // right, and full-width cards cycle left/right/middle in turn.
-const CACHE = 'chocomcc-shell-v78';
+// v79: Return multiplier bumped from 20x to 25x on all 10 default
+// chocolate tiers (fallback expectedReturn values updated to match).
+// Settings (dailyCheckin, commission %, min withdraw, etc.) now
+// resync from the server roughly once a minute during an open session,
+// instead of only once at app launch -- an admin changing a live value
+// used to never reach an already-open session at all.
+const CACHE = 'chocomcc-shell-v79';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

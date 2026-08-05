@@ -84,8 +84,8 @@ async function setupFundedUser(uid, phone, balance) {
   const invId = r.body?.investmentId;
   const inv = investments().get(invId);
   check('investment stores the PRODUCT\'S OWN cycle (180), not a stale global default', inv?.cycle === 180, inv);
-  check('investment stores the product\'s own expectedReturn (600,000 = 30,000 x 20)', inv?.expectedReturn === 600000, inv);
-  check('dailyPayout computed correctly (600000/180=3333.33 rounds to 3333)', inv?.dailyPayout === Math.round(600000 / 180), inv);
+  check('investment stores the product\'s own expectedReturn (750,000 = 30,000 x 25)', inv?.expectedReturn === 750000, inv);
+  check('dailyPayout computed correctly (750000/180=4166.67 rounds to 4167)', inv?.dailyPayout === Math.round(750000 / 180), inv);
   check('wallet debited by the product price (30,000)', userDoc(A).walletBalance === 1000000 - 30000, userDoc(A).walletBalance);
   check('totalInvested credited', userDoc(A).totalInvested === 30000, userDoc(A).totalInvested);
 
@@ -93,8 +93,8 @@ async function setupFundedUser(uid, phone, balance) {
   await adminCall('/admin/settings/update', { settings: { returnMultiple: 3, cycleDays: 10 } }); // deliberately different from the product's own fields
   r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'mars' } });
   const marsInv = investments().get(r.body?.investmentId);
-  check('mars still uses ITS OWN 180-day/20x fields, ignoring the now-different global settings', marsInv?.cycle === 180 && marsInv?.expectedReturn === 1800000, marsInv);
-  await adminCall('/admin/settings/update', { settings: { returnMultiple: 20, cycleDays: 180 } }); // restore
+  check('mars still uses ITS OWN 180-day/25x fields, ignoring the now-different global settings', marsInv?.cycle === 180 && marsInv?.expectedReturn === 2250000, marsInv);
+  await adminCall('/admin/settings/update', { settings: { returnMultiple: 25, cycleDays: 180 } }); // restore
 
   console.log('\n== Balance / auth security ==');
   const B = 'bob-uid';
@@ -134,7 +134,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n== Daily cashback settlement accuracy ==');
   const E = 'erin-uid';
   await setupFundedUser(E, '0771000005', 1000000);
-  r = await call('POST', '/invest/create', { token: 'uid:' + E, body: { tierKey: 'hersheys' } }); // 30,000 -> 600,000 over 180 days
+  r = await call('POST', '/invest/create', { token: 'uid:' + E, body: { tierKey: 'hersheys' } }); // 30,000 -> 750,000 over 180 days
   const erinInvId = r.body?.investmentId;
   const erinInv = investments().get(erinInvId);
   // Backdate createdAt so settle-on-read thinks several days have elapsed.
@@ -155,7 +155,7 @@ async function setupFundedUser(uid, phone, balance) {
   await call('GET', '/investments', { token: 'uid:' + E });
   const freshInv = investments().get(erinInvId);
   check('investment marked matured', freshInv.status === 'matured', freshInv);
-  check('total paid out exactly equals expectedReturn (no more, no less — no decimal drift)', freshInv.paidOut === 600000, freshInv.paidOut);
+  check('total paid out exactly equals expectedReturn (no more, no less — no decimal drift)', freshInv.paidOut === 750000, freshInv.paidOut);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -5,7 +5,7 @@ var CHOCO_BANNERS = {"bonbon": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABA
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 19, minWithdraw: 10000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 20, cycleDays: 180,
+  returnMultiple: 25, cycleDays: 180,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', brandTagline: '', aboutText: '',
@@ -16,16 +16,16 @@ var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" str
 // stamped explicitly per product) — only ever used before syncPublicConfig()
 // has fetched the real, admin-editable catalogue, or if that fetch fails.
 var PRODUCTS = [
-  { key:'hersheys',  name:"Hershey's Milk Chocolate", price:30000,   cycle:180, expectedReturn:600000   },
-  { key:'mars',      name:"Mars",                     price:90000,   cycle:180, expectedReturn:1800000  },
-  { key:'snickers',  name:"Snickers",                 price:200000,  cycle:180, expectedReturn:4000000  },
-  { key:'cadbury',   name:"Cadbury Dairy Milk",        price:350000,  cycle:180, expectedReturn:7000000  },
-  { key:'kitkat',    name:"KitKat Chunky",             price:500000,  cycle:180, expectedReturn:10000000 },
-  { key:'toblerone', name:"Toblerone",                 price:800000,  cycle:180, expectedReturn:16000000 },
-  { key:'rondnoir',  name:"Ferrero Rondnoir",          price:1000000, cycle:180, expectedReturn:20000000 },
-  { key:'rocher',    name:"Ferrero Rocher",            price:2000000, cycle:180, expectedReturn:40000000 },
-  { key:'raffaello', name:"Raffaello",                 price:3000000, cycle:180, expectedReturn:60000000 },
-  { key:'godiva',    name:"Godiva Gold Box",           price:4000000, cycle:180, expectedReturn:80000000 }
+  { key:'hersheys',  name:"Hershey's Milk Chocolate", price:30000,   cycle:180, expectedReturn:750000    },
+  { key:'mars',      name:"Mars",                     price:90000,   cycle:180, expectedReturn:2250000   },
+  { key:'snickers',  name:"Snickers",                 price:200000,  cycle:180, expectedReturn:5000000   },
+  { key:'cadbury',   name:"Cadbury Dairy Milk",        price:350000,  cycle:180, expectedReturn:8750000   },
+  { key:'kitkat',    name:"KitKat Chunky",             price:500000,  cycle:180, expectedReturn:12500000  },
+  { key:'toblerone', name:"Toblerone",                 price:800000,  cycle:180, expectedReturn:20000000  },
+  { key:'rondnoir',  name:"Ferrero Rondnoir",          price:1000000, cycle:180, expectedReturn:25000000  },
+  { key:'rocher',    name:"Ferrero Rocher",            price:2000000, cycle:180, expectedReturn:50000000  },
+  { key:'raffaello', name:"Raffaello",                 price:3000000, cycle:180, expectedReturn:75000000  },
+  { key:'godiva',    name:"Godiva Gold Box",           price:4000000, cycle:180, expectedReturn:100000000 }
 ];
 // FIXED BUG: the array above has no active/comingSoon flags at all (it's
 // just a price/cycle fallback shape), so on EVERY fresh page load -- not
@@ -971,6 +971,19 @@ function stopActivityFeed(){ clearInterval(_activityFeedTimer); _activityFeedTim
 var _accountPollTimer = null;
 var _accountPollRunning = false;
 var ACCOUNT_POLL_MS = 5000;
+// Settings (dailyCheckin, commL1/2/3, minWithdraw...) used to only ever
+// sync once, at app entry -- an admin changing a value while a user's
+// session was already open (e.g. raising the check-in bonus from 250 to
+// 500) never reached that open session at all, so the check-in button
+// kept showing the old figure while a fresh sign-in elsewhere already
+// credited the new one: exactly the "shows 250 but claims 500" mismatch.
+// Piggybacking a resync onto the existing account poll, throttled to
+// roughly once a minute (matches the server's own 60s settings cache, so
+// polling faster couldn't see a newer value anyway), keeps every
+// settings-driven figure genuinely live instead of stuck from whenever
+// the app happened to launch.
+var _settingsPollCounter = 0;
+var SETTINGS_POLL_EVERY = 12;
 function scheduleAccountPoll(){
   clearTimeout(_accountPollTimer);
   if(!STATE || document.hidden) return;
@@ -981,6 +994,8 @@ async function runAccountPoll(){
   _accountPollRunning = true;
   try{
     await refreshFromServer();
+    _settingsPollCounter++;
+    if(_settingsPollCounter % SETTINGS_POLL_EVERY === 0) await syncPublicConfig();
     renderAll();
     // An open History screen's Topups/Cash Outs tab has its own separate
     // fetch (not part of refreshFromServer) — keep it live too if it's the
