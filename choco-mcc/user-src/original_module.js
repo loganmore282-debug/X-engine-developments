@@ -54,12 +54,17 @@ var NETWORK_COLORS = { 'MTN Mobile Money':{color:'#FFCC08',textColor:'#3B2416'},
 
 /* ====================== SERVER API ====================== */
 var SERVER = 'https://mybusinessuganda.onrender.com';
-// Crossed wrench + screwdriver, filled silhouette (matches the owner-supplied
-// reference icon) -- the notch cut into the wrench head is a plain rect
-// painted the same cocoa as the lockout screen's background, not a real cutout.
-var LOCKOUT_IC_MAINT = '<svg viewBox="0 0 100 100" width="72" height="72" fill="currentColor">'+
-  '<g transform="rotate(45 50 50)"><rect x="45" y="6" width="10" height="70" rx="5"/><rect x="38" y="72" width="24" height="20" rx="6"/></g>'+
-  '<g transform="rotate(-45 50 50)"><rect x="45" y="18" width="10" height="60" rx="5"/><circle cx="50" cy="12" r="14"/><rect x="42" y="5" width="16" height="11" rx="3" fill="#3B2416"/></g>'+
+// Wrench + gear, thin outline style (matches the owner-supplied reference
+// "maintenance mode" icon) -- wrench diagonal top-left to bottom-right,
+// gear overlapping its lower end, both stroked (not filled).
+var LOCKOUT_IC_MAINT = '<svg viewBox="0 0 100 100" width="72" height="72" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">'+
+  '<g transform="translate(8,2) scale(3.15)" stroke-width="1.7">'+
+    '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>'+
+  '</g>'+
+  '<g transform="translate(38,38) scale(2.1)" stroke-width="1.7">'+
+    '<circle cx="12" cy="12" r="3"/>'+
+    '<path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>'+
+  '</g>'+
 '</svg>';
 var LOCKOUT_IC_BANNED = '<svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
   '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1.6" fill="currentColor" stroke="none"/>'+

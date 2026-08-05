@@ -410,7 +410,10 @@
 // v71: Still small -- jumped to 40px (gap 8px), checked against real
 // card width (grid minmax(120px,1fr) inside 20px page margins) so it
 // still fits "UGX 45,900" on one line without wrapping.
-const CACHE = 'chocomcc-shell-v71';
+// v72: Maintenance-mode lockout icon replaced -- was a filled crossed
+// wrench+screwdriver silhouette, now a thin-outline wrench crossed over
+// a gear (matches the owner-supplied reference icon style).
+const CACHE = 'chocomcc-shell-v72';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
