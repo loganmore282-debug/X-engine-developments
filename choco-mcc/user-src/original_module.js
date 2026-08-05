@@ -1216,16 +1216,6 @@ async function doDeposit(){
   document.getElementById('depAmt').value='';
   openDepositStatus(r.depositId, r.reference, phone);
 }
-// Tapping a quick-amount chip must feel identical to typing it: fill the
-// field AND recompute the fee/net right away. The bug the owner hit was
-// the chip only ever setting witAmt.value with no matching input event, so
-// the fee/net calc row stayed frozen at UGX 0 (looked like the tap did
-// nothing / "swapped back to default") until the user typed something.
-function witQuickAmt(v){
-  var amt = (v==='max') ? Math.max(0, Math.floor(STATE.balance||0)) : v;
-  document.getElementById('witAmt').value = amt;
-  renderWitCalc();
-}
 function renderWitCalc(){
   var sett = getSettings();
   var amt = parseInt(document.getElementById('witAmt').value,10)||0;

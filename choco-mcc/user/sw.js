@@ -294,7 +294,14 @@
 // Deposit, Cash Out, Support, Bind Bank all now sit square-edged, flush
 // with the page padding) -- Home keeps its curved bottom corners on
 // purpose, everything else is now straight-edged per feedback.
-const CACHE = 'chocomcc-shell-v52';
+// v53: (1) Reverted the v51 withdrawal quick-amount chips -- never asked
+// for, removed entirely, Cash Out is back to a plain amount field. (2)
+// Bottom tab bar is no longer a floating rounded pill -- it's now full
+// width, flush with the very bottom and both side edges, square corners,
+// per feedback. (3) Added "How it works" numbered instruction cards: one
+// on the Team screen (how referral commissions work) and one on the Cash
+// Out screen (how withdrawals get approved and paid).
+const CACHE = 'chocomcc-shell-v53';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

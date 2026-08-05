@@ -40,7 +40,7 @@
     background:var(--cream); color:var(--cocoa);
     min-height:100%;
   }
-  #root{max-width:480px;margin:0 auto;min-height:100vh;background:var(--cream);position:relative;padding-bottom:86px;}
+  #root{max-width:480px;margin:0 auto;min-height:100vh;background:var(--cream);position:relative;padding-bottom:calc(86px + env(safe-area-inset-bottom,0px));}
   img{max-width:100%;display:block;}
   button{font-family:inherit;cursor:pointer;}
   input{font-family:inherit;}
@@ -213,8 +213,9 @@
     letter-spacing:1px;text-transform:uppercase;padding:6px 0;}
 
   /* ---------- Bottom nav ---------- */
-  .tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;width:calc(100% - 32px);max-width:448px;
-    background:var(--cocoa);border-radius:24px;display:flex;box-shadow:0 16px 32px -12px rgba(59,36,22,.55);padding:8px;z-index:40;}
+  .tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:480px;
+    background:var(--cocoa);border-radius:0;display:flex;box-shadow:0 -8px 24px -12px rgba(59,36,22,.5);
+    padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));z-index:40;}
   .tab{flex:1;text-align:center;padding:9px 4px;border:none;background:none;color:#C7AF9B;border-radius:16px;font-size:10.5px;font-weight:700;}
   .tab.active{background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;}
   .tab .ti{display:block;margin:0 auto 3px;}
@@ -420,6 +421,15 @@
   .comm-tile b{display:block;font-size:19px;color:var(--caramel-deep);}
   .comm-tile span{font-size:10.5px;color:var(--cocoa-faint);font-weight:700;}
 
+  /* ---------- How it works — numbered instruction cards ---------- */
+  .howto-card{margin:0 20px 16px;padding:16px 16px 4px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);}
+  .howto-card h4{font-size:14px;font-weight:800;color:var(--cocoa);margin-bottom:10px;}
+  .howto-step{display:flex;align-items:flex-start;gap:11px;margin-bottom:14px;}
+  .howto-num{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--caramel-pale);color:var(--caramel-deep);
+    font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+  .howto-step p{font-size:12.5px;line-height:1.5;color:var(--cocoa-soft);padding-top:2px;}
+  .howto-step b{color:var(--cocoa);}
+
   .checkin-wrap{padding:30px 24px;text-align:center;}
   .checkin-ring{width:170px;height:170px;border-radius:50%;margin:20px auto;background:conic-gradient(var(--caramel) var(--pct,0%), var(--cream-deep) 0);
     display:flex;align-items:center;justify-content:center;position:relative;}
@@ -565,6 +575,13 @@
         <div class="comm-tile"><b id="commL1Pct">27%</b><span>LEVEL 1</span></div>
         <div class="comm-tile"><b id="commL2Pct">2%</b><span>LEVEL 2</span></div>
         <div class="comm-tile"><b id="commL3Pct">1%</b><span>LEVEL 3</span></div>
+      </div>
+      <div class="howto-card">
+        <h4>How referrals work</h4>
+        <div class="howto-step"><span class="howto-num">1</span><p>Share your referral link above with friends and family.</p></div>
+        <div class="howto-step"><span class="howto-num">2</span><p>When someone signs up with your link and buys a chocolate product, you earn a commission straight away.</p></div>
+        <div class="howto-step"><span class="howto-num">3</span><p>You earn on <b>3 levels</b> — people you invite directly (Level 1), the people they invite (Level 2), and the people those invite (Level 3).</p></div>
+        <div class="howto-step"><span class="howto-num">4</span><p>Commissions land straight in your wallet balance — no waiting, no claiming.</p></div>
       </div>
       <div class="sec-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
       <div style="margin:0 20px" class="card" >
@@ -727,14 +744,16 @@
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
       <input class="famt" id="witAmt" type="number" placeholder="0" oninput="renderWitCalc()">
-      <div class="quick-amt-row">
-        <button type="button" class="quick-amt-chip" onclick="witQuickAmt(20000)">UGX 20,000</button>
-        <button type="button" class="quick-amt-chip" onclick="witQuickAmt(50000)">UGX 50,000</button>
-        <button type="button" class="quick-amt-chip" onclick="witQuickAmt('max')">Max</button>
-      </div>
       <div class="calc-row"><span>Service fee (<span id="witFeePctLabel">19%</span>)</span><span id="witFee">UGX 0</span></div>
       <div class="calc-row"><span>You receive</span><span id="witNet">UGX 0</span></div>
       <button class="btn btn-berry btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Cash Out</button>
+    </div>
+    <div class="howto-card">
+      <h4>How cash-outs work</h4>
+      <div class="howto-step"><span class="howto-num">1</span><p>Bind a mobile-money account (MTN or Airtel) once — every cash-out is sent there.</p></div>
+      <div class="howto-step"><span class="howto-num">2</span><p>Enter the amount you want and tap Request Cash Out.</p></div>
+      <div class="howto-step"><span class="howto-num">3</span><p>Your request goes to an admin for approval, then the net amount (after the service fee) is sent to your mobile money number.</p></div>
+      <div class="howto-step"><span class="howto-num">4</span><p>Track the status any time under <b>Account → Ledger → Cash Outs</b>.</p></div>
     </div>
   </div>
 
