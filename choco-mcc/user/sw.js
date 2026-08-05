@@ -350,7 +350,17 @@
 // card, the DAILY REWARD pill, Redeem-a-Promo-Code card) -- everything
 // now sits directly on the page separated by thin dividers, no boxes.
 // Cash Out's own "How cash-outs work" card is untouched (out of scope).
-const CACHE = 'chocomcc-shell-v59';
+// v60: Design pass -- own chocolate-brand execution, not a copy of the
+// reference app the owner shared. (1) Account/Me: the 2 plain balance
+// boxes are now a caramel-gradient hero card, plus a new dark-cocoa
+// "Invite friends" banner (tap to copy the referral link) above the menu
+// grid. (2) Team: level tiles get gold/silver/bronze numbered medal
+// badges above the L1/L2/L3 percentages. (3) Shop: the cheapest tier
+// gets a "Popular" ribbon, the priciest gets "Premium". (4) Redeeming a
+// promo code now shows a festive gift-badge pop-up with the amount
+// earned instead of a plain toast. Reversible as a unit -- this is one
+// commit on top of the previous known-good state.
+const CACHE = 'chocomcc-shell-v60';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

@@ -383,6 +383,33 @@
   .acct-num{font-size:16px;font-weight:800;}
   .avatar{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;}
 
+  /* ---------- Account hub: balance hero + invite banner ---------- */
+  .acct-hero{margin:0 20px 12px;padding:20px;border-radius:22px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));box-shadow:0 14px 28px -12px rgba(192,111,28,.5);}
+  .acct-hero-row{display:flex;align-items:center;}
+  .acct-hero-stat{flex:1;text-align:center;cursor:pointer;}
+  .acct-hero-n{font-size:20px;font-weight:800;color:#fff;}
+  .acct-hero-l{font-size:11px;color:rgba(255,255,255,.82);font-weight:700;margin-top:4px;text-transform:uppercase;letter-spacing:.4px;}
+  .acct-hero-div{width:1px;height:34px;background:rgba(255,255,255,.32);}
+  .invite-banner{margin:0 20px 18px;padding:16px;border-radius:20px;background:linear-gradient(150deg,#4A2A17,#2C160C);
+    display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:var(--shadow);border:none;width:calc(100% - 40px);text-align:left;font:inherit;}
+  .invite-ic{width:42px;height:42px;border-radius:13px;background:rgba(255,255,255,.12);color:var(--caramel);
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .invite-body{flex:1;color:#fff;min-width:0;}
+  .invite-body b{display:block;font-size:13.5px;}
+  .invite-body span{display:block;font-size:11.5px;color:rgba(255,255,255,.65);margin-top:2px;}
+  .invite-copy{background:rgba(255,255,255,.14);color:#fff;font-weight:800;font-size:12px;padding:8px 14px;border-radius:10px;flex:0 0 auto;}
+
+  /* ---------- Team level medal badges ---------- */
+  .team-badge{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:13px;color:#fff;margin:0 auto 8px;}
+  .team-badge-gold{background:linear-gradient(135deg,#F0C550,#C9932A);box-shadow:0 4px 10px -2px rgba(201,147,42,.55);}
+  .team-badge-silver{background:linear-gradient(135deg,#DCE1E6,#9AA3AC);box-shadow:0 4px 10px -2px rgba(154,163,172,.55);}
+  .team-badge-bronze{background:linear-gradient(135deg,#D69A6A,#A9663A);box-shadow:0 4px 10px -2px rgba(169,102,58,.55);}
+
+  /* ---------- Shop ribbon badges ---------- */
+  .prod-ribbon{position:absolute;top:12px;right:12px;background:linear-gradient(135deg,var(--caramel),var(--caramel-deep));color:#fff;
+    font-size:10.5px;font-weight:800;padding:5px 11px;border-radius:999px;letter-spacing:.3px;box-shadow:0 4px 10px -2px rgba(192,111,28,.5);}
+
   .link-box{background:var(--cream-deep);border:1.5px dashed var(--caramel);border-radius:14px;padding:14px 16px;margin:14px 20px;}
   .link-row{display:flex;align-items:center;gap:10px;}
   .link-row span{flex:1;font-size:12.5px;font-weight:700;color:var(--cocoa-soft);}
@@ -593,9 +620,9 @@
         </div>
       </div>
       <div class="comm-row">
-        <div class="comm-tile"><b id="commL1Pct">27%</b><span>LEVEL 1</span></div>
-        <div class="comm-tile"><b id="commL2Pct">2%</b><span>LEVEL 2</span></div>
-        <div class="comm-tile"><b id="commL3Pct">1%</b><span>LEVEL 3</span></div>
+        <div class="comm-tile"><div class="team-badge team-badge-gold">1</div><b id="commL1Pct">27%</b><span>LEVEL 1</span></div>
+        <div class="comm-tile"><div class="team-badge team-badge-silver">2</div><b id="commL2Pct">2%</b><span>LEVEL 2</span></div>
+        <div class="comm-tile"><div class="team-badge team-badge-bronze">3</div><b id="commL3Pct">1%</b><span>LEVEL 3</span></div>
       </div>
       <div class="sec-head"><h3>Team overview</h3><button type="button" class="tm-task-link" onclick="openOverlay('taskcenter')">Task Center <span style="font-size:16px;line-height:1">&rsaquo;</span></button></div>
       <div style="padding:0 20px">
@@ -655,10 +682,18 @@
           <div class="acct-num" id="acctPhone">0700 000 000</div>
         </div>
       </div>
-      <div class="cards" style="margin:0 20px 18px">
-        <div class="stat" style="cursor:pointer" onclick="openOverlay('records')"><div class="n" style="color:var(--mint)" id="acctBalNum">UGX 0</div><div class="l">Balance</div></div>
-        <div class="stat" style="cursor:pointer" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="n" style="color:var(--berry)" id="acctWitNum">UGX 0</div><div class="l">Cash Outs</div></div>
+      <div class="acct-hero">
+        <div class="acct-hero-row">
+          <div class="acct-hero-stat" onclick="openOverlay('records')"><div class="acct-hero-n" id="acctBalNum">UGX 0</div><div class="acct-hero-l">Balance</div></div>
+          <div class="acct-hero-div"></div>
+          <div class="acct-hero-stat" onclick="openOverlay('records');setRecordsTab('cashouts')"><div class="acct-hero-n" id="acctWitNum">UGX 0</div><div class="acct-hero-l">Cash Outs</div></div>
+        </div>
       </div>
+      <button type="button" class="invite-banner" onclick="copyCode()">
+        <div class="invite-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2.5"/><path d="M3 12.5h18"/><path d="M12 8v13"/><path d="M12 8c-1.3-4.2-6.2-4.2-6.2-1.3C5.8 8.6 8.8 8 12 8z"/><path d="M12 8c1.3-4.2 6.2-4.2 6.2-1.3C18.2 8.6 15.2 8 12 8z"/></svg></div>
+        <div class="invite-body"><b>Invite friends, earn together</b><span>Share your code — tap to copy</span></div>
+        <div class="invite-copy">Copy</div>
+      </button>
       <div class="menu-grid">
         <button class="menu-tile" onclick="openOverlay('mychoc')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M3 9l6-6 12 12-6 6L3 9z"/><path d="M6 6l3 3M9 3l3 3M12 12l3 3M15 9l3 3"/><path d="M9 12l1.5-3 3 .5 1-2.5" stroke-linejoin="round"/></svg></div><div class="menu-tile-lbl">My Chocolates</div></button>
         <button class="menu-tile" onclick="openOverlay('records')"><div class="menu-tile-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M6.5 3h11v18l-2.2-1.6L13 21l-2.3-1.6L8.5 21l-2-1.6V3z"/><path d="M9 8.2h6M9 12h6"/></svg></div><div class="menu-tile-lbl">Ledger</div></button>
@@ -809,6 +844,20 @@
         <div id="annTgRow" class="tg-row"></div>
       </div>
       <button class="ann-close-float" onclick="dismissAnnouncement()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+
+  <!-- REDEEM REWARD (festive pop-up on a successful promo-code redemption, replaces a plain toast) -->
+  <div class="modal-bg" id="redeemRewardBg" onclick="if(event.target===this) closeRedeemReward()">
+    <div class="modal-wrap">
+      <div class="modal-sheet ann-sheet" style="text-align:center">
+        <div class="ann-hero">
+          <div class="ann-badge" style="margin:0 auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2.5"/><path d="M3 12.5h18"/><path d="M12 8v13"/><path d="M12 8c-1.3-4.2-6.2-4.2-6.2-1.3C5.8 8.6 8.8 8 12 8z"/><path d="M12 8c1.3-4.2 6.2-4.2 6.2-1.3C18.2 8.6 15.2 8 12 8z"/></svg></div>
+        </div>
+        <h3>Code Redeemed!</h3>
+        <div style="font-size:26px;font-weight:800;color:var(--mint);margin:2px 0 18px" id="redeemRewardAmt">+UGX 0</div>
+        <button class="btn btn-primary btn-block" onclick="closeRedeemReward()">Nice!</button>
+      </div>
     </div>
   </div>
 
