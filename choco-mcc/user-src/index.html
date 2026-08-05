@@ -66,8 +66,10 @@
     background:linear-gradient(120deg,transparent,rgba(255,255,255,.55),transparent);
     transform:skewX(-20deg);animation:btnGlowSweep 2s linear infinite;}
   @keyframes btnGlowSweep{0%{left:-60%;}100%{left:130%;}}
-  #depGoBtn:not(:disabled),#witGoBtn:not(:disabled){animation:btnFadePulse 1s ease-in-out infinite;}
-  @keyframes btnFadePulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+  #depGoBtn,#witGoBtn{position:relative;overflow:hidden;}
+  #depGoBtn::after,#witGoBtn::after{content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;
+    background:linear-gradient(120deg,transparent,rgba(255,255,255,.55),transparent);
+    transform:skewX(-20deg);animation:btnGlowSweep 2s linear infinite;}
   .shake-x{animation:shakeX .4s ease-in-out;}
   @keyframes shakeX{0%,100%{transform:translateX(0);}20%{transform:translateX(-8px);}40%{transform:translateX(8px);}60%{transform:translateX(-6px);}80%{transform:translateX(6px);}}
   .verify-spin{display:inline-flex;animation:verifySpin .9s linear infinite;}

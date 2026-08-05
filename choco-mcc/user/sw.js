@@ -428,7 +428,10 @@
 // rejected client-side, either below the minimum limit or above the
 // wallet balance. Redeem a Promo Code's thumbnail now shows the
 // owner-supplied gift-box/coupon artwork instead of the chocolate photo.
-const CACHE = 'chocomcc-shell-v75';
+// v76: Add Funds / Request Cash Out fade-pulse (was changing the button's
+// color) replaced with the same left-to-right glow sweep used on the
+// Buy this chocolate buttons.
+const CACHE = 'chocomcc-shell-v76';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
