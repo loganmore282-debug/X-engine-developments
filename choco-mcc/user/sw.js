@@ -523,7 +523,12 @@
 // v94 tile-style icons for now -- the owner-supplied replacements for
 // those two had visible Vecteezy/Dreamstime stock-site watermarks baked
 // into the image, so they weren't used.
-const CACHE = 'chocomcc-shell-v95';
+// v96: All 10 Account/Me menu tiles (My Chocolates, Ledger, My Team,
+// Payout Account, Security, About Us, Terms & Rules, Support, Download
+// App, Sign Out) swapped from thin-line SVGs to real 3D picture icons,
+// background cut out so they float directly on the white card -- no
+// colored square backer needed, matching the bottom-nav treatment.
+const CACHE = 'chocomcc-shell-v96';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
