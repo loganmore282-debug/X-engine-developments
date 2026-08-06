@@ -2803,6 +2803,41 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    // A deposit flagged needsManualCredit is already 'matched' — creditDeposit()
+    // claims that status BEFORE crediting so nothing can ever re-credit it
+    // automatically — but its wallet write failed, so the member was never
+    // actually paid. That is the one case where a 'matched' deposit still owes
+    // money, and without this branch the old "Already credited" short-circuit
+    // below would strand it with no recovery path at all.
+    if (snap.data().status === 'matched' && snap.data().needsManualCredit === true) {
+      let recovered = false;
+      await withLock('dep:' + depositId, async () => {
+        const fresh = await db.collection('pendingDeposits').doc(depositId).get();
+        if (!fresh.exists || fresh.data().needsManualCredit !== true) return; // another admin already recovered it
+        const amt = Number(fresh.data().amount) || 0;
+        // Clear the flag first so two admins double-clicking can't both pay,
+        // then restore it if the credit itself fails so it stays recoverable.
+        await fresh.ref.update({ needsManualCredit: false });
+        try {
+          await db.collection('users').doc(fresh.data().userId).update({
+            walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt)
+          });
+        } catch (creditErr) {
+          await fresh.ref.update({ needsManualCredit: true }).catch(() => {});
+          throw creditErr;
+        }
+        const { date, time } = nowStr();
+        await db.collection('transactions').add({
+          userId: fresh.data().userId, type: 'deposit', description: 'Added funds to wallet',
+          amount: amt, status: 'success', date, time, ref: fresh.data().ref,
+          createdAt: FieldValue.serverTimestamp()
+        });
+        recovered = true;
+      });
+      if (!recovered) return res.json({ status: 'success', message: 'Already credited' });
+      logAdminAction(req, 'deposit_manual_credit_recovered', { depositId, amount: snap.data().amount });
+      return res.json({ status: 'success', message: `Credited ${fmtUGX(snap.data().amount)} to the user` });
+    }
     if (snap.data().status === 'matched') return res.json({ status: 'success', message: 'Already credited' });
     const ok = await creditDeposit(snap);
     if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit. Try again' });

@@ -157,9 +157,23 @@ function failNextUserWrite() { global.__mockDbFailUpdateOnce.add('users'); }
   check('retries never re-credit an already-claimed deposit', userDoc(B).walletBalance === depBalBefore,
     { balance: userDoc(B).walletBalance, wouldBeDouble: depBalBefore + 60000 });
 
-  // The admin recovery path still works for the flagged deposit.
+  // A claimed-but-uncredited deposit is 'matched', so force-credit's normal
+  // "already credited" short-circuit would strand the member's money forever.
+  // Assert the money genuinely LANDS, not merely that the call returns success.
   const forced = await adminCall('/admin/deposit/force-credit', { depositId });
-  check('admin force-credit can still recover the flagged deposit', forced.body?.status === 'success', forced.body);
+  check('admin force-credit reports success', forced.body?.status === 'success', forced.body);
+  check('force-credit actually pays the stranded deposit into the wallet',
+    userDoc(B).walletBalance === depBalBefore + 30000,
+    { balance: userDoc(B).walletBalance, expected: depBalBefore + 30000 });
+  check('the manual-credit flag is cleared once recovered',
+    collMap('pendingDeposits').get(depositId).needsManualCredit !== true,
+    collMap('pendingDeposits').get(depositId));
+
+  // And recovering twice must not pay twice.
+  const forcedAgain = await adminCall('/admin/deposit/force-credit', { depositId });
+  check('a second force-credit is a no-op, never a second payment',
+    userDoc(B).walletBalance === depBalBefore + 30000,
+    { balance: userDoc(B).walletBalance, wouldBeDouble: depBalBefore + 60000, resp: forcedAgain.body });
 
   console.log('\n== Promo code: a failed claim write must never credit the reward anyway ==');
   // Fixed reward (min === max) so the expected balance below is exact.
