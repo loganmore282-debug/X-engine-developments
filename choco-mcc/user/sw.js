@@ -517,7 +517,13 @@
 // people, person) per the owner-supplied reference images -- the active
 // tab now shows a white ring around the icon instead of recoloring it,
 // since a raster image can't recolor via currentColor the way the SVGs did.
-const CACHE = 'chocomcc-shell-v94';
+// v95: Home, Rewards, and Me nav icons swapped to new clean 3D renders
+// with the white background cut out (float directly on the nav bar, no
+// background box) and sized up (26px -> 34px). Shop and Team keep their
+// v94 tile-style icons for now -- the owner-supplied replacements for
+// those two had visible Vecteezy/Dreamstime stock-site watermarks baked
+// into the image, so they weren't used.
+const CACHE = 'chocomcc-shell-v95';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
