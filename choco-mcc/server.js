@@ -776,32 +776,49 @@ async function settleInvestmentIfDue(doc) {
   _creditingPayouts.add(doc.id);
   try {
     await withLock('payout:' + doc.id, async () => {
-      await db.runTransaction(async t => {
-        const fresh = await t.get(doc.ref);
-        if (!fresh.exists || fresh.data().status !== 'active') return;
-        const f = fresh.data();
-        const fMade = Number(f.payoutsMade) || 0;
-        const fTotal = Number(f.payoutsTotal) || 0;
-        const fElapsed = Math.floor((Date.now() - (tsMillis(f.createdAt) || Date.now())) / 86400000);
-        const fDue = Math.min(fTotal, fElapsed) - fMade;
-        if (fDue <= 0) return;
-        const newMade = fMade + fDue;
-        const willComplete = newMade >= fTotal;
-        const amount = willComplete
-          ? Math.max(0, (Number(f.expectedReturn) || 0) - (Number(f.paidOut) || 0))
-          : (Number(f.dailyPayout) || 0) * fDue;
-        if (amount <= 0) return;
-        const uRef = db.collection('users').doc(f.userId);
-        t.update(uRef, { walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount) });
-        t.update(doc.ref, {
-          payoutsMade: newMade, paidOut: FieldValue.increment(amount),
-          status: willComplete ? 'matured' : 'active'
+      const fresh = await doc.ref.get();
+      if (!fresh.exists || fresh.data().status !== 'active') return;
+      const f = fresh.data();
+      const fMade = Number(f.payoutsMade) || 0;
+      const fTotal = Number(f.payoutsTotal) || 0;
+      const fElapsed = Math.floor((Date.now() - (tsMillis(f.createdAt) || Date.now())) / 86400000);
+      const fDue = Math.min(fTotal, fElapsed) - fMade;
+      if (fDue <= 0) return;
+      const newMade = fMade + fDue;
+      const willComplete = newMade >= fTotal;
+      const amount = willComplete
+        ? Math.max(0, (Number(f.expectedReturn) || 0) - (Number(f.paidOut) || 0))
+        : (Number(f.dailyPayout) || 0) * fDue;
+      if (amount <= 0) return;
+      // RECORD-BEFORE-CREDIT. db.js's runTransaction is NOT atomic on M0 — it
+      // replays queued writes one at a time — so a failure part-way through
+      // leaves whatever already ran committed. Crediting the wallet first and
+      // recording the payout second meant a failed second write left money
+      // credited with payoutsMade still on its old value; reconcileCashback()
+      // re-runs every second, recomputed the SAME dueCount, and credited it
+      // again on every tick until the write finally landed — an unbounded,
+      // self-amplifying over-payment. Advancing payoutsMade first makes the
+      // failure direction safe: the ledger says paid, so nothing re-credits,
+      // and the rollback below puts it straight back if the credit itself
+      // fails, so the member never silently loses a day either.
+      await doc.ref.update({
+        payoutsMade: newMade, paidOut: FieldValue.increment(amount),
+        status: willComplete ? 'matured' : 'active'
+      });
+      try {
+        await db.collection('users').doc(f.userId).update({
+          walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount)
         });
-        const { date, time } = nowStr();
-        t.set(db.collection('transactions').doc(), {
-          userId: f.userId, type: 'cashback', description: `${f.tierLabel} daily cashback`,
-          amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
-        });
+      } catch (creditErr) {
+        await doc.ref.update({
+          payoutsMade: fMade, paidOut: FieldValue.increment(-amount), status: 'active'
+        }).catch(() => {});
+        throw creditErr;
+      }
+      const { date, time } = nowStr();
+      await db.collection('transactions').add({
+        userId: f.userId, type: 'cashback', description: `${f.tierLabel} daily cashback`,
+        amount, status: 'success', date, time, investmentId: doc.id, createdAt: FieldValue.serverTimestamp()
       });
     });
     return true;
@@ -1478,18 +1495,36 @@ async function creditDeposit(depDoc) {
     await withLock('dep:' + depDoc.id, async () => {
       const fresh = await depDoc.ref.get();
       if (!fresh.exists || fresh.data().status === 'matched') { credited = fresh.exists; return; }
-      await db.runTransaction(async t => {
-        const uRef = db.collection('users').doc(fresh.data().userId);
-        t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalDeposited: FieldValue.increment(fresh.data().amount) });
-        t.update(depDoc.ref, { status: 'matched', creditedAt: FieldValue.serverTimestamp() });
-        const { date, time } = nowStr();
-        t.set(db.collection('transactions').doc(), {
-          userId: fresh.data().userId, type: 'deposit', description: 'Added funds to wallet',
-          amount: fresh.data().amount, status: 'success', date, time, ref: fresh.data().ref,
-          createdAt: FieldValue.serverTimestamp()
+      const depUserId = fresh.data().userId;
+      const depAmount = Number(fresh.data().amount) || 0;
+      // CLAIM-BEFORE-CREDIT — see settleInvestmentIfDue for the full rationale.
+      // db.js's runTransaction replays writes sequentially with no rollback, so
+      // crediting first and flipping to 'matched' second meant a failed second
+      // write left the deposit still 'pending' with the money already paid in.
+      // This exact deposit is then retried from three directions (the MarzPay
+      // webhook, the client's own status poll, and reconcilePendingDeposits),
+      // and every one of those retries would credit it again. Flipping to
+      // 'matched' first makes each retry a clean no-op instead.
+      await depDoc.ref.update({ status: 'matched', creditedAt: FieldValue.serverTimestamp() });
+      try {
+        await db.collection('users').doc(depUserId).update({
+          walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount)
         });
+      } catch (creditErr) {
+        // Money genuinely arrived at the gateway but the wallet credit failed.
+        // Never re-open the deposit (that would risk a double credit) — flag it
+        // loudly so it shows up for admin force-credit instead.
+        await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
+        console.error(`DEPOSIT CREDIT FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, creditErr.message);
+        throw creditErr;
+      }
+      const { date, time } = nowStr();
+      await db.collection('transactions').add({
+        userId: depUserId, type: 'deposit', description: 'Added funds to wallet',
+        amount: depAmount, status: 'success', date, time, ref: fresh.data().ref,
+        createdAt: FieldValue.serverTimestamp()
       });
-      credited = true; justCredited = true; creditedAmount = fresh.data().amount;
+      credited = true; justCredited = true; creditedAmount = depAmount;
     });
     // Only on a REAL new credit (never on an idempotent replay/no-op) —
     // otherwise a retried webhook would fire a duplicate notification for
@@ -1840,8 +1875,15 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
         const fresh = await t.get(witSnap.ref);
         if (!fresh.exists || fresh.data().status !== 'processing') return;
         const uRef = db.collection('users').doc(userId);
-        t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
+        // STATUS-BEFORE-REFUND: db.js's runTransaction replays these writes
+        // one at a time with no rollback, and the guard just above is
+        // `status !== 'processing'`. Flipping the status first means a
+        // failure before the credit lands leaves the refund un-paid but
+        // retryable, instead of paid-but-still-'processing' — which every
+        // retry of this path (client poll, webhook, reconciler) would refund
+        // again.
         t.update(witSnap.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
+        t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
       }));
       return res.json({ status: 'success', state: 'declined' });
     }
@@ -1938,8 +1980,15 @@ app.post('/withdraw/callback', async (req, res) => {
         const fresh = await t.get(doc.ref);
         if (!fresh.exists || fresh.data().status !== 'processing') return;
         const uRef = db.collection('users').doc(wit.userId);
-        t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
+        // STATUS-BEFORE-REFUND: db.js's runTransaction replays these writes
+        // one at a time with no rollback, and the guard just above is
+        // `status !== 'processing'`. Flipping the status first means a
+        // failure before the credit lands leaves the refund un-paid but
+        // retryable, instead of paid-but-still-'processing' — which every
+        // retry of this path (client poll, webhook, reconciler) would refund
+        // again.
         t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
+        t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
       }));
     }
   } catch (e) {
@@ -2026,8 +2075,26 @@ app.post('/redeem', async (req, res) => {
       if (usedBy.indexOf(userId) !== -1) return res.status(400).json({ status: 'error', message: "You've already used this code" });
       if (cd.maxUses && usedBy.length >= cd.maxUses) return res.status(400).json({ status: 'error', message: 'This code has reached its usage limit' });
       const reward = Number(cd.reward) || 0;
-      await db.collection('users').doc(userId).update({ walletBalance: FieldValue.increment(reward) });
+      // CLAIM-BEFORE-CREDIT. This used to credit the wallet first and mark the
+      // code used second — so if that second write failed (an M0 connection
+      // blip is enough), the member saw an error, tapped Redeem again, and got
+      // credited a second time off the same code, repeatable indefinitely.
+      // Claiming first inverts the failure: a failed claim credits nothing and
+      // is safely retryable, and a claim that lands is honoured exactly once.
       await codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId) });
+      // $addToSet is atomic, so re-reading proves whether THIS claim really
+      // landed and whether a concurrent redemption pushed the code past its
+      // usage cap — the earlier in-memory check can't see a claim made by
+      // another process between the read and the write.
+      const claimSnap = await codeDoc.ref.get();
+      const claimedBy = (claimSnap.exists && claimSnap.data().usedBy) || [];
+      if (claimedBy.indexOf(userId) === -1)
+        return res.status(500).json({ status: 'error', message: 'Could not redeem this code' });
+      if (cd.maxUses && claimedBy.length > cd.maxUses) {
+        await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId) }).catch(() => {});
+        return res.status(400).json({ status: 'error', message: 'This code has reached its usage limit' });
+      }
+      await db.collection('users').doc(userId).update({ walletBalance: FieldValue.increment(reward) });
       await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
       const { date, time } = nowStr();
       await db.collection('transactions').add({
@@ -2792,8 +2859,14 @@ app.post('/admin/withdraw/reject', async (req, res) => {
       const uRef = db.collection('users').doc(w.userId);
       const refund = { walletBalance: FieldValue.increment(fresh.data().amount) };
       if (wasProcessing) refund.totalWithdrawn = FieldValue.increment(-fresh.data().net);
-      t.update(uRef, refund);
+      // STATUS-BEFORE-REFUND: db.js's runTransaction replays these writes
+      // one at a time with no rollback, and the guard just above is `status
+      // !== 'processing'`. Flipping the status first means a failure before
+      // the credit lands leaves the refund un-paid but retryable, instead of
+      // paid-but-still-'processing' — which every retry of this path (client
+      // poll, webhook, reconciler) would refund again.
       t.update(ref, { status: 'declined', failureReason: String(req.body.reason || 'Declined by admin') });
+      t.update(uRef, refund);
     }));
     logAdminAction(req, 'withdraw_force_declined', { withdrawalId: witId, reason: req.body.reason });
     res.json({ status: 'success' });
@@ -3189,8 +3262,15 @@ async function reconcilePendingWithdrawals() {
           const fresh = await t.get(doc.ref);
           if (!fresh.exists || fresh.data().status !== 'processing') return;
           const uRef = db.collection('users').doc(wit.userId);
-          t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
+          // STATUS-BEFORE-REFUND: db.js's runTransaction replays these
+          // writes one at a time with no rollback, and the guard just above
+          // is `status !== 'processing'`. Flipping the status first means a
+          // failure before the credit lands leaves the refund un-paid but
+          // retryable, instead of paid-but-still-'processing' — which every
+          // retry of this path (client poll, webhook, reconciler) would
+          // refund again.
           t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
+          t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
         }));
         settled++;
       }

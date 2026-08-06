@@ -41,6 +41,9 @@ function applyPatch(target, patch) {
       const arr = Array.isArray(target[k]) ? target[k] : [];
       for (const item of v.vs) if (!arr.some(x => JSON.stringify(x) === JSON.stringify(item))) arr.push(item);
       target[k] = arr;
+    } else if (v && typeof v === 'object' && v[OP] === 'remove') {
+      const arr = Array.isArray(target[k]) ? target[k] : [];
+      target[k] = arr.filter(x => !v.vs.some(item => JSON.stringify(x) === JSON.stringify(item)));
     } else if (v && typeof v === 'object' && v[OP] === 'del') delete target[k];
     else target[k] = clone(v);
   }
@@ -51,6 +54,11 @@ function applyPatch(target, patch) {
 // Mongo hiccup (cold-start, dropped connection) rather than a real "not
 // found" — the two must be handled differently by server.js.
 global.__mockDbFailOnce = new Set();
+// Same idea for WRITES: put a collection name here to make its NEXT .update()
+// throw once. This is what reproduces the partial-write window that made
+// credit-before-guard ordering unsafe — db.js's runTransaction is not atomic
+// on M0, so a write failing mid-sequence leaves the earlier writes committed.
+global.__mockDbFailUpdateOnce = new Set();
 
 function docRef(cname, id) {
   const ref = {
@@ -71,6 +79,10 @@ function docRef(cname, id) {
       coll(cname).set(id, next);
     },
     async update(data) {
+      if (global.__mockDbFailUpdateOnce.has(cname)) {
+        global.__mockDbFailUpdateOnce.delete(cname);
+        throw new Error('Simulated transient DB write error');
+      }
       const existing = coll(cname).get(id);
       if (!existing) throw new Error(`No document to update: ${cname}/${id}`);
       applyPatch(existing, data);
@@ -154,6 +166,7 @@ const FieldValue = {
   increment: n => ({ [OP]: 'inc', n }),
   serverTimestamp: () => ({ [OP]: 'ts' }),
   arrayUnion: (...vs) => ({ [OP]: 'union', vs }),
+  arrayRemove: (...vs) => ({ [OP]: 'remove', vs }),
   delete: () => ({ [OP]: 'del' }),
 };
 
@@ -163,4 +176,5 @@ module.exports = {
   pingDb: async () => true,
   __store: store,                          // test hook: direct state access/manipulation
   __mockDbFailOnce: global.__mockDbFailOnce, // test hook: force the next .get() on a collection to throw once
+  __mockDbFailUpdateOnce: global.__mockDbFailUpdateOnce, // test hook: force the next .update() on a collection to throw once
 };
