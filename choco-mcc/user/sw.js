@@ -496,7 +496,7 @@
 // v90: Cash Out's amount/fee card and "How cash-outs work" steps are now
 // one continuous card (just a divider line between them) instead of two
 // separate floating cards with a gap between them.
-// v91: Auth screen's logo badge now overlaps the bottom edge of the photo
+// v91: Auth screen's logo badge now overlaps well up into the photo
 // banner instead of sitting well below it in the empty cream gap, and the
 // heading follows right after the photo. Fixed the actual underlying bug:
 // the photo banner uses position:relative for its fade overlay, and CSS
