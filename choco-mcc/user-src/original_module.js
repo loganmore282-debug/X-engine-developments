@@ -1260,12 +1260,13 @@ async function deleteBankAccount(id){
   }
 }
 function openNetworkPicker(){
+  document.getElementById('npStepList').style.display='none';
   document.getElementById('npStep1').style.display='block';
   document.getElementById('npStep2').style.display='none';
   document.getElementById('npTitle').textContent='Choose network';
   document.getElementById('networkPickerBg').classList.add('show');
 }
-function closeNetworkPicker(){ document.getElementById('networkPickerBg').classList.remove('show'); }
+function closeNetworkPicker(){ document.getElementById('networkPickerBg').classList.remove('show'); _payoutPickerActive = false; }
 var _pickedNetwork = null;
 function pickNetwork(name, color, textColor){
   _pickedNetwork = {network:name, color:color, textColor:textColor};
@@ -1283,9 +1284,16 @@ async function saveBankAccount(){
   try{
     var r = await api('/bank/save', { holder:holder, network:_pickedNetwork.network, phone:phone });
     if(r.status!=='success'){ toast(r.message||'Could not save the account'); return; }
+    var oldIds = STATE.bankAccounts.map(function(b){return b.id;});
     var bankR = await api('/bank/list');
     if(bankR.status==='success') STATE.bankAccounts = bankR.accounts;
     if(STATE.bankAccounts.length===1) STATE.defaultBankIdx = 0;
+    else if(_payoutPickerActive){
+      // Binding a new account from mid-withdrawal should use it right
+      // away, not silently keep whatever was previously selected.
+      var newIdx = STATE.bankAccounts.findIndex(function(b){ return oldIds.indexOf(b.id)===-1; });
+      if(newIdx>=0) STATE.defaultBankIdx = newIdx;
+    }
     saveState();
     closeNetworkPicker(); renderBankList(); renderWitBankBox();
     toast('Account bound');
@@ -1293,21 +1301,15 @@ async function saveBankAccount(){
     if(btn){ btn.disabled = false; btn.textContent = label; }
   }
 }
-// Payout Account is opened from two different places: standalone from the
-// Account tab (just managing bound accounts) and from mid-withdrawal
-// (Cash Out's "Change"/"Bind one now" link). This flag remembers which,
-// so a tap only auto-returns to Cash Out when that's actually where the
-// member came from -- picked here, not guessed.
-var _bindbankReturnToWithdraw = false;
 // A tap picks the account AND is the whole interaction -- no separate
-// "Default" label to explain, no confirmation toast. From the withdrawal
-// flow it drops straight back into Cash Out with the pick already applied;
-// from the standalone Account tab it just re-renders the (unlabelled) list.
+// "Default" label to explain, no confirmation toast. Used only by the
+// standalone Payout Account page (Account tab), which just re-renders the
+// (unlabelled) list -- the mid-withdrawal picker below has its own version
+// that stays inside the Cash Out screen instead.
 function pickBankAccount(i){
   STATE.defaultBankIdx = i;
   saveState();
-  if(_bindbankReturnToWithdraw){ _bindbankReturnToWithdraw = false; openOverlay('withdraw'); }
-  else { renderBankList(); }
+  renderBankList();
 }
 function renderWitBankBox(){
   var sett = getSettings();
@@ -1322,7 +1324,7 @@ function renderWitBankBox(){
   var box = document.getElementById('witBankBox');
   if(!STATE.bankAccounts.length){
     box.innerHTML = '<div class="info-box" style="background:var(--berry-pale);color:var(--berry)">No bank account bound yet.'+
-      ' <b style="text-decoration:underline;cursor:pointer" onclick="_bindbankReturnToWithdraw=true;closeOverlay();openOverlay(\'bindbank\')">Bind one now</b></div>';
+      ' <b style="text-decoration:underline;cursor:pointer" onclick="openPayoutPicker()">Bind one now</b></div>';
     return;
   }
   var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
@@ -1331,7 +1333,51 @@ function renderWitBankBox(){
   box.innerHTML = '<div class="bank-row" style="margin:16px 20px 0">'+
     '<div class="bank-net-badge" style="background:'+nc.color+';color:'+nc.textColor+'">'+b.network.charAt(0)+'</div>'+
     '<div class="bank-info"><b>Cash out to '+esc(b.holder)+'</b><span>'+esc(b.network)+' · '+masked+'</span></div>'+
-    '<b style="font-size:12px;color:var(--caramel-deep);cursor:pointer" onclick="_bindbankReturnToWithdraw=true;closeOverlay();openOverlay(\'bindbank\')">Change</b></div>';
+    '<b style="font-size:12px;color:var(--caramel-deep);cursor:pointer" onclick="openPayoutPicker()">Change</b></div>';
+}
+// Picking or binding a payout account from Cash Out used to fully navigate
+// away to a separate "Payout Account" page and jump back -- an abrupt cut
+// that felt like switching between two tabs. This opens the same account
+// picker as a sheet directly over Cash Out instead, so binding/selecting
+// an account never leaves the cash-out screen at all.
+var _payoutPickerActive = false;
+function openPayoutPicker(){
+  _payoutPickerActive = true;
+  document.getElementById('npStep2').style.display='none';
+  if(STATE.bankAccounts.length){
+    renderPayoutPickerList();
+    document.getElementById('npStepList').style.display='block';
+    document.getElementById('npStep1').style.display='none';
+    document.getElementById('npTitle').textContent='Payout Account';
+  } else {
+    document.getElementById('npStepList').style.display='none';
+    document.getElementById('npStep1').style.display='block';
+    document.getElementById('npTitle').textContent='Choose network';
+  }
+  document.getElementById('networkPickerBg').classList.add('show');
+}
+function renderPayoutPickerList(){
+  var list = STATE.bankAccounts;
+  document.getElementById('npBankList').innerHTML = list.map(function(b,i){
+    var nc = NETWORK_COLORS[b.network] || {color:'#EADFC9',textColor:'#3B2416'};
+    var initials = b.network.split(' ').map(function(w){return w.charAt(0);}).join('').slice(0,2);
+    var masked = b.phone.length>4 ? b.phone.slice(0,4)+'•••'+b.phone.slice(-2) : b.phone;
+    return '<div class="bank-row" onclick="choosePayoutAccount('+i+')" style="cursor:pointer">'+
+      '<div class="bank-net-badge" style="background:'+nc.color+';color:'+nc.textColor+'">'+initials+'</div>'+
+      '<div class="bank-info"><b>'+esc(b.holder)+'</b><span>'+esc(b.network)+' · '+masked+'</span></div>'+
+      '</div>';
+  }).join('');
+}
+function choosePayoutAccount(i){
+  STATE.defaultBankIdx = i;
+  saveState();
+  closeNetworkPicker();
+  renderWitBankBox();
+}
+function showPayoutPickerNetworkStep(){
+  document.getElementById('npStepList').style.display='none';
+  document.getElementById('npStep1').style.display='block';
+  document.getElementById('npTitle').textContent='Choose network';
 }
 
 async function buyProduct(btn, key){
@@ -1406,7 +1452,7 @@ function shakeVibrate(){
 }
 async function doWithdraw(){
   var sett = getSettings();
-  if(!STATE.bankAccounts.length){ toast('Bind a bank account first'); _bindbankReturnToWithdraw = true; closeOverlay(); openOverlay('bindbank'); return; }
+  if(!STATE.bankAccounts.length){ toast('Bind a bank account first'); openPayoutPicker(); return; }
   var amt = parseInt(document.getElementById('witAmt').value,10)||0;
   if(amt < sett.minWithdraw){ toast('Minimum cash-out is '+ugx(sett.minWithdraw)); shakeVibrate(document.getElementById('witAmt'), document.getElementById('witGoBtn')); return; }
   if(amt > STATE.balance){ toast('Insufficient balance'); shakeVibrate(document.getElementById('witAmt'), document.getElementById('witGoBtn')); return; }
