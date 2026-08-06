@@ -530,7 +530,10 @@
 // colored square backer needed, matching the bottom-nav treatment.
 // v97: The Continue button on Sign In / Create Account now has the same
 // glow sweep animation as Add Funds, Request Cash Out, and Buy Chocolate.
-const CACHE = 'chocomcc-shell-v97';
+// v98: Maintenance-mode lockout screen icon swapped from the thin-outline
+// wrench+gear SVG to the owner-supplied 3D render, background cut out to
+// float like every other picture icon in the app.
+const CACHE = 'chocomcc-shell-v98';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
