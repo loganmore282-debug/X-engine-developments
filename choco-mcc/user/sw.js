@@ -512,7 +512,12 @@
 // v93: Auth field boxes (phone, password, confirm password, invite code)
 // are now fully pill-shaped, matching the rounded Continue button, instead
 // of the smaller 16px corner radius used elsewhere in the app.
-const CACHE = 'chocomcc-shell-v93';
+// v94: Bottom nav icons (Home, Shop, Rewards, Team, Me) swapped from the
+// thin-line SVGs to real picture icons (gingerbread house, cart, gift box,
+// people, person) per the owner-supplied reference images -- the active
+// tab now shows a white ring around the icon instead of recoloring it,
+// since a raster image can't recolor via currentColor the way the SVGs did.
+const CACHE = 'chocomcc-shell-v94';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
