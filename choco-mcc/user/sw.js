@@ -503,13 +503,7 @@
 // always paints positioned elements above static ones regardless of DOM
 // order -- so the banner was covering the logo wherever they overlapped
 // until the logo was made position:relative too.
-// v92: Auth screen redesigned -- the photo is now a contained, rounded,
-// shadowed hero card (was an edge-to-edge banner that faded into the
-// page) with the logo badge centered on its bottom seam (ring border) and
-// the heading/subtitle centered underneath, instead of the old
-// left-aligned layout. Same fields, same buttons, same content -- just a
-// different visual architecture.
-const CACHE = 'chocomcc-shell-v92';
+const CACHE = 'chocomcc-shell-v91';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
