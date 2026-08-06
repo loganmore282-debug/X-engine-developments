@@ -493,11 +493,7 @@
 // only ever opens the direct support Telegram link (supportTelegram) --
 // it used to fall back to the Telegram channel/group link when the direct
 // contact wasn't set, which isn't customer service.
-// v90: Binding/picking a payout account from Cash Out no longer navigates
-// to a separate "Payout Account" page and jumps back -- that felt like
-// switching between two tabs. It now opens as a sheet directly over Cash
-// Out, so the whole cash-out flow stays on one screen.
-const CACHE = 'chocomcc-shell-v90';
+const CACHE = 'chocomcc-shell-v89';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
