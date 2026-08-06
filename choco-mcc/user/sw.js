@@ -493,7 +493,10 @@
 // only ever opens the direct support Telegram link (supportTelegram) --
 // it used to fall back to the Telegram channel/group link when the direct
 // contact wasn't set, which isn't customer service.
-const CACHE = 'chocomcc-shell-v89';
+// v90: Cash Out's amount/fee card and "How cash-outs work" steps are now
+// one continuous card (just a divider line between them) instead of two
+// separate floating cards with a gap between them.
+const CACHE = 'chocomcc-shell-v90';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
