@@ -509,7 +509,10 @@
 // invite code) are now each their own separate curved box again (same
 // .field style used on every other form in the app), instead of one
 // merged card with row dividers between them.
-const CACHE = 'chocomcc-shell-v92';
+// v93: Auth field boxes (phone, password, confirm password, invite code)
+// are now fully pill-shaped, matching the rounded Continue button, instead
+// of the smaller 16px corner radius used elsewhere in the app.
+const CACHE = 'chocomcc-shell-v93';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
