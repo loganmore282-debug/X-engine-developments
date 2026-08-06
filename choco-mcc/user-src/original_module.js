@@ -1444,24 +1444,29 @@ async function redeemGiftCode(){
     if(btn){ btn.disabled = false; btn.textContent = label; }
   }
 }
-// Treasure-chest reveal on a successful redeem -- the chest pops in with a
-// glow+sparkle burst (pure CSS, replayed each time via a reflow-forcing
-// class toggle) while the reward figure counts up from 0 to the real
-// amount over ~900ms, instead of the redeem just showing a plain toast.
+// Treasure-chest reveal on a successful redeem -- the chest pops in then
+// keeps shaking in place while gold light bursts upward and coin sparks
+// fly out (pure CSS, replayed each time via a reflow-forcing class toggle),
+// plus a real device vibration, while the reward figure counts up from 0
+// to the real amount over ~900ms, instead of the redeem just showing a
+// plain toast.
 var _giftCountRaf = null;
 function showGiftReveal(amount){
   amount = Math.round(Number(amount) || 0);
   var bg = document.getElementById('giftRevealBg');
   var amountEl = document.getElementById('giftRevealAmount');
   var chest = bg.querySelector('.gift-reveal-chest');
+  var glow = bg.querySelector('.gift-reveal-glow');
   var sparks = bg.querySelectorAll('.gift-spark');
   amountEl.textContent = ugx(0);
   bg.classList.add('show');
-  // Force a reflow so re-showing the modal replays the pop/spark animations
-  // from frame 0 instead of the browser treating the classes as unchanged.
-  [chest].concat(Array.prototype.slice.call(sparks)).forEach(function(el){
+  // Force a reflow so re-showing the modal replays the shake/burst/spark
+  // animations from frame 0 instead of the browser treating the classes as
+  // unchanged.
+  [chest, glow].concat(Array.prototype.slice.call(sparks)).forEach(function(el){
     el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
   });
+  if(navigator.vibrate) navigator.vibrate([40, 30, 40, 30, 90]);
   if(_giftCountRaf) cancelAnimationFrame(_giftCountRaf);
   var start = null, duration = 900;
   function step(ts){

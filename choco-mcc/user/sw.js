@@ -541,7 +541,11 @@
 // v100: Redeeming a promo/gift code now shows a treasure-chest reveal --
 // the chest pops in with a gold glow burst + sparkles and the reward
 // figure counts up from 0 to the real amount, instead of a plain toast.
-const CACHE = 'chocomcc-shell-v100';
+// v101: Gift-code reveal chest now keeps shaking in place after it pops in
+// (matching the owner's reference animation), with gold light bursting
+// upward and coin sparks flying out, plus a real device vibration --
+// instead of the previous static pop + drifting sparkle burst.
+const CACHE = 'chocomcc-shell-v101';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

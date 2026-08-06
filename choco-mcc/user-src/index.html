@@ -506,28 +506,31 @@
   .modal-wrap{position:relative;width:100%;max-width:440px;margin:0 auto;}
   .modal-wrap .modal-sheet{width:100%;max-width:none;margin:0;}
   .ann-close-float{position:absolute;left:50%;bottom:-20px;transform:translateX(-50%);width:40px;height:40px;border-radius:0;background:var(--cream);box-shadow:var(--shadow);border:none;display:flex;align-items:center;justify-content:center;color:var(--cocoa-soft);z-index:2;}
-  /* Gift-code redeem reveal — a treasure chest "pops" open with a gold glow
-     burst and a few sparkles the instant the modal shows, then the reward
-     figure counts up from 0 (driven by showGiftReveal() in JS) instead of
-     just appearing, so claiming a code feels like a live reveal rather than
-     a static toast. */
+  /* Gift-code redeem reveal — a treasure chest pops in, then keeps shaking
+     in place (matching the owner's reference GIF) while gold light bursts
+     upward from it and coin sparks fly outward, and the reward figure
+     counts up from 0 (driven by showGiftReveal() in JS) instead of just
+     appearing, so claiming a code feels like a live reveal rather than a
+     static toast. A real device vibration fires alongside it too. */
   .gift-reveal-stage{position:relative;width:180px;height:180px;margin:4px auto 6px;display:flex;align-items:center;justify-content:center;}
   .gift-reveal-glow{position:absolute;inset:0;border-radius:50%;
-    background:radial-gradient(circle, rgba(255,205,90,.75) 0%, rgba(255,205,90,.35) 40%, rgba(255,205,90,0) 72%);
-    animation:giftGlowPulse 1.8s ease-out infinite;}
-  @keyframes giftGlowPulse{0%{transform:scale(.55);opacity:.4;}55%{transform:scale(1.08);opacity:1;}100%{transform:scale(.55);opacity:.4;}}
+    background:radial-gradient(circle, rgba(255,205,90,.85) 0%, rgba(255,205,90,.4) 40%, rgba(255,205,90,0) 72%);
+    animation:giftGlowBurst .5s ease-out both, giftGlowPulse 1s ease-in-out .5s infinite;}
+  @keyframes giftGlowBurst{0%{transform:scale(0);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  @keyframes giftGlowPulse{0%,100%{transform:scale(.85);opacity:.55;}50%{transform:scale(1.15);opacity:1;}}
   .gift-reveal-chest{position:relative;width:150px;height:150px;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(180,120,20,.45));
-    animation:giftChestPop .6s cubic-bezier(.34,1.56,.64,1) both;}
+    animation:giftChestPop .5s cubic-bezier(.34,1.56,.64,1) both, giftChestShake .35s ease-in-out .5s infinite;}
   @keyframes giftChestPop{0%{transform:scale(0) rotate(-8deg);opacity:0;}60%{transform:scale(1.12) rotate(3deg);opacity:1;}100%{transform:scale(1) rotate(0deg);opacity:1;}}
-  .gift-spark{position:absolute;width:7px;height:7px;border-radius:50%;background:#FFD873;box-shadow:0 0 6px 1px rgba(255,216,115,.9);
-    opacity:0;animation:giftSparkFly 1.6s ease-out infinite;}
-  @keyframes giftSparkFly{0%{transform:translate(0,0) scale(.3);opacity:0;}15%{opacity:1;}100%{transform:var(--spark-end) scale(1);opacity:0;}}
-  .gift-spark-1{top:50%;left:50%;--spark-end:translate(-70px,-60px);animation-delay:.1s;}
-  .gift-spark-2{top:50%;left:50%;--spark-end:translate(65px,-70px);animation-delay:.35s;}
-  .gift-spark-3{top:50%;left:50%;--spark-end:translate(-80px,20px);animation-delay:.6s;}
-  .gift-spark-4{top:50%;left:50%;--spark-end:translate(78px,15px);animation-delay:.2s;}
-  .gift-spark-5{top:50%;left:50%;--spark-end:translate(-30px,-90px);animation-delay:.75s;}
-  .gift-spark-6{top:50%;left:50%;--spark-end:translate(35px,-95px);animation-delay:.5s;}
+  @keyframes giftChestShake{0%,100%{transform:translate(0,0) rotate(0deg);}20%{transform:translate(-3px,1px) rotate(-2.5deg);}40%{transform:translate(3px,-1px) rotate(2.5deg);}60%{transform:translate(-2px,1px) rotate(-1.5deg);}80%{transform:translate(2px,0) rotate(1.5deg);}}
+  .gift-spark{position:absolute;width:8px;height:8px;border-radius:50%;background:#FFD873;box-shadow:0 0 7px 1px rgba(255,216,115,.95);
+    opacity:0;animation:giftSparkFly 1.3s ease-out infinite;}
+  @keyframes giftSparkFly{0%{transform:translate(0,10px) scale(.3);opacity:0;}12%{opacity:1;}100%{transform:var(--spark-end) scale(1);opacity:0;}}
+  .gift-spark-1{top:50%;left:50%;--spark-end:translate(-55px,-115px);animation-delay:.05s;}
+  .gift-spark-2{top:50%;left:50%;--spark-end:translate(50px,-125px);animation-delay:.25s;}
+  .gift-spark-3{top:50%;left:50%;--spark-end:translate(-95px,-40px);animation-delay:.45s;}
+  .gift-spark-4{top:50%;left:50%;--spark-end:translate(90px,-55px);animation-delay:.15s;}
+  .gift-spark-5{top:50%;left:50%;--spark-end:translate(-15px,-140px);animation-delay:.55s;}
+  .gift-spark-6{top:50%;left:50%;--spark-end:translate(20px,-135px);animation-delay:.35s;}
   .gift-reveal-label{color:var(--cocoa-faint);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
   .gift-reveal-amount{font-size:32px;font-weight:900;color:var(--mint);margin-bottom:20px;}
   /* Announcement popup — square corners throughout (no curved frames), and
