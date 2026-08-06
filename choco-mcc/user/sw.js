@@ -528,7 +528,9 @@
 // App, Sign Out) swapped from thin-line SVGs to real 3D picture icons,
 // background cut out so they float directly on the white card -- no
 // colored square backer needed, matching the bottom-nav treatment.
-const CACHE = 'chocomcc-shell-v96';
+// v97: The Continue button on Sign In / Create Account now has the same
+// glow sweep animation as Add Funds, Request Cash Out, and Buy Chocolate.
+const CACHE = 'chocomcc-shell-v97';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
