@@ -496,7 +496,14 @@
 // v90: Cash Out's amount/fee card and "How cash-outs work" steps are now
 // one continuous card (just a divider line between them) instead of two
 // separate floating cards with a gap between them.
-const CACHE = 'chocomcc-shell-v90';
+// v91: Auth screen's logo badge now overlaps the bottom edge of the photo
+// banner instead of sitting well below it in the empty cream gap, and the
+// heading follows right after the photo. Fixed the actual underlying bug:
+// the photo banner uses position:relative for its fade overlay, and CSS
+// always paints positioned elements above static ones regardless of DOM
+// order -- so the banner was covering the logo wherever they overlapped
+// until the logo was made position:relative too.
+const CACHE = 'chocomcc-shell-v91';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
