@@ -96,16 +96,11 @@
     display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-lg);margin-bottom:18px;}
   .auth-title{font-size:28px;margin-bottom:6px;}
   .auth-sub{color:var(--cocoa-faint);font-size:14.5px;margin-bottom:28px;line-height:1.5;}
-  /* All auth fields grouped into one card with row dividers, instead of
-     separate floating boxes — same icons/inputs/placeholders, just a
-     single unified container for both Sign In and Sign Up alike. */
-  .auth-card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:2px 18px;margin-bottom:22px;}
-  .auth-card .field{margin-bottom:0;padding:15px 0;}
-  .auth-card .field:not(:first-child){border-top:1px solid var(--line);}
-  .auth-card .field input{width:100%;border:none;background:none;padding:0 0 0 32px;font-size:15px;color:var(--cocoa);outline:none;}
-  .auth-card .field .ic{left:0;}
-  .auth-card .phone-prefix{left:26px;}
-  .auth-card #fPhone{padding-left:66px;}
+  /* Each auth field is its own separate curved, floating box -- same
+     .field style used everywhere else in the app (Add Funds, Bind Bank
+     Card, etc.) instead of one merged card with row dividers. */
+  .auth-card{margin-bottom:22px;}
+  .auth-card .field:last-child{margin-bottom:0;}
   /* Invisible-animation trick to detect the browser's own autofill (tapping
      a saved-password suggestion), separately from normal keystroke typing —
      there is no other reliable cross-input signal for "a suggestion was

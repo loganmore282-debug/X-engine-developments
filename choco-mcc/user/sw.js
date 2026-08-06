@@ -503,7 +503,13 @@
 // always paints positioned elements above static ones regardless of DOM
 // order -- so the banner was covering the logo wherever they overlapped
 // until the logo was made position:relative too.
-const CACHE = 'chocomcc-shell-v91';
+// v92: Reverted the v92-that-never-shipped framed-hero-card auth redesign
+// back to the original edge-to-edge banner/left-aligned layout -- that
+// change wasn't wanted. Auth fields (phone, password, confirm password,
+// invite code) are now each their own separate curved box again (same
+// .field style used on every other form in the app), instead of one
+// merged card with row dividers between them.
+const CACHE = 'chocomcc-shell-v92';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
