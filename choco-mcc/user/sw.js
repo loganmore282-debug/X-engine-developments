@@ -533,7 +533,12 @@
 // v98: Maintenance-mode lockout screen icon swapped from the thin-outline
 // wrench+gear SVG to the owner-supplied 3D render, background cut out to
 // float like every other picture icon in the app.
-const CACHE = 'chocomcc-shell-v98';
+// v99: Pricing table bumped from 25x to 40x per the owner's new poster --
+// every tier's total payout increased (price unchanged), e.g. Hershey's
+// 30,000 -> 1,200,000 (was 750,000), Godiva 4,000,000 -> 160,000,000 (was
+// 100,000,000). Same 180-day cycle for all. Server-side DEFAULT_PRODUCTS
+// and the client's pre-fetch fallback catalogue both updated together.
+const CACHE = 'chocomcc-shell-v99';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

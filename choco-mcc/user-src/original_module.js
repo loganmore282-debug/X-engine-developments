@@ -5,27 +5,27 @@ var CHOCO_BANNERS = {"bonbon": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABA
 var DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 5000, minDeposit: 5000,
   dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 25, cycleDays: 180,
+  returnMultiple: 40, cycleDays: 180,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', brandTagline: '', aboutText: '',
   homeBannerTitle: '', homeBannerText: ''
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
-// Mirrors server.js's DEFAULT_PRODUCTS exactly (20x return, 180-day cycle,
+// Mirrors server.js's DEFAULT_PRODUCTS exactly (40x return, 180-day cycle,
 // stamped explicitly per product) — only ever used before syncPublicConfig()
 // has fetched the real, admin-editable catalogue, or if that fetch fails.
 var PRODUCTS = [
-  { key:'hersheys',  name:"Hershey's Milk Chocolate", price:30000,   cycle:180, expectedReturn:750000    },
-  { key:'mars',      name:"Mars",                     price:90000,   cycle:180, expectedReturn:2250000   },
-  { key:'snickers',  name:"Snickers",                 price:200000,  cycle:180, expectedReturn:5000000   },
-  { key:'cadbury',   name:"Cadbury Dairy Milk",        price:350000,  cycle:180, expectedReturn:8750000   },
-  { key:'kitkat',    name:"KitKat Chunky",             price:500000,  cycle:180, expectedReturn:12500000  },
-  { key:'toblerone', name:"Toblerone",                 price:800000,  cycle:180, expectedReturn:20000000  },
-  { key:'rondnoir',  name:"Ferrero Rondnoir",          price:1000000, cycle:180, expectedReturn:25000000  },
-  { key:'rocher',    name:"Ferrero Rocher",            price:2000000, cycle:180, expectedReturn:50000000  },
-  { key:'raffaello', name:"Raffaello",                 price:3000000, cycle:180, expectedReturn:75000000  },
-  { key:'godiva',    name:"Godiva Gold Box",           price:4000000, cycle:180, expectedReturn:100000000 }
+  { key:'hersheys',  name:"Hershey's Milk Chocolate", price:30000,   cycle:180, expectedReturn:1200000   },
+  { key:'mars',      name:"Mars",                     price:90000,   cycle:180, expectedReturn:3600000   },
+  { key:'snickers',  name:"Snickers",                 price:200000,  cycle:180, expectedReturn:8000000   },
+  { key:'cadbury',   name:"Cadbury Dairy Milk",        price:350000,  cycle:180, expectedReturn:14000000  },
+  { key:'kitkat',    name:"KitKat Chunky",             price:500000,  cycle:180, expectedReturn:20000000  },
+  { key:'toblerone', name:"Toblerone",                 price:800000,  cycle:180, expectedReturn:32000000  },
+  { key:'rondnoir',  name:"Ferrero Rondnoir",          price:1000000, cycle:180, expectedReturn:40000000  },
+  { key:'rocher',    name:"Ferrero Rocher",            price:2000000, cycle:180, expectedReturn:80000000  },
+  { key:'raffaello', name:"Raffaello",                 price:3000000, cycle:180, expectedReturn:120000000 },
+  { key:'godiva',    name:"Godiva Gold Box",           price:4000000, cycle:180, expectedReturn:160000000 }
 ];
 // FIXED BUG: the array above has no active/comingSoon flags at all (it's
 // just a price/cycle fallback shape), so on EVERY fresh page load -- not

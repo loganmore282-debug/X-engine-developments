@@ -77,7 +77,7 @@ function check(name, cond, extra) {
   check('the edited product actually reflects the new price', savedHersheys?.price === 35000, savedHersheys);
   const stillDefaultMars = r.products.find(p => p.key === 'mars');
   check('an untouched default (mars) is still there with its original price', stillDefaultMars?.price === 90000, stillDefaultMars);
-  check('untouched default (mars) still has its 180-day/25x fields', stillDefaultMars?.cycle === 180 && stillDefaultMars?.expectedReturn === 2250000, stillDefaultMars);
+  check('untouched default (mars) still has its 180-day/40x fields', stillDefaultMars?.cycle === 180 && stillDefaultMars?.expectedReturn === 3600000, stillDefaultMars);
 
   console.log('\n-- Same merge applies to the public (user-app) products endpoint --');
   const pub = await getPublicProducts();
@@ -122,11 +122,11 @@ function check(name, cond, extra) {
   const godivaAfterClear = r.products.find(p => p.key === 'godiva');
   check('the edited price is gone — reverted to the true default (4,000,000)', godivaAfterClear?.price === 4000000, godivaAfterClear);
 
-  console.log('\n-- sync-pricing: the real-world bug -- a rate change (e.g. 20x -> 25x) does nothing for an already-saved tier --');
+  console.log('\n-- sync-pricing: the real-world bug -- a rate change (e.g. 20x -> 40x) does nothing for an already-saved tier --');
   // Simulate exactly what actually happened live: mars got individually
   // saved a while back (say, just to reorder it) while pricing was still
   // 20x, so its saved doc is now stuck holding the OLD price/expectedReturn
-  // even though DEFAULT_PRODUCTS has since moved to the new 25x table.
+  // even though DEFAULT_PRODUCTS has since moved to the new 40x table.
   // Give it a custom image + a deliberately different order too, to prove
   // sync-pricing leaves everything except price/cycle/expectedReturn alone.
   const staleMars = { key: 'mars', name: 'Mars', price: 90000, cycle: 180, expectedReturn: 1800000, order: 7, image: 'data:image/png;base64,CUSTOM' };
@@ -135,7 +135,7 @@ function check(name, cond, extra) {
   const marsBeforeSync = r.products.find(p => p.key === 'mars');
   check('sanity: mars is stuck on the stale 20x figure before syncing', marsBeforeSync?.expectedReturn === 1800000, marsBeforeSync);
   const snickersBeforeSync = r.products.find(p => p.key === 'snickers');
-  check('sanity: snickers (never individually saved) is already on the current default', snickersBeforeSync?.expectedReturn === 5000000, snickersBeforeSync);
+  check('sanity: snickers (never individually saved) is already on the current default', snickersBeforeSync?.expectedReturn === 8000000, snickersBeforeSync);
 
   const syncR = await adminCall('/admin/products/sync-pricing');
   check('sync-pricing succeeds', syncR.body?.status === 'success', syncR.body);
@@ -143,10 +143,10 @@ function check(name, cond, extra) {
 
   r = await getProductsViaAdmin();
   const marsAfterSync = r.products.find(p => p.key === 'mars');
-  check('mars price/expectedReturn/cycle now match the current default (25x)', marsAfterSync?.price === 90000 && marsAfterSync?.expectedReturn === 2250000 && marsAfterSync?.cycle === 180, marsAfterSync);
+  check('mars price/expectedReturn/cycle now match the current default (40x)', marsAfterSync?.price === 90000 && marsAfterSync?.expectedReturn === 3600000 && marsAfterSync?.cycle === 180, marsAfterSync);
   check('mars\' custom image and order were left completely untouched', marsAfterSync?.image === 'data:image/png;base64,CUSTOM' && marsAfterSync?.order === 7, marsAfterSync);
   const snickersAfterSync = r.products.find(p => p.key === 'snickers');
-  check('an already-correct, never-saved product is unaffected (nothing to sync)', snickersAfterSync?.expectedReturn === 5000000, snickersAfterSync);
+  check('an already-correct, never-saved product is unaffected (nothing to sync)', snickersAfterSync?.expectedReturn === 8000000, snickersAfterSync);
 
   console.log('\n-- Re-running sync-pricing again is a safe no-op (idempotent) --');
   const syncAgainR = await adminCall('/admin/products/sync-pricing');

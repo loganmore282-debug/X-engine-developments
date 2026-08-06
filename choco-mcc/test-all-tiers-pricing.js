@@ -74,21 +74,21 @@ async function setupFundedUser(uid, phone, balance) {
   userDoc(uid).walletBalance = balance;
 }
 
-// The owner's own reference table -- every tier, at the current 25x/180-day
+// The owner's own reference table -- every tier, at the current 40x/180-day
 // rate. If DEFAULT_PRODUCTS in server.js ever drifts from this (or a saved
 // doc silently overrides one tier again), this test fails on that exact
 // tier instead of the mismatch going unnoticed.
 const REFERENCE_TABLE = [
-  { key: 'hersheys',  price: 30000,   expectedReturn: 750000    },
-  { key: 'mars',      price: 90000,   expectedReturn: 2250000   },
-  { key: 'snickers',  price: 200000,  expectedReturn: 5000000   },
-  { key: 'cadbury',   price: 350000,  expectedReturn: 8750000   },
-  { key: 'kitkat',    price: 500000,  expectedReturn: 12500000  },
-  { key: 'toblerone', price: 800000,  expectedReturn: 20000000  },
-  { key: 'rondnoir',  price: 1000000, expectedReturn: 25000000  },
-  { key: 'rocher',    price: 2000000, expectedReturn: 50000000  },
-  { key: 'raffaello', price: 3000000, expectedReturn: 75000000  },
-  { key: 'godiva',    price: 4000000, expectedReturn: 100000000 },
+  { key: 'hersheys',  price: 30000,   expectedReturn: 1200000   },
+  { key: 'mars',      price: 90000,   expectedReturn: 3600000   },
+  { key: 'snickers',  price: 200000,  expectedReturn: 8000000   },
+  { key: 'cadbury',   price: 350000,  expectedReturn: 14000000  },
+  { key: 'kitkat',    price: 500000,  expectedReturn: 20000000  },
+  { key: 'toblerone', price: 800000,  expectedReturn: 32000000  },
+  { key: 'rondnoir',  price: 1000000, expectedReturn: 40000000  },
+  { key: 'rocher',    price: 2000000, expectedReturn: 80000000  },
+  { key: 'raffaello', price: 3000000, expectedReturn: 120000000 },
+  { key: 'godiva',    price: 4000000, expectedReturn: 160000000 },
 ];
 
 (async () => {
