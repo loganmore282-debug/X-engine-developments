@@ -460,6 +460,7 @@ function recordLoginFail(key) {
   const f = _loginFails.get(key) || { count: 0, lockedUntil: 0 };
   f.count++;
   if (f.count >= 5) { f.lockedUntil = Date.now() + 15 * 60 * 1000; f.count = 0; }
+  f.ts = Date.now(); // last touched — lets the sweeper below expire dead entries
   _loginFails.set(key, f);
 }
 function clearLoginFails(key) { _loginFails.delete(key); }
@@ -3355,6 +3356,41 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ status: 'error', message: 'Something went wrong' });
 });
 
+// ── IN-MEMORY STATE SWEEPER ──
+// The debounce/attempt/lockout maps above are all keyed by something
+// unbounded (a userId, or worse, an arbitrary attacker-supplied username on
+// /admin/login) and only ever pruned when that SAME key comes back. On a
+// long-running process they therefore only grow: every member who ever
+// deposits keeps a permanent entry, and anyone spraying the admin login with
+// fresh usernames can add entries indefinitely — a slow memory-exhaustion
+// path on a small Render instance. Nothing here is durable state (it's all
+// short-window rate/abuse tracking), so anything past its own window is safe
+// to drop outright.
+function sweepEphemeralState() {
+  const now = Date.now();
+  const dropStale = (map, maxAgeMs) => {
+    for (const [k, ts] of map) if (now - ts > maxAgeMs) map.delete(k);
+  };
+  try {
+    // Debounce stamps are plain timestamps and only matter for a few seconds.
+    dropStale(_depCreateDebounce, 5 * 60 * 1000);
+    dropStale(_adminCreditDebounce, 5 * 60 * 1000);
+    dropStale(_adminDebitDebounce, 5 * 60 * 1000);
+    // Deposit-attempt windows are 60s; keep a wide margin, then drop.
+    for (const [uid, times] of _depAttempts) {
+      const live = times.filter(t => now - t < 60000);
+      if (live.length) _depAttempts.set(uid, live);
+      else { _depAttempts.delete(uid); _depAttemptsSucceeded.delete(uid); }
+    }
+    // Login-failure counters: keep anything still inside its lockout, drop the
+    // rest once it's older than the 15-minute lockout window.
+    for (const [k, f] of _loginFails) {
+      const locked = f.lockedUntil && f.lockedUntil > now;
+      if (!locked && now - (f.ts || 0) > 15 * 60 * 1000) _loginFails.delete(k);
+    }
+  } catch (e) { console.error('State sweep error:', e.message); }
+}
+
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || '';
 if (!MONGODB_URI) { console.error('MONGODB_URI env var is required'); process.exit(1); }
@@ -3365,5 +3401,6 @@ connectMongo(MONGODB_URI)
     setTimeout(runReconciler, 15 * 1000);
     setInterval(reconcileCashback, 1000);
     setTimeout(reconcileCashback, 1000);
+    setInterval(sweepEphemeralState, 5 * 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });
