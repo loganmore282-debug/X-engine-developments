@@ -538,7 +538,10 @@
 // 30,000 -> 1,200,000 (was 750,000), Godiva 4,000,000 -> 160,000,000 (was
 // 100,000,000). Same 180-day cycle for all. Server-side DEFAULT_PRODUCTS
 // and the client's pre-fetch fallback catalogue both updated together.
-const CACHE = 'chocomcc-shell-v99';
+// v100: Redeeming a promo/gift code now shows a treasure-chest reveal --
+// the chest pops in with a gold glow burst + sparkles and the reward
+// figure counts up from 0 to the real amount, instead of a plain toast.
+const CACHE = 'chocomcc-shell-v100';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

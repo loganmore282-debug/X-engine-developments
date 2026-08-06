@@ -1439,10 +1439,44 @@ async function redeemGiftCode(){
     if(r.status!=='success'){ toast(r.message||"That code isn't valid"); return; }
     document.getElementById('giftCodeInput').value='';
     await refreshFromServer();
-    renderAll(); toast('+'+ugx(r.reward)+' credited!');
+    renderAll(); showGiftReveal(r.reward);
   } finally {
     if(btn){ btn.disabled = false; btn.textContent = label; }
   }
+}
+// Treasure-chest reveal on a successful redeem -- the chest pops in with a
+// glow+sparkle burst (pure CSS, replayed each time via a reflow-forcing
+// class toggle) while the reward figure counts up from 0 to the real
+// amount over ~900ms, instead of the redeem just showing a plain toast.
+var _giftCountRaf = null;
+function showGiftReveal(amount){
+  amount = Math.round(Number(amount) || 0);
+  var bg = document.getElementById('giftRevealBg');
+  var amountEl = document.getElementById('giftRevealAmount');
+  var chest = bg.querySelector('.gift-reveal-chest');
+  var sparks = bg.querySelectorAll('.gift-spark');
+  amountEl.textContent = ugx(0);
+  bg.classList.add('show');
+  // Force a reflow so re-showing the modal replays the pop/spark animations
+  // from frame 0 instead of the browser treating the classes as unchanged.
+  [chest].concat(Array.prototype.slice.call(sparks)).forEach(function(el){
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  });
+  if(_giftCountRaf) cancelAnimationFrame(_giftCountRaf);
+  var start = null, duration = 900;
+  function step(ts){
+    if(!start) start = ts;
+    var p = Math.min(1, (ts - start) / duration);
+    var eased = 1 - Math.pow(1 - p, 3);
+    amountEl.textContent = ugx(Math.round(amount * eased));
+    if(p < 1) _giftCountRaf = requestAnimationFrame(step);
+    else amountEl.textContent = ugx(amount);
+  }
+  _giftCountRaf = requestAnimationFrame(step);
+}
+function closeGiftReveal(){
+  document.getElementById('giftRevealBg').classList.remove('show');
+  if(_giftCountRaf){ cancelAnimationFrame(_giftCountRaf); _giftCountRaf = null; }
 }
 
 /* ====================== DEPOSIT STATUS (auto-verifying) ====================== */
