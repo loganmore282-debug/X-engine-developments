@@ -553,7 +553,10 @@
 // v103: Added WhatsApp Group + WhatsApp Contact to Support contacts (admin
 // Settings) and Contact Us, alongside the existing Telegram rows, each with
 // its own green WhatsApp brand icon.
-const CACHE = 'chocomcc-shell-v103';
+// v104: Announcement dialog's "Telegram Channel" pill swapped for a
+// "WhatsApp Group" pill (real glossy WhatsApp icon, green glow), reusing
+// the same whatsappGroup setting as Contact Us. "Telegram Group" pill kept.
+const CACHE = 'chocomcc-shell-v104';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
