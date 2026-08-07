@@ -1601,6 +1601,49 @@ app.post('/deposit/marzpay/status', async (req, res) => {
 // DECIDE to. Anything inconclusive (no key configured, TronGrid down, no
 // match, underpaid) is never rejected — it just stays awaiting_verification
 // for the admin's own Approve/Reject in the Deposits tab, exactly as before.
+// TRON/TRC20 addresses show up in at least three different textual forms
+// depending on which part of TronGrid's response they came from: base58check
+// ("T...", what every wallet app and our own settings field use), TRON hex
+// ("41" + 20-byte hash), or bare EVM-style hex ("0x" + 20-byte hash, same
+// 20-byte hash TRON reuses from Ethereum's address derivation). Comparing
+// two addresses for equality only works if they're both reduced to that
+// shared 20-byte core first -- a naive direct string comparison between a
+// base58 address and TronGrid's hex-formatted event data would NEVER match,
+// silently making auto-verification never fire (safe, since it just falls
+// back to manual review either way, but pointless). Only the DECODE
+// direction is needed (never re-encode to base58), so this is a plain
+// big-integer base58 decode -- no external library required.
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function base58Decode(str) {
+  let num = 0n;
+  for (const ch of str) {
+    const idx = BASE58_ALPHABET.indexOf(ch);
+    if (idx < 0) throw new Error('Invalid base58 character');
+    num = num * 58n + BigInt(idx);
+  }
+  let hex = num.toString(16);
+  if (hex.length % 2) hex = '0' + hex;
+  let leadingZeros = 0;
+  for (const ch of str) { if (ch === '1') leadingZeros++; else break; }
+  return '00'.repeat(leadingZeros) + hex;
+}
+function addrCore(addr) {
+  addr = String(addr || '').trim();
+  if (!addr) return '';
+  if (addr.startsWith('0x') || addr.startsWith('0X')) addr = addr.slice(2);
+  if (/^[0-9a-fA-F]+$/.test(addr) && addr.length >= 40) {
+    let hex = addr.toLowerCase();
+    if (hex.length === 42 && hex.startsWith('41')) hex = hex.slice(2);
+    return hex.length === 40 ? hex : '';
+  }
+  try {
+    let full = base58Decode(addr);
+    if (full.length < 50) full = full.padStart(50, '0');
+    const body = full.slice(0, full.length - 8); // strip the 4-byte (8 hex char) checksum
+    const core = body.length === 42 && body.startsWith('41') ? body.slice(2) : body;
+    return core.length === 40 ? core.toLowerCase() : '';
+  } catch (_) { return ''; }
+}
 async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
   if (!TRONGRID_API_KEY) return { verified: false, reason: 'TRONGRID_API_KEY not configured' };
   if (!expectWalletAddress) return { verified: false, reason: 'No receiving wallet address configured' };
@@ -1613,10 +1656,12 @@ async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
     const d = await resp.json().catch(() => null);
     const events = d && Array.isArray(d.data) ? d.data : null;
     if (!events) return { verified: false, reason: 'Unexpected TronGrid response shape' };
+    const expectCore = addrCore(expectWalletAddress);
+    const contractCore = addrCore(USDT_TRC20_CONTRACT);
     const transfer = events.find(e =>
       e && e.event_name === 'Transfer' &&
-      String(e.contract_address || '') === USDT_TRC20_CONTRACT &&
-      e.result && String(e.result.to || '') === expectWalletAddress
+      addrCore(e.contract_address) === contractCore &&
+      e.result && addrCore(e.result.to) === expectCore && expectCore !== ''
     );
     if (!transfer) return { verified: false, reason: 'No matching confirmed USDT Transfer event to our wallet' };
     // USDT on TRON has 6 decimals -- the raw on-chain value is an integer.

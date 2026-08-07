@@ -43,8 +43,20 @@ faMod.exports = {
 faMod.loaded = true;
 require.cache[faPath] = faMod;
 
-const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-const WALLET = 'TXhWEqoDp4hVLwXWDvSVrJEHrPGvXAg1Xy';
+// The real TronGrid /v1/transactions/{id}/events endpoint returns event
+// `result.to`/`result.from` in HEX form (e.g. "0x..." / "41..."), NOT the
+// base58 "T..." form our own settings field (and every wallet app) uses --
+// confirmed against a real example response. A first version of this
+// verifier compared the two directly and would therefore NEVER have
+// matched anything in production (safe -- just permanently inert). These
+// fixtures deliberately mirror that real hex shape so this suite actually
+// exercises the address-format normalization (addrCore in server.js)
+// instead of accidentally comparing two base58 strings to each other.
+const USDT_CONTRACT_B58 = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'; // real contract; event-level contract_address IS base58 in TronGrid's real response
+const WALLET_B58 = 'TXhWEqoDp4hVLwXWDvSVrJEHrPGvXAg1Xy';         // what admin Settings / the deposit record store
+const WALLET_HEX = '41ee5a8048e116b16317ebf46d1d95725059e4a0be'; // the SAME address, TRON-hex form (41 + 20-byte core) -- decoded+verified from WALLET_B58 via the exact addrCore logic in server.js
+const WRONG_ADDR_HEX = '41deadbeefdeadbeefdeadbeefdeadbeefdead00'; // a plainly different address
+const WRONG_CONTRACT_HEX = '41badc0ffeebadc0ffeebadc0ffeebadc0ffee0'; // a plainly different (fake) contract
 const realFetch = global.fetch;
 // Keyed by txid so each test controls exactly what TronGrid "found" for its
 // own transaction, independent of every other test running in the same
@@ -52,8 +64,8 @@ const realFetch = global.fetch;
 const trongridStubs = new Map();
 function stubTronGrid(txid, respond) { trongridStubs.set(txid, respond); }
 function eventsPayload(transfers) { return { success: true, data: transfers, meta: {} }; }
-function transferEvent({ contract = USDT_CONTRACT, to = WALLET, valueUsdt = 10 }) {
-  return { event_name: 'Transfer', contract_address: contract, result: { from: 'TSomeSender111111111111111111111', to, value: String(Math.round(valueUsdt * 1e6)) } };
+function transferEvent({ contract = USDT_CONTRACT_B58, to = WALLET_HEX, valueUsdt = 10 }) {
+  return { event_name: 'Transfer', contract_address: contract, result: { from: '41c0ffee00c0ffee00c0ffee00c0ffee00c0ffee', to, value: String(Math.round(valueUsdt * 1e6)) } };
 }
 global.fetch = async (url, opts) => {
   const u = String(url);
@@ -105,7 +117,44 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 (async () => {
   await new Promise(r => setTimeout(r, 600));
-  await adminCall('POST', '/admin/settings/update', { settings: { usdtEnabled: true, usdtWalletAddress: WALLET, usdtRate: 3750 } });
+  await adminCall('POST', '/admin/settings/update', { settings: { usdtEnabled: true, usdtWalletAddress: WALLET_B58, usdtRate: 3750 } });
+
+  console.log('\n== Base58 decode is independently correct (checksum recomputed, not just internally consistent) ==');
+  {
+    const crypto = require('crypto');
+    // Decode the REAL, well-known USDT TRC20 contract address and verify
+    // its base58check checksum ourselves -- if the hand-written decoder in
+    // server.js had a bug, this recomputed checksum would not match, which
+    // a purely "does it match some other test fixture" check could miss
+    // (two wrong decodes could coincidentally agree with each other).
+    const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    function decode(str) {
+      let num = 0n;
+      for (const ch of str) num = num * 58n + BigInt(BASE58_ALPHABET.indexOf(ch));
+      let hex = num.toString(16); if (hex.length % 2) hex = '0' + hex;
+      return hex;
+    }
+    const full = decode(USDT_CONTRACT_B58);
+    const payload = full.slice(0, full.length - 8);
+    const givenChecksum = full.slice(full.length - 8);
+    const computedChecksum = crypto.createHash('sha256').update(crypto.createHash('sha256').update(Buffer.from(payload, 'hex')).digest()).digest().slice(0, 4).toString('hex');
+    check('decoded USDT contract payload starts with the TRON prefix byte (41)', payload.startsWith('41'), payload);
+    check("decoded checksum matches an independently recomputed SHA256d checksum -- proves the decode is genuinely correct, not just self-consistent",
+      givenChecksum === computedChecksum, { given: givenChecksum, computed: computedChecksum });
+  }
+
+  console.log('\n== Address matching works no matter which format TronGrid happens to return (hex OR base58) ==');
+  const Z = 'auto-user-z'; await setupFundedUser(Z, '0771200299');
+  const txZ = freshTxid();
+  // Same wallet, but this time simulate TronGrid returning base58 (T...)
+  // instead of hex for result.to -- proves the match isn't accidentally
+  // hex-only.
+  stubTronGrid(txZ, { events: [transferEvent({ to: WALLET_B58, valueUsdt: 10 })] });
+  const zBalBefore = userDoc(Z).walletBalance || 0;
+  const subZ = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + Z, body: { amountUsdt: 10, txid: txZ } });
+  await wait(400);
+  check('a base58-formatted on-chain address is recognised as the same wallet and auto-credits',
+    userDoc(Z).walletBalance === zBalBefore + 37500, { balance: userDoc(Z).walletBalance, expected: zBalBefore + 37500 });
 
   console.log('\n== Clean match: auto-credits within moments, no admin action ==');
   const A = 'auto-user-a'; await setupFundedUser(A, '0771200201');
@@ -149,7 +198,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   console.log('\n== A look-alike token (wrong contract) never auto-credits ==');
   const D = 'auto-user-d'; await setupFundedUser(D, '0771200204');
   const txD = freshTxid();
-  stubTronGrid(txD, { events: [transferEvent({ contract: 'TFakeContractNotRealUSDTxxxxxxxxxx', valueUsdt: 10 })] });
+  stubTronGrid(txD, { events: [transferEvent({ contract: WRONG_CONTRACT_HEX, valueUsdt: 10 })] });
   const subD = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + D, body: { amountUsdt: 10, txid: txD } });
   await wait(400);
   check('wrong-contract transfer is ignored, stays pending', collMap('pendingDeposits').get(subD.body.depositId).status === 'awaiting_verification');
@@ -157,7 +206,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   console.log('\n== A transfer to someone else\'s address never auto-credits ==');
   const E = 'auto-user-e'; await setupFundedUser(E, '0771200205');
   const txE = freshTxid();
-  stubTronGrid(txE, { events: [transferEvent({ to: 'TSomeoneElsesWalletNotOursxxxxxxxx', valueUsdt: 10 })] });
+  stubTronGrid(txE, { events: [transferEvent({ to: WRONG_ADDR_HEX, valueUsdt: 10 })] });
   const subE = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + E, body: { amountUsdt: 10, txid: txE } });
   await wait(400);
   check('transfer to a different address is ignored, stays pending', collMap('pendingDeposits').get(subE.body.depositId).status === 'awaiting_verification');
