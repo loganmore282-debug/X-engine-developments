@@ -144,6 +144,18 @@ const PUBLIC_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 const MARZ_TIMEOUT = 20000; // matches Chronova's proven value — a short timeout here just means more retries on a slow-but-real MarzPay response
+// USDT (TRC20) deposit auto-verification. TRONGRID_API_KEY must be set for
+// this to run at all -- with no key, every USDT deposit simply stays on the
+// existing manual-review path (never blocks, never breaks anything).
+const TRONGRID_BASE = 'https://api.trongrid.io';
+const TRONGRID_API_KEY = process.env.TRONGRID_API_KEY || '';
+const TRONGRID_TIMEOUT = 15000;
+// The one, official USDT TRC20 contract on TRON mainnet -- matches the
+// "Contract Information ...jLj6t" every real TRC20 wallet shows on its own
+// Deposit USDT screen. Hardcoded (not admin-settable): accepting transfers
+// from ANY contract address would let a worthless look-alike token be
+// submitted as if it were real USDT.
+const USDT_TRC20_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 
 // Product/economics defaults — mirrors DEFAULT_SETTINGS in the client
 // (choco-mcc/user/index.html). Admin panel overrides live in the
@@ -1573,16 +1585,78 @@ app.post('/deposit/marzpay/status', async (req, res) => {
 });
 
 // ── USDT (TRC20) DEPOSIT ──
-// A second, manual-review deposit rail alongside the automatic MarzPay
-// mobile-money flow above — that flow (and its instant crediting) is
-// completely untouched by this. The member sends USDT to the admin's own
-// wallet address OUTSIDE this app, then submits the transaction hash here.
-// Nothing is credited automatically: this only files the claim as
-// 'awaiting_verification'. An admin checks the hash on Tronscan and either
-// approves it (via /admin/deposit/force-credit — the SAME claim-before-credit
-// creditDeposit() every other deposit path already uses, so this rail
-// inherits the exact same double-credit protection with no new money-moving
-// code) or rejects it.
+// A second deposit rail alongside the automatic MarzPay mobile-money flow
+// above — that flow (and its instant crediting) is completely untouched by
+// this. The member sends USDT to the admin's own wallet address OUTSIDE
+// this app, then submits the transaction hash here.
+//
+// Every claim is filed as 'awaiting_verification' first, same as before.
+// If TRONGRID_API_KEY is configured, a background check against the real
+// TRON blockchain (verifyUsdtTx below) runs right after filing, and again
+// on every 30s reconciler sweep for anything still unresolved — a clean,
+// unambiguous match (right contract, right destination address, amount at
+// least what was claimed, confirmed on-chain) auto-credits it via the exact
+// same claim-before-credit creditDeposit() every other deposit path already
+// uses, so this never adds a second way to move money, only a second way to
+// DECIDE to. Anything inconclusive (no key configured, TronGrid down, no
+// match, underpaid) is never rejected — it just stays awaiting_verification
+// for the admin's own Approve/Reject in the Deposits tab, exactly as before.
+async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
+  if (!TRONGRID_API_KEY) return { verified: false, reason: 'TRONGRID_API_KEY not configured' };
+  if (!expectWalletAddress) return { verified: false, reason: 'No receiving wallet address configured' };
+  try {
+    const resp = await fetch(`${TRONGRID_BASE}/v1/transactions/${txid}/events?only_confirmed=true`, {
+      signal: AbortSignal.timeout(TRONGRID_TIMEOUT),
+      headers: { 'TRON-PRO-API-KEY': TRONGRID_API_KEY }
+    });
+    if (!resp.ok) return { verified: false, reason: `TronGrid HTTP ${resp.status}` };
+    const d = await resp.json().catch(() => null);
+    const events = d && Array.isArray(d.data) ? d.data : null;
+    if (!events) return { verified: false, reason: 'Unexpected TronGrid response shape' };
+    const transfer = events.find(e =>
+      e && e.event_name === 'Transfer' &&
+      String(e.contract_address || '') === USDT_TRC20_CONTRACT &&
+      e.result && String(e.result.to || '') === expectWalletAddress
+    );
+    if (!transfer) return { verified: false, reason: 'No matching confirmed USDT Transfer event to our wallet' };
+    // USDT on TRON has 6 decimals -- the raw on-chain value is an integer.
+    const onChainAmount = Number(transfer.result.value) / 1e6;
+    if (!isFinite(onChainAmount)) return { verified: false, reason: 'Could not parse on-chain amount' };
+    // The member could only ever be credited the AMOUNT THEY CLAIMED (that's
+    // what the UGX figure on the record was computed from) -- so it's only
+    // ever safe to auto-credit when the real on-chain payment is at least
+    // that much. A genuine shortfall must never round up to a match.
+    if (onChainAmount < expectAmountUsdt - 0.000001)
+      return { verified: false, reason: `On-chain amount ${onChainAmount} is less than the ${expectAmountUsdt} claimed` };
+    return { verified: true, onChainAmount };
+  } catch (e) {
+    return { verified: false, reason: e.message };
+  }
+}
+async function attemptAutoCreditUsdtDeposit(depositId) {
+  try {
+    const snap = await db.collection('pendingDeposits').doc(depositId).get();
+    if (!snap.exists || snap.data().status !== 'awaiting_verification') return false;
+    const dep = snap.data();
+    const result = await verifyUsdtTx(dep.txid, dep.walletAddress, dep.amountUsdt);
+    if (!result.verified) {
+      console.log(`USDT auto-verify not yet confirmed for ${depositId}: ${result.reason}`);
+      return false;
+    }
+    // autoVerified is set BEFORE the credit for the same claim-before-credit
+    // reason as everywhere else -- if this update lands but the credit call
+    // below fails, the retry sees autoVerified already true and simply
+    // proceeds straight to creditDeposit() again (idempotent) rather than
+    // re-running the on-chain check.
+    await snap.ref.update({ autoVerified: true, onChainAmountUsdt: result.onChainAmount }).catch(() => {});
+    const ok = await creditDeposit(snap);
+    if (ok) console.log(`USDT deposit ${depositId} auto-credited (on-chain confirmed).`);
+    return ok;
+  } catch (e) {
+    console.error(`USDT auto-verify error for ${depositId}:`, e.message);
+    return false;
+  }
+}
 const _usdtSubmitDebounce = new Map();
 app.post('/deposit/usdt/submit', async (req, res) => {
   const userId = await verifyAuth(req);
@@ -1633,7 +1707,13 @@ app.post('/deposit/usdt/submit', async (req, res) => {
       date, time, createdAt: FieldValue.serverTimestamp()
     });
     res.json({ status: 'success', depositId: depRef.id, reference: ref,
-      message: 'Submitted. Your deposit will be credited once verified.' });
+      message: 'Submitted. Your deposit will be credited automatically once confirmed on-chain, usually within a minute.' });
+    // Runs AFTER the response -- the on-chain check can take a couple of
+    // seconds and the member's screen shouldn't wait on it. If TronGrid has
+    // nothing yet (still confirming) or isn't configured at all, this is a
+    // harmless no-op and the 30s reconciler sweep (reconcileUsdtDeposits)
+    // keeps retrying until an admin's own Approve/Reject settles it anyway.
+    attemptAutoCreditUsdtDeposit(depRef.id).catch(() => {});
   } catch (e) {
     console.error('USDT deposit submit error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not submit your deposit. Please try again.' });
@@ -3449,8 +3529,32 @@ async function reconcileCashback() {
   } catch (e) { console.error('Reconcile cashback error:', e.message); }
   finally { _sweepingCashback = false; }
 }
+// Retries on-chain auto-verification for any USDT claim still sitting at
+// 'awaiting_verification' -- covers the case where TronGrid was briefly
+// down (or the transaction wasn't confirmed yet) at submit time, so a real
+// payment still gets auto-credited on its own rather than needing an admin
+// to notice and force-credit it. A no-op entirely (and cheap) when
+// TRONGRID_API_KEY isn't configured, since verifyUsdtTx always returns
+// unverified in that case. Bounded to recent claims so a genuinely bad/
+// abandoned submission doesn't get re-checked forever.
+let _sweepingUsdt = false;
+async function reconcileUsdtDeposits() {
+  if (_sweepingUsdt || !TRONGRID_API_KEY) return 0;
+  _sweepingUsdt = true;
+  let settled = 0;
+  try {
+    const cutoffMs = Date.now() - 7 * 24 * 3600000;
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'awaiting_verification').limit(50).get();
+    for (const doc of snap.docs) {
+      if (tsMillis(doc.data().createdAt) < cutoffMs) continue;
+      if (await attemptAutoCreditUsdtDeposit(doc.id)) settled++;
+    }
+  } catch (e) { console.error('Reconcile USDT deposits error:', e.message); }
+  finally { _sweepingUsdt = false; }
+  return settled;
+}
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
+  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).then(reconcileUsdtDeposits).catch(() => {});
 }
 
 // Manual "Sync MarzPay" button in the admin panel — re-checks every in-flight
@@ -3463,7 +3567,9 @@ app.get('/admin/payments/sync', async (req, res) => {
   try {
     const depositsSettled = await reconcilePendingDeposits();
     const withdrawalsSettled = await reconcilePendingWithdrawals();
-    res.json({ status: 'success', settled: (depositsSettled || 0) + (withdrawalsSettled || 0), depositsSettled: depositsSettled || 0, withdrawalsSettled: withdrawalsSettled || 0 });
+    const usdtSettled = await reconcileUsdtDeposits();
+    res.json({ status: 'success', settled: (depositsSettled || 0) + (withdrawalsSettled || 0) + (usdtSettled || 0),
+      depositsSettled: depositsSettled || 0, withdrawalsSettled: withdrawalsSettled || 0, usdtSettled: usdtSettled || 0 });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 

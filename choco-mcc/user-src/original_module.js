@@ -1431,6 +1431,12 @@ async function doUsdtDeposit(){
   document.getElementById('usdtUgxPreview').textContent = ugx(0);
   closeOverlay();
   toast(r.message||'Submitted. Awaiting verification.');
+  // The server may auto-verify and credit this within a couple of seconds
+  // (see attemptAutoCreditUsdtDeposit server-side) -- one delayed refresh
+  // picks up a fast auto-credit without the member having to reopen the
+  // app. Nothing breaks if it's still pending; the next natural refresh
+  // catches it eventually either way.
+  setTimeout(function(){ refreshFromServer().then(renderAll); }, 4000);
 }
 // Money amount fields can't be left to type() alone -- a number input has
 // no real upper bound, and someone mashing digits (or a scanner) could

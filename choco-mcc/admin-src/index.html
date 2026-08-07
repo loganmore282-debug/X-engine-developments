@@ -742,7 +742,7 @@ async function syncMarzPay(btn, afterFn){
   const d = await api('/admin/payments/sync');
   btn.disabled=false; btn.textContent=t;
   if(d.status==='success'){
-    toast(d.settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced, nothing was waiting on MarzPay', 'ok');
+    toast(d.settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s), ${d.usdtSettled||0} USDT auto-verified` : 'Synced, nothing was waiting', 'ok');
     afterFn();
   } else toast(d.message||'Sync failed','err');
 }
@@ -791,7 +791,7 @@ function drawDeps(){
     const awaiting = isUsdt && d.status==='awaiting_verification';
     const code = u(d.userId).referralCode;
     const method = isUsdt
-      ? `USDT (TRC20)<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>`
+      ? `USDT (TRC20)${d.autoVerified?' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>':''}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>`
       : 'Mobile Money';
     let actions = '';
     if(stuck) actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
@@ -1314,7 +1314,7 @@ async function renderSettings(){
 
     <h2 class="sec">Crypto deposits (USDT TRC20)</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A manual-review deposit rail alongside automatic MarzPay mobile money (that flow is unaffected by this). A member sends USDT to the wallet address below on their own, submits the transaction hash in-app, and it lands in the Deposits tab as Awaiting Review for you to check on Tronscan and Approve or Reject.</p>
+      <p class="muted" style="margin-top:0">A second deposit rail alongside automatic MarzPay mobile money (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), a real match against the blockchain credits it automatically within moments — tagged "Auto" in the Deposits tab. Without one, or whenever the automatic check can't confirm it yet, it simply waits there as Awaiting Review for you to check on Tronscan and Approve or Reject.</p>
       <div class="switch-row"><span><b>Enable USDT deposits</b> <span class="muted">(shows the option in the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sUsdtEnabled" ${s.usdtEnabled?'checked':''} style="width:auto"></label></div>
       <label>Receiving wallet address (TRC20)</label><input id="sUsdtAddr" value="${esc(v('usdtWalletAddress',''))}" placeholder="T...">

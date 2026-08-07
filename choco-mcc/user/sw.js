@@ -565,7 +565,14 @@
 // enabled; USDT shows the live exchange rate, receiving address and a
 // transaction-hash submission that lands as "Pending Review" until an
 // admin approves or rejects it from the Deposits tab.
-const CACHE = 'chocomcc-shell-v106';
+// v107: USDT deposits can now credit AUTOMATICALLY — a background check
+// against the real TRON blockchain (TronGrid) confirms a clean match
+// (right contract, right address, right amount) and credits it within
+// moments, no admin tap needed. Anything inconclusive still falls back to
+// the existing manual Awaiting Review queue exactly as before. Add Funds
+// now does one quick balance refresh a few seconds after a USDT submit so
+// a fast auto-credit shows up without reopening the app.
+const CACHE = 'chocomcc-shell-v107';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
