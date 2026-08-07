@@ -545,7 +545,12 @@
 // (matching the owner's reference animation), with gold light bursting
 // upward and coin sparks flying out, plus a real device vibration --
 // instead of the previous static pop + drifting sparkle burst.
-const CACHE = 'chocomcc-shell-v101';
+// v102: Login/register/check-in toasts simplified to "Login successful ✓",
+// "Registration successful ✓", "Checked in successfully ✓" (dropped "see
+// you tomorrow!" and the "welcome back"-style phrasing). The toast itself
+// is now a slim, square-cornered bar instead of the app's usual big
+// rounded-corner popup card.
+const CACHE = 'chocomcc-shell-v102';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

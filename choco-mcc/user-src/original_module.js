@@ -378,7 +378,7 @@ document.getElementById('authGo').onclick = async function(){
       var regR = await api('/register', { referralCode: ref }, 'POST', true);
       if(regR.status!=='success'){ toast(regR.message||'Could not finish setting up your account, try again shortly'); return; }
       await refreshFromServer();
-      toast('Account created, welcome!');
+      toast('Registration successful ✓');
     } else {
       cred = await window.fbSignIn(email, pass);
       STATE = loadState(cred.user.uid) || freshState(cred.user.uid, 'Member', phone);
@@ -397,7 +397,7 @@ document.getElementById('authGo').onclick = async function(){
         errBox.style.display = '';
         return;
       }
-      toast('Signed in successfully, welcome back!');
+      toast('Login successful ✓');
     }
     enterApp();
     if(authMode==='register') maybeOfferInstallAfterSignup();
@@ -1419,7 +1419,7 @@ async function doCheckin(){
     var r = await api('/checkin', {});
     if(r.status!=='success'){ toast(r.message||'Check-in failed'); if(btn) btn.disabled = false; renderAll(); return; }
     await refreshFromServer();
-    renderAll(); toast('+'+ugx(r.bonus)+', see you tomorrow!');
+    renderAll(); toast('Checked in successfully ✓');
   } catch(e) {
     if(btn) btn.disabled = false;
     renderAll();
