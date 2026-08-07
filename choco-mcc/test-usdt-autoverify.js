@@ -162,8 +162,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   stubTronGrid(txA, { events: [transferEvent({ valueUsdt: 10 })] });
   const balBefore = userDoc(A).walletBalance || 0;
   const subA = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + A, body: { amountUsdt: 10, txid: txA } });
-  check('submit accepted', subA.body.status === 'success', subA.body);
-  await wait(400);
+  check('the submit response ITSELF reports Completed -- resolved synchronously, no separate poll needed', subA.body.state === 'matched', subA.body);
   const depA = collMap('pendingDeposits').get(subA.body.depositId);
   check('auto-credited to matched with no admin click', depA.status === 'matched', depA);
   check('tagged autoVerified for the admin UI', depA.autoVerified === true, depA);
@@ -182,34 +181,50 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   check('credited exactly the claimed 37,500 UGX, not more', userDoc(B).walletBalance === bBalBefore + 37500,
     { balance: userDoc(B).walletBalance, expected: bBalBefore + 37500 });
 
-  console.log('\n== Underpayment never auto-credits ==');
+  console.log('\n== Underpayment is confirmed on-chain, so it auto-DECLINES immediately (never auto-credits) ==');
   const C = 'auto-user-c'; await setupFundedUser(C, '0771200203');
   const txC = freshTxid();
   stubTronGrid(txC, { events: [transferEvent({ valueUsdt: 3 })] }); // sent LESS than the 10 claimed
   const cBalBefore = userDoc(C).walletBalance || 0;
   const subC = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + C, body: { amountUsdt: 10, txid: txC } });
-  await wait(400);
+  check('submit response itself reports Declined -- no lingering "pending" state', subC.body.state === 'rejected', subC.body);
   const depC = collMap('pendingDeposits').get(subC.body.depositId);
-  check('underpaid claim stays awaiting_verification, never auto-credited', depC.status === 'awaiting_verification', depC);
+  check('underpaid claim is auto-declined (blockchain proves the real amount), never auto-credited', depC.status === 'rejected', depC);
+  check('tagged autoDeclined (the system declined it, not an admin)', depC.autoDeclined === true, depC);
   check('wallet untouched', userDoc(C).walletBalance === cBalBefore, userDoc(C).walletBalance);
-  check('admin can still see and manually resolve it (force-credit works)',
+  check('admin can still override and credit it as a courtesy if they choose (force-credit still works)',
     (await adminCall('POST', '/admin/deposit/force-credit', { depositId: subC.body.depositId })).body.status === 'success');
 
-  console.log('\n== A look-alike token (wrong contract) never auto-credits ==');
+  console.log('\n== A declined claim can be resubmitted (e.g. with the corrected amount) against the SAME txid ==');
+  const C2 = 'auto-user-c2'; await setupFundedUser(C2, '0771200233');
+  const txC2 = freshTxid();
+  stubTronGrid(txC2, { events: [transferEvent({ valueUsdt: 3 })] }); // genuinely only sent 3
+  const wrongClaim = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + C2, body: { amountUsdt: 10, txid: txC2 } });
+  check('first (wrong) claim declines', wrongClaim.body.state === 'rejected', wrongClaim.body);
+  const c2BalBefore = userDoc(C2).walletBalance || 0;
+  await wait(7200); // clear this user's own 7s resubmission debounce, same as a real member waiting a moment before correcting their claim
+  const correctedClaim = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + C2, body: { amountUsdt: 3, txid: txC2 } });
+  check('resubmitting the SAME txid with the correct amount is accepted, not blocked as a duplicate', correctedClaim.body.state === 'matched', correctedClaim.body);
+  check('the corrected claim credits the right (smaller) amount', userDoc(C2).walletBalance === c2BalBefore + Math.round(3 * 3750),
+    { balance: userDoc(C2).walletBalance, expected: c2BalBefore + Math.round(3 * 3750) });
+
+  console.log('\n== A look-alike token (wrong contract) is confirmed on-chain, so it auto-declines immediately ==');
   const D = 'auto-user-d'; await setupFundedUser(D, '0771200204');
   const txD = freshTxid();
   stubTronGrid(txD, { events: [transferEvent({ contract: WRONG_CONTRACT_HEX, valueUsdt: 10 })] });
   const subD = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + D, body: { amountUsdt: 10, txid: txD } });
-  await wait(400);
-  check('wrong-contract transfer is ignored, stays pending', collMap('pendingDeposits').get(subD.body.depositId).status === 'awaiting_verification');
+  check('wrong-contract transfer declines immediately in the submit response itself', subD.body.state === 'rejected', subD.body);
+  const depD = collMap('pendingDeposits').get(subD.body.depositId);
+  check('stored as auto-declined', depD.status === 'rejected' && depD.autoDeclined === true, depD);
 
-  console.log('\n== A transfer to someone else\'s address never auto-credits ==');
+  console.log('\n== A transfer to someone else\'s address is confirmed on-chain, so it auto-declines immediately ==');
   const E = 'auto-user-e'; await setupFundedUser(E, '0771200205');
   const txE = freshTxid();
   stubTronGrid(txE, { events: [transferEvent({ to: WRONG_ADDR_HEX, valueUsdt: 10 })] });
   const subE = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + E, body: { amountUsdt: 10, txid: txE } });
-  await wait(400);
-  check('transfer to a different address is ignored, stays pending', collMap('pendingDeposits').get(subE.body.depositId).status === 'awaiting_verification');
+  check('transfer to a different address declines immediately in the submit response itself', subE.body.state === 'rejected', subE.body);
+  const depE = collMap('pendingDeposits').get(subE.body.depositId);
+  check('stored as auto-declined', depE.status === 'rejected' && depE.autoDeclined === true, depE);
 
   console.log('\n== TronGrid errors and malformed responses fail safe, never crash, never credit ==');
   const F = 'auto-user-f'; await setupFundedUser(F, '0771200206');
@@ -248,6 +263,38 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const beforeResync = userDoc(A).walletBalance;
   await adminCall('GET', '/admin/payments/sync');
   check('re-syncing an already-matched USDT deposit changes nothing', userDoc(A).walletBalance === beforeResync, userDoc(A).walletBalance);
+
+  console.log('\n== /deposit/usdt/status lets the client poll a claim through to its final outcome ==');
+  const I = 'auto-user-i'; await setupFundedUser(I, '0771200209');
+  const txI = freshTxid();
+  stubTronGrid(txI, { events: [] }); // still unconfirmed at submit time
+  const subI = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + I, body: { amountUsdt: 10, txid: txI } });
+  check('submit itself reports still-pending', subI.body.state === 'awaiting_verification', subI.body);
+  const statusNoAuth = await call('POST', '/deposit/usdt/status', { body: { depositId: subI.body.depositId } });
+  check('status check refuses an unauthenticated caller (401)', statusNoAuth.code === 401, statusNoAuth.body);
+  const statusOtherUser = await call('POST', '/deposit/usdt/status', { token: 'uid:auto-user-a', body: { depositId: subI.body.depositId } });
+  check("a DIFFERENT user cannot poll someone else's deposit status (404, not leaked)", statusOtherUser.code === 404, statusOtherUser.body);
+  let statusStillPending = await call('POST', '/deposit/usdt/status', { token: 'uid:' + I, body: { depositId: subI.body.depositId } });
+  check('status poll reports still awaiting_verification while unconfirmed', statusStillPending.body.state === 'awaiting_verification', statusStillPending.body);
+  // Confirms a moment later -- the NEXT status poll (which itself tries to
+  // resolve, not just read the stale stored value) should pick it up.
+  stubTronGrid(txI, { events: [transferEvent({ valueUsdt: 10 })] });
+  const statusNowMatched = await call('POST', '/deposit/usdt/status', { token: 'uid:' + I, body: { depositId: subI.body.depositId } });
+  check('status poll resolves to matched the moment it confirms, without a separate sync/reconciler tick', statusNowMatched.body.state === 'matched', statusNowMatched.body);
+
+  console.log('\n== A claim that NEVER resolves is auto-declined after the 15-minute timeout -- never stuck forever ==');
+  const J = 'auto-user-j'; await setupFundedUser(J, '0771200210');
+  const txJ = freshTxid();
+  stubTronGrid(txJ, { events: [] }); // TronGrid never finds this one -- bad TXID, or a transaction that never confirms
+  const subJ = await call('POST', '/deposit/usdt/submit', { token: 'uid:' + J, body: { amountUsdt: 10, txid: txJ } });
+  check('starts out pending like any unconfirmed claim', subJ.body.state === 'awaiting_verification', subJ.body);
+  // Backdate it past the 15-minute unresolved window (no real 15-minute
+  // wait in a test) and let the reconciler sweep find it.
+  collMap('pendingDeposits').get(subJ.body.depositId).createdAt = new Date(Date.now() - 16 * 60 * 1000);
+  await adminCall('GET', '/admin/payments/sync');
+  const depJ = collMap('pendingDeposits').get(subJ.body.depositId);
+  check('auto-declined once genuinely unresolved for too long, not left pending forever', depJ.status === 'rejected', depJ);
+  check('tagged autoDeclined, with a clear reason', depJ.autoDeclined === true && /Could not confirm/.test(depJ.failureReason || ''), depJ);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

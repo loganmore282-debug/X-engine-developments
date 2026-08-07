@@ -572,7 +572,16 @@
 // the existing manual Awaiting Review queue exactly as before. Add Funds
 // now does one quick balance refresh a few seconds after a USDT submit so
 // a fast auto-credit shows up without reopening the app.
-const CACHE = 'chocomcc-shell-v107';
+// v108: USDT deposits now resolve to a definitive Completed or Declined
+// result automatically -- the server checks the transaction a few times
+// right at submission (most real deposits resolve in the same request), a
+// transaction confirmed but plainly wrong (bad token/address/amount)
+// declines immediately instead of sitting pending, and anything that still
+// can't be resolved gets a hard 15-minute cutoff so nothing waits forever.
+// A declined claim can be corrected and resubmitted against the same TXID.
+// Add Funds shows the real Completed/Declined outcome (polling briefly if
+// still verifying) instead of a generic "submitted" toast.
+const CACHE = 'chocomcc-shell-v108';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

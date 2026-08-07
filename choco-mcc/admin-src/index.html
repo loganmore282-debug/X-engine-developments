@@ -766,7 +766,7 @@ async function renderDeposits(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — MarzPay mobile money (automatic) and USDT TRC20 (manual review). A stuck MarzPay deposit can be force-credited once you've verified the money landed; a USDT claim needs its TXID checked on Tronscan before you Approve or Reject it.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — MarzPay mobile money and USDT TRC20, both automatic. A stuck MarzPay deposit can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for the rare one still Awaiting Review.</p>
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
@@ -790,8 +790,11 @@ function drawDeps(){
     const stuck = !isUsdt && (d.status==='initiating' || d.status==='pending' || d.status==='failed');
     const awaiting = isUsdt && d.status==='awaiting_verification';
     const code = u(d.userId).referralCode;
+    const usdtBadge = d.autoVerified ? ' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>'
+      : d.autoDeclined ? ' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>' : '';
     const method = isUsdt
-      ? `USDT (TRC20)${d.autoVerified?' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>':''}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>`
+      ? `USDT (TRC20)${usdtBadge}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>`
+      + (d.status==='rejected' && d.failureReason ? `<br><span class="muted" style="font-size:10.5px">${esc(d.failureReason)}</span>` : '')
       : 'Mobile Money';
     let actions = '';
     if(stuck) actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
@@ -1314,7 +1317,7 @@ async function renderSettings(){
 
     <h2 class="sec">Crypto deposits (USDT TRC20)</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">A second deposit rail alongside automatic MarzPay mobile money (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), a real match against the blockchain credits it automatically within moments — tagged "Auto" in the Deposits tab. Without one, or whenever the automatic check can't confirm it yet, it simply waits there as Awaiting Review for you to check on Tronscan and Approve or Reject.</p>
+      <p class="muted" style="margin-top:0">A second deposit rail alongside automatic MarzPay mobile money (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission — a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject — nothing here ever forces automatic mode on you.</p>
       <div class="switch-row"><span><b>Enable USDT deposits</b> <span class="muted">(shows the option in the app)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sUsdtEnabled" ${s.usdtEnabled?'checked':''} style="width:auto"></label></div>
       <label>Receiving wallet address (TRC20)</label><input id="sUsdtAddr" value="${esc(v('usdtWalletAddress',''))}" placeholder="T...">

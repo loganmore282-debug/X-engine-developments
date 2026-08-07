@@ -1422,21 +1422,61 @@ async function doUsdtDeposit(){
   var amtUgx = Math.round(amtUsdt*(Number(sett.usdtRate)||0));
   if(amtUgx < sett.minDeposit){ toast('Minimum amount is '+ugx(sett.minDeposit)); return; }
   var btn = document.getElementById('usdtGoBtn'), label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
+  // The server itself checks the transaction a few times before answering
+  // (see resolveUsdtDeposit server-side) -- this button legitimately takes
+  // a few seconds, which "Checking payment…" makes honest rather than just
+  // a generic spinner.
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Checking payment…');
   var r = await api('/deposit/usdt/submit', { amountUsdt:amtUsdt, txid:txid });
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not submit your deposit'); return; }
+
+  if(r.state==='rejected'){
+    // Overlay and fields stay exactly as typed -- the member can see what
+    // they entered and correct it (e.g. the right amount) rather than
+    // starting over from a blank form.
+    toast(r.message||'Payment declined.');
+    return;
+  }
+
   document.getElementById('usdtAmt').value = '';
   document.getElementById('usdtTxid').value = '';
   document.getElementById('usdtUgxPreview').textContent = ugx(0);
   closeOverlay();
-  toast(r.message||'Submitted. Awaiting verification.');
-  // The server may auto-verify and credit this within a couple of seconds
-  // (see attemptAutoCreditUsdtDeposit server-side) -- one delayed refresh
-  // picks up a fast auto-credit without the member having to reopen the
-  // app. Nothing breaks if it's still pending; the next natural refresh
-  // catches it eventually either way.
-  setTimeout(function(){ refreshFromServer().then(renderAll); }, 4000);
+
+  if(r.state==='matched'){
+    toast('Payment completed! Credited to your wallet.');
+    refreshFromServer().then(renderAll);
+    return;
+  }
+  // Still verifying (rare -- the synchronous check above already resolves
+  // most real deposits) -- keep checking a while longer so a slightly
+  // slower confirmation still ends with a clear final result on screen. If
+  // it's somehow still open after this, the server keeps retrying on its
+  // own (up to 15 minutes) regardless of whether anyone is watching.
+  toast(r.message||'Submitted. Verifying on-chain…');
+  pollUsdtDepositStatus(r.depositId);
+}
+var _usdtPollTimer = null;
+function pollUsdtDepositStatus(depositId){
+  if(_usdtPollTimer) clearInterval(_usdtPollTimer);
+  var attempts = 0;
+  _usdtPollTimer = setInterval(async function(){
+    attempts++;
+    var r = await api('/deposit/usdt/status', { depositId:depositId });
+    if(r.status==='success' && r.state==='matched'){
+      clearInterval(_usdtPollTimer); _usdtPollTimer = null;
+      toast('Payment completed! Credited to your wallet.');
+      refreshFromServer().then(renderAll);
+      return;
+    }
+    if(r.status==='success' && r.state==='rejected'){
+      clearInterval(_usdtPollTimer); _usdtPollTimer = null;
+      toast(r.message||'Payment declined.');
+      return;
+    }
+    if(attempts>=6){ clearInterval(_usdtPollTimer); _usdtPollTimer = null; } // server keeps retrying regardless; stop bothering the member
+  }, 5000);
 }
 // Money amount fields can't be left to type() alone -- a number input has
 // no real upper bound, and someone mashing digits (or a scanner) could
