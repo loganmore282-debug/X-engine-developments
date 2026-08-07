@@ -556,7 +556,10 @@
 // v104: Announcement dialog's "Telegram Channel" pill swapped for a
 // "WhatsApp Group" pill (real glossy WhatsApp icon, green glow), reusing
 // the same whatsappGroup setting as Contact Us. "Telegram Group" pill kept.
-const CACHE = 'chocomcc-shell-v104';
+// v105: Shop's "Buy this chocolate" button shortened to "Buy" (button size
+// unchanged). "My Chocolates" relabelled "My Products" everywhere it
+// appears (Shop pill, Account tile, My Products overlay title).
+const CACHE = 'chocomcc-shell-v105';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

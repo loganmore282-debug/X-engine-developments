@@ -906,7 +906,7 @@ function renderShop(){
         '</div>'+
         (soldOut
           ? '<button class="btn btn-primary btn-block" disabled style="opacity:.5;cursor:not-allowed;margin-top:14px">Coming soon</button>'
-          : '<button class="btn btn-primary btn-block btn-buy-glow" style="margin-top:14px" onclick="buyProduct(this,\''+p.key+'\')">Buy this chocolate</button>')+
+          : '<button class="btn btn-primary btn-block btn-buy-glow" style="margin-top:14px" onclick="buyProduct(this,\''+p.key+'\')">Buy</button>')+
       '</div></div>';
   }).join('');
   document.getElementById('shopGrid').innerHTML = html;
