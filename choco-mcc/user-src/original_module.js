@@ -8,6 +8,7 @@ var DEFAULT_SETTINGS = {
   returnMultiple: 40, cycleDays: 180,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
+  whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
   homeBannerTitle: '', homeBannerText: ''
 };
@@ -562,6 +563,7 @@ function nl2pTight(text){
 // on a solid Telegram-blue background, where the full disc would double up.
 var TG_ICON = '<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#26A5E4"/><path fill="#fff" d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.3-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71l-4.14-3.05-2 1.93c-.23.23-.42.42-.83.42z"/></svg>';
 var TG_ICON_WHITE = '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#fff" d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.3-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71l-4.14-3.05-2 1.93c-.23.23-.42.42-.83.42z"/></svg>';
+var WA_ICON = '<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#25D366"/><path fill="#fff" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>';
 function renderStaticPages(){
   var s = getSettings();
   // About page: admin text if set, otherwise keep the shipped placeholder.
@@ -571,16 +573,17 @@ function renderStaticPages(){
   }
   // Rules & Regulation: entirely admin-authored, empty until set.
   document.getElementById('rulesBody').innerHTML = s.rulesText ? nl2p(s.rulesText) : '<div class="empty">Nothing published yet.</div>';
-  // Support links: WhatsApp removed entirely (Telegram-only support now) —
-  // every configured Telegram destination (Channel, Group, direct contact)
-  // gets its own row with the real Telegram brand icon, instead of
-  // collapsing all three into one generic "Telegram" link that only ever
-  // showed whichever field happened to be set first.
+  // Support links: every configured Telegram/WhatsApp destination (Channel,
+  // Group, direct contact) gets its own row with the real brand icon,
+  // instead of collapsing them into one generic link that only ever showed
+  // whichever field happened to be set first.
   var rows = '';
   if(s.telegramChannel) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(s.telegramChannel)+'\',\'_blank\')"><div class="menu-ic" style="background:transparent">'+TG_ICON+'</div><div class="menu-lbl">Telegram Channel</div>'+ICON_CHEV+'</button>';
   if(s.telegramGroup) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(s.telegramGroup)+'\',\'_blank\')"><div class="menu-ic" style="background:transparent">'+TG_ICON+'</div><div class="menu-lbl">Telegram Group</div>'+ICON_CHEV+'</button>';
   if(s.supportTelegram) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(s.supportTelegram)+'\',\'_blank\')"><div class="menu-ic" style="background:transparent">'+TG_ICON+'</div><div class="menu-lbl">Message us on Telegram</div>'+ICON_CHEV+'</button>';
-  if(!s.telegramChannel && !s.telegramGroup && !s.supportTelegram) rows += '<div class="empty">Contact details are not set up yet.</div>';
+  if(s.whatsappGroup) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(s.whatsappGroup)+'\',\'_blank\')"><div class="menu-ic" style="background:transparent">'+WA_ICON+'</div><div class="menu-lbl">WhatsApp Group</div>'+ICON_CHEV+'</button>';
+  if(s.whatsappContact) rows += '<button class="menu-item" style="margin:0 0 10px" onclick="window.open(\''+esc(s.whatsappContact)+'\',\'_blank\')"><div class="menu-ic" style="background:transparent">'+WA_ICON+'</div><div class="menu-lbl">Message us on WhatsApp</div>'+ICON_CHEV+'</button>';
+  if(!s.telegramChannel && !s.telegramGroup && !s.supportTelegram && !s.whatsappGroup && !s.whatsappContact) rows += '<div class="empty">Contact details are not set up yet.</div>';
   rows += '<div class="kv" style="margin:0 20px"><span>Support hours</span><b>'+esc(s.supportHours||'8am – 9pm')+'</b></div>';
   document.getElementById('supportLinks').innerHTML = rows;
 }

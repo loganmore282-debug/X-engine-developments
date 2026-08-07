@@ -550,7 +550,10 @@
 // you tomorrow!" and the "welcome back"-style phrasing). The toast itself
 // is now a slim, square-cornered bar instead of the app's usual big
 // rounded-corner popup card.
-const CACHE = 'chocomcc-shell-v102';
+// v103: Added WhatsApp Group + WhatsApp Contact to Support contacts (admin
+// Settings) and Contact Us, alongside the existing Telegram rows, each with
+// its own green WhatsApp brand icon.
+const CACHE = 'chocomcc-shell-v103';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

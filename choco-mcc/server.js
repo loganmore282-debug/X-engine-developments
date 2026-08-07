@@ -155,6 +155,7 @@ const DEFAULT_SETTINGS = {
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
+  whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
   homeBannerTitle: '', homeBannerText: ''
 };
@@ -1047,6 +1048,7 @@ app.get('/public/settings', async (_req, res) => {
       annCtaLabel: s.annCtaLabel || '', annCtaUrl: s.annCtaUrl || '', announcementBg: s.announcementBg || '',
       supportTelegram: s.supportTelegram || '',
       telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
+      whatsappGroup: s.whatsappGroup || '', whatsappContact: s.whatsappContact || '',
       rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || '',
       homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || ''
     } });
