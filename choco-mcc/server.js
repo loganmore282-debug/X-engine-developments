@@ -66,7 +66,7 @@ app.use('/admin/', async (req, _res, next) => {
   }
   next();
 });
-['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/redeem', '/bank/save',
+['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/usdt/submit', '/redeem', '/bank/save',
  '/bank/delete', '/account/create-profile', '/register', '/team/milestone/claim']
   .forEach(p => app.use(p, apiLimiter));
 
@@ -157,7 +157,8 @@ const DEFAULT_SETTINGS = {
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
-  homeBannerTitle: '', homeBannerText: ''
+  homeBannerTitle: '', homeBannerText: '',
+  usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0
 };
 // Each tier pays exactly 40x its price over a fixed 180-day cycle (both
 // stamped explicitly per product, not left to the global returnMultiple/
@@ -1050,7 +1051,8 @@ app.get('/public/settings', async (_req, res) => {
       telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
       whatsappGroup: s.whatsappGroup || '', whatsappContact: s.whatsappContact || '',
       rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || '',
-      homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || ''
+      homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || '',
+      usdtEnabled: !!s.usdtEnabled, usdtWalletAddress: s.usdtWalletAddress || '', usdtRate: Number(s.usdtRate) || 0
     } });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });
@@ -1567,6 +1569,74 @@ app.post('/deposit/marzpay/status', async (req, res) => {
   } catch (e) {
     console.error('Deposit status error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not check payment status' });
+  }
+});
+
+// ── USDT (TRC20) DEPOSIT ──
+// A second, manual-review deposit rail alongside the automatic MarzPay
+// mobile-money flow above — that flow (and its instant crediting) is
+// completely untouched by this. The member sends USDT to the admin's own
+// wallet address OUTSIDE this app, then submits the transaction hash here.
+// Nothing is credited automatically: this only files the claim as
+// 'awaiting_verification'. An admin checks the hash on Tronscan and either
+// approves it (via /admin/deposit/force-credit — the SAME claim-before-credit
+// creditDeposit() every other deposit path already uses, so this rail
+// inherits the exact same double-credit protection with no new money-moving
+// code) or rejects it.
+const _usdtSubmitDebounce = new Map();
+app.post('/deposit/usdt/submit', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT deposits are not available right now.' });
+    const rate = Number(sett.usdtRate) || 0;
+    if (rate <= 0) return res.status(400).json({ status: 'error', message: 'USDT deposits are not configured yet. Please try again later.' });
+
+    const amountUsdt = Number(req.body.amountUsdt);
+    if (!isFinite(amountUsdt) || amountUsdt <= 0) return res.status(400).json({ status: 'error', message: 'Enter a valid USDT amount' });
+    // Tron TXIDs are 64 hex chars — a loose format check to keep obvious
+    // junk/typos out. The real verification is the admin's own Tronscan
+    // check before they approve it; this is not relied on for security.
+    const txid = String(req.body.txid || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{60,66}$/.test(txid)) return res.status(400).json({ status: 'error', message: 'Enter a valid transaction hash (TXID)' });
+
+    const amountUgx = Math.round(amountUsdt * rate);
+    if (amountUgx < sett.minDeposit)
+      return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)} (about ${(sett.minDeposit / rate).toFixed(2)} USDT)` });
+
+    const lastSub = _usdtSubmitDebounce.get(userId) || 0;
+    if (Date.now() - lastSub < 7000)
+      return res.status(429).json({ status: 'error', message: 'A deposit is already being submitted. Please wait a moment.' });
+    _usdtSubmitDebounce.set(userId, Date.now());
+
+    // A TXID can only ever back ONE deposit claim, by anyone — without this
+    // the same real payment could be submitted by multiple accounts (or
+    // resubmitted after already being credited) to farm repeat credits off
+    // a single real transfer.
+    const dupSnap = await db.collection('pendingDeposits').where('txid', '==', txid).limit(1).get();
+    if (!dupSnap.empty) {
+      const existing = dupSnap.docs[0];
+      if (existing.data().userId === userId)
+        return res.json({ status: 'success', depositId: existing.id, alreadySubmitted: true, message: 'This transaction was already submitted and is awaiting review.' });
+      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
+    }
+
+    const ref = await uniqueRef('B');
+    const { date, time } = nowStr();
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId, method: 'usdt', amount: amountUgx, amountUsdt, rate, txid, ref,
+      walletAddress: sett.usdtWalletAddress, status: 'awaiting_verification',
+      date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    res.json({ status: 'success', depositId: depRef.id, reference: ref,
+      message: 'Submitted. Your deposit will be credited once verified.' });
+  } catch (e) {
+    console.error('USDT deposit submit error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not submit your deposit. Please try again.' });
   }
 });
 
@@ -2847,6 +2917,24 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
     res.json({ status: 'success', message: `Force-credited ${fmtUGX(snap.data().amount)} to the user` });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Declines a USDT deposit claim (bad/unmatched TXID, wrong amount, etc.) —
+// the counterpart to approving one via force-credit above. Only ever acts on
+// a still-open ('awaiting_verification') claim; an already-matched deposit
+// can never be "rejected" out from under a member who was already paid.
+app.post('/admin/deposit/usdt/reject', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { depositId, reason } = req.body;
+  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+  try {
+    const snap = await db.collection('pendingDeposits').doc(depositId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    if (snap.data().status === 'matched') return res.status(400).json({ status: 'error', message: 'This deposit was already credited — cannot reject it now.' });
+    if (snap.data().status === 'rejected') return res.json({ status: 'success', message: 'Already rejected' });
+    await snap.ref.update({ status: 'rejected', failureReason: String(reason || 'Could not verify this transaction').slice(0, 300) });
+    logAdminAction(req, 'usdt_deposit_rejected', { depositId, reason: reason || '' });
+    res.json({ status: 'success', message: 'Deposit rejected' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 app.post('/admin/withdrawals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -3411,6 +3499,7 @@ function sweepEphemeralState() {
   try {
     // Debounce stamps are plain timestamps and only matter for a few seconds.
     dropStale(_depCreateDebounce, 5 * 60 * 1000);
+    dropStale(_usdtSubmitDebounce, 5 * 60 * 1000);
     dropStale(_adminCreditDebounce, 5 * 60 * 1000);
     dropStale(_adminDebitDebounce, 5 * 60 * 1000);
     // Deposit-attempt windows are 60s; keep a wide margin, then drop.

@@ -559,7 +559,13 @@
 // v105: Shop's "Buy this chocolate" button shortened to "Buy" (button size
 // unchanged). "My Chocolates" relabelled "My Products" everywhere it
 // appears (Shop pill, Account tile, My Products overlay title).
-const CACHE = 'chocomcc-shell-v105';
+// v106: Added USDT (TRC20) as a second, manual-review deposit rail
+// alongside the automatic MarzPay mobile-money flow (untouched). Add Funds
+// now has a Mobile Money / USDT (TRC20) tab switcher when the admin has it
+// enabled; USDT shows the live exchange rate, receiving address and a
+// transaction-hash submission that lands as "Pending Review" until an
+// admin approves or rejects it from the Deposits tab.
+const CACHE = 'chocomcc-shell-v106';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

@@ -10,7 +10,8 @@ var DEFAULT_SETTINGS = {
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
-  homeBannerTitle: '', homeBannerText: ''
+  homeBannerTitle: '', homeBannerText: '',
+  usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Mirrors server.js's DEFAULT_PRODUCTS exactly (40x return, 180-day cycle,
@@ -1085,6 +1086,7 @@ var REC_TYPE_LABEL = { checkin:'Daily reward', cashback:'Chocolate cashback', co
 function recStatusInfo(s){
   s = String(s||'success').toLowerCase();
   if(['success','matched','processed'].indexOf(s)!==-1) return { label:'Completed', cls:'ok' };
+  if(s==='awaiting_verification') return { label:'Pending Review', cls:'proc' };
   if(['initiating','pending','processing'].indexOf(s)!==-1) return { label:'Settling', cls:'proc' };
   if(['failed','declined','cancelled','rejected','expired'].indexOf(s)!==-1) return { label:'Declined', cls:'bad' };
   return { label: s.charAt(0).toUpperCase()+s.slice(1), cls:'mut' };
@@ -1148,12 +1150,16 @@ function renderRecords(){
   document.getElementById('recordsList').innerHTML = list.slice(0,50).map(function(r){
     var st = recStatusInfo(r.status);
     var stamp = r.createdAt ? new Date(r.createdAt).toLocaleString() : ((r.date||'')+' '+(r.time||'')).trim();
-    var desc = isTop ? 'Mobile-money top-up' : ('Cash out'+(r.holder ? ' to '+r.holder : '')+(r.network ? ' ('+r.network+')' : ''));
+    var isUsdtDep = isTop && r.method==='usdt';
+    var desc = isTop ? (isUsdtDep ? 'USDT (TRC20) top-up' : 'Mobile-money top-up') : ('Cash out'+(r.holder ? ' to '+r.holder : '')+(r.network ? ' ('+r.network+')' : ''));
+    var numberRow = isUsdtDep
+      ? '<div class="rec-line"><span>TXID</span><b style="word-break:break-all">'+esc(r.txid||'')+'</b></div>'
+      : '<div class="rec-line"><span>Number</span><b>'+esc(r.phone||'')+'</b></div>';
     return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(r.ref||'pending')+'</span><span class="rec-st '+st.cls+'">'+st.label+'</span></div>'+
       '<div class="rec-line"><span>Description</span><b>'+esc(desc)+'</b></div>'+
       '<div class="rec-line"><span>Amount</span><b>'+ugx(r.amount)+'</b></div>'+
       (!isTop && r.net!=null ? '<div class="rec-line"><span>Received</span><b>'+ugx(r.net)+'</b></div>' : '')+
-      '<div class="rec-line"><span>Number</span><b>'+esc(r.phone||'')+'</b></div>'+
+      numberRow+
       '<div class="rec-line"><span>Date</span><b>'+esc(stamp)+'</b></div></div>';
   }).join('');
 }
@@ -1209,6 +1215,17 @@ function openOverlay(name){
     document.getElementById('depPhone').value = '';
     _depNetwork = null;
     document.querySelectorAll('#depNetworkRow .net-card').forEach(function(b){ b.classList.remove('active'); });
+    // USDT is a second rail alongside Mobile Money -- only shown when the
+    // admin has it enabled, and Mobile Money is always the default tab so
+    // nothing changes for anyone until an admin turns it on.
+    var sett = getSettings();
+    document.getElementById('depMethodRow').style.display = sett.usdtEnabled ? 'flex' : 'none';
+    document.getElementById('usdtAddrDisplay').textContent = sett.usdtWalletAddress || '';
+    document.getElementById('usdtRateDisplay').textContent = '1 USDT = '+ugx(Number(sett.usdtRate)||0);
+    document.getElementById('usdtAmt').value = '';
+    document.getElementById('usdtTxid').value = '';
+    document.getElementById('usdtUgxPreview').textContent = ugx(0);
+    selectDepMethod('mm');
   }
 }
 function closeOverlay(){ document.querySelectorAll('.overlay').forEach(function(o){o.classList.remove('show');}); }
@@ -1372,6 +1389,48 @@ async function doDeposit(){
   if(r.status!=='success'){ toast(r.message||'Could not start the payment'); return; }
   document.getElementById('depAmt').value='';
   openDepositStatus(r.depositId, r.reference, phone);
+}
+// USDT (TRC20) — a second, manual-review deposit rail alongside the
+// automatic Mobile Money flow above (untouched by any of this). Only ever
+// shown/usable when the admin has usdtEnabled on; selectDepMethod() toggles
+// between the two panels, both of which live permanently in the DOM.
+var _depMethod = 'mm';
+function selectDepMethod(m){
+  _depMethod = m;
+  document.querySelectorAll('#depMethodRow .uline-tab').forEach(function(b){ b.classList.toggle('active', b.dataset.dm===m); });
+  document.getElementById('depMmPanel').style.display = (m==='mm') ? 'block' : 'none';
+  document.getElementById('depUsdtPanel').style.display = (m==='usdt') ? 'block' : 'none';
+}
+function updateUsdtConversion(){
+  var sett = getSettings();
+  var rate = Number(sett.usdtRate)||0;
+  var amt = parseFloat(document.getElementById('usdtAmt').value)||0;
+  document.getElementById('usdtUgxPreview').textContent = ugx(Math.round(amt*rate));
+}
+function copyUsdtAddress(){
+  var addr = document.getElementById('usdtAddrDisplay').textContent;
+  if(!addr) return;
+  if(navigator.clipboard) navigator.clipboard.writeText(addr).catch(function(){});
+  toast('Address copied');
+}
+async function doUsdtDeposit(){
+  var sett = getSettings();
+  var amtUsdt = parseFloat(document.getElementById('usdtAmt').value);
+  var txid = document.getElementById('usdtTxid').value.trim();
+  if(!amtUsdt || amtUsdt<=0){ toast('Enter the USDT amount you sent'); return; }
+  if(!txid){ toast('Enter the transaction hash (TXID)'); return; }
+  var amtUgx = Math.round(amtUsdt*(Number(sett.usdtRate)||0));
+  if(amtUgx < sett.minDeposit){ toast('Minimum amount is '+ugx(sett.minDeposit)); return; }
+  var btn = document.getElementById('usdtGoBtn'), label = btn.textContent;
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
+  var r = await api('/deposit/usdt/submit', { amountUsdt:amtUsdt, txid:txid });
+  btn.disabled = false; btn.textContent = label;
+  if(r.status!=='success'){ toast(r.message||'Could not submit your deposit'); return; }
+  document.getElementById('usdtAmt').value = '';
+  document.getElementById('usdtTxid').value = '';
+  document.getElementById('usdtUgxPreview').textContent = ugx(0);
+  closeOverlay();
+  toast(r.message||'Submitted. Awaiting verification.');
 }
 // Money amount fields can't be left to type() alone -- a number input has
 // no real upper bound, and someone mashing digits (or a scanner) could

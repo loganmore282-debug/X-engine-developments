@@ -773,6 +773,11 @@
   <div class="overlay" id="ovDeposit">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Add Funds</div></div>
     <div class="photo-banner" id="depositBanner"></div>
+    <div class="uline-tabs" id="depMethodRow" style="display:none">
+      <button type="button" class="uline-tab active" data-dm="mm" onclick="selectDepMethod('mm')">Mobile Money</button>
+      <button type="button" class="uline-tab" data-dm="usdt" onclick="selectDepMethod('usdt')">USDT (TRC20)</button>
+    </div>
+    <div id="depMmPanel">
     <div class="info-box">Funds are added to your wallet once your mobile-money payment is confirmed.</div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
@@ -810,6 +815,33 @@
         <li>Tap Add Funds, then confirm the prompt on your phone</li>
         <li>Your wallet updates automatically once confirmed</li>
       </ul>
+    </div>
+    </div>
+    <div id="depUsdtPanel" style="display:none">
+      <div class="info-box">Send USDT on the TRC20 (Tron) network to the address below, then submit the transaction hash. Your deposit is credited after a quick manual review.</div>
+      <div class="form-card">
+        <div class="kv" style="margin:0 0 4px"><span>Exchange rate</span><b id="usdtRateDisplay">1 USDT = UGX 0</b></div>
+        <span class="flabel">Amount (USDT)</span>
+        <input class="famt" id="usdtAmt" type="number" step="0.01" placeholder="0" oninput="updateUsdtConversion()">
+        <div class="kv" style="margin:2px 0 14px"><span>You will receive</span><b id="usdtUgxPreview" style="color:var(--mint)">UGX 0</b></div>
+        <span class="flabel">Send EXACT USDT to this address (TRC20 only)</span>
+        <div class="link-box" style="margin-bottom:14px">
+          <div class="link-row"><span id="usdtAddrDisplay" style="word-break:break-all;font-size:12.5px"></span><button type="button" class="btn btn-dark btn-sm" onclick="copyUsdtAddress()">Copy</button></div>
+        </div>
+        <span class="flabel">Transaction Hash (TXID)</span>
+        <div class="field" style="margin-bottom:14px">
+          <input id="usdtTxid" type="text" placeholder="Paste your transaction hash">
+        </div>
+        <button class="btn btn-primary btn-block" id="usdtGoBtn" onclick="doUsdtDeposit()">Submit USDT Payment</button>
+      </div>
+      <div class="info-box" style="background:var(--berry-pale);color:var(--berry)">
+        <b style="display:block;margin-bottom:2px;font-size:12.5px">Important</b>
+        <ul class="pay-steps" style="margin-top:6px">
+          <li>TRC20 (Tron) network only — any other network permanently loses the funds</li>
+          <li>Send the exact USDT amount, then paste its transaction hash above</li>
+          <li>Reviewed and credited manually, usually within a few minutes</li>
+        </ul>
+      </div>
     </div>
   </div>
 
