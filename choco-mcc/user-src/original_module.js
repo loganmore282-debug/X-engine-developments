@@ -11,7 +11,8 @@ var DEFAULT_SETTINGS = {
   whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
   homeBannerTitle: '', homeBannerText: '',
-  usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0
+  usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0,
+  bankWithdrawEnabled: false
 };
 var ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 // Mirrors server.js's DEFAULT_PRODUCTS exactly (40x return, 180-day cycle,
@@ -1151,9 +1152,15 @@ function renderRecords(){
     var st = recStatusInfo(r.status);
     var stamp = r.createdAt ? new Date(r.createdAt).toLocaleString() : ((r.date||'')+' '+(r.time||'')).trim();
     var isUsdtDep = isTop && r.method==='usdt';
-    var desc = isTop ? (isUsdtDep ? 'USDT (TRC20) top-up' : 'Mobile-money top-up') : ('Cash out'+(r.holder ? ' to '+r.holder : '')+(r.network ? ' ('+r.network+')' : ''));
+    var isBankWit = !isTop && r.method==='bank';
+    var desc = isTop
+      ? (isUsdtDep ? 'USDT (TRC20) top-up' : 'Mobile-money top-up')
+      : (isBankWit ? 'Cash out'+(r.accountName ? ' to '+r.accountName : '')+(r.bankName ? ' ('+r.bankName+')' : '')
+                   : 'Cash out'+(r.holder ? ' to '+r.holder : '')+(r.network ? ' ('+r.network+')' : ''));
     var numberRow = isUsdtDep
       ? '<div class="rec-line"><span>TXID</span><b style="word-break:break-all">'+esc(r.txid||'')+'</b></div>'
+      : isBankWit
+      ? '<div class="rec-line"><span>Account</span><b>'+esc(r.accountNumber||'')+'</b></div>'
       : '<div class="rec-line"><span>Number</span><b>'+esc(r.phone||'')+'</b></div>';
     return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(r.ref||'pending')+'</span><span class="rec-st '+st.cls+'">'+st.label+'</span></div>'+
       '<div class="rec-line"><span>Description</span><b>'+esc(desc)+'</b></div>'+
@@ -1200,7 +1207,18 @@ function openOverlay(name){
   closeOverlay();
   document.getElementById('ov'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('show');
   if(name==='bindbank') renderBankList();
-  if(name==='withdraw') renderWitBankBox();
+  if(name==='withdraw'){
+    renderWitBankBox();
+    // Bank Transfer is a second withdrawal rail alongside Mobile Money --
+    // only shown when the admin has it enabled, same pattern as USDT on
+    // the deposit side. Mobile Money is always the default tab.
+    var sett = getSettings();
+    document.getElementById('witMethodRow').style.display = sett.bankWithdrawEnabled ? 'flex' : 'none';
+    document.getElementById('witBankAccName').value = '';
+    document.getElementById('witBankAccNum').value = '';
+    selectWitMethod('mm');
+    if(sett.bankWithdrawEnabled) loadWitBankList();
+  }
   if(name==='records'){ setRecordsTab('accrued'); }
   if(name==='mychoc') renderMyChoc();
   if(name==='earnings') renderEarnings();
@@ -1486,6 +1504,28 @@ function pollUsdtDepositStatus(depositId){
 function capAmountInput(el){
   if(el.value.length>10) el.value = el.value.slice(0,10);
 }
+// Bank Transfer -- a second withdrawal rail through the SAME MarzPay
+// gateway as Mobile Money above (untouched by any of this).
+var _witMethod = 'mm';
+function selectWitMethod(m){
+  _witMethod = m;
+  document.querySelectorAll('#witMethodRow .uline-tab').forEach(function(b){ b.classList.toggle('active', b.dataset.wm===m); });
+  document.getElementById('witMmPanel').style.display = (m==='mm') ? 'block' : 'none';
+  document.getElementById('witBankPanel').style.display = (m==='bank') ? 'block' : 'none';
+}
+var _witBankListLoaded = false;
+async function loadWitBankList(){
+  if(_witBankListLoaded) return;
+  var r = await api('/public/banks');
+  if(r.status!=='success' || !r.banks || !r.banks.length) return;
+  _witBankListLoaded = true;
+  var sel = document.getElementById('witBankName');
+  r.banks.forEach(function(name){
+    var opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    sel.appendChild(opt);
+  });
+}
 function renderWitCalc(){
   var sett = getSettings();
   var amt = parseInt(document.getElementById('witAmt').value,10)||0;
@@ -1509,17 +1549,31 @@ function shakeVibrate(){
 }
 async function doWithdraw(){
   var sett = getSettings();
-  if(!STATE.bankAccounts.length){ toast('Bind a bank account first'); _bindbankReturnToWithdraw = true; closeOverlay(); openOverlay('bindbank'); return; }
   var amt = parseInt(document.getElementById('witAmt').value,10)||0;
   if(amt < sett.minWithdraw){ toast('Minimum cash-out is '+ugx(sett.minWithdraw)); shakeVibrate(document.getElementById('witAmt'), document.getElementById('witGoBtn')); return; }
   if(amt > STATE.balance){ toast('Insufficient balance'); shakeVibrate(document.getElementById('witAmt'), document.getElementById('witGoBtn')); return; }
-  var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
+
+  var payload = { amount:amt, method:_witMethod };
+  if(_witMethod==='bank'){
+    var bankName = document.getElementById('witBankName').value;
+    var accName = document.getElementById('witBankAccName').value.trim();
+    var accNum = document.getElementById('witBankAccNum').value.trim();
+    if(!bankName){ toast('Choose your bank'); return; }
+    if(!accName || !accNum){ toast('Enter the account name and account number'); return; }
+    payload.bankName = bankName; payload.accountName = accName; payload.accountNumber = accNum;
+  } else {
+    if(!STATE.bankAccounts.length){ toast('Bind a mobile-money account first'); _bindbankReturnToWithdraw = true; closeOverlay(); openOverlay('bindbank'); return; }
+    var b = STATE.bankAccounts[STATE.defaultBankIdx] || STATE.bankAccounts[0];
+    payload.holder = b.holder; payload.network = b.network; payload.phone = b.phone;
+  }
+
   var btn = document.getElementById('witGoBtn'), label = btn.textContent;
   btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-  var r = await api('/withdraw/request', { amount:amt, holder:b.holder, network:b.network, phone:b.phone });
+  var r = await api('/withdraw/request', payload);
   btn.disabled = false; btn.textContent = label;
   if(r.status!=='success'){ toast(r.message||'Could not process the cash-out'); return; }
   document.getElementById('witAmt').value=''; renderWitCalc();
+  if(_witMethod==='bank'){ document.getElementById('witBankAccName').value=''; document.getElementById('witBankAccNum').value=''; }
   await refreshFromServer();
   closeOverlay(); renderAll(); toast(r.message||'Cash-out requested');
 }

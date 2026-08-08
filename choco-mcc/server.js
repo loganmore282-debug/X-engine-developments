@@ -170,7 +170,8 @@ const DEFAULT_SETTINGS = {
   whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
   homeBannerTitle: '', homeBannerText: '',
-  usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0
+  usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0,
+  bankWithdrawEnabled: false
 };
 // Each tier pays exactly 40x its price over a fixed 180-day cycle (both
 // stamped explicitly per product, not left to the global returnMultiple/
@@ -665,6 +666,74 @@ async function marzSendMoney({ amount, phone, reference, description, callbackUr
   });
   return _marzParse(resp);
 }
+// ── BANK TRANSFER — a second, real automatic withdrawal rail through the
+// SAME MarzPay gateway (mobile-money send-money above is completely
+// untouched by any of this). Unlike collect-money/send-money, bank-transfer
+// does NOT take a client-supplied reference -- MarzPay generates its own
+// and returns it as `data.bank_transfer.reference` (also duplicated as
+// `transaction_uuid`), so that's what we capture and poll against later.
+async function marzValidateBankAccount({ bankName, accountNumber }) {
+  const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/validate`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bank_name: bankName, account_number: accountNumber })
+  });
+  return _marzParse(resp);
+}
+async function marzBankTransfer({ amount, description, bankName, accountNumber, accountName, branch }) {
+  const payload = { amount: Number(amount), description: description || 'Bank transfer',
+    bank_name: bankName, bank_account_number: accountNumber, bank_account_name: accountName,
+    wallet_source: 'main' };
+  if (branch) payload.bank_branch = branch;
+  const resp = await fetch(`${MARZPAY_BASE}/bank-transfer`, {
+    method: 'POST', signal: AbortSignal.timeout(MARZ_TIMEOUT),
+    headers: { 'Authorization': `Basic ${MARZPAY_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return _marzParse(resp);
+}
+// The show/status endpoint's response key is documented inconsistently
+// against the create endpoint (create nests under `bank_transfer`; the
+// show endpoint may use `bank_transfer_request` instead) -- read both
+// rather than trusting either name alone, same defensive spirit as
+// _marzExtractTx below for send-money's own shape drift.
+function _marzExtractBankTransfer(d) {
+  const bt = d?.data?.bank_transfer || d?.data?.bank_transfer_request || d?.data || {};
+  const rawStatus = bt.status || d?.status || '';
+  return { status: String(rawStatus).toLowerCase(), reference: bt.reference || bt.transaction_uuid || null };
+}
+async function marzGetBankTransferStatus(reference) {
+  try {
+    const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/${reference}`, {
+      signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+    });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) { console.error(`marzGetBankTransferStatus(${reference}): HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300)); return ''; }
+    return _marzExtractBankTransfer(d).status;
+  } catch (e) { console.error(`marzGetBankTransferStatus(${reference}) failed:`, e.message); return ''; }
+}
+// The supported-banks list barely ever changes -- cached the same short-TTL
+// way as getSettings()/getProducts() so the picker doesn't hit MarzPay on
+// every single page load, while still picking up an addition within a
+// minute with zero manual cache-busting.
+let _banksCache = null, _banksCacheTs = 0;
+async function getMarzBanks() {
+  if (Date.now() - _banksCacheTs < 60 * 1000 && _banksCache) return _banksCache;
+  try {
+    const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/banks`, {
+      signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
+    });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const list = d?.data?.banks || d?.data || [];
+    const banks = Array.isArray(list) ? list.map(b => (typeof b === 'string' ? b : (b.name || b.bank_name || ''))).filter(Boolean) : [];
+    if (banks.length) { _banksCache = banks; _banksCacheTs = Date.now(); }
+    return _banksCache || [];
+  } catch (e) {
+    console.error('getMarzBanks error:', e.message);
+    return _banksCache || []; // serve the last known-good list on a transient failure rather than an empty picker
+  }
+}
 // Returns the full transaction resource (status + whatever identifying
 // fields MarzPay's response happens to echo back), not just a bare status
 // string — a bare status alone only proves SOME transaction with this uuid
@@ -1064,7 +1133,8 @@ app.get('/public/settings', async (_req, res) => {
       whatsappGroup: s.whatsappGroup || '', whatsappContact: s.whatsappContact || '',
       rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || '',
       homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || '',
-      usdtEnabled: !!s.usdtEnabled, usdtWalletAddress: s.usdtWalletAddress || '', usdtRate: Number(s.usdtRate) || 0
+      usdtEnabled: !!s.usdtEnabled, usdtWalletAddress: s.usdtWalletAddress || '', usdtRate: Number(s.usdtRate) || 0,
+      bankWithdrawEnabled: !!s.bankWithdrawEnabled
     } });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });
@@ -1080,6 +1150,14 @@ app.get('/public/banners', async (_req, res) => {
   const banners = {};
   for (const k of BANNER_KEYS) if (overrides[k]) banners[k] = overrides[k];
   res.json({ status: 'success', banners });
+});
+// Real bank picker for the Bank Transfer withdrawal screen -- pulled from
+// MarzPay's own supported-bank list (cached, see getMarzBanks) rather than
+// a free-text field, so a member can never type a bank name MarzPay
+// doesn't actually support.
+app.get('/public/banks', async (_req, res) => {
+  try { res.json({ status: 'success', banks: await getMarzBanks() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: 'Could not load bank list' }); }
 });
 
 // ── ACTIVITY FEED — simulated, NOT real transactions (same as Chronova's
@@ -1965,15 +2043,46 @@ app.post('/withdraw/request', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const amt = parseInt(req.body.amount, 10);
-  const holder = stripHtml(req.body.holder);
-  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  const phone = cleanPhone(req.body.phone || '');
-  if (!holder || !network || !phone || phone.length < 10)
-    return res.status(400).json({ status: 'error', message: 'Bind a mobile-money account first.' });
+  // Bank Transfer is a second, real withdrawal rail through the SAME
+  // MarzPay gateway -- mobile-money cash-out below is completely
+  // untouched by any of this.
+  const method = req.body.method === 'bank' ? 'bank' : 'mobile_money';
+  let holder = null, network = null, phone = null;
+  let bankName = null, accountName = null, accountNumber = null, branch = null;
+  if (method === 'bank') {
+    bankName = stripHtml(req.body.bankName);
+    accountName = stripHtml(req.body.accountName);
+    accountNumber = String(req.body.accountNumber || '').replace(/[^0-9]/g, '').trim();
+    branch = req.body.branch ? stripHtml(req.body.branch) : null;
+    if (!bankName || !accountName || !accountNumber)
+      return res.status(400).json({ status: 'error', message: 'Enter the bank name, account name and account number.' });
+  } else {
+    holder = stripHtml(req.body.holder);
+    network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
+    phone = cleanPhone(req.body.phone || '');
+    if (!holder || !network || !phone || phone.length < 10)
+      return res.status(400).json({ status: 'error', message: 'Bind a mobile-money account first.' });
+  }
   try {
     const sett = await getSettings();
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
+
+    if (method === 'bank') {
+      if (!sett.bankWithdrawEnabled) return res.status(400).json({ status: 'error', message: 'Bank transfer withdrawals are not available right now.' });
+      // Validated against MarzPay itself BEFORE anything is reserved --
+      // catches a bad account number or unsupported bank up front rather
+      // than wasting an admin's later click on a doomed send. A genuine
+      // DEFINITIVE rejection blocks the request; a failure of the check
+      // ITSELF (network blip, MarzPay hiccup) does not -- that's not
+      // evidence the account is bad, just a failed check, same fail-open
+      // reasoning already used for the send-money live re-check elsewhere.
+      try {
+        const v = await marzValidateBankAccount({ bankName, accountNumber });
+        if (v.status !== 'success' && v.status !== 'sandbox')
+          return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Could not verify this bank account. Check the bank name and account number.') });
+      } catch (_) { /* validation check itself failed -- proceed, the real transfer attempt will surface any genuine problem */ }
+    }
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;
@@ -2011,12 +2120,13 @@ app.post('/withdraw/request', async (req, res) => {
       // at request time, since nothing has left the platform yet.
       t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
       const { date, time } = nowStr();
-      t.set(witRef, {
-        userId, amount: amt, fee, net, holder, network, phone, ref,
-        status: 'pending', date, time, createdAt: FieldValue.serverTimestamp()
-      });
+      const record = { userId, amount: amt, fee, net, method, ref, status: 'pending', date, time, createdAt: FieldValue.serverTimestamp() };
+      if (method === 'bank') Object.assign(record, { bankName, accountName, accountNumber, branch });
+      else Object.assign(record, { holder, network, phone });
+      t.set(witRef, record);
+      const destDesc = method === 'bank' ? `${bankName} (${accountName})` : `${holder} (${network})`;
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'withdraw', description: `Cash out to ${holder} (${network}), net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, processing`,
+        userId, type: 'withdraw', description: `Cash out to ${destDesc}, net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, processing`,
         amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
@@ -2052,9 +2162,15 @@ app.post('/admin/withdraw/process', async (req, res) => {
     const wit = witSnap.data();
     if (wit.status !== 'pending') return res.status(400).json({ status: 'error', message: `Cannot send, the status is '${wit.status}'` });
 
-    const marzReference = crypto.randomUUID();
+    const isBank = wit.method === 'bank';
+    // Bank-transfer doesn't take a client-supplied reference (MarzPay
+    // generates its own and returns it) -- this local marker exists purely
+    // as OUR OWN "an attempt was made" audit trail, written before the
+    // gateway call for the same crash-safety reason send-money's
+    // marzReference is.
+    const sendingMarker = crypto.randomUUID();
     const processedBy = req.adminUser?.username || 'owner-key';
-    await witRef.update({ status: 'sending', sendingReference: marzReference, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+    await witRef.update({ status: 'sending', sendingReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
 
     // SECURITY/MONEY-SAFETY (found comparing against Chronova's proven
     // /admin/withdraw/process): a network exception here (timeout, dropped
@@ -2071,21 +2187,24 @@ app.post('/admin/withdraw/process', async (req, res) => {
     // 'sending' (blocking any further /admin/withdraw/process call, since
     // that requires status 'pending') and lets /admin/integrity surface it
     // for the owner to check directly on MarzPay's own dashboard, rather
-    // than guessing. Ported the same distinction here.
+    // than guessing. Ported the same distinction here -- identical
+    // treatment for the bank-transfer rail.
     let mpData;
     let ambiguous = false;
     try {
-      mpData = await marzSendMoney({
-        amount: wit.net, phone: wit.phone, reference: marzReference, description: 'Mobile Money',
-        callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
-      });
+      mpData = isBank
+        ? await marzBankTransfer({ amount: wit.net, description: 'Withdrawal', bankName: wit.bankName, accountNumber: wit.accountNumber, accountName: wit.accountName, branch: wit.branch })
+        : await marzSendMoney({
+            amount: wit.net, phone: wit.phone, reference: sendingMarker, description: 'Mobile Money',
+            callbackUrl: PUBLIC_URL ? PUBLIC_URL + '/withdraw/callback' : undefined
+          });
     } catch (netErr) {
-      console.error('MarzPay send-money network error (ambiguous, NOT reverting to pending):', netErr.message);
+      console.error(`MarzPay ${isBank ? 'bank-transfer' : 'send-money'} network error (ambiguous, NOT reverting to pending):`, netErr.message);
       ambiguous = true;
       mpData = { status: 'error', providerDown: true, message: netErr.message };
     }
     if (ambiguous) {
-      return res.status(500).json({ status: 'error', message: 'Lost contact with MarzPay mid-request -- we cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly; check this reference on the MarzPay dashboard before doing anything else.', sendingReference: marzReference });
+      return res.status(500).json({ status: 'error', message: 'Lost contact with MarzPay mid-request -- we cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly; check this reference on the MarzPay dashboard before doing anything else.', sendingReference: sendingMarker });
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       // A real, complete HTTP round-trip that MarzPay itself answered with
@@ -2095,25 +2214,21 @@ app.post('/admin/withdraw/process', async (req, res) => {
       await witRef.update({ status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
       return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') });
     }
-    const marzTxUuid = mpData.data?.transaction?.uuid || null;
     const sandbox = mpData.status === 'sandbox';
-    if (sandbox) {
-      await Promise.all([
-        witRef.update({ status: 'processed', marzReference, marzTxUuid, processedBy, processedAt: FieldValue.serverTimestamp() }),
-        db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) })
-      ]);
-    } else {
-      await Promise.all([
-        witRef.update({ status: 'processing', marzReference, marzTxUuid, processedBy, processedAt: FieldValue.serverTimestamp() }),
-        db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) })
-      ]);
-    }
+    const updateFields = { status: sandbox ? 'processed' : 'processing', processedBy, processedAt: FieldValue.serverTimestamp() };
+    if (isBank) updateFields.marzBankReference = _marzExtractBankTransfer(mpData).reference || sendingMarker;
+    else { updateFields.marzReference = sendingMarker; updateFields.marzTxUuid = mpData.data?.transaction?.uuid || null; }
+    await Promise.all([
+      witRef.update(updateFields),
+      db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) })
+    ]);
     try {
       const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
       if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: sandbox ? 'success' : 'processing' });
     } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
-    logAdminAction(req, 'withdrawal_processed', { withdrawalId, amount: wit.net, phone: wit.phone, userId: wit.userId });
-    res.json({ status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtUGX(wit.net)} to ${wit.phone}` : `Sending ${fmtUGX(wit.net)} to ${wit.phone}` });
+    const dest = isBank ? `${wit.bankName} · ${wit.accountName}` : wit.phone;
+    logAdminAction(req, 'withdrawal_processed', { withdrawalId, amount: wit.net, dest, userId: wit.userId });
+    res.json({ status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtUGX(wit.net)} to ${dest}` : `Sending ${fmtUGX(wit.net)} to ${dest}` });
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
     res.status(500).json({ status: 'error', message: e.message });
@@ -2131,9 +2246,11 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     const snap = await db.collection('withdrawals').doc(withdrawalId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
-    if (!w.marzTxUuid)
+    const isBank = w.method === 'bank';
+    const gatewayRef = isBank ? w.marzBankReference : w.marzTxUuid;
+    if (!gatewayRef)
       return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This payout never reached MarzPay (no gateway reference). Nothing was sent.' });
-    const marzStatus = await marzGetSendStatus(w.marzTxUuid);
+    const marzStatus = isBank ? await marzGetBankTransferStatus(gatewayRef) : await marzGetSendStatus(gatewayRef);
     const sent = SUCCESS_STATUSES.has(marzStatus);
     const failed = FAILED_STATUSES.has(marzStatus);
     let message;
@@ -2155,9 +2272,11 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
       return res.status(404).json({ status: 'error', message: 'Cash-out not found' });
     const wit = witSnap.data();
     if (wit.status !== 'processing') return res.json({ status: 'success', state: wit.status });
-    if (!wit.marzTxUuid) return res.json({ status: 'success', state: 'processing' });
+    const isBank = wit.method === 'bank';
+    const gatewayRef = isBank ? wit.marzBankReference : wit.marzTxUuid;
+    if (!gatewayRef) return res.json({ status: 'success', state: 'processing' });
 
-    const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
+    const marzStatus = isBank ? await marzGetBankTransferStatus(gatewayRef) : await marzGetSendStatus(gatewayRef);
     if (SUCCESS_STATUSES.has(marzStatus)) {
       await witSnap.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
       return res.json({ status: 'success', state: 'processed' });
@@ -2175,7 +2294,7 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
         // retryable, instead of paid-but-still-'processing' — which every
         // retry of this path (client poll, webhook, reconciler) would refund
         // again.
-        t.update(witSnap.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
+        t.update(witSnap.ref, { status: 'declined', failureReason: isBank ? 'Bank transfer failed at the provider' : 'Payout failed at the mobile-money provider' });
         t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
       }));
       return res.json({ status: 'success', state: 'declined' });
@@ -3598,8 +3717,10 @@ async function reconcilePendingWithdrawals() {
     const snap = await db.collection('withdrawals').where('status', '==', 'processing').limit(50).get();
     for (const doc of snap.docs) {
       const wit = doc.data();
-      if (!wit.marzTxUuid) continue;
-      const marzStatus = await marzGetSendStatus(wit.marzTxUuid);
+      const isBank = wit.method === 'bank';
+      const gatewayRef = isBank ? wit.marzBankReference : wit.marzTxUuid;
+      if (!gatewayRef) continue;
+      const marzStatus = isBank ? await marzGetBankTransferStatus(gatewayRef) : await marzGetSendStatus(gatewayRef);
       if (SUCCESS_STATUSES.has(marzStatus)) {
         await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
         settled++;
@@ -3615,7 +3736,7 @@ async function reconcilePendingWithdrawals() {
           // retryable, instead of paid-but-still-'processing' — which every
           // retry of this path (client poll, webhook, reconciler) would
           // refund again.
-          t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
+          t.update(doc.ref, { status: 'declined', failureReason: isBank ? 'Bank transfer failed at the provider' : 'Payout failed at the mobile-money provider' });
           t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
         }));
         settled++;

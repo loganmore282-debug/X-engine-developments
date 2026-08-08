@@ -875,8 +875,22 @@
   <div class="overlay" id="ovWithdraw">
     <div class="ov-top"><button class="ov-back" onclick="closeOverlay()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L3 12L9 18"/><path d="M3 12H15C18.3137 12 21 14.6863 21 18V19"/></svg></button><div class="ov-title">Cash Out</div></div>
     <div class="photo-banner" id="withdrawBanner"></div>
+    <div class="uline-tabs" id="witMethodRow" style="display:none">
+      <button type="button" class="uline-tab active" data-wm="mm" onclick="selectWitMethod('mm')">Mobile Money</button>
+      <button type="button" class="uline-tab" data-wm="bank" onclick="selectWitMethod('bank')">Bank Transfer</button>
+    </div>
     <div class="info-box">Minimum cash-out <b id="witMinAmt">UGX 10,000</b>. A service fee of <b id="witFeePctInfo">19%</b> applies to every cash-out. Up to <b><span id="witMaxPerDay">2</span> cash-outs</b> per day.</div>
-    <div id="witBankBox"></div>
+    <div id="witMmPanel">
+      <div id="witBankBox"></div>
+    </div>
+    <div id="witBankPanel" style="display:none">
+      <span class="flabel">Bank</span>
+      <select id="witBankName" class="famt" style="font-size:16px"><option value="">Select your bank</option></select>
+      <span class="flabel">Account name</span>
+      <div class="field" style="margin-bottom:14px"><input id="witBankAccName" type="text" placeholder="As it appears on the account"></div>
+      <span class="flabel">Account number</span>
+      <div class="field" style="margin-bottom:14px"><input id="witBankAccNum" type="text" inputmode="numeric" placeholder="Account number"></div>
+    </div>
     <div class="form-card">
       <span class="flabel">Amount (UGX)</span>
       <input class="famt" id="witAmt" type="number" placeholder="0" oninput="capAmountInput(this);renderWitCalc()">
@@ -885,9 +899,9 @@
       <button class="btn btn-berry btn-block" style="margin-top:12px" id="witGoBtn" onclick="doWithdraw()">Request Cash Out</button>
       <div class="howto-card howto-flat" style="margin:16px 0 0;padding:16px 0 0">
         <h4>How cash-outs work</h4>
-        <div class="howto-step"><span class="howto-num">1</span><p>Bind a mobile-money account (MTN or Airtel) once — every cash-out is sent there.</p></div>
+        <div class="howto-step"><span class="howto-num">1</span><p>Choose Mobile Money or Bank Transfer and enter your payout details.</p></div>
         <div class="howto-step"><span class="howto-num">2</span><p>Enter the amount you want and tap Request Cash Out.</p></div>
-        <div class="howto-step"><span class="howto-num">3</span><p>Your request is processed automatically and the net amount (after the service fee) is sent straight to your mobile money number.</p></div>
+        <div class="howto-step"><span class="howto-num">3</span><p>Your request is processed automatically and the net amount (after the service fee) is sent straight to your mobile money number or bank account.</p></div>
         <div class="howto-step"><span class="howto-num">4</span><p>Track the status any time under <b>Account → Ledger → Cash Outs</b>.</p></div>
       </div>
     </div>

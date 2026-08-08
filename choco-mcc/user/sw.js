@@ -581,7 +581,14 @@
 // A declined claim can be corrected and resubmitted against the same TXID.
 // Add Funds shows the real Completed/Declined outcome (polling briefly if
 // still verifying) instead of a generic "submitted" toast.
-const CACHE = 'chocomcc-shell-v108';
+// v109: Bank Transfer added as a second cash-out rail through the SAME
+// MarzPay gateway mobile-money withdrawals already use (that flow is
+// unaffected). Cash Out now has a Mobile Money / Bank Transfer tab; bank
+// members pick their bank from MarzPay's own supported list and enter
+// account name + number, which MarzPay validates before the request is
+// even accepted. Every bank request still waits as Pending for admin
+// manual Send, exactly like mobile money does today.
+const CACHE = 'chocomcc-shell-v109';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
