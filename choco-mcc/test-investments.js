@@ -173,6 +173,35 @@ async function setupFundedUser(uid, phone, balance) {
   check('totalInvested self-healed to a real number (30000 + 30000 = 60000)', userDoc(F).totalInvested === 60000, userDoc(F).totalInvested);
   check('walletBalance debited correctly regardless', userDoc(F).walletBalance === 1000000 - 30000, userDoc(F).walletBalance);
 
+  console.log('\n-- An admin rename reaches an already-running investment\'s display name, but never its locked-in terms --');
+  const G = 'grace-uid';
+  await setupFundedUser(G, '0771000007', 1000000);
+  r = await call('POST', '/invest/create', { token: 'uid:' + G, body: { tierKey: 'hersheys' } });
+  const graceInvId = r.body?.investmentId;
+  check('purchase succeeds before the rename', r.body?.status === 'success', r.body);
+  let list = await call('GET', '/investments', { token: 'uid:' + G });
+  let graceInv = list.body.investments.find(i => i.id === graceInvId);
+  check('shows the original product name before any rename', graceInv?.tierLabel === "Hershey's Milk Chocolate", graceInv);
+
+  await adminCall('/admin/products/save', { products: [{ key: 'hersheys', name: 'VIP 1: Hershey’s Milk Chocolate', price: 30000, cycle: 180, expectedReturn: 1200000 }] });
+  list = await call('GET', '/investments', { token: 'uid:' + G });
+  graceInv = list.body.investments.find(i => i.id === graceInvId);
+  check('the ALREADY-RUNNING investment now shows the renamed product live, not the frozen purchase-time label', graceInv?.tierLabel === 'VIP 1: Hershey’s Milk Chocolate', graceInv);
+  check('cycle/amount/expectedReturn/dailyPayout stay exactly what was locked in at purchase, unaffected by the rename',
+    graceInv?.cycle === 180 && graceInv?.amount === 30000 && graceInv?.expectedReturn === 1200000 && graceInv?.dailyPayout === Math.round(1200000 / 180), graceInv);
+
+  const godivaTierKey = 'godiva';
+  userDoc(G).walletBalance = 10000000; // top up -- godiva costs more than Grace's remaining balance
+  r = await call('POST', '/invest/create', { token: 'uid:' + G, body: { tierKey: godivaTierKey } });
+  check('godiva purchase succeeds after top-up', r.body?.status === 'success', r.body);
+  const godivaInvId = r.body?.investmentId;
+  const godivaBefore = collMap('investments').get(godivaInvId);
+  await adminCall('/admin/products/delete', { key: godivaTierKey });
+  list = await call('GET', '/investments', { token: 'uid:' + G });
+  const godivaAfterDelete = list.body.investments.find(i => i.id === godivaInvId);
+  check('a deleted product key falls back to the frozen purchase-time label instead of breaking', godivaAfterDelete?.tierLabel === godivaBefore.tierLabel, godivaAfterDelete);
+  await adminCall('/admin/products/save', { products: [{ key: godivaTierKey, name: 'Godiva Gold Box', price: 4000000, cycle: 180, expectedReturn: 160000000 }] }); // restore for other tests
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });

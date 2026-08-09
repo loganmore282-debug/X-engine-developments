@@ -1538,8 +1538,25 @@ app.get('/investments', async (req, res) => {
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     await settleAllForUser(uid);
-    const snap = await db.collection('investments').where('userId', '==', uid).get();
-    res.json({ status: 'success', investments: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    const [snap, products] = await Promise.all([
+      db.collection('investments').where('userId', '==', uid).get(),
+      getProducts()
+    ]);
+    // Price/cycle/expectedReturn/dailyPayout are locked in for good at
+    // purchase time (see test-locked-in-pricing.js) -- an admin edit must
+    // never retroactively change what an existing plan pays out. The
+    // DISPLAY name is different: an owner relabelling a product (e.g. to
+    // "VIP 1: Hershey's...") should show up on every already-running plan
+    // too, not just the shop listing, so this looks the current product up
+    // by tierKey and swaps in its live name. Falls back to the name
+    // recorded at purchase time if that product key was since deleted.
+    const byKey = new Map(products.map(p => [p.key, p]));
+    const investments = snap.docs.map(d => {
+      const data = d.data();
+      const live = byKey.get(data.tierKey);
+      return { id: d.id, ...data, tierLabel: (live && live.name) || data.tierLabel };
+    });
+    res.json({ status: 'success', investments });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not load your chocolates' });
   }
