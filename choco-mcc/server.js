@@ -2660,7 +2660,34 @@ app.get('/transactions', async (req, res) => {
     const snap = await db.collection('transactions').where('userId', '==', userId).limit(300).get();
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
-    res.json({ status: 'success', transactions: list.slice(0, 100) });
+    const page = list.slice(0, 100);
+    // Same live-rename treatment as GET /investments: 'Bought X' and
+    // 'X daily cashback' descriptions were written with the product's name
+    // at that moment, so a later admin rename never showed up here even
+    // though it now does on the running plan itself. Rebuilt from the
+    // CURRENT product name (looked up via each row's investmentId -> its
+    // investment's tierKey), never by guessing/replacing text inside the
+    // old stored string. Anything without a resolvable investmentId (a
+    // deleted investment, or a transaction type that was never
+    // product-related) just keeps its original description untouched.
+    const invIds = [...new Set(page.filter(t => t.investmentId && (t.type === 'investment' || t.type === 'cashback')).map(t => t.investmentId))];
+    if (invIds.length) {
+      const [invDocs, products] = await Promise.all([
+        Promise.all(invIds.map(id => db.collection('investments').doc(id).get())),
+        getProducts()
+      ]);
+      const tierKeyByInvId = new Map();
+      invDocs.forEach((d, i) => { if (d.exists) tierKeyByInvId.set(invIds[i], d.data().tierKey); });
+      const nameByTierKey = new Map(products.map(p => [p.key, p.name]));
+      page.forEach(t => {
+        if (!t.investmentId) return;
+        const liveName = nameByTierKey.get(tierKeyByInvId.get(t.investmentId));
+        if (!liveName) return;
+        if (t.type === 'investment') t.description = `Bought ${liveName}`;
+        else if (t.type === 'cashback') t.description = `${liveName} daily cashback`;
+      });
+    }
+    res.json({ status: 'success', transactions: page });
   } catch (e) {
     console.error('Transactions list error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your transactions' });

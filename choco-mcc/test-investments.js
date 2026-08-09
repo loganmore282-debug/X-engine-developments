@@ -202,6 +202,21 @@ async function setupFundedUser(uid, phone, balance) {
   check('a deleted product key falls back to the frozen purchase-time label instead of breaking', godivaAfterDelete?.tierLabel === godivaBefore.tierLabel, godivaAfterDelete);
   await adminCall('/admin/products/save', { products: [{ key: godivaTierKey, name: 'Godiva Gold Box', price: 4000000, cycle: 180, expectedReturn: 160000000 }] }); // restore for other tests
 
+  console.log('\n-- The rename reaches the Records/Accrued transaction history too ("Bought X" and "X daily cashback") --');
+  let txList = await call('GET', '/transactions', { token: 'uid:' + G });
+  let boughtTx = txList.body.transactions.find(t => t.investmentId === graceInvId && t.type === 'investment');
+  check('the purchase transaction\'s description now uses the renamed product, not the frozen one from purchase time',
+    boughtTx?.description === 'Bought VIP 1: Hershey’s Milk Chocolate', boughtTx);
+
+  const graceInvDoc = collMap('investments').get(graceInvId);
+  graceInvDoc.createdAt = new Date(Date.now() - 3 * 86400000); // backdate so settle-on-read credits cashback
+  await call('GET', '/investments', { token: 'uid:' + G }); // triggers settleAllForUser
+  txList = await call('GET', '/transactions', { token: 'uid:' + G });
+  const cashbackTx = txList.body.transactions.find(t => t.investmentId === graceInvId && t.type === 'cashback');
+  check('a cashback transaction was actually created', !!cashbackTx, txList.body.transactions);
+  check('its description also uses the renamed product live, not the name frozen when it was credited',
+    cashbackTx?.description === 'VIP 1: Hershey’s Milk Chocolate daily cashback', cashbackTx);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });
