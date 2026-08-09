@@ -3626,7 +3626,16 @@ app.get('/admin/stats', async (req, res) => {
   try {
     const [usersSnap, pendingWitSnap, activeInvSnap] = await Promise.all([
       db.collection('users').limit(10000).get(),
-      db.collection('withdrawals').where('status', '==', 'processing').get(),
+      // BUG FIXED: this only ever matched status 'processing' -- the brief
+      // window between an admin's Send and MarzPay's own confirmation --
+      // never 'pending', which is what a withdrawal sits at from the
+      // moment a member requests it until an admin actually sends it (see
+      // /admin/badges just below, which already queries 'pending' and was
+      // never wrong). Real outstanding payout liability is every status
+      // that hasn't reached a terminal state yet: 'pending' (queued,
+      // untouched), 'sending' (crash-safety marker written just before the
+      // gateway call), and 'processing' (sent, awaiting confirmation).
+      db.collection('withdrawals').where('status', 'in', ['pending', 'sending', 'processing']).get(),
       db.collection('investments').where('status', '==', 'active').get()
     ]);
     let totalWallet = 0, totalDeposited = 0, totalWithdrawn = 0, totalInvested = 0,

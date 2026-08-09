@@ -29,7 +29,12 @@ const faPath = require.resolve('firebase-admin');
 const faMod = new Module(faPath);
 faMod.exports = {
   initializeApp: () => {}, credential: { cert: () => ({}) },
-  auth: () => ({ verifyIdToken: async () => { throw new Error('not used'); } }),
+  auth: () => ({
+    verifyIdToken: async tok => {
+      if (String(tok).startsWith('uid:')) return { uid: tok.slice(4) };
+      throw new Error('invalid token');
+    },
+  }),
 };
 faMod.loaded = true;
 require.cache[faPath] = faMod;
@@ -68,6 +73,41 @@ function check(name, cond, extra) {
   check('/admin/stats -> 401 with no admin auth', r.status === 401, await r.text());
   r = await realFetch(BASE + '/admin/badges', { method: 'GET' });
   check('/admin/badges -> 401 with no admin auth', r.status === 401, await r.text());
+
+  console.log('\n-- Dashboard "Pending payouts"/"Payout amount due" actually reflects a real pending withdrawal --');
+  // Was querying withdrawals.status == 'processing' -- the brief window
+  // AFTER an admin clicks Send, awaiting MarzPay's own confirmation --
+  // instead of 'pending', the status a withdrawal actually sits at from
+  // the moment a member requests it until an admin sends it. The dashboard
+  // card showed 0 forever unless something happened to be mid-send at the
+  // exact instant the page loaded. Now sums 'pending'+'sending'+'processing'.
+  async function call(method, p, { token, body } = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const resp = await realFetch(BASE + p, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    let j = null; try { j = await resp.json(); } catch (_) {}
+    return { code: resp.status, body: j };
+  }
+  const mockdb2 = require('./test-mockdb.js');
+  function collMap(name) {
+    if (!mockdb2.__store.has(name)) mockdb2.__store.set(name, new Map());
+    return mockdb2.__store.get(name);
+  }
+  const uid = 'stats-wit-user';
+  await call('POST', '/account/create-profile', { token: 'uid:' + uid, body: { phone: '0771999001' } });
+  await call('POST', '/register', { token: 'uid:' + uid, body: {} });
+  const u = collMap('users').get(uid);
+  u.walletBalance = 500000; u.totalInvested = 500000;
+  await call('POST', '/bank/save', { token: 'uid:' + uid, body: { holder: 'Stats Tester', network: 'MTN Mobile Money', phone: '0771999001' } });
+  const witR = await call('POST', '/withdraw/request', { token: 'uid:' + uid, body: { amount: 60000, holder: 'Stats Tester', network: 'MTN Mobile Money', phone: '0771999001' } });
+  check('withdrawal request accepted (status stays "pending", nothing sent yet)', witR.body?.status === 'success', witR.body);
+  const witId = witR.body?.withdrawalId;
+  check('confirmed sitting at status "pending" in the store', collMap('withdrawals').get(witId)?.status === 'pending', collMap('withdrawals').get(witId));
+
+  r = await realFetch(BASE + '/admin/stats', { method: 'GET', headers: adminHeaders });
+  body = await r.json();
+  check('pendingWithdrawals now counts the real pending request, not 0', body.pendingWithdrawals >= 1, body.pendingWithdrawals);
+  check('pendingPayouts (amount due) now includes its net amount, not 0', body.pendingPayouts >= collMap('withdrawals').get(witId).net, { pendingPayouts: body.pendingPayouts, net: collMap('withdrawals').get(witId).net });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
