@@ -46,6 +46,19 @@ faMod.exports = {
       });
       return { responses, successCount: responses.filter(r => r.success).length, failureCount: responses.filter(r => !r.success).length };
     },
+    // Owner devices get a withdrawal push through sendEach (one message per
+    // device, since each carries that device's OWN quick-approve secret) --
+    // see sendWithdrawalPush in server.js. Recorded the same way as
+    // sendEachForMulticast above so the existing assertions below (which
+    // only care about .tokens/.notification) keep working unmodified.
+    sendEach: async (messages) => {
+      messages.forEach(m => sentPushes.push({ tokens: [m.token], notification: m.notification, data: m.data }));
+      const responses = messages.map(m => {
+        if (m.token === deadTokenToReport) return { success: false, error: { code: 'messaging/registration-token-not-registered' } };
+        return { success: true };
+      });
+      return { responses, successCount: responses.filter(r => r.success).length, failureCount: responses.filter(r => !r.success).length };
+    },
   }),
 };
 faMod.loaded = true;

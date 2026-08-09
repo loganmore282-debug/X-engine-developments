@@ -543,14 +543,71 @@ async function sendAdminPush(title, body, data) {
     console.error('Admin push error:', e.message);
   }
 }
+// Owner-only variant of the push above, used ONLY for new-withdrawal alerts:
+// owner devices get an "Approve" action button wired to that device's own
+// quick-approve secret (see /admin/push/register) so a single tap sends the
+// payout with the admin panel fully closed; staff devices get the identical
+// notification with no action at all -- quick-approve is deliberately
+// owner-only, staff still approve the normal way from inside the panel.
+// FCM's sendEachForMulticast reuses one shared payload for every token, but
+// each owner device needs ITS OWN token+secret embedded in the payload, so
+// owner devices go out individually via sendEach while staff devices stay
+// on the cheaper shared multicast.
+async function sendWithdrawalPush(title, body, withdrawalId) {
+  try {
+    const snap = await db.collection('adminPushTokens').get();
+    if (snap.empty) return;
+    const ownerMessages = [];
+    const staffTokens = [];
+    snap.docs.forEach(d => {
+      const t = d.data();
+      if (t.role === 'owner' && t.quickApproveSecret) {
+        ownerMessages.push({
+          token: d.id,
+          notification: { title, body },
+          data: { type: 'withdrawal', withdrawalId, quickApprove: '1', pushToken: d.id, secret: t.quickApproveSecret }
+        });
+      } else {
+        staffTokens.push(d.id);
+      }
+    });
+    const deadTokens = [];
+    const isDeadTokenError = code => /registration-token-not-registered|invalid-registration-token/.test(String(code || ''));
+    if (ownerMessages.length) {
+      const resp = await admin.messaging().sendEach(ownerMessages);
+      resp.responses.forEach((r, i) => { if (!r.success && isDeadTokenError(r.error?.code)) deadTokens.push(ownerMessages[i].token); });
+    }
+    if (staffTokens.length) {
+      const resp = await admin.messaging().sendEachForMulticast({
+        tokens: staffTokens, notification: { title, body }, data: { type: 'withdrawal', withdrawalId },
+      });
+      resp.responses.forEach((r, i) => { if (!r.success && isDeadTokenError(r.error?.code)) deadTokens.push(staffTokens[i]); });
+    }
+    deadTokens.forEach(t => db.collection('adminPushTokens').doc(t).delete().catch(() => {}));
+  } catch (e) {
+    console.error('Withdrawal push error:', e.message);
+  }
+}
 app.post('/admin/push/register', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const token = String(req.body.token || '');
   if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
   try {
-    await db.collection('adminPushTokens').doc(token).set({
-      username: req.adminUser?.username || 'owner', updatedAt: FieldValue.serverTimestamp()
-    }, { merge: true });
+    const role = req.adminUser?.role || 'owner';
+    // A one-time, narrowly-scoped secret for this device's push-driven
+    // quick-approve action (see sendWithdrawalPush/quick-approve below) --
+    // deliberately NOT the master ADMIN_KEY or a login session, and never
+    // sent back to the page/JS: it only ever travels inside the encrypted
+    // FCM payload of a push this same device receives, and back out again
+    // when that device's own service worker acts on it. Persisted across
+    // re-registration (merge) so it doesn't rotate on every token refresh.
+    // Staff devices never get one at all -- quick-approve is owner-only, so
+    // there's no reason for a usable-if-leaked secret to exist for staff.
+    const tokRef = db.collection('adminPushTokens').doc(token);
+    const existing = await tokRef.get();
+    const fields = { username: req.adminUser?.username || 'owner', role, updatedAt: FieldValue.serverTimestamp() };
+    if (role === 'owner') fields.quickApproveSecret = (existing.exists && existing.data().quickApproveSecret) || crypto.randomUUID();
+    await tokRef.set(fields, { merge: true });
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not register for push' });
@@ -1442,8 +1499,20 @@ app.post('/invest/create', async (req, res) => {
       const isFirstInvestment = !(fresh.data().firstInvestmentDone === true || (fresh.data().totalInvested || 0) > 0);
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
+      // FieldValue.increment() on MongoDB throws "Cannot increment with
+      // non-numeric argument" outright if the stored field isn't already a
+      // number (seen live on a real account with totalInvested stored as
+      // the STRING "30000", likely from an old manual edit) -- blocking the
+      // purchase entirely instead of just producing a wrong total. This
+      // transaction is already single-writer-safe per user via the
+      // withLock('bal:'+userId) wrapping it, so computing the new values
+      // from the value just read and writing them as plain numbers is just
+      // as race-safe as increment() here, and it self-heals a corrupted
+      // string field back to numeric the moment this runs.
+      const newBalance = (Number(fresh.data().walletBalance) || 0) - tier.price;
+      const newInvested = (Number(fresh.data().totalInvested) || 0) + tier.price;
       t.update(uRef, {
-        walletBalance: FieldValue.increment(-tier.price), totalInvested: FieldValue.increment(tier.price),
+        walletBalance: newBalance, totalInvested: newInvested,
         firstInvestmentDone: true
       });
       const { date, time } = nowStr();
@@ -2133,7 +2202,7 @@ app.post('/withdraw/request', async (req, res) => {
 
     // sendAdminPush is the owner's OWN push notification (not shown to the
     // member) -- it's fine, and meant, to say "awaiting approval" here.
-    sendAdminPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}), awaiting approval`, { type: 'withdrawal', withdrawalId: witId });
+    sendWithdrawalPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}), awaiting approval`, witId);
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested — processing now` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -2148,19 +2217,20 @@ app.post('/withdraw/request', async (req, res) => {
 // retry. Money-safety notes mirror /withdraw/request's old auto-send path:
 // the "sending" marker is written BEFORE the gateway call so a crash right
 // after marzSendMoney() succeeds can never leave this silently stuck.
-app.post('/admin/withdraw/process', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const withdrawalId = String(req.body.withdrawalId || '');
-  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+// The actual send -- shared by the normal admin-panel button AND the
+// push-notification quick-approve action below, so this money-safety logic
+// exists in exactly one place. Returns { code, body, meta } instead of
+// touching `res` directly; callers decide how to respond/log.
+async function processWithdrawalCore(withdrawalId, processedBy) {
   if (_withdrawInFlight.has(withdrawalId))
-    return res.status(409).json({ status: 'error', message: 'Another admin is already acting on this withdrawal. Check the list in a moment.' });
+    return { code: 409, body: { status: 'error', message: 'Another admin is already acting on this withdrawal. Check the list in a moment.' } };
   _withdrawInFlight.add(withdrawalId);
   try {
     const witRef = db.collection('withdrawals').doc(withdrawalId);
     const witSnap = await witRef.get();
-    if (!witSnap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
+    if (!witSnap.exists) return { code: 404, body: { status: 'error', message: 'Withdrawal not found' } };
     const wit = witSnap.data();
-    if (wit.status !== 'pending') return res.status(400).json({ status: 'error', message: `Cannot send, the status is '${wit.status}'` });
+    if (wit.status !== 'pending') return { code: 400, body: { status: 'error', message: `Cannot send, the status is '${wit.status}'` } };
 
     const isBank = wit.method === 'bank';
     // Bank-transfer doesn't take a client-supplied reference (MarzPay
@@ -2169,7 +2239,6 @@ app.post('/admin/withdraw/process', async (req, res) => {
     // gateway call for the same crash-safety reason send-money's
     // marzReference is.
     const sendingMarker = crypto.randomUUID();
-    const processedBy = req.adminUser?.username || 'owner-key';
     await witRef.update({ status: 'sending', sendingReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
 
     // SECURITY/MONEY-SAFETY (found comparing against Chronova's proven
@@ -2204,7 +2273,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
       mpData = { status: 'error', providerDown: true, message: netErr.message };
     }
     if (ambiguous) {
-      return res.status(500).json({ status: 'error', message: 'Lost contact with MarzPay mid-request -- we cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly; check this reference on the MarzPay dashboard before doing anything else.', sendingReference: sendingMarker });
+      return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request -- we cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly; check this reference on the MarzPay dashboard before doing anything else.', sendingReference: sendingMarker } };
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       // A real, complete HTTP round-trip that MarzPay itself answered with
@@ -2212,7 +2281,7 @@ app.post('/admin/withdraw/process', async (req, res) => {
       // -- this one genuinely never moved money, so it's safe to put it back
       // to 'pending' and let the admin retry.
       await witRef.update({ status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
-      return res.status(400).json({ status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') });
+      return { code: 400, body: { status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
     }
     const sandbox = mpData.status === 'sandbox';
     const updateFields = { status: sandbox ? 'processed' : 'processing', processedBy, processedAt: FieldValue.serverTimestamp() };
@@ -2227,12 +2296,52 @@ app.post('/admin/withdraw/process', async (req, res) => {
       if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: sandbox ? 'success' : 'processing' });
     } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
     const dest = isBank ? `${wit.bankName} · ${wit.accountName}` : wit.phone;
-    logAdminAction(req, 'withdrawal_processed', { withdrawalId, amount: wit.net, dest, userId: wit.userId });
-    res.json({ status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtUGX(wit.net)} to ${dest}` : `Sending ${fmtUGX(wit.net)} to ${dest}` });
+    return {
+      code: 200,
+      body: { status: 'success', sandbox, message: sandbox ? `Sandbox: withdrawal marked complete, ${fmtUGX(wit.net)} to ${dest}` : `Sending ${fmtUGX(wit.net)} to ${dest}` },
+      meta: { amount: wit.net, dest, userId: wit.userId }
+    };
   } catch (e) {
     console.error('Process withdrawal error:', e.message);
-    res.status(500).json({ status: 'error', message: e.message });
+    return { code: 500, body: { status: 'error', message: e.message } };
   } finally { _withdrawInFlight.delete(withdrawalId); }
+}
+app.post('/admin/withdraw/process', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const withdrawalId = String(req.body.withdrawalId || '');
+  if (!withdrawalId) return res.status(400).json({ status: 'error', message: 'withdrawalId required' });
+  const processedBy = req.adminUser?.username || 'owner-key';
+  const result = await processWithdrawalCore(withdrawalId, processedBy);
+  if (result.code === 200) logAdminAction(req, 'withdrawal_processed', { withdrawalId, ...result.meta });
+  res.status(result.code).json(result.body);
+});
+// Owner-only quick-approve, reachable from a push notification's "Approve"
+// action with the admin panel fully closed (no session, no page open) --
+// see sendWithdrawalPush and /admin/push/register above for how the
+// pushToken+secret pair is issued and delivered. Deliberately does NOT
+// accept the master ADMIN_KEY or a login session: this is a narrower,
+// single-purpose credential that can only ever reach processWithdrawalCore,
+// nothing else on the admin surface, and is revoked the instant the device
+// unregisters from push.
+app.post('/admin/withdraw/quick-approve', async (req, res) => {
+  try {
+    const withdrawalId = String(req.body.withdrawalId || '');
+    const pushToken = String(req.body.pushToken || '');
+    const secret = String(req.body.secret || '');
+    if (!withdrawalId || !pushToken || !secret) return res.status(400).json({ status: 'error', message: 'Missing fields' });
+    const tokDoc = await db.collection('adminPushTokens').doc(pushToken).get();
+    const tok = tokDoc.exists ? tokDoc.data() : null;
+    if (!tok || tok.role !== 'owner' || !tok.quickApproveSecret || !safeEqual(String(tok.quickApproveSecret), secret))
+      return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    const result = await processWithdrawalCore(withdrawalId, 'owner (quick-approve)');
+    if (result.code === 200) {
+      logAdminAction({ adminUser: { username: 'owner (quick-approve)', role: 'owner' }, ip: req.ip },
+        'withdrawal_processed', { withdrawalId, via: 'push', ...result.meta });
+    }
+    res.status(result.code).json(result.body);
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: e.message });
+  }
 });
 
 // Read-only re-check of a still-processing withdrawal against MarzPay's own

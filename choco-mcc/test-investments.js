@@ -157,6 +157,22 @@ async function setupFundedUser(uid, phone, balance) {
   check('investment marked matured', freshInv.status === 'matured', freshInv);
   check('total paid out exactly equals expectedReturn (no more, no less — no decimal drift)', freshInv.paidOut === 1200000, freshInv.paidOut);
 
+  console.log('\n-- A totalInvested field corrupted to a STRING (seen live in production) no longer blocks a purchase --');
+  // MongoDB's real $inc throws "Cannot increment with non-numeric argument"
+  // outright if the stored field isn't already a number -- reproduced here
+  // by writing the field as a string directly into the store, exactly like
+  // a live account was found with totalInvested: "30000". The purchase
+  // transaction now computes the new value itself instead of using
+  // FieldValue.increment() for this field, so it must both succeed AND
+  // self-heal the field back to numeric.
+  const F = 'faith-uid';
+  await setupFundedUser(F, '0771000006', 1000000);
+  userDoc(F).totalInvested = '30000'; // corrupted, as a string -- not a number
+  r = await call('POST', '/invest/create', { token: 'uid:' + F, body: { tierKey: 'hersheys' } });
+  check('purchase succeeds despite a string-corrupted totalInvested', r.body?.status === 'success', r.body);
+  check('totalInvested self-healed to a real number (30000 + 30000 = 60000)', userDoc(F).totalInvested === 60000, userDoc(F).totalInvested);
+  check('walletBalance debited correctly regardless', userDoc(F).walletBalance === 1000000 - 30000, userDoc(F).walletBalance);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });

@@ -588,7 +588,15 @@
 // account name + number, which MarzPay validates before the request is
 // even accepted. Every bank request still waits as Pending for admin
 // manual Send, exactly like mobile money does today.
-const CACHE = 'chocomcc-shell-v109';
+// v110: Fixed a live bug where an account with totalInvested corrupted to a
+// STRING in the database (instead of a number) got "Cannot increment with
+// non-numeric argument" on every Buy attempt -- the purchase now computes
+// the new balance/totalInvested itself instead of relying on an atomic
+// increment for those two fields, which also self-heals the corrupted
+// value the next time that account buys. Home screen's four quick-action
+// tiles (Add Funds/Cash Out/Rewards Hub/Support) now use the 3D icon
+// artwork instead of line-art SVGs.
+const CACHE = 'chocomcc-shell-v110';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
