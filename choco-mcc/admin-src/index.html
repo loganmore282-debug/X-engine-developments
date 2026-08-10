@@ -449,11 +449,35 @@ function contentHasFocus(){
   const c=$('content'), el=document.activeElement;
   return !!(c && el && el!==document.body && c.contains(el));
 }
+// The list-style tabs (Transactions, Deposits, Withdrawals, Referrals,
+// Users) each rebuild their WHOLE panel on every render -- search box
+// included -- because the panel also carries live counts/charts that only
+// the full API response has. Without this, a 5s live tick silently wiped
+// out whatever search text was typed and snapped the page back to the top
+// of a now-longer unfiltered list -- exactly the "affects me when I'm mid-
+// read" complaint. Each entry's draw() only touches the table body, so
+// re-running it after restoring the search value re-applies the filter
+// without another full rebuild.
+const LIVE_LIST_TABS = {
+  transactions: { search:'txSearch', draw:()=>drawTxns() },
+  deposits:     { search:'depSearch', draw:()=>drawDeps() },
+  withdrawals:  { search:'witSearch', draw:()=>drawWits() },
+  referrals:    { search:'refSearch', draw:()=>drawRefs() },
+  users:        { search:'userSearch', draw:()=>drawUsers() },
+};
 function liveTick(){
   if(document.hidden) return;
   refreshBadges().catch(()=>{});
   if(!_live || modalOpen() || contentHasFocus() || !LIVE_TABS.has(_tab)) return;
-  (RENDERERS[_tab]||(()=>{}))();
+  const tab = _tab;
+  const cfg = LIVE_LIST_TABS[tab];
+  const searchVal = cfg && $(cfg.search) ? $(cfg.search).value : '';
+  const scrollY = window.scrollY;
+  Promise.resolve((RENDERERS[tab]||(()=>{}))()).then(()=>{
+    if(staleTab(tab)) return; // admin switched tabs while this was loading -- don't touch whatever's shown now
+    if(cfg && searchVal && $(cfg.search)){ $(cfg.search).value = searchVal; cfg.draw(); }
+    window.scrollTo(0, scrollY);
+  }).catch(()=>{});
 }
 function startLive(){ if(_liveTimer) return; _liveTimer=setInterval(liveTick, 5000); }
 function setLive(on){ _live=on; const d=$('liveDot'); if(d) d.style.background = on ? 'var(--ok)' : 'var(--sub)';
