@@ -440,7 +440,7 @@ async function refreshBadges(){
 // that would touch either just skips silently and tries again next cycle.
 let _live=true, _liveTimer=null;
 const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','promocodes','transactions','referrals','settings','admins','auditlog']);
-const RENDERERS={ dashboard:()=>renderDashboard(), analytics:()=>renderAnalytics(), users:()=>renderUsers(), deposits:()=>renderDeposits(),
+const RENDERERS={ dashboard:()=>renderDashboard(), analytics:()=>renderAnalytics(true), users:()=>renderUsers(), deposits:()=>renderDeposits(),
   withdrawals:()=>renderWithdrawals(), products:()=>renderProducts(), banners:()=>renderBanners(),
   promocodes:()=>renderPromoCodes(), transactions:()=>renderTransactions(), referrals:()=>renderReferrals(),
   settings:()=>renderSettings(), admins:()=>renderAdmins(), auditlog:()=>renderAuditLog() };
@@ -533,11 +533,19 @@ function statusPill(s){
 
 // ── ANALYTICS ──
 let _anPeriod = 30;
-async function renderAnalytics(){
-  $('content').innerHTML='<div class="empty">Crunching numbers…</div>';
+async function renderAnalytics(silent){
+  // silent=true (used by the live-refresh tick) skips the placeholder wipe
+  // entirely -- unlike every other tab, this one used to blank the WHOLE
+  // panel to "Crunching numbers…" on every single call, including a 5s
+  // background refresh, so it looked like a full reload even after the
+  // scroll/search-preserving fix (which only runs AFTER the render
+  // finishes, too late to stop this flash). A real tab switch or changing
+  // the 7/30/90-day period still shows it -- there's nothing worth keeping
+  // on screen yet in those cases.
+  if(!silent) $('content').innerHTML='<div class="empty">Crunching numbers…</div>';
   const a = await api('/admin/analytics', { days:_anPeriod });
   if(staleTab('analytics')) return;
-  if(a.status!=='success'){ $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
+  if(a.status!=='success'){ if(!silent) $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
   const k=a.kpis||{};
   const h12=x=>{const ap=x<12?'am':'pm';let h=x%12;if(h===0)h=12;return h+ap;};
   const maxHour = Math.max(1, ...a.byHour.map(h=>Math.max(h.depAmt,h.witAmt)));
