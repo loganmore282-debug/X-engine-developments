@@ -773,16 +773,17 @@ function _marzExtractBankTransfer(d) {
   const rawStatus = bt.status || d?.status || '';
   return { status: String(rawStatus).toLowerCase(), reference: bt.reference || bt.transaction_uuid || null };
 }
-async function marzGetBankTransferStatus(reference) {
-  try {
-    const resp = await fetch(`${MARZPAY_BASE}/bank-transfer/${reference}`, {
-      signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
-    });
-    const d = await resp.json().catch(() => ({}));
-    if (!resp.ok) { console.error(`marzGetBankTransferStatus(${reference}): HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300)); return ''; }
-    return _marzExtractBankTransfer(d).status;
-  } catch (e) { console.error(`marzGetBankTransferStatus(${reference}) failed:`, e.message); return ''; }
-}
+// Was a single unretried attempt with no fallback -- exactly the gap that
+// (once fixed for send-money below, after a real MTN payout got stuck
+// "processing" forever on a provider-side error) never got ported over to
+// bank-transfer. A real bank payout showed "Completed" on MarzPay's own
+// dashboard while sitting stuck on 'processing' here indefinitely -- same
+// failure shape, different rail. Now goes through the exact same hardened
+// retry + /transactions/{reference} fallback + logging as send-money/
+// collect-money (see _marzFetchTxStatus below), just with the bank-transfer
+// response shape parsed via _marzExtractBankTransfer instead.
+async function marzGetBankTransferTx(reference) { return _marzFetchTxStatus(`/bank-transfer/${reference}`, reference, 'marzGetBankTransferTx', _marzExtractBankTransfer); }
+async function marzGetBankTransferStatus(reference) { return (await marzGetBankTransferTx(reference)).status; }
 // The supported-banks list barely ever changes -- cached the same short-TTL
 // way as getSettings()/getProducts() so the picker doesn't hit MarzPay on
 // every single page load, while still picking up an addition within a
@@ -834,7 +835,8 @@ function _marzExtractTx(d) {
   const rawStatus = tx.status || tx.state || tx.transaction_status || tx.payment_status || d?.status || '';
   return { status: String(rawStatus).toLowerCase(), reference: tx.reference || tx.transaction_reference || null };
 }
-async function _marzFetchTxStatus(path, uuid, label) {
+async function _marzFetchTxStatus(path, uuid, label, extractFn) {
+  extractFn = extractFn || _marzExtractTx;
   let lastErr = null;
   // 2 attempts, 350ms apart, then straight to the /transactions fallback
   // below -- a genuine transient blip almost always clears on the first
@@ -852,7 +854,7 @@ async function _marzFetchTxStatus(path, uuid, label) {
         console.error(`${label}(${uuid}) attempt ${attempt}: HTTP ${resp.status}`, JSON.stringify(d).slice(0, 300));
         lastErr = new Error(`HTTP ${resp.status}`);
       } else {
-        return _marzExtractTx(d);
+        return extractFn(d);
       }
     } catch (e) { lastErr = e; console.error(`${label}(${uuid}) attempt ${attempt} failed:`, e.message); }
     if (attempt < 2) await new Promise(r => setTimeout(r, 350));
@@ -863,17 +865,18 @@ async function _marzFetchTxStatus(path, uuid, label) {
   // every single attempt, not a transient network flake) for one specific
   // transaction. Their own docs list GET /transactions/{uuid} as a
   // documented fallback "when webhooks are delayed" -- it's a different
-  // resource/code path on their side, so a bug specific to the send-money
+  // resource/code path on their side, so a bug specific to one product's own
   // formatter doesn't necessarily also break this one. One extra try here
-  // before giving up, reusing the exact same parsing since it returns the
-  // same transaction shape.
+  // before giving up, reusing the SAME extractFn since /transactions/{uuid}
+  // is a generic resource across every MarzPay product (send-money,
+  // collect-money, bank-transfer), not specific to whichever one failed.
   try {
     const resp = await fetch(`${MARZPAY_BASE}/transactions/${uuid}`, {
       signal: AbortSignal.timeout(MARZ_TIMEOUT), headers: { 'Authorization': `Basic ${MARZPAY_KEY}` }
     });
     const d = await resp.json().catch(() => ({}));
     if (resp.ok) {
-      const parsed = _marzExtractTx(d);
+      const parsed = extractFn(d);
       if (parsed.status) {
         console.log(`${label}(${uuid}): resolved via /transactions/{uuid} fallback after the primary endpoint kept failing`);
         return parsed;

@@ -43,6 +43,16 @@
        route to 'processed' on a still-processing withdrawal is the real,
        automatic, provider-verified reconciliation path
 
+   SECOND real incident, same shape, different rail: a bank-transfer payout
+   showed "Completed" on MarzPay's own dashboard while sitting stuck
+   "processing" here indefinitely. marzGetBankTransferStatus() had never
+   received the same treatment as send-money above -- one unretried attempt,
+   no /transactions/{reference} fallback, no logging on failure. It's now
+   routed through the exact same _marzFetchTxStatus retry+fallback+logging
+   pipeline (see server.js), just parsed via _marzExtractBankTransfer
+   instead of _marzExtractTx. The bank-transfer cases below mirror the
+   send-money ones as directly as the two rails' shapes allow.
+
    Run: node test-withdrawal-stuck-auto-resolve.js   (exits 0 = all green) */
 
 process.env.MONGODB_URI = 'mongodb://mock';
@@ -71,8 +81,11 @@ const realFetch = global.fetch;
 // Per-uuid scripted behavior for GET .../send-money/{uuid}, so each test
 // case can simulate a different real-world provider response shape.
 const _sendStatusScript = new Map(); // uuid -> { calls: 0, script: fn(callNum) => {ok, status, body} }
-// Separate script for the GET .../transactions/{uuid} fallback endpoint.
+// Separate script for the GET .../transactions/{uuid} fallback endpoint --
+// shared by both send-money and bank-transfer, exactly like the real one.
 const _transactionsScript = new Map(); // uuid -> { calls: 0, script: fn(callNum) => {ok, status, body} }
+// Same idea, for GET .../bank-transfer/{reference}.
+const _bankStatusScript = new Map(); // reference -> { calls: 0, script: fn(callNum) => {ok, status, body} }
 global.fetch = async (url, opts) => {
   const u = String(url);
   const isGet = !opts || opts.method === undefined || opts.method === 'GET';
@@ -90,6 +103,16 @@ global.fetch = async (url, opts) => {
   if (u.includes('wearemarz.com') && m && isGet) {
     const uuid = m[1];
     const entry = _sendStatusScript.get(uuid);
+    if (entry) {
+      entry.calls++;
+      const r = entry.script(entry.calls);
+      return { ok: r.ok, status: r.ok ? 200 : (r.httpStatus || 500), json: async () => r.body };
+    }
+  }
+  const bm = u.match(/\/bank-transfer\/([^/?]+)/);
+  if (u.includes('wearemarz.com') && bm && isGet) {
+    const ref = bm[1];
+    const entry = _bankStatusScript.get(ref);
     if (entry) {
       entry.calls++;
       const r = entry.script(entry.calls);
@@ -138,6 +161,13 @@ function seedProcessingWithdrawal(id, userId, { amount, net, marzTxUuid, ageMs }
     createdAt: new Date(Date.now() - ageMs), processedAt: new Date(Date.now() - ageMs), processedBy: 'owner-key',
   });
 }
+function seedBankProcessingWithdrawal(id, userId, { amount, net, marzBankReference, ageMs }) {
+  withdrawals().set(id, {
+    userId, amount, net, method: 'bank', bankName: 'DFCU Bank', accountName: 'Test Holder', accountNumber: '0146001886466',
+    status: 'processing', marzBankReference: marzBankReference || null,
+    createdAt: new Date(Date.now() - ageMs), processedAt: new Date(Date.now() - ageMs), processedBy: 'owner-key',
+  });
+}
 async function syncNow() { return ownerCall('GET', '/admin/payments/sync'); }
 
 (async () => {
@@ -176,6 +206,35 @@ async function syncNow() { return ownerCall('GET', '/admin/payments/sync'); }
   _transactionsScript.set('MTX-BOTHBROKEN', { calls: 0, script: () => ({ ok: false, httpStatus: 500, body: { error: 'also broken' } }) });
   await syncNow();
   check('stays "processing", not falsely resolved, when neither endpoint answers', withdrawals().get('wit-bothbroken').status === 'processing', withdrawals().get('wit-bothbroken'));
+
+  console.log('\n== SECOND real incident, bank-transfer rail: a real payout shows "Completed" on MarzPay\'s own dashboard but was stuck "processing" here forever ==');
+  console.log('-- A transient failure on /bank-transfer/{reference} still resolves in ONE reconciler pass --');
+  seedBankProcessingWithdrawal('bwit-transient', A, { amount: 22000, net: 18700, marzBankReference: 'BTX-TRANSIENT', ageMs: 60000 });
+  _bankStatusScript.set('BTX-TRANSIENT', { calls: 0, script: n => n === 1 ? { ok: false, httpStatus: 503, body: { error: 'temporary' } } : { ok: true, body: { data: { bank_transfer_request: { status: 'completed', reference: 'BTX-TRANSIENT' } } } } });
+  await syncNow();
+  check('resolved automatically despite the first attempt failing', withdrawals().get('bwit-transient').status === 'processed', withdrawals().get('bwit-transient'));
+
+  console.log('-- The EXACT real incident: MarzPay\'s /bank-transfer/{reference} fails on every attempt, but it already shows "Completed" on MarzPay\'s own dashboard -- the /transactions/{reference} fallback resolves it --');
+  seedBankProcessingWithdrawal('bwit-marzbug', A, { amount: 22000, net: 18700, marzBankReference: 'BTX-MARZBUG', ageMs: 60000 });
+  _bankStatusScript.set('BTX-MARZBUG', { calls: 0, script: () => ({ ok: false, httpStatus: 500, body: { status: 'error', message: 'Internal error' } }) });
+  _transactionsScript.set('BTX-MARZBUG', { calls: 0, script: () => ({ ok: true, body: { data: { bank_transfer_request: { status: 'completed', reference: 'BTX-MARZBUG' } } } }) });
+  await syncNow();
+  check('resolved automatically via the /transactions/{reference} fallback, exactly like the send-money incident', withdrawals().get('bwit-marzbug').status === 'processed', withdrawals().get('bwit-marzbug'));
+
+  console.log('-- ...and if BOTH endpoints are broken, a bank-transfer withdrawal also correctly stays unresolved (never guesses) --');
+  seedBankProcessingWithdrawal('bwit-bothbroken', A, { amount: 22000, net: 18700, marzBankReference: 'BTX-BOTHBROKEN', ageMs: 60000 });
+  _bankStatusScript.set('BTX-BOTHBROKEN', { calls: 0, script: () => ({ ok: false, httpStatus: 500, body: { error: 'broken' } }) });
+  _transactionsScript.set('BTX-BOTHBROKEN', { calls: 0, script: () => ({ ok: false, httpStatus: 500, body: { error: 'also broken' } }) });
+  await syncNow();
+  check('stays "processing", not falsely resolved, when neither endpoint answers', withdrawals().get('bwit-bothbroken').status === 'processing', withdrawals().get('bwit-bothbroken'));
+
+  console.log('-- A genuinely failed bank transfer is still correctly declined and refunded --');
+  const balBeforeBankFail = userDoc(A).walletBalance;
+  seedBankProcessingWithdrawal('bwit-realfail', A, { amount: 15000, net: 12750, marzBankReference: 'BTX-REALFAIL', ageMs: 60000 });
+  _bankStatusScript.set('BTX-REALFAIL', { calls: 0, script: () => ({ ok: true, body: { data: { bank_transfer_request: { status: 'failed', reference: 'BTX-REALFAIL' } } } }) });
+  await syncNow();
+  check('genuinely failed bank transfer is declined, not processed', withdrawals().get('bwit-realfail').status === 'declined', withdrawals().get('bwit-realfail'));
+  check('wallet refunded for the real failure', userDoc(A).walletBalance === balBeforeBankFail + 15000, userDoc(A).walletBalance);
 
   console.log('\n== A genuinely failed payout is still correctly declined and refunded (not incorrectly marked processed) ==');
   const balBeforeFail = userDoc(A).walletBalance;
