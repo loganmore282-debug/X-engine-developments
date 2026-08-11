@@ -3902,6 +3902,18 @@ async function reconcilePendingWithdrawals() {
           t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
         }));
         settled++;
+      } else {
+        // Was silently swallowed with zero trace of WHY -- a withdrawal
+        // stuck in 'processing' with a status this codebase doesn't
+        // recognize as terminal loops here forever (every 30s), and since
+        // MarzPay only allows one send-money payout in flight per business
+        // account at a time, ONE stuck-and-invisible item like this blocks
+        // every OTHER pending withdrawal from ever being sent too -- with
+        // nothing in the logs explaining why. Logs the exact raw status
+        // string MarzPay (or its /transactions/{uuid} fallback) actually
+        // returned, so a genuinely still-in-flight payout is distinguishable
+        // from a status spelling this code just doesn't know about yet.
+        console.log(`reconcilePendingWithdrawals: ${doc.id} (${gatewayRef}) still unresolved -- MarzPay status: "${marzStatus || '(empty)'}"`);
       }
     }
   } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
