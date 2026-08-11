@@ -3312,7 +3312,35 @@ app.post('/admin/user/detail', async (req, res) => {
     const investments = invSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
     const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
     const bankAccounts = bankSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    res.json({ status: 'success', user: { id: snap.id, ...snap.data() }, investments, transactions, bankAccounts });
+    // The PIN is a one-way scrypt hash of a 4-digit value on purpose -- it
+    // can't be "shown" to admin, only reset (see /admin/user/reset-payout-pin
+    // below). Sending the raw hash here would let anyone with admin-panel
+    // access offline-brute-force it (10,000 combinations) with none of the
+    // 5-attempt/15-minute lockout that protects it online.
+    const userData = snap.data();
+    const hasPayoutPin = !!userData.payoutPinHash;
+    delete userData.payoutPinHash;
+    res.json({ status: 'success', user: { id: snap.id, ...userData, hasPayoutPin }, investments, transactions, bankAccounts });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Admin can never "view" a member's payout PIN -- it's a one-way hash by
+// design, same as a login password -- but a locked-out or forgetful member
+// still needs a way back in. This clears the PIN entirely (and any lockout
+// state), so the very next add/remove/bank-withdraw auto-provisions a fresh
+// one from whatever 4 digits that member types, exactly like a brand new
+// user who never had a PIN. Owner-only, same trust boundary as a password
+// reset.
+app.post('/admin/user/reset-payout-pin', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const uRef = db.collection('users').doc(userId);
+    const snap = await uRef.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    await uRef.update({ payoutPinHash: null, payoutPinFailCount: 0, payoutPinLockedUntil: null });
+    logAdminAction(req, 'payout_pin_reset', { userId });
+    res.json({ status: 'success', message: 'Payout PIN cleared. The member sets a new one automatically next time they add/remove a payout account or send a bank-transfer cash-out.' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // FIXED BUG: an owner reported a manual admin credit landing TWICE on the

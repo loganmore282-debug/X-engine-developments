@@ -718,6 +718,10 @@ async function openUser(uid){
     </tbody></table></div>`:'<p class="muted" style="margin:0">No chocolates purchased yet.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Saved cash-out accounts</h4>
     ${(r.bankAccounts||[]).length?(r.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holder||'Account')}</span><span>${esc(a.network||'')} · ${esc(a.phone||'')}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
+    <h4 style="margin:18px 0 8px;font-size:14px">Payout security PIN</h4>
+    <div class="kv"><span class="k">Status</span><span>${u.hasPayoutPin?'Set':'Not set yet'}</span></div>
+    <p class="muted" style="margin:2px 0 8px;font-size:12px">The PIN is one-way hashed -- it can never be viewed, only reset. Resetting clears it so the member sets a fresh one automatically next time they add/remove a payout account or send a bank-transfer cash-out.</p>
+    ${SESSION_ROLE==='owner'?`<button class="btn ghost sm" id="resetPinBtn" ${u.hasPayoutPin?'':'disabled'}>Reset payout PIN</button>`:'<p class="muted" style="margin:0">Resetting the PIN is owner-only.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
     <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td>${spinnerHtml()}</td></tr></tbody></table></div>`);
   const tx=(r.transactions||[]).slice(0,25);
@@ -755,6 +759,13 @@ async function openUser(uid){
     b.disabled=false; b.textContent='Reset password';
     toast(d.status==='success'?'Password reset, give it to the user':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success') $('pwNew').value='';
+  });
+  $('resetPinBtn')?.addEventListener('click', async()=>{
+    if(!confirm(`Clear the payout PIN for ${u.phone}? They will set a new one automatically next time they add/remove a payout account or send a bank-transfer cash-out.`)) return;
+    const b=$('resetPinBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Resetting…';
+    const d=await api('/admin/user/reset-payout-pin',{userId:uid});
+    toast(d.status==='success'?'Payout PIN cleared':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ closeModal(); } else { b.disabled=false; b.textContent=lbl; }
   });
   $('delBtn')?.addEventListener('click', async()=>{
     const typed = prompt(`This PERMANENTLY deletes ${u.phone} and ALL their data: deposits, withdrawals, chocolates, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);

@@ -206,6 +206,42 @@ async function freshFundedUser(uid, phone) {
   }
   check('nothing was ever saved for E across all the malformed attempts', bankAccountsOf(E).length === 0, bankAccountsOf(E));
 
+  console.log('\n== Admin can reset a payout PIN (never view it) ==');
+  const F = 'pin-user-f';
+  await freshFundedUser(F, '0771900601');
+  await call('POST', '/bank/save', { token: 'uid:' + F, body: { holder: 'F One', network: 'MTN Mobile Money', phone: '0771900601', pin: '9012' } });
+
+  let r2 = await adminCall('/admin/user/detail', { userId: F });
+  check('admin detail reports hasPayoutPin:true', r2.body?.user?.hasPayoutPin === true, r2.body?.user);
+  check('SECURITY: the raw PIN hash is never sent to the admin panel', !('payoutPinHash' in (r2.body?.user || {})), r2.body?.user);
+
+  r2 = await call('POST', '/admin/user/reset-payout-pin', { body: { userId: F } });
+  check('non-admin cannot reset a payout PIN', r2.code === 401, r2.body);
+
+  r2 = await adminCall('/admin/user/reset-payout-pin', { userId: F });
+  check('owner-admin reset succeeds', r2.body?.status === 'success', r2.body);
+  check('payoutPinHash actually cleared in the store', !userDoc(F).payoutPinHash, userDoc(F));
+
+  r2 = await adminCall('/admin/user/detail', { userId: F });
+  check('detail now reports hasPayoutPin:false after the reset', r2.body?.user?.hasPayoutPin === false, r2.body?.user);
+
+  console.log('-- After a reset, the OLD pin no longer works and a fresh one auto-provisions --');
+  r2 = await call('POST', '/bank/save', { token: 'uid:' + F, body: { holder: 'F Two', network: 'Airtel Money', phone: '0771900602', pin: '9012' } });
+  check('the pre-reset pin is treated as a brand new pin, not verified against nothing', r2.body?.status === 'success' && r2.body?.pinJustSet === true, r2.body);
+
+  console.log('-- Resetting an already-locked-out account also clears the lockout --');
+  const G = 'pin-user-g';
+  await freshFundedUser(G, '0771900701');
+  await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '1111' } });
+  for (let i = 0; i < 5; i++) {
+    await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '0000' } });
+  }
+  r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '1111' } });
+  check('sanity: account is locked even with the correct pin', r2.code === 400 && r2.body?.code === 'LOCKED', r2.body);
+  await adminCall('/admin/user/reset-payout-pin', { userId: G });
+  r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '2222' } });
+  check('reset clears the lockout too -- a fresh pin works immediately', r2.body?.status === 'success' && r2.body?.pinJustSet === true, r2.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });
