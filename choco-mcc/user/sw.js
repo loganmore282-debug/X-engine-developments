@@ -596,7 +596,12 @@
 // value the next time that account buys. Home screen's four quick-action
 // tiles (Add Funds/Cash Out/Rewards Hub/Support) now use the 3D icon
 // artwork instead of line-art SVGs.
-const CACHE = 'chocomcc-shell-v110';
+// v111: A declined/failed top-up or cash-out in Records now shows the
+// actual reason (an admin's typed rejection reason, or the server's own
+// failure message) -- the server was already sending it, this screen just
+// never displayed it, so every decline read as a bare "Declined" with no
+// explanation at all.
+const CACHE = 'chocomcc-shell-v111';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

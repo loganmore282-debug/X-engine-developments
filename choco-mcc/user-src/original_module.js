@@ -1162,11 +1162,18 @@ function renderRecords(){
       : isBankWit
       ? '<div class="rec-line"><span>Account</span><b>'+esc(r.accountNumber||'')+'</b></div>'
       : '<div class="rec-line"><span>Number</span><b>'+esc(r.phone||'')+'</b></div>';
+    // A declined/failed record's reason (set by the admin on a manual
+    // reject, e.g. "Reject" on a withdrawal, or auto-set by the server on
+    // a provider-side failure) was already being sent by the server the
+    // whole time -- this screen just never showed it, so every decline
+    // read as a bare "Declined" with no explanation at all.
+    var reasonRow = (st.cls==='bad' && r.failureReason) ? '<div class="rec-line"><span>Reason</span><b>'+esc(r.failureReason)+'</b></div>' : '';
     return '<div class="rec-card"><div class="rec-head"><span class="rec-ref">'+esc(r.ref||'pending')+'</span><span class="rec-st '+st.cls+'">'+st.label+'</span></div>'+
       '<div class="rec-line"><span>Description</span><b>'+esc(desc)+'</b></div>'+
       '<div class="rec-line"><span>Amount</span><b>'+ugx(r.amount)+'</b></div>'+
       (!isTop && r.net!=null ? '<div class="rec-line"><span>Received</span><b>'+ugx(r.net)+'</b></div>' : '')+
       numberRow+
+      reasonRow+
       '<div class="rec-line"><span>Date</span><b>'+esc(stamp)+'</b></div></div>';
   }).join('');
 }
