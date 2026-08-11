@@ -3654,7 +3654,10 @@ app.post('/admin/withdraw/reject', async (req, res) => {
       // the credit lands leaves the refund un-paid but retryable, instead of
       // paid-but-still-'processing' — which every retry of this path (client
       // poll, webhook, reconciler) would refund again.
-      t.update(ref, { status: 'declined', failureReason: String(req.body.reason || 'Declined by admin') });
+      t.update(ref, {
+        status: 'declined', failureReason: String(req.body.reason || 'Declined by admin'),
+        declinedBy: req.adminUser?.username || 'owner-key', declinedAt: FieldValue.serverTimestamp()
+      });
       t.update(uRef, refund);
     }));
     logAdminAction(req, 'withdraw_force_declined', { withdrawalId: witId, reason: req.body.reason });
@@ -3909,6 +3912,55 @@ app.post('/admin/analytics', async (req, res) => {
     });
     bigWits.sort((a, b) => b.amount - a.amount);
 
+    // Who's actually approving/declining payouts, and how fast -- separate
+    // from the deposits/withdrawals volume above because it's about STAFF
+    // activity, not member activity. processedBy/declinedBy are the same
+    // identity logAdminAction already uses (adminUser.username, or
+    // 'owner-key' for the master key). Windowed to the same period as
+    // everything else so "this month's" staff activity is what shows.
+    const staffMap = {};
+    const staffTimeline = [];
+    const touchStaff = actor => (staffMap[actor] = staffMap[actor] || { actor, approvals: 0, declines: 0, amountApproved: 0, amountDeclined: 0, firstAt: null, lastAt: null });
+    witSnap.forEach(d => {
+      const w = d.data();
+      // processedBy/declinedBy mark an ADMIN ACTION happened, independent of
+      // the withdrawal's current status -- a fresh approval lands at
+      // 'processing' (still awaiting MarzPay's own confirmation) and only
+      // becomes 'processed' later once the reconciler/webhook catches up, so
+      // gating on status==='processed' here undercounts every recent
+      // approval. The two checks are deliberately NOT mutually exclusive: a
+      // withdrawal can be approved by one admin, fail at the gateway, and
+      // get declined/refunded by another -- both actions get credited to
+      // whoever actually did them.
+      if (w.processedBy) {
+        const ms = tsMillis(w.processedAt || w.createdAt);
+        if (ms >= sinceMs) {
+          const s = touchStaff(w.processedBy);
+          s.approvals++; s.amountApproved += w.amount || 0;
+          s.firstAt = s.firstAt === null ? ms : Math.min(s.firstAt, ms);
+          s.lastAt = s.lastAt === null ? ms : Math.max(s.lastAt, ms);
+          staffTimeline.push({ actor: w.processedBy, action: 'approved', phone: w.phone || w.accountName || '', amount: w.amount || 0, at: ms });
+        }
+      }
+      if (w.declinedBy) {
+        const ms = tsMillis(w.declinedAt || w.createdAt);
+        if (ms >= sinceMs) {
+          const s = touchStaff(w.declinedBy);
+          s.declines++; s.amountDeclined += w.amount || 0;
+          s.firstAt = s.firstAt === null ? ms : Math.min(s.firstAt, ms);
+          s.lastAt = s.lastAt === null ? ms : Math.max(s.lastAt, ms);
+          staffTimeline.push({ actor: w.declinedBy, action: 'declined', phone: w.phone || w.accountName || '', amount: w.amount || 0, at: ms });
+        }
+      }
+    });
+    const staffActionsTotal = Object.values(staffMap).reduce((s, x) => s + x.approvals + x.declines, 0);
+    const staffApprovals = {
+      byStaff: Object.values(staffMap)
+        .map(s => ({ ...s, totalHandled: s.approvals + s.declines, sharePct: staffActionsTotal ? Math.round((s.approvals + s.declines) / staffActionsTotal * 1000) / 10 : 0 }))
+        .sort((a, b) => b.totalHandled - a.totalHandled),
+      timeline: staffTimeline.sort((a, b) => b.at - a.at).slice(0, 40),
+    };
+
     let totalUsers = 0, newUsers = 0, activeInvestors = 0, investedAmount = 0, commissionsPaid = 0;
     const referrers = [], depositors = [];
     usersSnap.forEach(d => {
@@ -3982,7 +4034,7 @@ app.post('/admin/analytics', async (req, res) => {
         netFlow: depAmount - witAmount, totalUsers, newUsers, activeInvestors,
         investedAmount, commissionsPaid, teamRewardsPaid
       },
-      byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand, forecast,
+      byHour, bands, byDay, peakDepositHour, peakWithdrawHour, busiestBand, forecast, staffApprovals,
       topReferrers: referrers.slice(0, 10), topDepositors: depositors.slice(0, 10), biggestWithdrawals: bigWits.slice(0, 10)
     });
   } catch (e) { console.error('Analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }

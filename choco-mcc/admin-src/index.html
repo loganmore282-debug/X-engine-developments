@@ -432,54 +432,49 @@ async function refreshBadges(){
 
 // ── LIVE AUTO-REFRESH ──
 // Every tab auto-refreshes on its own, nobody should ever need to hit
-// Refresh (or worse, reload the page) to see current data. Two guards keep
-// this from ever clobbering something the admin is mid-typing: modalOpen()
+// Refresh (or worse, reload the page) to see current data -- but it must
+// never look or feel like a reload while doing it. Two guards keep this
+// from ever clobbering something the admin is mid-typing: modalOpen()
 // (edit dialogs live in the modal, e.g. products/gift codes) and
 // contentHasFocus() (a plain input sitting right on the tab itself, e.g.
 // Settings' rate fields or the Admins tab's "create admin" form) -- a tick
 // that would touch either just skips silently and tries again next cycle.
 let _live=true, _liveTimer=null;
 const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','promocodes','transactions','referrals','settings','admins','auditlog']);
-const RENDERERS={ dashboard:()=>renderDashboard(), analytics:()=>renderAnalytics(true), users:()=>renderUsers(), deposits:()=>renderDeposits(),
-  withdrawals:()=>renderWithdrawals(), products:()=>renderProducts(), banners:()=>renderBanners(),
-  promocodes:()=>renderPromoCodes(), transactions:()=>renderTransactions(), referrals:()=>renderReferrals(),
+// The list-style tabs (Users, Deposits, Withdrawals, Transactions,
+// Referrals) get their OWN quiet*() function here instead of the full
+// render*() -- those only refetch data and patch the table body + subtab
+// counts in place (see quietRefreshUsers() etc., next to each tab's other
+// functions), never touching the search box or rebuilding the panel shell.
+// That's what a full render*() on a timer used to do: wipe out whatever was
+// typed in the search box and snap the page back to the top of a now-longer
+// list every single tick -- the "page suddenly reloads to another area"
+// complaint. Everything else still gets a full render on tick (no per-user
+// state to lose there beyond scroll position, which is restored below).
+const RENDERERS={ dashboard:()=>renderDashboard(), analytics:()=>renderAnalytics(true), users:()=>quietRefreshUsers(), deposits:()=>quietRefreshDeposits(),
+  withdrawals:()=>quietRefreshWithdrawals(), products:()=>renderProducts(), banners:()=>renderBanners(),
+  promocodes:()=>renderPromoCodes(), transactions:()=>quietRefreshTransactions(), referrals:()=>quietRefreshReferrals(),
   settings:()=>renderSettings(), admins:()=>renderAdmins(), auditlog:()=>renderAuditLog() };
 function modalOpen(){ const m=$('modalRoot'); return m && !m.classList.contains('hidden'); }
 function contentHasFocus(){
   const c=$('content'), el=document.activeElement;
   return !!(c && el && el!==document.body && c.contains(el));
 }
-// The list-style tabs (Transactions, Deposits, Withdrawals, Referrals,
-// Users) each rebuild their WHOLE panel on every render -- search box
-// included -- because the panel also carries live counts/charts that only
-// the full API response has. Without this, a 5s live tick silently wiped
-// out whatever search text was typed and snapped the page back to the top
-// of a now-longer unfiltered list -- exactly the "affects me when I'm mid-
-// read" complaint. Each entry's draw() only touches the table body, so
-// re-running it after restoring the search value re-applies the filter
-// without another full rebuild.
-const LIVE_LIST_TABS = {
-  transactions: { search:'txSearch', draw:()=>drawTxns() },
-  deposits:     { search:'depSearch', draw:()=>drawDeps() },
-  withdrawals:  { search:'witSearch', draw:()=>drawWits() },
-  referrals:    { search:'refSearch', draw:()=>drawRefs() },
-  users:        { search:'userSearch', draw:()=>drawUsers() },
-};
 function liveTick(){
   if(document.hidden) return;
   refreshBadges().catch(()=>{});
   if(!_live || modalOpen() || contentHasFocus() || !LIVE_TABS.has(_tab)) return;
   const tab = _tab;
-  const cfg = LIVE_LIST_TABS[tab];
-  const searchVal = cfg && $(cfg.search) ? $(cfg.search).value : '';
   const scrollY = window.scrollY;
   Promise.resolve((RENDERERS[tab]||(()=>{}))()).then(()=>{
     if(staleTab(tab)) return; // admin switched tabs while this was loading -- don't touch whatever's shown now
-    if(cfg && searchVal && $(cfg.search)){ $(cfg.search).value = searchVal; cfg.draw(); }
     window.scrollTo(0, scrollY);
   }).catch(()=>{});
 }
-function startLive(){ if(_liveTimer) return; _liveTimer=setInterval(liveTick, 5000); }
+// 30s, not 5s -- pending approvals/deposits don't need second-by-second
+// polling, and a slower cadence means fewer chances to catch someone
+// mid-interaction even with the quiet-refresh functions above in place.
+function startLive(){ if(_liveTimer) return; _liveTimer=setInterval(liveTick, 30000); }
 function setLive(on){ _live=on; const d=$('liveDot'); if(d) d.style.background = on ? 'var(--ok)' : 'var(--sub)';
   $('liveBtn').style.opacity = on ? '1' : '.6'; }
 
@@ -561,6 +556,16 @@ async function renderAnalytics(silent){
   const bandCard=(key,label)=>{const b=a.bands[key]||{dep:0,wit:0};const on=a.busiestBand===key;
     return `<div class="stat" style="${on?'outline:2px solid var(--gold);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">deposits</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">withdrawals</div></div>`;};
   const f=a.forecast||{}; const fw=f.withdrawals||{}; const fd=f.deposits||{};
+  const sa=a.staffApprovals||{byStaff:[],timeline:[]};
+  const staffTable = sa.byStaff.length ? `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals (${a.period}-day)</h2>
+    <p class="muted" style="margin-top:0">Who's actually approving/declining payouts, and how much of the workload each person carries.</p>
+    <div class="table-scroll"><table><thead><tr><th>Staff</th><th>Approved</th><th>Declined</th><th>Handled</th><th>Share</th><th>Amount approved</th><th>Last action</th></tr></thead>
+    <tbody>${sa.byStaff.map(s=>`<tr><td><b>${esc(s.actor)}</b></td><td style="color:var(--ok)">${s.approvals}</td><td style="color:var(--danger)">${s.declines}</td>
+      <td>${s.totalHandled}</td><td>${s.sharePct}%</td><td>${ugx(s.amountApproved)}</td><td>${s.lastAt?fdate(s.lastAt):'—'}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="panel-card"><h2 class="sec" style="margin-top:0">Recent approval activity</h2>
+    <div class="table-scroll" style="max-height:280px"><table><thead><tr><th>When</th><th>Staff</th><th>Action</th><th>User</th><th>Amount</th></tr></thead>
+    <tbody>${sa.timeline.map(t=>`<tr><td>${fdate(t.at)}</td><td>${esc(t.actor)}</td><td style="color:${t.action==='approved'?'var(--ok)':'var(--danger)'}">${t.action==='approved'?'Approved':'Declined'}</td><td>${esc(t.phone||'')}</td><td>${ugx(t.amount)}</td></tr>`).join('')}</tbody></table></div></div>`
+    : `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals</h2><p class="muted" style="margin:0">No withdrawals approved or declined in this period yet.</p></div>`;
   $('content').innerHTML=`
     <div class="row" style="align-items:center;margin-bottom:6px"><h2 class="sec" style="flex:1;margin:0">Analytics</h2></div>
     <div class="seg">${[7,30,90].map(d=>`<button class="${_anPeriod===d?'on':''}" data-per="${d}">${d} days</button>`).join('')}</div>
@@ -605,7 +610,8 @@ async function renderAnalytics(silent){
       <tbody>${(a.topDepositors||[]).length?a.topDepositors.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No deposits yet</td></tr>'}</tbody></table></div></div>
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Biggest withdrawals</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Amount</th></tr></thead>
-      <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No withdrawals yet</td></tr>'}</tbody></table></div></div>`;
+      <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No withdrawals yet</td></tr>'}</tbody></table></div></div>
+    ${staffTable}`;
   document.querySelectorAll('[data-per]').forEach(b=>b.addEventListener('click',()=>{ _anPeriod=parseInt(b.dataset.per); renderAnalytics(); }));
 }
 
@@ -618,7 +624,7 @@ async function renderUsers(){
   _users = (r.users||[]).sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
   const isOwner = SESSION_ROLE === 'owner';
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Users (${_users.length})</h2>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="usersCount">Users (${_users.length})</h2>
       ${isOwner?`<button class="btn sm ghost" id="auditBtn" title="Recompute every balance from the transaction ledger and flag mismatches, duplicate credits and stuck withdrawals">Integrity audit</button>
       <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning totals from the transaction ledger">Recalculate totals</button>`:''}</div>
     <div class="panel-card"><input id="userSearch" placeholder="Search phone or referral code"></div>
@@ -679,6 +685,18 @@ function drawUsers(){
       <td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td>
     </tr>`).join('') : '<tr><td colspan="5" class="empty">No matching users</td></tr>') + note;
   document.querySelectorAll('#userRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
+}
+// Used by the live-refresh tick instead of renderUsers(): refetches the
+// data and patches just the header count + table rows, never touching the
+// search input or rebuilding the panel shell -- that's what was causing a
+// visible "reload" every few seconds while someone was mid-search or
+// mid-scroll. See liveTick() below.
+async function quietRefreshUsers(){
+  const r = await api('/admin/users');
+  if(staleTab('users') || !$('userRows')) return;
+  _users = (r.users||[]).sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
+  const h = $('usersCount'); if(h) h.textContent = `Users (${_users.length})`;
+  drawUsers();
 }
 async function openUser(uid){
   const r = await api('/admin/user/detail',{ userId:uid });
@@ -862,6 +880,24 @@ function drawDeps(){
     toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
   }));
 }
+// Live-refresh counterpart to renderDeposits() -- see quietRefreshUsers()
+// for why this exists instead of just calling renderDeposits() on a timer.
+// Deliberately skips rebuilding the processed-per-day chart (its own data
+// barely moves minute to minute, and re-running .chart's DOM would only add
+// back the flash this is meant to remove) -- that stays as of the last full
+// render/tab switch, everything else stays current.
+async function quietRefreshDeposits(){
+  const r = await api('/admin/deposits/list', {});
+  if(staleTab('deposits') || !$('depRows')) return;
+  _deps = r.deposits||[];
+  const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
+  const subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
+  document.querySelectorAll('[data-df]').forEach(b=>{
+    const k=b.dataset.df, l=(subs.find(s=>s[0]===k)||[])[1]||k;
+    b.textContent = `${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}`;
+  });
+  drawDeps();
+}
 
 // ── WITHDRAWALS ──
 let _wits=[], _witFilter='pending';
@@ -916,7 +952,7 @@ function drawWits(){
     const sendLabel = isBank ? 'Send via Bank Transfer' : 'Send via MarzPay';
     return `<tr class="clickable" data-uid="${esc(w.userId)}"><td>${fdate(w.createdAt)}</td><td>${who}${code?`<br><span class="muted">${esc(code)}</span>`:''}</td>
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.net)}</b></td><td>${dest}</td>
-    <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:''}</td>
+    <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">${sendLabel}</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :''}</td></tr>`;
@@ -933,6 +969,19 @@ function drawWits(){
   document.querySelectorAll('[data-proc]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); if(!confirm('Send this payout through MarzPay now?'))return; b.disabled=true;b.textContent='…'; const d=await api('/admin/withdraw/process',{withdrawalId:b.dataset.proc}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-rej]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); const reason=prompt('Reason for rejection? (funds are refunded to the user)','Rejected by admin'); if(reason===null)return; const d=await api('/admin/withdraw/reject',{withdrawalId:b.dataset.rej,reason}); toast(d.message||d.status,d.status==='success'?'ok':'err'); renderWithdrawals(); refreshBadges(); }));
   document.querySelectorAll('[data-vrf]').forEach(b=>b.addEventListener('click',async(e)=>{ e.stopPropagation(); const t=b.textContent; b.disabled=true;b.textContent='Checking…'; const d=await api('/admin/withdraw/verify',{withdrawalId:b.dataset.vrf}); b.disabled=false;b.textContent=t; if(d.status==='success'){ alert(`MarzPay verify\n\nOur record: ${d.ourStatus}\nMarzPay says: ${d.marzStatus}\n\n${d.message}`); } else { toast(d.message||'Verify failed','err'); } }));
+}
+// Live-refresh counterpart to renderWithdrawals() -- see quietRefreshUsers().
+async function quietRefreshWithdrawals(){
+  const r = await api('/admin/withdrawals/list', {});
+  if(staleTab('withdrawals') || !$('witRows')) return;
+  _wits = r.withdrawals||[];
+  const counts = r.counts || {};
+  const subs = [['pending','Pending'],['processing','Processing'],['processed','Processed'],['declined','Declined'],['all','All']];
+  document.querySelectorAll('[data-wf]').forEach(b=>{
+    const k=b.dataset.wf, l=(subs.find(s=>s[0]===k)||[])[1]||k;
+    b.textContent = `${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}`;
+  });
+  drawWits();
 }
 
 // ── PRODUCTS ──
@@ -1275,6 +1324,15 @@ function drawTxns(){
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
   document.querySelectorAll('#txRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
+// Live-refresh counterpart to renderTransactions() -- see
+// quietRefreshUsers(). No counts to patch here, the subtabs are plain
+// labels, so this is just fresh data + drawTxns().
+async function quietRefreshTransactions(){
+  const r = await api('/admin/transactions/list', { limit: 400 });
+  if(staleTab('transactions') || !$('txRows')) return;
+  _txns = r.transactions||[];
+  drawTxns();
+}
 
 // ── REFERRALS ──
 let _refs=[];
@@ -1283,7 +1341,7 @@ async function renderReferrals(){
   if(staleTab('referrals')) return;
   _refs = r.referrals||[];
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Referrals (${_refs.length})</h2></div>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="refsCount">Referrals (${_refs.length})</h2></div>
     <div class="panel-card" style="margin-bottom:12px"><input id="refSearch" placeholder="Search a phone number"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Referrer</th><th>New user</th><th>Invested by new user</th></tr></thead>
     <tbody id="refRows"></tbody></table></div>`;
@@ -1294,6 +1352,14 @@ function drawRefs(){
   const raw = ($('refSearch')?.value||'').trim().toLowerCase();
   const list = raw ? _refs.filter(x => (x.referrerPhone||'').toLowerCase().includes(raw) || (x.referredPhone||'').toLowerCase().includes(raw)) : _refs;
   $('refRows').innerHTML = list.length?list.map(x=>`<tr><td>${fdate(x.createdAt)}</td><td><b>${esc(x.referrerPhone||'')}</b></td><td>${esc(x.referredPhone||'')}</td><td>${ugx(x.referredInvested)}</td></tr>`).join(''):`<tr><td colspan="4" class="empty">${raw?'No matching referrals':'No referrals yet'}</td></tr>`;
+}
+// Live-refresh counterpart to renderReferrals() -- see quietRefreshUsers().
+async function quietRefreshReferrals(){
+  const r = await api('/admin/referrals/list');
+  if(staleTab('referrals') || !$('refRows')) return;
+  _refs = r.referrals||[];
+  const h = $('refsCount'); if(h) h.textContent = `Referrals (${_refs.length})`;
+  drawRefs();
 }
 
 // ── SETTINGS ──
