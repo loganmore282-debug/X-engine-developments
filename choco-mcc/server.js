@@ -269,13 +269,27 @@ function tsMillis(v) {
 // Same synthetic-email scheme the client uses (phoneToEmail in index.html) —
 // kept here only for endpoints that need to derive it server-side.
 function phoneToEmail(phone) { return String(phone).replace(/\D/g, '').replace(/^0+/, '') + '@choco-mcc.com'; }
+// STRICT on purpose. The old version's first check -- starts with "256" AND
+// is >=12 digits, no upper bound -- let anything through: a mistyped
+// +25625607541000 (14 digits) passed straight to MarzPay's /send-money as
+// phone_number, which is exactly how one real payout got stuck "processing"
+// forever with MarzPay throwing an internal error on that malformed number
+// (and, since MarzPay only allows one send-money payout in flight per
+// business account, silently blocked every OTHER pending withdrawal too).
+// Every real Uganda mobile number is the country code (256) plus EXACTLY 9
+// digits, the first of which is always 7 (all UG mobile prefixes are 07x)
+// -- MarzPay's own send-money/collect-money docs use this same
+// +2567XXXXXXXX shape. Returns null on anything that doesn't reduce to
+// exactly that, so a garbled/wrong-country number is rejected outright
+// instead of silently being accepted and forwarded to the gateway.
 function cleanPhone(raw) {
   const s = String(raw || '').replace(/\D/g, '');
-  if (s.startsWith('256') && s.length >= 12) return '+' + s;
-  if (s.startsWith('0')   && s.length === 10) return '+256' + s.slice(1);
-  if (s.length === 9)  return '+256' + s;
-  if (s.length === 12 && s.startsWith('256')) return '+' + s;
-  return '+256' + s;
+  let local9 = null;
+  if (s.startsWith('256') && s.length === 12) local9 = s.slice(3);
+  else if (s.startsWith('0') && s.length === 10) local9 = s.slice(1);
+  else if (s.length === 9) local9 = s;
+  if (!local9 || !/^7\d{8}$/.test(local9)) return null;
+  return '+256' + local9;
 }
 // Whitelisted mobile-money networks — every endpoint that stores a `network`
 // value (deposit, bank-account binding, withdrawal) validates against this
@@ -1307,7 +1321,14 @@ app.get('/public/activity-feed', async (_req, res) => {
 app.post('/account/create-profile', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const phone = cleanPhone(req.body.phone || '');
+  // Not rejecting here on purpose -- this phone already succeeded as this
+  // user's Firebase login identity client-side before this call ever
+  // happens, so it's not the money-moving path cleanPhone()'s new strict
+  // rejection is meant to guard (payout binding/withdrawal, below). Falls
+  // back to the raw trimmed input rather than storing null so a profile
+  // phone that doesn't reduce to a clean UG mobile number is stored as-is,
+  // exactly like it always was, instead of becoming null.
+  const phone = cleanPhone(req.body.phone || '') || String(req.body.phone || '').trim();
   try {
     const ref = db.collection('users').doc(userId);
     const snap = await ref.get();
@@ -2147,8 +2168,16 @@ app.post('/withdraw/request', async (req, res) => {
     holder = stripHtml(req.body.holder);
     network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
     phone = cleanPhone(req.body.phone || '');
-    if (!holder || !network || !phone || phone.length < 10)
-      return res.status(400).json({ status: 'error', message: 'Bind a mobile-money account first.' });
+    if (!holder || !network) return res.status(400).json({ status: 'error', message: 'Bind a mobile-money account first.' });
+    // Was a loose length check that let a garbled number (e.g. a stray
+    // extra "256" mashed onto the front) straight through to MarzPay's
+    // send-money call -- that's exactly how one real payout ended up
+    // permanently stuck "processing" with MarzPay erroring on the bad
+    // number, which then blocked every OTHER withdrawal too (MarzPay only
+    // allows one send-money payout in flight per business account).
+    // cleanPhone() itself is strict now; rejected here BEFORE anything is
+    // reserved, with a message that says exactly what's wrong.
+    if (!phone) return res.status(400).json({ status: 'error', message: 'That mobile-money number is not a valid Uganda number. Use the format 07XXXXXXXX or +2567XXXXXXXX, then bind it again.' });
   }
   try {
     const sett = await getSettings();
@@ -2543,7 +2572,19 @@ app.post('/bank/save', async (req, res) => {
   const holder = stripHtml(req.body.holder);
   const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
   const phone = cleanPhone(req.body.phone || '');
-  if (!holder || !network || phone.length < 10) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
+  if (!holder || !network) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
+  // This is THE bug that put +25625607541000 into a real payout: the old
+  // check here was phone.length < 10, which a garbled 14-digit number
+  // sailed straight past, got saved as a real payout destination, and
+  // later got sent to MarzPay's send-money as-is -- MarzPay choked on it
+  // and left that one withdrawal stuck "processing" forever, which then
+  // blocked every OTHER pending withdrawal too (MarzPay only allows one
+  // send-money payout in flight per business account at a time).
+  // cleanPhone() itself now only accepts a real Uganda mobile number
+  // (256 + exactly 9 digits, starting with 7) and returns null otherwise,
+  // so this is rejected right here, before it's ever saved as a payout
+  // destination.
+  if (!phone) return res.status(400).json({ status: 'error', message: 'That is not a valid Uganda mobile-money number. Use the format 07XXXXXXXX or +2567XXXXXXXX.' });
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
