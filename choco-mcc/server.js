@@ -2977,7 +2977,26 @@ app.post('/admin/admins/delete', async (req, res) => {
   try {
     await db.collection('adminUsers').doc(username).delete();
     await invalidateSessionsFor(username);
-    logAdminAction(req, 'admin_deleted', { username });
+    // Clear the NAME wherever it's stamped as "who did this" -- the
+    // Withdrawals list, the Analytics staff table (computed live off these
+    // same fields, so this alone is enough to drop them from it), and the
+    // Audit Log -- while leaving the underlying record completely intact
+    // (status, amount, processedAt/declinedAt). That's the actual ask: no
+    // lingering name once someone's removed, but a MEMBER's own withdrawal
+    // history and running balance must never be corrupted by staff
+    // turnover -- /admin/integrity recomputes every balance straight off
+    // these same transaction/withdrawal records.
+    const clearField = async (collection, field) => {
+      const snap = await db.collection(collection).where(field, '==', username).get();
+      await Promise.all(snap.docs.map(d => d.ref.update({ [field]: null })));
+      return snap.docs.length;
+    };
+    const [processedCleared, declinedCleared, auditCleared] = await Promise.all([
+      clearField('withdrawals', 'processedBy'),
+      clearField('withdrawals', 'declinedBy'),
+      clearField('adminAuditLog', 'actor'),
+    ]);
+    logAdminAction(req, 'admin_deleted', { username, nameStampsCleared: { processedCleared, declinedCleared, auditCleared } });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
