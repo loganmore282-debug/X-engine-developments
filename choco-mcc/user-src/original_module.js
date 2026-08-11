@@ -1281,7 +1281,10 @@ async function deleteBankAccount(id){
   if(_deletingBankId) return;
   _deletingBankId = id;
   try{
-    var r = await api('/bank/delete', { id:id });
+    var r = await withPayoutPin(function(pin){
+      return api('/bank/delete', { id:id, pin:pin });
+    });
+    if(!r) return; // cancelled at the PIN prompt
     if(r.status!=='success'){ toast(r.message||'Could not remove the account'); return; }
     var wasDefaultId = (STATE.bankAccounts[STATE.defaultBankIdx]||{}).id;
     var bankR = await api('/bank/list');
@@ -1294,7 +1297,7 @@ async function deleteBankAccount(id){
     STATE.defaultBankIdx = stillIdx >= 0 ? stillIdx : 0;
     saveState();
     renderBankList(); renderWitBankBox();
-    toast('Account removed');
+    toast(r.pinJustSet ? 'Account removed. Your payout PIN is now set for next time.' : 'Account removed');
   } finally {
     _deletingBankId = null;
   }
@@ -1319,16 +1322,19 @@ async function saveBankAccount(){
   var phone = document.getElementById('npPhone').value.trim();
   if(!holder || !phone){ toast('Enter the account holder name and phone'); return; }
   var btn = document.getElementById('npSaveBtn'), label = btn ? btn.textContent : '';
-  if(btn){ if(btn.disabled) return; btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…'); }
+  if(btn){ if(btn.disabled) return; btn.disabled = true; }
   try{
-    var r = await api('/bank/save', { holder:holder, network:_pickedNetwork.network, phone:phone });
+    var r = await withPayoutPin(function(pin){
+      return api('/bank/save', { holder:holder, network:_pickedNetwork.network, phone:phone, pin:pin });
+    }, btn);
+    if(!r) return; // cancelled at the PIN prompt
     if(r.status!=='success'){ toast(r.message||'Could not save the account'); return; }
     var bankR = await api('/bank/list');
     if(bankR.status==='success') STATE.bankAccounts = bankR.accounts;
     if(STATE.bankAccounts.length===1) STATE.defaultBankIdx = 0;
     saveState();
     closeNetworkPicker(); renderBankList(); renderWitBankBox();
-    toast('Account bound');
+    toast(r.pinJustSet ? 'Account bound. Your payout PIN is now set for next time.' : 'Account bound');
   } finally {
     if(btn){ btn.disabled = false; btn.textContent = label; }
   }
@@ -1554,6 +1560,86 @@ function shakeVibrate(){
   }
   if(navigator.vibrate) navigator.vibrate([60,40,60]);
 }
+/* ====================== PAYOUT SECURITY PIN ====================== */
+// A 4-digit PIN guards adding/removing a mobile-money payout account and
+// every bank-transfer withdrawal (bank-transfer has no persistent "bind"
+// step -- the destination is typed fresh each time -- so the PIN gate
+// sits directly on that withdrawal request instead). The server
+// auto-provisions the PIN from whatever 4 digits are typed the first time
+// any of those actions is attempted, so existing members with accounts
+// already saved never hit a separate mandatory setup screen.
+var _pinResolve = null;
+function openPayoutPinSheet(title, sub, err){
+  document.getElementById('pinSheetTitle').textContent = title;
+  document.getElementById('pinSheetSub').textContent = sub;
+  var errEl = document.getElementById('pinSheetErr');
+  errEl.textContent = err || '';
+  errEl.style.display = err ? '' : 'none';
+  var inp = document.getElementById('pinSheetInput');
+  inp.value = '';
+  document.getElementById('payoutPinBg').classList.add('show');
+  setTimeout(function(){ inp.focus(); }, 60);
+}
+function closePayoutPinSheet(){
+  document.getElementById('payoutPinBg').classList.remove('show');
+  if(_pinResolve){ var r = _pinResolve; _pinResolve = null; r(null); }
+}
+function _pinSheetSubmit(){
+  var inp = document.getElementById('pinSheetInput');
+  var v = inp.value.trim();
+  if(!/^\d{4}$/.test(v)){ shakeVibrate(inp); return; }
+  document.getElementById('payoutPinBg').classList.remove('show');
+  if(_pinResolve){ var r = _pinResolve; _pinResolve = null; r(v); }
+}
+function askPayoutPin(title, sub, err){
+  return new Promise(function(resolve){
+    _pinResolve = resolve;
+    openPayoutPinSheet(title, sub, err);
+  });
+}
+// Prompts for the PIN and calls action(pin); on a wrong guess it re-prompts
+// with the server's own message until it succeeds, gets locked out, or the
+// member cancels (resolves null). `btn`, if given, gets a busy state only
+// while the actual request for that attempt is in flight.
+async function withPayoutPin(action, btn){
+  var label = btn ? btn.textContent : '';
+  var sub = "Enter your 4-digit PIN to continue. First time? Choose one now — it'll be saved for next time.";
+  var err = '';
+  while(true){
+    var pin = await askPayoutPin('Payout Security PIN', sub, err);
+    if(pin===null) return null;
+    if(btn) btn.innerHTML = btnBusyHtml('Please wait…');
+    var r = await action(pin);
+    if(btn) btn.textContent = label;
+    if(r.status==='success') return r;
+    if(r.code==='WRONG_PIN'){ err = r.message || 'Incorrect PIN. Try again.'; continue; }
+    toast(r.message || 'Could not verify your PIN');
+    return r;
+  }
+}
+function openChangePayoutPin(){
+  document.getElementById('cpOldPin').value = '';
+  document.getElementById('cpNewPin').value = '';
+  document.getElementById('changePinErr').style.display = 'none';
+  document.getElementById('changePinBg').classList.add('show');
+}
+function closeChangePayoutPin(){ document.getElementById('changePinBg').classList.remove('show'); }
+async function doChangePayoutPin(){
+  var oldPin = document.getElementById('cpOldPin').value.trim();
+  var newPin = document.getElementById('cpNewPin').value.trim();
+  var errEl = document.getElementById('changePinErr');
+  if(!/^\d{4}$/.test(oldPin) || !/^\d{4}$/.test(newPin)){
+    errEl.textContent = 'Both PINs must be exactly 4 digits.'; errEl.style.display = '';
+    return;
+  }
+  var btn = document.getElementById('cpSubmitBtn'), label = btn.textContent;
+  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
+  var r = await api('/account/payout-pin/change', { oldPin:oldPin, newPin:newPin });
+  btn.disabled = false; btn.textContent = label;
+  if(r.status!=='success'){ errEl.textContent = r.message || 'Could not change the PIN'; errEl.style.display = ''; return; }
+  closeChangePayoutPin();
+  toast('Payout PIN updated');
+}
 async function doWithdraw(){
   var sett = getSettings();
   var amt = parseInt(document.getElementById('witAmt').value,10)||0;
@@ -1575,9 +1661,23 @@ async function doWithdraw(){
   }
 
   var btn = document.getElementById('witGoBtn'), label = btn.textContent;
-  btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-  var r = await api('/withdraw/request', payload);
-  btn.disabled = false; btn.textContent = label;
+  var r;
+  if(_witMethod==='bank'){
+    // Bank transfer has no persistent "bind" step -- the destination is
+    // typed fresh on every request -- so the PIN gate sits directly on the
+    // withdrawal request itself instead of a separate bind/delete call.
+    btn.disabled = true;
+    r = await withPayoutPin(function(pin){
+      payload.pin = pin;
+      return api('/withdraw/request', payload);
+    }, btn);
+    btn.disabled = false; btn.textContent = label;
+    if(!r) return; // cancelled at the PIN prompt
+  } else {
+    btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
+    r = await api('/withdraw/request', payload);
+    btn.disabled = false; btn.textContent = label;
+  }
   if(r.status!=='success'){ toast(r.message||'Could not process the cash-out'); return; }
   document.getElementById('witAmt').value=''; renderWitCalc();
   if(_witMethod==='bank'){ document.getElementById('witBankAccName').value=''; document.getElementById('witBankAccNum').value=''; }

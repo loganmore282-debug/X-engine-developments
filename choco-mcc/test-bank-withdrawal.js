@@ -122,7 +122,7 @@ async function setupFundedUser(uid, phone, balance) {
   u.walletBalance = balance;
   u.totalInvested = balance; // clears requireInvestToWithdraw
 }
-const bankBody = (over) => Object.assign({ method: 'bank', bankName: 'Stanbic Bank', accountName: 'John Doe', accountNumber: '9988776655' }, over);
+const bankBody = (over) => Object.assign({ method: 'bank', bankName: 'Stanbic Bank', accountName: 'John Doe', accountNumber: '9988776655', pin: '1234' }, over);
 
 (async () => {
   await new Promise(r => setTimeout(r, 600));

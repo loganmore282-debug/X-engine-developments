@@ -601,7 +601,15 @@
 // failure message) -- the server was already sending it, this screen just
 // never displayed it, so every decline read as a bare "Declined" with no
 // explanation at all.
-const CACHE = 'chocomcc-shell-v111';
+// v112: Payout Security PIN -- a 4-digit PIN now guards adding/removing a
+// mobile-money payout account and every bank-transfer cash-out request
+// (bank transfer has no persistent "bind" step, so the PIN gate sits on
+// the withdrawal request itself instead). The server auto-provisions the
+// PIN from whatever 4 digits are typed the first time any of those
+// actions is attempted, so members with accounts already saved just set
+// it in passing next time they add or remove one -- no separate mandatory
+// setup screen. Payout Account also gets a "Change payout PIN" link.
+const CACHE = 'chocomcc-shell-v112';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

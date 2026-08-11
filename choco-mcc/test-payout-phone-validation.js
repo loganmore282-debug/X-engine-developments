@@ -140,7 +140,7 @@ async function freshFundedUser() {
   ];
   for (const [label, phone] of goodCases) {
     const uid = await freshFundedUser();
-    r = await call('POST', '/bank/save', { token: 'uid:' + uid, body: { holder: 'Test', network: 'Airtel Money', phone } });
+    r = await call('POST', '/bank/save', { token: 'uid:' + uid, body: { holder: 'Test', network: 'Airtel Money', phone, pin: '1234' } });
     check(`accepted: ${label} ("${phone}")`, r.body?.status === 'success', r.body);
     check(`  -> stored normalized as +2567XXXXXXXX`, bankAccountsOf(uid)[0]?.phone === '+256771234567', bankAccountsOf(uid));
   }

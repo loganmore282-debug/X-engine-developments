@@ -144,7 +144,7 @@ async function setupUser(uid, phone) {
   console.log('\n-- An active (non-banned) account can still bind normally --');
   const G = 'active-bank-user';
   await setupUser(G, '0771000204');
-  r = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'Active Guy', network: 'MTN Mobile Money', phone: '0771000204' } });
+  r = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'Active Guy', network: 'MTN Mobile Money', phone: '0771000204', pin: '1234' } });
   check('a normal active account can still bind a payout account', r.body?.status === 'success', r.body);
 
   console.log(`\n${pass} passed, ${fail} failed`);

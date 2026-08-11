@@ -63,13 +63,13 @@ async function setupUser(uid, phone) {
   console.log('\n== Owner can delete their own bound account ==');
   const A = 'alice-uid';
   await setupUser(A, '0771000001');
-  await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: 'Alice One', network: 'MTN Mobile Money', phone: '700111222' } });
-  await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: 'Alice Two', network: 'Airtel Money', phone: '700333444' } });
+  await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: 'Alice One', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
+  await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: 'Alice Two', network: 'Airtel Money', phone: '700333444', pin: '1234' } });
   let list = await call('GET', '/bank/list', { token: 'uid:' + A });
   check('two accounts bound', list.body?.accounts?.length === 2, list.body);
   const firstId = list.body.accounts[0].id;
 
-  const del = await call('POST', '/bank/delete', { token: 'uid:' + A, body: { id: firstId } });
+  const del = await call('POST', '/bank/delete', { token: 'uid:' + A, body: { id: firstId, pin: '1234' } });
   check('delete succeeds', del.body?.status === 'success', del.body);
   list = await call('GET', '/bank/list', { token: 'uid:' + A });
   check('exactly one account remains', list.body?.accounts?.length === 1, list.body);
@@ -78,7 +78,7 @@ async function setupUser(uid, phone) {
   console.log('\n-- A signed-in user can never delete someone else\'s bound account --');
   const B = 'bob-uid';
   await setupUser(B, '0771000002');
-  const bobSave = await call('POST', '/bank/save', { token: 'uid:' + B, body: { holder: 'Bob Holder', network: 'MTN Mobile Money', phone: '700555666' } });
+  const bobSave = await call('POST', '/bank/save', { token: 'uid:' + B, body: { holder: 'Bob Holder', network: 'MTN Mobile Money', phone: '700555666', pin: '4321' } });
   const bobList = await call('GET', '/bank/list', { token: 'uid:' + B });
   const bobAccountId = bobList.body.accounts[0].id;
 

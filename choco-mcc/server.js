@@ -2182,6 +2182,7 @@ app.post('/withdraw/request', async (req, res) => {
     // reserved, with a message that says exactly what's wrong.
     if (!phone) return res.status(400).json({ status: 'error', message: 'That mobile-money number is not a valid Uganda number. Use the format 07XXXXXXXX or +2567XXXXXXXX, then bind it again.' });
   }
+  let pinJustSet = false;
   try {
     const sett = await getSettings();
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
@@ -2200,6 +2201,14 @@ app.post('/withdraw/request', async (req, res) => {
         if (v.status !== 'success' && v.status !== 'sandbox')
           return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Could not verify this bank account. Check the bank name and account number.') });
       } catch (_) { /* validation check itself failed -- proceed, the real transfer attempt will surface any genuine problem */ }
+      // Bank transfer has no separate "bind a payout account" step the way
+      // mobile money does -- the destination is typed fresh into every
+      // single request -- so THIS is the moment an unauthorized session
+      // could redirect a payout, and the PIN gate has to sit right here
+      // instead of on a bind endpoint. Checked before anything is reserved.
+      const pinCheck = await _payoutPinCheck(userId, req.body.pin, true);
+      if (!pinCheck.ok) return res.status(400).json({ status: 'error', code: pinCheck.code, message: pinCheck.message });
+      pinJustSet = !!pinCheck.justSet;
     }
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
@@ -2252,7 +2261,7 @@ app.post('/withdraw/request', async (req, res) => {
     // sendAdminPush is the owner's OWN push notification (not shown to the
     // member) -- it's fine, and meant, to say "awaiting approval" here.
     sendWithdrawalPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}), awaiting approval`, witId);
-    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: `Cash-out requested — processing now` });
+    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, pinJustSet, message: `Cash-out requested — processing now` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
@@ -2567,6 +2576,89 @@ app.post('/withdraw/callback', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// PAYOUT SECURITY PIN — guards every place a member can point their money
+// somewhere new: binding/removing a mobile-money payout account, and every
+// bank-transfer withdrawal (that rail never has a separate "bind" step --
+// the bank details are typed fresh into each request -- so the PIN gate
+// sits on the request itself instead). Without this, anyone who gets into
+// a signed-in session (a shared/stolen phone, a hijacked browser tab) could
+// silently redirect future payouts to their own number with no extra
+// friction at all.
+// ═══════════════════════════════════════════
+// A 4-digit PIN is a password with only 10,000 possibilities -- verified
+// the exact same way admin passwords are (scryptHash/scryptVerify above:
+// salted, one-way, timing-safe compare; the PIN itself is never stored or
+// recoverable in plaintext, matching what "encrypted" should actually mean
+// for a secret like this), but ALSO needs a hard lockout or it's trivially
+// brute-forceable in minutes even against 60/min rate limiting alone.
+// Failure count + lock timestamp are persisted on the user doc itself
+// (not an in-memory map) so a lockout survives a server restart.
+const PAYOUT_PIN_LOCK_MS = 15 * 60 * 1000;
+const PAYOUT_PIN_MAX_FAILS = 5;
+// allowAutoSetup=true (bind/delete/bank-withdraw): a member with no PIN yet
+// has whatever they type here become their PIN, and it authorizes this one
+// action in the same step -- no separate mandatory "set up your PIN first"
+// screen before their very first bind. allowAutoSetup=false (changing an
+// existing PIN) requires one to already exist; there's nothing to change
+// from otherwise.
+async function _payoutPinCheck(userId, pin, allowAutoSetup) {
+  if (!/^\d{4}$/.test(String(pin || '')))
+    return { ok: false, code: 'INVALID_PIN', message: 'Enter your 4-digit payout security PIN.' };
+  return withLock('pin:' + userId, async () => {
+    const uRef = db.collection('users').doc(userId);
+    const snap = await uRef.get();
+    if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Account not found' };
+    const u = snap.data();
+    const now = Date.now();
+    if (u.payoutPinLockedUntil && tsMillis(u.payoutPinLockedUntil) > now) {
+      const mins = Math.ceil((tsMillis(u.payoutPinLockedUntil) - now) / 60000);
+      return { ok: false, code: 'LOCKED', message: `Too many wrong PIN attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.` };
+    }
+    if (!u.payoutPinHash) {
+      if (!allowAutoSetup) return { ok: false, code: 'NO_PIN', message: 'No payout PIN is set yet.' };
+      await uRef.update({ payoutPinHash: scryptHash(pin), payoutPinFailCount: 0, payoutPinLockedUntil: null });
+      return { ok: true, justSet: true };
+    }
+    if (!scryptVerify(pin, u.payoutPinHash)) {
+      const fails = (u.payoutPinFailCount || 0) + 1;
+      const update = { payoutPinFailCount: fails };
+      let locked = false;
+      if (fails >= PAYOUT_PIN_MAX_FAILS) { update.payoutPinLockedUntil = new Date(now + PAYOUT_PIN_LOCK_MS); update.payoutPinFailCount = 0; locked = true; }
+      await uRef.update(update);
+      return { ok: false, code: locked ? 'LOCKED' : 'WRONG_PIN', message: locked ? `Too many wrong PIN attempts. Try again in ${PAYOUT_PIN_LOCK_MS / 60000} minutes.` : 'Incorrect PIN.' };
+    }
+    await uRef.update({ payoutPinFailCount: 0 });
+    return { ok: true };
+  });
+}
+// So the client knows whether to show "Create your payout PIN" (first ever
+// bind/withdraw) or "Enter your payout PIN" (already set) without guessing.
+app.get('/account/payout-pin/status', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('users').doc(userId).get();
+    res.json({ status: 'success', hasPayoutPin: !!(snap.exists && snap.data().payoutPinHash) });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not check PIN status' });
+  }
+});
+app.post('/account/payout-pin/change', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const newPin = String(req.body.newPin || '');
+  if (!/^\d{4}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New PIN must be exactly 4 digits.' });
+  try {
+    const check = await _payoutPinCheck(userId, req.body.oldPin, false);
+    if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
+    await db.collection('users').doc(userId).update({ payoutPinHash: scryptHash(newPin) });
+    res.json({ status: 'success', message: 'Payout PIN changed.' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not change the PIN' });
+  }
+});
+
+// ═══════════════════════════════════════════
 // BIND BANK CARD
 // ═══════════════════════════════════════════
 app.post('/bank/save', async (req, res) => {
@@ -2591,8 +2683,13 @@ app.post('/bank/save', async (req, res) => {
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    // A payout account is exactly the kind of thing an unauthorized
+    // session (stolen/shared phone) could silently redirect -- gated the
+    // same way a bank rebind would be, right before it's ever saved.
+    const pinCheck = await _payoutPinCheck(userId, req.body.pin, true);
+    if (!pinCheck.ok) return res.status(400).json({ status: 'error', code: pinCheck.code, message: pinCheck.message });
     await db.collection('bankAccounts').add({ userId, holder, network, phone, createdAt: FieldValue.serverTimestamp() });
-    res.json({ status: 'success' });
+    res.json({ status: 'success', pinJustSet: !!pinCheck.justSet });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save the bank account' });
   }
@@ -2619,8 +2716,10 @@ app.post('/bank/delete', async (req, res) => {
     // proof this account belongs to the caller; without this any signed-in
     // user could delete anyone else's bound payout account by id.
     if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Account not found' });
+    const pinCheck = await _payoutPinCheck(userId, req.body.pin, true);
+    if (!pinCheck.ok) return res.status(400).json({ status: 'error', code: pinCheck.code, message: pinCheck.message });
     await ref.delete();
-    res.json({ status: 'success' });
+    res.json({ status: 'success', pinJustSet: !!pinCheck.justSet });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not remove the bank account' });
   }
