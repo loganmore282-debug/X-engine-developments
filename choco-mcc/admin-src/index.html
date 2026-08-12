@@ -912,9 +912,18 @@ function drawDeps(){
       ? `USDT (TRC20)${usdtBadge}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>`
       + (d.status==='rejected' && d.failureReason ? `<br><span class="muted" style="font-size:10.5px">${esc(d.failureReason)}</span>` : '')
       : 'Mobile Money';
+    // Both server-side already: /admin/deposit/force-credit and
+    // /admin/deposit/usdt/reject are verifyOwner-gated (crediting a deposit
+    // that was never actually verified by MarzPay's own webhook is a real
+    // money-safety decision, not a routine action). The buttons themselves
+    // now match that -- staff never sees them at all, same silent pattern
+    // as every other owner-only control, rather than seeing a button that
+    // just errors when they tap it.
     let actions = '';
-    if(stuck) actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
-    else if(awaiting) actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Approve</button> <button class="btn danger sm" data-reject="${esc(d.id)}">Reject</button>`;
+    if (SESSION_ROLE === 'owner') {
+      if(stuck) actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
+      else if(awaiting) actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Approve</button> <button class="btn danger sm" data-reject="${esc(d.id)}">Reject</button>`;
+    }
     return `<tr><td>${fdate(d.createdAt)}</td>
       <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
       <td>${method}</td>
