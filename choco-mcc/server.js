@@ -1349,63 +1349,77 @@ app.post('/account/create-profile', async (req, res) => {
   }
 });
 
+// Shared by the member's own self-service /register AND the owner-only
+// admin "Complete registration" reconciliation action (see
+// /admin/user/complete-registration below), so there is exactly ONE place
+// that ever assigns a referral code, links a referrer's team counts, or
+// credits the welcome bonus -- not two copies that could quietly drift
+// apart. Both call sites go through the SAME 'reg:'+userId lock, so if a
+// member's own client happens to retry /register at the exact moment an
+// admin clicks the fix, they cannot race each other into a double credit --
+// whichever gets the lock first completes registration and flips
+// registrationDone to true; the other sees that flag already set and stops
+// immediately, exactly like a normal retry always has.
+async function completeRegistrationCore(userId, referralCode) {
+  return withLock('reg:' + userId, async () => {
+    const userRef = db.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
+    if (userSnap.data().registrationDone)
+      return { code: 200, body: { status: 'already_done', referralCode: userSnap.data().referralCode || null } };
+
+    const code = String(referralCode || '').trim().toUpperCase();
+    let referrerId = null;
+    if (code) {
+      const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+      if (refSnap.empty)
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } };
+      if (refSnap.docs[0].id === userId)
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' } };
+      referrerId = refSnap.docs[0].id;
+    }
+
+    const myRefCode = await generateUniqueReferralCode();
+    const sett = await getSettings();
+    const WELCOME = Number(sett.welcomeBonus) || 0;
+    const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
+    if (referrerId) {
+      update.referredBy = referrerId;
+      await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+      const l1Snap = await db.collection('users').doc(referrerId).get();
+      const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
+      if (l2Id && l2Id !== referrerId) {
+        await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+        const l2Snap = await db.collection('users').doc(l2Id).get();
+        const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
+        if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+      }
+    }
+    // The user's own doc (registrationDone + the actual wallet credit) is
+    // written FIRST, in one update. If the process dies right after this,
+    // the user is already fully and correctly paid and marked done — a
+    // retried call hits the registrationDone guard above and stops
+    // immediately rather than re-running this block. The only possible
+    // casualty of an interruption is the ledger row below never getting
+    // written (cosmetic, not money) — never the reverse (a ledger row with
+    // no matching credit, or a double credit from a retry).
+    await userRef.update(update);
+    if (WELCOME > 0) {
+      const { date, time } = nowStr();
+      await db.collection('transactions').add({
+        userId, type: 'admin_credit', description: 'Welcome gift',
+        amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+    }
+    return { code: 200, body: { status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode } };
+  });
+}
 app.post('/register', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { referralCode } = req.body;
   try {
-    await withLock('reg:' + userId, async () => {
-      const userRef = db.collection('users').doc(userId);
-      const userSnap = await userRef.get();
-      if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-      if (userSnap.data().registrationDone)
-        return res.json({ status: 'already_done', referralCode: userSnap.data().referralCode || null });
-
-      const code = String(referralCode || '').trim().toUpperCase();
-      let referrerId = null;
-      if (code) {
-        const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
-        if (refSnap.empty)
-          return res.status(400).json({ status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' });
-        if (refSnap.docs[0].id === userId)
-          return res.status(400).json({ status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' });
-        referrerId = refSnap.docs[0].id;
-      }
-
-      const myRefCode = await generateUniqueReferralCode();
-      const sett = await getSettings();
-      const WELCOME = Number(sett.welcomeBonus) || 0;
-      const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
-      if (referrerId) {
-        update.referredBy = referrerId;
-        await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
-        const l1Snap = await db.collection('users').doc(referrerId).get();
-        const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
-        if (l2Id && l2Id !== referrerId) {
-          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
-          const l2Snap = await db.collection('users').doc(l2Id).get();
-          const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
-          if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
-        }
-      }
-      // The user's own doc (registrationDone + the actual wallet credit) is
-      // written FIRST, in one update. If the process dies right after this,
-      // the user is already fully and correctly paid and marked done — a
-      // retried /register hits the registrationDone guard above and stops
-      // immediately rather than re-running this block. The only possible
-      // casualty of an interruption is the ledger row below never getting
-      // written (cosmetic, not money) — never the reverse (a ledger row with
-      // no matching credit, or a double credit from a retry).
-      await userRef.update(update);
-      if (WELCOME > 0) {
-        const { date, time } = nowStr();
-        await db.collection('transactions').add({
-          userId, type: 'admin_credit', description: 'Welcome gift',
-          amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-        });
-      }
-      res.json({ status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode });
-    });
+    const result = await completeRegistrationCore(userId, req.body.referralCode);
+    res.status(result.code).json(result.body);
   } catch (e) {
     console.error('Register error:', e.message);
     res.status(500).json({ status: 'error', message: e.message });
@@ -3511,6 +3525,33 @@ app.post('/admin/user/set-phone', async (req, res) => {
     await ref.update({ phone });
     logAdminAction(req, 'user_phone_corrected', { userId, oldPhone, newPhone: phone });
     res.json({ status: 'success', message: `Phone corrected to ${phone}` });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Reconciliation for the registration_incomplete integrity alert: a member
+// whose profile exists but whose /register call never completed (a dropped
+// connection, a maintenance-mode window) -- no referral code, no welcome
+// bonus, invisible to whoever actually invited them. This finishes that
+// SAME flow server-side through the identical shared
+// completeRegistrationCore() the member's own client calls -- not an
+// improvised manual credit -- so the result is indistinguishable from a
+// normal successful signup, with the exact same protections: the shared
+// 'reg:'+userId lock means a member whose app reconnects and retries
+// /register on its own at the same moment can never be double-credited by
+// this (whichever gets the lock first wins, the other sees registrationDone
+// already true and stops), and the idempotent guard means clicking this
+// twice is always harmless. referralCode is optional -- exactly like
+// self-service registration, some members never had one to begin with.
+app.post('/admin/user/complete-registration', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId, referralCode } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const result = await completeRegistrationCore(userId, referralCode);
+    if (result.body?.status === 'success')
+      logAdminAction(req, 'registration_completed', {
+        userId, referralCode: result.body.referralCode, referrerId: result.body.referrerId, welcomeBonus: result.body.welcomeBonus
+      });
+    res.status(result.code).json(result.body);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // PERMANENT account deletion: removes the user and ALL their data, fixes the

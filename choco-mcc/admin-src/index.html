@@ -658,7 +658,7 @@ async function renderUsers(){
             : a.kind==='duplicate_credit'?`ref ${esc(String(a.ref))} credited ${a.times}×`
             : a.kind==='negative_balance'?ugx(a.balance)
             : a.kind==='phone_malformed'?`<button class="btn sm ghost" data-fixphone="${esc(a.userId)}" data-oldphone="${esc(a.phone||'')}">Fix phone</button>`
-            : a.kind==='registration_incomplete'?`${a.hours}h ago`
+            : a.kind==='registration_incomplete'?`${a.hours}h ago &nbsp; <button class="btn sm ghost" data-completereg="${esc(a.userId)}">Complete registration</button>`
             : `${ugx(a.amount||0)} · ${a.hours}h`}</span></div>`).join('')}
         <button class="btn block" onclick="closeModal()">Close</button>`);
       document.querySelectorAll('[data-fixphone]').forEach(b=>b.addEventListener('click', async ()=>{
@@ -669,6 +669,17 @@ async function renderUsers(){
         const r = await api('/admin/user/set-phone', { userId: uid, phone: correct.trim() });
         if(r.status==='success'){ toast(r.message||'Phone corrected','ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Fixed'; }
         else { toast(r.message||'Could not save that number','err'); b.disabled=false; b.textContent='Fix phone'; }
+      }));
+      document.querySelectorAll('[data-completereg]').forEach(b=>b.addEventListener('click', async ()=>{
+        const uid = b.dataset.completereg;
+        const code = prompt('Referral code they should be credited under, if you know who invited them (leave blank if nobody referred them):', '');
+        if(code===null) return;
+        if(!confirm('This finishes their signup for real: assigns their own referral code, credits the current welcome bonus to their wallet, and (if a referral code is entered) counts them toward that person\'s team. Continue?')) return;
+        b.disabled=true; b.textContent='Completing…';
+        const r = await api('/admin/user/complete-registration', { userId: uid, referralCode: code.trim() });
+        if(r.status==='success'){ toast(`Registration completed -- welcome bonus of ${ugx(r.welcomeBonus)} credited`,'ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Done'; }
+        else if(r.status==='already_done'){ toast('This account had already finished registering','ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Already done'; }
+        else { toast(r.message||'Could not complete registration','err'); b.disabled=false; b.textContent='Complete registration'; }
       }));
     });
   }
