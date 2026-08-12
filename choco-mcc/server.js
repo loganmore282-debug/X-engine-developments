@@ -3264,6 +3264,7 @@ app.get('/admin/integrity', async (req, res) => {
         alerts.push({ kind: 'duplicate_credit', userId, ref, times });
       }
     });
+    const now = Date.now();
     usersSnap.forEach(d => {
       const u = d.data();
       const bal = Number(u.walletBalance) || 0;
@@ -3271,8 +3272,24 @@ app.get('/admin/integrity', async (req, res) => {
       const ledger = ledgerByUser[d.id] || 0;
       const diff = Math.round(bal - ledger);
       if (Math.abs(diff) > 1) alerts.push({ kind: 'balance_mismatch', userId: d.id, phone: u.phone, balance: bal, ledger, diff });
+      // /account/create-profile deliberately never rejects a phone that
+      // doesn't reduce to a clean Uganda mobile number (it's this person's
+      // already-working Firebase login identity, not the money-moving path
+      // -- see the comment there) -- but that same leniency means a typo at
+      // signup (a dropped digit, stray characters) silently becomes a
+      // permanent, unsearchable phone with no format an admin can recognize
+      // or match against. Surfaced here so it's found by a sweep, not by a
+      // member complaining their referrer can't locate them.
+      if (u.phone && !cleanPhone(u.phone)) alerts.push({ kind: 'phone_malformed', userId: d.id, phone: u.phone });
+      // A profile that exists but never finished /register (no referral
+      // code assigned, no welcome bonus, invisible to any referrer's team)
+      // -- usually a create-profile that succeeded followed by a /register
+      // call that failed or was never retried (a dropped connection, a
+      // maintenance-mode window). Given an hour's grace so someone mid-
+      // signup right now isn't flagged.
+      if (!u.registrationDone && (now - tsMillis(u.createdAt)) / 3600000 > 1)
+        alerts.push({ kind: 'registration_incomplete', userId: d.id, phone: u.phone, hours: Math.round((now - tsMillis(u.createdAt)) / 3600000) });
     });
-    const now = Date.now();
     witSnap.forEach(d => {
       const w = d.data();
       const ageHours = (now - tsMillis(w.createdAt)) / 3600000;
@@ -3469,6 +3486,32 @@ app.post('/admin/user/reset-password', async (req, res) => {
       ? 'No Firebase login exists for this account.' : (e.message || 'Could not reset password');
     res.status(500).json({ status: 'error', message: msg });
   }
+});
+// Corrects a member's stored profile phone -- the reconciliation half of
+// the phone_malformed integrity alert above. Unlike /account/create-profile
+// (which deliberately accepts anything, since it's this person's ALREADY-
+// WORKING Firebase login identity), this is the owner deliberately fixing a
+// bad entry, so it's held to the same strict Uganda-mobile shape as a
+// payout number -- no point "fixing" one broken value into another.
+// Only touches the Firestore profile field (what search/display use) --
+// does NOT rename the member's Firebase Auth email, so they keep logging in
+// exactly the way they always have; this alone is what makes them findable
+// and correctly attributed to their referrer again.
+app.post('/admin/user/set-phone', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  const phone = cleanPhone(req.body.phone || '');
+  if (!phone) return res.status(400).json({ status: 'error', message: 'Enter a valid Uganda mobile number (07XXXXXXXX or +2567XXXXXXXX).' });
+  try {
+    const ref = db.collection('users').doc(userId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const oldPhone = snap.data().phone || '';
+    await ref.update({ phone });
+    logAdminAction(req, 'user_phone_corrected', { userId, oldPhone, newPhone: phone });
+    res.json({ status: 'success', message: `Phone corrected to ${phone}` });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // PERMANENT account deletion: removes the user and ALL their data, fixes the
 // referrer's team counts up the chain, and frees the phone number in

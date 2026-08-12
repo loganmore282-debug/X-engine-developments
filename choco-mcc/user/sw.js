@@ -609,7 +609,14 @@
 // actions is attempted, so members with accounts already saved just set
 // it in passing next time they add or remove one -- no separate mandatory
 // setup screen. Payout Account also gets a "Change payout PIN" link.
-const CACHE = 'chocomcc-shell-v112';
+// v113: Sign-up now rejects a malformed phone number (must be a real
+// 07XXXXXXXX-shaped Uganda mobile) before it ever becomes an account's
+// permanent identity -- previously anything typed was accepted as-is, so a
+// dropped digit at signup silently became a permanent, unsearchable phone
+// with no bonus/referral matching working right for that account. Existing
+// accounts are unaffected (their login still works exactly as before);
+// admin now has a way to detect and correct already-broken ones.
+const CACHE = 'chocomcc-shell-v113';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

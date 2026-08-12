@@ -339,6 +339,16 @@ document.getElementById('authGo').onclick = async function(){
   // habit. Rather than reject and make them fix it, just strip the leading
   // 0 ourselves so either form works with no friction.
   if(phone.charAt(0)==='0') phone = phone.slice(1);
+  if(authMode==='register'){
+    // This phone becomes the member's permanent Firebase login identity,
+    // support lookup key, and referral-matching field all at once -- a
+    // dropped digit or stray character here is garbled forever afterward
+    // (the server deliberately never re-rejects a profile phone once it's
+    // someone's already-working login, so an admin can only later correct
+    // the display/search copy, never restore the missing digits). This is
+    // the one moment that can actually stop it happening.
+    if(!/^7\d{8}$/.test(phone)){ toast('Enter a valid Uganda mobile number (07XXXXXXXX)'); shakeVibrate(document.getElementById('fPhone')); return; }
+  }
   if(pass.length < 6){ toast('Password must be at least 6 characters'); return; }
   if(authMode==='register'){
     var passConfirm = document.getElementById('fPassConfirm').value.trim();
