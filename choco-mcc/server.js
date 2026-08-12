@@ -41,6 +41,25 @@ function rlKeyByUser(req) {
 const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 400, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
+// SECURITY: rlKeyByUser trusts the uid CLAIMED in the token's payload
+// without verifying its signature (real verification happens later, inside
+// each handler, via verifyAuth/verifyAdmin) -- so on its own, a request
+// carrying a well-formed-but-fake Bearer token with a different fake uid
+// claimed each time gets a brand-new rate-limit bucket every single
+// request, on BOTH the limiter above and every per-route one below,
+// completely defeating them. No real data is ever at risk this way (the
+// forged token still fails real verification inside the handler), but the
+// limiters intended to bound abuse would not actually bound anything.
+// This second limiter is keyed purely by IP -- nothing claimed in a
+// request body or token header can change it -- so it can't be evaded the
+// same way. Deliberately looser than the per-user ceiling above (double
+// it) so it never re-introduces the exact problem per-user keying was
+// built to solve (real Ugandan carrier-NAT traffic sharing one IP); it
+// only ever becomes the binding constraint for someone actively rotating
+// fake identities to dodge the smarter limiter.
+const ipOnlyLimiter = rateLimit({ windowMs: 60 * 1000, max: 900, standardHeaders: false, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests from this network. Slow down.' } });
+app.use((req, res, next) => (req.path === '/health' ? next() : ipOnlyLimiter(req, res, next)));
 app.use((req, res, next) => (req.path === '/health' ? next() : globalLimiter(req, res, next)));
 
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser,
@@ -67,7 +86,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 ['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/usdt/submit', '/redeem', '/bank/save',
- '/bank/delete', '/account/create-profile', '/register', '/team/milestone/claim']
+ '/bank/delete', '/account/create-profile', '/register', '/team/milestone/claim', '/account/payout-pin/change']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
