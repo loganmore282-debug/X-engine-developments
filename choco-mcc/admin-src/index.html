@@ -757,7 +757,13 @@ async function openUser(uid){
     <div class="row">
       <div style="flex:2"><input id="phoneFix" type="text" placeholder="07XXXXXXXX"></div>
       <button class="btn sky sm" id="phoneFixBtn">Save phone</button>
-    </div>`:''}
+    </div>
+    ${!u.referredBy?`<label style="margin-top:14px">Attach referrer</label>
+    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">This account has no referrer. If you later learn who invited them, attach it here -- their upline gets team credit, and if this member already made their first purchase, commission on it is paid now. Works once only; an account that already has a referrer can't be changed here.</div>
+    <div class="row">
+      <div style="flex:2"><input id="attachRefCode" type="text" placeholder="Referrer's code"></div>
+      <button class="btn sky sm" id="attachRefBtn">Attach</button>
+    </div>`:''}`:''}
     <h4 style="margin:18px 0 8px;font-size:14px">Chocolates (${(r.investments||[]).length})</h4>
     ${(r.investments||[]).length?`<div class="table-scroll" style="max-height:170px"><table><tbody>
       ${r.investments.map(iv=>`<tr><td><b>${esc(iv.tierLabel||'Product')}</b></td><td>${ugx(iv.amount)}</td>
@@ -815,6 +821,16 @@ async function openUser(uid){
     const d=await api('/admin/user/set-phone',{userId:uid,phone:np});
     b.disabled=false; b.textContent=lbl;
     toast(d.message||(d.status==='success'?'Phone corrected':'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
+  });
+  $('attachRefBtn')?.addEventListener('click', async()=>{
+    const code=$('attachRefCode').value.trim();
+    if(!code) return toast('Enter the referral code','err');
+    if(!confirm(`Attach ${code} as this member's referrer? Their upline gets team credit now, and commission on this member's first purchase (if any) is paid immediately.`)) return;
+    const b=$('attachRefBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Attaching…';
+    const d=await api('/admin/user/attach-referrer',{userId:uid,referralCode:code});
+    b.disabled=false; b.textContent=lbl;
+    toast(d.status==='success'?(d.commissionTriggered?'Referrer attached, first-purchase commission credited':'Referrer attached'):(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
   });
   $('resetPinBtn')?.addEventListener('click', async()=>{

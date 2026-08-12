@@ -3554,6 +3554,89 @@ app.post('/admin/user/complete-registration', async (req, res) => {
     res.status(result.code).json(result.body);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Attaches a referrer to an account AFTER the fact -- the case where
+// /admin/user/complete-registration above was already used with no code
+// (nobody knew who invited them yet) and the real referrer surfaces later.
+// Deliberately narrow: only ever works on an account with NO referrer
+// currently set. Changing an ALREADY-correct referral link is a much bigger
+// operation (it would mean reversing commission already paid to the old
+// upline) and isn't what this is for -- rejected outright instead of
+// guessed at.
+//
+// Reuses existing, already-proven pieces rather than inventing new money
+// logic:
+//   - the same L1/L2/L3 team-count chain-walk completeRegistrationCore uses
+//   - creditReferralCommission() itself (the exact function /invest/create
+//     and the periodic reconciler call) to pay commission on the member's
+//     FIRST-EVER investment if they already made one before a referrer
+//     existed to credit. That function reads referredBy LIVE (just set
+//     below) and is idempotent per (investment, level) via
+//     commissionPaidLevels, so calling it here is exactly as safe as the
+//     reconciler re-invoking it after a restart -- it can never double-pay,
+//     and it naturally does nothing if this member hasn't invested yet
+//     (their next purchase, if it's their first, pays normally through the
+//     ordinary /invest/create path).
+//   - Task Center milestones need NO separate sync step at all:
+//     activeL1Count()/l1TeamDeposits() are computed LIVE off referredBy on
+//     every read, never cached -- the moment referredBy is set, the
+//     referrer's Task Center progress already reflects it.
+app.post('/admin/user/attach-referrer', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  const code = String(req.body.referralCode || '').trim().toUpperCase();
+  if (!code) return res.status(400).json({ status: 'error', message: 'Enter the referrer\'s referral code' });
+  try {
+    const result = await withLock('reg:' + userId, async () => {
+      const userRef = db.collection('users').doc(userId);
+      const userSnap = await userRef.get();
+      if (!userSnap.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
+      if (userSnap.data().referredBy)
+        return { code: 400, body: { status: 'error', message: 'This account already has a referrer -- attaching a different one isn\'t supported here (it would require reversing commission already paid).' } };
+
+      const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+      if (refSnap.empty) return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } };
+      const referrerId = refSnap.docs[0].id;
+      if (referrerId === userId) return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'A member cannot be their own referrer.' } };
+      // Defensive cycle guard: the normal client flow can never produce a
+      // loop (a brand new signup has no downline yet), but this admin tool
+      // can attach a referrer to an account that's been active -- possibly
+      // referring others of its own -- for a while. Bounded walk, this
+      // chain is never more than a handful of hops deep in practice.
+      let walk = referrerId, hops = 0;
+      while (walk && hops < 25) {
+        if (walk === userId) return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That would create a referral loop -- the chosen referrer is already downstream of this member.' } };
+        const s = await db.collection('users').doc(walk).get();
+        walk = s.exists ? s.data().referredBy : null;
+        hops++;
+      }
+
+      await userRef.update({ referredBy: referrerId });
+      await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+      const l1Snap = await db.collection('users').doc(referrerId).get();
+      const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
+      if (l2Id && l2Id !== referrerId) {
+        await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+        const l2Snap = await db.collection('users').doc(l2Id).get();
+        const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
+        if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+      }
+
+      let commissionTriggered = false;
+      const firstInvSnap = await db.collection('investments').where('userId', '==', userId).where('isFirstInvestment', '==', true).limit(1).get();
+      if (!firstInvSnap.empty) {
+        const inv = firstInvSnap.docs[0];
+        await creditReferralCommission(inv.id, userId, inv.data().amount);
+        commissionTriggered = true;
+      }
+
+      return { code: 200, body: { status: 'success', referrerId, commissionTriggered } };
+    });
+    if (result.body?.status === 'success')
+      logAdminAction(req, 'referrer_attached', { userId, referrerId: result.body.referrerId, referralCode: code, commissionTriggered: result.body.commissionTriggered });
+    res.status(result.code).json(result.body);
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 // PERMANENT account deletion: removes the user and ALL their data, fixes the
 // referrer's team counts up the chain, and frees the phone number in
 // Firebase so it can register again. Requires confirm:"DELETE".
