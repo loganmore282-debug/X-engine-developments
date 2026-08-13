@@ -3722,6 +3722,35 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
     res.status(result.code).json(result.body);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Single-user check-in streak reconciliation, on demand from the admin panel.
+// /checkin already self-heals on every call, so this is a visibility/control
+// tool for the owner rather than the only fix -- it reads the SAME real
+// 'checkin' transaction history and reports/writes the true streak right
+// now, without waiting for that member's next check-in. Never touches the
+// wallet; idempotent (a no-op write when the stored value is already correct).
+app.post('/admin/user/reconcile-checkin', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const userRef = db.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const before = { checkinStreak: userSnap.data().checkinStreak || 0, lastCheckin: userSnap.data().lastCheckin || null };
+
+    const ledgerSnap = await db.collection('transactions')
+      .where('userId', '==', userId).where('type', '==', 'checkin').limit(500).get();
+    const dayKeys = new Set();
+    ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
+    const real = computeCheckinStreak(dayKeys);
+    const after = { checkinStreak: real.streak, lastCheckin: real.lastCheckin };
+    const changed = before.checkinStreak !== after.checkinStreak || before.lastCheckin !== after.lastCheckin;
+    if (changed) await userRef.update({ checkinStreak: after.checkinStreak, lastCheckin: after.lastCheckin });
+
+    logAdminAction(req, 'checkin_reconciled', { userId, before, after, changed });
+    res.json({ status: 'success', before, after, changed });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 // PERMANENT account deletion: removes the user and ALL their data, fixes the
 // referrer's team counts up the chain, and frees the phone number in
 // Firebase so it can register again. Requires confirm:"DELETE".

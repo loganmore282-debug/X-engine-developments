@@ -737,7 +737,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Team commission</span><span>${ugx(u.teamCommission)}</span></div>
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
-    <div class="kv"><span class="k">Check-in streak</span><span>${u.checkinStreak||0}</span></div>
+    <div class="kv"><span class="k">Check-in streak</span><span id="streakVal">${u.checkinStreak||0}</span>${SESSION_ROLE==='owner'?` <button class="btn ghost sm" id="reconcileStreakBtn" title="Recompute this member's streak from their real check-in history right now" style="margin-left:8px">Reconcile</button>`:''}</div>
     ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned</div>`:''}
     <label>Amount (UGX)</label><input id="adjAmt" type="number" placeholder="0">
     <label>Note (optional)</label><input id="adjNote" placeholder="Reason">
@@ -839,6 +839,14 @@ async function openUser(uid){
     const d=await api('/admin/user/reset-payout-pin',{userId:uid});
     toast(d.status==='success'?'Payout PIN cleared':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); } else { b.disabled=false; b.textContent=lbl; }
+  });
+  $('reconcileStreakBtn')?.addEventListener('click', async()=>{
+    const b=$('reconcileStreakBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Checking…';
+    const d=await api('/admin/user/reconcile-checkin',{userId:uid});
+    b.disabled=false; b.textContent=lbl;
+    if(d.status!=='success') return toast(d.message||'Failed','err');
+    $('streakVal').textContent=d.after.checkinStreak;
+    toast(d.changed?`Streak corrected: ${d.before.checkinStreak} → ${d.after.checkinStreak}`:`Streak was already correct (${d.after.checkinStreak})`, 'ok');
   });
   $('delBtn')?.addEventListener('click', async()=>{
     const typed = prompt(`This PERMANENTLY deletes ${u.phone} and ALL their data: deposits, withdrawals, chocolates, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
