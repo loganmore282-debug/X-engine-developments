@@ -285,6 +285,44 @@ function tsMillis(v) {
   if (v instanceof Date) return v.getTime();
   return 0;
 }
+// The EAT calendar-day key a checkin transaction actually happened on,
+// derived fresh from its own createdAt timestamp -- never trusted from the
+// transaction's stored `date` string, so anything built on this is a
+// genuine independent recomputation, not just re-reading a cached value.
+function eatDayKey(ts) {
+  const d = new Date(tsMillis(ts) + 3 * 3600000);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+// Matches nowStr().date's zero-padded MM/DD/YYYY exactly -- that's the
+// format /checkin itself compares lastCheckin against, so a recomputed
+// value has to land in the identical shape or the very next real check-in
+// would wrongly see it as "not yesterday" and reset the streak all over
+// again.
+function dayKeyToLastCheckinFormat(key) {
+  const [y, m, d] = key.split('-');
+  return `${m}/${d}/${y}`;
+}
+// What checkinStreak/lastCheckin SHOULD be, purely from the real history of
+// 'checkin' transactions -- the length of the run of CONSECUTIVE calendar
+// days ending at the most recent actual check-in. This is exactly the
+// state repeated real, unbroken daily check-ins would produce on their
+// own; it never invents activity that didn't happen and never touches
+// wallet balance (the reward money for each real check-in was already
+// correctly paid at the time, verified by the very transactions this
+// reads). Used both by /checkin itself on every call (so a stale/corrupted
+// stored value can never keep silently breaking a real streak) and by the
+// admin recount tool below (for surfacing/logging what got corrected).
+function computeCheckinStreak(dayKeysSet) {
+  if (!dayKeysSet.size) return { streak: 0, lastCheckin: null };
+  const sorted = [...dayKeysSet].sort();
+  let streak = 1;
+  for (let i = sorted.length - 1; i > 0; i--) {
+    const cur = Date.parse(sorted[i] + 'T00:00:00Z');
+    const prev = Date.parse(sorted[i - 1] + 'T00:00:00Z');
+    if (cur - prev === 86400000) streak++; else break;
+  }
+  return { streak, lastCheckin: dayKeyToLastCheckinFormat(sorted[sorted.length - 1]) };
+}
 // Same synthetic-email scheme the client uses (phoneToEmail in index.html) —
 // kept here only for endpoints that need to derive it server-side.
 function phoneToEmail(phone) { return String(phone).replace(/\D/g, '').replace(/^0+/, '') + '@choco-mcc.com'; }
@@ -1487,10 +1525,23 @@ app.post('/checkin', async (req, res) => {
       if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
       const today = nowStr().date;
       if (u.lastCheckin === today) return res.status(400).json({ status: 'error', message: 'Already checked in today' });
+      // Reconciled against real check-in history on every single call,
+      // rather than trusting the stored checkinStreak/lastCheckin fields
+      // outright -- a stale or corrupted value (a bad past write, data
+      // edited by hand, any bug since fixed) can never keep silently
+      // breaking or misreporting a real streak; the next check-in always
+      // self-heals it. Bounded to this one user's own check-ins -- at most
+      // one real row per calendar day since the account existed -- so this
+      // is one small extra indexed query, not a real scan.
+      const ledgerSnap = await db.collection('transactions')
+        .where('userId', '==', uid).where('type', '==', 'checkin').limit(500).get();
+      const dayKeys = new Set();
+      ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
+      const real = computeCheckinStreak(dayKeys);
       const yesterday = new Date(eatNow().getTime() - 86400000);
       const yPad = n => String(n).padStart(2, '0');
       const yStr = yPad(yesterday.getUTCMonth() + 1) + '/' + yPad(yesterday.getUTCDate()) + '/' + yesterday.getUTCFullYear();
-      const streak = u.lastCheckin === yStr ? (u.checkinStreak || 0) + 1 : 1;
+      const streak = real.lastCheckin === yStr ? real.streak + 1 : 1;
       const bonus = sett.dailyCheckin;
       await ref.update({ walletBalance: FieldValue.increment(bonus), lastCheckin: today, checkinStreak: streak });
       const { date, time } = nowStr();
@@ -3220,43 +3271,6 @@ app.get('/admin/users', async (req, res) => {
 // used to only ever be incremented at registration time (L3 wasn't even
 // incremented at all, only ever decremented on delete), so any account that
 // existed before that fix, or drifted for any other reason, is corrected here.
-// The EAT calendar-day key a checkin transaction actually happened on,
-// derived fresh from its own createdAt timestamp -- not trusted from the
-// transaction's stored `date` string, so this is a genuine independent
-// recomputation, the same way recounting totals below reads straight off
-// amounts rather than trusting a cached total.
-function eatDayKey(ts) {
-  const d = new Date(tsMillis(ts) + 3 * 3600000);
-  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
-}
-// Matches nowStr().date's zero-padded MM/DD/YYYY exactly -- that's the
-// format /checkin itself compares lastCheckin against, so a recomputed
-// value has to land in the identical shape or the very next real check-in
-// would wrongly see it as "not yesterday" and reset the streak all over
-// again.
-function dayKeyToLastCheckinFormat(key) {
-  const [y, m, d] = key.split('-');
-  return `${m}/${d}/${y}`;
-}
-// Recomputes what checkinStreak/lastCheckin SHOULD be, purely from the real
-// history of 'checkin' transactions -- the length of the run of CONSECUTIVE
-// calendar days ending at the most recent actual check-in. This is exactly
-// the state the live /checkin endpoint would have arrived at on its own
-// through real, unbroken daily check-ins; it never invents activity that
-// didn't happen and never touches wallet balance (the reward money was
-// already correctly paid at each individual check-in, verified by the very
-// transactions this reads).
-function computeCheckinStreak(dayKeysSet) {
-  if (!dayKeysSet.size) return { streak: 0, lastCheckin: null };
-  const sorted = [...dayKeysSet].sort();
-  let streak = 1;
-  for (let i = sorted.length - 1; i > 0; i--) {
-    const cur = Date.parse(sorted[i] + 'T00:00:00Z');
-    const prev = Date.parse(sorted[i - 1] + 'T00:00:00Z');
-    if (cur - prev === 86400000) streak++; else break;
-  }
-  return { streak, lastCheckin: dayKeyToLastCheckinFormat(sorted[sorted.length - 1]) };
-}
 app.get('/admin/users/recount', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

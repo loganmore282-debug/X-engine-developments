@@ -630,7 +630,19 @@
 // recomputes every check-in streak straight from real check-in history in
 // the transaction ledger (never touches wallet balance), for when a streak
 // looks wrong and needs reconciling against what actually happened.
-const CACHE = 'chocomcc-shell-v115';
+// v116: /checkin now self-heals on every single call -- it recomputes the
+// real streak from actual check-in history in the transaction ledger
+// before deciding whether today continues or resets it, instead of
+// trusting the stored streak/lastCheckin fields outright. A stale or
+// corrupted value can no longer keep silently breaking or misreporting a
+// streak; it fixes itself the next time the member checks in, with no
+// admin action needed. The 7-dot row is back too, rescaled to fit all 30
+// days on one line, alongside the "Day X of 30" label (both driven by the
+// same bug-free day-position math from v115). Copying the referral link
+// now opens the device's native share sheet directly where supported
+// (falls back to a plain clipboard copy otherwise) -- no separate Share
+// button, the same Copy action just does the more useful thing.
+const CACHE = 'chocomcc-shell-v116';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

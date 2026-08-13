@@ -803,6 +803,8 @@ function renderAll(){
   var cyclePos = s.checkinStreak > 0 ? ((s.checkinStreak - 1) % 30) + 1 : 0;
   document.getElementById('checkinRing').style.setProperty('--pct', (cyclePos/30*100)+'%');
   document.getElementById('streakCycleLabel').textContent = s.checkinStreak > 0 ? ('Day ' + cyclePos + ' of 30') : 'Start your streak today';
+  var dots=''; for(var i=0;i<30;i++) dots += '<i class="'+(i<cyclePos?'on':'')+'"></i>';
+  document.getElementById('streakDots').innerHTML = dots;
 
   renderFeatured(); renderTicker(); renderShop(); renderRecords();
 }
@@ -1887,8 +1889,19 @@ function copyDepositRef(){
   if(navigator.clipboard) navigator.clipboard.writeText(ref).catch(function(){});
   toast('Reference copied');
 }
+// Tapping this used to just copy the link to the clipboard, leaving the
+// member to open WhatsApp/SMS themselves and paste it in. Where the device
+// supports it, this now opens the native share sheet directly instead --
+// one tap straight into whichever app they actually want to send it
+// through -- with a silent clipboard-copy fallback for anything that
+// doesn't support sharing. No separate "Share" button anywhere; this same
+// button just does the more useful thing when it can.
 function copyCode(){
   var link = 'https://choco-mcc.com/?ref='+STATE.referralCode;
+  if(navigator.share){
+    navigator.share({ title:'ChocoMCC', text:'Join ChocoMCC and start stacking chocolate tiers with me!', url:link }).catch(function(){});
+    return;
+  }
   if(navigator.clipboard) navigator.clipboard.writeText(link).catch(function(){});
   toast('Referral link copied');
 }
