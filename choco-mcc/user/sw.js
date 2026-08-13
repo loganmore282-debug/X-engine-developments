@@ -642,7 +642,16 @@
 // now opens the device's native share sheet directly where supported
 // (falls back to a plain clipboard copy otherwise) -- no separate Share
 // button, the same Copy action just does the more useful thing.
-const CACHE = 'chocomcc-shell-v116';
+// v117: SECURITY -- closed a real hole behind a run of unauthorized cash-
+// outs. A run of fake "customer service" DMs on Telegram/WhatsApp phished
+// members for their login password, then used it to sign in and cash out
+// straight to mobile money -- the payout PIN was only ever checked on bank
+// transfers, never on mobile money, so a stolen password alone was enough.
+// Every withdrawal now requires the PIN, mobile money included (same PIN
+// sheet bank transfers already used, wired into the same Cash Out flow --
+// nothing new to learn). The PIN itself is never something "support" would
+// ever legitimately ask for.
+const CACHE = 'chocomcc-shell-v117';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

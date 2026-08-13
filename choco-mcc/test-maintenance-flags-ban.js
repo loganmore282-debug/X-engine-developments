@@ -134,7 +134,7 @@ async function setupUser(uid, phone) {
   check('checkin: code is BANNED', r.body?.code === 'BANNED', r.body);
   r = await call('POST', '/invest/create', { token: 'uid:' + I, body: { tierKey: 'hersheys' } });
   check('invest/create (thrown inside a transaction): code still reaches BANNED', r.body?.code === 'BANNED', r.body);
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 20000, holder: 'x', network: 'MTN Mobile Money', phone: '0771000206' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 20000, holder: 'x', network: 'MTN Mobile Money', phone: '0771000206', pin: '1234' } });
   check('withdraw/request (thrown inside a transaction): code still reaches BANNED', r.body?.code === 'BANNED', r.body);
   r = await call('POST', '/deposit/marzpay', { token: 'uid:' + I, body: { amount: 30000, phone: '0771000206', network: 'MTN Mobile Money' } });
   check('deposit/marzpay: code is BANNED', r.body?.code === 'BANNED', r.body);

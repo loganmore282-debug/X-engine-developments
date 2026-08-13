@@ -255,7 +255,7 @@ async function setupUser(uid, phone) {
   await setupUser(E, '0771000405');
   userDoc(E).walletBalance = 100000; userDoc(E).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + E, body: { holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' } });
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + E, body: { amount: 20000, holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + E, body: { amount: 20000, holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' , pin: '1234' } });
   const witId = r.body.withdrawalId;
   collMap('withdrawals').get(witId).status = 'processing';
   collMap('withdrawals').get(witId).marzTxUuid = 'MTX-E-UNAVAILABLE'; // captured at send time, but the live GET for it is about to fail
@@ -278,7 +278,7 @@ async function setupUser(uid, phone) {
   await setupUser(H, '0771000407');
   userDoc(H).walletBalance = 100000; userDoc(H).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + H, body: { holder: 'H', network: 'MTN Mobile Money', phone: '0771000407' } });
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + H, body: { amount: 12000, holder: 'H', network: 'MTN Mobile Money', phone: '0771000407' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + H, body: { amount: 12000, holder: 'H', network: 'MTN Mobile Money', phone: '0771000407' , pin: '1234' } });
   const witIdH = r.body.withdrawalId;
   collMap('withdrawals').get(witIdH).status = 'processing';
   collMap('withdrawals').get(witIdH).marzTxUuid = 'MTX-H-DISAGREES';
@@ -299,7 +299,7 @@ async function setupUser(uid, phone) {
   await setupUser(I, '0771000408');
   userDoc(I).walletBalance = 100000; userDoc(I).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + I, body: { holder: 'I', network: 'MTN Mobile Money', phone: '0771000408' } });
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 12000, holder: 'I', network: 'MTN Mobile Money', phone: '0771000408' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 12000, holder: 'I', network: 'MTN Mobile Money', phone: '0771000408' , pin: '1234' } });
   const witIdI = r.body.withdrawalId;
   collMap('withdrawals').get(witIdI).status = 'processing';
   const refI = collMap('withdrawals').get(witIdI).marzReference || 'WD-REF-I';
@@ -318,7 +318,7 @@ async function setupUser(uid, phone) {
   await setupUser(G, '0771000406');
   userDoc(G).walletBalance = 100000; userDoc(G).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771000406' } });
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + G, body: { amount: 15000, holder: 'G', network: 'MTN Mobile Money', phone: '0771000406' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + G, body: { amount: 15000, holder: 'G', network: 'MTN Mobile Money', phone: '0771000406' , pin: '1234' } });
   const witIdG = r.body.withdrawalId;
   collMap('withdrawals').get(witIdG).status = 'processing';
   const refG = collMap('withdrawals').get(witIdG).marzReference || 'WD-REF-G';

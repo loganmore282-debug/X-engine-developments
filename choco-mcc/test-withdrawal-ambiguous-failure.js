@@ -123,7 +123,7 @@ async function setupUser(uid, phone) {
   await ownerCall('POST', '/admin/deposit', { userId: A, amount: 500000, note: 'seed funds' });
   userDoc(A).totalInvested = 500000;
   await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: 'A', network: 'MTN Mobile Money', phone: '0771002001' } });
-  let r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: 'A', network: 'MTN Mobile Money', phone: '0771002001' } });
+  let r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: 'A', network: 'MTN Mobile Money', phone: '0771002001', pin: '1234' } });
   const witIdA = r.body.withdrawalId;
   const balBeforeA = userDoc(A).walletBalance;
 
@@ -151,7 +151,7 @@ async function setupUser(uid, phone) {
   await ownerCall('POST', '/admin/deposit', { userId: B, amount: 500000, note: 'seed funds' });
   userDoc(B).totalInvested = 500000;
   await call('POST', '/bank/save', { token: 'uid:' + B, body: { holder: 'B', network: 'MTN Mobile Money', phone: '0771002002' } });
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + B, body: { amount: 15000, holder: 'B', network: 'MTN Mobile Money', phone: '0771002002' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + B, body: { amount: 15000, holder: 'B', network: 'MTN Mobile Money', phone: '0771002002', pin: '1234' } });
   const witIdB = r.body.withdrawalId;
   nextSendMoneyBehavior = 'throw';
   await ownerCall('POST', '/admin/withdraw/process', { withdrawalId: witIdB });
@@ -165,7 +165,7 @@ async function setupUser(uid, phone) {
   await ownerCall('POST', '/admin/deposit', { userId: C, amount: 500000, note: 'seed funds' });
   userDoc(C).totalInvested = 500000;
   await call('POST', '/bank/save', { token: 'uid:' + C, body: { holder: 'C', network: 'MTN Mobile Money', phone: '0771002003' } });
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + C, body: { amount: 12000, holder: 'C', network: 'MTN Mobile Money', phone: '0771002003' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + C, body: { amount: 12000, holder: 'C', network: 'MTN Mobile Money', phone: '0771002003', pin: '1234' } });
   const witIdC = r.body.withdrawalId;
   nextSendMoneyBehavior = 'reject';
   r = await ownerCall('POST', '/admin/withdraw/process', { withdrawalId: witIdC });

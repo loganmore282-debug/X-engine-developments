@@ -149,18 +149,18 @@ async function freshFundedUser() {
 
   const B = await freshFundedUser();
   const balBefore = userDoc(B).walletBalance;
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + B, body: { amount: 20000, holder: 'Bad Number', network: 'MTN Mobile Money', phone: '+25625607541000' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + B, body: { amount: 20000, holder: 'Bad Number', network: 'MTN Mobile Money', phone: '+25625607541000', pin: '1234' } });
   check('withdraw/request rejects the exact real-world garbled number outright', r.code === 400, r.body);
   check('no balance reserved', userDoc(B).walletBalance === balBefore, userDoc(B).walletBalance);
   check('no withdrawal record created', withdrawalsOf(B).length === 0, withdrawalsOf(B));
 
   const C = await freshFundedUser();
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + C, body: { amount: 20000, holder: 'Kenyan', network: 'Airtel Money', phone: '+254712345678' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + C, body: { amount: 20000, holder: 'Kenyan', network: 'Airtel Money', phone: '+254712345678', pin: '1234' } });
   check('withdraw/request rejects a Kenyan number', r.code === 400, r.body);
   check('no balance reserved', userDoc(C).walletBalance === 1000000, userDoc(C).walletBalance);
 
   const D = await freshFundedUser();
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + D, body: { amount: 20000, holder: 'Good', network: 'MTN Mobile Money', phone: '0771234567' } });
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + D, body: { amount: 20000, holder: 'Good', network: 'MTN Mobile Money', phone: '0771234567', pin: '1234' } });
   check('withdraw/request accepts a valid number directly', r.body?.status === 'success', r.body);
   check('balance correctly reserved', userDoc(D).walletBalance === 1000000 - 20000, userDoc(D).walletBalance);
 

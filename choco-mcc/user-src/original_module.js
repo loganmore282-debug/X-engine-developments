@@ -1692,24 +1692,19 @@ async function doWithdraw(){
     payload.holder = b.holder; payload.network = b.network; payload.phone = b.phone;
   }
 
+  // Every cash-out -- mobile money included -- is PIN-gated server-side now.
+  // A stolen login password used to be enough on its own to drain a wallet
+  // to an already-bound mobile-money account; the PIN (never shared with
+  // "customer service" impersonators the way a password gets phished) is
+  // the actual second factor that stops that.
   var btn = document.getElementById('witGoBtn'), label = btn.textContent;
-  var r;
-  if(_witMethod==='bank'){
-    // Bank transfer has no persistent "bind" step -- the destination is
-    // typed fresh on every request -- so the PIN gate sits directly on the
-    // withdrawal request itself instead of a separate bind/delete call.
-    btn.disabled = true;
-    r = await withPayoutPin(function(pin){
-      payload.pin = pin;
-      return api('/withdraw/request', payload);
-    }, btn);
-    btn.disabled = false; btn.textContent = label;
-    if(!r) return; // cancelled at the PIN prompt
-  } else {
-    btn.disabled = true; btn.innerHTML = btnBusyHtml('Please wait…');
-    r = await api('/withdraw/request', payload);
-    btn.disabled = false; btn.textContent = label;
-  }
+  btn.disabled = true;
+  var r = await withPayoutPin(function(pin){
+    payload.pin = pin;
+    return api('/withdraw/request', payload);
+  }, btn);
+  btn.disabled = false; btn.textContent = label;
+  if(!r) return; // cancelled at the PIN prompt
   if(r.status!=='success'){ toast(r.message||'Could not process the cash-out'); return; }
   document.getElementById('witAmt').value=''; renderWitCalc();
   if(_witMethod==='bank'){ document.getElementById('witBankAccName').value=''; document.getElementById('witBankAccNum').value=''; }

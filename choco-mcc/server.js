@@ -2285,15 +2285,20 @@ app.post('/withdraw/request', async (req, res) => {
         if (v.status !== 'success' && v.status !== 'sandbox')
           return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Could not verify this bank account. Check the bank name and account number.') });
       } catch (_) { /* validation check itself failed -- proceed, the real transfer attempt will surface any genuine problem */ }
-      // Bank transfer has no separate "bind a payout account" step the way
-      // mobile money does -- the destination is typed fresh into every
-      // single request -- so THIS is the moment an unauthorized session
-      // could redirect a payout, and the PIN gate has to sit right here
-      // instead of on a bind endpoint. Checked before anything is reserved.
-      const pinCheck = await _payoutPinCheck(userId, req.body.pin, true);
-      if (!pinCheck.ok) return res.status(400).json({ status: 'error', code: pinCheck.code, message: pinCheck.message });
-      pinJustSet = !!pinCheck.justSet;
     }
+    // PIN gate applies to EVERY withdrawal, mobile money included. A stolen
+    // login password (phished via a fake "customer service" DM, the exact
+    // pattern behind a run of unauthorized cash-outs) used to be enough on
+    // its own to drain a wallet to mobile money -- this endpoint only ever
+    // checked the PIN on the bank branch, since bank has no separate "bind"
+    // step to gate instead. That asymmetry is the hole: mobile money DOES
+    // have a bind step (/bank/save, already PIN-gated), but nothing stopped
+    // an authenticated session from cashing out to that already-bound
+    // account with nothing beyond the password. Checked before anything is
+    // reserved, same as bank.
+    const pinCheck = await _payoutPinCheck(userId, req.body.pin, true);
+    if (!pinCheck.ok) return res.status(400).json({ status: 'error', code: pinCheck.code, message: pinCheck.message });
+    pinJustSet = !!pinCheck.justSet;
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;

@@ -113,7 +113,7 @@ async function setupFundedUser(uid, phone, balance) {
   await call('POST', '/bank/save', { token: 'uid:' + uid, body: { holder: 'Tester', network: 'MTN Mobile Money', phone } });
 }
 async function requestWithdrawal(uid, phone, amount) {
-  const r = await call('POST', '/withdraw/request', { token: 'uid:' + uid, body: { amount, holder: 'Tester', network: 'MTN Mobile Money', phone } });
+  const r = await call('POST', '/withdraw/request', { token: 'uid:' + uid, body: { amount, holder: 'Tester', network: 'MTN Mobile Money', phone, pin: '1234' } });
   return r.body.withdrawalId;
 }
 
