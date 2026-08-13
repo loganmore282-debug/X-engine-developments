@@ -158,6 +158,15 @@ async function api(path, body, method, retry){
 // Pulls the live account/investments/bank accounts/transactions from the
 // server and stamps them onto STATE. Called after every money action and on
 // app entry, since deposit/withdrawal/cashback settlement all happen server-side.
+// FIXED BUG: this runs on a 5s self-scheduling poll (see runAccountPoll)
+// while the app just sits open, so a genuinely slow/cold/briefly-down
+// server used to fire the SAME "Could not reach the server" toast on every
+// single 5s retry -- a real outage of even 20-30s looked like the warning
+// was "blinking" nonstop, which is far more alarming than the actual
+// problem. _serverUnreachableWarned only lets it fire once per outage: set
+// the moment it first fails, cleared the moment a read succeeds again, so
+// the NEXT outage still warns properly.
+var _serverUnreachableWarned = false;
 async function refreshFromServer(){
   // Parallel, not sequential — on a cold free-tier instance four requests in
   // a row can take long enough that a user re-taps and thinks nothing
@@ -168,6 +177,7 @@ async function refreshFromServer(){
   ]);
   var accR = results[0], invR = results[1], bankR = results[2], txR = results[3];
   if(accR.status==='success'){
+    _serverUnreachableWarned = false;
     var a = accR.account;
     STATE.phone = a.phone || STATE.phone;
     STATE.balance = a.walletBalance; STATE.totalDeposited = a.totalDeposited;
@@ -179,7 +189,8 @@ async function refreshFromServer(){
     // Both are handled by the global full-screen lockout triggered inside
     // api() itself (see showLockout) -- no separate toast needed here, that
     // would just double up on top of the takeover screen.
-  } else {
+  } else if(!_serverUnreachableWarned){
+    _serverUnreachableWarned = true;
     toast('Could not reach the server, showing your last known balance');
   }
   if(invR.status==='success'){

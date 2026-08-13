@@ -661,7 +661,14 @@
 // exists ("Enter your 4-digit payout PIN"). The Payout Account page and
 // the Cash Out "How it works" steps both spell out the PIN step plainly
 // now, including never sharing it with anyone claiming to be support.
-const CACHE = 'chocomcc-shell-v118';
+// v119: FIXED BUG -- the balance/account poll running every 5s while the
+// app just sits open re-fired "Could not reach the server, showing your
+// last known balance" on EVERY single failed retry, so even a short
+// server hiccup (e.g. Render restarting after a deploy) looked like the
+// warning was blinking nonstop instead of a single clear notice. It now
+// only warns once per outage -- the moment connectivity first drops --
+// and stays quiet until a read actually succeeds again.
+const CACHE = 'chocomcc-shell-v119';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
