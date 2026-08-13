@@ -2300,6 +2300,23 @@ app.post('/withdraw/request', async (req, res) => {
     if (!pinCheck.ok) return res.status(400).json({ status: 'error', code: pinCheck.code, message: pinCheck.message });
     pinJustSet = !!pinCheck.justSet;
 
+    // A second, independent layer beyond the PIN: the mobile-money
+    // destination has to actually BE one of this member's saved payout
+    // accounts, not just look like valid holder/network/phone fields. The
+    // real app UI only ever sends an already-bound account, but nothing
+    // server-side used to enforce that -- a direct API call (the exact
+    // capability an attacker who already has a stolen password and PIN
+    // would use, bypassing the app's own restriction) could redirect a
+    // cash-out to ANY number, never bound at all. Bank transfer has no
+    // bind step to compare against by design (its PIN gate already covers
+    // it, right above), so this only applies to the mobile-money branch.
+    if (method === 'mobile_money') {
+      const boundSnap = await db.collection('bankAccounts')
+        .where('userId', '==', userId).where('network', '==', network).where('phone', '==', phone).limit(1).get();
+      if (boundSnap.empty)
+        return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: 'That mobile-money account isn\'t saved to your profile. Bind it in Payout Account first, then try again.' });
+    }
+
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;
     const ref = await uniqueRef('B');

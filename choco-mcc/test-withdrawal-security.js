@@ -101,16 +101,19 @@ async function setupFundedUser(uid, phone, balance) {
   check('unknown network rejected on bind', r.code === 400, r.body);
 
   console.log('\n-- /withdraw/request rejects a forged network even if bank binding is bypassed --');
+  collMap('bankAccounts').set('fx1', { userId: A, holder: 'Alice', network: 'FAKE_NETWORK', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: 'Alice', network: 'FAKE_NETWORK', phone: '700111222', pin: '1234' } });
   check('forged network in withdraw request rejected (never reaches storage)', r.code === 400, r.body);
   check('no withdrawal doc created for the rejected request', [...withdrawals().values()].filter(w => w.userId === A).length === 0, [...withdrawals().values()]);
 
   console.log('\n-- object/markup payload in holder is neutralized, never stored as raw HTML --');
+  collMap('bankAccounts').set('fx1b', { userId: A, holder: 'Alice', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: { $ne: null }, network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   // Either rejected outright, or (if it somehow proceeds) the stored holder must never contain live HTML tags.
   const storedAfterObjHolder = [...withdrawals().values()].find(w => w.userId === A);
   const holderIsSafe = !storedAfterObjHolder || !/<[^>]+>/.test(String(storedAfterObjHolder.holder));
   check('object-shaped holder payload never results in stored raw HTML', holderIsSafe, storedAfterObjHolder);
+  collMap('bankAccounts').set('fx2', { userId: A, holder: '<img src=x onerror=alert(1)>', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: '<img src=x onerror=alert(1)>', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   const htmlDoc = [...withdrawals().values()].filter(w => w.userId === A).slice(-1)[0];
   check('HTML tags in holder are stripped before storage', htmlDoc && !/<[^>]+>/.test(htmlDoc.holder), htmlDoc);
@@ -120,6 +123,7 @@ async function setupFundedUser(uid, phone, balance) {
   // exactly one extra request instead of the three a new setupFundedUser()
   // call would cost — this file's fake "uid:x" tokens don't parse as real
   // JWTs, so every request in it shares ONE rate-limit bucket keyed by IP.
+  collMap('bankAccounts').set('fx3', { userId: A, holder: 'Alice', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 17000, holder: 'Alice', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('17,000 (not a multiple of 5,000) is accepted', r.body?.status === 'success', r.body);
   const oddAmountDoc = [...withdrawals().values()].find(w => w.userId === A && w.amount === 17000);
@@ -130,10 +134,13 @@ async function setupFundedUser(uid, phone, balance) {
   await setupFundedUser(B, '0771000002', 1000000);
   const bobStart = userDoc(B).walletBalance;
 
+  collMap('bankAccounts').set('fx4', { userId: B, holder: 'Bob', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + B, body: { amount: 20000, holder: 'Bob', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('1st withdrawal of the day succeeds', r.body?.status === 'success', r.body);
+  collMap('bankAccounts').set('fx5', { userId: B, holder: 'Bob', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + B, body: { amount: 20000, holder: 'Bob', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('2nd withdrawal of the day succeeds', r.body?.status === 'success', r.body);
+  collMap('bankAccounts').set('fx6', { userId: B, holder: 'Bob', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + B, body: { amount: 20000, holder: 'Bob', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('3rd withdrawal of the SAME day is rejected (cap=2)', r.code === 400 && /limit/i.test(r.body?.message || ''), r.body);
   check('exactly 2 withdrawal docs created for bob today', [...withdrawals().values()].filter(w => w.userId === B).length === 2, [...withdrawals().values()].filter(w => w.userId === B).length);
@@ -143,6 +150,7 @@ async function setupFundedUser(uid, phone, balance) {
   const C = 'carol-uid';
   await setupFundedUser(C, '0771000003', 1000000);
   // Use up 1 of 2 slots first, then fire two concurrent requests for the last slot.
+  collMap('bankAccounts').set('fx7', { userId: C, holder: 'Carol', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   await call('POST', '/withdraw/request', { token: 'uid:' + C, body: { amount: 20000, holder: 'Carol', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   const carolBalBeforeRace = userDoc(C).walletBalance;
   const [rc1, rc2] = await Promise.all([
@@ -164,8 +172,10 @@ async function setupFundedUser(uid, phone, balance) {
 
   const D = 'dave-uid';
   await setupFundedUser(D, '0771000004', 1000000);
+  collMap('bankAccounts').set('fx10', { userId: D, holder: 'Dave', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + D, body: { amount: 20000, holder: 'Dave', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('1st withdrawal succeeds under the new cap=1', r.body?.status === 'success', r.body);
+  collMap('bankAccounts').set('fx11', { userId: D, holder: 'Dave', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + D, body: { amount: 20000, holder: 'Dave', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('2nd withdrawal SAME day now rejected under the lowered cap=1', r.code === 400 && /limit/i.test(r.body?.message || ''), r.body);
 
@@ -174,6 +184,7 @@ async function setupFundedUser(uid, phone, balance) {
   const E = 'erin-uid';
   await setupFundedUser(E, '0771000005', 1000000);
   for (let i = 0; i < 4; i++) {
+    collMap('bankAccounts').set('fx12', { userId: E, holder: 'Erin', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
     r = await call('POST', '/withdraw/request', { token: 'uid:' + E, body: { amount: 20000, holder: 'Erin', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
     check('withdrawal #' + (i + 1) + ' succeeds with cap disabled', r.body?.status === 'success', r.body);
   }
@@ -185,6 +196,7 @@ async function setupFundedUser(uid, phone, balance) {
   await setupFundedUser(F, '0771000006', 1000000);
   userDoc(F).status = 'banned';
   const frankStart = userDoc(F).walletBalance;
+  collMap('bankAccounts').set('fx13', { userId: F, holder: 'Frank', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + F, body: { amount: 20000, holder: 'Frank', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('banned account withdrawal rejected', r.code === 400 && r.body?.code === 'BANNED', r.body);
   check('banned account wallet unchanged', userDoc(F).walletBalance === frankStart, userDoc(F).walletBalance);
@@ -195,11 +207,13 @@ async function setupFundedUser(uid, phone, balance) {
   await call('POST', '/register', { token: 'uid:' + K, body: {} });
   userDoc(K).walletBalance = 1000000; // funded, but never invested
   await call('POST', '/bank/save', { token: 'uid:' + K, body: { holder: 'Kim', network: 'MTN Mobile Money', phone: '700111222' } });
+  collMap('bankAccounts').set('fx14', { userId: K, holder: 'Kim', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + K, body: { amount: 20000, holder: 'Kim', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('withdrawal blocked for a user who never invested', r.code === 400 && /chocolate|invest/i.test(r.body?.message || ''), r.body);
   check('wallet untouched by the blocked attempt', userDoc(K).walletBalance === 1000000, userDoc(K).walletBalance);
 
   await realFetch(BASE + '/admin/settings/update', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ settings: { requireInvestToWithdraw: false } }) });
+  collMap('bankAccounts').set('fx15', { userId: K, holder: 'Kim', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + K, body: { amount: 20000, holder: 'Kim', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('withdrawal allowed once requireInvestToWithdraw is turned off', r.body?.status === 'success', r.body);
   await realFetch(BASE + '/admin/settings/update', { method: 'POST', headers: adminHeaders, body: JSON.stringify({ settings: { requireInvestToWithdraw: true } }) });
@@ -216,6 +230,7 @@ async function setupFundedUser(uid, phone, balance) {
   const G = 'grace-uid';
   await setupFundedUser(G, '0771000007', 1000000);
   const graceStart = userDoc(G).walletBalance;
+  collMap('bankAccounts').set('fx16', { userId: G, holder: 'Grace', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + G, body: { amount: 20000, holder: 'Grace', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('withdraw/request succeeds without touching MarzPay', r.body?.status === 'success', r.body);
   const graceWitId = r.body?.withdrawalId;
@@ -250,6 +265,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n-- Two admins racing to process the same pending withdrawal: only one wins --');
   const H = 'henry-uid';
   await setupFundedUser(H, '0771000008', 1000000);
+  collMap('bankAccounts').set('fx17', { userId: H, holder: 'Henry', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + H, body: { amount: 20000, holder: 'Henry', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   const henryWitId = r.body?.withdrawalId;
   const [pr1, pr2] = await Promise.all([
@@ -267,6 +283,7 @@ async function setupFundedUser(uid, phone, balance) {
   const I = 'ivy-uid';
   await setupFundedUser(I, '0771000009', 1000000);
   const ivyStart = userDoc(I).walletBalance;
+  collMap('bankAccounts').set('fx18', { userId: I, holder: 'Ivy', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 20000, holder: 'Ivy', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   const ivyWitId = r.body?.withdrawalId;
   ar = await adminCall('/admin/withdraw/reject', { withdrawalId: ivyWitId, reason: 'test reject while pending' });
@@ -279,6 +296,7 @@ async function setupFundedUser(uid, phone, balance) {
   const J = 'jack-uid';
   await setupFundedUser(J, '0771000010', 1000000);
   const jackStart = userDoc(J).walletBalance;
+  collMap('bankAccounts').set('fx19', { userId: J, holder: 'Jack', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + J, body: { amount: 20000, holder: 'Jack', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   const jackWitId = r.body?.withdrawalId;
   await adminCall('/admin/withdraw/process', { withdrawalId: jackWitId });

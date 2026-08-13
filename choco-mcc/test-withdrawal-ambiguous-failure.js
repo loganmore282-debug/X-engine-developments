@@ -123,6 +123,7 @@ async function setupUser(uid, phone) {
   await ownerCall('POST', '/admin/deposit', { userId: A, amount: 500000, note: 'seed funds' });
   userDoc(A).totalInvested = 500000;
   await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: 'A', network: 'MTN Mobile Money', phone: '0771002001' } });
+  collMap('bankAccounts').set('fx1', { userId: A, holder: 'A', network: 'MTN Mobile Money', phone: '+256771002001', createdAt: new Date() });
   let r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: 'A', network: 'MTN Mobile Money', phone: '0771002001', pin: '1234' } });
   const witIdA = r.body.withdrawalId;
   const balBeforeA = userDoc(A).walletBalance;
@@ -151,6 +152,7 @@ async function setupUser(uid, phone) {
   await ownerCall('POST', '/admin/deposit', { userId: B, amount: 500000, note: 'seed funds' });
   userDoc(B).totalInvested = 500000;
   await call('POST', '/bank/save', { token: 'uid:' + B, body: { holder: 'B', network: 'MTN Mobile Money', phone: '0771002002' } });
+  collMap('bankAccounts').set('fx2', { userId: B, holder: 'B', network: 'MTN Mobile Money', phone: '+256771002002', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + B, body: { amount: 15000, holder: 'B', network: 'MTN Mobile Money', phone: '0771002002', pin: '1234' } });
   const witIdB = r.body.withdrawalId;
   nextSendMoneyBehavior = 'throw';
@@ -165,6 +167,7 @@ async function setupUser(uid, phone) {
   await ownerCall('POST', '/admin/deposit', { userId: C, amount: 500000, note: 'seed funds' });
   userDoc(C).totalInvested = 500000;
   await call('POST', '/bank/save', { token: 'uid:' + C, body: { holder: 'C', network: 'MTN Mobile Money', phone: '0771002003' } });
+  collMap('bankAccounts').set('fx3', { userId: C, holder: 'C', network: 'MTN Mobile Money', phone: '+256771002003', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + C, body: { amount: 12000, holder: 'C', network: 'MTN Mobile Money', phone: '0771002003', pin: '1234' } });
   const witIdC = r.body.withdrawalId;
   nextSendMoneyBehavior = 'reject';

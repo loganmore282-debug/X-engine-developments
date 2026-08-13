@@ -99,6 +99,7 @@ function check(name, cond, extra) {
   const u = collMap('users').get(uid);
   u.walletBalance = 500000; u.totalInvested = 500000;
   await call('POST', '/bank/save', { token: 'uid:' + uid, body: { holder: 'Stats Tester', network: 'MTN Mobile Money', phone: '0771999001' } });
+  collMap('bankAccounts').set('fx1', { userId: uid, holder: 'Stats Tester', network: 'MTN Mobile Money', phone: '+256771999001', createdAt: new Date() });
   const witR = await call('POST', '/withdraw/request', { token: 'uid:' + uid, body: { amount: 60000, holder: 'Stats Tester', network: 'MTN Mobile Money', phone: '0771999001', pin: '1234' } });
   check('withdrawal request accepted (status stays "pending", nothing sent yet)', witR.body?.status === 'success', witR.body);
   const witId = witR.body?.withdrawalId;

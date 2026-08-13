@@ -253,6 +253,7 @@ const bankBody = (over) => Object.assign({ method: 'bank', bankName: 'Stanbic Ba
   console.log('\n== A plain mobile-money withdrawal is completely unaffected ==');
   const H = 'bankwit-h'; await setupFundedUser(H, '0772300208', 500000);
   await call('POST', '/bank/save', { token: 'uid:' + H, body: { holder: 'H Tester', network: 'MTN Mobile Money', phone: '0772300208' } });
+  collMap('bankAccounts').set('fx1', { userId: H, holder: 'H Tester', network: 'MTN Mobile Money', phone: '+256772300208', createdAt: new Date() });
   const reqH = await call('POST', '/withdraw/request', { token: 'uid:' + H, body: { amount: 50000, holder: 'H Tester', network: 'MTN Mobile Money', phone: '0772300208', pin: '1234' } });
   check('plain mobile-money request still works', reqH.body.status === 'success', reqH.body);
   const witH = collMap('withdrawals').get(reqH.body.withdrawalId);

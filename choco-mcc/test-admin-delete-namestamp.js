@@ -89,7 +89,18 @@ async function setupFundedUser(uid, phone, balance) {
   u.walletBalance = balance;
   u.totalInvested = balance;
 }
+function cleanPhoneLocal(raw) {
+  const s = String(raw || '').replace(/\D/g, '');
+  let local9 = null;
+  if (s.startsWith('256') && s.length === 12) local9 = s.slice(3);
+  else if (s.startsWith('0') && s.length === 10) local9 = s.slice(1);
+  else if (s.length === 9) local9 = s;
+  return local9 ? '+256' + local9 : raw;
+}
 async function requestWithdrawal(uid, phone, amount) {
+  // Withdrawal destinations must now be an actually-bound payout account --
+  // stored (and matched) in the SAME cleaned +256... format /bank/save uses.
+  collMap('bankAccounts').set('fx-' + uid, { userId: uid, holder: 'Tester', network: 'MTN Mobile Money', phone: cleanPhoneLocal(phone), createdAt: new Date() });
   const r = await call('POST', '/withdraw/request', { token: 'uid:' + uid, body: { amount, holder: 'Tester', network: 'MTN Mobile Money', phone, pin: '1234' } });
   return r.body.withdrawalId;
 }

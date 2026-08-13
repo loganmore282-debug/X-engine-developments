@@ -136,6 +136,7 @@ const pushTokens = () => collMap('adminPushTokens');
   await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: 'Alice', network: 'MTN Mobile Money', phone: '700111222' } });
 
   const pushCountBefore = sentPushes.length;
+  collMap('bankAccounts').set('fx1', { userId: A, holder: 'Alice', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: 'Alice', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   check('withdrawal succeeds', r.body?.status === 'success', r.body);
   await sleep(100); // sendAdminPush is fire-and-forget
@@ -169,6 +170,7 @@ const pushTokens = () => collMap('adminPushTokens');
   await call('POST', '/admin/push/register', { adminKey: 'test-admin-key', body: { token: 'device-dead-1' } });
   deadTokenToReport = 'device-dead-1';
   check('dead token is registered before the next push', pushTokens().has('device-dead-1'));
+  collMap('bankAccounts').set('fx2', { userId: A, holder: 'Alice', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: 'Alice', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
   await sleep(150);
   check('withdrawal that triggers the push still succeeds', r.body?.status === 'success', r.body);

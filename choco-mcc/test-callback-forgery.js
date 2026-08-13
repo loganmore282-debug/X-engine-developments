@@ -255,6 +255,7 @@ async function setupUser(uid, phone) {
   await setupUser(E, '0771000405');
   userDoc(E).walletBalance = 100000; userDoc(E).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + E, body: { holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' } });
+  collMap('bankAccounts').set('fx1', { userId: E, holder: 'E', network: 'MTN Mobile Money', phone: '+256771000405', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + E, body: { amount: 20000, holder: 'E', network: 'MTN Mobile Money', phone: '0771000405' , pin: '1234' } });
   const witId = r.body.withdrawalId;
   collMap('withdrawals').get(witId).status = 'processing';
@@ -278,6 +279,7 @@ async function setupUser(uid, phone) {
   await setupUser(H, '0771000407');
   userDoc(H).walletBalance = 100000; userDoc(H).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + H, body: { holder: 'H', network: 'MTN Mobile Money', phone: '0771000407' } });
+  collMap('bankAccounts').set('fx2', { userId: H, holder: 'H', network: 'MTN Mobile Money', phone: '+256771000407', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + H, body: { amount: 12000, holder: 'H', network: 'MTN Mobile Money', phone: '0771000407' , pin: '1234' } });
   const witIdH = r.body.withdrawalId;
   collMap('withdrawals').get(witIdH).status = 'processing';
@@ -299,6 +301,7 @@ async function setupUser(uid, phone) {
   await setupUser(I, '0771000408');
   userDoc(I).walletBalance = 100000; userDoc(I).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + I, body: { holder: 'I', network: 'MTN Mobile Money', phone: '0771000408' } });
+  collMap('bankAccounts').set('fx3', { userId: I, holder: 'I', network: 'MTN Mobile Money', phone: '+256771000408', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + I, body: { amount: 12000, holder: 'I', network: 'MTN Mobile Money', phone: '0771000408' , pin: '1234' } });
   const witIdI = r.body.withdrawalId;
   collMap('withdrawals').get(witIdI).status = 'processing';
@@ -318,6 +321,7 @@ async function setupUser(uid, phone) {
   await setupUser(G, '0771000406');
   userDoc(G).walletBalance = 100000; userDoc(G).totalInvested = 100000;
   await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771000406' } });
+  collMap('bankAccounts').set('fx4', { userId: G, holder: 'G', network: 'MTN Mobile Money', phone: '+256771000406', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + G, body: { amount: 15000, holder: 'G', network: 'MTN Mobile Money', phone: '0771000406' , pin: '1234' } });
   const witIdG = r.body.withdrawalId;
   collMap('withdrawals').get(witIdG).status = 'processing';

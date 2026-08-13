@@ -135,9 +135,11 @@ const NEW = {
   console.log('\n-- Withdrawal: new minWithdraw, withdrawFeePct, maxWithdrawalsPerDay all actually enforced --');
   userDoc('refbuyer').totalInvested = 10000; // satisfy requireInvestToWithdraw regardless (already false, but be realistic)
   await call('POST', '/bank/save', { token: 'uid:refbuyer', body: { holder: 'Ref Buyer', network: 'MTN Mobile Money', phone: '700111333' } });
+  collMap('bankAccounts').set('fx1', { userId: 'refbuyer', holder: 'Ref Buyer', network: 'MTN Mobile Money', phone: '+256700111333', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:refbuyer', body: { amount: 12000, holder: 'Ref Buyer', network: 'MTN Mobile Money', phone: '700111333', pin: '1234' } });
   check('withdrawal below new minWithdraw (12,345) rejected', r.code === 400 && /12,345/.test(r.body?.message || ''), r.body);
   const walBefore = userDoc('refbuyer').walletBalance;
+  collMap('bankAccounts').set('fx2', { userId: 'refbuyer', holder: 'Ref Buyer', network: 'MTN Mobile Money', phone: '+256700111333', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:refbuyer', body: { amount: 20000, holder: 'Ref Buyer', network: 'MTN Mobile Money', phone: '700111333', pin: '1234' } });
   check('withdrawal at/above new minWithdraw succeeds', r.body?.status === 'success', r.body);
   const expectedFee = Math.round(20000 * 33 / 100); // new withdrawFeePct = 33%
@@ -149,11 +151,13 @@ const NEW = {
   await call('POST', '/register', { token: 'uid:neverinvested', body: {} });
   userDoc('neverinvested').walletBalance = 100000;
   await call('POST', '/bank/save', { token: 'uid:neverinvested', body: { holder: 'Never Invested', network: 'MTN Mobile Money', phone: '700111444' } });
+  collMap('bankAccounts').set('fx3', { userId: 'neverinvested', holder: 'Never Invested', network: 'MTN Mobile Money', phone: '+256700111444', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:neverinvested', body: { amount: 20000, holder: 'Never Invested', network: 'MTN Mobile Money', phone: '700111444', pin: '1234' } });
   check('withdrawal succeeds with requireInvestToWithdraw=false even though never invested', r.body?.status === 'success', r.body);
 
   console.log('\n-- Re-enabling requireInvestToWithdraw immediately blocks the same account again --');
   await call('POST', '/admin/settings/update', { admin: true, body: { settings: { requireInvestToWithdraw: true } } });
+  collMap('bankAccounts').set('fx4', { userId: 'neverinvested', holder: 'Never Invested', network: 'MTN Mobile Money', phone: '+256700111444', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:neverinvested', body: { amount: 20000, holder: 'Never Invested', network: 'MTN Mobile Money', phone: '700111444', pin: '1234' } });
   check('withdrawal now rejected once the setting is flipped back on', r.code === 400 && /chocolate product/i.test(r.body?.message || ''), r.body);
 
