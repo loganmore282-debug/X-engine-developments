@@ -626,7 +626,7 @@ async function renderUsers(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="usersCount">Users (${_users.length})</h2>
       ${isOwner?`<button class="btn sm ghost" id="auditBtn" title="Recompute every balance from the transaction ledger and flag mismatches, duplicate credits and stuck withdrawals">Integrity audit</button>
-      <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning totals from the transaction ledger">Recalculate totals</button>`:''}</div>
+      <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning totals AND check-in streaks from the transaction ledger">Recalculate totals</button>`:''}</div>
     <div class="panel-card"><input id="userSearch" placeholder="Search phone or referral code"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
   $('userSearch').addEventListener('input', drawUsers);
@@ -634,7 +634,7 @@ async function renderUsers(){
     $('recountBtn').addEventListener('click', async()=>{
       const b=$('recountBtn'); b.disabled=true; b.textContent='Recalculating…';
       const d=await api('/admin/users/recount');
-      toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)${d.streaksFixed?`, ${d.streaksFixed} check-in streak(s) corrected`:''}`:(d.message||'Failed'), d.status==='success'?'ok':'err');
       renderUsers();
     });
     $('auditBtn').addEventListener('click', async()=>{

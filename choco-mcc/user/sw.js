@@ -620,7 +620,17 @@
 // page content fade-and-settle in, instead of appearing instantly -- a
 // plain opacity+drift "appear", not a slide. Tapping any nav tab also gives
 // it a quick squeeze/release animation for tactile feedback.
-const CACHE = 'chocomcc-shell-v114';
+// v115: Daily Reward's streak cycle is now 30 days, not 7 (ring + "Day X of
+// 30" label instead of the old 7-dot row, which would never have scaled to
+// 30 legibly) -- and fixed a real display bug along the way: the old ring's
+// percentage math showed EMPTY on every exact multiple of 7 (streak%7===0
+// divides out to 0%) even though the dot row correctly showed all 7 lit
+// that same day. The new day-position math can't disagree with the streak
+// number the way ring/dots used to. Admin's "Recalculate totals" now also
+// recomputes every check-in streak straight from real check-in history in
+// the transaction ledger (never touches wallet balance), for when a streak
+// looks wrong and needs reconciling against what actually happened.
+const CACHE = 'chocomcc-shell-v115';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

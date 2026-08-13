@@ -793,9 +793,16 @@ function renderAll(){
   btn.innerHTML = done ? '<span style="display:inline-flex;align-items:center;gap:6px;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12l4.5 4.5L19.5 6"/></svg>Claimed today</span>' : ('Check in for UGX ' + sett.dailyCheckin);
   btn.disabled = done; btn.style.opacity = done?'.55':'1';
   document.getElementById('streakNum').textContent = s.checkinStreak;
-  document.getElementById('checkinRing').style.setProperty('--pct', Math.min(100,(s.checkinStreak%7)/7*100)+'%');
-  var dots=''; for(var i=0;i<7;i++) dots += '<i class="'+(i<(s.checkinStreak%7||(s.checkinStreak>0?7:0))?'on':'')+'"></i>';
-  document.getElementById('streakDots').innerHTML = dots;
+  // The ring/label represent a 30-day cycle -- day 30 shows a full ring and
+  // wraps cleanly back to day 1 the day after, rather than the old 7-day
+  // math which actually showed an EMPTY ring on every exact multiple of 7
+  // (streak%7===0 divides out to 0%) despite the dot row correctly showing
+  // all dots lit that same day -- cyclePos here is always 1..30 (never 0
+  // while on a real streak), so ring/label and the underlying streak number
+  // can't disagree with each other the way ring/dots used to.
+  var cyclePos = s.checkinStreak > 0 ? ((s.checkinStreak - 1) % 30) + 1 : 0;
+  document.getElementById('checkinRing').style.setProperty('--pct', (cyclePos/30*100)+'%');
+  document.getElementById('streakCycleLabel').textContent = s.checkinStreak > 0 ? ('Day ' + cyclePos + ' of 30') : 'Start your streak today';
 
   renderFeatured(); renderTicker(); renderShop(); renderRecords();
 }

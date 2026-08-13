@@ -501,9 +501,7 @@
   .checkin-ring::before{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--cream);}
   .checkin-inner{position:relative;z-index:2;}
   .checkin-inner b{font-size:22px;display:block;}
-  .streak-dots{display:flex;justify-content:center;gap:7px;margin:10px 0 16px;}
-  .streak-dots i{width:9px;height:9px;border-radius:50%;background:var(--line);}
-  .streak-dots i.on{background:var(--caramel);}
+  .streak-cycle-label{text-align:center;font-size:12.5px;font-weight:700;color:var(--cocoa-faint);margin:10px 0 16px;}
 
   .empty{text-align:center;padding:40px 20px;color:var(--cocoa-faint);font-size:13.5px;}
   /* Opens from the centre of the screen (a real popup, not a bottom sheet) —
@@ -732,7 +730,7 @@
             <span class="muted" style="font-size:11.5px">day streak</span>
           </div>
         </div>
-        <div class="streak-dots" id="streakDots"></div>
+        <div class="streak-cycle-label" id="streakCycleLabel"></div>
         <button class="btn btn-primary btn-block" id="checkinBtn" onclick="doCheckin()">Check in for UGX 250</button>
       </div>
       <div class="sec-head"><h3>Redeem a Promo Code</h3></div>

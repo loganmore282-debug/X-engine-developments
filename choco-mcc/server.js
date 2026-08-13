@@ -3220,17 +3220,56 @@ app.get('/admin/users', async (req, res) => {
 // used to only ever be incremented at registration time (L3 wasn't even
 // incremented at all, only ever decremented on delete), so any account that
 // existed before that fix, or drifted for any other reason, is corrected here.
+// The EAT calendar-day key a checkin transaction actually happened on,
+// derived fresh from its own createdAt timestamp -- not trusted from the
+// transaction's stored `date` string, so this is a genuine independent
+// recomputation, the same way recounting totals below reads straight off
+// amounts rather than trusting a cached total.
+function eatDayKey(ts) {
+  const d = new Date(tsMillis(ts) + 3 * 3600000);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+// Matches nowStr().date's zero-padded MM/DD/YYYY exactly -- that's the
+// format /checkin itself compares lastCheckin against, so a recomputed
+// value has to land in the identical shape or the very next real check-in
+// would wrongly see it as "not yesterday" and reset the streak all over
+// again.
+function dayKeyToLastCheckinFormat(key) {
+  const [y, m, d] = key.split('-');
+  return `${m}/${d}/${y}`;
+}
+// Recomputes what checkinStreak/lastCheckin SHOULD be, purely from the real
+// history of 'checkin' transactions -- the length of the run of CONSECUTIVE
+// calendar days ending at the most recent actual check-in. This is exactly
+// the state the live /checkin endpoint would have arrived at on its own
+// through real, unbroken daily check-ins; it never invents activity that
+// didn't happen and never touches wallet balance (the reward money was
+// already correctly paid at each individual check-in, verified by the very
+// transactions this reads).
+function computeCheckinStreak(dayKeysSet) {
+  if (!dayKeysSet.size) return { streak: 0, lastCheckin: null };
+  const sorted = [...dayKeysSet].sort();
+  let streak = 1;
+  for (let i = sorted.length - 1; i > 0; i--) {
+    const cur = Date.parse(sorted[i] + 'T00:00:00Z');
+    const prev = Date.parse(sorted[i - 1] + 'T00:00:00Z');
+    if (cur - prev === 86400000) streak++; else break;
+  }
+  return { streak, lastCheckin: dayKeyToLastCheckinFormat(sorted[sorted.length - 1]) };
+}
 app.get('/admin/users/recount', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const txSnap = await db.collection('transactions').limit(200000).get();
     const totals = {}; // userId -> { deposited, earned }
+    const checkinDays = {}; // userId -> Set of 'YYYY-MM-DD' EAT day keys
     txSnap.forEach(d => {
       const t = d.data();
       if (!t.userId) return;
       const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
       if (t.type === 'deposit') row.deposited += Number(t.amount) || 0;
       else if (t.type === 'cashback') row.earned += Number(t.amount) || 0;
+      if (t.type === 'checkin') (checkinDays[t.userId] || (checkinDays[t.userId] = new Set())).add(eatDayKey(t.createdAt));
     });
     const usersSnap = await db.collection('users').limit(10000).get();
     const referredByMap = {}; // userId -> their own referredBy
@@ -3249,19 +3288,32 @@ app.get('/admin/users/recount', async (req, res) => {
       }
     });
     const batch = db.batch();
-    let updated = 0;
+    let updated = 0, streaksFixed = 0;
     usersSnap.forEach(d => {
+      const u = d.data();
       const row = totals[d.id] || { deposited: 0, earned: 0 };
       const team = teamCounts[d.id] || { l1: 0, l2: 0, l3: 0 };
-      batch.update(d.ref, {
+      const fields = {
         totalDeposited: row.deposited, totalEarned: row.earned,
         teamL1Count: team.l1, teamL2Count: team.l2, teamL3Count: team.l3
-      });
+      };
+      // Only ever WRITE a corrected streak/lastCheckin when the ledger-true
+      // value actually differs from what's stored -- keeps this a genuine
+      // "only touch what's actually wrong" reconciliation, not a blanket
+      // rewrite, and streaksFixed reports exactly how many accounts really
+      // had a stale/incorrect value.
+      const real = computeCheckinStreak(checkinDays[d.id] || new Set());
+      if (real.streak !== (u.checkinStreak || 0) || real.lastCheckin !== (u.lastCheckin || null)) {
+        fields.checkinStreak = real.streak;
+        fields.lastCheckin = real.lastCheckin;
+        streaksFixed++;
+      }
+      batch.update(d.ref, fields);
       updated++;
     });
     await batch.commit();
-    logAdminAction(req, 'users_recounted', { updated });
-    res.json({ status: 'success', updated });
+    logAdminAction(req, 'users_recounted', { updated, streaksFixed });
+    res.json({ status: 'success', updated, streaksFixed });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Read-only sweep for real money-safety problems: negative balances, the same
