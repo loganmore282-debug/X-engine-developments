@@ -1196,9 +1196,22 @@ var _lastTab = 'home';
 function switchTab(name){
   var enteringHomeFromElsewhere = (name==='home' && _lastTab!=='home');
   ['home','shop','rewards','team','account'].forEach(function(t){
-    document.getElementById('view'+t.charAt(0).toUpperCase()+t.slice(1)).style.display = (t===name)?'block':'none';
+    var el = document.getElementById('view'+t.charAt(0).toUpperCase()+t.slice(1));
+    if(t===name){
+      el.style.display = 'block';
+      // Force a reflow before (re-)adding the class so the appear animation
+      // replays every time, including switching back to a tab that already
+      // had it -- without this the class staying present from last time
+      // would mean no animation change for the browser to notice.
+      el.classList.remove('view-appear'); void el.offsetWidth; el.classList.add('view-appear');
+    } else {
+      el.style.display = 'none';
+      el.classList.remove('view-appear');
+    }
   });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===name); });
+  var tappedTab = document.querySelector('.tab[data-tab="'+name+'"]');
+  if(tappedTab){ tappedTab.classList.remove('tab-tapped'); void tappedTab.offsetWidth; tappedTab.classList.add('tab-tapped'); }
   if(name==='rewards' || name==='team' || name==='home') renderAll();
   // Shop -> Home, Team -> Home, Rewards -> Home, Me -> Home all re-show the
   // announcement (with its Telegram buttons shaking right away -- see

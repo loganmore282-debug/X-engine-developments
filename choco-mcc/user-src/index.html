@@ -241,6 +241,19 @@
      with the old active-state ring; the cut-out icons don't need either. */
   .tab .ti img.pic-tile{border-radius:9px;object-fit:cover;}
   .tab.active .ti img.pic-tile{box-shadow:0 0 0 2px rgba(255,255,255,.55);}
+  /* Tap feedback on a nav tab -- a quick squeeze-and-release, replayed every
+     tap (even repeat taps on the tab you're already on) via a reflow-forcing
+     class toggle in switchTab(), the same pattern used elsewhere for
+     replayable one-shot animations (the gift-code reveal, etc). */
+  .tab.tab-tapped{animation:tabTap .28s ease;}
+  @keyframes tabTap{0%{transform:scale(1);}40%{transform:scale(.88);}100%{transform:scale(1);}}
+  /* Plain fade-and-settle appear for the page you're switching TO -- opacity
+     plus a few px of upward drift, not a slide-in-from-a-side: this is meant
+     to read as "the content appearing", the same feeling as the About Us
+     reveal, without that page's left/right slide variants. Replayed on every
+     switch the same reflow-forcing way as the tap animation above. */
+  .view-appear{animation:viewAppear .32s ease-out both;}
+  @keyframes viewAppear{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 
   /* ---------- Overlay pages ---------- */
   .overlay{position:fixed;inset:0;background:var(--cream);z-index:80;display:none;overflow-y:auto;}

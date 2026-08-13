@@ -616,7 +616,11 @@
 // with no bonus/referral matching working right for that account. Existing
 // accounts are unaffected (their login still works exactly as before);
 // admin now has a way to detect and correct already-broken ones.
-const CACHE = 'chocomcc-shell-v113';
+// v114: Switching bottom-nav tabs (Home/Shop/Rewards/Team/Me) now has the
+// page content fade-and-settle in, instead of appearing instantly -- a
+// plain opacity+drift "appear", not a slide. Tapping any nav tab also gives
+// it a quick squeeze/release animation for tactile feedback.
+const CACHE = 'chocomcc-shell-v114';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
