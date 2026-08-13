@@ -651,7 +651,17 @@
 // sheet bank transfers already used, wired into the same Cash Out flow --
 // nothing new to learn). The PIN itself is never something "support" would
 // ever legitimately ask for.
-const CACHE = 'chocomcc-shell-v117';
+// v118: Clearer guidance around the Payout PIN, after members who bound a
+// payout account before the PIN existed kept saying "I never set a PIN"
+// -- they had, just without realizing it, because the prompt read the
+// same generic way whether this was their first time or not. The app now
+// asks the server first and shows a genuinely different, unmissable
+// message when there's truly no PIN yet ("Create Your Payout PIN...
+// remember it, it can only be reset by support") versus when one already
+// exists ("Enter your 4-digit payout PIN"). The Payout Account page and
+// the Cash Out "How it works" steps both spell out the PIN step plainly
+// now, including never sharing it with anyone claiming to be support.
+const CACHE = 'chocomcc-shell-v118';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 

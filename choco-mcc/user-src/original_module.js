@@ -1635,10 +1635,22 @@ function askPayoutPin(title, sub, err){
 // while the actual request for that attempt is in flight.
 async function withPayoutPin(action, btn){
   var label = btn ? btn.textContent : '';
-  var sub = "Enter your 4-digit PIN to continue. First time? Choose one now — it'll be saved for next time.";
+  // Asks the server directly, every time, whether this account has ever
+  // set a real PIN -- members who bound a payout account before this PIN
+  // step existed kept seeing the same generic "enter your PIN" wording and
+  // assumed it referred to some PIN they'd already set, typed something
+  // quickly without realizing THAT became their permanent PIN, then said
+  // "I never set a PIN." The title/message now says plainly, up front,
+  // which of the two situations this actually is.
+  var statusR = await api('/account/payout-pin/status');
+  var isFirstTime = !!(statusR && statusR.status==='success' && !statusR.hasPayoutPin);
+  var title = isFirstTime ? 'Create Your Payout PIN' : 'Payout Security PIN';
+  var sub = isFirstTime
+    ? "You don't have a payout PIN yet — even if you already saved a payout account before. Choose any 4 digits now. This becomes your permanent PIN and will be asked for on every withdrawal and every payout-account change from now on, so remember it. It can only be reset by contacting support."
+    : 'Enter your 4-digit payout PIN to continue.';
   var err = '';
   while(true){
-    var pin = await askPayoutPin('Payout Security PIN', sub, err);
+    var pin = await askPayoutPin(title, sub, err);
     if(pin===null) return null;
     if(btn) btn.innerHTML = btnBusyHtml('Please wait…');
     var r = await action(pin);
