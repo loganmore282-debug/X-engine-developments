@@ -743,6 +743,17 @@ async function banUserAutomatically(userId, reason) {
     console.error(`Auto-ban: ${userId} -- ${reason}`);
   } catch (e) { console.error('Auto-ban write error:', e.message); }
 }
+// Lightweight, fire-and-forget log of a suspicious/rejected action -- feeds
+// the owner-only "Suspicious Activity" analytics (repeated insufficient-
+// funds withdrawal attempts, repeated already-claimed check-ins, gift/promo
+// code guessing). Deliberately NOT awaited at any call site: this is pure
+// visibility, never on the critical path of the actual request, and a
+// logging failure must never turn into a user-facing error.
+function logSecurityEvent(userId, type, meta) {
+  if (!userId) return;
+  db.collection('securityEvents').add({ userId, type, meta: meta || null, createdAt: FieldValue.serverTimestamp() })
+    .catch(e => console.error('logSecurityEvent error:', e.message));
+}
 // Marks a pending deposit failed AND checks this user's failed-deposit count
 // for today, banning past 20. Centralized here so every place a deposit can
 // resolve to 'failed' (the initial gateway call, the status-poll fallback,
@@ -1524,7 +1535,10 @@ app.post('/checkin', async (req, res) => {
       const u = snap.data();
       if (u.status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
       const today = nowStr().date;
-      if (u.lastCheckin === today) return res.status(400).json({ status: 'error', message: 'Already checked in today' });
+      if (u.lastCheckin === today) {
+        logSecurityEvent(uid, 'checkin_already_claimed', null);
+        return res.status(400).json({ status: 'error', message: 'Already checked in today' });
+      }
       // Reconciled against real check-in history on every single call,
       // rather than trusting the stored checkinStreak/lastCheckin fields
       // outright -- a stale or corrupted value (a bad past write, data
@@ -2332,7 +2346,10 @@ app.post('/withdraw/request', async (req, res) => {
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
         throw new Error('Purchase at least one chocolate product before you can cash out.');
       const bal = fresh.data().walletBalance || 0;
-      if (bal < amt) throw new Error(`Not enough balance, you have ${fmtUGX(bal)}`);
+      if (bal < amt) {
+        logSecurityEvent(userId, 'withdraw_insufficient_funds', { attempted: amt, balance: bal });
+        throw new Error(`Not enough balance, you have ${fmtUGX(bal)}`);
+      }
       // Daily cash-out cap, admin-editable (settings.maxWithdrawalsPerDay).
       // Counted and enforced HERE, inside the same per-user withLock('bal:'+
       // userId) every withdrawal already serialises through — two requests
@@ -2854,7 +2871,13 @@ app.post('/redeem', async (req, res) => {
       if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
       if (userSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
       const codeSnap = await db.collection('promoCodes').where('code', '==', code).limit(1).get();
-      if (codeSnap.empty) return res.status(400).json({ status: 'error', message: "That code isn't valid" });
+      if (codeSnap.empty) {
+        // A code that doesn't exist at all is the actual "guessing" signal --
+        // an already-used or usage-capped code below is a REAL code, not a
+        // guess, so those aren't logged here.
+        logSecurityEvent(userId, 'giftcode_invalid_attempt', { code });
+        return res.status(400).json({ status: 'error', message: "That code isn't valid" });
+      }
       const codeDoc = codeSnap.docs[0];
       const cd = codeDoc.data();
       if (cd.active === false) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
@@ -4360,6 +4383,66 @@ app.post('/admin/analytics', async (req, res) => {
       topReferrers: referrers.slice(0, 10), topDepositors: depositors.slice(0, 10), biggestWithdrawals: bigWits.slice(0, 10)
     });
   } catch (e) { console.error('Analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// Owner-only visibility into suspicious/abusive usage patterns -- deliberately
+// a SEPARATE endpoint from /admin/analytics (which staff can also read) and
+// gated with verifyOwner, not verifyAdmin, so staff never receives this data
+// at all, same "never disclose it" treatment as the Integrity audit and
+// other owner-only tools. Surfaces repeat offenders across four signals the
+// owner asked for by name: accounts with many FAILED deposits (reads the
+// same pendingDeposits records /admin/integrity already trusts, no new
+// logging needed), accounts repeatedly trying to withdraw more than their
+// balance, accounts repeatedly tapping check-in after already claiming
+// today, and accounts trying gift/promo codes that don't exist (guessing) --
+// the last three are newly logged to securityEvents at the exact point each
+// one is rejected (see logSecurityEvent call sites). Only ever a READ over
+// events that already happened; never blocks or bans anyone by itself.
+app.post('/admin/analytics/abuse', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const days = Math.min(Math.max(parseInt(req.body.days) || 30, 1), 180);
+  const minCount = Math.min(Math.max(parseInt(req.body.minCount) || 3, 1), 1000);
+  const sinceMs = Date.now() - days * 86400000;
+  try {
+    const [depSnap, evSnap, usersSnap] = await Promise.all([
+      db.collection('pendingDeposits').where('status', '==', 'failed').limit(10000).get(),
+      db.collection('securityEvents').limit(10000).get(),
+      db.collection('users').limit(10000).get(),
+    ]);
+    const phoneOf = {};
+    usersSnap.forEach(d => { phoneOf[d.id] = d.data().phone || d.id; });
+
+    // Groups docs matching filterFn into a per-user count, windowed to the
+    // period, keeping up to 5 sample details per user for the admin to
+    // actually see WHAT was attempted (amounts, codes tried), not just a
+    // bare number. Only users at/above minCount show up at all -- a single
+    // failed deposit or one mistimed check-in tap is normal life, not abuse.
+    function topOffenders(snap, filterFn, sampleFn) {
+      const byUser = {};
+      snap.forEach(d => {
+        const x = d.data();
+        if (!x.userId || !filterFn(x)) return;
+        const ms = tsMillis(x.createdAt);
+        if (ms < sinceMs) return;
+        const row = byUser[x.userId] || (byUser[x.userId] = { userId: x.userId, phone: phoneOf[x.userId] || x.userId, count: 0, lastAt: 0, samples: [] });
+        row.count++;
+        row.lastAt = Math.max(row.lastAt, ms);
+        if (sampleFn && row.samples.length < 5) row.samples.push(sampleFn(x));
+      });
+      return Object.values(byUser).filter(r => r.count >= minCount).sort((a, b) => b.count - a.count).slice(0, 50);
+    }
+
+    const repeatedFailedDeposits = topOffenders(depSnap, () => true, x => ({ amount: x.amount || 0, reason: x.failureReason || null }));
+    const repeatedInsufficientWithdrawals = topOffenders(evSnap, x => x.type === 'withdraw_insufficient_funds',
+      x => ({ attempted: (x.meta && x.meta.attempted) || 0, balance: (x.meta && x.meta.balance) || 0 }));
+    const repeatedCheckinAlreadyClaimed = topOffenders(evSnap, x => x.type === 'checkin_already_claimed', null);
+    const giftcodeGuessing = topOffenders(evSnap, x => x.type === 'giftcode_invalid_attempt', x => (x.meta && x.meta.code) || '');
+
+    res.json({
+      status: 'success', period: days, minCount,
+      repeatedFailedDeposits, repeatedInsufficientWithdrawals, repeatedCheckinAlreadyClaimed, giftcodeGuessing
+    });
+  } catch (e) { console.error('Abuse analytics error:', e.message); res.status(500).json({ status: 'error', message: e.message }); }
 });
 
 // ═══════════════════════════════════════════

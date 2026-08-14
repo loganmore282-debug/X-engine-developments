@@ -538,7 +538,14 @@ async function renderAnalytics(silent){
   // the 7/30/90-day period still shows it -- there's nothing worth keeping
   // on screen yet in those cases.
   if(!silent) $('content').innerHTML='<div class="empty">Crunching numbers…</div>';
-  const a = await api('/admin/analytics', { days:_anPeriod });
+  const isOwner = SESSION_ROLE === 'owner';
+  // Suspicious-activity data is owner-only end to end (server refuses it to
+  // staff outright) -- only even requested when the session is the owner's,
+  // so a staff session never sees the request in its own network tab either.
+  const [a, ab] = await Promise.all([
+    api('/admin/analytics', { days:_anPeriod }),
+    isOwner ? api('/admin/analytics/abuse', { days:_anPeriod }) : Promise.resolve(null)
+  ]);
   if(staleTab('analytics')) return;
   if(a.status!=='success'){ if(!silent) $('content').innerHTML='<div class="empty">Could not load analytics. '+esc(a.message||'')+'</div>'; return; }
   const k=a.kpis||{};
@@ -557,6 +564,37 @@ async function renderAnalytics(silent){
     return `<div class="stat" style="${on?'outline:2px solid var(--gold);outline-offset:-2px':''}"><div class="l" style="text-transform:uppercase;font-size:11px;font-weight:700">${label}${on?' · busiest':''}</div><div class="n" style="font-size:15px;color:var(--ok);margin-top:4px">${ugx(b.dep)}</div><div class="l">deposits</div><div class="n" style="font-size:15px;color:var(--danger);margin-top:4px">${ugx(b.wit)}</div><div class="l">withdrawals</div></div>`;};
   const f=a.forecast||{}; const fw=f.withdrawals||{}; const fd=f.deposits||{};
   const sa=a.staffApprovals||{byStaff:[],timeline:[]};
+  // Owner-only suspicious-activity tables. `ab` is null outright for a staff
+  // session (never requested -- see above), so this whole block just never
+  // runs for them; no placeholder, no disclosure, matching every other
+  // owner-only tool in this panel.
+  const abuseSection = (isOwner && ab && ab.status==='success') ? (()=>{
+    const rowsOr = (list, cols, empty) => list.length ? list.map(cols).join('') : `<tr><td colspan="99" class="empty">${empty}</td></tr>`;
+    const lastCol = r => `<td>${r.lastAt?fdate(r.lastAt):'—'}</td>`;
+    const failedDepRows = rowsOr(ab.repeatedFailedDeposits,
+      r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(s=>ugx(s.amount)).join(', ')}</td>${lastCol(r)}</tr>`,
+      'No accounts with repeated failed deposits in this period.');
+    const insufficientRows = rowsOr(ab.repeatedInsufficientWithdrawals,
+      r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(s=>`tried ${ugx(s.attempted)} with ${ugx(s.balance)}`).join('; ')}</td>${lastCol(r)}</tr>`,
+      'No accounts repeatedly trying to withdraw more than their balance.');
+    const checkinRows = rowsOr(ab.repeatedCheckinAlreadyClaimed,
+      r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td>${lastCol(r)}</tr>`,
+      'No accounts repeatedly re-tapping check-in after already claiming.');
+    const giftcodeRows = rowsOr(ab.giftcodeGuessing,
+      r=>`<tr><td>${esc(r.phone)}</td><td style="color:var(--danger)"><b>${r.count}</b></td><td>${(r.samples||[]).map(esc).join(', ')}</td>${lastCol(r)}</tr>`,
+      'No accounts trying gift/promo codes that don\'t exist.');
+    return `
+    <div class="row" style="align-items:center;margin:18px 0 6px"><h2 class="sec" style="flex:1;margin:0">Suspicious activity (${ab.period}-day, ${ab.minCount}+ to appear)</h2></div>
+    <p class="muted" style="margin:0 0 10px">Owner-only. Patterns worth a look, not automatic accusations -- a slow connection or a genuine mistake can also produce a repeat or two.</p>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated failed deposits</h2>
+      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Failures</th><th>Recent amounts</th><th>Last seen</th></tr></thead><tbody>${failedDepRows}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated insufficient-funds withdrawal attempts</h2>
+      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Recent tries</th><th>Last seen</th></tr></thead><tbody>${insufficientRows}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Repeated "already checked in" taps</h2>
+      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Last seen</th></tr></thead><tbody>${checkinRows}</tbody></table></div></div>
+    <div class="panel-card"><h2 class="sec" style="margin-top:0">Gift/promo code guessing</h2>
+      <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Attempts</th><th>Codes tried</th><th>Last seen</th></tr></thead><tbody>${giftcodeRows}</tbody></table></div></div>`;
+  })() : '';
   const staffTable = sa.byStaff.length ? `<div class="panel-card"><h2 class="sec" style="margin-top:0">Staff withdrawal approvals (${a.period}-day)</h2>
     <p class="muted" style="margin-top:0">Who's actually approving/declining payouts, and how much of the workload each person carries.</p>
     <div class="table-scroll"><table><thead><tr><th>Staff</th><th>Approved</th><th>Declined</th><th>Handled</th><th>Share</th><th>Amount approved</th><th>Last action</th></tr></thead>
@@ -611,7 +649,8 @@ async function renderAnalytics(silent){
     <div class="panel-card"><h2 class="sec" style="margin-top:0">Biggest withdrawals</h2>
       <div class="table-scroll"><table><thead><tr><th>Phone</th><th>Amount</th></tr></thead>
       <tbody>${(a.biggestWithdrawals||[]).length?a.biggestWithdrawals.map(r=>`<tr><td>${esc(r.phone)}</td><td><b>${ugx(r.amount)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="empty">No withdrawals yet</td></tr>'}</tbody></table></div></div>
-    ${staffTable}`;
+    ${staffTable}
+    ${abuseSection}`;
   document.querySelectorAll('[data-per]').forEach(b=>b.addEventListener('click',()=>{ _anPeriod=parseInt(b.dataset.per); renderAnalytics(); }));
 }
 
