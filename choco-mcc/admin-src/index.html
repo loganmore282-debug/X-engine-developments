@@ -665,7 +665,7 @@ async function renderUsers(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="usersCount">Users (${_users.length})</h2>
       ${isOwner?`<button class="btn sm ghost" id="auditBtn" title="Recompute every balance from the transaction ledger and flag mismatches, duplicate credits and stuck withdrawals">Integrity audit</button>
-      <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning totals AND check-in streaks from the transaction ledger">Recalculate totals</button>`:''}</div>
+      <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning/invested totals AND check-in streaks from the real ledger">Recalculate totals</button>`:''}</div>
     <div class="panel-card"><input id="userSearch" placeholder="Search phone or referral code"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
   $('userSearch').addEventListener('input', drawUsers);
@@ -673,7 +673,7 @@ async function renderUsers(){
     $('recountBtn').addEventListener('click', async()=>{
       const b=$('recountBtn'); b.disabled=true; b.textContent='Recalculating…';
       const d=await api('/admin/users/recount');
-      toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)${d.streaksFixed?`, ${d.streaksFixed} check-in streak(s) corrected`:''}`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)${d.streaksFixed?`, ${d.streaksFixed} check-in streak(s) corrected`:''}${d.investedFixed?`, ${d.investedFixed} invested total(s) corrected`:''}`:(d.message||'Failed'), d.status==='success'?'ok':'err');
       renderUsers();
     });
     $('auditBtn').addEventListener('click', async()=>{
@@ -687,7 +687,8 @@ async function renderUsers(){
         withdrawal_stuck_sending:'Lost contact with MarzPay mid-payout -- check this reference on the MarzPay dashboard before doing anything, the user may already have been paid',
         deposit_stuck_initiating:'Lost contact with MarzPay mid-deposit -- check this reference on the MarzPay dashboard, the member may already have been charged',
         phone_malformed:'Malformed phone -- not a real Uganda number, unsearchable by their referrer or support',
-        registration_incomplete:'Signed up but never finished registering -- no referral code, no welcome bonus, invisible to any referrer\'s team'};
+        registration_incomplete:'Signed up but never finished registering -- no referral code, no welcome bonus, invisible to any referrer\'s team',
+        invested_mismatch:'"Invested" total does not match their real purchases -- click Recalculate totals (below, in Users) to fix'};
       openModal(`<h3>Integrity audit</h3>
         <div class="muted" style="margin-bottom:10px">${d.usersChecked} user(s) checked · ${fdate(d.ranAt)}</div>
         ${d.healthy?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance matches its ledger. No duplicates, no stuck payouts.</div>`
@@ -698,6 +699,7 @@ async function renderUsers(){
             : a.kind==='negative_balance'?ugx(a.balance)
             : a.kind==='phone_malformed'?`<button class="btn sm ghost" data-fixphone="${esc(a.userId)}" data-oldphone="${esc(a.phone||'')}">Fix phone</button>`
             : a.kind==='registration_incomplete'?`${a.hours}h ago &nbsp; <button class="btn sm ghost" data-completereg="${esc(a.userId)}">Complete registration</button>`
+            : a.kind==='invested_mismatch'?`shows ${ugx(a.stored)}, real total is ${ugx(a.real)}`
             : `${ugx(a.amount||0)} · ${a.hours}h`}</span></div>`).join('')}
         <button class="btn block" onclick="closeModal()">Close</button>`);
       document.querySelectorAll('[data-fixphone]').forEach(b=>b.addEventListener('click', async ()=>{

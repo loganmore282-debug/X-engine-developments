@@ -3319,7 +3319,10 @@ app.get('/admin/users', async (req, res) => {
 app.get('/admin/users/recount', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const txSnap = await db.collection('transactions').limit(200000).get();
+    const [txSnap, invSnap] = await Promise.all([
+      db.collection('transactions').limit(200000).get(),
+      db.collection('investments').limit(200000).get(),
+    ]);
     const totals = {}; // userId -> { deposited, earned }
     const checkinDays = {}; // userId -> Set of 'YYYY-MM-DD' EAT day keys
     txSnap.forEach(d => {
@@ -3329,6 +3332,26 @@ app.get('/admin/users/recount', async (req, res) => {
       if (t.type === 'deposit') row.deposited += Number(t.amount) || 0;
       else if (t.type === 'cashback') row.earned += Number(t.amount) || 0;
       if (t.type === 'checkin') (checkinDays[t.userId] || (checkinDays[t.userId] = new Set())).add(eatDayKey(t.createdAt));
+    });
+    // totalInvested is a plain cumulative counter (never derived server-side
+    // from the investments themselves) -- an old code path that once did
+    // naive JS `+=` on a field that had ever been stored as a STRING (a
+    // manual edit, or a pre-fix write) doesn't throw, it silently
+    // CONCATENATES: "30000" + 30000 becomes the string "3000030000",
+    // which then gets stored and read back as the very real-looking but
+    // wildly wrong number 3,000,030,000. /invest/create itself is already
+    // hardened against this (Number()-coerces both sides before writing),
+    // so it can't happen again going forward -- this repairs whatever is
+    // ALREADY sitting wrong in the database from before that fix, the same
+    // way the streak repair below fixes stale streaks. Each investment
+    // record's own `amount` is written once at purchase time and never
+    // mutated afterward, so summing them is the authoritative total
+    // regardless of what the corrupted counter field says.
+    const investedByUser = {};
+    invSnap.forEach(d => {
+      const inv = d.data();
+      if (!inv.userId) return;
+      investedByUser[inv.userId] = (investedByUser[inv.userId] || 0) + (Number(inv.amount) || 0);
     });
     const usersSnap = await db.collection('users').limit(10000).get();
     const referredByMap = {}; // userId -> their own referredBy
@@ -3347,7 +3370,7 @@ app.get('/admin/users/recount', async (req, res) => {
       }
     });
     const batch = db.batch();
-    let updated = 0, streaksFixed = 0;
+    let updated = 0, streaksFixed = 0, investedFixed = 0;
     usersSnap.forEach(d => {
       const u = d.data();
       const row = totals[d.id] || { deposited: 0, earned: 0 };
@@ -3367,12 +3390,20 @@ app.get('/admin/users/recount', async (req, res) => {
         fields.lastCheckin = real.lastCheckin;
         streaksFixed++;
       }
+      // Same "only touch what's actually wrong" treatment for totalInvested
+      // -- see the corruption explanation above. Never touches walletBalance
+      // or any investment/payout record, purely a display/analytics counter.
+      const realInvested = investedByUser[d.id] || 0;
+      if (realInvested !== (Number(u.totalInvested) || 0)) {
+        fields.totalInvested = realInvested;
+        investedFixed++;
+      }
       batch.update(d.ref, fields);
       updated++;
     });
     await batch.commit();
-    logAdminAction(req, 'users_recounted', { updated, streaksFixed });
-    res.json({ status: 'success', updated, streaksFixed });
+    logAdminAction(req, 'users_recounted', { updated, streaksFixed, investedFixed });
+    res.json({ status: 'success', updated, streaksFixed, investedFixed });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Read-only sweep for real money-safety problems: negative balances, the same
@@ -3384,11 +3415,12 @@ app.get('/admin/users/recount', async (req, res) => {
 app.get('/admin/integrity', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [usersSnap, txSnap, witSnap, depSnap] = await Promise.all([
+    const [usersSnap, txSnap, witSnap, depSnap, invSnap] = await Promise.all([
       db.collection('users').limit(10000).get(),
       db.collection('transactions').limit(200000).get(),
       db.collection('withdrawals').limit(10000).get(),
       db.collection('pendingDeposits').limit(10000).get(),
+      db.collection('investments').limit(200000).get(),
     ]);
     const alerts = [];
     const ledgerByUser = {};
@@ -3401,6 +3433,19 @@ app.get('/admin/integrity', async (req, res) => {
         const key = t.userId + '::' + t.ref;
         refSeen[key] = (refSeen[key] || 0) + 1;
       }
+    });
+    // See /admin/users/recount for the full story: totalInvested is a plain
+    // counter, and an old code path that once did naive JS `+=` on a field
+    // that had ever been stored as a STRING would silently CONCATENATE
+    // instead of add ("30000" + 30000 -> the string "3000030000", read back
+    // as a very real-looking but wildly wrong number). Flagged here so it
+    // shows up in a routine audit, not just when an admin happens to
+    // notice an absurd number on a user's detail page.
+    const investedByUser = {};
+    invSnap.forEach(d => {
+      const inv = d.data();
+      if (!inv.userId) return;
+      investedByUser[inv.userId] = (investedByUser[inv.userId] || 0) + (Number(inv.amount) || 0);
     });
     Object.entries(refSeen).forEach(([key, times]) => {
       if (times > 1) {
@@ -3416,6 +3461,10 @@ app.get('/admin/integrity', async (req, res) => {
       const ledger = ledgerByUser[d.id] || 0;
       const diff = Math.round(bal - ledger);
       if (Math.abs(diff) > 1) alerts.push({ kind: 'balance_mismatch', userId: d.id, phone: u.phone, balance: bal, ledger, diff });
+      const realInvested = investedByUser[d.id] || 0;
+      const storedInvested = Number(u.totalInvested) || 0;
+      if (realInvested !== storedInvested)
+        alerts.push({ kind: 'invested_mismatch', userId: d.id, phone: u.phone, stored: storedInvested, real: realInvested });
       // /account/create-profile deliberately never rejects a phone that
       // doesn't reduce to a clean Uganda mobile number (it's this person's
       // already-working Firebase login identity, not the money-moving path
