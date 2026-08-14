@@ -913,10 +913,11 @@ function syncSweepPhase(root){
   (root||document).querySelectorAll('.btn-buy-glow').forEach(function(el){ el.style.setProperty('--sweep-delay', delay+'s'); });
 }
 function renderShop(){
-  // Sold-out/coming-soon tiers render fully dimmed with a banner spanning
-  // the whole image. Every chocolate's full numbers (price, daily reward,
-  // cycle, total payout) plus its own Buy button sit right on the card
-  // -- no detail page to tap through to anymore. Server-side,
+  // Sold-out/coming-soon tiers render fully dimmed, with the ONLY "Coming
+  // soon" indication being the disabled button at the bottom -- no banner
+  // across the image anymore. Every chocolate's full numbers (price, daily
+  // reward, cycle, total payout) plus its own Buy button sit right on the
+  // card -- no detail page to tap through to anymore. Server-side,
   // /invest/create independently re-checks active/comingSoon on every
   // purchase attempt regardless of what the client shows.
   var html = PRODUCTS.map(function(p, i){
@@ -926,8 +927,7 @@ function renderShop(){
     return '<div class="prod-card'+(soldOut?' is-soldout':'')+'" id="prodCard-'+p.key+'">'+
       '<div class="prod-img-wrap"><img class="prod-img" src="'+CHOCO_IMAGES[p.key]+'">'+
       '<span class="prod-rank">Tier '+(i+1)+'</span>'+
-      (ribbon?'<span class="prod-ribbon">'+ribbon+'</span>':'')+
-      (soldOut?'<span class="prod-soldout-banner">Coming Soon</span>':'')+'</div>'+
+      (ribbon?'<span class="prod-ribbon">'+ribbon+'</span>':'')+'</div>'+
       '<div class="prod-body-full">'+
         '<div class="prod-name">'+p.name+'</div>'+
         '<div class="prod-stats-line">'+

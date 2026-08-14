@@ -668,7 +668,10 @@
 // warning was blinking nonstop instead of a single clear notice. It now
 // only warns once per outage -- the moment connectivity first drops --
 // and stays quiet until a read actually succeeds again.
-const CACHE = 'chocomcc-shell-v119';
+// v120: Shop's sold-out/coming-soon tiers no longer show a "COMING SOON"
+// banner across the product image -- that status now only shows on the
+// disabled button at the bottom of the card, exactly as requested.
+const CACHE = 'chocomcc-shell-v120';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
