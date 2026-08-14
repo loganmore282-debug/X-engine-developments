@@ -117,7 +117,26 @@ function showLockout(kind, message){
 // is a POST with a body, so the default already routes correctly without
 // every call site needing to opt in/out explicitly.
 var _wokenUp = false;
+// Counts money-moving requests currently in flight, purely so a service-
+// worker update never reloads the page mid-payment (see the SW registration
+// block in index.html). Anything with a body is a POST money/state action;
+// plain reads don't matter here because a reload just re-reads.
+window.__moneyCallsInFlight = 0;
 async function api(path, body, method, retry){
+  var isWrite = !!body;
+  if(isWrite) window.__moneyCallsInFlight++;
+  try {
+    return await _apiRaw(path, body, method, retry);
+  } finally {
+    if(isWrite){
+      window.__moneyCallsInFlight--;
+      // A service-worker update that arrived mid-request was deliberately
+      // held back; now that nothing is in flight it's safe to apply.
+      if(window.__moneyCallsInFlight <= 0 && window.__swUpdateReady) window.__swUpdateReady();
+    }
+  }
+}
+async function _apiRaw(path, body, method, retry){
   method = method || (body ? 'POST' : 'GET');
   if(retry === undefined) retry = (method === 'GET');
   var delays = [0, 3000, 8000, 20000];

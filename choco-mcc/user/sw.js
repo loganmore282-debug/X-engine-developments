@@ -671,7 +671,24 @@
 // v120: Shop's sold-out/coming-soon tiers no longer show a "COMING SOON"
 // banner across the product image -- that status now only shows on the
 // disabled button at the bottom of the card, exactly as requested.
-const CACHE = 'chocomcc-shell-v120';
+// v121: FIXED the long-standing "app still shows the old version until you
+// reinstall" problem, which had three separate causes stacked on top of
+// each other:
+//   1. index.html (which IS the whole app) had no Cache-Control header on
+//      the static host, so the browser/CDN served a stored copy and the
+//      service worker's "network-first" navigation never actually reached
+//      the network. Fixed in render.yaml (no-cache = revalidate every time,
+//      still 304s when unchanged, so no repeated 3MB download).
+//   2. The page registered the service worker once and never checked again,
+//      and even when a new worker took over, the already-running page kept
+//      executing the OLD code. Nothing ever reloaded. Now the app checks for
+//      a new build on launch, on every foreground, and hourly, and reloads
+//      itself the moment a new worker takes control -- held back only while
+//      a payment is actually in flight.
+//   3. The navigation fetch itself didn't bypass the HTTP cache. It does now.
+// Also: the Add Funds quick-amount chips now include 350,000 / 500,000 /
+// 800,000, wrapping onto a second row.
+const CACHE = 'chocomcc-shell-v121';
 const VENDOR_CACHE = 'chocomcc-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
@@ -722,7 +739,16 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request).catch(() => caches.match('/index.html')));
+    // cache:'no-cache' forces a revalidation against the server rather than
+    // letting the browser/CDN hand back a stored copy -- "network-first" was
+    // never actually reaching the network when index.html sat in the HTTP
+    // cache, which is a big part of why phones stayed on old builds. This
+    // still allows a 304, so an unchanged build costs a header round-trip
+    // instead of re-downloading the whole 3MB shell.
+    e.respondWith(
+      fetch(e.request, { cache: 'no-cache' })
+        .catch(() => fetch(e.request).catch(() => caches.match('/index.html')))
+    );
     return;
   }
   e.respondWith(

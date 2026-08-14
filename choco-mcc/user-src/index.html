@@ -358,8 +358,11 @@
   .form-card{margin:6px 20px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:18px;}
   .flabel{font-size:12px;font-weight:800;color:var(--cocoa-soft);margin-bottom:8px;display:block;}
   .famt{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:14px;font-size:20px;font-weight:800;color:var(--cocoa);outline:none;margin-bottom:14px;}
-  .quick-amt-row{display:flex;gap:8px;margin:-6px 0 14px;}
-  .quick-amt-chip{flex:1;padding:10px 4px;border-radius:12px;border:1.5px solid var(--line);background:var(--cream);color:var(--cocoa-soft);font-weight:700;font-size:12.5px;}
+  /* Wraps to as many rows as it needs -- the 28% basis lets exactly three
+     chips share a line, so adding more amounts just adds a tidy new row
+     instead of squeezing every chip narrower. */
+  .quick-amt-row{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 14px;}
+  .quick-amt-chip{flex:1 1 28%;min-width:0;padding:10px 4px;border-radius:12px;border:1.5px solid var(--line);background:var(--cream);color:var(--cocoa-soft);font-weight:700;font-size:12.5px;}
   .quick-amt-chip:active{transform:scale(.97);}
   .famt:focus{border-color:var(--caramel);}
   .calc-row{display:flex;justify-content:space-between;font-size:13px;padding:9px 0;border-bottom:1px dashed var(--line);}
@@ -801,6 +804,9 @@
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=30000">UGX 30,000</button>
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=90000">UGX 90,000</button>
         <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=200000">UGX 200,000</button>
+        <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=350000">UGX 350,000</button>
+        <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=500000">UGX 500,000</button>
+        <button type="button" class="quick-amt-chip" onclick="document.getElementById('depAmt').value=800000">UGX 800,000</button>
       </div>
       <span class="flabel">Choose network</span>
       <div class="net-card-row" id="depNetworkRow">
@@ -1158,6 +1164,51 @@
 
 <script data-nx-assets></script>
 <script data-nx-core></script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}</script>
+<script>
+/* FIXED BUG: updates never reached phones until someone hard-refreshed or
+   reinstalled the app. Registration used to be a single fire-and-forget
+   register() call: the browser only ever re-checked sw.js on its own
+   schedule, and even when a new worker DID install and take over, the page
+   already on screen kept running the OLD code it had loaded at startup.
+   Nothing ever told it to reload, so a member could sit on a build from
+   days ago -- which is exactly how people ended up on an app that had no
+   PIN box during the security rollout.
+
+   Now: the worker script itself is always revalidated against the server
+   (updateViaCache:'none'), we actively check for a new build on launch,
+   every time the app is brought back to the foreground, and hourly while
+   it stays open -- and the moment a new worker takes control we reload so
+   the fresh code is actually what's running.
+
+   The reload is deliberately held back while a money request is in flight
+   (window.__moneyCallsInFlight, maintained by the app's own api() helper)
+   so a deposit/withdrawal/purchase is never yanked out from under someone
+   mid-request; it goes through the instant that request settles. */
+if ('serviceWorker' in navigator) {
+  (function () {
+    var reloading = false, pending = false;
+    // On a first-ever install there was no controller, so claim() fires
+    // controllerchange for a page that is ALREADY the newest code -- reloading
+    // there would just be a pointless flash on someone's first open.
+    var hadController = !!navigator.serviceWorker.controller;
+    function applyUpdate() {
+      if (reloading || !hadController) return;
+      if (window.__moneyCallsInFlight > 0) { pending = true; return; }
+      reloading = true;
+      location.reload();
+    }
+    // Re-checked whenever a money call finishes, so a deferred update lands
+    // as soon as it's safe instead of waiting for the next foreground.
+    window.__swUpdateReady = function () { if (pending) applyUpdate(); };
+    navigator.serviceWorker.addEventListener('controllerchange', applyUpdate);
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function (reg) {
+      function check() { try { reg.update(); } catch (e) {} }
+      check();
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+      setInterval(check, 3600000);
+    }).catch(function () {});
+  })();
+}
+</script>
 </body>
 </html>

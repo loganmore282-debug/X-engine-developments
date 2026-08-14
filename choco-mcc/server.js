@@ -1168,7 +1168,7 @@ app.get('/team/members', async (req, res) => {
     }
     members.sort((a, b) => (b.joinedAt || '') > (a.joinedAt || '') ? 1 : -1);
     res.json({ status: 'success', level, members });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { console.error('Team members error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load your team right now' }); }
 });
 
 // Team + Task Center stats. Milestones here are informational — actually
@@ -1201,7 +1201,7 @@ app.get('/team/stats', async (req, res) => {
       counts: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
       commission: u.teamCommission || 0, teamRewards
     });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { console.error('Team stats error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load your team stats right now' }); }
 });
 
 app.post('/team/milestone/claim', async (req, res) => {
@@ -1243,7 +1243,7 @@ app.post('/team/milestone/claim', async (req, res) => {
     });
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
     res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -1490,7 +1490,7 @@ app.post('/register', async (req, res) => {
     res.status(result.code).json(result.body);
   } catch (e) {
     console.error('Register error:', e.message);
-    res.status(500).json({ status: 'error', message: e.message });
+    res.status(500).json({ status: 'error', message: 'Could not complete your registration right now' });
   }
 });
 
