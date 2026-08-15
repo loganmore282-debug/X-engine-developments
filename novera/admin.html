@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novera Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Albert+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#050507; --void-2:#0b0b12; --void-3:#12121c;
+    --signal:#6C4EFF; --ink:#f4f2ff; --ink-dim:#9d9ab4; --line:#211f2e;
+    --good:#3ddc97; --bad:#ff5c72;
+    --ff-head:'Unbounded',sans-serif; --ff-body:'Albert Sans',sans-serif; --ff-mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--void); color:var(--ink); font-family:var(--ff-body);}
+  .mono{font-family:var(--ff-mono); font-variant-numeric:tabular-nums;}
+  h1,h2{font-family:var(--ff-head); margin:0;}
+  #login{min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column;}
+  #login input{width:260px; padding:12px 14px; border-radius:10px; border:1px solid var(--line); background:var(--void-3); color:var(--ink); margin-top:16px;}
+  #login button{margin-top:14px; padding:12px 20px; border-radius:10px; border:none; background:var(--signal); color:#fff; font-weight:600; cursor:pointer;}
+  #login .err{color:var(--bad); margin-top:10px; font-size:13px; min-height:16px;}
+
+  #dash{display:none;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:16px 24px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--void); z-index:5;}
+  .tabs{display:flex; gap:6px; padding:14px 24px; border-bottom:1px solid var(--line); overflow-x:auto;}
+  .tab{background:var(--void-3); border:1px solid var(--line); color:var(--ink-dim); padding:8px 16px; border-radius:20px; cursor:pointer; white-space:nowrap; font-size:13px;}
+  .tab.active{background:var(--signal); color:#fff; border-color:var(--signal);}
+  .panel{padding:20px 24px; display:none;}
+  .panel.active{display:block;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line);}
+  th{color:var(--ink-dim); text-transform:uppercase; font-size:11px; letter-spacing:.06em;}
+  .badge{padding:3px 10px; border-radius:20px; font-size:11px; text-transform:capitalize;}
+  .badge.pending{background:#3a2f10; color:#e8b93d;}
+  .badge.completed,.badge.successful{background:#0f3327; color:var(--good);}
+  .badge.failed,.badge.rejected{background:#3a1420; color:var(--bad);}
+  .badge.processing{background:#12203a; color:#5aa5ff;}
+  button.act{background:var(--signal); color:#fff; border:none; padding:6px 12px; border-radius:8px; font-size:12px; cursor:pointer; margin-right:6px;}
+  button.act.danger{background:var(--bad);}
+  .card{background:var(--void-3); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:16px; max-width:520px;}
+  .card label{display:block; font-size:12px; color:var(--ink-dim); margin:12px 0 6px; text-transform:uppercase; letter-spacing:.06em;}
+  .card input{width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--void-2); color:var(--ink);}
+  .stat-row{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:20px;}
+  .stat{background:var(--void-3); border:1px solid var(--line); border-radius:12px; padding:14px 18px; min-width:130px;}
+  .stat .n{font-family:var(--ff-mono); font-size:20px; font-weight:700;}
+  .stat .l{font-size:11px; color:var(--ink-dim); text-transform:uppercase; margin-top:4px;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h1>Novera<span style="color:var(--signal)">.</span> Admin</h1>
+  <input id="admin-key" type="password" placeholder="Admin key">
+  <button onclick="doAdminLogin()">Enter</button>
+  <div class="err" id="login-err"></div>
+</div>
+
+<div id="dash">
+  <div class="topbar">
+    <h2>Novera<span style="color:var(--signal)">.</span> Admin</h2>
+    <button class="act danger" onclick="logout()">Log out</button>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-p="users" onclick="showPanel('users')">Users</div>
+    <div class="tab" data-p="deposits" onclick="showPanel('deposits')">Deposits</div>
+    <div class="tab" data-p="withdrawals" onclick="showPanel('withdrawals')">Withdrawals</div>
+    <div class="tab" data-p="giftcodes" onclick="showPanel('giftcodes')">Gift codes</div>
+    <div class="tab" data-p="settings" onclick="showPanel('settings')">Settings</div>
+  </div>
+
+  <div class="panel active" id="p-users">
+    <div class="stat-row" id="user-stats"></div>
+    <table><thead><tr><th>Name</th><th>Phone</th><th>Balance</th><th>Invested</th><th>Earned</th><th>Adjust</th></tr></thead>
+    <tbody id="users-body"></tbody></table>
+  </div>
+
+  <div class="panel" id="p-deposits">
+    <table><thead><tr><th>User</th><th>Amount</th><th>Phone</th><th>Status</th></tr></thead>
+    <tbody id="deposits-body"></tbody></table>
+  </div>
+
+  <div class="panel" id="p-withdrawals">
+    <table><thead><tr><th>User</th><th>Amount</th><th>Payout</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+    <tbody id="withdrawals-body"></tbody></table>
+  </div>
+
+  <div class="panel" id="p-giftcodes">
+    <div class="card">
+      <label>Amount (UGX)</label>
+      <input id="gift-amount" type="number" placeholder="5000">
+      <button class="act" style="margin-top:14px;" onclick="createGift()">Generate code</button>
+      <div id="gift-result" class="mono" style="margin-top:12px; font-size:18px;"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="p-settings">
+    <div class="card">
+      <h2 style="font-size:16px;">Platform settings</h2>
+      <label>Level 1 commission (0–1)</label><input id="s-l1" type="number" step="0.01">
+      <label>Level 2 commission (0–1)</label><input id="s-l2" type="number" step="0.01">
+      <label>Level 3 commission (0–1)</label><input id="s-l3" type="number" step="0.01">
+      <label>Withdrawal fee (0–1)</label><input id="s-fee" type="number" step="0.01">
+      <label>Maintenance mode</label>
+      <select id="s-maint" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--void-2); color:var(--ink);">
+        <option value="false">Off</option><option value="true">On</option>
+      </select>
+      <button class="act" style="margin-top:16px;" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'https://REPLACE-WITH-RAILWAY-URL.up.railway.app';
+let ADMIN_KEY = sessionStorage.getItem('novera_admin_key') || '';
+
+function fmtUGX(n){ return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
+async function adminApi(path, opts = {}) {
+  const resp = await fetch(API_BASE + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY, ...(opts.headers || {}) },
+  });
+  return resp.json();
+}
+
+async function doAdminLogin(){
+  const key = document.getElementById('admin-key').value;
+  const r = await fetch(API_BASE + '/admin/check-key', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }),
+  }).then(r => r.json()).catch(() => ({ status: 'error' }));
+  if (r.status === 'success') {
+    ADMIN_KEY = key;
+    sessionStorage.setItem('novera_admin_key', key);
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('dash').style.display = 'block';
+    loadUsers();
+  } else {
+    document.getElementById('login-err').textContent = 'Invalid key';
+  }
+}
+function logout(){ sessionStorage.removeItem('novera_admin_key'); location.reload(); }
+
+function showPanel(name){
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.p === name));
+  document.getElementById('p-' + name).classList.add('active');
+  if (name === 'users') loadUsers();
+  if (name === 'deposits') loadDeposits();
+  if (name === 'withdrawals') loadWithdrawals();
+  if (name === 'settings') loadSettings();
+}
+
+async function loadUsers(){
+  const r = await adminApi('/admin/users');
+  if (r.status !== 'success') return;
+  document.getElementById('user-stats').innerHTML = `
+    <div class="stat"><div class="n mono">${r.count}</div><div class="l">Total users</div></div>
+    <div class="stat"><div class="n mono">${fmtUGX(r.users.reduce((s,u)=>s+(u.walletBalance||0),0))}</div><div class="l">Total balance</div></div>
+    <div class="stat"><div class="n mono">${fmtUGX(r.users.reduce((s,u)=>s+(u.totalInvested||0),0))}</div><div class="l">Total invested</div></div>`;
+  document.getElementById('users-body').innerHTML = r.users.map(u => `
+    <tr>
+      <td>${escapeHtml(u.name || '')}</td>
+      <td>${escapeHtml(u.phone || '')}</td>
+      <td class="mono">${fmtUGX(u.walletBalance)}</td>
+      <td class="mono">${fmtUGX(u.totalInvested)}</td>
+      <td class="mono">${fmtUGX(u.totalEarned)}</td>
+      <td><button class="act" onclick="adjustUser('${u.id}')">Adjust</button></td>
+    </tr>`).join('');
+}
+async function adjustUser(id){
+  const amt = prompt('Amount to add (negative to deduct):');
+  if (!amt) return;
+  const r = await adminApi(`/admin/users/${id}/adjust`, { method: 'POST', body: JSON.stringify({ amount: Number(amt) }) });
+  if (r.status === 'success') loadUsers(); else alert(r.message || 'Failed');
+}
+
+async function loadDeposits(){
+  const r = await adminApi('/admin/deposits');
+  if (r.status !== 'success') return;
+  document.getElementById('deposits-body').innerHTML = r.deposits.map(d => `
+    <tr><td class="mono">${d.userId.slice(0,8)}</td><td class="mono">${fmtUGX(d.amount)}</td><td>${escapeHtml(d.phone||'')}</td>
+    <td><span class="badge ${d.status}">${d.status}</span></td></tr>`).join('');
+}
+
+async function loadWithdrawals(){
+  const r = await adminApi('/admin/withdrawals');
+  if (r.status !== 'success') return;
+  document.getElementById('withdrawals-body').innerHTML = r.withdrawals.map(w => `
+    <tr><td class="mono">${w.userId.slice(0,8)}</td><td class="mono">${fmtUGX(w.amount)}</td><td class="mono">${fmtUGX(w.payout)}</td>
+    <td>${escapeHtml(w.phone||'')}</td><td><span class="badge ${w.status}">${w.status}</span></td>
+    <td>${w.status === 'pending' ? `<button class="act" onclick="approveW('${w.id}')">Approve</button><button class="act danger" onclick="rejectW('${w.id}')">Reject</button>` : ''}</td></tr>`).join('');
+}
+async function approveW(id){
+  const r = await adminApi(`/admin/withdrawals/${id}/approve`, { method: 'POST' });
+  if (r.status === 'success') loadWithdrawals(); else alert(r.message || 'Failed');
+}
+async function rejectW(id){
+  if (!confirm('Reject and refund this withdrawal?')) return;
+  const r = await adminApi(`/admin/withdrawals/${id}/reject`, { method: 'POST' });
+  if (r.status === 'success') loadWithdrawals(); else alert(r.message || 'Failed');
+}
+
+async function createGift(){
+  const amount = document.getElementById('gift-amount').value;
+  const r = await adminApi('/admin/giftcodes/create', { method: 'POST', body: JSON.stringify({ amount: Number(amount) }) });
+  document.getElementById('gift-result').textContent = r.status === 'success' ? 'Code: ' + r.code : (r.message || 'Failed');
+}
+
+async function loadSettings(){
+  const r = await adminApi('/admin/settings');
+  if (r.status !== 'success') return;
+  const s = r.settings || {};
+  document.getElementById('s-l1').value = s.commL1 ?? 0.20;
+  document.getElementById('s-l2').value = s.commL2 ?? 0.05;
+  document.getElementById('s-l3').value = s.commL3 ?? 0.01;
+  document.getElementById('s-fee').value = s.liquidityFee ?? 0.15;
+  document.getElementById('s-maint').value = String(!!s.maintenanceMode);
+}
+async function saveSettings(){
+  const body = {
+    commL1: Number(document.getElementById('s-l1').value),
+    commL2: Number(document.getElementById('s-l2').value),
+    commL3: Number(document.getElementById('s-l3').value),
+    liquidityFee: Number(document.getElementById('s-fee').value),
+    maintenanceMode: document.getElementById('s-maint').value === 'true',
+  };
+  const r = await adminApi('/admin/settings', { method: 'POST', body: JSON.stringify(body) });
+  alert(r.status === 'success' ? 'Saved' : (r.message || 'Failed'));
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+if (ADMIN_KEY) {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('dash').style.display = 'block';
+  loadUsers();
+}
+</script>
+</body>
+</html>
