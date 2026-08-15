@@ -30,15 +30,19 @@ The owner was explicit and this must not be re-litigated without them saying so:
    brand-string renames or genuinely new endpoints (e.g. a future "Show" feature) — never
    rewritten.
 2. **Admin panel (`admin-src/index.html`, `admin/`) — a ChocoMCC reskin, correct as an
-   approach, but has an OPEN task.** The owner's original instruction — *"l told you
-   everything admin we just replace, see ChocoMCC admin, we just replace just name and
-   logo, everything remains every feature, every code"* — means don't redesign it from
-   scratch. But later in the same session the owner also said: *"I want all features...
-   remove residues of USD depositing, bank depositing... just the same admin panel like
-   for chocomcc."* **This removal has NOT been done yet** — the USDT/crypto deposit UI and
-   bank-transfer *deposit* UI are still present. Do not conflate this with bank-transfer
-   *withdrawal* (a separate, PIN-gated, admin-toggleable feature via `bankWithdrawEnabled`)
-   — that was never asked to be removed.
+   approach.** The owner's original instruction — *"l told you everything admin we just
+   replace, see ChocoMCC admin, we just replace just name and logo, everything remains
+   every feature, every code"* — means don't redesign it from scratch. Later in the same
+   session the owner also said to remove USD/USDT depositing and, after clarifying, bank-
+   transfer *withdrawal* too (not `/bank/save`, which despite its name binds a
+   MOBILE-MONEY payout account and is required for every withdrawal — that stays).
+   **Both removals are DONE.** USDT deposit was fully deleted (self-contained feature, no
+   shared logic with mobile money). Bank-transfer withdrawal was handled differently:
+   `/withdraw/request` now hard-locks to `method:'mobile_money'` so a new bank-transfer
+   withdrawal can never be created, but the `isBank` branches inside the shared
+   processing/reconciler functions were deliberately left in place (harmless dead code,
+   safer than surgically deleting logic shared with mobile-money withdrawals). See
+   `AGENT_LOG.md` for the full breakdown of what was removed vs. deliberately kept.
 3. **User-facing app (`user-src/index.html` + `user-src/original_module.js`, and its built
    artifact `user/`) — REBUILT FROM SCRATCH, this is done as of the most recent session.**
    Zero lines of ChocoMCC's original frontend structure remain — the owner rejected an
@@ -161,8 +165,8 @@ referral L1 28% / L2 2% / L3 1% (31% total).
   finding those constants — that's expected, not a bug.
 - `user/` — built artifact (`build-core.js` output). Never hand-edit; ~434KB now (was
   ~2.17MB before the frontend rebuild dropped the old embedded photos).
-- `admin-src/index.html` — readable admin source, still a straight ChocoMCC reskin with
-  the USD/bank-deposit removal still outstanding (see three-part split above).
+- `admin-src/index.html` — readable admin source, a straight ChocoMCC reskin with USDT
+  deposit and bank-transfer withdrawal now removed (see three-part split above).
 - `admin/` — built admin artifact (`build-admin.js` output). Never hand-edit.
 - `server.js` — Express backend. Keep as the foundation; only add new endpoints for
   genuinely new features (Show, the server-side assistant).
@@ -190,10 +194,14 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    Firebase project + live backend in a real browser yet.
 2. **"Show" feature** — not scoped, not built, anywhere.
 3. **Server-side floating assistant** — current one is a client-side placeholder.
-4. **Admin panel USD/bank-deposit removal** — not done.
-5. **Real product catalog** — not entered into the admin panel yet (owner's task).
-6. **App icons / favicon / maskable variants** — still ChocoMCC's chocolate-brand art.
-7. **VAPID key** — updated in code, not test-fired against a real device yet.
+4. **Real product catalog** — not entered into the admin panel yet (owner's task).
+5. **App icons / favicon / maskable variants** — still ChocoMCC's chocolate-brand art.
+6. **VAPID key** — updated in code, not test-fired against a real device yet.
+7. **ChatGPT security-review findings not yet acted on** — referral-commission
+   double-pay-on-crash race and a withdrawal-bookkeeping `Promise.all` race, both
+   confirmed real. See `AGENT_LOG.md`'s "Fixed a real deposit-polling bug..." entry for
+   exact locations and severity — needs the owner's go-ahead before touching this
+   money-handling code.
 
 ## Secrets — NEVER commit
 

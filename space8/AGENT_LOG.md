@@ -14,6 +14,85 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-15 — Claude — Fixed a real deposit-polling bug (caught by ChatGPT security review) + removed USDT deposit and bank-transfer withdrawal
+
+- **What changed**:
+  1. **Deposit-status polling fix** (`user-src/original_module.js`) — `pollDepositStatus()`
+     was calling `GET /deposit/marzpay/status?id=...` and reading `r.deposit.status`. The
+     real endpoint is `POST /deposit/marzpay/status` with `depositId` in the body, returning
+     `r.state` (`'matched'`/`'failed'`/`'pending'`). Every deposit would have polled forever
+     without ever detecting success or failure — a genuine, user-facing bug in the frontend
+     built last session. Rebuilt via `build-core.js` (round-trip OK).
+  2. **USDT (TRC20) deposit — fully removed.** Self-contained feature (own endpoints, own
+     on-chain verification subsystem, own reconciler sweep), safe to delete outright:
+     `/deposit/usdt/submit`, `/deposit/usdt/status`, `/admin/deposit/usdt/reject` endpoints;
+     `verifyUsdtTx`/`resolveUsdtDeposit`/`reconcileUsdtDeposits` functions; `TRONGRID_*`
+     constants; `usdtEnabled`/`usdtWalletAddress`/`usdtRate` settings everywhere they
+     appeared; the admin's "Crypto deposits (USDT TRC20)" settings panel and the USDT
+     column/badge/Approve-Reject UI in the Deposits tab. Deleted
+     `test-usdt-autoverify.js`/`test-usdt-deposit.js` (tested a feature that no longer
+     exists).
+  3. **Bank-transfer withdrawal — entry point locked, not surgically deleted.** Unlike
+     USDT, this was woven through six shared functions that also handle mobile-money
+     withdrawals (`processWithdrawalCore`, `/admin/withdraw/verify`,
+     `/withdraw/marzpay/status`, the periodic reconciler, `/withdraw/request` itself).
+     Deleting every `isBank` branch across all of those risked breaking real mobile-money
+     withdrawals for a cosmetic gain. Instead: `/withdraw/request` now hard-locks `method`
+     to `'mobile_money'` and never reads `req.body.method` — a bank-transfer withdrawal can
+     no longer be created, period. Removed the now-unreachable `bankWithdrawEnabled`
+     setting and its admin settings panel. **Deliberately left** the `isBank` branches
+     inside the shared processing/reconciler functions in place as inert dead code — they
+     can still correctly process any withdrawal record that already has `method:'bank'`
+     (there are effectively none, this is a fresh database), and removing them was the
+     genuinely risky part of this change for no real benefit. Removed
+     `test-bank-withdrawal.js` and the bank-transfer PIN-gate scenario from
+     `test-payout-pin.js` (redundant once bank withdrawal can't be created); left
+     `test-withdrawal-stuck-auto-resolve.js`'s bank-method scenario intact since it seeds
+     the DB directly, bypassing `/withdraw/request`, so it still validly exercises the
+     reconciler code that's deliberately still there.
+- **Why**: The owner brought in ChatGPT (now also reading `CLAUDE.md`/`AGENT_LOG.md` on
+  this branch, see the coordination note added to `CLAUDE.md`) for a second-opinion
+  security review, which surfaced the deposit-polling bug as a "High" finding — verified
+  against the real `server.js` handler before fixing, confirmed genuine. ChatGPT also
+  raised several other findings (a referral-commission double-pay race on crash, a
+  withdrawal-bookkeeping `Promise.all` race, process-local locking, first-time-PIN
+  auto-setup) — see "Left open" below, **none of those were acted on this entry**, only
+  investigated. Separately, the owner explicitly asked for USDT deposit and bank-transfer
+  withdrawal removed (an earlier session already asked for USD/bank-*deposit* removal from
+  admin; this session clarified "bank" specifically meant the withdrawal rail, not the
+  `/bank/save` payout-binding endpoint, which stays — that binds a MOBILE-MONEY payout
+  account despite its name, required for every withdrawal).
+- **Verification**: Full `test-*.js` suite: 51/51 passing (54 minus the 3
+  removed/obsolete files). `node build-core.js`/`build-admin.js` both round-trip OK.
+  ChatGPT's other findings were cross-checked against the existing test suite before
+  deciding whether they were real gaps or already-covered — see "Left open" below for the
+  verdict on each.
+- **Left open / deferred — do not claim any of these are done**:
+  1. **Referral-commission double-pay on crash** (confirmed real, `server.js` ~
+     `creditReferralCommission`) — the wallet credit and the "level paid" flag write are
+     two separate writes; a crash between them lets the reconciler pay that level again on
+     retry. Not covered by any existing test. Not fixed this entry — owner hadn't given
+     go-ahead on backend changes to this specific function when this entry was written.
+  2. **Withdrawal-bookkeeping race** (confirmed real, `processWithdrawalCore`'s
+     `Promise.all([witRef.update(...), users.doc(...).update({totalWithdrawn:...})])`) —
+     lower-impact than it sounds (the MarzPay send already happened by this point, so a
+     partial failure here is a reporting inconsistency, not a double-spend or lost money).
+     Not fixed this entry.
+  3. **Process-local locks** and **first-time payout-PIN auto-setup** — both real, but
+     confirmed to be deliberate, already-documented, already-tested tradeoffs, not
+     oversights (locks: safe as long as Render stays single-instance, confirmed via
+     `render.yaml` — no autoscaling configured; PIN: inherent to any PIN scheme, and
+     `test-payout-pin.js` explicitly tests "first bind succeeds" as intended behavior).
+     Nothing to fix here unless the owner wants a stronger first-setup mitigation (e.g. an
+     OTP step) — a product decision, not a bug.
+  4. **`getMarzBanks()`/`marzValidateBankAccount()`/`GET /public/banks`** are now fully
+     orphaned (zero callers anywhere) but were left in place rather than risk more edits
+     right after a money-safety-critical change. Harmless, just unused — safe to remove in
+     a future pass if someone wants the cleanup.
+  5. Everything already listed as open in the previous entry (real end-to-end device
+     check, "Show" feature, server-side assistant, real product catalog, app icons/
+     favicon) is still open — this entry didn't touch any of those.
+
 ## 2026-08-15 — Claude — Rename to space8 (full replace) + real infra + frontend rebuilt from scratch
 
 - **What changed**:
