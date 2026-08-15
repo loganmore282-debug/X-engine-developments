@@ -86,7 +86,7 @@ app.use('/admin/', async (req, _res, next) => {
   next();
 });
 ['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/redeem', '/bank/save',
- '/bank/delete', '/account/create-profile', '/register', '/team/milestone/claim', '/account/payout-pin/change']
+ '/bank/delete', '/account/create-profile', '/register', '/team/milestone/claim', '/account/payout-pin/change', '/account/payout-pin/set']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -2457,6 +2457,25 @@ app.post('/account/payout-pin/change', async (req, res) => {
     res.json({ status: 'success', message: 'Payout PIN changed.' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not change the PIN' });
+  }
+});
+// Sets the withdrawal PIN for the first time, right after registration --
+// distinct from /account/payout-pin/change (which requires the OLD pin and
+// is for an account that already has one). Reuses _payoutPinCheck's own
+// allowAutoSetup path unchanged: if no payoutPinHash exists yet, the pin
+// supplied here becomes it; if one already exists (e.g. this got called
+// twice), it's verified like any other PIN-gated action rather than
+// silently overwritten -- a PIN can never be reset without proving you
+// already know the current one.
+app.post('/account/payout-pin/set', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const check = await _payoutPinCheck(userId, req.body.pin, true);
+    if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
+    res.json({ status: 'success', justSet: !!check.justSet, message: check.justSet ? 'Withdrawal PIN set' : 'PIN confirmed' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not set the PIN' });
   }
 });
 

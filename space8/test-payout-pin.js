@@ -232,6 +232,25 @@ async function freshFundedUser(uid, phone) {
   r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '2222' } });
   check('reset clears the lockout too -- a fresh pin works immediately', r2.body?.status === 'success' && r2.body?.pinJustSet === true, r2.body);
 
+  console.log('\n== POST /account/payout-pin/set (registration-time PIN setup) ==');
+  const H = 'pin-user-h';
+  await freshFundedUser(H, '0771900801');
+  r2 = await call('POST', '/account/payout-pin/set', { token: 'uid:' + H, body: { pin: 'abcd' } });
+  check('malformed pin rejected on set', r2.code === 400 && r2.body?.code === 'INVALID_PIN', r2.body);
+  r2 = await call('POST', '/account/payout-pin/set', { token: 'uid:' + H, body: { pin: '4321' } });
+  check('first call sets the pin', r2.body?.status === 'success' && r2.body?.justSet === true, r2.body);
+  r2 = await adminCall('/admin/user/detail', { userId: H });
+  check('pin actually recorded (hasPayoutPin:true)', r2.body?.user?.hasPayoutPin === true, r2.body?.user);
+  r2 = await call('POST', '/account/payout-pin/set', { token: 'uid:' + H, body: { pin: '9999' } });
+  check('a SECOND call cannot silently overwrite -- wrong pin rejected', r2.code === 400 && r2.body?.code === 'WRONG_PIN', r2.body);
+  r2 = await call('POST', '/account/payout-pin/set', { token: 'uid:' + H, body: { pin: '4321' } });
+  check('a SECOND call with the correct pin just confirms, does not re-set', r2.body?.status === 'success' && r2.body?.justSet !== true, r2.body);
+  console.log('-- The pin set here is the SAME one required later to bind a payout account --');
+  r2 = await call('POST', '/bank/save', { token: 'uid:' + H, body: { holder: 'H One', network: 'MTN Mobile Money', phone: '0771900801', pin: '4321' } });
+  check('bind succeeds with the pin set at "registration"', r2.body?.status === 'success', r2.body);
+  r2 = await call('POST', '/bank/save', { token: 'uid:' + H, body: { holder: 'H Two', network: 'Airtel Money', phone: '0771900802', pin: '0000' } });
+  check('bind with a different pin is rejected -- it never got reset by the mismatched attempt above', r2.code === 400 && r2.body?.code === 'WRONG_PIN', r2.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });

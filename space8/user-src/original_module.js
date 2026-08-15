@@ -184,15 +184,20 @@ $('registerBtn').onclick = async function(){
   showAuthErr('registerErr', '');
   var phone = cleanPhone($('regPhone').value);
   var pass = $('regPassword').value, pass2 = $('regPassword2').value;
+  var pin = $('regPin').value, pin2 = $('regPin2').value;
   var ref = $('regReferral').value.trim();
   if (!phone) return showAuthErr('registerErr', 'Enter a valid Uganda phone number (07XXXXXXXX).');
   if (pass.length < 6) return showAuthErr('registerErr', 'Password must be at least 6 characters.');
   if (pass !== pass2) return showAuthErr('registerErr', 'Passwords do not match.');
+  if (!/^\d{4}$/.test(pin)) return showAuthErr('registerErr', 'Choose a 4-digit withdrawal PIN.');
+  if (pin !== pin2) return showAuthErr('registerErr', 'PINs do not match.');
   setBtnLoading($('registerBtn'), true, 'Creating account…');
   try {
     await window.fbCreateUser(phoneToEmail(phone), pass);
     var r = await api('/register', { referralCode: ref || undefined }, 'POST', true);
     if (r.status === 'error') { toast(r.message, true); }
+    var pinR = await api('/account/payout-pin/set', { pin: pin });
+    if (pinR.status === 'error') toast('Account created, but the PIN could not be set — set it later in Account.', true);
   } catch (e) {
     setBtnLoading($('registerBtn'), false);
     var msg = 'Could not create your account.';
@@ -439,10 +444,10 @@ async function openInvestSheet(key){
     '<div class="sheet-sub">Confirm your investment</div>' +
     '<div class="card" style="margin-bottom:16px">' +
       '<div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
-        '<div><div class="lab" style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--ink-dim);text-transform:uppercase">Price</div><div style="font-weight:700" class="mono">' + ugx(p.price) + '</div></div>' +
-        '<div><div class="lab" style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--ink-dim);text-transform:uppercase">Cycle</div><div style="font-weight:700">' + p.cycle + ' days</div></div>' +
-        '<div><div class="lab" style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--ink-dim);text-transform:uppercase">Daily Income</div><div style="font-weight:700" class="mono">' + ugx(daily) + '</div></div>' +
-        '<div><div class="lab" style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--ink-dim);text-transform:uppercase">Total Return</div><div style="font-weight:700" class="mono">' + ugx(p.expectedReturn) + '</div></div>' +
+        '<div><div class="lab" style="font-size:10px;color:var(--ink-dim);text-transform:uppercase">Price</div><div style="font-weight:700" class="mono">' + ugx(p.price) + '</div></div>' +
+        '<div><div class="lab" style="font-size:10px;color:var(--ink-dim);text-transform:uppercase">Cycle</div><div style="font-weight:700">' + p.cycle + ' days</div></div>' +
+        '<div><div class="lab" style="font-size:10px;color:var(--ink-dim);text-transform:uppercase">Daily Income</div><div style="font-weight:700" class="mono">' + ugx(daily) + '</div></div>' +
+        '<div><div class="lab" style="font-size:10px;color:var(--ink-dim);text-transform:uppercase">Total Return</div><div style="font-weight:700" class="mono">' + ugx(p.expectedReturn) + '</div></div>' +
       '</div>' +
     '</div>' +
     (!can ? '<div class="auth-err" style="display:block;margin-bottom:14px">Insufficient balance. You have ' + ugx(bal) + '.</div>' : '') +
@@ -632,8 +637,8 @@ async function openPayoutSheet(){
         '<option value="Airtel Money" ' + (existing&&existing.network==='Airtel Money'?'selected':'') + '>Airtel Money</option>' +
       '</select>' +
       '<div class="field">' + ico('phone') + '<input id="payPhone" placeholder="07XXXXXXXX" value="' + esc(existing?existing.phone:'') + '"></div>' +
-      '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit security PIN"></div>' +
-      '<div class="field-hint">This PIN protects every withdrawal. Remember it — you\'ll need it each time you cash out.</div>' +
+      '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN"></div>' +
+      '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
     '</div>' +
     '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Save Payout Account</button>'
   );
@@ -654,7 +659,7 @@ async function openPinSheet(){
   var has = status.status === 'success' && status.hasPayoutPin;
   openSheet('generic',
     '<div class="sheet-title">Security PIN</div>' +
-    '<div class="sheet-sub">' + (has ? 'Change your 4-digit payout PIN.' : 'You have not set a payout PIN yet — set one when you bind a payout account.') + '</div>' +
+    '<div class="sheet-sub">' + (has ? 'Change your 4-digit withdrawal PIN.' : 'No withdrawal PIN on this account yet — it should have been set at registration. Contact support if this looks wrong.') + '</div>' +
     (has ?
       '<div class="auth-form">' +
         '<div class="field">' + ico('shield') + '<input id="oldPin" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN"></div>' +
