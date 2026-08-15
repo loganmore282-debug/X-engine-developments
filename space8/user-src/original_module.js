@@ -87,7 +87,8 @@ var ICONS = {
   cluster: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><circle cx="5" cy="19" r="2.4"/><circle cx="19" cy="19" r="2.4"/><path d="M12 7.4V14M12 14 6.6 17.3M12 14l5.4 3.3"/></svg>',
   assistant: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
-  phone: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
+  phone: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
 };
 function ico(name){ return ICONS[name] || ''; }
 
@@ -279,7 +280,11 @@ async function renderHome(){
     '<div class="action-btn ' + (checkedIn?'done':'') + '" id="homeCheckinBtn"><div class="ico">' + ico(checkedIn?'check':'checkin') + '</div><span>' + (checkedIn?'Claimed':'Check In') + '</span></div>' +
   '</div>';
 
-  html += '<div class="ticker"><div class="ticker-head"><span class="ticker-dot"></span>Live Activity</div><div class="ticker-list" id="tickerList"></div></div>';
+  html += '<div class="ticker-bar">' +
+    '<div class="ticker-icon">' + ico('bell') + '</div>' +
+    '<div class="ticker-track"><div class="ticker-items" id="tickerItems"></div></div>' +
+    '<div class="ticker-icon" id="tickerRecordsBtn">' + ico('doc') + '</div>' +
+  '</div>';
 
   if (active.length) {
     html += '<div class="section-title">Active Plans</div>';
@@ -324,22 +329,27 @@ function prodMiniHtml(p){
   '</div>';
 }
 function renderTicker(feed){
-  var list = $('tickerList');
-  if (!list) return;
-  if (!feed.length) { list.innerHTML = '<div class="ticker-row"><span class="who">Waiting for activity…</span></div>'; return; }
-  var rows = feed.slice(0,18).map(function(f){
+  var track = $('tickerItems');
+  if (!track) return;
+  STATE.lastFeed = feed;
+  if (!feed.length) { track.innerHTML = '<span class="ticker-item">Waiting for activity…</span>'; return; }
+  var items = feed.slice(0,18).map(function(f){
     var verb = f.type === 'withdrawal' ? 'withdrew' : 'deposited';
-    return '<div class="ticker-row"><span class="who">' + esc(f.phone||f.masked||'A member') + ' ' + verb + '</span><span class="amt mono">' + ugx(f.amount) + '</span></div>';
+    return '<span class="ticker-item">' + esc(f.phone||f.masked||'A member') + ' ' + verb + ' <span class="amt mono">' + ugx(f.amount) + '</span></span>';
   }).join('');
-  list.innerHTML = rows + rows; // duplicate for seamless loop
-  var pos = 0, rowH = 33;
-  clearInterval(renderTicker._tm);
-  renderTicker._tm = setInterval(function(){
-    pos += rowH;
-    if (pos >= rowH * feed.length) pos = 0;
-    list.style.transition = 'transform .5s ease';
-    list.style.transform = 'translateY(-' + pos + 'px)';
-  }, 2400);
+  track.innerHTML = items + items; // doubled so a -50% translate loop is seamless
+  var recBtn = $('tickerRecordsBtn');
+  if (recBtn) recBtn.onclick = openActivitySheet;
+}
+function openActivitySheet(){
+  var feed = STATE.lastFeed || [];
+  openSheet('generic', '<div class="sheet-title">Recent Activity</div>' +
+    (feed.length ? feed.slice(0,30).map(function(f){
+      var verb = f.type === 'withdrawal' ? 'withdrew' : 'deposited';
+      return '<div class="member-row"><div class="info"><div class="phone">' + esc(f.phone||f.masked||'A member') + ' ' + verb + '</div></div>' +
+        '<span class="mono" style="font-weight:700">' + ugx(f.amount) + '</span></div>';
+    }).join('') : emptyState('doc','No activity yet.'))
+  );
 }
 function wireHomeActions(){
   $('homeDepositBtn').onclick = openDepositSheet;
