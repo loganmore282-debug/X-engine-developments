@@ -13,12 +13,85 @@ let _client = null;
 let _mdb    = null;
 
 async function connectMongo(uri) {
-  _client = new MongoClient(uri, { serverSelectionTimeoutMS: 10000 });
+  _client = new MongoClient(uri, {
+    serverSelectionTimeoutMS: 10000, // give up finding a server after 10s
+    connectTimeoutMS:         15000,
+    socketTimeoutMS:          45000, // don't let a slow query hang a socket forever
+    maxPoolSize:              50,    // cap connections so one instance can't exhaust M0
+    minPoolSize:              0,
+    retryReads:               true,  // auto-retry reads through a transient blip
+    retryWrites:              true,  // auto-retry writes through a transient blip
+    waitQueueTimeoutMS:       10000
+  });
   await _client.connect();
   const dbName = new URL(uri).pathname.slice(1) || 'novera';
   _mdb = _client.db(dbName);
-  console.log(`✅ MongoDB connected (${dbName})`);
+  // Surface pool/topology problems in the logs instead of failing silently.
+  _client.on('serverHeartbeatFailed', e => console.warn('Mongo heartbeat failed:', e && e.failure && e.failure.message));
+  _client.on('close', () => console.warn('Mongo connection closed'));
+  console.log(`MongoDB connected (${dbName})`);
+  ensureIndexes().catch(e => console.warn('Index build warning:', e.message));
   return _mdb;
+}
+
+// Every field server.js filters on via .where() needs an index here — without
+// one, MongoDB does a full collection scan on every single request for it
+// (userId, referredBy, status, marzReference...), and that scan gets slower
+// as each collection grows. createIndex is a cheap no-op if the index already
+// exists, so this just runs on every boot instead of needing a one-time
+// migration step. Fired in the background (not awaited by connectMongo) so a
+// slow first-time build on an already-large collection never delays startup —
+// queries run at their old (scan) speed until it finishes, then stay fast.
+async function ensureIndexes() {
+  const specs = [
+    ['users',           { referredBy: 1 }],
+    ['users',           { referralCode: 1 }],
+    ['users',           { usernameLower: 1 }],
+    ['investments',     { userId: 1 }],
+    ['investments',     { status: 1 }],
+    ['transactions',    { userId: 1 }],
+    ['transactions',    { withdrawalId: 1 }],
+    ['transactions',    { marzReference: 1 }],
+    ['transactions',    { ref: 1 }],
+    ['withdrawals',     { userId: 1 }],
+    ['withdrawals',     { status: 1 }],
+    ['withdrawals',     { marzReference: 1 }],
+    ['withdrawals',     { marzTxUuid: 1 }],
+    ['withdrawals',     { ref: 1 }],
+    ['pendingDeposits', { userId: 1 }],
+    ['pendingDeposits', { marzReference: 1 }],
+    ['pendingDeposits', { status: 1 }],
+    ['pendingDeposits', { ref: 1 }],
+    ['promoCodes',      { code: 1 }],
+    ['products',        { key: 1 }],
+    ['bankAccounts',    { userId: 1 }],
+    ['adminSessions',   { username: 1 }],
+    ['adminAuditLog',   { createdAt: -1 }],
+  ];
+  // ONE AT A TIME — M0's free tier has very little real concurrency headroom.
+  // Firing all of these at once (Promise.all/allSettled) queued many simultaneous
+  // operations against the same small connection pool at the exact moment the
+  // rest of server startup was ALSO opening connections — that combination can
+  // exhaust the pool and produce cascading "Timed out while checking out a
+  // connection" errors across completely unrelated requests. Sequential keeps
+  // peak concurrent demand from this function at 1, at the cost of a few more
+  // seconds before every index is confirmed built — a trade worth making since
+  // nothing blocks on this finishing (it's fire-and-forget from connectMongo).
+  let failed = 0;
+  for (const [col, keys] of specs) {
+    try { await _mdb.collection(col).createIndex(keys); }
+    catch (e) { failed++; console.warn(`Index build failed (${col} ${JSON.stringify(keys)}):`, e.message); }
+  }
+  console.log(`MongoDB indexes ensured (${specs.length - failed}/${specs.length})`);
+}
+
+// Lightweight liveness check for the /health endpoint — pings the DB with a
+// short deadline so monitoring can see an outage before users do.
+async function pingDb() {
+  try {
+    await _mdb.command({ ping: 1 }, { maxTimeMS: 4000 });
+    return true;
+  } catch (_) { return false; }
 }
 
 // ── FieldValue replacements ──────────────────────────────────────────────────
@@ -288,4 +361,4 @@ const db = {
   },
 };
 
-module.exports = { connectMongo, db, FieldValue, Timestamp };
+module.exports = { connectMongo, db, FieldValue, Timestamp, pingDb };
