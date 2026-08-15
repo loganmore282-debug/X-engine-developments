@@ -6,7 +6,7 @@ var SERVER = 'https://mycallbackurl.onrender.com';
 var STATE = {
   account: null, products: null, investments: null, settings: null,
   teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null,
-  hasPayoutPin: false, banners: {}, currentPage: 'home', teamTab: 1,
+  hasPayoutPin: false, banners: {}, currentPage: 'home',
   loaded: { home:false, products:false, team:false, account:false }
 };
 
@@ -480,37 +480,32 @@ async function renderTeam(){
   if (r.status === 'success') STATE.teamStats = r;
   STATE.loaded.team = true;
   var s = STATE.teamStats || { counts:{l1:0,l2:0,l3:0}, commission:0, milestones:[] };
+  var LEVEL_PCT = { 1:28, 2:2, 3:1 };
 
   var html = bannerHtml('giftbox', 'cluster');
-  html += '<div class="tabs-row">' +
-    [1,2,3].map(function(l){
-      var pct = l===1?28:l===2?2:1;
-      return '<div class="tabitem ' + (STATE.teamTab===l?'active':'') + '" data-lvl="'+l+'">Level ' + l + '<span class="pct">' + pct + '%</span></div>';
-    }).join('') +
-  '</div>';
   html += '<div class="mystats">' +
     '<div class="card"><div class="lab">Total Referrals</div><div class="val">' + ((s.counts.l1||0)+(s.counts.l2||0)+(s.counts.l3||0)) + '</div></div>' +
     '<div class="card"><div class="lab">Total Commission</div><div class="val mono">' + ugx(s.commission) + '</div></div>' +
   '</div>';
-  html += '<div class="section-title">Members</div><div id="teamMemberList"><div class="sk sk-line" style="width:50%"></div></div>';
+  [1,2,3].forEach(function(l){
+    html += '<div class="section-title">Level ' + l + ' <span class="see-all">' + LEVEL_PCT[l] + '%</span></div>';
+    html += '<div id="teamMemberList' + l + '"><div class="sk sk-line" style="width:50%"></div></div>';
+  });
   html += '<div class="section-title">Task Center</div><div id="taskList"></div>';
   el.innerHTML = html;
 
-  qsa('.tabitem').forEach(function(t){
-    t.onclick = function(){ STATE.teamTab = parseInt(t.dataset.lvl,10); renderTeam(); };
-  });
-  loadTeamMembers(STATE.teamTab);
+  [1,2,3].forEach(function(l){ loadTeamMembers(l); });
   renderTaskList(s.milestones||[]);
 }
 async function loadTeamMembers(level){
-  var box = $('teamMemberList');
-  if (STATE.teamMembers[level]) { paintMembers(STATE.teamMembers[level]); return; }
+  var box = $('teamMemberList' + level);
+  if (STATE.teamMembers[level]) { paintMembers(level, STATE.teamMembers[level]); return; }
   var r = await api('/team/members?level=' + level, null, 'GET');
-  if (r.status === 'success') { STATE.teamMembers[level] = r.members || []; paintMembers(STATE.teamMembers[level]); }
-  else box.innerHTML = emptyState('cluster','Could not load your team.');
+  if (r.status === 'success') { STATE.teamMembers[level] = r.members || []; paintMembers(level, STATE.teamMembers[level]); }
+  else if (box) box.innerHTML = emptyState('cluster','Could not load your team.');
 }
-function paintMembers(members){
-  var box = $('teamMemberList');
+function paintMembers(level, members){
+  var box = $('teamMemberList' + level);
   if (!box) return;
   if (!members.length) { box.innerHTML = emptyState('cluster','No referrals at this level yet.'); return; }
   box.innerHTML = '<div class="card">' + members.map(function(m){
