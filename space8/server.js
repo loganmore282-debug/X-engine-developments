@@ -85,7 +85,7 @@ app.use('/admin/', async (req, _res, next) => {
   }
   next();
 });
-['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/deposit/usdt/submit', '/redeem', '/bank/save',
+['/checkin', '/withdraw/request', '/invest/create', '/deposit/marzpay', '/redeem', '/bank/save',
  '/bank/delete', '/account/create-profile', '/register', '/team/milestone/claim', '/account/payout-pin/change']
   .forEach(p => app.use(p, apiLimiter));
 
@@ -163,18 +163,6 @@ const PUBLIC_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 const MARZ_TIMEOUT = 20000; // matches Chronova's proven value — a short timeout here just means more retries on a slow-but-real MarzPay response
-// USDT (TRC20) deposit auto-verification. TRONGRID_API_KEY must be set for
-// this to run at all -- with no key, every USDT deposit simply stays on the
-// existing manual-review path (never blocks, never breaks anything).
-const TRONGRID_BASE = 'https://api.trongrid.io';
-const TRONGRID_API_KEY = process.env.TRONGRID_API_KEY || '';
-const TRONGRID_TIMEOUT = 15000;
-// The one, official USDT TRC20 contract on TRON mainnet -- matches the
-// "Contract Information ...jLj6t" every real TRC20 wallet shows on its own
-// Deposit USDT screen. Hardcoded (not admin-settable): accepting transfers
-// from ANY contract address would let a worthless look-alike token be
-// submitted as if it were real USDT.
-const USDT_TRC20_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 
 // Product/economics defaults — mirrors DEFAULT_SETTINGS in the client
 // (space8/user/index.html). Admin panel overrides live in the
@@ -188,9 +176,7 @@ const DEFAULT_SETTINGS = {
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
-  homeBannerTitle: '', homeBannerText: '',
-  usdtEnabled: false, usdtWalletAddress: '', usdtRate: 0,
-  bankWithdrawEnabled: false
+  homeBannerTitle: '', homeBannerText: ''
 };
 // Each tier pays exactly 40x its price over a fixed 180-day cycle (both
 // stamped explicitly per product, not left to the global returnMultiple/
@@ -1274,9 +1260,7 @@ app.get('/public/settings', async (_req, res) => {
       telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
       whatsappGroup: s.whatsappGroup || '', whatsappContact: s.whatsappContact || '',
       rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || '',
-      homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || '',
-      usdtEnabled: !!s.usdtEnabled, usdtWalletAddress: s.usdtWalletAddress || '', usdtRate: Number(s.usdtRate) || 0,
-      bankWithdrawEnabled: !!s.bankWithdrawEnabled
+      homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || ''
     } });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });
@@ -1870,281 +1854,6 @@ app.post('/deposit/marzpay/status', async (req, res) => {
   }
 });
 
-// ── USDT (TRC20) DEPOSIT ──
-// A second deposit rail alongside the automatic MarzPay mobile-money flow
-// above — that flow (and its instant crediting) is completely untouched by
-// this. The member sends USDT to the admin's own wallet address OUTSIDE
-// this app, then submits the transaction hash here.
-//
-// Every claim is filed as 'awaiting_verification' first, same as before.
-// If TRONGRID_API_KEY is configured, a background check against the real
-// TRON blockchain (verifyUsdtTx below) runs right after filing, and again
-// on every 30s reconciler sweep for anything still unresolved — a clean,
-// unambiguous match (right contract, right destination address, amount at
-// least what was claimed, confirmed on-chain) auto-credits it via the exact
-// same claim-before-credit creditDeposit() every other deposit path already
-// uses, so this never adds a second way to move money, only a second way to
-// DECIDE to. Anything inconclusive (no key configured, TronGrid down, no
-// match, underpaid) is never rejected — it just stays awaiting_verification
-// for the admin's own Approve/Reject in the Deposits tab, exactly as before.
-// TRON/TRC20 addresses show up in at least three different textual forms
-// depending on which part of TronGrid's response they came from: base58check
-// ("T...", what every wallet app and our own settings field use), TRON hex
-// ("41" + 20-byte hash), or bare EVM-style hex ("0x" + 20-byte hash, same
-// 20-byte hash TRON reuses from Ethereum's address derivation). Comparing
-// two addresses for equality only works if they're both reduced to that
-// shared 20-byte core first -- a naive direct string comparison between a
-// base58 address and TronGrid's hex-formatted event data would NEVER match,
-// silently making auto-verification never fire (safe, since it just falls
-// back to manual review either way, but pointless). Only the DECODE
-// direction is needed (never re-encode to base58), so this is a plain
-// big-integer base58 decode -- no external library required.
-const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-function base58Decode(str) {
-  let num = 0n;
-  for (const ch of str) {
-    const idx = BASE58_ALPHABET.indexOf(ch);
-    if (idx < 0) throw new Error('Invalid base58 character');
-    num = num * 58n + BigInt(idx);
-  }
-  let hex = num.toString(16);
-  if (hex.length % 2) hex = '0' + hex;
-  let leadingZeros = 0;
-  for (const ch of str) { if (ch === '1') leadingZeros++; else break; }
-  return '00'.repeat(leadingZeros) + hex;
-}
-function addrCore(addr) {
-  addr = String(addr || '').trim();
-  if (!addr) return '';
-  if (addr.startsWith('0x') || addr.startsWith('0X')) addr = addr.slice(2);
-  if (/^[0-9a-fA-F]+$/.test(addr) && addr.length >= 40) {
-    let hex = addr.toLowerCase();
-    if (hex.length === 42 && hex.startsWith('41')) hex = hex.slice(2);
-    return hex.length === 40 ? hex : '';
-  }
-  try {
-    let full = base58Decode(addr);
-    if (full.length < 50) full = full.padStart(50, '0');
-    const body = full.slice(0, full.length - 8); // strip the 4-byte (8 hex char) checksum
-    const core = body.length === 42 && body.startsWith('41') ? body.slice(2) : body;
-    return core.length === 40 ? core.toLowerCase() : '';
-  } catch (_) { return ''; }
-}
-// Distinguishes two very different kinds of "not verified":
-//   conclusive:true  -- the transaction WAS found confirmed on-chain, but it
-//                        plainly isn't a valid payment to us (wrong token,
-//                        wrong destination, or short of the claimed amount).
-//                        The blockchain itself proves this claim is wrong --
-//                        safe to decline immediately, no waiting needed.
-//   conclusive:false -- nothing usable came back yet (TronGrid has no record
-//                        of this txid at all, or the request itself failed).
-//                        This does NOT prove the claim is wrong -- a real
-//                        transaction can simply not have confirmed yet, or
-//                        TronGrid can be having a bad moment. Must be
-//                        retried, never declined outright.
-async function verifyUsdtTx(txid, expectWalletAddress, expectAmountUsdt) {
-  if (!TRONGRID_API_KEY) return { verified: false, conclusive: false, reason: 'TRONGRID_API_KEY not configured' };
-  if (!expectWalletAddress) return { verified: false, conclusive: false, reason: 'No receiving wallet address configured' };
-  try {
-    const resp = await fetch(`${TRONGRID_BASE}/v1/transactions/${txid}/events?only_confirmed=true`, {
-      signal: AbortSignal.timeout(TRONGRID_TIMEOUT),
-      headers: { 'TRON-PRO-API-KEY': TRONGRID_API_KEY }
-    });
-    if (!resp.ok) return { verified: false, conclusive: false, reason: `TronGrid HTTP ${resp.status}` };
-    const d = await resp.json().catch(() => null);
-    const events = d && Array.isArray(d.data) ? d.data : null;
-    if (!events) return { verified: false, conclusive: false, reason: 'Unexpected TronGrid response shape' };
-    if (events.length === 0) return { verified: false, conclusive: false, reason: 'Not confirmed on-chain yet' };
-    const expectCore = addrCore(expectWalletAddress);
-    const contractCore = addrCore(USDT_TRC20_CONTRACT);
-    const transfer = events.find(e =>
-      e && e.event_name === 'Transfer' &&
-      addrCore(e.contract_address) === contractCore &&
-      e.result && addrCore(e.result.to) === expectCore && expectCore !== ''
-    );
-    // Something DID confirm under this txid, it just isn't a matching USDT
-    // payment to our wallet (wrong token, wrong recipient, or not a
-    // Transfer at all) -- the chain itself proves this one is wrong.
-    if (!transfer) return { verified: false, conclusive: true, reason: 'The confirmed transaction is not a matching USDT transfer to our wallet' };
-    // USDT on TRON has 6 decimals -- the raw on-chain value is an integer.
-    const onChainAmount = Number(transfer.result.value) / 1e6;
-    if (!isFinite(onChainAmount)) return { verified: false, conclusive: false, reason: 'Could not parse on-chain amount' };
-    // The member could only ever be credited the AMOUNT THEY CLAIMED (that's
-    // what the UGX figure on the record was computed from) -- so it's only
-    // ever safe to auto-credit when the real on-chain payment is at least
-    // that much. A genuine shortfall must never round up to a match, but it
-    // IS confirmed and conclusive -- the member sent less than they claimed.
-    if (onChainAmount < expectAmountUsdt - 0.000001)
-      return { verified: false, conclusive: true, reason: `The confirmed on-chain amount (${onChainAmount} USDT) is less than the ${expectAmountUsdt} USDT claimed` };
-    return { verified: true, onChainAmount };
-  } catch (e) {
-    return { verified: false, conclusive: false, reason: e.message };
-  }
-}
-// How long an INCONCLUSIVE claim (TronGrid simply has no record of it yet)
-// is allowed to keep waiting before the reconciler gives up and declines it
-// -- guarantees every claim eventually reaches a definitive completed/
-// declined outcome on its own, never sitting unresolved forever. Real
-// transactions confirm on TRON within seconds to low minutes, so 15 minutes
-// is a generous margin, not a tight one.
-const USDT_UNRESOLVED_TIMEOUT_MS = 15 * 60 * 1000;
-// The one function that decides a USDT claim's fate -- used by the
-// synchronous check-loop at submit time, the client's own status poll, and
-// the 30s reconciler sweep, so there is exactly one path that can ever move
-// a claim out of 'awaiting_verification', not three slightly different ones.
-async function resolveUsdtDeposit(depositId) {
-  try {
-    const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists || snap.data().status !== 'awaiting_verification') return { outcome: 'unchanged' };
-    const dep = snap.data();
-    const result = await verifyUsdtTx(dep.txid, dep.walletAddress, dep.amountUsdt);
-    if (result.verified) {
-      // autoVerified is set BEFORE the credit for the same claim-before-credit
-      // reason as everywhere else -- if this update lands but the credit call
-      // below fails, the retry sees autoVerified already true and simply
-      // proceeds straight to creditDeposit() again (idempotent) rather than
-      // re-running the on-chain check.
-      await snap.ref.update({ autoVerified: true, onChainAmountUsdt: result.onChainAmount }).catch(() => {});
-      const ok = await creditDeposit(snap);
-      if (ok) console.log(`USDT deposit ${depositId} auto-credited (on-chain confirmed).`);
-      return { outcome: ok ? 'matched' : 'unchanged' };
-    }
-    if (result.conclusive) {
-      await snap.ref.update({ status: 'rejected', autoDeclined: true, failureReason: result.reason }).catch(() => {});
-      console.log(`USDT deposit ${depositId} auto-declined (on-chain proof): ${result.reason}`);
-      return { outcome: 'rejected', reason: result.reason };
-    }
-    // Inconclusive -- only give up and decline once it's been unresolved for
-    // longer than any real confirmation should ever take. Gated on a key
-    // actually being configured: with none set, automatic mode isn't
-    // active at all (Round 1's pure-manual behavior), so nothing should
-    // ever auto-decline on a timer -- it just waits for an admin, exactly
-    // as if this whole feature didn't exist.
-    if (TRONGRID_API_KEY && Date.now() - tsMillis(dep.createdAt) > USDT_UNRESOLVED_TIMEOUT_MS) {
-      const reason = 'Could not confirm this transaction on-chain. Please check the TXID or contact support.';
-      await snap.ref.update({ status: 'rejected', autoDeclined: true, failureReason: reason }).catch(() => {});
-      console.log(`USDT deposit ${depositId} auto-declined (unresolved past ${USDT_UNRESOLVED_TIMEOUT_MS / 60000} min): ${result.reason}`);
-      return { outcome: 'rejected', reason };
-    }
-    console.log(`USDT auto-verify not yet resolved for ${depositId}: ${result.reason}`);
-    return { outcome: 'pending', reason: result.reason };
-  } catch (e) {
-    console.error(`USDT resolve error for ${depositId}:`, e.message);
-    return { outcome: 'pending', reason: e.message };
-  }
-}
-const _usdtSubmitDebounce = new Map();
-app.post('/deposit/usdt/submit', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
-  try {
-    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    if (!sett.usdtEnabled) return res.status(400).json({ status: 'error', message: 'USDT deposits are not available right now.' });
-    const rate = Number(sett.usdtRate) || 0;
-    if (rate <= 0) return res.status(400).json({ status: 'error', message: 'USDT deposits are not configured yet. Please try again later.' });
-
-    const amountUsdt = Number(req.body.amountUsdt);
-    if (!isFinite(amountUsdt) || amountUsdt <= 0) return res.status(400).json({ status: 'error', message: 'Enter a valid USDT amount' });
-    // Tron TXIDs are 64 hex chars — a loose format check to keep obvious
-    // junk/typos out. The real verification is the admin's own Tronscan
-    // check before they approve it; this is not relied on for security.
-    const txid = String(req.body.txid || '').trim().toLowerCase();
-    if (!/^[a-f0-9]{60,66}$/.test(txid)) return res.status(400).json({ status: 'error', message: 'Enter a valid transaction hash (TXID)' });
-
-    const amountUgx = Math.round(amountUsdt * rate);
-    if (amountUgx < sett.minDeposit)
-      return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)} (about ${(sett.minDeposit / rate).toFixed(2)} USDT)` });
-
-    const lastSub = _usdtSubmitDebounce.get(userId) || 0;
-    if (Date.now() - lastSub < 7000)
-      return res.status(429).json({ status: 'error', message: 'A deposit is already being submitted. Please wait a moment.' });
-    _usdtSubmitDebounce.set(userId, Date.now());
-
-    // A TXID can only ever back ONE OPEN OR PAID claim, by anyone — without
-    // this the same real payment could be submitted by multiple accounts
-    // (or resubmitted after already being credited) to farm repeat credits
-    // off a single real transfer. A claim that was previously DECLINED
-    // doesn't count as a conflict — the member is allowed to correct a
-    // mistaken claim (e.g. the right amount) against the same real
-    // transaction rather than being permanently locked out over it.
-    const dupSnap = await db.collection('pendingDeposits').where('txid', '==', txid).limit(20).get();
-    const openOrPaid = dupSnap.docs.filter(d => d.data().status !== 'rejected');
-    if (openOrPaid.length) {
-      const matched = openOrPaid.find(d => d.data().status === 'matched');
-      if (matched) {
-        if (matched.data().userId === userId)
-          return res.json({ status: 'success', state: 'matched', depositId: matched.id, message: 'This transaction was already credited.' });
-        return res.status(409).json({ status: 'error', message: 'This transaction hash has already been used.' });
-      }
-      const existing = openOrPaid[0];
-      if (existing.data().userId === userId)
-        return res.json({ status: 'success', state: 'awaiting_verification', depositId: existing.id, alreadySubmitted: true, message: 'This transaction was already submitted and is being verified.' });
-      return res.status(409).json({ status: 'error', message: 'This transaction hash has already been submitted.' });
-    }
-
-    const ref = await uniqueRef('B');
-    const { date, time } = nowStr();
-    const depRef = db.collection('pendingDeposits').doc();
-    await depRef.set({
-      userId, method: 'usdt', amount: amountUgx, amountUsdt, rate, txid, ref,
-      walletAddress: sett.usdtWalletAddress, status: 'awaiting_verification',
-      date, time, createdAt: FieldValue.serverTimestamp()
-    });
-    // Try to resolve it right here, a few times, before answering at all --
-    // in practice the member usually already sent the crypto and waited for
-    // their OWN wallet to show it confirmed before coming back to paste the
-    // hash, so the payment is very often already settled by this point.
-    // This is what turns "submitted, wait and see" into an immediate,
-    // definitive Completed/Declined answer for the common case. Anything
-    // still unresolved after this falls back to the 30s reconciler sweep
-    // (reconcileUsdtDeposits), which keeps retrying until it resolves --
-    // and after 15 minutes unresolved, resolves itself to Declined rather
-    // than sitting there forever. An admin's manual Approve/Reject stays
-    // available as a backstop throughout, but is never required.
-    let resolved = { outcome: 'pending' };
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
-      resolved = await resolveUsdtDeposit(depRef.id);
-      if (resolved.outcome === 'matched' || resolved.outcome === 'rejected') break;
-    }
-    if (resolved.outcome === 'matched')
-      return res.json({ status: 'success', state: 'matched', depositId: depRef.id, reference: ref, message: 'Payment completed! Credited to your wallet.' });
-    if (resolved.outcome === 'rejected')
-      return res.json({ status: 'success', state: 'rejected', depositId: depRef.id, reference: ref, message: 'Payment declined: ' + resolved.reason });
-    res.json({ status: 'success', state: 'awaiting_verification', depositId: depRef.id, reference: ref,
-      message: 'Submitted. Verifying on-chain — this can take a minute.' });
-  } catch (e) {
-    console.error('USDT deposit submit error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not submit your deposit. Please try again.' });
-  }
-});
-// Lets the client poll a still-pending claim (the common early-return case
-// above, or one revived by the background reconciler) until it resolves --
-// same role as /deposit/marzpay/status for the mobile-money flow.
-app.post('/deposit/usdt/status', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const snap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
-    if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
-    const dep = snap.data();
-    if (dep.status === 'matched') return res.json({ status: 'success', state: 'matched' });
-    if (dep.status === 'rejected') return res.json({ status: 'success', state: 'rejected', message: dep.failureReason || 'Payment declined.' });
-    // Give this specific poll one more real attempt rather than just
-    // reporting the stale stored status -- the member is actively watching,
-    // so it's worth trying to resolve it right now instead of waiting for
-    // the next 30s reconciler tick.
-    const resolved = await resolveUsdtDeposit(snap.id);
-    if (resolved.outcome === 'matched') return res.json({ status: 'success', state: 'matched' });
-    if (resolved.outcome === 'rejected') return res.json({ status: 'success', state: 'rejected', message: 'Payment declined: ' + resolved.reason });
-    res.json({ status: 'success', state: 'awaiting_verification' });
-  } catch (e) {
-    console.error('USDT deposit status error:', e.message);
-    res.status(500).json({ status: 'error', message: 'Could not check payment status' });
-  }
-});
 
 // MarzPay webhook. Respond 200 immediately (MarzPay retries on anything
 // else, and slow processing here shouldn't hold the connection open), then
@@ -2252,54 +1961,26 @@ app.post('/withdraw/request', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
-  // Bank Transfer is a second, real withdrawal rail through the SAME
-  // MarzPay gateway -- mobile-money cash-out below is completely
-  // untouched by any of this.
-  const method = req.body.method === 'bank' ? 'bank' : 'mobile_money';
-  let holder = null, network = null, phone = null;
-  let bankName = null, accountName = null, accountNumber = null, branch = null;
-  if (method === 'bank') {
-    bankName = stripHtml(req.body.bankName);
-    accountName = stripHtml(req.body.accountName);
-    accountNumber = String(req.body.accountNumber || '').replace(/[^0-9]/g, '').trim();
-    branch = req.body.branch ? stripHtml(req.body.branch) : null;
-    if (!bankName || !accountName || !accountNumber)
-      return res.status(400).json({ status: 'error', message: 'Enter the bank name, account name and account number.' });
-  } else {
-    holder = stripHtml(req.body.holder);
-    network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
-    phone = cleanPhone(req.body.phone || '');
-    if (!holder || !network) return res.status(400).json({ status: 'error', message: 'Bind a mobile-money account first.' });
-    // Was a loose length check that let a garbled number (e.g. a stray
-    // extra "256" mashed onto the front) straight through to MarzPay's
-    // send-money call -- that's exactly how one real payout ended up
-    // permanently stuck "processing" with MarzPay erroring on the bad
-    // number, which then blocked every OTHER withdrawal too (MarzPay only
-    // allows one send-money payout in flight per business account).
-    // cleanPhone() itself is strict now; rejected here BEFORE anything is
-    // reserved, with a message that says exactly what's wrong.
-    if (!phone) return res.status(400).json({ status: 'error', message: 'That mobile-money number is not a valid Uganda number. Use the format 07XXXXXXXX or +2567XXXXXXXX, then bind it again.' });
-  }
+  // Bank-transfer withdrawal has been removed -- mobile money is the only
+  // withdrawal rail. method is intentionally never read from the client.
+  const method = 'mobile_money';
+  const holder = stripHtml(req.body.holder);
+  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
+  const phone = cleanPhone(req.body.phone || '');
+  if (!holder || !network) return res.status(400).json({ status: 'error', message: 'Bind a mobile-money account first.' });
+  // Was a loose length check that let a garbled number (e.g. a stray
+  // extra "256" mashed onto the front) straight through to MarzPay's
+  // send-money call -- that's exactly how one real payout ended up
+  // permanently stuck "processing" with MarzPay erroring on the bad
+  // number, which then blocked every OTHER withdrawal too (MarzPay only
+  // allows one send-money payout in flight per business account).
+  // cleanPhone() itself is strict now; rejected here BEFORE anything is
+  // reserved, with a message that says exactly what's wrong.
+  if (!phone) return res.status(400).json({ status: 'error', message: 'That mobile-money number is not a valid Uganda number. Use the format 07XXXXXXXX or +2567XXXXXXXX, then bind it again.' });
   let pinJustSet = false;
   try {
     const sett = await getSettings();
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
-
-    if (method === 'bank') {
-      if (!sett.bankWithdrawEnabled) return res.status(400).json({ status: 'error', message: 'Bank transfer withdrawals are not available right now.' });
-      // Validated against MarzPay itself BEFORE anything is reserved --
-      // catches a bad account number or unsupported bank up front rather
-      // than wasting an admin's later click on a doomed send. A genuine
-      // DEFINITIVE rejection blocks the request; a failure of the check
-      // ITSELF (network blip, MarzPay hiccup) does not -- that's not
-      // evidence the account is bad, just a failed check, same fail-open
-      // reasoning already used for the send-money live re-check elsewhere.
-      try {
-        const v = await marzValidateBankAccount({ bankName, accountNumber });
-        if (v.status !== 'success' && v.status !== 'sandbox')
-          return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Could not verify this bank account. Check the bank name and account number.') });
-      } catch (_) { /* validation check itself failed -- proceed, the real transfer attempt will surface any genuine problem */ }
-    }
     // PIN gate applies to EVERY withdrawal, mobile money included. A stolen
     // login password (phished via a fake "customer service" DM, the exact
     // pattern behind a run of unauthorized cash-outs) used to be enough on
@@ -2370,11 +2051,9 @@ app.post('/withdraw/request', async (req, res) => {
       // at request time, since nothing has left the platform yet.
       t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
       const { date, time } = nowStr();
-      const record = { userId, amount: amt, fee, net, method, ref, status: 'pending', date, time, createdAt: FieldValue.serverTimestamp() };
-      if (method === 'bank') Object.assign(record, { bankName, accountName, accountNumber, branch });
-      else Object.assign(record, { holder, network, phone });
+      const record = { userId, amount: amt, fee, net, method, holder, network, phone, ref, status: 'pending', date, time, createdAt: FieldValue.serverTimestamp() };
       t.set(witRef, record);
-      const destDesc = method === 'bank' ? `${bankName} (${accountName})` : `${holder} (${network})`;
+      const destDesc = `${holder} (${network})`;
       t.set(db.collection('transactions').doc(), {
         userId, type: 'withdraw', description: `Cash out to ${destDesc}, net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, processing`,
         amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
@@ -3974,24 +3653,6 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
     res.json({ status: 'success', message: `Force-credited ${fmtUGX(snap.data().amount)} to the user` });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Declines a USDT deposit claim (bad/unmatched TXID, wrong amount, etc.) —
-// the counterpart to approving one via force-credit above. Only ever acts on
-// a still-open ('awaiting_verification') claim; an already-matched deposit
-// can never be "rejected" out from under a member who was already paid.
-app.post('/admin/deposit/usdt/reject', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { depositId, reason } = req.body;
-  if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
-  try {
-    const snap = await db.collection('pendingDeposits').doc(depositId).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
-    if (snap.data().status === 'matched') return res.status(400).json({ status: 'error', message: 'This deposit was already credited — cannot reject it now.' });
-    if (snap.data().status === 'rejected') return res.json({ status: 'success', message: 'Already rejected' });
-    await snap.ref.update({ status: 'rejected', failureReason: String(reason || 'Could not verify this transaction').slice(0, 300) });
-    logAdminAction(req, 'usdt_deposit_rejected', { depositId, reason: reason || '' });
-    res.json({ status: 'success', message: 'Deposit rejected' });
-  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
-});
 app.post('/admin/withdrawals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -4641,32 +4302,8 @@ async function reconcileCashback() {
   } catch (e) { console.error('Reconcile cashback error:', e.message); }
   finally { _sweepingCashback = false; }
 }
-// Retries on-chain resolution for any USDT claim still sitting at
-// 'awaiting_verification' -- covers the case where TronGrid was briefly
-// down (or the transaction hadn't confirmed yet) at submit time, so a real
-// payment still gets auto-credited on its own rather than needing an admin
-// to notice and force-credit it, AND guarantees the 15-minute unresolved
-// timeout (see resolveUsdtDeposit) actually gets a chance to fire even if
-// the member never reopens the app to poll for status themselves. A no-op
-// entirely (and cheap) when TRONGRID_API_KEY isn't configured -- pure
-// manual mode is untouched by any of this.
-let _sweepingUsdt = false;
-async function reconcileUsdtDeposits() {
-  if (_sweepingUsdt || !TRONGRID_API_KEY) return 0;
-  _sweepingUsdt = true;
-  let settled = 0;
-  try {
-    const snap = await db.collection('pendingDeposits').where('status', '==', 'awaiting_verification').limit(50).get();
-    for (const doc of snap.docs) {
-      const result = await resolveUsdtDeposit(doc.id);
-      if (result.outcome === 'matched' || result.outcome === 'rejected') settled++;
-    }
-  } catch (e) { console.error('Reconcile USDT deposits error:', e.message); }
-  finally { _sweepingUsdt = false; }
-  return settled;
-}
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).then(reconcileUsdtDeposits).catch(() => {});
+  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
 }
 
 // Manual "Sync MarzPay" button in the admin panel — re-checks every in-flight
@@ -4679,9 +4316,8 @@ app.get('/admin/payments/sync', async (req, res) => {
   try {
     const depositsSettled = await reconcilePendingDeposits();
     const withdrawalsSettled = await reconcilePendingWithdrawals();
-    const usdtSettled = await reconcileUsdtDeposits();
-    res.json({ status: 'success', settled: (depositsSettled || 0) + (withdrawalsSettled || 0) + (usdtSettled || 0),
-      depositsSettled: depositsSettled || 0, withdrawalsSettled: withdrawalsSettled || 0, usdtSettled: usdtSettled || 0 });
+    res.json({ status: 'success', settled: (depositsSettled || 0) + (withdrawalsSettled || 0),
+      depositsSettled: depositsSettled || 0, withdrawalsSettled: withdrawalsSettled || 0 });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -4717,7 +4353,6 @@ function sweepEphemeralState() {
   try {
     // Debounce stamps are plain timestamps and only matter for a few seconds.
     dropStale(_depCreateDebounce, 5 * 60 * 1000);
-    dropStale(_usdtSubmitDebounce, 5 * 60 * 1000);
     dropStale(_adminCreditDebounce, 5 * 60 * 1000);
     dropStale(_adminDebitDebounce, 5 * 60 * 1000);
     // Deposit-attempt windows are 60s; keep a wide margin, then drop.

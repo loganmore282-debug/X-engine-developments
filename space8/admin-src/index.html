@@ -907,11 +907,11 @@ async function syncMarzPay(btn, afterFn){
   const d = await api('/admin/payments/sync');
   btn.disabled=false; btn.textContent=t;
   if(d.status==='success'){
-    toast(d.settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s), ${d.usdtSettled||0} USDT auto-verified` : 'Synced, nothing was waiting', 'ok');
+    toast(d.settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced, nothing was waiting', 'ok');
     afterFn();
   } else toast(d.message||'Sync failed','err');
 }
-const DEP_GROUPS = { pending: ['initiating','pending','awaiting_verification'], matched: ['matched'], failed: ['failed','rejected'] };
+const DEP_GROUPS = { pending: ['initiating','pending'], matched: ['matched'], failed: ['failed','rejected'] };
 let _deps=[], _depFilter='pending';
 async function renderDeposits(){
   const r = await api('/admin/deposits/list', {});
@@ -931,7 +931,7 @@ async function renderDeposits(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — MarzPay mobile money and USDT TRC20, both automatic. A stuck MarzPay deposit can be force-credited once you've verified the money landed. A USDT claim resolves itself against the real blockchain (credited if it checks out, declined — tagged "Auto-declined" — if it plainly doesn't); Approve/Reject only ever shows up as a manual backstop for the rare one still Awaiting Review.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — MarzPay mobile money, automatic. A stuck deposit can be force-credited once you've verified the money landed.</p>
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
@@ -951,45 +951,25 @@ function drawDeps(){
     (qCore && phoneCore(d.accountPhone||d.phone).includes(qCore))
   );
   $('depRows').innerHTML = list.length?list.map(d=>{
-    const isUsdt = d.method==='usdt';
-    const stuck = !isUsdt && (d.status==='initiating' || d.status==='pending' || d.status==='failed');
-    const awaiting = isUsdt && d.status==='awaiting_verification';
+    const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed';
     const code = u(d.userId).referralCode;
-    const usdtBadge = d.autoVerified ? ' <span class="pill-tag t-ok" style="font-size:9.5px;padding:2px 6px">Auto</span>'
-      : d.autoDeclined ? ' <span class="pill-tag t-bad" style="font-size:9.5px;padding:2px 6px">Auto-declined</span>' : '';
-    const method = isUsdt
-      ? `USDT (TRC20)${usdtBadge}<br><a href="https://tronscan.org/#/transaction/${esc(d.txid||'')}" target="_blank" rel="noopener" style="font-size:11px">${esc((d.txid||'').slice(0,10))}…</a>`
-      + (d.status==='rejected' && d.failureReason ? `<br><span class="muted" style="font-size:10.5px">${esc(d.failureReason)}</span>` : '')
-      : 'Mobile Money';
-    // Both server-side already: /admin/deposit/force-credit and
-    // /admin/deposit/usdt/reject are verifyOwner-gated (crediting a deposit
+    // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
     // that was never actually verified by MarzPay's own webhook is a real
-    // money-safety decision, not a routine action). The buttons themselves
-    // now match that -- staff never sees them at all, same silent pattern
-    // as every other owner-only control, rather than seeing a button that
-    // just errors when they tap it.
-    let actions = '';
-    if (SESSION_ROLE === 'owner') {
-      if(stuck) actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>`;
-      else if(awaiting) actions = `<button class="btn ok sm" data-force="${esc(d.id)}">Approve</button> <button class="btn danger sm" data-reject="${esc(d.id)}">Reject</button>`;
-    }
+    // money-safety decision, not a routine action) -- the button matches
+    // that, same silent pattern as every other owner-only control, rather
+    // than showing a button that just errors when tapped.
+    const actions = (SESSION_ROLE === 'owner' && stuck) ? `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>` : '';
     return `<tr><td>${fdate(d.createdAt)}</td>
       <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
-      <td>${method}</td>
-      <td><b>${ugx(d.amount)}</b>${isUsdt?`<br><span class="muted" style="font-size:11px">${d.amountUsdt} USDT @ ${d.rate}</span>`:''}</td>
+      <td>Mobile Money</td>
+      <td><b>${ugx(d.amount)}</b></td>
       <td>${esc(d.ref||'Not set')}</td>
       <td>${statusPill(d.status)}</td>
       <td>${actions}</td></tr>`;
   }).join(''):'<tr><td colspan="7" class="empty">No deposits</td></tr>';
   document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async()=>{
-    if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed (MarzPay dashboard, or the TXID on Tronscan for a USDT claim).'))return;
+    if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed on the MarzPay dashboard.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
-    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
-  }));
-  document.querySelectorAll('[data-reject]').forEach(b=>b.addEventListener('click',async()=>{
-    const reason = prompt('Reason for rejecting this USDT deposit (shown to no one but kept in the audit log):','Could not verify this transaction');
-    if(reason===null) return;
-    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/usdt/reject',{depositId:b.dataset.reject, reason});
     toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
   }));
 }
@@ -1057,16 +1037,12 @@ function drawWits(){
   );
   $('witRows').innerHTML = list.length?list.map(w=>{
     const code = u(w.userId).referralCode;
-    const isBank = w.method==='bank';
-    const who = isBank ? esc(w.accountName||'') : esc(w.holder||'');
-    const dest = isBank
-      ? `${esc(w.bankName||'Not set')}<br><span class="muted" style="font-size:11px">${esc(w.accountNumber||'')}${w.branch?' · '+esc(w.branch):''}</span>`
-      : `${esc(w.network||'Not set')}<br><span class="muted" style="font-size:11px">${esc(w.phone||'')}</span>`;
-    const sendLabel = isBank ? 'Send via Bank Transfer' : 'Send via MarzPay';
+    const who = esc(w.holder||'');
+    const dest = `${esc(w.network||'Not set')}<br><span class="muted" style="font-size:11px">${esc(w.phone||'')}</span>`;
     return `<tr class="clickable" data-uid="${esc(w.userId)}"><td>${fdate(w.createdAt)}</td><td>${who}${code?`<br><span class="muted">${esc(code)}</span>`:''}</td>
     <td>${ugx(w.amount)}</td><td><b>${ugx(w.net)}</b></td><td>${dest}</td>
     <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
-    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">${sendLabel}</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
+    <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :''}</td></tr>`;
   }).join(''):'<tr><td colspan="7" class="empty">No withdrawals</td></tr>';
@@ -1507,7 +1483,7 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock — back shortly.">
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
-      <p class="muted" style="margin:0 0 4px">Mobile-money recharges run on MarzPay automatically; cash-outs wait as Pending until an admin sends them from the Withdrawals tab. USDT deposits are a separate manual-review rail — configure that below under Crypto deposits.</p>
+      <p class="muted" style="margin:0 0 4px">Mobile-money recharges run on MarzPay automatically; cash-outs wait as Pending until an admin sends them from the Withdrawals tab.</p>
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
@@ -1541,24 +1517,6 @@ async function renderSettings(){
       <label>WhatsApp contact</label><input id="spWaContact" value="${esc(v('whatsappContact',''))}" placeholder="https://wa.me/256700000000">
       <label>Support hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Every day, 8am – 9pm">
       <button class="btn block" id="saveSupport">Save support contacts</button>
-    </div>
-
-    <h2 class="sec">Crypto deposits (USDT TRC20)</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">A second deposit rail alongside automatic MarzPay mobile money (that flow is unaffected by this). A member sends USDT to the wallet address below on their own and submits the transaction hash in-app. With a TronGrid API key set on the server (TRONGRID_API_KEY), the server checks it against the real blockchain right at submission — a real match credits it instantly ("Auto"), and a transaction that's confirmed but plainly wrong (wrong token, wrong address, short amount) declines instantly too ("Auto-declined"), no admin needed either way. Anything still unconfirmed keeps retrying in the background and resolves itself within 15 minutes at the latest. Without a key configured, every claim simply waits as Awaiting Review for your own Approve/Reject — nothing here ever forces automatic mode on you.</p>
-      <div class="switch-row"><span><b>Enable USDT deposits</b> <span class="muted">(shows the option in the app)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sUsdtEnabled" ${s.usdtEnabled?'checked':''} style="width:auto"></label></div>
-      <label>Receiving wallet address (TRC20)</label><input id="sUsdtAddr" value="${esc(v('usdtWalletAddress',''))}" placeholder="T...">
-      <label>Exchange rate (UGX per 1 USDT)</label><input id="sUsdtRate" type="number" step="1" min="0" value="${v('usdtRate',0)}" placeholder="e.g. 3750">
-      <button class="btn block" id="saveUsdt">Save crypto deposit settings</button>
-    </div>
-
-    <h2 class="sec">Bank transfer withdrawals</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">A second withdrawal rail through the SAME MarzPay gateway as mobile-money cash-outs (that flow is unaffected by this) — MarzPay's own bank-transfer product, real automatic bank payouts. A member picks their bank from MarzPay's own supported list and enters their account details; the account is validated against MarzPay before the request is even accepted. Every request still waits as Pending for your manual Send, exactly like mobile money does. Requires the Bank Transfer service subscribed on your MarzPay business account, API disbursement permission enabled, and your server's IP whitelisted with MarzPay — turn this on only once that's done, or real cash-out attempts will fail.</p>
-      <div class="switch-row"><span><b>Enable bank transfer withdrawals</b> <span class="muted">(shows the option in the app)</span></span>
-        <label style="width:auto;margin:0"><input type="checkbox" id="sBankWitEnabled" ${s.bankWithdrawEnabled?'checked':''} style="width:auto"></label></div>
-      <button class="btn block" id="saveBankWit">Save bank withdrawal settings</button>
     </div>
 
     <h2 class="sec">Regulation page</h2>
@@ -1621,15 +1579,6 @@ async function renderSettings(){
       whatsappGroup:$('spWaGroup').value.trim(), whatsappContact:$('spWaContact').value.trim(),
       supportHours:$('spHours').value.trim() };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Support saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveUsdt').addEventListener('click', async()=>{
-    const upd = { usdtEnabled:$('sUsdtEnabled').checked,
-      usdtWalletAddress:$('sUsdtAddr').value.trim(), usdtRate:Number($('sUsdtRate').value)||0 };
-    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Crypto deposit settings saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveBankWit').addEventListener('click', async()=>{
-    const d=await api('/admin/settings/update', { settings: { bankWithdrawEnabled:$('sBankWitEnabled').checked } });
-    toast(d.status==='success'?'Bank withdrawal settings saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('saveReg').addEventListener('click', async()=>{
     const d=await api('/admin/settings/update', { settings: { rulesText:$('regText').value } });

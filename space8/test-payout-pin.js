@@ -134,16 +134,6 @@ async function freshFundedUser(uid, phone) {
   check('correct pin allows delete', r.body?.status === 'success', r.body);
   check('account actually deleted', !bankAccountsOf(A).some(b => b.id === toDelete), bankAccountsOf(A));
 
-  console.log('\n== The SAME pin also gates a bank-transfer withdrawal request (no separate bind step on that rail) ==');
-  const balBeforeBankWit = userDoc(A).walletBalance;
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, method: 'bank', bankName: 'Stanbic Bank', accountName: 'A One', accountNumber: '9988776655', pin: '0000' } });
-  check('wrong pin blocks a bank-transfer withdrawal request', r.code === 400 && r.body?.code === 'WRONG_PIN', r.body);
-  check('no balance reserved', userDoc(A).walletBalance === balBeforeBankWit, userDoc(A).walletBalance);
-  check('no withdrawal record created', withdrawalsOf(A).length === 0, withdrawalsOf(A));
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, method: 'bank', bankName: 'Stanbic Bank', accountName: 'A One', accountNumber: '9988776655', pin: '1357' } });
-  check('correct pin allows the bank-transfer withdrawal request', r.body?.status === 'success', r.body);
-  check('balance now reserved', userDoc(A).walletBalance === balBeforeBankWit - 20000, userDoc(A).walletBalance);
-
   console.log('\n== 5 wrong attempts locks the account for 15 minutes ==');
   const B = 'pin-user-b';
   await freshFundedUser(B, '0771900201');
