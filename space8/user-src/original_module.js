@@ -710,14 +710,14 @@ function pollDepositStatus(id){
   var tries = 0;
   var iv = setInterval(async function(){
     tries++;
-    var r = await api('/deposit/marzpay/status?id=' + id, null, 'GET');
-    if (r.status === 'success' && r.deposit && r.deposit.status && r.deposit.status !== 'initiating' && r.deposit.status !== 'pending') {
+    var r = await api('/deposit/marzpay/status', { depositId: id });
+    if (r.status === 'success' && r.state && r.state !== 'pending') {
       clearInterval(iv);
-      if (r.deposit.status === 'matched' || r.deposit.status === 'success' || r.deposit.status === 'completed') {
-        toast('Deposit successful — ' + ugx(r.deposit.amount));
+      if (r.state === 'matched') {
+        toast('Deposit successful');
         STATE.account = null; STATE.loaded.home = false;
         if (STATE.currentPage === 'home') renderHome();
-      } else toast('Deposit failed', true);
+      } else toast(r.message || 'Deposit failed', true);
     }
     if (tries > 40) clearInterval(iv);
   }, 3000);
