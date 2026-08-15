@@ -65,6 +65,12 @@ app.use((req, res, next) => (req.path === '/health' ? next() : globalLimiter(req
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: rlKeyByUser,
   standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
+// Each message here is a real, billed LLM call -- a much tighter ceiling
+// than the general apiLimiter so one user can't run up the Anthropic bill.
+const assistLimiter = rateLimit({ windowMs: 60 * 1000, max: 15, keyGenerator: rlKeyByUser,
+  standardHeaders: true, legacyHeaders: false,
+  message: { status: 'error', message: 'Too many messages — slow down a moment.' } });
+app.use('/assistant/chat', assistLimiter);
 const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many attempts. Try again in a minute.' } });
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
@@ -163,6 +169,12 @@ const PUBLIC_URL  = (() => {
 const MARZPAY_BASE = 'https://wallet.wearemarz.com/api/v1';
 const MARZPAY_KEY  = process.env.MARZPAY_KEY || ''; // base64 encoded credentials
 const MARZ_TIMEOUT = 20000; // matches Chronova's proven value — a short timeout here just means more retries on a slow-but-real MarzPay response
+
+// ── ASSISTANT (Claude-backed support chat) ──
+const Anthropic = require('@anthropic-ai/sdk');
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
+if (!ANTHROPIC_API_KEY) console.warn('ANTHROPIC_API_KEY not set — /assistant/chat will return a fallback message.');
 
 // Product/economics defaults — mirrors DEFAULT_SETTINGS in the client
 // (space8/user/index.html). Admin panel overrides live in the
@@ -1504,6 +1516,78 @@ app.get('/account', async (req, res) => {
   } catch (e) {
     console.error('Account error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your account' });
+  }
+});
+
+// ── ASSISTANT ──────────────────────────────────────────────────────────
+// Claude-backed support chat. System prompt is rebuilt from live settings +
+// products + the caller's own account on every request, so answers track
+// whatever the admin has actually configured (fees, minimums, commission
+// rates, the real product ladder) instead of copy hand-maintained in the
+// client. The model is told explicitly it cannot perform actions (move
+// money, change settings, waive a fee) -- it only explains what buttons in
+// the app do; it never claims to have done something itself.
+function buildAssistantSystemPrompt(sett, products, u) {
+  const productLines = products.slice(0, 20).map(p =>
+    `- ${p.name}: price ${fmtUGX(p.price)}, cycle ${p.cycle} days, total return ${fmtUGX(p.expectedReturn)} (paid in full at maturity)`
+  ).join('\n');
+  return [
+    'You are the in-app support assistant for Space8, a Uganda mobile-money investment platform (satellite-themed investment plans, MarzPay mobile-money deposits/withdrawals, a 3-level referral program).',
+    'Answer only questions about using Space8: deposits, withdrawals, investing, referrals, check-ins, the payout PIN, and account basics. For anything else, briefly say it is outside what you can help with and point to Support.',
+    'You cannot perform any action yourself -- you cannot move money, change settings, waive fees, or look anything up beyond what is given to you below. Only explain what the buttons in the app do and the numbers that apply right now.',
+    'Never invent numbers -- use only the figures given below. Keep replies short (2-4 sentences), plain, and in full words for money (e.g. "UGX 20,000", never "20k").',
+    '',
+    'CURRENT PLATFORM SETTINGS:',
+    `- Minimum deposit: ${fmtUGX(sett.minDeposit)}`,
+    `- Minimum withdrawal: ${fmtUGX(sett.minWithdraw)}`,
+    `- Withdrawal fee: ${sett.withdrawFeePct}%`,
+    `- Daily check-in bonus: ${fmtUGX(sett.dailyCheckin)}`,
+    `- Welcome bonus: ${fmtUGX(sett.welcomeBonus)}`,
+    `- Referral commission: Level 1 ${sett.commL1}%, Level 2 ${sett.commL2}%, Level 3 ${sett.commL3}% of what your team invests`,
+    sett.supportTelegram ? `- Support Telegram: ${sett.supportTelegram}` : '',
+    sett.whatsappContact ? `- Support WhatsApp: ${sett.whatsappContact}` : '',
+    '',
+    'CURRENT INVESTMENT PLANS:',
+    productLines || '(none configured yet)',
+    '',
+    'THIS USER:',
+    `- Wallet balance: ${fmtUGX(u.walletBalance || 0)}`,
+    `- Total invested: ${fmtUGX(u.totalInvested || 0)}`,
+    `- Referral code: ${u.referralCode || 'none yet'}`,
+    `- Check-in streak: ${u.checkinStreak || 0} day(s)`
+  ].filter(Boolean).join('\n');
+}
+const ASSIST_FALLBACK = 'The assistant is temporarily unavailable. For deposits, withdrawals, investing, referrals or check-ins, see the relevant screen in the app, or reach Support from the Account tab.';
+app.post('/assistant/chat', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const message = stripHtml(req.body.message).slice(0, 1000);
+  if (!message) return res.status(400).json({ status: 'error', message: 'Type a message first.' });
+  if (!anthropic) return res.json({ status: 'success', reply: ASSIST_FALLBACK });
+  try {
+    const history = Array.isArray(req.body.history) ? req.body.history.slice(-8) : [];
+    const messages = history
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
+      .map(m => ({ role: m.role, content: stripHtml(m.text).slice(0, 1000) }))
+      .filter(m => m.content);
+    messages.push({ role: 'user', content: message });
+
+    const [sett, products, snap] = await Promise.all([
+      getSettings(), getProducts(), db.collection('users').doc(uid).get()
+    ]);
+    const u = snap.exists ? snap.data() : {};
+
+    const resp = await anthropic.messages.create({
+      model: 'claude-opus-5',
+      max_tokens: 400,
+      system: buildAssistantSystemPrompt(sett, products, u),
+      messages
+    });
+    const reply = resp.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim() || ASSIST_FALLBACK;
+    res.json({ status: 'success', reply });
+  } catch (e) {
+    console.error('Assistant error:', e.message);
+    res.json({ status: 'success', reply: ASSIST_FALLBACK });
   }
 });
 

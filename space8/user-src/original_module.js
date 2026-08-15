@@ -777,20 +777,9 @@ async function openWithdrawSheet(){
   };
 }
 
-// ── FLOATING ASSISTANT (client-side Q&A — server-side upgrade planned) ─
-var ASSIST_FAQ = [
-  { q: /deposit|add fund|top ?up/i, a: function(){ var m = (STATE.settings||{}).minDeposit; return 'Tap Deposit on Home, enter an amount (minimum ' + (m?ugx(m):'the platform minimum') + '), pick your network and confirm the mobile-money prompt on your phone.'; } },
-  { q: /withdraw|cash ?out|payout/i, a: function(){ var m = (STATE.settings||{}).minWithdraw, f = (STATE.settings||{}).withdrawFeePct; return 'Bind a payout account first (Account → Payout Account), then tap Withdraw on Home. Minimum is ' + (m?ugx(m):'the platform minimum') + ', a ' + (f||15) + '% fee applies.'; } },
-  { q: /referral|invite|team|commission/i, a: function(){ return 'Share your referral code from the Account tab. You earn 28% on Level 1, 2% on Level 2, and 1% on Level 3 of what your team invests.'; } },
-  { q: /invest|product|plan/i, a: function(){ return 'Browse plans on the Products tab. Each shows the price, cycle length, daily income and total return — tap Invest to confirm.'; } },
-  { q: /check ?in|daily|bonus/i, a: function(){ return 'Tap Check In on Home once a day for a small bonus. It resets every 24 hours.'; } },
-  { q: /support|contact|help|human/i, a: function(){ var s = STATE.settings||{}; return 'Reach our team on Telegram (' + (s.supportTelegram||'see Account → Support') + ') or WhatsApp (' + (s.whatsappContact||'see Account → Support') + ').'; } }
-];
+// ── FLOATING ASSISTANT (server-side, Claude-backed) ─────────────────────
 var ASSIST_QUICK = ['How do I deposit?', 'How do I withdraw?', 'How do referrals work?', 'How do I invest?'];
-function assistReply(text){
-  for (var i=0;i<ASSIST_FAQ.length;i++) if (ASSIST_FAQ[i].q.test(text)) return ASSIST_FAQ[i].a();
-  return "I can help with deposits, withdrawals, investing, referrals, and check-ins — try asking about one of those, or reach Support from the Account tab for anything else.";
-}
+var ASSIST_HISTORY = []; // {role:'user'|'assistant', text}
 function addMsg(text, who){
   var body = $('assistBody');
   var div = document.createElement('div');
@@ -798,13 +787,38 @@ function addMsg(text, who){
   div.textContent = text;
   body.appendChild(div);
   body.scrollTop = body.scrollHeight;
+  return div;
+}
+function addTyping(){
+  var body = $('assistBody');
+  var div = document.createElement('div');
+  div.className = 'msg bot typing';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+  return div;
+}
+async function assistSend(text){
+  addMsg(text, 'user');
+  ASSIST_HISTORY.push({ role: 'user', text: text });
+  var typing = addTyping();
+  var reply;
+  try {
+    var r = await api('/assistant/chat', { message: text, history: ASSIST_HISTORY.slice(-8) });
+    reply = (r && r.status === 'success' && r.reply) ? r.reply : 'The assistant is unavailable right now — reach Support from the Account tab.';
+  } catch (e) {
+    reply = "Couldn't reach the assistant — check your connection, or reach Support from the Account tab.";
+  }
+  typing.remove();
+  addMsg(reply, 'bot');
+  ASSIST_HISTORY.push({ role: 'assistant', text: reply });
 }
 function openAssistant(){
   $('assistPanel').classList.add('show');
   if (!$('assistBody').childElementCount) {
-    addMsg("Hi! I'm the Space8 assistant. Ask me about deposits, withdrawals, investing or referrals.", 'bot');
+    addMsg("Hi! I'm the Space8 assistant. Ask me anything about deposits, withdrawals, investing, referrals or your account.", 'bot');
     $('assistQuick').innerHTML = ASSIST_QUICK.map(function(q){ return '<div class="qchip">' + esc(q) + '</div>'; }).join('');
-    qsa('.qchip').forEach(function(c){ c.onclick = function(){ addMsg(c.textContent, 'user'); addMsg(assistReply(c.textContent), 'bot'); }; });
+    qsa('.qchip').forEach(function(c){ c.onclick = function(){ assistSend(c.textContent); }; });
   }
 }
 $('assistFab').onclick = openAssistant;
@@ -813,10 +827,12 @@ $('assistSend').onclick = function(){
   var input = $('assistInput');
   var text = input.value.trim();
   if (!text) return;
-  addMsg(text, 'user');
   input.value = '';
-  setTimeout(function(){ addMsg(assistReply(text), 'bot'); }, 350);
+  assistSend(text);
 };
+$('assistInput').addEventListener('keydown', function(e){
+  if (e.key === 'Enter') { e.preventDefault(); $('assistSend').click(); }
+});
 $('assistInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('assistSend').click(); });
 
 // ── BOOT ──────────────────────────────────────────────────────────────

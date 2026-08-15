@@ -102,11 +102,13 @@ tab.
   reward — a proof-of-payment social feature, genuinely new (upload flow, storage, admin
   review/approval queue, reward-grant mechanism). Needs full scoping if/when confirmed
   still wanted.
-- **Floating assistant** — exists in the UI (bottom-right bubble, full-screen chat panel)
-  but is currently **client-side canned Q&A only** (regex-matched answers about deposits/
-  withdrawals/referrals/investing/check-in/support). The owner asked for something
-  server-side ("I think they may be serversided, put some technology") — not built yet.
-  Needs a real backend endpoint and a choice of LLM/response tech.
+- **Floating assistant** — bottom-right bubble, full-screen chat panel, now backed by a
+  real server endpoint: `POST /assistant/chat` in `server.js` calls Claude
+  (`@anthropic-ai/sdk`, `claude-opus-5`) with a system prompt rebuilt every request from
+  live settings/products/account data, so it answers with real current numbers, not
+  hardcoded copy. Rate-limited separately (`assistLimiter`, 15/min/user) since each
+  message is a billed API call. **Requires `ANTHROPIC_API_KEY` on the backend's Render
+  env vars — not set yet**, falls back to a static message until it is.
 
 ## Product ladder — real, owner-provided (NOT the old chocolate-derived placeholder)
 
@@ -190,10 +192,18 @@ referral L1 28% / L2 2% / L3 1% (31% total).
 See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
 
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
-   withdraw, referral, check-in — none of this has been verified against the live
-   Firebase project + live backend in a real browser yet.
+   withdraw, referral, check-in, and now the assistant + registration-time PIN —
+   none of this has been verified against the live Firebase project + live
+   backend in a real browser yet.
 2. **"Show" feature** — not scoped, not built, anywhere.
-3. **Server-side floating assistant** — current one is a client-side placeholder.
+3. **Server-side floating assistant — code is DONE, needs an env var.**
+   `POST /assistant/chat` in `server.js` is a real Claude-backed endpoint
+   (`@anthropic-ai/sdk`, `claude-opus-5`), wired up end-to-end in
+   `user-src/original_module.js` (with a typing indicator and rolling history).
+   **The owner still needs to add `ANTHROPIC_API_KEY` to the backend's Render/
+   Railway env vars** — until then it returns a graceful static fallback message
+   instead of a real answer. Same "owner forgets to set/redeploy" risk as other
+   env vars — flag this explicitly, don't assume it's set.
 4. **Real product catalog** — not entered into the admin panel yet (owner's task).
 5. **VAPID key** — updated in code, not test-fired against a real device yet.
 6. **ChatGPT security-review findings not yet acted on** — referral-commission

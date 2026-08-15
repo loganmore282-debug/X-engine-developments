@@ -14,6 +14,76 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Font swap to Inter, larger SVG icons, centered sheet modals, PIN-at-registration, real server-side assistant
+
+- **What changed**:
+  - `user-src/index.html` / `user-src/original_module.js`: replaced the Instrument
+    Sans + Space Mono two-font system with a single self-hosted Inter variable font
+    (400–800, base64 `@font-face`); `.mono` now only sets tabular-nums, no separate
+    family. Bumped ~15 SVG icon-size CSS rules (nav, action buttons, tickers, sheets,
+    profile avatar, etc.) for legibility. Reworked `.sheet-bg`/`.sheet` from a
+    slide-up-from-bottom pattern to a centered, instantly-appearing modal (no
+    transform/transition at all) per the owner's "sheets should not slide from
+    down, rather should open from middle" + general "stop bringing animation"
+    feedback.
+  - `server.js`: added `POST /account/payout-pin/set` (first-time PIN setup,
+    reuses `_payoutPinCheck`'s `justSet` path, no old PIN required) so the
+    withdrawal PIN can be captured at registration instead of at first payout-bind.
+    Rate-limited via `apiLimiter`. Register screen (`user-src/index.html`) already
+    had PIN + confirm-PIN fields from prior work; `original_module.js`'s
+    `registerBtn` handler calls `/account/payout-pin/set` right after `/register`
+    succeeds. The Payout Account sheet's PIN field copy was already updated to
+    "Enter the withdrawal PIN you set when you registered" (field itself stays —
+    still required to gate `/bank/save`).
+  - `server.js`: added `POST /assistant/chat` — a real, Claude-backed support
+    endpoint (`@anthropic-ai/sdk`, model `claude-opus-5`, added to `package.json`).
+    Replaces the old client-side `ASSIST_FAQ` regex table entirely. The system
+    prompt is rebuilt on every request from live `getSettings()`/`getProducts()`
+    plus the caller's own account snapshot (wallet balance, total invested,
+    referral code, check-in streak) — so answers track whatever the admin has
+    actually configured instead of copy hand-maintained in the client. The model
+    is told explicitly it cannot perform actions (move money, change settings) —
+    it only explains what the app's buttons do. New `assistLimiter` (15/min per
+    user — tighter than the general `apiLimiter` since every call is a billed LLM
+    request). Requires a new `ANTHROPIC_API_KEY` Render env var on the backend
+    service — **not yet set by the owner**; until it is, the endpoint returns a
+    graceful static fallback message instead of erroring.
+    `user-src/original_module.js`'s assistant panel now calls this endpoint with
+    a rolling 8-message history, shows an animated typing indicator
+    (`.msg.typing`, new CSS) while waiting, and renders the real reply.
+  - Bumped `user/sw.js` cache to `space8-shell-v201`.
+- **Why**: the owner's message — "which font did you use, please change that
+  font, increase size of svgs, sheets should not slide from down, rather should
+  open from middle, also withdrawal pin should be set on registration not in
+  payout so remove that, even assistant just answers abruptly, it doesn't have
+  modern technology and not highly advanced" — five explicit asks in one message,
+  all addressed here in the order given.
+- **Verification**: `node build-core.js` round-trip OK. Full `test-*.js` suite run
+  (54 files inc. new `test-assistant-smoke.js`) — only pre-existing failures are 3
+  date/timezone-dependent checkin-streak assertions in
+  `test-checkin-self-heal.js`/`test-checkin-streak-recount.js`/
+  `test-reconcile-checkin.js`, confirmed present on the branch BEFORE this
+  session's changes too (via `git stash` + re-run) — not a regression, not
+  touched this session. `test-payout-pin.js` (53/53, includes the
+  `/account/payout-pin/set` registration-flow cases) all green. New
+  `test-assistant-smoke.js` proves routing/auth/rate-limit/no-key-fallback for
+  `/assistant/chat` (real model output not exercised — no `ANTHROPIC_API_KEY` in
+  this sandbox). Playwright smoke tests (mocked API, real DOM) confirmed: body
+  font is Inter, sheet-bg `align-items:center` (not `flex-end`), register screen
+  renders PIN/confirm-PIN fields and blocks submit on mismatch then calls both
+  `/register` and `/account/payout-pin/set` on success, and the assistant panel
+  sends a real `/assistant/chat` call with history and renders the reply with no
+  console errors.
+- **Left open**: **the owner must add `ANTHROPIC_API_KEY` to the Railway/Render
+  backend service's env vars** for the assistant to give real answers instead of
+  the fallback message — same "forgets to redeploy/configure" risk as other env
+  vars, flag this clearly when reporting back. Real end-to-end device/browser
+  verification (still blocked in-sandbox by egress policy) now additionally
+  needs to cover: the assistant giving a real answer, and a real registration
+  setting a real PIN that a real payout-bind later accepts.
+
+---
+
 ## 2026-08-15 — Claude — Replaced ChocoMCC chocolate-brand icons with the real Space8 mark
 
 - **What changed**: `icon-192.png`/`icon-512.png`/`icon-maskable-192.png`/
