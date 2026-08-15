@@ -66,8 +66,8 @@ function skRows(n, cls){
 // ── ICONS ──────────────────────────────────────────────────────────────
 var ICONS = {
   satellite: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="m4.5 4.5 3 3M19.5 4.5l-3 3M4.5 19.5l3-3M19.5 19.5l-3-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>',
-  deposit: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="m6 11 6 6 6-6"/><path d="M4 21h16"/></svg>',
-  withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V8"/><path d="m6 13 6-6 6 6"/><path d="M4 3h16"/></svg>',
+  deposit: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v6.5"/><path d="M8.5 5 12 8.5 15.5 5"/><circle cx="12" cy="16" r="6.5"/><text x="12" y="19" text-anchor="middle" font-size="8" font-weight="700" font-family="inherit" stroke="none" fill="currentColor">$</text></svg>',
+  withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M7 9.5h5"/><path d="M21.5 10.5h-4a2.5 2.5 0 0 0 0 5h4"/><circle cx="17.3" cy="13" r="0.9" fill="currentColor" stroke="none"/></svg>',
   checkin: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
@@ -297,9 +297,7 @@ async function renderHome(){
   }
 
   html += '<div class="section-title">Products <span class="see-all" id="homeSeeAllProds">See all</span></div>';
-  html += '<div class="prod-scroll">';
-  products.slice(0,10).forEach(function(p){ html += prodMiniHtml(p); });
-  html += '</div>';
+  products.slice(0,10).forEach(function(p){ html += prodCardHtml(p); });
 
   el.innerHTML = html;
   wireHomeActions();
@@ -322,15 +320,6 @@ function planCardHtml(inv){
     '<div class="plan-info"><div class="name">' + esc(inv.tierLabel) + '</div>' +
     '<div class="meta">Day ' + (inv.payoutsMade||0) + ' of ' + (inv.payoutsTotal||0) + '</div>' +
     '<div class="earn mono">+' + ugx(inv.paidOut) + ' earned</div></div>' +
-  '</div>';
-}
-function prodMiniHtml(p){
-  var daily = Math.round((p.expectedReturn||0)/(p.cycle||1));
-  return '<div class="prod-card-mini" data-key="' + esc(p.key) + '">' +
-    '<div class="sat">' + (p.image ? '<img src="'+esc(p.image)+'">' : ico('satellite')) + '</div>' +
-    '<div class="info"><div class="name">' + esc(p.name) + '</div>' +
-    '<div class="price mono">' + ugx(p.price) + '</div>' +
-    '<div class="ret">' + ugx(daily) + '/day</div></div>' +
   '</div>';
 }
 function renderTicker(feed){
@@ -361,7 +350,10 @@ function wireHomeActions(){
   $('homeWithdrawBtn').onclick = openWithdrawSheet;
   $('homeCheckinBtn').onclick = doCheckin;
   var seeAll = $('homeSeeAllProds'); if (seeAll) seeAll.onclick = function(){ showPage('products'); };
-  qsa('.prod-card-mini').forEach(function(c){ c.onclick = function(){ openInvestSheet(c.dataset.key); }; });
+  qsa('.prod-card', $('page-home')).forEach(function(c){
+    var invBtn = qs('.invest-btn', c);
+    if (invBtn) invBtn.onclick = function(e){ e.stopPropagation(); openInvestSheet(c.dataset.key); };
+  });
 }
 async function doCheckin(){
   var btn = $('homeCheckinBtn');
@@ -831,7 +823,36 @@ $('assistSend').onclick = function(){
 $('assistInput').addEventListener('keydown', function(e){
   if (e.key === 'Enter') { e.preventDefault(); $('assistSend').click(); }
 });
-$('assistInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('assistSend').click(); });
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────
+async function openNotificationsSheet(){
+  var s = STATE.settings;
+  if (!s) { var setR = await api('/public/settings'); s = setR.status === 'success' ? setR.settings : {}; STATE.settings = s; }
+  var feed = STATE.lastFeed;
+  if (!feed) {
+    var feedR = await api('/public/activity-feed');
+    feed = feedR.status === 'success' ? (feedR.feed || feedR.items || []) : [];
+    STATE.lastFeed = feed;
+  }
+  var html = '<div class="sheet-title">Notifications</div>';
+  if (s.annEnabled && s.annTitle) {
+    html += '<div class="card" style="margin-bottom:16px">' +
+      '<div style="font-weight:700;margin-bottom:4px">' + esc(s.annTitle) + '</div>' +
+      (s.annBody ? '<div style="font-size:13px;color:var(--ink-dim);line-height:1.5">' + esc(s.annBody) + '</div>' : '') +
+      (s.annCtaLabel && s.annCtaUrl ? '<button class="btn btn-primary" style="margin-top:12px" id="notifCtaBtn">' + esc(s.annCtaLabel) + '</button>' : '') +
+    '</div>';
+  }
+  html += '<div class="section-title" style="margin-top:0">Recent Activity</div>';
+  html += feed.length ? feed.slice(0,20).map(function(f){
+    var verb = f.type === 'withdrawal' ? 'withdrew' : 'deposited';
+    return '<div class="member-row"><div class="info"><div class="phone">' + esc(f.phone||f.masked||'A member') + ' ' + verb + '</div></div>' +
+      '<span class="mono" style="font-weight:700">' + ugx(f.amount) + '</span></div>';
+  }).join('') : emptyState('doc','No activity yet.');
+  openSheet('generic', html);
+  var ctaBtn = $('notifCtaBtn');
+  if (ctaBtn) ctaBtn.onclick = function(){ window.open(s.annCtaUrl, '_blank'); };
+}
+$('notifBtn').onclick = openNotificationsSheet;
 
 // ── BOOT ──────────────────────────────────────────────────────────────
 async function boot(){

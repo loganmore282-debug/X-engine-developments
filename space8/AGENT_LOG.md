@@ -14,6 +14,90 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — New team/deposit/withdraw icons, Home cards now match Products exactly, notification bell wired up, assistant knowledge deepened
+
+- **What changed**:
+  - **New icons from the owner's reference images** (3 attached PNGs — a solid
+    3-person group icon, a circle/arrow/$ deposit icon, an outlined wallet icon).
+    These couldn't be traced pixel-for-pixel (no vector source, just rasters), so
+    each was hand-rebuilt as inline SVG matching the reference as closely as
+    possible: **Team** nav icon replaced with a solid 3-person silhouette (new
+    `.svg-team` CSS class, mirroring the existing `.svg-cart` fill-not-stroke
+    pattern for exactly this kind of exception among otherwise-stroke nav icons;
+    also fixed a small pre-existing inconsistency where `.svg-cart`'s inactive
+    color was still `--ink-dim` instead of `--blue-mute` like every other nav
+    icon after last entry's blue-everywhere pass). **Deposit** icon (`ICONS.
+    deposit`) rebuilt as a down-arrow feeding into a ringed "$" — used in both
+    the Home action button AND the deposit sheet's amount field, both places
+    updated automatically since they share one icon definition. **Withdraw**
+    icon (`ICONS.withdraw`) rebuilt as a wallet (rounded body, top stripe, right-
+    side card-pocket bump with a dot), replacing the old up-arrow-into-tray icon,
+    same shared-definition effect on the withdraw sheet's field icon.
+  - **Fixed a real bug: Home's product cards were a different, lesser component
+    than the Products page's** — the owner: "why does the products and cards in
+    home summarised, I need them to match with these in products category with
+    all the features." Home was using `prodMiniHtml()`/`.prod-card-mini` (name +
+    price + daily figure only). Deleted that function and its CSS entirely and
+    switched Home to call the exact same `prodCardHtml()` the Products page uses
+    — full image, name, price, a Cycle/Daily/Total grid, and a working Invest
+    button. Re-wired `wireHomeActions()`'s click handling to match
+    `renderProducts()`'s pattern (`.invest-btn` inside each `.prod-card`, scoped
+    to `qsa('.prod-card', $('page-home'))` so it doesn't cross-wire stale
+    Products-page cards that might also be sitting in the DOM).
+  - **Fixed a real bug: the notification bell did nothing.** `#notifBtn` had
+    markup and CSS but genuinely no click handler anywhere — confirmed via
+    grep, not a hunch. Added `openNotificationsSheet()`: shows the admin's
+    announcement (`annEnabled`/`annTitle`/`annBody`/`annCtaLabel`/`annCtaUrl` —
+    settings fields that already existed server-side but were never surfaced
+    anywhere in the frontend) plus the same recent-activity feed the ticker's
+    records icon shows, wired to `$('notifBtn').onclick` at top level since the
+    bell lives in the persistent app shell, not a per-page render. Also fixed an
+    unrelated small bug spotted while in this code: the assistant's Enter-to-
+    send handler was accidentally wired TWICE (`#assistInput` had two identical
+    `keydown` listeners), which would have sent every Enter-submitted message
+    twice — removed the duplicate.
+  - **Assistant knowledge deepened, per "assistant need some training of high
+    advance ai... explain very well... high advanced js in server codes."** To
+    be direct about what this is and isn't: there's still no external LLM (the
+    owner declined to pay for one), so this isn't model training in the ML
+    sense — it's a substantial expansion of `assistant-engine.js`'s own
+    rule-based knowledge: intents went from 16 to 25 (added: withdrawal timing,
+    why-the-fee-exists, maturity/payout timing, multi-investment, cancellation
+    policy, referral milestones/Task Center, banned-account guidance, gift
+    codes, general security posture, and a full "how does Space8 work" step-by-
+    step walkthrough). Existing replies got measurably longer and more
+    explanatory (the "why", not just the "how") instead of one-line answers.
+    Multi-turn context blending upgraded from one prior turn to two (most
+    recent weighted highest), so a short back-and-forth ("what about
+    withdrawing?" → "and the fee?") tracks across more than one hop, not just
+    one. Manually verified across ~13 new sample questions plus the existing
+    ones — all landed on correct, on-topic, accurate-to-live-data answers.
+  - Bumped `user/sw.js` cache to `space8-shell-v203`.
+- **Why**: five things in one owner message — three specific icon swaps, Home's
+  products being a lesser version of the Products page instead of matching it,
+  a broken notification bell, and a push for a noticeably smarter assistant.
+- **Verification**: `node -c` clean on `server.js`/`assistant-engine.js`/
+  `original_module.js`. Full `test-*.js` suite (55 files) re-run after these
+  changes — only the same 3 pre-existing, unrelated date-dependent checkin-
+  streak failures, everything else green including `test-assistant-smoke.js`
+  (10/10, re-verified against the deepened engine). `node build-core.js`
+  round-trip OK. Playwright smoke tests: nav bar screenshot confirms the solid
+  team icon renders and colors correctly (active blue / inactive blue-mute);
+  action-row crop confirms the new deposit/withdraw icons render cleanly at
+  real size with no clipping/garbling; Home screenshot confirms product cards
+  now show the full Cycle/Daily/Total/Invest layout identical to the Products
+  page; notification-bell click opens a sheet showing a seeded announcement
+  (title/body/CTA button) followed by recent activity, sheet title confirmed
+  via DOM read; grep confirmed zero remaining references to the deleted
+  `prodMiniHtml`/`.prod-card-mini`/`.prod-scroll`. No console errors in any of
+  the above.
+- **Left open**: the three new icons are hand-rebuilt approximations of the
+  owner's reference images, not pixel-perfect vector traces (no tracing tool
+  available) — worth a visual once-over by the owner against the originals.
+  Real end-to-end device/browser verification remains the standing open item.
+
+---
+
 ## 2026-08-16 — Claude — Real 15-tier product catalog live, assistant made more conversational, Home products bug fixed, Privacy Policy removed
 
 - **What changed**:
