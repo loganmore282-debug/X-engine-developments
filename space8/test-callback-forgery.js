@@ -225,13 +225,13 @@ async function setupUser(uid, phone) {
   const J = 'legit-depositor-j';
   await setupUser(J, '0771000409');
   const balBeforeJ = userDoc(J).walletBalance;
-  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + J, body: { amount: 15000, phone: '0771000409', network: 'MTN Mobile Money' } });
+  r = await call('POST', '/deposit/marzpay', { token: 'uid:' + J, body: { amount: 25000, phone: '0771000409', network: 'MTN Mobile Money' } });
   const depIdJ = r.body.depositId;
   const refJ = collMap('pendingDeposits').get(depIdJ).marzReference;
   collectTxForUuid['OWN-UUID-J'] = { status: 'successful', reference: refJ };
   r = await call('POST', '/deposit/callback', { body: { event_type: 'collection.completed', data: { reference: refJ, transaction: { uuid: 'OWN-UUID-J' } } } });
   await new Promise(r2 => setTimeout(r2, 200));
-  check('credited from event_type alone, no transaction.status field needed', userDoc(J).walletBalance === balBeforeJ + 15000, userDoc(J).walletBalance);
+  check('credited from event_type alone, no transaction.status field needed', userDoc(J).walletBalance === balBeforeJ + 25000, userDoc(J).walletBalance);
   check('deposit correctly marked matched', collMap('pendingDeposits').get(depIdJ).status === 'matched', collMap('pendingDeposits').get(depIdJ).status);
 
   console.log('\n== Withdrawal callback SUCCESS: trusted on a genuine reference match, even when the live re-check is unavailable ==');

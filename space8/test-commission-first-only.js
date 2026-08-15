@@ -1,5 +1,5 @@
 /* SPACE8 REFERRAL COMMISSION — FIRST INVESTMENT ONLY
-   L1/L2/L3 commission (27% / 2% / 1%) used to fire on EVERY investment a
+   L1/L2/L3 commission (28% / 2% / 1%) used to fire on EVERY investment a
    referred member ever made. Changed to a one-time reward: it only pays out
    on that member's first-ever investment. Every later purchase they make is
    still real, valid activity for the Task Center's active-referral-count and
@@ -65,25 +65,25 @@ const users = () => collMap('users');
   users().set('buyer1', { phone: '0771000001', walletBalance: 10_000_000, totalInvested: 0, referredBy: 'ref1', registrationDone: true, status: 'active' });
 
   console.log('\n-- buyer1\'s FIRST investment pays L1 commission to ref1 --');
-  let r = await call('POST', '/invest/create', { token: 'uid:buyer1', body: { tierKey: 'comet' } });
+  let r = await call('POST', '/invest/create', { token: 'uid:buyer1', body: { tierKey: 'explorer1' } });
   check('first purchase succeeds', r.body?.status === 'success', r.body);
   await sleep(150); // commission is fired async (.catch, not awaited) in /invest/create
   const balAfterFirst = users().get('ref1').walletBalance;
-  check('ref1 got paid 27% of 30,000 = 8,100 on buyer1\'s first purchase', balAfterFirst === 8100, balAfterFirst);
+  check('ref1 got paid 28% of 30,000 = 8,400 on buyer1\'s first purchase', balAfterFirst === 8400, balAfterFirst);
   check('buyer1.firstInvestmentDone is now true', users().get('buyer1').firstInvestmentDone === true, users().get('buyer1').firstInvestmentDone);
 
   console.log('\n-- buyer1\'s SECOND investment does NOT pay commission again --');
-  r = await call('POST', '/invest/create', { token: 'uid:buyer1', body: { tierKey: 'asteroid' } });
+  r = await call('POST', '/invest/create', { token: 'uid:buyer1', body: { tierKey: 'tiros1' } });
   check('second purchase succeeds', r.body?.status === 'success', r.body);
   await sleep(150);
   const balAfterSecond = users().get('ref1').walletBalance;
-  check('ref1\'s balance UNCHANGED after buyer1\'s second purchase (still 8,100)', balAfterSecond === 8100, balAfterSecond);
+  check('ref1\'s balance UNCHANGED after buyer1\'s second purchase (still 8,400)', balAfterSecond === 8400, balAfterSecond);
 
   console.log('\n-- A third investment, even re-run through the reconciler-style call, still pays nothing --');
-  r = await call('POST', '/invest/create', { token: 'uid:buyer1', body: { tierKey: 'pulsar' } });
+  r = await call('POST', '/invest/create', { token: 'uid:buyer1', body: { tierKey: 'telstar1' } });
   check('third purchase succeeds', r.body?.status === 'success', r.body);
   await sleep(150);
-  check('ref1\'s balance still unchanged (8,100) after a third purchase', users().get('ref1').walletBalance === 8100, users().get('ref1').walletBalance);
+  check('ref1\'s balance still unchanged (8,400) after a third purchase', users().get('ref1').walletBalance === 8400, users().get('ref1').walletBalance);
 
   console.log('\n== Backward-compatible migration path ==');
   console.log('-- An account that already invested BEFORE this fix (totalInvested > 0, no firstInvestmentDone flag) --');
@@ -93,7 +93,7 @@ const users = () => collMap('users');
     referredBy: 'ref2', registrationDone: true, status: 'active'
     // NOTE: no firstInvestmentDone field at all — simulates a real account from before this change.
   });
-  r = await call('POST', '/invest/create', { token: 'uid:oldBuyer', body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:oldBuyer', body: { tierKey: 'explorer1' } });
   check('pre-existing investor\'s new purchase succeeds', r.body?.status === 'success', r.body);
   await sleep(150);
   check('ref2 is NOT paid a phantom "first investment" commission for oldBuyer\'s actually-later purchase',

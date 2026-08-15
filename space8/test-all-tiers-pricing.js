@@ -8,9 +8,9 @@
    mars, so this class of "every tier except the checked ones is quietly
    wrong" bug had no test that would have caught it across the full table.
 
-   This buys a purchase in EVERY one of the 10 default tiers and proves,
-   for each: expectedReturn is exactly price*25, dailyPayout is exactly
-   round(expectedReturn/180) (matching the owner's reference table to the
+   This buys a purchase in EVERY one of the 15 default tiers and proves,
+   for each: expectedReturn is exactly price*42, dailyPayout is exactly
+   round(expectedReturn/210) (matching the owner's reference table to the
    digit, including the ones that don't divide evenly), and daily cashback
    settlement actually pays that exact daily figure for a backdated
    investment -- not just that the numbers are stored right, but that the
@@ -74,21 +74,27 @@ async function setupFundedUser(uid, phone, balance) {
   userDoc(uid).walletBalance = balance;
 }
 
-// The owner's own reference table -- every tier, at the current 40x/180-day
-// rate. If DEFAULT_PRODUCTS in server.js ever drifts from this (or a saved
-// doc silently overrides one tier again), this test fails on that exact
-// tier instead of the mismatch going unnoticed.
+// The owner's own reference table (Space8_Investment_Plans_and_Variables.pdf)
+// -- every tier, at the real 42x/210-day rate. If DEFAULT_PRODUCTS in
+// server.js ever drifts from this (or a saved doc silently overrides one
+// tier again), this test fails on that exact tier instead of the mismatch
+// going unnoticed.
 const REFERENCE_TABLE = [
-  { key: 'comet',  price: 30000,   expectedReturn: 1200000   },
-  { key: 'asteroid',      price: 90000,   expectedReturn: 3600000   },
-  { key: 'pulsar',  price: 200000,  expectedReturn: 8000000   },
-  { key: 'nebula',   price: 350000,  expectedReturn: 14000000  },
-  { key: 'quasar',    price: 500000,  expectedReturn: 20000000  },
-  { key: 'neutron_star', price: 800000,  expectedReturn: 32000000  },
-  { key: 'supernova',  price: 1000000, expectedReturn: 40000000  },
-  { key: 'blackhole',    price: 2000000, expectedReturn: 80000000  },
-  { key: 'magnetar', price: 3000000, expectedReturn: 120000000 },
-  { key: 'singularity',    price: 4000000, expectedReturn: 160000000 },
+  { key: 'sputnik1',   price: 15000,    expectedReturn: 630000     },
+  { key: 'explorer1',  price: 30000,    expectedReturn: 1260000    },
+  { key: 'vanguard1',  price: 50000,    expectedReturn: 2100000    },
+  { key: 'tiros1',     price: 100000,   expectedReturn: 4200000    },
+  { key: 'telstar1',   price: 180000,   expectedReturn: 7560000    },
+  { key: 'landsat1',   price: 250000,   expectedReturn: 10500000   },
+  { key: 'meteosat1',  price: 350000,   expectedReturn: 14700000   },
+  { key: 'hubble',     price: 500000,   expectedReturn: 21000000   },
+  { key: 'terra',      price: 850000,   expectedReturn: 35700000   },
+  { key: 'aqua',       price: 1000000,  expectedReturn: 42000000   },
+  { key: 'sentinel1a', price: 1500000,  expectedReturn: 63000000   },
+  { key: 'goes16',     price: 3000000,  expectedReturn: 126000000  },
+  { key: 'sentinel6',  price: 5000000,  expectedReturn: 210000000  },
+  { key: 'landsat9',   price: 10000000, expectedReturn: 420000000  },
+  { key: 'jwst',       price: 20000000, expectedReturn: 840000000  },
 ];
 
 (async () => {
@@ -100,15 +106,15 @@ const REFERENCE_TABLE = [
 
   const boughtIds = {};
   for (const tier of REFERENCE_TABLE) {
-    const expectedDaily = Math.round(tier.expectedReturn / 180);
+    const expectedDaily = Math.round(tier.expectedReturn / 210);
     const r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: tier.key } });
     check(`${tier.key}: purchase succeeds`, r.body?.status === 'success', r.body);
     const inv = investments().get(r.body?.investmentId);
     boughtIds[tier.key] = r.body?.investmentId;
     check(`${tier.key}: price is ${tier.price.toLocaleString()}`, inv?.amount === tier.price, inv);
-    check(`${tier.key}: expectedReturn is exactly price x25 (${tier.expectedReturn.toLocaleString()})`, inv?.expectedReturn === tier.expectedReturn, inv);
-    check(`${tier.key}: cycle is 180 days`, inv?.cycle === 180, inv);
-    check(`${tier.key}: dailyPayout is round(expectedReturn/180) = ${expectedDaily.toLocaleString()}`, inv?.dailyPayout === expectedDaily, inv);
+    check(`${tier.key}: expectedReturn is exactly price x42 (${tier.expectedReturn.toLocaleString()})`, inv?.expectedReturn === tier.expectedReturn, inv);
+    check(`${tier.key}: cycle is 210 days`, inv?.cycle === 210, inv);
+    check(`${tier.key}: dailyPayout is round(expectedReturn/210) = ${expectedDaily.toLocaleString()}`, inv?.dailyPayout === expectedDaily, inv);
   }
 
   console.log('\n== Daily cashback settlement pays the exact per-tier daily figure, for every tier ==');
@@ -137,7 +143,7 @@ const REFERENCE_TABLE = [
     const r = await call('POST', '/invest/create', { token: 'uid:' + C, body: { tierKey: tier.key } });
     const invId = r.body?.investmentId;
     const inv = investments().get(invId);
-    inv.createdAt = new Date(Date.now() - 400 * 86400000); // far past the 180-day cycle
+    inv.createdAt = new Date(Date.now() - 400 * 86400000); // far past the 210-day cycle
     await call('GET', '/investments', { token: 'uid:' + C });
     const fresh = investments().get(invId);
     check(`${tier.key}: matures and pays out exactly expectedReturn (${tier.expectedReturn.toLocaleString()}), no rounding drift`,

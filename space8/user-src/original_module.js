@@ -252,9 +252,9 @@ async function renderHome(){
   }
   var results = await Promise.all([
     STATE.account ? Promise.resolve({status:'success',account:STATE.account}) : api('/account'),
-    STATE.investments ? Promise.resolve({status:'success'}) : api('/investments'),
-    STATE.products ? Promise.resolve({status:'success'}) : api('/public/products'),
-    STATE.settings ? Promise.resolve({status:'success'}) : api('/public/settings'),
+    STATE.investments ? Promise.resolve({status:'success',investments:STATE.investments}) : api('/investments'),
+    STATE.products ? Promise.resolve({status:'success',products:STATE.products}) : api('/public/products'),
+    STATE.settings ? Promise.resolve({status:'success',settings:STATE.settings}) : api('/public/settings'),
     api('/public/activity-feed')
   ]);
   var accR = results[0], invR = results[1], prodR = results[2], setR = results[3], feedR = results[4];
@@ -328,9 +328,9 @@ function prodMiniHtml(p){
   var daily = Math.round((p.expectedReturn||0)/(p.cycle||1));
   return '<div class="prod-card-mini" data-key="' + esc(p.key) + '">' +
     '<div class="sat">' + (p.image ? '<img src="'+esc(p.image)+'">' : ico('satellite')) + '</div>' +
-    '<div class="name">' + esc(p.name) + '</div>' +
+    '<div class="info"><div class="name">' + esc(p.name) + '</div>' +
     '<div class="price mono">' + ugx(p.price) + '</div>' +
-    '<div class="ret">' + ugx(daily) + '/day</div>' +
+    '<div class="ret">' + ugx(daily) + '/day</div></div>' +
   '</div>';
 }
 function renderTicker(feed){
@@ -581,7 +581,6 @@ async function renderAccount(){
     menuRow('info','About Space8','about') +
     menuRow('doc','Rules & Regulations','rules') +
     menuRow('shield','Terms of Service','terms') +
-    menuRow('lock','Privacy Policy','privacy') +
     menuRow('support','Support','support') +
   '</div>';
   html += '<div class="menu-list" style="margin-top:14px">' +
@@ -613,7 +612,6 @@ async function openInfoSheet(key){
     about: ['About Space8', s.aboutText || 'Space8 lets you invest in satellite-themed plans and earn daily returns.'],
     rules: ['Rules & Regulations', s.rulesText || 'Standard platform rules apply.'],
     terms: ['Terms of Service', s.rulesText || 'By using Space8 you agree to our terms of service.'],
-    privacy: ['Privacy Policy', 'Your information is kept private and never shared with third parties without consent.'],
     support: ['Support', 'Telegram: ' + esc(s.supportTelegram||'—') + '<br>WhatsApp: ' + esc(s.whatsappContact||'—') + '<br>Hours: ' + esc(s.supportHours||'—')]
   };
   var m = map[key] || ['Info',''];

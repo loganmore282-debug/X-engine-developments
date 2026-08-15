@@ -193,14 +193,14 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .plan-info .meta{ color:var(--ink-dim); font-size:11.5px; margin-top:3px; }
 .plan-info .earn{ font-weight:700; font-size:13px; margin-top:5px; color:var(--blue); }
 
-.prod-scroll{ display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; margin:0 -16px; padding-left:16px; padding-right:16px; scrollbar-width:none; }
-.prod-scroll::-webkit-scrollbar{ display:none; }
-.prod-card-mini{ flex:0 0 140px; border-radius:16px; background:var(--surface); padding:12px; }
-.prod-card-mini .sat{ width:100%; height:70px; border-radius:10px; background:var(--surface-2); margin-bottom:9px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.prod-scroll{ display:flex; flex-direction:column; gap:10px; }
+.prod-card-mini{ display:flex; align-items:center; gap:12px; border-radius:16px; background:var(--surface); padding:12px; }
+.prod-card-mini .sat{ width:56px; height:56px; border-radius:10px; background:var(--surface-2); flex-shrink:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .prod-card-mini .sat img{ width:100%; height:100%; object-fit:cover; }
-.prod-card-mini .name{ font-weight:700; font-size:12.5px; }
-.prod-card-mini .price{ font-size:12px; margin-top:4px; }
-.prod-card-mini .ret{ font-size:10px; color:var(--ink-dim); margin-top:2px; }
+.prod-card-mini .info{ flex:1; min-width:0; }
+.prod-card-mini .name{ font-weight:700; font-size:13.5px; }
+.prod-card-mini .price{ font-size:12.5px; margin-top:3px; }
+.prod-card-mini .ret{ font-size:11px; color:var(--ink-dim); margin-top:2px; }
 
 /* ---------- products ---------- */
 .shortcut-row{ display:flex; gap:8px; margin-bottom:16px; }

@@ -61,66 +61,66 @@ function check(name, cond, extra) {
 
   console.log('\n== Fresh install: no products saved yet ==');
   let r = await getProductsViaAdmin();
-  check('returns all 10 defaults with nothing ever saved', r.products.length === 10, r.products.map(p => p.key));
+  check('returns all 15 defaults with nothing ever saved', r.products.length === 15, r.products.map(p => p.key));
   const keys = r.products.map(p => p.key);
-  check('includes every known default key', ['comet','asteroid','pulsar','nebula','quasar','neutron_star','supernova','blackhole','magnetar','singularity'].every(k => keys.includes(k)));
+  check('includes every known default key', ['sputnik1','explorer1','vanguard1','tiros1','telstar1','landsat1','meteosat1','hubble','terra','aqua','sentinel1a','goes16','sentinel6','landsat9','jwst'].every(k => keys.includes(k)));
 
   console.log('\n-- THE ACTUAL BUG: editing ONE product must not delete the other 9 --');
-  const hersheys = r.products.find(p => p.key === 'comet');
+  const hersheys = r.products.find(p => p.key === 'sputnik1');
   const editedHersheys = Object.assign({}, hersheys, { price: 35000 });
   let sr = await adminCall('/admin/products/save', { products: [editedHersheys] });
   check('save succeeds', sr.body?.status === 'success', sr.body);
 
   r = await getProductsViaAdmin();
-  check('all 10 products still present after editing only one', r.products.length === 10, r.products.map(p => p.key));
-  const savedHersheys = r.products.find(p => p.key === 'comet');
+  check('all 15 products still present after editing only one', r.products.length === 15, r.products.map(p => p.key));
+  const savedHersheys = r.products.find(p => p.key === 'sputnik1');
   check('the edited product actually reflects the new price', savedHersheys?.price === 35000, savedHersheys);
-  const stillDefaultMars = r.products.find(p => p.key === 'asteroid');
-  check('an untouched default (mars) is still there with its original price', stillDefaultMars?.price === 90000, stillDefaultMars);
-  check('untouched default (mars) still has its 180-day/40x fields', stillDefaultMars?.cycle === 180 && stillDefaultMars?.expectedReturn === 3600000, stillDefaultMars);
+  const stillDefaultMars = r.products.find(p => p.key === 'explorer1');
+  check('an untouched default (mars) is still there with its original price', stillDefaultMars?.price === 30000, stillDefaultMars);
+  check('untouched default (mars) still has its 210-day/42x fields', stillDefaultMars?.cycle === 210 && stillDefaultMars?.expectedReturn === 1260000, stillDefaultMars);
 
   console.log('\n-- Same merge applies to the public (user-app) products endpoint --');
   const pub = await getPublicProducts();
-  check('public endpoint also shows all 10 (not just the edited one)', pub.products.length === 10, pub.products.map(p => p.key));
+  check('public endpoint also shows all 15 (not just the edited one)', pub.products.length === 15, pub.products.map(p => p.key));
 
   console.log('\n-- order is preserved from the submitted product, not reset to 0 for a single-item save --');
-  const cadbury = r.products.find(p => p.key === 'nebula');
+  const cadbury = r.products.find(p => p.key === 'vanguard1');
   const editedCadbury = Object.assign({}, cadbury, { order: 7 });
   await adminCall('/admin/products/save', { products: [editedCadbury] });
   r = await getProductsViaAdmin();
-  const savedCadbury = r.products.find(p => p.key === 'nebula');
+  const savedCadbury = r.products.find(p => p.key === 'vanguard1');
   check('single-product save keeps the order value it was given (7), not forced to 0', savedCadbury?.order === 7, savedCadbury);
 
   console.log('\n-- Deleting a default product actually stays gone (soft-delete tombstone) --');
-  const dr = await adminCall('/admin/products/delete', { key: 'asteroid' });
+  const dr = await adminCall('/admin/products/delete', { key: 'explorer1' });
   check('delete succeeds', dr.body?.status === 'success', dr.body);
   r = await getProductsViaAdmin();
-  check('mars is gone right after delete', !r.products.some(p => p.key === 'asteroid'), r.products.map(p => p.key));
-  check('exactly 9 products remain', r.products.length === 9, r.products.length);
+  check('mars is gone right after delete', !r.products.some(p => p.key === 'explorer1'), r.products.map(p => p.key));
+  check('exactly 14 products remain', r.products.length === 14, r.products.length);
 
   // Force the 60s in-process cache to actually re-read from the DB, proving
   // this isn't just a stale cache hiding mars — the fix has to hold on a
   // genuinely fresh read too.
   await adminCall('/admin/settings/update', { settings: {} }); // no-op, just a round-trip
   r = await getProductsViaAdmin();
-  check('mars stays deleted on a subsequent read (not resurrected by the default-merge)', !r.products.some(p => p.key === 'asteroid'), r.products.map(p => p.key));
+  check('mars stays deleted on a subsequent read (not resurrected by the default-merge)', !r.products.some(p => p.key === 'explorer1'), r.products.map(p => p.key));
 
   console.log('\n-- Re-saving a previously-deleted key actually revives it --');
-  const revived = { key: 'asteroid', name: 'Meteor Belt', price: 90000, cycle: 180, expectedReturn: 1800000, order: 1 };
+  const revived = { key: 'explorer1', name: 'Explorer 1', price: 30000, cycle: 210, expectedReturn: 1260000, order: 1 };
   await adminCall('/admin/products/save', { products: [revived] });
   r = await getProductsViaAdmin();
-  check('mars is back after being explicitly re-saved', r.products.some(p => p.key === 'asteroid'), r.products.map(p => p.key));
-  check('back to 10 products total', r.products.length === 10, r.products.length);
+  check('mars is back after being explicitly re-saved', r.products.some(p => p.key === 'explorer1'), r.products.map(p => p.key));
+  check('back to 15 products total', r.products.length === 15, r.products.length);
 
   console.log('\n-- Clear all reverts genuinely to the full default set --');
-  const editedAgain = Object.assign({}, r.products.find(p => p.key === 'singularity'), { price: 9999999 });
+  const editedAgain = Object.assign({}, r.products.find(p => p.key === 'jwst'), { price: 9999999 });
   await adminCall('/admin/products/save', { products: [editedAgain] });
   const cr = await adminCall('/admin/products/clear');
   check('clear succeeds', cr.body?.status === 'success', cr.body);
   r = await getProductsViaAdmin();
-  check('back to exactly 10 products', r.products.length === 10, r.products.length);
-  const godivaAfterClear = r.products.find(p => p.key === 'singularity');
-  check('the edited price is gone — reverted to the true default (4,000,000)', godivaAfterClear?.price === 4000000, godivaAfterClear);
+  check('back to exactly 15 products', r.products.length === 15, r.products.length);
+  const godivaAfterClear = r.products.find(p => p.key === 'jwst');
+  check('the edited price is gone — reverted to the true default (20,000,000)', godivaAfterClear?.price === 20000000, godivaAfterClear);
 
   console.log('\n-- sync-pricing: the real-world bug -- a rate change (e.g. 20x -> 40x) does nothing for an already-saved tier --');
   // Simulate exactly what actually happened live: mars got individually
@@ -129,24 +129,24 @@ function check(name, cond, extra) {
   // even though DEFAULT_PRODUCTS has since moved to the new 40x table.
   // Give it a custom image + a deliberately different order too, to prove
   // sync-pricing leaves everything except price/cycle/expectedReturn alone.
-  const staleMars = { key: 'asteroid', name: 'Meteor Belt', price: 90000, cycle: 180, expectedReturn: 1800000, order: 7, image: 'data:image/png;base64,CUSTOM' };
+  const staleMars = { key: 'explorer1', name: 'Explorer 1', price: 30000, cycle: 180, expectedReturn: 1200000, order: 7, image: 'data:image/png;base64,CUSTOM' };
   await adminCall('/admin/products/save', { products: [staleMars] });
   r = await getProductsViaAdmin();
-  const marsBeforeSync = r.products.find(p => p.key === 'asteroid');
-  check('sanity: mars is stuck on the stale 20x figure before syncing', marsBeforeSync?.expectedReturn === 1800000, marsBeforeSync);
-  const snickersBeforeSync = r.products.find(p => p.key === 'pulsar');
-  check('sanity: snickers (never individually saved) is already on the current default', snickersBeforeSync?.expectedReturn === 8000000, snickersBeforeSync);
+  const marsBeforeSync = r.products.find(p => p.key === 'explorer1');
+  check('sanity: mars is stuck on the stale figure before syncing', marsBeforeSync?.expectedReturn === 1200000, marsBeforeSync);
+  const snickersBeforeSync = r.products.find(p => p.key === 'tiros1');
+  check('sanity: snickers (never individually saved) is already on the current default', snickersBeforeSync?.expectedReturn === 4200000, snickersBeforeSync);
 
   const syncR = await adminCall('/admin/products/sync-pricing');
   check('sync-pricing succeeds', syncR.body?.status === 'success', syncR.body);
-  check('exactly one product needed syncing (mars)', syncR.body?.synced === 1 && syncR.body?.keys?.[0] === 'asteroid', syncR.body);
+  check('exactly one product needed syncing (mars)', syncR.body?.synced === 1 && syncR.body?.keys?.[0] === 'explorer1', syncR.body);
 
   r = await getProductsViaAdmin();
-  const marsAfterSync = r.products.find(p => p.key === 'asteroid');
-  check('mars price/expectedReturn/cycle now match the current default (40x)', marsAfterSync?.price === 90000 && marsAfterSync?.expectedReturn === 3600000 && marsAfterSync?.cycle === 180, marsAfterSync);
+  const marsAfterSync = r.products.find(p => p.key === 'explorer1');
+  check('mars price/expectedReturn/cycle now match the current default (42x)', marsAfterSync?.price === 30000 && marsAfterSync?.expectedReturn === 1260000 && marsAfterSync?.cycle === 210, marsAfterSync);
   check('mars\' custom image and order were left completely untouched', marsAfterSync?.image === 'data:image/png;base64,CUSTOM' && marsAfterSync?.order === 7, marsAfterSync);
-  const snickersAfterSync = r.products.find(p => p.key === 'pulsar');
-  check('an already-correct, never-saved product is unaffected (nothing to sync)', snickersAfterSync?.expectedReturn === 8000000, snickersAfterSync);
+  const snickersAfterSync = r.products.find(p => p.key === 'tiros1');
+  check('an already-correct, never-saved product is unaffected (nothing to sync)', snickersAfterSync?.expectedReturn === 4200000, snickersAfterSync);
 
   console.log('\n-- Re-running sync-pricing again is a safe no-op (idempotent) --');
   const syncAgainR = await adminCall('/admin/products/sync-pricing');

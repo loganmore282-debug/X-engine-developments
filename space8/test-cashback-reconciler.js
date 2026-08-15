@@ -84,7 +84,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n== A due cashback payout is credited by the background sweep alone, with no read from the owning user ==');
   const A = 'reconciler-user-a';
   await setupFundedUser(A, '0771000301', 1000000);
-  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'comet' } }); // 30,000 -> 600,000 over 180 days
+  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'explorer1' } }); // 30,000 -> 1,260,000 over 210 days
   check('purchase succeeds', r.body?.status === 'success', r.body);
   const invId = r.body?.investmentId;
   const inv = investments().get(invId);
@@ -108,7 +108,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n-- A second, not-yet-due investment is untouched by the same sweep --');
   const B = 'reconciler-user-b';
   await setupFundedUser(B, '0771000302', 1000000);
-  r = await call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'explorer1' } });
   const invIdB = r.body?.investmentId;
   // Freshly created (a few seconds old) -- zero full days elapsed, nothing due yet.
   check('a freshly-bought investment is not touched by the sweep (nothing due)', investments().get(invIdB).payoutsMade === 0, investments().get(invIdB));

@@ -73,7 +73,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n== The exact real-world race: /account and /investments fire together (refreshFromServer) ==');
   const A = 'race-cashback-a';
   await setupFundedUser(A, '0771000501', 1000000);
-  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'comet' } }); // 30,000 -> 1,200,000 / 180 days
+  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'explorer1' } }); // 30,000 -> 1,260,000 / 210 days
   const invIdA = r.body.investmentId;
   const invA = investments().get(invIdA);
   invA.createdAt = new Date(Date.now() - 5 * 86400000); // 5 days of cashback now due
@@ -92,7 +92,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n== A burst of 10 simultaneous /investments reads on the same investment ==');
   const B = 'race-cashback-b';
   await setupFundedUser(B, '0771000502', 1000000);
-  r = await call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'explorer1' } });
   const invIdB = r.body.investmentId;
   const invB = investments().get(invIdB);
   invB.createdAt = new Date(Date.now() - 8 * 86400000); // 8 days due
@@ -107,7 +107,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n== Maturity under a concurrent race: full remaining payout credited exactly once, never doubled ==');
   const C = 'race-cashback-c';
   await setupFundedUser(C, '0771000503', 1000000);
-  r = await call('POST', '/invest/create', { token: 'uid:' + C, body: { tierKey: 'comet' } }); // 180-day cycle, 1,200,000 total
+  r = await call('POST', '/invest/create', { token: 'uid:' + C, body: { tierKey: 'explorer1' } }); // 210-day cycle, 1,260,000 total
   const invIdC = r.body.investmentId;
   const invC = investments().get(invIdC);
   invC.createdAt = new Date(Date.now() - 400 * 86400000); // far past full cycle
@@ -119,9 +119,9 @@ async function setupFundedUser(uid, phone, balance) {
     call('GET', '/investments', { token: 'uid:' + C }),
   ]);
   check('all 3 concurrent requests succeed cleanly', results.every(x => x.body?.status === 'success'), results.map(x => x.body?.status));
-  check('matured investment pays exactly expectedReturn once, never doubled by the 3-way race', userDoc(C).walletBalance === balBeforeC + 1200000, { got: userDoc(C).walletBalance, expected: balBeforeC + 1200000 });
+  check('matured investment pays exactly expectedReturn once, never doubled by the 3-way race', userDoc(C).walletBalance === balBeforeC + 1260000, { got: userDoc(C).walletBalance, expected: balBeforeC + 1260000 });
   check('investment correctly marked matured exactly once', investments().get(invIdC).status === 'matured', investments().get(invIdC).status);
-  check('paidOut caps exactly at expectedReturn, no overpay from the race', investments().get(invIdC).paidOut === 1200000, investments().get(invIdC).paidOut);
+  check('paidOut caps exactly at expectedReturn, no overpay from the race', investments().get(invIdC).paidOut === 1260000, investments().get(invIdC).paidOut);
   check('exactly ONE cashback transaction for the matured payout', countCashbackTxns(C, invIdC) === 1, countCashbackTxns(C, invIdC));
 
   console.log(`\n${pass} passed, ${fail} failed`);

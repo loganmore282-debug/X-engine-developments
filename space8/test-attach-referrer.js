@@ -158,7 +158,7 @@ async function registerNoReferrer(uid, phone) {
 
   console.log('\n== CHILD now makes their first purchase (referrer already attached) -- pays commission the NORMAL way ==');
   const parentBalBeforePurchase = userDoc(PARENT).walletBalance;
-  r = await call('POST', '/invest/create', { token: 'uid:' + CHILD, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + CHILD, body: { tierKey: 'explorer1' } });
   check('first purchase succeeds', r.body?.status === 'success', r.body);
   await sleep(200); // commission crediting is fire-and-forget on /invest/create
   check('PARENT was paid normal commission on this first purchase (the ordinary path, unaffected by any of the above)', userDoc(PARENT).walletBalance > parentBalBeforePurchase, { before: parentBalBeforePurchase, after: userDoc(PARENT).walletBalance });
@@ -167,7 +167,7 @@ async function registerNoReferrer(uid, phone) {
   const LATE = 'ar-late-buyer';
   await registerNoReferrer(LATE, '0771960007');
   userDoc(LATE).walletBalance = 1000000;
-  r = await call('POST', '/invest/create', { token: 'uid:' + LATE, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + LATE, body: { tierKey: 'explorer1' } });
   check('LATE buys their first plan with no referrer at all -- no commission possible yet', r.body?.status === 'success', r.body);
   check('sanity: no commission was paid to anyone (LATE had no referrer at purchase time)', invsOf(LATE)[0]?.commissionPaidLevels?.length === 0 || !invsOf(LATE)[0]?.commissionPaidLevels, invsOf(LATE));
   const parentBalBeforeLateAttach = userDoc(PARENT).walletBalance;
@@ -178,7 +178,7 @@ async function registerNoReferrer(uid, phone) {
 
   console.log('-- A SECOND purchase by LATE never retroactively pays commission (matches the platform\'s first-purchase-only rule) --');
   const parentBalBeforeSecondBuy = userDoc(PARENT).walletBalance;
-  r = await call('POST', '/invest/create', { token: 'uid:' + LATE, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + LATE, body: { tierKey: 'explorer1' } });
   check('LATE\'s second purchase succeeds', r.body?.status === 'success', r.body);
   await sleep(200);
   check('PARENT gets NOTHING extra from LATE\'s second purchase (first-purchase-only rule holds even through this admin path)', userDoc(PARENT).walletBalance === parentBalBeforeSecondBuy, { before: parentBalBeforeSecondBuy, after: userDoc(PARENT).walletBalance });

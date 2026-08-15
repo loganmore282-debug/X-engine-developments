@@ -101,7 +101,7 @@ function failNextUserWrite() { global.__mockDbFailUpdateOnce.add('users'); }
   console.log('\n== Cashback: a failed wallet write must never leave a payout credited-but-unrecorded ==');
   const A = 'partial-cashback';
   await setupFundedUser(A, '0771000201', 5000000);
-  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'comet' } });
+  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'explorer1' } });
   check('investment created', r.body?.status === 'success', r.body);
   const invId = r.body.investmentId;
   const inv = collMap('investments').get(invId);

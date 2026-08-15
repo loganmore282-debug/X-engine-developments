@@ -178,9 +178,9 @@ const { answerAssistant } = require('./assistant-engine');
 // (space8/user/index.html). Admin panel overrides live in the
 // `settings`/`products` collections; these are only the boot fallback.
 const DEFAULT_SETTINGS = {
-  withdrawFeePct: 15, minWithdraw: 5000, minDeposit: 5000,
-  dailyCheckin: 250, welcomeBonus: 7000, commL1: 27, commL2: 2, commL3: 1,
-  returnMultiple: 40, cycleDays: 180, maintenanceMode: false, maintenanceMsg: '',
+  withdrawFeePct: 15, minWithdraw: 5000, minDeposit: 20000,
+  dailyCheckin: 250, welcomeBonus: 5000, commL1: 28, commL2: 2, commL3: 1,
+  returnMultiple: 42, cycleDays: 210, maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
@@ -188,22 +188,28 @@ const DEFAULT_SETTINGS = {
   rulesText: '', brandTagline: '', aboutText: '',
   homeBannerTitle: '', homeBannerText: ''
 };
-// Each tier pays exactly 40x its price over a fixed 180-day cycle (both
-// stamped explicitly per product, not left to the global returnMultiple/
-// cycleDays fallback) — matches the owner's approved pricing table exactly,
-// and keeps dailyPayout (expectedReturn/cycle, rounded server-side) a whole
-// number with no lingering fractional cents.
+// The real 15-plan catalog from the owner's PDF (Space8_Investment_Plans_
+// and_Variables.pdf) -- x42 total return over a fixed 210-day cycle for
+// every tier (both stamped explicitly per product, not left to the global
+// returnMultiple/cycleDays fallback), daily cashback = 20% of price/day.
+// This is the boot fallback only -- the admin panel's `products` collection
+// is still the real source of truth and overrides these via getProducts().
 const DEFAULT_PRODUCTS = [
-  { key: 'comet',  name: "Comet", price: 30000,   cycle: 180, expectedReturn: 1200000   },
-  { key: 'asteroid',      name: 'Meteor Belt',                     price: 90000,   cycle: 180, expectedReturn: 3600000   },
-  { key: 'pulsar',  name: 'Pulsar',                 price: 200000,  cycle: 180, expectedReturn: 8000000   },
-  { key: 'nebula',   name: 'Nebula',        price: 350000,  cycle: 180, expectedReturn: 14000000  },
-  { key: 'quasar',    name: 'Quasar',             price: 500000,  cycle: 180, expectedReturn: 20000000  },
-  { key: 'neutron_star', name: 'Neutron Star',                 price: 800000,  cycle: 180, expectedReturn: 32000000  },
-  { key: 'supernova',  name: 'Supernova',          price: 1000000, cycle: 180, expectedReturn: 40000000  },
-  { key: 'blackhole',    name: 'Black Hole',            price: 2000000, cycle: 180, expectedReturn: 80000000  },
-  { key: 'magnetar', name: 'Magnetar',                 price: 3000000, cycle: 180, expectedReturn: 120000000 },
-  { key: 'singularity',    name: 'Singularity',           price: 4000000, cycle: 180, expectedReturn: 160000000 }
+  { key: 'sputnik1',   name: 'Sputnik 1',                    price: 15000,    cycle: 210, expectedReturn: 630000     },
+  { key: 'explorer1',  name: 'Explorer 1',                   price: 30000,    cycle: 210, expectedReturn: 1260000    },
+  { key: 'vanguard1',  name: 'Vanguard 1',                   price: 50000,    cycle: 210, expectedReturn: 2100000    },
+  { key: 'tiros1',     name: 'TIROS-1',                      price: 100000,   cycle: 210, expectedReturn: 4200000    },
+  { key: 'telstar1',   name: 'Telstar 1',                    price: 180000,   cycle: 210, expectedReturn: 7560000    },
+  { key: 'landsat1',   name: 'Landsat 1',                    price: 250000,   cycle: 210, expectedReturn: 10500000   },
+  { key: 'meteosat1',  name: 'Meteosat-1',                   price: 350000,   cycle: 210, expectedReturn: 14700000   },
+  { key: 'hubble',     name: 'Hubble Space Telescope',       price: 500000,   cycle: 210, expectedReturn: 21000000   },
+  { key: 'terra',      name: 'Terra',                        price: 850000,   cycle: 210, expectedReturn: 35700000   },
+  { key: 'aqua',       name: 'Aqua',                         price: 1000000,  cycle: 210, expectedReturn: 42000000   },
+  { key: 'sentinel1a', name: 'Sentinel-1A',                  price: 1500000,  cycle: 210, expectedReturn: 63000000   },
+  { key: 'goes16',     name: 'GOES-16',                      price: 3000000,  cycle: 210, expectedReturn: 126000000  },
+  { key: 'sentinel6',  name: 'Sentinel-6 Michael Freilich',  price: 5000000,  cycle: 210, expectedReturn: 210000000  },
+  { key: 'landsat9',   name: 'Landsat 9',                    price: 10000000, cycle: 210, expectedReturn: 420000000  },
+  { key: 'jwst',       name: 'James Webb Space Telescope',   price: 20000000, cycle: 210, expectedReturn: 840000000  }
 ];
 
 let _settingsCache = null, _settingsCacheTs = 0;

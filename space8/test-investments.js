@@ -79,37 +79,37 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n== Basic purchase accuracy ==');
   const A = 'alice-uid';
   await setupFundedUser(A, '0771000001', 1000000);
-  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'comet' } });
+  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'explorer1' } });
   check('purchase of an active default product succeeds', r.body?.status === 'success', r.body);
   const invId = r.body?.investmentId;
   const inv = investments().get(invId);
-  check('investment stores the PRODUCT\'S OWN cycle (180), not a stale global default', inv?.cycle === 180, inv);
-  check('investment stores the product\'s own expectedReturn (1,200,000 = 30,000 x 40)', inv?.expectedReturn === 1200000, inv);
-  check('dailyPayout computed correctly (1200000/180=6666.67 rounds to 6667)', inv?.dailyPayout === Math.round(1200000 / 180), inv);
+  check('investment stores the PRODUCT\'S OWN cycle (210), not a stale global default', inv?.cycle === 210, inv);
+  check('investment stores the product\'s own expectedReturn (1,260,000 = 30,000 x 42)', inv?.expectedReturn === 1260000, inv);
+  check('dailyPayout computed correctly (1260000/210=6000)', inv?.dailyPayout === Math.round(1260000 / 210), inv);
   check('wallet debited by the product price (30,000)', userDoc(A).walletBalance === 1000000 - 30000, userDoc(A).walletBalance);
   check('totalInvested credited', userDoc(A).totalInvested === 30000, userDoc(A).totalInvested);
 
   console.log('\n-- Per-product override actually used over the global fallback --');
   await adminCall('/admin/settings/update', { settings: { returnMultiple: 3, cycleDays: 10 } }); // deliberately different from the product's own fields
-  r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'asteroid' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'tiros1' } });
   const marsInv = investments().get(r.body?.investmentId);
-  check('mars still uses ITS OWN 180-day/40x fields, ignoring the now-different global settings', marsInv?.cycle === 180 && marsInv?.expectedReturn === 3600000, marsInv);
+  check('mars still uses ITS OWN 210-day/42x fields, ignoring the now-different global settings', marsInv?.cycle === 210 && marsInv?.expectedReturn === 4200000, marsInv);
   await adminCall('/admin/settings/update', { settings: { returnMultiple: 40, cycleDays: 180 } }); // restore
 
   console.log('\n== Balance / auth security ==');
   const B = 'bob-uid';
   await setupFundedUser(B, '0771000002', 10000); // not enough for any tier
-  r = await call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'explorer1' } });
   check('purchase rejected for insufficient balance', r.code === 400 && /need|have/i.test(r.body?.message || ''), r.body);
   check('no wallet change on rejected purchase', userDoc(B).walletBalance === 10000, userDoc(B).walletBalance);
 
-  r = await call('POST', '/invest/create', { body: { tierKey: 'comet' } }); // no token at all
+  r = await call('POST', '/invest/create', { body: { tierKey: 'explorer1' } }); // no token at all
   check('purchase rejected with no auth token', r.code === 401, r.body);
 
   const C = 'carol-uid';
   await setupFundedUser(C, '0771000003', 1000000);
   userDoc(C).status = 'banned';
-  r = await call('POST', '/invest/create', { token: 'uid:' + C, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + C, body: { tierKey: 'explorer1' } });
   check('banned account cannot buy', r.code === 400 && r.body?.code === 'BANNED', r.body);
   check('banned account wallet untouched', userDoc(C).walletBalance === 1000000, userDoc(C).walletBalance);
 
@@ -134,7 +134,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n== Daily cashback settlement accuracy ==');
   const E = 'erin-uid';
   await setupFundedUser(E, '0771000005', 1000000);
-  r = await call('POST', '/invest/create', { token: 'uid:' + E, body: { tierKey: 'comet' } }); // 30,000 -> 1,200,000 over 180 days
+  r = await call('POST', '/invest/create', { token: 'uid:' + E, body: { tierKey: 'explorer1' } }); // 30,000 -> 1,200,000 over 180 days
   const erinInvId = r.body?.investmentId;
   const erinInv = investments().get(erinInvId);
   // Backdate createdAt so settle-on-read thinks several days have elapsed.
@@ -155,7 +155,7 @@ async function setupFundedUser(uid, phone, balance) {
   await call('GET', '/investments', { token: 'uid:' + E });
   const freshInv = investments().get(erinInvId);
   check('investment marked matured', freshInv.status === 'matured', freshInv);
-  check('total paid out exactly equals expectedReturn (no more, no less — no decimal drift)', freshInv.paidOut === 1200000, freshInv.paidOut);
+  check('total paid out exactly equals expectedReturn (no more, no less — no decimal drift)', freshInv.paidOut === 1260000, freshInv.paidOut);
 
   console.log('\n-- A totalInvested field corrupted to a STRING (seen live in production) no longer blocks a purchase --');
   // MongoDB's real $inc throws "Cannot increment with non-numeric argument"
@@ -168,7 +168,7 @@ async function setupFundedUser(uid, phone, balance) {
   const F = 'faith-uid';
   await setupFundedUser(F, '0771000006', 1000000);
   userDoc(F).totalInvested = '30000'; // corrupted, as a string -- not a number
-  r = await call('POST', '/invest/create', { token: 'uid:' + F, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + F, body: { tierKey: 'explorer1' } });
   check('purchase succeeds despite a string-corrupted totalInvested', r.body?.status === 'success', r.body);
   check('totalInvested self-healed to a real number (30000 + 30000 = 60000)', userDoc(F).totalInvested === 60000, userDoc(F).totalInvested);
   check('walletBalance debited correctly regardless', userDoc(F).walletBalance === 1000000 - 30000, userDoc(F).walletBalance);
@@ -176,21 +176,21 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n-- An admin rename reaches an already-running investment\'s display name, but never its locked-in terms --');
   const G = 'grace-uid';
   await setupFundedUser(G, '0771000007', 1000000);
-  r = await call('POST', '/invest/create', { token: 'uid:' + G, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + G, body: { tierKey: 'explorer1' } });
   const graceInvId = r.body?.investmentId;
   check('purchase succeeds before the rename', r.body?.status === 'success', r.body);
   let list = await call('GET', '/investments', { token: 'uid:' + G });
   let graceInv = list.body.investments.find(i => i.id === graceInvId);
-  check('shows the original product name before any rename', graceInv?.tierLabel === "Comet", graceInv);
+  check('shows the original product name before any rename', graceInv?.tierLabel === "Explorer 1", graceInv);
 
-  await adminCall('/admin/products/save', { products: [{ key: 'comet', name: 'VIP 1: Hershey’s Milk Chocolate', price: 30000, cycle: 180, expectedReturn: 1200000 }] });
+  await adminCall('/admin/products/save', { products: [{ key: 'explorer1', name: 'VIP 1: Hershey’s Milk Chocolate', price: 30000, cycle: 180, expectedReturn: 1200000 }] });
   list = await call('GET', '/investments', { token: 'uid:' + G });
   graceInv = list.body.investments.find(i => i.id === graceInvId);
   check('the ALREADY-RUNNING investment now shows the renamed product live, not the frozen purchase-time label', graceInv?.tierLabel === 'VIP 1: Hershey’s Milk Chocolate', graceInv);
   check('cycle/amount/expectedReturn/dailyPayout stay exactly what was locked in at purchase, unaffected by the rename',
-    graceInv?.cycle === 180 && graceInv?.amount === 30000 && graceInv?.expectedReturn === 1200000 && graceInv?.dailyPayout === Math.round(1200000 / 180), graceInv);
+    graceInv?.cycle === 210 && graceInv?.amount === 30000 && graceInv?.expectedReturn === 1260000 && graceInv?.dailyPayout === Math.round(1260000 / 210), graceInv);
 
-  const godivaTierKey = 'singularity';
+  const godivaTierKey = 'sentinel6';
   userDoc(G).walletBalance = 10000000; // top up -- godiva costs more than Grace's remaining balance
   r = await call('POST', '/invest/create', { token: 'uid:' + G, body: { tierKey: godivaTierKey } });
   check('godiva purchase succeeds after top-up', r.body?.status === 'success', r.body);
@@ -200,7 +200,7 @@ async function setupFundedUser(uid, phone, balance) {
   list = await call('GET', '/investments', { token: 'uid:' + G });
   const godivaAfterDelete = list.body.investments.find(i => i.id === godivaInvId);
   check('a deleted product key falls back to the frozen purchase-time label instead of breaking', godivaAfterDelete?.tierLabel === godivaBefore.tierLabel, godivaAfterDelete);
-  await adminCall('/admin/products/save', { products: [{ key: godivaTierKey, name: 'Singularity', price: 4000000, cycle: 180, expectedReturn: 160000000 }] }); // restore for other tests
+  await adminCall('/admin/products/save', { products: [{ key: godivaTierKey, name: 'Sentinel-6 Michael Freilich', price: 5000000, cycle: 210, expectedReturn: 210000000 }] }); // restore for other tests
 
   console.log('\n-- The rename reaches the Records/Accrued transaction history too ("Bought X" and "X daily cashback") --');
   let txList = await call('GET', '/transactions', { token: 'uid:' + G });

@@ -22,6 +22,10 @@
      6. Highest-scoring intent's handler runs against that context and
         returns plain text. Below a confidence floor, a fallback lists what
         it can actually help with instead of guessing.
+
+   Most reply handlers return one of several phrasings (pick()) so the same
+   question asked twice, or a run of short greetings, doesn't read as a
+   stuck robot repeating itself verbatim.
 */
 
 function normalize(s) {
@@ -36,6 +40,7 @@ function stem(w) {
   return w;
 }
 function fmt(n) { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
+function fmt2(n) { return Number(n || 0).toLocaleString('en-UG'); }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function extractAmount(text) {
@@ -52,28 +57,38 @@ const INTENTS = [
   { id: 'security_secret', priority: 5,
     phrase: [/what('?s| is) my (pin|password)/i, /tell me my (pin|password)/i, /show (me )?my (pin|password)/i, /forgot (my )?(pin|password)/i, /reset (my )?pin/i, /lost (my )?pin/i],
     reply: (ctx) => /forgot|lost|reset/i.test(ctx.message)
-      ? 'To change your withdrawal PIN, go to Account → Security PIN. If you never set one, it should have been created at registration — contact Support if that looks wrong.'
-      : "I can't see or share your PIN or password — they're never stored anywhere in a readable form. You can change your PIN anytime from Account → Security PIN." },
+      ? '🔒 To change your withdrawal PIN, go to Account → Security PIN. If you never set one, it should have been created at registration — contact Support if that looks wrong.'
+      : "🔒 I can't see or share your PIN or password — they're never stored anywhere in a readable form. You can change your PIN anytime from Account → Security PIN." },
 
-  { id: 'greeting', priority: 1, kw: { hi: 2, hello: 2, hey: 2, hallo: 2, morning: 1, afternoon: 1, evening: 1, sup: 1, yo: 1, greeting: 2 },
+  { id: 'greeting', priority: 1,
+    kw: { hi: 2, hii: 2, hello: 2, hallo: 2, morning: 2, afternoon: 2, evening: 2, sup: 1, yo: 1, yoo: 1, greeting: 2, howdy: 2 },
+    phrase: [/^h+[ei]+y*!*$/i, /^y+o+!*$/i, /^s+u+p+!*$/i],
     reply: () => pick([
-      "Hi! I'm the Space8 assistant. Ask me about deposits, withdrawals, investing, referrals, check-ins or your account.",
-      "Hello! What can I help you with on Space8 today?"
+      "Hey! 👋 I'm the Space8 assistant. Ask me about deposits, withdrawals, investing, referrals, check-ins or your account.",
+      "Hi there! 🛰️ What can I help you with on Space8 today?",
+      "Hello! 😊 Deposits, withdrawals, investing, referrals, check-ins — ask away."
     ]) },
 
-  { id: 'thanks', priority: 1, kw: { thank: 2, thanks: 2, appreciate: 2, appreciated: 2, nice: 1, great: 1 },
-    reply: () => pick(["You're welcome! Anything else I can help with?", 'Happy to help — let me know if you need anything else.']) },
+  { id: 'howareyou', priority: 1,
+    phrase: [/how('?s| is| are) (it going|you doing|you)\b/i, /how you dey/i, /wassup/i],
+    reply: () => pick([
+      "I'm doing great, thanks for asking! 😊 How can I help with your Space8 account today?",
+      "All good here! 🚀 What do you need help with — deposits, withdrawals, investing?"
+    ]) },
+
+  { id: 'thanks', priority: 1, kw: { thank: 2, thanks: 2, appreciate: 2, appreciated: 2 },
+    reply: () => pick(["You're welcome! 😊 Anything else I can help with?", "Happy to help! 🙌 Let me know if you need anything else.", "Anytime! 👍"]) },
 
   { id: 'bye', priority: 1, kw: { bye: 2, goodbye: 2, cya: 1, later: 1 },
-    reply: () => 'Take care! Come back anytime you have a question.' },
+    reply: () => pick(['Take care! 👋 Come back anytime you have a question.', 'See you around! 🛰️']) },
 
   { id: 'whoami', priority: 1,
     phrase: [/who are you/i, /are you (a )?(human|real person|robot|ai|bot)/i, /what are you/i],
-    reply: () => "I'm the Space8 in-app assistant — I answer using your platform's live settings and your own account data. I can't perform actions myself, only explain how things work." },
+    reply: () => "🤖 I'm the Space8 in-app assistant — I answer using your platform's live settings and your own account data. I can't perform actions myself, only explain how things work." },
 
   { id: 'capability', priority: 1,
     phrase: [/what can you (do|help)/i, /help me with/i, /what do you know/i],
-    reply: () => 'I can help with deposits, withdrawals, investing, referrals, check-ins, your account balance, and your security PIN. Ask away.' },
+    reply: () => "🛰️ I can help with deposits, withdrawals, investing, referrals, check-ins, your account balance, and your security PIN. Ask away!" },
 
   { id: 'deposit', priority: 2, kw: { deposit: 3, topup: 2, fund: 1, recharge: 2, addmoney: 2, addfund: 2, momo: 1 },
     reply: (ctx) => {
@@ -82,9 +97,12 @@ const INTENTS = [
       if (ctx.entities.amount) {
         extra = ctx.entities.amount < m
           ? ` UGX ${fmt2(ctx.entities.amount)} is below the minimum — deposit at least ${fmt(m)}.`
-          : ` UGX ${fmt2(ctx.entities.amount)} works — that's above the minimum of ${fmt(m)}.`;
+          : ` UGX ${fmt2(ctx.entities.amount)} works — that's above the minimum of ${fmt(m)}. ✅`;
       }
-      return `Tap Deposit on Home, enter an amount (minimum ${fmt(m)}), choose your mobile-money network and confirm the prompt on your phone.${extra}`;
+      return pick([
+        `💰 Tap Deposit on Home, enter an amount (minimum ${fmt(m)}), choose your mobile-money network and confirm the prompt on your phone.${extra}`,
+        `To add funds 💵: Home → Deposit → enter an amount (min ${fmt(m)}) → confirm on your phone.${extra}`
+      ]);
     } },
 
   { id: 'withdraw', priority: 2, kw: { withdraw: 3, withdrawal: 3, cashout: 3, payout: 2, payouts: 2 },
@@ -95,46 +113,50 @@ const INTENTS = [
         if (ctx.entities.amount < m) extra = ` UGX ${fmt2(ctx.entities.amount)} is below the minimum of ${fmt(m)}.`;
         else {
           const feeAmt = Math.round(ctx.entities.amount * f / 100);
-          extra = ` On UGX ${fmt2(ctx.entities.amount)}, the ${f}% fee is ${fmt(feeAmt)}, so you'd receive ${fmt(ctx.entities.amount - feeAmt)}.`;
+          extra = ` On UGX ${fmt2(ctx.entities.amount)}, the ${f}% fee is ${fmt(feeAmt)}, so you'd receive ${fmt(ctx.entities.amount - feeAmt)}. 💸`;
         }
       }
-      return `Bind a payout account first (Account → Payout Account) if you haven't already, then tap Withdraw on Home. Minimum withdrawal is ${fmt(m)}, and a ${f}% fee applies.${extra}`;
+      return `💸 Bind a payout account first (Account → Payout Account) if you haven't already, then tap Withdraw on Home. Minimum withdrawal is ${fmt(m)}, and a ${f}% fee applies.${extra}`;
     } },
 
   { id: 'fees', priority: 1, kw: { fee: 2, fees: 2, charge: 1, charges: 1, cost: 1 },
-    reply: (ctx) => `Deposits are free. Withdrawals carry a ${ctx.settings.withdrawFeePct}% fee, taken from the amount you withdraw. Minimum deposit is ${fmt(ctx.settings.minDeposit)}, minimum withdrawal is ${fmt(ctx.settings.minWithdraw)}.` },
+    reply: (ctx) => `💵 Deposits are free. Withdrawals carry a ${ctx.settings.withdrawFeePct}% fee, taken from the amount you withdraw. Minimum deposit is ${fmt(ctx.settings.minDeposit)}, minimum withdrawal is ${fmt(ctx.settings.minWithdraw)}.` },
 
   { id: 'invest', priority: 2, kw: { invest: 3, investment: 2, plan: 2, product: 2, return: 2, profit: 2, cycle: 1, maturity: 1, buy: 1 },
     reply: (ctx) => {
       const list = ctx.products.slice(0, 5).map(p => `${p.name} (${fmt(p.price)}, ${p.cycle} days, total ${fmt(p.expectedReturn)})`).join('; ');
-      return `Browse plans on the Products tab — each shows price, cycle length and total return. A few: ${list || 'plans are being set up — check back soon'}. Tap Invest on any plan to confirm; the full amount is paid out at maturity.`;
+      return `🚀 Browse plans on the Products tab — each shows price, cycle length and total return. A few: ${list || 'plans are being set up — check back soon'}. Tap Invest on any plan to confirm; the full amount is paid out at maturity.`;
     } },
 
   { id: 'referral', priority: 2, kw: { referral: 3, invite: 2, commission: 3, team: 2, downline: 2, share: 1, upline: 2 },
-    reply: (ctx) => `Share your referral code from the Account tab. You earn ${ctx.settings.commL1}% on Level 1, ${ctx.settings.commL2}% on Level 2 and ${ctx.settings.commL3}% on Level 3 of what your team invests.${ctx.account.referralCode ? ' Your code is ' + ctx.account.referralCode + '.' : ''}` },
+    reply: (ctx) => `🤝 Share your referral code from the Account tab. You earn ${ctx.settings.commL1}% on Level 1, ${ctx.settings.commL2}% on Level 2 and ${ctx.settings.commL3}% on Level 3 of what your team invests.${ctx.account.referralCode ? ' Your code is ' + ctx.account.referralCode + '. 🔗' : ''}` },
 
   { id: 'checkin', priority: 2, kw: { checkin: 3, daily: 2, bonus: 2, streak: 2 },
-    reply: (ctx) => `Tap Check In on Home once a day for ${fmt(ctx.settings.dailyCheckin)}. It resets every 24 hours${ctx.account.checkinStreak ? ` — you're on a ${ctx.account.checkinStreak}-day streak` : ''}.` },
+    reply: (ctx) => `📅 Tap Check In on Home once a day for ${fmt(ctx.settings.dailyCheckin)}. It resets every 24 hours${ctx.account.checkinStreak ? ` — you're on a ${ctx.account.checkinStreak}-day streak 🔥` : ''}.` },
 
   { id: 'pin', priority: 2, kw: { pin: 3, pincode: 3 },
-    reply: () => "Your withdrawal PIN was set when you registered. To change it, go to Account → Security PIN. It's required to bind a payout account and for every withdrawal." },
+    reply: () => "🔒 Your withdrawal PIN was set when you registered. To change it, go to Account → Security PIN. It's required to bind a payout account and for every withdrawal." },
 
   { id: 'balance', priority: 2, kw: { balance: 3, earning: 2, earned: 2, invested: 2, wallet: 2, worth: 1 },
-    reply: (ctx) => `Your wallet balance is ${fmt(ctx.account.walletBalance || 0)}, you've invested ${fmt(ctx.account.totalInvested || 0)} in total, and earned ${fmt(ctx.account.totalEarned || 0)} so far.` },
+    reply: (ctx) => `📊 Your wallet balance is ${fmt(ctx.account.walletBalance || 0)}, you've invested ${fmt(ctx.account.totalInvested || 0)} in total, and earned ${fmt(ctx.account.totalEarned || 0)} so far.` },
 
   { id: 'support', priority: 2, kw: { support: 3, contact: 2, human: 2, agent: 2, complaint: 2, problem: 1, issue: 1 },
     reply: (ctx) => {
       const s = ctx.settings, parts = [];
       if (s.supportTelegram) parts.push(`Telegram: ${s.supportTelegram}`);
       if (s.whatsappContact) parts.push(`WhatsApp: ${s.whatsappContact}`);
-      return parts.length ? `Reach our team directly — ${parts.join(', ')}.` : 'Reach our support team from Account → Support.';
+      return parts.length ? `🎧 Reach our team directly — ${parts.join(', ')}.` : '🎧 Reach our support team from Account → Support.';
     } },
 
   { id: 'about', priority: 1, kw: { space8: 2, platform: 2, legit: 2, legitimate: 2, safe: 2, scam: 2, trust: 2 },
-    reply: () => 'Space8 is a mobile-money investment platform — you invest in a plan and it pays out a fixed return at the end of its cycle. Deposits and withdrawals run through mobile money, and every transaction is logged on your account.' }
+    reply: () => '🛰️ Space8 is a mobile-money investment platform — you invest in a plan and it pays out a fixed return at the end of its cycle. Deposits and withdrawals run through mobile money, and every transaction is logged on your account.' }
 ];
 
-function fmt2(n) { return Number(n || 0).toLocaleString('en-UG'); }
+const FALLBACKS = [
+  "🤔 I can help with deposits, withdrawals, investing, referrals, check-ins, your balance, or the security PIN — try asking about one of those!",
+  "🛰️ Not sure I caught that — I'm best with deposits, withdrawals, investing, referrals, check-ins, and your account. Try rephrasing?",
+  "Hmm, I can help with things like deposits, withdrawals, investing or referrals 🙂 — or reach Support from the Account tab for anything else."
+];
 
 function scoreText(text, tokens, intent) {
   let score = 0;
@@ -162,7 +184,7 @@ function matchProduct(products, tokens) {
 
 function answerAssistant({ message, history, settings, products, account }) {
   const text = String(message || '').slice(0, 500).trim();
-  if (!text) return "Type a message and I'll help.";
+  if (!text) return "Type a message and I'll help. 🙂";
 
   const sett = settings || {};
   const prods = Array.isArray(products) ? products : [];
@@ -196,12 +218,12 @@ function answerAssistant({ message, history, settings, products, account }) {
   const product = matchProduct(prods, tokens);
   if (product && (!top || top.score < 4)) {
     const daily = Math.round((product.expectedReturn || 0) / (product.cycle || 1));
-    return `${product.name}: price ${fmt(product.price)}, ${product.cycle}-day cycle, ${fmt(daily)}/day, total payout ${fmt(product.expectedReturn)} at maturity. Tap Invest on the Products tab to buy in.`;
+    return `🛰️ ${product.name}: price ${fmt(product.price)}, ${product.cycle}-day cycle, ${fmt(daily)}/day, total payout ${fmt(product.expectedReturn)} at maturity. Tap Invest on the Products tab to buy in.`;
   }
 
   if (top && top.score >= 2) return top.intent.reply(ctx);
 
-  return "I can help with deposits, withdrawals, investing, referrals, check-ins, your balance, or the security PIN — try asking about one of those, or reach Support from the Account tab for anything else.";
+  return pick(FALLBACKS);
 }
 
 module.exports = { answerAssistant };

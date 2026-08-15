@@ -91,20 +91,20 @@ async function setupFundedUser(uid, phone, balance) {
 (async () => {
   await new Promise(r => setTimeout(r, 600));
 
-  console.log('\n== Step 1: buy Hershey\'s at today\'s rate (30,000 -> 1,200,000, the "before the change" purchase) ==');
+  console.log('\n== Step 1: buy Explorer 1 at today\'s rate (30,000 -> 1,260,000, the "before the change" purchase) ==');
   const A = 'early-buyer-uid';
   await setupFundedUser(A, '0771000095', 10000000);
-  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'comet' } });
+  let r = await call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'explorer1' } });
   check('purchase succeeds', r.body?.status === 'success', r.body);
   const oldInvId = r.body?.investmentId;
   const oldInv = investments().get(oldInvId);
-  check('locked in at 1,200,000 total, 30,000 price', oldInv?.expectedReturn === 1200000 && oldInv?.amount === 30000, oldInv);
+  check('locked in at 1,260,000 total, 30,000 price', oldInv?.expectedReturn === 1260000 && oldInv?.amount === 30000, oldInv);
   const oldDaily = oldInv.dailyPayout;
-  check('locked-in daily figure is 6,667', oldDaily === 6667, oldInv);
+  check('locked-in daily figure is 6,000', oldDaily === 6000, oldInv);
 
-  console.log('\n-- Step 2: the owner changes Hershey\'s pricing AND the global rate, after the purchase --');
+  console.log('\n-- Step 2: the owner changes Explorer 1\'s pricing AND the global rate, after the purchase --');
   const saveR = await adminCall('/admin/products/save', {
-    products: [{ key: 'comet', name: "Comet", price: 50000, cycle: 90, expectedReturn: 999999, order: 0 }],
+    products: [{ key: 'explorer1', name: "Explorer 1", price: 50000, cycle: 90, expectedReturn: 999999, order: 0 }],
   });
   check('admin price/cycle/total-payout edit succeeds', saveR.body?.status === 'success', saveR.body);
   const settingsR = await adminCall('/admin/settings/update', { settings: { returnMultiple: 999, cycleDays: 1 } });
@@ -113,30 +113,30 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n-- Step 3: the ALREADY-BOUGHT investment is completely untouched by either edit --');
   const untouchedInv = investments().get(oldInvId);
   check('price is still 30,000 (not the new 50,000)', untouchedInv.amount === 30000, untouchedInv);
-  check('expectedReturn is still 1,200,000 (not the new 999,999)', untouchedInv.expectedReturn === 1200000, untouchedInv);
-  check('cycle is still 180 (not the new 90)', untouchedInv.cycle === 180, untouchedInv);
-  check('dailyPayout is still 6,667 (not re-derived from the new global returnMultiple/cycleDays)', untouchedInv.dailyPayout === 6667, untouchedInv);
+  check('expectedReturn is still 1,260,000 (not the new 999,999)', untouchedInv.expectedReturn === 1260000, untouchedInv);
+  check('cycle is still 210 (not the new 90)', untouchedInv.cycle === 210, untouchedInv);
+  check('dailyPayout is still 6,000 (not re-derived from the new global returnMultiple/cycleDays)', untouchedInv.dailyPayout === 6000, untouchedInv);
 
   console.log('\n-- Cashback settlement on the old investment still pays the OLD daily figure --');
   untouchedInv.createdAt = new Date(Date.now() - 3 * 86400000);
   const balBefore = userDoc(A).walletBalance;
   await call('GET', '/investments', { token: 'uid:' + A });
   const expected = oldDaily * 3;
-  check('3 elapsed days pays exactly 3 x 6,667 = 20,001, not any new-rate figure',
+  check('3 elapsed days pays exactly 3 x 6,000 = 18,000, not any new-rate figure',
     userDoc(A).walletBalance === balBefore + expected,
     { balance: userDoc(A).walletBalance, expected: balBefore + expected });
 
-  console.log('\n-- Maturity on the old investment still pays out exactly the original 1,200,000 total --');
+  console.log('\n-- Maturity on the old investment still pays out exactly the original 1,260,000 total --');
   const freshOld = investments().get(oldInvId);
   freshOld.createdAt = new Date(Date.now() - 400 * 86400000);
   await call('GET', '/investments', { token: 'uid:' + A });
   const maturedOld = investments().get(oldInvId);
-  check('matures at exactly 1,200,000 paid out, never the new total-payout figure', maturedOld.status === 'matured' && maturedOld.paidOut === 1200000, maturedOld);
+  check('matures at exactly 1,260,000 paid out, never the new total-payout figure', maturedOld.status === 'matured' && maturedOld.paidOut === 1260000, maturedOld);
 
   console.log('\n== Step 4: a FRESH purchase of the same tier, made AFTER the change, correctly gets the NEW numbers ==');
   const B = 'late-buyer-uid';
   await setupFundedUser(B, '0771000096', 10000000);
-  r = await call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'comet' } });
+  r = await call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'explorer1' } });
   check('purchase succeeds', r.body?.status === 'success', r.body);
   const newInv = investments().get(r.body?.investmentId);
   check('new purchase reflects the NEW price (50,000), not the old buyer\'s locked-in 30,000', newInv?.amount === 50000, newInv);

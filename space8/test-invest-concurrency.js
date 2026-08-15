@@ -76,14 +76,14 @@ async function setupFundedUser(uid, phone, balance) {
 
 (async () => {
   await new Promise(r => setTimeout(r, 600));
-  const PRICE = 30000; // hersheys tier
+  const PRICE = 30000; // explorer1 tier
 
   console.log('\n== Two simultaneous purchases, wallet can only afford ONE ==');
   const A = 'race-a';
   await setupFundedUser(A, '0771000101', PRICE); // exactly one tier's worth, no more
   const [r1, r2] = await Promise.all([
-    call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'comet' } }),
-    call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'comet' } }),
+    call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'explorer1' } }),
+    call('POST', '/invest/create', { token: 'uid:' + A, body: { tierKey: 'explorer1' } }),
   ]);
   const successesA = [r1, r2].filter(x => x.body?.status === 'success').length;
   check('exactly ONE of two simultaneous purchases succeeds', successesA === 1, { r1: r1.body, r2: r2.body });
@@ -96,7 +96,7 @@ async function setupFundedUser(uid, phone, balance) {
   const B = 'race-b';
   await setupFundedUser(B, '0771000102', PRICE * 3);
   const burst = await Promise.all(Array.from({ length: 10 }, () =>
-    call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'comet' } })
+    call('POST', '/invest/create', { token: 'uid:' + B, body: { tierKey: 'explorer1' } })
   ));
   const successesB = burst.filter(x => x.body?.status === 'success').length;
   check('exactly 3 of 10 simultaneous purchases succeed (wallet only affords 3)', successesB === 3, { successes: successesB, bodies: burst.map(x => x.body?.status) });
@@ -108,7 +108,7 @@ async function setupFundedUser(uid, phone, balance) {
   console.log('\n== A single purchase attempt with insufficient funds touches nothing ==');
   const C = 'race-c';
   await setupFundedUser(C, '0771000103', PRICE - 1000); // just short
-  const rC = await call('POST', '/invest/create', { token: 'uid:' + C, body: { tierKey: 'comet' } });
+  const rC = await call('POST', '/invest/create', { token: 'uid:' + C, body: { tierKey: 'explorer1' } });
   check('purchase rejected (400) when short by even a small amount', rC.code === 400, rC.body);
   check('exact shortfall reported in the message', /Need/.test(rC.body?.message || ''), rC.body);
   check('wallet balance completely untouched by the rejected attempt', userDoc(C).walletBalance === PRICE - 1000, userDoc(C).walletBalance);
