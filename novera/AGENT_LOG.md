@@ -14,6 +14,40 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-15 — Claude — Session wrap-up: scope corrected, design mockup built, rename to "space8" pending
+
+- **What changed**: No code changes this entry — this is a checkpoint before a long
+  session ends. Rewrote `CLAUDE.md` top-to-bottom to capture the full session history
+  (including two wrong turns, corrected below) so the next session doesn't re-derive or
+  repeat them. Added `design/visual-system-mockup.html` to the repo (previously only a
+  scratchpad file + Artifact link) so the agreed design direction survives the session
+  ending. Read the new `CLAUDE.md` in full — this log entry is a summary of it, not a
+  replacement for it.
+- **Why**: Owner corrected scope twice this session: (1) backend + admin panel should be
+  ChocoMCC reused as-is — confirmed correct, no further action; (2) the user-facing
+  frontend should NOT be a ChocoMCC reskin — it needs its own design and architecture, and
+  the port that's currently sitting in `user-src/`/`user/` is wrong and needs replacing.
+  Owner also specified an exact palette after rejecting the first design pass (violet +
+  starfield): white + one dominant blue, no other colours. A reviewed mockup was built
+  against that spec (screens + component strip, real embedded fonts, Robinhood/Cash App/
+  Revolut/Stripe referenced for discipline) but had not yet received owner feedback when
+  the owner asked to wrap the session and pivot the project name to "space8."
+- **Verification**: N/A (documentation-only entry). Backend test suite was last confirmed
+  green earlier in this session (54/54 files, see the prior entry below) and has not been
+  touched since.
+- **Left open for next session — in priority order**:
+  1. Confirm what "space8" actually means for renaming scope (folder name? all brand
+     strings? just a name change, keeping "Novera" internally?) before doing any find/
+     replace — guessing wrong here has already cost two full wasted passes this session.
+  2. Get owner reaction to `design/visual-system-mockup.html` — approved, or changes
+     needed — before building the real frontend against it.
+  3. Rebuild `user-src/`/`user/` from scratch against the approved design (backend/admin
+     stay as they are — do not touch `server.js`/`db.js`/`admin-src/` for this).
+  4. Scope and build the "Show" feature (withdrawal-proof-of-payment upload for a reward)
+     — genuinely new, does not exist in ChocoMCC in any form.
+  5. Real app icons + product/banner fallback art (currently still ChocoMCC's chocolate
+     photos) — lower priority, admin-uploaded content overrides these in practice.
+
 ## 2026-08-15 — Claude — Ported full ChocoMCC codebase into Novera, rebranded in place
 
 - **What changed**: Deleted an earlier from-scratch Novera scaffold (server.js/db.js/
