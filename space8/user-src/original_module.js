@@ -143,23 +143,17 @@ qsa('.sheet-bg').forEach(function(bg){
 });
 
 // ── AUTH ──────────────────────────────────────────────────────────────
-function switchAuthTab(tab){
-  qsa('.auth-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === tab); });
-  $('loginPane').style.display = tab === 'login' ? '' : 'none';
-  $('registerPane').style.display = tab === 'register' ? '' : 'none';
-  $('authFooter').innerHTML = tab === 'login'
-    ? 'Don\'t have an account? <b id="authFooterLink">Create one</b>'
-    : 'Already have an account? <b id="authFooterLink">Sign in</b>';
-  $('authFooterLink').onclick = function(){ switchAuthTab(tab === 'login' ? 'register' : 'login'); };
-}
-$('tabLogin').onclick = function(){ switchAuthTab('login'); };
-$('tabRegister').onclick = function(){ switchAuthTab('register'); };
-$('authFooterLink').onclick = function(){ switchAuthTab('register'); };
+function showLoginScreen(){ $('screenRegister').style.display = 'none'; $('screenLogin').style.display = 'flex'; }
+function showRegisterScreen(){ $('screenLogin').style.display = 'none'; $('screenRegister').style.display = 'flex'; }
+$('goRegister').onclick = showRegisterScreen;
+$('goLogin').onclick = showLoginScreen;
 
-qsa('.field-eye').forEach(function(eye){
-  eye.addEventListener('click', function(){
-    var input = $(eye.dataset.target);
-    input.type = input.type === 'password' ? 'text' : 'password';
+qsa('.auth-pw-toggle').forEach(function(toggle){
+  toggle.addEventListener('click', function(){
+    var input = $(toggle.dataset.target);
+    var hidden = input.type === 'password';
+    input.type = hidden ? 'text' : 'password';
+    toggle.textContent = hidden ? 'Hide' : 'Show';
   });
 });
 
@@ -821,19 +815,18 @@ async function boot(){
   if (setR.status === 'success') STATE.settings = setR.settings;
   var bannerR = await api('/public/banners');
   if (bannerR.status === 'success') STATE.banners = bannerR.banners || {};
-  var heroImg = STATE.banners.assortment;
-  if (heroImg) $('authHeroImg').style.backgroundImage = 'url(' + heroImg + ')';
 }
 window.addEventListener('space8-auth', async function(e){
   var user = e.detail;
   $('loadingScreen').style.display = 'none';
   if (user) {
-    $('authScreen').style.display = 'none';
+    $('screenLogin').style.display = 'none';
+    $('screenRegister').style.display = 'none';
     $('app').style.display = 'flex';
     showPage('home');
   } else {
     $('app').style.display = 'none';
-    $('authScreen').style.display = 'flex';
+    showLoginScreen();
     STATE.account = null;
     Object.keys(STATE.loaded).forEach(function(k){ STATE.loaded[k] = false; });
   }

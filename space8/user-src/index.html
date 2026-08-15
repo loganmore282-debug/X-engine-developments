@@ -80,25 +80,23 @@ svg{display:block;}
 #loadingScreen .spin{ width:26px; height:26px; border-radius:50%; border:3px solid var(--surface-2); border-top-color:var(--blue); animation:spin .8s linear infinite; }
 @keyframes spin{ to{ transform:rotate(360deg); } }
 
-#authScreen{ min-height:100dvh; display:none; flex-direction:column; padding:0; background:var(--page-bg); }
-.auth-hero{
-  position:relative; height:38vh; min-height:220px;
-  background:linear-gradient(160deg, var(--ink) 0%, var(--blue-dim) 130%);
-  background-size:cover; background-position:center; overflow:hidden;
-  border-radius:0 0 32px 32px;
-}
-.auth-hero::after{ content:''; position:absolute; inset:0; background:linear-gradient(180deg, transparent 40%, var(--page-bg) 100%); }
-.auth-hero .wordmark{ position:absolute; left:24px; top:max(24px, env(safe-area-inset-top)); z-index:2; }
-.auth-body{ flex:1; padding:22px 22px 40px; margin-top:-28px; position:relative; z-index:1; }
-.auth-tabs{ display:flex; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:4px; margin-bottom:24px; }
-.auth-tab{ flex:1; text-align:center; padding:10px; border-radius:999px; font-weight:700; font-size:14px; color:var(--ink-dim); cursor:pointer; user-select:none; }
-.auth-tab.active{ background:var(--blue); color:#fff; }
-.auth-title{ font-weight:700; font-size:24px; letter-spacing:-.01em; margin:0 0 6px; }
-.auth-sub{ color:var(--ink-dim); font-size:13.5px; margin:0 0 22px; line-height:1.5; }
-.auth-form{ display:flex; flex-direction:column; gap:12px; }
+.auth-screen{ min-height:100dvh; display:none; flex-direction:column; align-items:center; justify-content:center; background:var(--page-bg); padding:max(28px, env(safe-area-inset-top)) 22px 40px; }
+.auth-wrap{ width:100%; max-width:380px; }
+.auth-word{ font-weight:700; font-size:20px; letter-spacing:-.01em; text-align:center; margin-bottom:32px; }
+.auth-word .dot{ color:var(--blue); }
+.auth-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); padding:26px 22px; }
+.auth-title{ font-weight:700; font-size:19px; letter-spacing:-.01em; margin:0 0 22px; text-align:center; }
+.auth-form{ display:flex; flex-direction:column; gap:15px; }
+.auth-label{ display:block; font-size:11.5px; font-weight:700; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px 2px; }
+.auth-input{ width:100%; background:var(--void); border:1px solid var(--line); border-radius:10px; padding:13px 14px; font-size:14.5px; color:var(--ink); outline:none; }
+.auth-input:focus{ border-color:var(--blue); }
+.auth-input::placeholder{ color:var(--ink-dim); }
+.auth-pwrow{ position:relative; }
+.auth-pwrow .auth-input{ padding-right:56px; }
+.auth-pw-toggle{ position:absolute; right:14px; top:50%; transform:translateY(-50%); font-size:11px; font-weight:700; color:var(--blue); text-transform:uppercase; letter-spacing:.02em; cursor:pointer; }
 .auth-footer{ text-align:center; margin-top:20px; font-size:13px; color:var(--ink-dim); }
-.auth-footer b{ color:var(--blue); font-weight:700; }
-.auth-err{ display:none; background:var(--danger-bg); color:var(--danger); border-radius:12px; padding:11px 13px; font-size:13px; font-weight:600; }
+.auth-footer b{ color:var(--blue); font-weight:700; cursor:pointer; }
+.auth-err{ display:none; background:var(--danger-bg); color:var(--danger); border-radius:10px; padding:11px 13px; font-size:13px; font-weight:600; margin-bottom:14px; }
 
 #app{ display:none; min-height:100dvh; flex-direction:column; }
 .topbar{
@@ -332,53 +330,55 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
   <div class="spin"></div>
 </div>
 
-<div id="authScreen">
-  <div class="auth-hero" id="authHeroImg">
-    <div class="wordmark" style="color:#fff">Space<span class="dot">8</span></div>
-  </div>
-  <div class="auth-body">
-    <div class="auth-tabs">
-      <div class="auth-tab active" id="tabLogin" data-tab="login">Sign In</div>
-      <div class="auth-tab" id="tabRegister" data-tab="register">Create Account</div>
-    </div>
-
-    <div id="loginPane">
-      <h1 class="auth-title">Welcome back</h1>
-      <p class="auth-sub">Sign in with your phone number to continue.</p>
+<div id="screenLogin" class="auth-screen">
+  <div class="auth-wrap">
+    <div class="auth-word">Space<span class="dot">8</span></div>
+    <div class="auth-card">
+      <div class="auth-title">Login</div>
       <div class="auth-err" id="loginErr"></div>
       <div class="auth-form">
-        <div class="field"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          <input id="loginPhone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="tel"></div>
-        <div class="field"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
-          <svg class="field-eye" data-target="loginPassword" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <div><label class="auth-label" for="loginPhone">Phone Number</label>
+          <input class="auth-input" id="loginPhone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="tel"></div>
+        <div><label class="auth-label" for="loginPassword">Password</label>
+          <div class="auth-pwrow">
+            <input class="auth-input" id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
+            <span class="auth-pw-toggle" data-target="loginPassword">Show</span>
+          </div>
         </div>
-        <button class="btn btn-primary" id="loginBtn" style="margin-top:6px">Sign In</button>
+        <button class="btn btn-primary" id="loginBtn" style="margin-top:4px">Login</button>
       </div>
+      <div class="auth-footer">New here? <b id="goRegister">Register</b></div>
     </div>
+  </div>
+</div>
 
-    <div id="registerPane" style="display:none">
-      <h1 class="auth-title">Create your account</h1>
-      <p class="auth-sub">Join Space8 and start earning today.</p>
+<div id="screenRegister" class="auth-screen">
+  <div class="auth-wrap">
+    <div class="auth-word">Space<span class="dot">8</span></div>
+    <div class="auth-card">
+      <div class="auth-title">Register</div>
       <div class="auth-err" id="registerErr"></div>
       <div class="auth-form">
-        <div class="field"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          <input id="regPhone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="tel"></div>
-        <div class="field"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input id="regPassword" type="password" placeholder="Password" autocomplete="new-password">
-          <svg class="field-eye" data-target="regPassword" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <div><label class="auth-label" for="regPhone">Phone Number</label>
+          <input class="auth-input" id="regPhone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="tel"></div>
+        <div><label class="auth-label" for="regPassword">Password</label>
+          <div class="auth-pwrow">
+            <input class="auth-input" id="regPassword" type="password" placeholder="Create password" autocomplete="new-password">
+            <span class="auth-pw-toggle" data-target="regPassword">Show</span>
+          </div>
         </div>
-        <div class="field"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input id="regPassword2" type="password" placeholder="Confirm password" autocomplete="new-password">
-          <svg class="field-eye" data-target="regPassword2" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <div><label class="auth-label" for="regPassword2">Confirm Password</label>
+          <div class="auth-pwrow">
+            <input class="auth-input" id="regPassword2" type="password" placeholder="Re-enter password" autocomplete="new-password">
+            <span class="auth-pw-toggle" data-target="regPassword2">Show</span>
+          </div>
         </div>
-        <div class="field"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <input id="regReferral" type="text" placeholder="Referral code (optional)" autocapitalize="characters"></div>
-        <button class="btn btn-primary" id="registerBtn" style="margin-top:6px">Create Account</button>
+        <div><label class="auth-label" for="regReferral">Referral Code (Optional)</label>
+          <input class="auth-input" id="regReferral" type="text" placeholder="Enter code" autocapitalize="characters"></div>
+        <button class="btn btn-primary" id="registerBtn" style="margin-top:4px">Register</button>
       </div>
+      <div class="auth-footer">Already have an account? <b id="goLogin">Login</b></div>
     </div>
-
-    <div class="auth-footer" id="authFooter">Don't have an account? <b id="authFooterLink">Create one</b></div>
   </div>
 </div>
 
