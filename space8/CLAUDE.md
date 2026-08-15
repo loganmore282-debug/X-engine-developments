@@ -60,18 +60,39 @@ The owner was explicit and this must not be re-litigated without them saying so:
 Static mockup, still in the repo: **`space8/design/visual-system-mockup.html`**. The real
 app in `user-src/` was built directly against this.
 
-- **Palette — white/ink + one dominant blue, nothing else.** `--blue: #2e6bff`. A single
-  desaturated red (`--danger`) is the only exception, reserved for genuine failure states.
-  No violet, no gold, no green, no gradients (except the auth-screen hero, which uses a
-  dark ink→blue gradient specifically so the white wordmark stays legible before an admin
-  sets a real login photo — this was a real bug caught and fixed via screenshot review,
-  don't revert it to a flat fallback).
-- **Typography**: Instrument Sans (UI) + Space Mono (every money figure, tabular-nums),
-  embedded as base64 `@font-face` (self-hosted, not a Google Fonts CDN dependency at
-  runtime).
-- **Light theme is primary** (owner's explicit instruction), dark mode supported via
-  `prefers-color-scheme` + `[data-theme="dark"]` override, same token structure as the
-  mockup.
+- **Palette — white/ink + one DOMINANT blue, nothing else.** `--blue: #0f52ba` (Sapphire —
+  changed 2026-08-16 from an earlier brighter `#2e6bff` per the owner: "why is blue not
+  dominant, I want it everywhere... use another elegant good blue"). Also `--blue-dim:
+  #0b3e8f` (darker, hover/pressed/claim-pill borders), `--blue-mute: #5d80b8` (muted-but-
+  still-blue, used for inactive states so they read as part of the blue family rather than
+  plain gray), `--blue-glow: rgba(15,82,186,.20)` (icon-circle backgrounds + button shadow
+  color, reused for both). Blue is applied broadly on purpose: nearly every SVG icon
+  (topbar, nav — active AND inactive, form fields, ticker, account matrix, menu rows +
+  chevrons), `.btn-secondary`/`.btn-ghost` outlines, assistant quick-reply chips. The two
+  deliberate exceptions are `.action-btn.done`/`.milestone-card.done` (kept gray — a
+  semantic "already claimed" muted state, not leftover neutral). A single desaturated red
+  (`--danger`) is the only non-blue accent, reserved for genuine failure states. No violet,
+  no gold, no green, no gradients anywhere (the auth screens and sheets are flat, no hero
+  image/gradient — see below).
+- **Typography**: a single self-hosted Inter variable font (weights 400–800, base64
+  `@font-face`, changed 2026-08-16 from an earlier two-font Instrument Sans + Space Mono
+  system per the owner). `.mono` only sets `font-variant-numeric:tabular-nums` now, no
+  separate font-family.
+- **Light theme ONLY, forced** — the owner was explicit ("I don't need dark mode, I need
+  light white mode"). The `prefers-color-scheme:dark` media block and `[data-theme="dark"]`
+  overrides that used to exist have been deleted entirely; do not re-add device-driven dark
+  mode without being asked again.
+- **No slide/bottom-sheet animation** — bottom sheets (`.sheet-bg`/`.sheet`) open as
+  centered, instantly-appearing modals (`align-items:center`, no transform/transition at
+  all), changed 2026-08-16 from an earlier slide-up-from-bottom pattern per the owner
+  ("sheets should not slide from down, rather should open from middle" + a general "stop
+  bringing animation" complaint). The one deliberate exception is the horizontal activity
+  ticker on Home, a continuous CSS-keyframe marquee — the owner asked for this "running
+  checker" by name, it is not the animation they meant to stop.
+- **No decorative card borders** ("no frames") — `.card`/`.prod-card`/`.plan-card`/etc.
+  rely on `background:var(--surface)` against `var(--page-bg)` for grouping, not an outline.
+  Functional element borders (form `.field`/`.auth-input`, `.btn-secondary`/`.btn-ghost`
+  outlines) are kept — those aren't decorative, they're the interactive boundary.
 - Visual identity via precision, not decoration: SVG progress ring on active-plan cards,
   tabular monospaced money, skeleton loaders (not spinners) on every async section.
 
@@ -102,13 +123,18 @@ tab.
   reward — a proof-of-payment social feature, genuinely new (upload flow, storage, admin
   review/approval queue, reward-grant mechanism). Needs full scoping if/when confirmed
   still wanted.
-- **Floating assistant** — bottom-right bubble, full-screen chat panel, now backed by a
-  real server endpoint: `POST /assistant/chat` in `server.js` calls Claude
-  (`@anthropic-ai/sdk`, `claude-opus-5`) with a system prompt rebuilt every request from
-  live settings/products/account data, so it answers with real current numbers, not
-  hardcoded copy. Rate-limited separately (`assistLimiter`, 15/min/user) since each
-  message is a billed API call. **Requires `ANTHROPIC_API_KEY` on the backend's Render
-  env vars — not set yet**, falls back to a static message until it is.
+- **Floating assistant** — bottom-right bubble, full-screen chat panel, backed by a real
+  server endpoint: `POST /assistant/chat` in `server.js`. **Self-hosted, no external
+  API, no per-message cost** — the owner explicitly does not want to pay for an LLM key
+  ("I don't have a Claude API key, I am not willing to buy it"). The actual logic lives
+  in `assistant-engine.js`: stems/tokenizes the message, scores it against ~16 weighted
+  intents, fuzzy-matches specific product names from the live catalog, extracts a money
+  amount from the message to compute real withdrawal-fee math on the spot, and blends in
+  the prior turn's topic for short ambiguous follow-ups. Every reply is grounded in a
+  fresh `getSettings()`/`getProducts()`/account read, same as the client used to do
+  manually — so it never goes stale as the admin changes fees/rates/products. Refuses to
+  reveal a PIN/password if asked. Rate-limited (`assistLimiter`, 30/min/user) to bound DB-
+  read spam, not API spend. No env var needed, nothing left to configure.
 
 ## Product ladder — real, owner-provided (NOT the old chocolate-derived placeholder)
 
@@ -196,14 +222,10 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    none of this has been verified against the live Firebase project + live
    backend in a real browser yet.
 2. **"Show" feature** — not scoped, not built, anywhere.
-3. **Server-side floating assistant — code is DONE, needs an env var.**
-   `POST /assistant/chat` in `server.js` is a real Claude-backed endpoint
-   (`@anthropic-ai/sdk`, `claude-opus-5`), wired up end-to-end in
-   `user-src/original_module.js` (with a typing indicator and rolling history).
-   **The owner still needs to add `ANTHROPIC_API_KEY` to the backend's Render/
-   Railway env vars** — until then it returns a graceful static fallback message
-   instead of a real answer. Same "owner forgets to set/redeploy" risk as other
-   env vars — flag this explicitly, don't assume it's set.
+3. **Server-side floating assistant — DONE, nothing pending.** `POST /assistant/chat`
+   is fully self-hosted (`assistant-engine.js`, no external API/key/cost — the owner
+   declined to buy a Claude API key, so don't suggest wiring one back in), wired up
+   end-to-end in `user-src/original_module.js` (typing indicator, rolling history).
 4. **Real product catalog** — not entered into the admin panel yet (owner's task).
 5. **VAPID key** — updated in code, not test-fired against a real device yet.
 6. **ChatGPT security-review findings not yet acted on** — referral-commission

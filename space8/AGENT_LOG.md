@@ -14,6 +14,87 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Assistant rebuilt as a free self-hosted engine (dropped Claude API); new elegant blue + far wider blue usage
+
+- **What changed**:
+  - **Assistant, take two.** The owner was explicit: "I don't have a Claude API
+    key, I am not willing to buy it" — so the `POST /assistant/chat` endpoint
+    from the entry below (which called `@anthropic-ai/sdk`) was torn out and
+    replaced with a genuinely self-hosted engine, new file
+    `assistant-engine.js`, zero external API, zero per-message cost.
+    `@anthropic-ai/sdk` removed from `package.json`. The engine does real
+    work, not a flat regex table: normalizes + stems the message, scores it
+    against ~16 weighted intents (deposit/withdraw/invest/referral/checkin/
+    pin/balance/support/about/small-talk/etc.), separately fuzzy-matches the
+    message against the LIVE product list by name so a specific-plan question
+    ("how much is Voyager 1?") gets a real numeric answer, extracts a money
+    amount from the message so a withdrawal question with a number in it gets
+    the actual fee/net computed on the spot, and blends in the previous
+    turn's topic for short ambiguous follow-ups ("and the fee?") using the
+    `history` the client already sends. Every reply is grounded in a fresh
+    `getSettings()`/`getProducts()`/account read, same as before, so numbers
+    never go stale. A hardcoded guard refuses to reveal a PIN/password if
+    asked, same as the old system-prompt instruction did. Rate limit
+    (`assistLimiter`) loosened from 15/min to 30/min per user since it's no
+    longer bounding API spend, just DB-read spam.
+  - **New elegant blue, and far more of it.** The owner: "why is blue not
+    dominant, I want it everywhere, on all SVGs, buttons, cards... use another
+    elegant good blue." Replaced the old `--blue:#2e6bff` (a brighter
+    "electric" blue) with Sapphire `#0f52ba` (`--blue-dim:#0b3e8f` for
+    pressed/darker states, new `--blue-mute:#5d80b8` for muted-but-still-blue
+    inactive states, `--blue-glow` recomputed to match). Then actually spread
+    it: topbar icon button, inactive nav icons+labels (now `--blue-mute`
+    instead of gray, so the whole nav bar reads as one blue family), sheet/
+    form-field icons, the activity-ticker icon, the Account 4-tile matrix
+    icons, every menu-row icon and its chevron, and the assistant's quick-
+    reply chips all moved off `--ink-dim` onto blue. `.btn-secondary` is now
+    a blue-outline button (was gray-outline/black-text) and `.btn-ghost`'s
+    border went from gray to a soft blue-glow. Deliberately left two icons
+    gray: `.action-btn.done`/`.milestone-card.done` (the "already claimed"
+    muted state) — that's a semantic done-state signal, not leftover gray;
+    flagging it explicitly in case the owner wants it blue too. Did NOT touch
+    `admin-src/`/`admin/` (out of scope per the three-part split — admin stays
+    a ChocoMCC reskin, this was a user-app-only ask).
+  - Rewrote `test-assistant-smoke.js` to assert on the ENGINE's actual output
+    through the real route (live-minimum in the deposit reply, computed fee/
+    net on a withdrawal amount, personalized balance numbers, PIN-reveal
+    refusal, context-blended follow-up, rate-limit trip) instead of just
+    checking "some string came back."
+  - Rebuilt via `build-core.js` (round-trip OK), bumped nothing else version-
+    wise this round (sw.js cache already bumped to v201 in the prior entry
+    and no shell/markup structure changed, only CSS values + the already-
+    shipped assistant JS's request shape, which is unchanged).
+- **Why**: two direct owner asks in one message, addressed in order — a
+  real/advanced assistant that costs nothing to run, and a more blue,
+  differently-blue visual identity.
+- **Verification**: `node -c assistant-engine.js` + `node -c server.js` both
+  clean. Full `test-*.js` suite re-run (55 files) — same 3 pre-existing date-
+  dependent checkin-streak failures as every prior entry (confirmed not a
+  regression, not touched), everything else green, including the new/rewritten
+  `test-assistant-smoke.js` (10/10). Manual `node -e` run of the engine
+  against realistic settings/products/account fixtures across ~17 sample
+  questions (greeting, deposit w/ and w/o amount, withdraw w/ amount → real
+  fee math, fees, referral, balance, two different specific-product lookups,
+  PIN-reveal refusal, forgot-PIN, who-are-you, gibberish, thanks, and a
+  context-blended follow-up) — all read correctly; tightened the blending
+  heuristic afterward (short-message gate) once it over-eagerly carried
+  context into an unrelated message in that same manual run. Playwright smoke
+  test confirmed `getComputedStyle` reports `--blue:#0f52ba` live in the
+  browser, screenshotted Home/Products/Account and visually confirmed blue on
+  nav (active + inactive), topbar bell, action-button icon circles, shortcut
+  icons, Invest buttons, matrix icons, menu-row icons+chevrons, and the
+  assistant bubble — with body text/headings still black for readability, not
+  every pixel blue. Re-ran the existing assistant Playwright script
+  end-to-end against the new response shape — still renders correctly, no
+  console errors.
+- **Left open**: none introduced by this entry — the previous entry's
+  `ANTHROPIC_API_KEY`/Render item is now moot and should be considered
+  withdrawn, not just deferred (see updated `CLAUDE.md`). Real end-to-end
+  device/browser verification is still the standing open item from every
+  prior entry.
+
+---
+
 ## 2026-08-16 — Claude — Font swap to Inter, larger SVG icons, centered sheet modals, PIN-at-registration, real server-side assistant
 
 - **What changed**:
