@@ -125,10 +125,15 @@ referral L1 28% / L2 2% / L3 1% (31% total).
   code lives under `space8/`, sibling to `voltra/`, `choco-mcc/`, `nexus/`, and others.
   **Never edit `choco-mcc/` or `voltra/` from this project's sessions.**
 - Branch: `claude/space8-rename-frontend-rebuild-juurd7`.
-- `space8/CODEX.md` points Codex sessions at this file — the owner wants Codex working
-  alongside Claude. `space8/AGENT_LOG.md` is the shared changelog — **append an entry
-  after every fix**, however small. Read `AGENT_LOG.md` in full before starting new work;
-  it has the granular history this file summarizes.
+- `space8/CODEX.md` points Codex sessions at this file — the owner wants **Codex and
+  ChatGPT working alongside Claude**, all three reading/writing the same two files rather
+  than each re-deriving context from scratch. `space8/AGENT_LOG.md` is the shared
+  changelog — **append an entry after every fix**, however small, regardless of which
+  agent you are. Read `CLAUDE.md` (this file) first, then `AGENT_LOG.md` in full, before
+  starting new work — the log has the granular history this file summarizes. Any agent
+  pointed at this repo needs to be told explicitly which branch to read
+  (`claude/space8-rename-frontend-rebuild-juurd7` as of this writing) — GitHub tools
+  default to the repo's default branch, which does not have this project's work on it.
 - **Live infra, all real and deployed**:
   - MongoDB Atlas: dedicated `space8_db_user` on the shared "Cluster0" (also hosts
     chocomcc/temubrazil data — separated by database name, `/space8`).
