@@ -195,9 +195,8 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
 2. **"Show" feature** — not scoped, not built, anywhere.
 3. **Server-side floating assistant** — current one is a client-side placeholder.
 4. **Real product catalog** — not entered into the admin panel yet (owner's task).
-5. **App icons / favicon / maskable variants** — still ChocoMCC's chocolate-brand art.
-6. **VAPID key** — updated in code, not test-fired against a real device yet.
-7. **ChatGPT security-review findings not yet acted on** — referral-commission
+5. **VAPID key** — updated in code, not test-fired against a real device yet.
+6. **ChatGPT security-review findings not yet acted on** — referral-commission
    double-pay-on-crash race and a withdrawal-bookkeeping `Promise.all` race, both
    confirmed real. See `AGENT_LOG.md`'s "Fixed a real deposit-polling bug..." entry for
    exact locations and severity — needs the owner's go-ahead before touching this

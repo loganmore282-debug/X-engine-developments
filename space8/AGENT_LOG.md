@@ -14,6 +14,47 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-15 — Claude — Replaced ChocoMCC chocolate-brand icons with the real Space8 mark
+
+- **What changed**: `icon-192.png`/`icon-512.png`/`icon-maskable-192.png`/
+  `icon-maskable-512.png`/`favicon.png` in both `user/` and `admin/`, plus
+  `user/link-preview.jpg` and the loading-screen `<svg class="mark">` in
+  `user-src/index.html`. New mark, "Orbital 8": two stacked blue (`#2e6bff`) rings
+  forming a vertical figure-eight, with a small satellite node on the top ring's
+  upper-right arc — reads as both an orbital-path motif and a literal "8". Flat,
+  single-color, no gradients, matches the white+blue design system exactly.
+  Maskable variants keep the mark inside a conservative safe zone; favicon uses a
+  bolder stroke for legibility at browser-tab size.
+- **Why**: the last visible piece of ChocoMCC's old chocolate branding still shipping
+  (flagged as open in every previous entry). The concept originated from a ChatGPT
+  design review the owner requested this session ("Orbital 8" — white field, blue
+  vertical figure-eight orbital path, satellite node, flat/no gradients, maskable-safe,
+  simplified favicon). Getting ChatGPT's own GitHub connector real write access to push
+  it directly turned into a long, repeatedly-403'ing side-quest (its connector is an
+  OAuth-style "Authorized GitHub App," not a fine-grained installed one, so scopes can't
+  be hand-edited from GitHub's settings UI the way Claude/Render/Railway's can — it needs
+  the requesting app itself to ask for the broader scope on reconnect). At the owner's
+  request ("last resort"), built and shipped it directly instead: rendered the mark as
+  SVG, screenshotted at each required size via a headless Chromium instance (Playwright
+  + this environment's pre-installed browser), no external design tool needed.
+- **Verification**: `node build-core.js` round-trip OK. Loading-screen mark smoke-tested
+  in a real headless browser — zero console/page errors, screenshot confirmed the icon
+  renders correctly. Visual review of `icon-512.png`, `icon-maskable-512.png`, and
+  `favicon.png` at actual size before shipping — all read clearly as an "8" including at
+  favicon size. File sizes dropped substantially too (old chocolate photos were
+  27-275KB each; the new flat-color mark is 4-16KB).
+- **Left open / deferred**:
+  1. ChatGPT's own GitHub connector still doesn't have write access — if a future
+     session wants it to push directly, look for a "Reconnect"/re-authenticate option in
+     ChatGPT's own connector settings (not GitHub's side) to trigger a fresh OAuth
+     consent screen requesting the broader scope. Not worth chasing further unless
+     there's a specific reason to want ChatGPT pushing commits itself rather than
+     proposing content for another session to commit.
+  2. Everything else already listed as open in the previous two entries (real
+     end-to-end device check, "Show" feature, server-side assistant, real product
+     catalog, VAPID key live test, the two unfixed ChatGPT-flagged money-safety races)
+     is still open — this entry only touched icon/mark assets.
+
 ## 2026-08-15 — Claude — Fixed a real deposit-polling bug (caught by ChatGPT security review) + removed USDT deposit and bank-transfer withdrawal
 
 - **What changed**:
