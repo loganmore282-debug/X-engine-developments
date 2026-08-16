@@ -17,6 +17,7 @@
   --void:   #f4f7fb;
   --surface:#ffffff;
   --surface-2:#eef2f8;
+  --surface-blue:#eaf1fc;
   --line:   #d7dfec;
   --ink:    #0a1220;
   --ink-dim:#5b6b84;
@@ -122,7 +123,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .field-hint{ font-size:12px; color:var(--ink-dim); margin:-4px 2px 0; }
 
 .card{ background:var(--surface); border-radius:var(--radius-card); padding:18px; }
-.section-title{ font-weight:700; font-size:16px; letter-spacing:-.01em; margin:26px 0 12px; display:flex; align-items:center; justify-content:space-between; }
+.section-title{ font-weight:700; font-size:16px; letter-spacing:-.01em; margin:26px 0 12px; display:flex; align-items:center; justify-content:space-between; color:var(--blue-dim); }
 .section-title .see-all{ font-size:11px; color:var(--blue); text-transform:uppercase; letter-spacing:.04em; }
 
 .pill{ display:inline-flex; align-items:center; gap:5px; font-size:10px; letter-spacing:.03em; padding:4px 9px; border-radius:999px; text-transform:uppercase; white-space:nowrap; }
@@ -184,7 +185,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .ticker-item{ font-size:12.5px; color:var(--ink-dim); white-space:nowrap; }
 .ticker-item .amt{ color:var(--ink); font-weight:700; }
 
-.plan-card{ position:relative; border-radius:var(--radius-card); background:var(--surface); padding:16px; display:flex; align-items:center; gap:14px; margin-bottom:10px; }
+.plan-card{ position:relative; border-radius:var(--radius-card); background:var(--surface); padding:16px; display:flex; align-items:center; gap:14px; margin-bottom:10px; border:1px solid var(--blue-glow); }
 .plan-ring{ width:56px; height:56px; flex-shrink:0; position:relative; }
 .plan-ring svg{ width:100%; height:100%; }
 .plan-ring .pct{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; }
@@ -201,11 +202,11 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .shortcut span{ font-size:10.5px; font-weight:700; }
 
 .mystats{ display:flex; gap:10px; margin-bottom:20px; }
-.mystats .card{ flex:1; padding:14px; }
-.mystats .lab{ font-size:9.5px; text-transform:uppercase; color:var(--ink-dim); letter-spacing:.05em; }
+.mystats .card{ flex:1; padding:14px; background:var(--surface-blue); border:1px solid var(--blue-glow); }
+.mystats .lab{ font-size:9.5px; text-transform:uppercase; color:var(--blue-dim); letter-spacing:.05em; }
 .mystats .val{ font-weight:700; font-size:16px; margin-top:5px; }
 
-.prod-card{ border-radius:var(--radius-card); background:var(--surface); padding:16px; margin-bottom:12px; }
+.prod-card{ border-radius:var(--radius-card); background:var(--surface); padding:16px; margin-bottom:12px; border:1px solid var(--blue-glow); }
 .prod-card .top{ display:flex; gap:12px; align-items:flex-start; }
 .prod-card .sat{ width:56px; height:56px; border-radius:14px; background:var(--surface-2); flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
 .prod-card .sat img{ width:100%; height:100%; object-fit:cover; }
@@ -251,7 +252,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .giftcode-row .btn{ width:auto; flex-shrink:0; padding:13px 20px; }
 
 .matrix{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:9px; margin-bottom:22px; }
-.mtile{ background:var(--surface); border-radius:14px; padding:12px 4px; display:flex; flex-direction:column; align-items:center; gap:7px; text-align:center; }
+.mtile{ background:var(--surface-blue); border:1px solid var(--blue-glow); border-radius:14px; padding:12px 4px; display:flex; flex-direction:column; align-items:center; gap:7px; text-align:center; }
 .mtile svg{ width:22px; height:22px; stroke:var(--blue); }
 .mtile span{ font-size:9.5px; font-weight:700; }
 

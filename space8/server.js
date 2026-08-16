@@ -1062,11 +1062,13 @@ async function settleAllForUser(userId) {
 // once, tracked via commissionPaidLevels on the investment doc itself, and
 // the whole function is safe to call again for the SAME purchase — by the
 // reconciler after a restart, by a retry, by anything — since already-paid
-// levels are skipped and never re-credited. This is what makes crediting
-// "faultless on restart": if the process dies mid-loop, whatever was
-// credited before that point stays correctly marked done, and the
-// reconciler's periodic re-invocation picks up exactly where it left off
-// rather than either re-paying or permanently losing the remaining levels.
+// levels are skipped and never re-credited. Each level is claimed
+// (commissionPaidLevels updated) BEFORE its wallet credit, not after, so a
+// crash mid-loop can only ever leave a level "claimed but not yet credited"
+// (a single lost payment, safe and visible to fix by hand) rather than
+// "credited but not marked" -- which used to let the reconciler's next pass
+// see the level as still unpaid and credit it again, repeating on every
+// restart until caught.
 async function creditReferralCommission(investmentId, buyerId, amount) {
   await withLock('comm:' + investmentId, async () => {
     const invRef = db.collection('investments').doc(investmentId);
@@ -1119,6 +1121,16 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
       if (pct <= 0) continue;
       const reward = Math.round(amount * pct / 100);
       if (reward <= 0) continue;
+      // CLAIM-BEFORE-CREDIT (same pattern as /redeem): mark this level paid
+      // BEFORE touching the wallet, not after. The old order (credit, THEN
+      // mark) meant a crash landing between those two writes left a real
+      // credit on the books with no marker recorded -- so the reconciler's
+      // next pass would see the level as still unpaid and credit it AGAIN,
+      // repeating indefinitely on every restart. Claiming first inverts the
+      // failure direction: a crash here can only ever produce "marked paid
+      // but the credit write never landed" (a single lost payment, visible
+      // and fixable by hand), never a silently repeating double-pay.
+      await invRef.update({ commissionPaidLevels: FieldValue.arrayUnion(i) });
       await db.collection('users').doc(id).update({
         walletBalance: FieldValue.increment(reward), teamCommission: FieldValue.increment(reward)
       });
@@ -1126,10 +1138,6 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
         userId: id, type: 'commission', description: `Level ${i + 1} reward`,
         amount: reward, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
       });
-      // Mark THIS level paid immediately after its own credit succeeds — if
-      // anything later in the loop throws, everything credited so far stays
-      // correctly marked done and will never be paid twice on retry.
-      await invRef.update({ commissionPaidLevels: FieldValue.arrayUnion(i) });
     }
   });
 }
@@ -1451,8 +1459,22 @@ async function completeRegistrationCore(userId, referralCode) {
     const sett = await getSettings();
     const WELCOME = Number(sett.welcomeBonus) || 0;
     const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
+    if (referrerId) update.referredBy = referrerId;
+    // The user's own doc (registrationDone + the actual wallet credit) is
+    // written FIRST, in one atomic single-document update. If the process
+    // dies right after this, the user is already fully and correctly paid
+    // and marked done — a retried call hits the registrationDone guard above
+    // and stops immediately rather than re-running anything below. This is
+    // also why the referrer/L2/L3 team-count increments moved to AFTER this
+    // line (they used to run before it): those are separate per-document
+    // writes with no cross-document transaction on M0, so if they ran first
+    // and the process crashed before registrationDone got set, a retry would
+    // re-run and increment every one of them a second time -- inflating team
+    // size on every crash-retry. Running them after means a crash here can
+    // only under-count (registrationDone already true, so a retry is a safe
+    // no-op that never re-runs this block at all), never over-count.
+    await userRef.update(update);
     if (referrerId) {
-      update.referredBy = referrerId;
       await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
       const l1Snap = await db.collection('users').doc(referrerId).get();
       const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
@@ -1463,15 +1485,6 @@ async function completeRegistrationCore(userId, referralCode) {
         if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
       }
     }
-    // The user's own doc (registrationDone + the actual wallet credit) is
-    // written FIRST, in one update. If the process dies right after this,
-    // the user is already fully and correctly paid and marked done — a
-    // retried call hits the registrationDone guard above and stops
-    // immediately rather than re-running this block. The only possible
-    // casualty of an interruption is the ledger row below never getting
-    // written (cosmetic, not money) — never the reverse (a ledger row with
-    // no matching credit, or a double credit from a retry).
-    await userRef.update(update);
     if (WELCOME > 0) {
       const { date, time } = nowStr();
       await db.collection('transactions').add({
@@ -1545,6 +1558,8 @@ app.post('/assistant/chat', async (req, res) => {
     const [sett, products, snap] = await Promise.all([
       getSettings(), getProducts(), db.collection('users').doc(uid).get()
     ]);
+    if (snap.exists && snap.data().status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const u = snap.exists ? snap.data() : {};
 
     const reply = answerAssistant({ message, history, settings: sett, products, account: u });
@@ -1579,8 +1594,15 @@ app.post('/checkin', async (req, res) => {
       // self-heals it. Bounded to this one user's own check-ins -- at most
       // one real row per calendar day since the account existed -- so this
       // is one small extra indexed query, not a real scan.
+      // orderBy + limit, not just limit: without an explicit sort, a bare
+      // .limit(500) returns whatever order the DB feels like (in practice,
+      // natural/insertion order -- the OLDEST 500 check-ins, not the most
+      // recent ones) for any account with more than 500 lifetime check-ins.
+      // That silently fed the streak calculation ancient history instead of
+      // recent activity, wrongly resetting a long-lived daily user's streak.
+      // Sorting desc first means the 500 fetched are always the most recent.
       const ledgerSnap = await db.collection('transactions')
-        .where('userId', '==', uid).where('type', '==', 'checkin').limit(500).get();
+        .where('userId', '==', uid).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
       const dayKeys = new Set();
       ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
       const real = computeCheckinStreak(dayKeys);
@@ -2195,10 +2217,25 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
     const updateFields = { status: sandbox ? 'processed' : 'processing', processedBy, processedAt: FieldValue.serverTimestamp() };
     if (isBank) updateFields.marzBankReference = _marzExtractBankTransfer(mpData).reference || sendingMarker;
     else { updateFields.marzReference = sendingMarker; updateFields.marzTxUuid = mpData.data?.transaction?.uuid || null; }
-    await Promise.all([
-      witRef.update(updateFields),
-      db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) })
-    ]);
+    // Money has already left via MarzPay above -- these two writes used to
+    // fire concurrently (Promise.all), so a write that failed on ONLY one of
+    // them (a transient M0 hiccup hits one call but not the other, since
+    // they're not one atomic transaction) could leave the withdrawal record
+    // and the user's totalWithdrawn disagreeing with no way to tell which one
+    // actually landed. Sequenced instead: the withdrawal doc (the real
+    // source of truth for "was this sent") is written FIRST and awaited on
+    // its own, so if IT fails the whole request correctly surfaces as a
+    // 500 with nothing silently desynced. totalWithdrawn is a derived
+    // per-user statistic, not itself money -- if it alone fails to write
+    // after the withdrawal is already correctly marked sent, that's caught
+    // here and logged loudly (with everything needed to backfill it by
+    // hand) rather than throwing past a payout that genuinely succeeded.
+    await witRef.update(updateFields);
+    try {
+      await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
+    } catch (twErr) {
+      console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent -- user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
+    }
     try {
       const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
       if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: sandbox ? 'success' : 'processing' });
@@ -3578,8 +3615,9 @@ app.post('/admin/user/reconcile-checkin', async (req, res) => {
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const before = { checkinStreak: userSnap.data().checkinStreak || 0, lastCheckin: userSnap.data().lastCheckin || null };
 
+    // See /checkin for why orderBy(desc) is required here, not just limit.
     const ledgerSnap = await db.collection('transactions')
-      .where('userId', '==', userId).where('type', '==', 'checkin').limit(500).get();
+      .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
     const dayKeys = new Set();
     ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
     const real = computeCheckinStreak(dayKeys);

@@ -14,6 +14,112 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Codex review verified and acted on: 4 real money-safety bugs fixed, design finding partially applied
+
+- **What changed**: the owner relayed a Codex review of this branch listing 8 numbered
+  findings plus a design finding. Every finding was checked against the real code
+  before anything was touched — two turned out not to apply to this codebase, the
+  rest were real and got fixed. Full breakdown:
+  - **[Confirmed real, FIXED] `creditReferralCommission` claim-before-credit.**
+    Matches a finding ChatGPT already flagged earlier this session (see the
+    "ChatGPT security-review findings" entry, now resolved). The function credited
+    the referrer's wallet THEN marked the level paid — a crash in that window left a
+    real credit with no marker, so the reconciler's next pass saw the level as still
+    unpaid and credited it again, repeating on every restart. Reordered to claim
+    (`commissionPaidLevels` `arrayUnion`) BEFORE the wallet credit, same pattern
+    `/redeem` already used. A crash now can only leave a level claimed-but-uncredited
+    (one lost payment, fixable by hand), never a silently repeating double-pay.
+  - **[Confirmed real, FIXED] `processWithdrawalCore` sequential writes.** Also a
+    repeat of an earlier ChatGPT finding. The withdrawal-status update and the
+    `totalWithdrawn` increment fired inside one `Promise.all` — two separate
+    documents, no cross-doc transaction on M0, so a failure in only one could leave
+    them disagreeing with no way to tell which landed. Changed to sequential: the
+    withdrawal doc (real source of truth for "was this sent") writes first and is
+    awaited on its own; `totalWithdrawn` is wrapped in try/catch so a failure there
+    (money already went out via MarzPay by this point) is logged loudly instead of
+    throwing past a payout that genuinely succeeded.
+  - **[NEW, confirmed real, FIXED] `completeRegistrationCore` team-count inflation
+    on retry.** Codex's own find, not previously flagged. The referrer's L1/L2/L3
+    team-count increments ran BEFORE the new user's `registrationDone` was set — a
+    crash in that window meant a retry (which only checks `registrationDone`) would
+    re-run and increment every one of those counts again. Fixed by moving the
+    increments to after `registrationDone` is set, so a retry past that point is
+    guaranteed a no-op (the existing guard already stops it) — a crash can now only
+    under-count, never inflate.
+  - **[NEW, confirmed real, FIXED] check-in streak read the wrong 500 records, not
+    just a capped 500.** Codex flagged this as "streak accuracy caps at 500 lifetime
+    check-ins"; the actual mechanism was worse on inspection: the query had NO
+    `orderBy` before `.limit(500)`, and this project runs on MongoDB (not real
+    Firestore) — an unsorted Mongo query returns natural/insertion order, i.e. the
+    OLDEST 500 records for any account with more than 500 lifetime check-ins,
+    completely missing real recent activity. Fixed both occurrences (`/checkin` and
+    `/admin/user/reconcile-checkin`) with `.orderBy('createdAt','desc')` before the
+    limit.
+  - **[NEW, confirmed real, FIXED] `/assistant/chat` had no ban check.** Every other
+    authenticated endpoint (`/checkin`, `/invest/create`, `/account`, etc.) rejects a
+    banned account; the assistant endpoint didn't. Added the same 403/BANNED check.
+  - **[Checked, does NOT apply] `/team/members` "Firestore `'in'` limit."** Codex's
+    framing assumes real Firestore's low `'in'`-clause item cap. This project runs on
+    MongoDB through a Firestore-shaped compat layer (`db.js`) — confirmed by reading
+    `db.js`'s `where(field,'in',value)` implementation, which maps straight to
+    Mongo's `$in` with no artificial cap of its own, and Mongo's real `$in` has no
+    comparable small limit (practically bound only by the 16MB BSON query-size
+    ceiling — tens of thousands of ids away at this app's realistic scale). Left the
+    query as-is; chunking it would have been unnecessary complexity solving a
+    problem this stack doesn't have.
+  - **[Checked, deliberate, confirmed intentional] first-purchase-only referral
+    commission.** Codex asked whether this matches intended rules. Yes — confirmed
+    against the project's own prior design decisions (see `CLAUDE.md`'s new
+    "Referral commission is deliberately first-purchase-only" note, added this entry
+    so it stops getting re-flagged by future reviews). Not a bug.
+  - **["Show" feature / "assistant isn't a real AI model"]** Both already-known,
+    already-documented gaps (see `CLAUDE.md` known gaps #2 and the assistant
+    section) — nothing new to act on here, not re-litigated.
+  - **[Design finding, partially applied — one part explicitly NOT done, on purpose]**
+    Codex said the app "reads as white with blue accents, not blue-dominant" and
+    recommended reverting `--blue` to `#2e6bff` plus several structural changes. The
+    revert-the-hex part directly contradicts the owner's own explicit instruction
+    *earlier this same session* ("why is blue not dominant... use another elegant
+    good blue") that is WHY `--blue` became `#0f52ba` in the first place — did not
+    revert it, said so plainly rather than silently complying. The underlying
+    structural critique was valid and consistent with the owner's own repeated
+    feedback this session, so applied it using the CURRENT blue family instead: new
+    `--surface-blue: #eaf1fc` token; `.section-title` text recolored to
+    `var(--blue-dim)` ("blue section headers"); `.mystats .card` (My Products/
+    Cumulative Earnings stat tiles) and `.mtile` (Account matrix) get
+    `--surface-blue` background + `--blue-glow` border ("pale blue-tinted surfaces
+    for important cards" + "blue primary statistics"); `.prod-card` and `.plan-card`
+    get a subtle `--blue-glow` border ("major cards get a subtle blue border")
+    without tinting their backgrounds, keeping large content areas light and
+    readable per the review's own caveat. `--blue-dim`/`--blue-mute`/`--blue-glow`
+    were already derived from the same `#0f52ba` family from the earlier session's
+    color-swap entry — nothing to change there.
+  - New `test-codex-review-fixes.js` proves all 5 fixed findings end-to-end against
+    the real server.js (real fault-injection for the withdrawal case via
+    `global.__mockDbFailUpdateOnce`; deterministic pre-seeded state for the
+    commission/registration retry-safety cases, since the real periodic reconciler
+    turned out to be non-functional under this test mock — its query uses a `'>'`
+    comparison the mock's `where()` only supports `'=='`/`'in'` for, so
+    `reconcileCommissions()` silently no-ops every tick under test; used
+    `/admin/user/attach-referrer` as an equally-real but mock-compatible trigger
+    path instead).
+- **Why**: the owner explicitly asked for verification and action on a relayed Codex
+  review — this entry is that verification, item by item, plus the resulting fixes.
+- **Verification**: `node -c server.js` clean, `node build-core.js` round-trip OK.
+  Full `test-*.js` suite (57 files now) all green except nothing — even the
+  previously-flaky date-dependent checkin-streak tests passed this run (the flake
+  really is just the system clock moving, not a regression, confirmed again). New
+  `test-codex-review-fixes.js`: 14/14. Playwright screenshots of Home/Products/
+  Account confirm the design changes render as intended — visibly more blue
+  (section headers, stat-tile backgrounds, card linings) while staying light,
+  readable, and not "solid blue everywhere."
+- **Left open**: real end-to-end device/browser verification remains the standing
+  open item. The design change is a partial response to the review — further blue-
+  dominance requests should keep building on the current `#0f52ba` family, not
+  reintroduce `#2e6bff`, unless the owner explicitly says otherwise.
+
+---
+
 ## 2026-08-16 — Claude — Gift Code redemption UI built, balance card gets a blue lining
 
 - **What changed**:

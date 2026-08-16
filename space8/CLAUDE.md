@@ -157,6 +157,15 @@ real catalog by default instead of leftover ChocoMCC placeholder data.
 Settings in the admin panel before assuming these are what's actually configured — the
 admin panel always wins if the owner has touched it.
 
+**Referral commission is deliberately first-purchase-only, confirmed intentional —
+don't re-flag this as a bug.** L1/L2/L3 commission pays exactly once, off a member's
+first-ever investment (`isFirstInvestment` on the investment doc), never on later
+purchases/recharges by that same member. A second review (Codex, 2026-08-16) asked
+whether this matches intended rules — yes, this was a deliberate design decision made
+earlier in the project, not an oversight. Later purchases still count toward Task
+Center milestones (active-referral-count, L1-deposit-total), they just never re-trigger
+L1/L2/L3 commission.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's
@@ -239,11 +248,29 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    was never actually required for the numbers to be correct, just for the owner to be
    able to edit them without a code change.
 5. **VAPID key** — updated in code, not test-fired against a real device yet.
-6. **ChatGPT security-review findings not yet acted on** — referral-commission
-   double-pay-on-crash race and a withdrawal-bookkeeping `Promise.all` race, both
-   confirmed real. See `AGENT_LOG.md`'s "Fixed a real deposit-polling bug..." entry for
-   exact locations and severity — needs the owner's go-ahead before touching this
-   money-handling code.
+6. **ChatGPT + Codex security-review findings — DONE as of 2026-08-16.** The
+   referral-commission double-pay-on-crash race and the withdrawal-bookkeeping
+   `Promise.all` race (originally flagged by ChatGPT, independently re-flagged by
+   Codex, both verified real by re-reading the actual code before touching anything)
+   are fixed — `creditReferralCommission` now claims each level before crediting it
+   (same pattern `/redeem` already used), `processWithdrawalCore` writes sequentially
+   with the `totalWithdrawn` stat wrapped so a failure there can't throw past a
+   payout that already succeeded. Codex also caught two NEW real bugs in the same
+   pass: `completeRegistrationCore` could inflate a referrer's team counts on a
+   crash-retry (fixed by moving those increments to after `registrationDone` is set),
+   and the check-in streak's ledger read used `.limit(500)` with no `orderBy`, which
+   on Mongo returns oldest-first natural order — silently corrupting the streak for
+   any account with >500 lifetime check-ins (fixed with `orderBy('createdAt','desc')`).
+   `/assistant/chat` was also missing the ban check every other endpoint has — added.
+   All verified by a new `test-codex-review-fixes.js` (14/14) plus the full existing
+   suite. Two other Codex findings were checked and do NOT apply here: the
+   "`/team/members` Firestore `'in'`-limit" claim doesn't hold since this project runs
+   on MongoDB (via a Firestore-shaped compat layer) whose `$in` has no such small cap;
+   and "revert `--blue` to `#2e6bff`" directly contradicts the owner's own explicit
+   instruction earlier the same session to move away from that exact color — the
+   *design* critique behind it (cards read as white-with-blue-accents, not genuinely
+   blue-dominant) was valid and acted on using the current blue family instead (see
+   `AGENT_LOG.md`).
 
 ## Secrets — NEVER commit
 
