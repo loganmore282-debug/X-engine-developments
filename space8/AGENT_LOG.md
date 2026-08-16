@@ -14,6 +14,102 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Assistant: 1,024 verified training utterances, conversational layer, and a corpus test that found ~270 silent routing bugs
+
+Owner: *"now bump the ai assistant to 1000, so should interact with a user, explain, etc."*
+
+**On the number, stated plainly:** 1,000 literal intent objects would have made the
+assistant worse. Collisions between intents grow with the SQUARE of the count and they
+are SILENT — a colliding intent doesn't throw, it quietly answers the wrong question
+(four were found by hand at 100 intents, one of which answered "how do I delete my
+account" with withdrawal-account instructions). What was built instead: a large but
+maintainable intent set, a real conversational layer, and **1,024 training utterances
+every one of which is mechanically asserted to route to the intent that owns it.**
+
+- **`assistant-corpus.js` (NEW) — 1,024 member phrasings mapped to owning intents.**
+  This is training data and regression suite in one. Deliberately includes
+  misspellings, missing punctuation, lowercase, terse noun-phrases and Ugandan-English
+  phrasings, because that is what members actually type.
+- **`test-assistant-corpus.js` (NEW) — the guard that makes growth safe.** Asserts
+  every utterance routes correctly, every intent replies without throwing, every
+  intent has training data, and the engine survives empty/5000-char/injection-shaped
+  input. **2,219 assertions, all green.** It immediately earned its keep: the first
+  run flagged **99 misroutes**, and the corpus expansion flagged **274 more** — ~270
+  real bugs that no amount of hand-checking would have found.
+- **Three scoring-model bugs found and fixed via that test** (all pre-existing, all
+  silent):
+  1. *Keywords outranked phrases.* A broad intent stacking 3-4 common keywords beat a
+     narrow intent that matched the member's actual sentence. Keyword contribution is
+     now capped (`KW_CAP` 5) below the value of one phrase match (`PHRASE_HIT` 6), so
+     a matched phrase always outranks loose keyword overlap.
+  2. *Phrase matches were additive.* An intent's phrase list is a set of ALTERNATIVE
+     wordings, so matching two isn't twice the evidence — but it scored that way, and
+     `payout_account` hit 12 on "add a second payout account" via two of its own
+     overlapping regexes, beating the dedicated intent. Now boolean per intent.
+  3. *Priority only broke exact ties, so it almost never applied.* Specificity is now
+     a real score term — but added ONLY when the intent's own phrase fired, never on
+     keyword overlap. (Adding it to keyword matches was tried first and was worse: the
+     high-priority problem-report intents hijacked ordinary questions, e.g. plain "how
+     to deposit money" started answering as `deposit_pending`.)
+- **Conversational layer — this is the "interact / explain" part:**
+  - **Follow-ups.** A bare "why?", "explain more", "tell me more" carries no keywords
+    and could never match anything. These now resolve against the topic already under
+    discussion and serve a **`DEEP` explanation** — 25 longer, genuinely different
+    write-ups (deposit, withdraw, invest, referral, fees, check-in, PIN, maturity,
+    balance, cumulative earnings, security, pending-money problems …). Anchored `^…$`
+    on purpose so "why is there a fee" still reaches `why_fee` rather than being
+    swallowed as a bare follow-up.
+  - **Product × aspect.** Any live product crossed with price / daily / total / cycle /
+    worth-it — 75 specific numeric answers off the 15-product catalogue, with no rule
+    per product.
+  - **Pronoun carry-over.** "what does **it** pay daily" after asking about Hubble now
+    resolves to Hubble. Requires all three of no product named, a pronoun, and a real
+    aspect word, so a stray "it" can't hijack anything — verified that "does it really
+    pay" still correctly reaches `testimonials`.
+  - **Amount math.** A figure in the message drives real arithmetic against the live
+    catalogue (exact-price match, largest affordable plan + remainder, below-minimum).
+  - **Smarter fallback** that names the closest partial matches instead of repeating
+    one generic capability list.
+- **Intents 100 → 157**, covering deposits/withdrawals in depth, plan mechanics,
+  referrals/team, Task Center, account security (hacked account, forgotten PIN, weak-PIN
+  rule, sessions, devices), trust/policy (pyramid-scheme, regulation, what-if-you-close),
+  technical support (blank screen, stale cache, slow app), and conversational filler
+  (thanks, apology, frustration, "are you sure", "talk to a human").
+- **One UX regression caught by the pre-existing `test-assistant-engine.js`:** the new
+  price aspect answered "how much is Sputnik 1" with the bare price, dropping the
+  return figures. Fixed in the code rather than the test — price now carries the return
+  and daily figures, since bare price just forces an immediate follow-up.
+- **Verification:** `node -c` on every touched file; `test-assistant-corpus.js`
+  2,219/2,219; the full `test-*.js` backend suite green; a scripted multi-turn
+  conversation exercising greeting → topic → follow-up → product → pronoun → amount
+  math → close.
+- **Final surface:** 157 intents · 1,024 verified utterances · 75 product×aspect
+  answers · 25 deep explanations · 257 distinct reachable answers.
+- Not done (deliberate): the assistant remains rule-based and self-hosted, no external
+  LLM, no per-message cost — unchanged constraint from the owner.
+
+---
+
+## 2026-08-16 — Claude — Fixed check-in test fixtures using the wrong calendar (pre-existing nightly flake)
+
+Found while running the full suite at 00:17 EAT during the assistant work — three
+check-in tests were failing, and stashing the assistant changes proved they failed on
+the baseline too, so not a regression from that work.
+
+- `eatNoon(daysAgo)` in `test-checkin-self-heal.js`, `test-checkin-streak-recount.js`
+  and `test-reconcile-checkin.js` anchored to the **UTC** calendar day, but the server
+  keys check-in days off `eatNow()` (**EAT**, UTC+3). Between 00:00 and 03:00 EAT the
+  two calendars disagree, so every fixture landed a day earlier than intended and the
+  streak-continuation assertions failed.
+- Net effect: the check-in suite went red every night between 21:00 and 24:00 UTC and
+  green again afterwards — a real CI flake that would have wasted a future session's
+  time chasing a non-bug.
+- **The server logic was correct**; only the fixtures were wrong. Fixed by building the
+  fixture timestamps on the EAT calendar and converting back to a UTC instant.
+- Committed separately from the assistant work since it is unrelated.
+
+---
+
 ## 2026-08-16 — Claude — Accent settled on DEEP VIOLET (#6d28d9) — green abandoned after three rejected attempts
 
 Owner, after rejecting three greens in a row on brightness: *"it seems that we might be

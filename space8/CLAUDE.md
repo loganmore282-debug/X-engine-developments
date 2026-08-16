@@ -325,8 +325,8 @@ tab.
   ("I don't have a Claude API key, I am not willing to buy it"). The actual logic lives
   in `assistant-engine.js`: stems/tokenizes the message (+ typo normalization and
   conservative one-edit fuzzy keyword matching, added by Codex, 2026-08-16), scores it
-  against 100 weighted intents (grown from an original ~16, via 43 then 50, now 100 —
-  2026-08-16), fuzzy-matches specific
+  against **157 weighted intents** (grown from an original ~16, via 43 → 50 → 100 → 157),
+  fuzzy-matches specific
   product names from the live catalog, extracts a money amount from the message to
   compute real withdrawal-fee math on the spot, and blends in the prior turn's topic
   for short ambiguous follow-ups. Every reply is grounded in a fresh
@@ -334,6 +334,29 @@ tab.
   manually — so it never goes stale as the admin changes fees/rates/products. Refuses to
   reveal a PIN/password if asked. Rate-limited (`assistLimiter`, 30/min/user) to bound DB-
   read spam, not API spend. No env var needed, nothing left to configure.
+  **Never add an intent without adding its training utterances to
+  `assistant-corpus.js`** (added 2026-08-16, 1,024 utterances). `test-assistant-corpus.js`
+  asserts every one routes to the intent that owns it — that guard exists because
+  intent collisions grow with the SQUARE of the intent count and are SILENT (a
+  colliding intent doesn't throw, it quietly answers the wrong question). It found
+  ~270 real misroutes across the 100→157 expansion, including three scoring-model
+  bugs that had been live for every prior round: keywords outranking phrase matches,
+  an intent's overlapping phrases stacking additively and inflating its own score,
+  and `priority` only breaking exact ties so it almost never applied. The scoring
+  rules now are: keyword total capped (`KW_CAP` 5) below one phrase hit
+  (`PHRASE_HIT` 6); phrase matching boolean per intent, not additive; and
+  `priority` added as a real score term **only when that intent's own phrase fired**
+  — adding it on keyword overlap instead was tried and made the high-priority
+  problem-report intents hijack ordinary questions.
+  **Conversational layer** (same date): bare follow-ups ("why?", "explain more")
+  resolve against the current topic and serve a longer `DEEP` explanation (25 of
+  them, keyed by intent id, kept out of the intent objects so the list stays
+  scannable); `PRODUCT_ASPECTS` crosses any live product with price/daily/total/
+  cycle/worth-it (75 answers off the 15-product catalogue, no rule per product);
+  pronoun carry-over resolves "what does **it** pay daily" against the last product
+  discussed (narrow on purpose — needs no product named + a pronoun + a real aspect
+  word, so a stray "it" can't hijack); and a money figure in the message drives real
+  arithmetic against the live catalogue.
   **On open, 2026-08-16** (owner: "when one taps assistant... shows him telegram group
   buttons to join or ask more from customer care, so 2 buttons"): shows a "Telegram
   Group" button (`settings.telegramGroup`, hidden if unset) and a "Customer Care"
