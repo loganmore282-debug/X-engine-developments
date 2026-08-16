@@ -14,6 +14,81 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Server-issued account ID, Account screen identity redesign, personal transaction Records, Telegram wiring
+
+- **What changed**: the owner sent two annotated screenshots plus a long instruction
+  message describing several connected asks together.
+  1. **New `publicId` account number** ("every registered user has a unique global
+     recognized, server given id in format of ID:000000"). Added `generateUniquePublicId()`
+     to `server.js` (random 6-digit, generate-check-retry against every existing user,
+     same shape as `generateUniqueReferralCode()` — not a shared counter). Assigned at
+     registration completion alongside the referral code; self-heals lazily for every
+     already-registered account the next time `GET /account` reads their doc (same
+     pattern the checkin-streak self-heal already uses) — no bulk migration needed or
+     written.
+  2. **Account screen identity redesign** ("put the logo for space8 on profile,
+     phone_number, and user id... the user details will spread halfly in the banner").
+     The old blank `rocherstack` banner + separate skinny profile row became one
+     `.identity-banner`: Space8 mark on the left half, phone + `ID:000000` on the
+     right half (new `identityBannerHtml()`), still respects an admin-uploaded
+     `rocherstack` image as the background (dark overlay added for text contrast) when
+     one is set. Referral code moved out into its own `.referral-card` — "Your
+     Referral Code" label, the code shown large, and an explainer line
+     ("server-issued and globally unique") replacing the old buried "Referral: —" text.
+  3. **Telegram community card** on Account, just below Gift Code ("recreate it to
+     accommodate space where telegram group and channel buttons will be") — wired to
+     `settings.telegramGroup`/`telegramChannel`, both of which already existed
+     server-side (`/public/settings`) but were never surfaced anywhere in the
+     frontend before this.
+  4. **Personal transaction Records** on Home ("that circled svg of records... should
+     show all transactions, deposits, withdraws, referrals, check ins, all
+     transactions, server side... accurate and well timed"). The doc-icon button in
+     the ticker bar used to open `openActivitySheet` (the SITE-WIDE feed of other
+     members' deposits/withdrawals) — repointed to a new `openRecordsSheet()` showing
+     the member's OWN full history instead, off `GET /transactions` (already existed
+     server-side, auth-scoped to the caller, real server timestamps, live product-name
+     resolution — never called from the frontend before this). Covers every
+     transaction type actually written anywhere in `server.js`
+     (deposit/withdraw/investment/cashback/checkin/commission/team_reward/
+     admin_credit/admin_debit/promocode — grepped every `transactions.add/.set` call
+     site to build the label map). `openActivitySheet` removed as dead code once
+     nothing pointed to it.
+  5. **Ticker bell made tappable** ("I want that notification bell on the activity
+     checker to be tappable... I am not saying the notification bell upper right
+     should go away, it should also remain"). The ticker bar's left-side bell icon had
+     zero click handler at all before this — now opens Notifications, same as the
+     topbar bell (both remain). Also fixed a real pre-existing bug found while
+     touching this code: both button handlers were wired INSIDE
+     `if (!feed.length) return` in `renderTicker()` — on a fresh install with no
+     site-wide activity yet, neither button ever got a click handler. Moved the
+     wiring out so it's unconditional.
+  6. **Assistant panel shows 2 buttons on open** ("shows him telegram group buttons to
+     join or ask more from customer care, so 2 buttons, group and customer care").
+     "Telegram Group" (hidden if `telegramGroup` unset) and "Customer Care" (always
+     shown — closes the assistant panel via `hideAssistant()`, a pure DOM close, then
+     opens the existing Support info sheet rather than picking one contact channel
+     arbitrarily, since that sheet already lists Telegram + WhatsApp + hours
+     together). Closing first matters: `.assist-panel` is `z-index:150`, `.sheet-bg`
+     is `z-index:100` — opening a sheet while the assistant is still showing would
+     render it invisibly behind the panel.
+- **Why**: owner's own words above, sent as one combined message with two annotated
+  screenshots.
+- **Verification**: full 63-file `test-*.js` suite passes. New
+  `test-public-id.js` (25 checks) proves the 6-digit shape, global uniqueness over a
+  real 15-account batch, the self-heal path (a simulated pre-existing account with no
+  `publicId` at all gets one on first read and keeps the SAME one on every later
+  read), and that an incomplete registration never gets one prematurely.
+  `node build-core.js` round-trip OK; `user/sw.js` cache bumped `v210` → `v211`.
+  Playwright end-to-end against the built artifact (mocked account/settings/
+  transactions data): identity banner renders the real phone + `ID:042317` +
+  referral code; Telegram Group/Channel buttons render and are labeled correctly;
+  Records sheet opens with all 4 transaction types present, correct description,
+  correct timestamp, correct sign/color (+blue for credits, −red for the withdrawal);
+  ticker bell button opens the real Notifications sheet; assistant panel shows both
+  new buttons, and tapping Customer Care correctly closes the assistant and opens the
+  Support sheet (not stacked invisibly behind it).
+- **Anything left open**: none for this piece.
+
 ## 2026-08-16 — Claude — 4 real bugs from a single owner bug-report message: false "suspended" toast, broken registration, blocked image uploads, admin banner residue
 
 - **What changed**: the owner listed 5 symptoms in one message. Investigated each

@@ -258,16 +258,38 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .milestone-card .claim{ font-size:10.5px; font-weight:700; color:var(--blue); border:1px solid var(--blue); border-radius:999px; padding:6px 12px; flex-shrink:0; }
 
 /* ---------- account ---------- */
-.profile-card{ display:flex; align-items:center; gap:14px; margin-bottom:20px; }
-.profile-card .av{ width:58px; height:58px; border-radius:50%; background:var(--blue-glow); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.profile-card .av svg{ width:27px; height:27px; stroke:var(--blue); }
-.profile-card .phone{ font-weight:700; font-size:16px; }
-.profile-card .code{ font-size:11.5px; color:var(--ink-dim); margin-top:3px; }
+/* The member's own identity spread across the (admin-customizable)
+   'rocherstack' banner -- Space8 mark on one half, phone + the
+   server-issued account ID on the other. A plain blue gradient by
+   default (not the generic satellite fallback-icon): more likely
+   default state than a set banner, and reads better behind white text. */
+.identity-banner{
+  position:relative; border-radius:var(--radius-card); min-height:104px; padding:20px;
+  display:flex; align-items:center; gap:14px; overflow:hidden; margin-bottom:16px;
+  background:linear-gradient(135deg,var(--blue),var(--blue-dim)); background-size:cover; background-position:center;
+}
+.identity-banner.has-img::before{ content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(10,18,32,.6),rgba(10,18,32,.28)); }
+.identity-mark{ position:relative; flex:1 1 50%; display:flex; align-items:center; justify-content:center; }
+.identity-mark svg{ width:56px; height:44px; color:#fff; opacity:.92; }
+.identity-info{ position:relative; flex:1 1 50%; min-width:0; color:#fff; }
+.identity-phone{ font-weight:700; font-size:16px; }
+.identity-id{ font-size:12px; opacity:.85; margin-top:5px; letter-spacing:.04em; }
+
+.referral-card{ margin-bottom:20px; }
+.referral-label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-dim); }
+.referral-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:9px; }
+.referral-code{ font-size:22px; font-weight:800; letter-spacing:.06em; color:var(--blue); word-break:break-all; }
+.referral-hint{ font-size:11.5px; color:var(--ink-dim); margin-top:9px; line-height:1.45; }
 
 .giftcode-card{ margin-bottom:20px; }
 .giftcode-row{ display:flex; align-items:center; gap:10px; }
 .giftcode-row .field{ flex:1; }
 .giftcode-row .btn{ width:auto; flex-shrink:0; padding:13px 20px; }
+
+.telegram-card{ margin-bottom:20px; }
+.telegram-row{ display:flex; gap:10px; margin-top:9px; }
+.telegram-row .btn{ flex:1; gap:8px; }
+.telegram-row .btn svg{ width:17px; height:17px; }
 
 .matrix{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:9px; margin-bottom:22px; }
 .mtile{ background:var(--surface); border-radius:14px; padding:12px 4px; display:flex; flex-direction:column; align-items:center; gap:7px; text-align:center; }
@@ -297,6 +319,9 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .msg.typing span:nth-child(2){ animation-delay:.15s; }
 .msg.typing span:nth-child(3){ animation-delay:.3s; }
 @keyframes typingDot{ 0%,60%,100%{ opacity:.3; transform:translateY(0); } 30%{ opacity:1; transform:translateY(-3px); } }
+.assist-links{ display:flex; gap:10px; padding:0 16px 12px; }
+.assist-links .btn{ flex:1; font-size:12.5px; padding:11px; gap:6px; }
+.assist-links .btn svg{ width:16px; height:16px; }
 .assist-quick{ display:flex; gap:8px; overflow-x:auto; padding:0 16px 12px; scrollbar-width:none; }
 .assist-quick::-webkit-scrollbar{display:none;}
 .qchip{ flex-shrink:0; font-size:12px; font-weight:600; background:var(--surface); border-radius:999px; padding:8px 13px; color:var(--blue); white-space:nowrap; }
@@ -415,6 +440,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
     <b>Space8 Assistant</b>
   </div>
   <div class="assist-body" id="assistBody"></div>
+  <div class="assist-links" id="assistLinks"></div>
   <div class="assist-quick" id="assistQuick"></div>
   <div class="assist-input">
     <div class="field"><input id="assistInput" type="text" placeholder="Ask about deposits, withdrawals…"></div>

@@ -401,6 +401,21 @@ async function generateUniqueReferralCode() {
   }
   return randCode(8);
 }
+// Every member's permanent, server-issued, globally-unique account number --
+// shown on the Account screen as "ID:000000". Same generate-check-retry
+// shape as generateUniqueReferralCode() (a random 6-digit number, checked
+// against every existing user's publicId, retried up to 20 times before
+// falling back to a wider space) rather than a shared incrementing counter,
+// which would need its own lock and would be a single point of contention
+// on every single registration -- not worth it for a display-only id.
+async function generateUniquePublicId() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const id = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const exists = await db.collection('users').where('publicId', '==', id).limit(1).get();
+    if (exists.empty) return id;
+  }
+  return String(crypto.randomInt(0, 10000000)).padStart(7, '0');
+}
 // Transaction reference: a type letter, timestamp to the second, four random
 // digits — same shape used across the rest of the product line (Chronova/
 // Voltra) so a reference always reads as "B" + date-time + a short tail.
@@ -1577,10 +1592,10 @@ async function completeRegistrationCore(userId, referralCode) {
       referrerId = refSnap.docs[0].id;
     }
 
-    const myRefCode = await generateUniqueReferralCode();
+    const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(), generateUniquePublicId()]);
     const sett = await getSettings();
     const WELCOME = Number(sett.welcomeBonus) || 0;
-    const update = { registrationDone: true, referralCode: myRefCode, walletBalance: FieldValue.increment(WELCOME) };
+    const update = { registrationDone: true, referralCode: myRefCode, publicId: myPublicId, walletBalance: FieldValue.increment(WELCOME) };
     if (referrerId) update.referredBy = referrerId;
     // The user's own doc (registrationDone + the actual wallet credit) is
     // written FIRST, in one atomic single-document update. If the process
@@ -1614,7 +1629,7 @@ async function completeRegistrationCore(userId, referralCode) {
         amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     }
-    return { code: 200, body: { status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode } };
+    return { code: 200, body: { status: 'success', referrerId, welcomeBonus: WELCOME, referralCode: myRefCode, publicId: myPublicId } };
   });
 }
 app.post('/register', async (req, res) => {
@@ -1662,10 +1677,25 @@ app.get('/account', async (req, res) => {
     // hit one of those specific write endpoints. This is the actual gate.
     if (u.status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    // Self-heal: publicId was introduced after real accounts already existed,
+    // so any already-registered member reading their own account here for
+    // the first time since won't have one yet. Assigned lazily, once, on
+    // read -- exactly the same self-heal shape the check-in streak already
+    // uses -- rather than a one-off migration script that would need to be
+    // remembered and re-run. Never touches a brand-new/incomplete account
+    // (registrationDone false): completeRegistrationCore assigns it
+    // properly, together with the referral code, at the moment that
+    // finishes.
+    let publicId = u.publicId || null;
+    if (!publicId && u.registrationDone) {
+      publicId = await generateUniquePublicId();
+      await db.collection('users').doc(uid).update({ publicId }).catch(e => console.warn('publicId self-heal:', e.message));
+    }
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: u.walletBalance || 0, totalDeposited: u.totalDeposited || 0,
       totalEarned: u.totalEarned || 0, totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
       checkinStreak: u.checkinStreak || 0, lastCheckin: u.lastCheckin || null, referralCode: u.referralCode || null,
+      publicId,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     } });
   } catch (e) {

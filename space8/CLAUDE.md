@@ -192,16 +192,41 @@ tab.
   (`barstack` slot), Deposit/Withdraw/Check-in action buttons, a live activity ticker (off
   the pre-existing `/public/activity-feed` endpoint — this was already built server-side,
   don't rebuild it), active-plan cards with a progress ring, a 10-of-15 products preview
-  scrolling to the full catalog.
+  scrolling to the full catalog. The ticker bar's two side icons, 2026-08-16: the bell
+  (`#tickerBellBtn`, previously purely decorative — no click handler at all) now opens
+  Notifications, same as the topbar bell (both remain, owner explicit: "not saying that
+  the notification bell upper right, should go away no no, it should also remain"); the
+  doc icon (`#tickerRecordsBtn`) used to open the SITE-WIDE activity feed
+  (`openActivitySheet`, other members' deposits/withdrawals) — now opens `openRecordsSheet()`
+  instead, the member's OWN full transaction history off `GET /transactions` (every
+  deposit/withdrawal/investment/cashback/checkin/commission/task-reward/gift-code/admin
+  credit-debit on their account, server-scoped to their own userId, real timestamps).
+  `openActivitySheet` was removed as dead code once nothing pointed to it anymore.
 - **Products** — shortcuts row, admin banner (`darkbar`), My Products + cumulative
   earnings summary, full product cards (name/price/cycle/daily income/total return/
   Invest), invest confirmation sheet.
 - **Team** — admin banner (`giftbox`), Level 1/2/3 tabs at 28%/2%/1% (off
   `/team/members?level=`), Task Center milestones (off `/team/stats` +
   `/team/milestone/claim` — already existed server-side).
-- **Account** — admin banner (`rocherstack`), profile + referral share, 4-tile matrix
-  (payout account / deposits / withdrawals / security PIN), About/Rules/Terms/Privacy/
-  Support sheets sourced from `/public/settings`, logout.
+- **Account**, redesigned 2026-08-16 (owner: "put the logo for space8 on profile,
+  phone_number, and user id... on profile the user details will spread halfly in the
+  banner"). The old blank `rocherstack` banner + separate skinny profile-card row are
+  now ONE `.identity-banner`: the Space8 mark on the left half, phone number + the new
+  server-issued `publicId` ("ID:000000", see Money-safety/Product-ladder-adjacent
+  section below) on the right half — still respects an admin-uploaded `rocherstack`
+  image as the background (with a dark overlay for text contrast) when one is set,
+  falls back to a plain blue gradient (not the generic satellite fallback-icon) when
+  none is. Referral code moved into its own `.referral-card` below it — a labeled
+  "Your Referral Code" section with the code shown large and prominent plus a one-line
+  "server-issued and globally unique" explainer, rather than a small "Referral: —"
+  line buried in the old profile row. A new `.telegram-card` sits just below the Gift
+  Code card ("Join The Community") with Group/Channel buttons wired to
+  `settings.telegramGroup`/`telegramChannel` — both fields already existed
+  server-side (`/public/settings`) but were never surfaced anywhere in the frontend
+  before this. Then: 4-tile matrix (payout account / deposits / withdrawals / security
+  PIN), About/Rules/Terms/Support sheets sourced from `/public/settings` (**no
+  Privacy** — removed earlier this session, "also remove privacy policy 🙄" — don't
+  re-add it without being asked), logout.
 - **"Show"** — still does not exist anywhere, frontend or backend. The owner's original
   description: users upload a screenshot of their withdrawal/payment and are granted a
   reward — a proof-of-payment social feature, genuinely new (upload flow, storage, admin
@@ -211,14 +236,25 @@ tab.
   server endpoint: `POST /assistant/chat` in `server.js`. **Self-hosted, no external
   API, no per-message cost** — the owner explicitly does not want to pay for an LLM key
   ("I don't have a Claude API key, I am not willing to buy it"). The actual logic lives
-  in `assistant-engine.js`: stems/tokenizes the message, scores it against ~16 weighted
-  intents, fuzzy-matches specific product names from the live catalog, extracts a money
-  amount from the message to compute real withdrawal-fee math on the spot, and blends in
-  the prior turn's topic for short ambiguous follow-ups. Every reply is grounded in a
-  fresh `getSettings()`/`getProducts()`/account read, same as the client used to do
+  in `assistant-engine.js`: stems/tokenizes the message (+ typo normalization and
+  conservative one-edit fuzzy keyword matching, added by Codex, 2026-08-16), scores it
+  against 43 weighted intents (grown from an original ~16), fuzzy-matches specific
+  product names from the live catalog, extracts a money amount from the message to
+  compute real withdrawal-fee math on the spot, and blends in the prior turn's topic
+  for short ambiguous follow-ups. Every reply is grounded in a fresh
+  `getSettings()`/`getProducts()`/account read, same as the client used to do
   manually — so it never goes stale as the admin changes fees/rates/products. Refuses to
   reveal a PIN/password if asked. Rate-limited (`assistLimiter`, 30/min/user) to bound DB-
   read spam, not API spend. No env var needed, nothing left to configure.
+  **On open, 2026-08-16** (owner: "when one taps assistant... shows him telegram group
+  buttons to join or ask more from customer care, so 2 buttons"): shows a "Telegram
+  Group" button (`settings.telegramGroup`, hidden if unset) and a "Customer Care"
+  button (always shown — closes the assistant panel first via `hideAssistant()`, a
+  pure DOM close, then opens the existing Support info sheet, rather than picking one
+  contact channel arbitrarily; that sheet already lists Telegram + WhatsApp + hours
+  together). Closing the assistant before opening the sheet matters: `.assist-panel`
+  is `z-index:150`, `.sheet-bg` is `z-index:100` — a sheet opened while the assistant
+  is still showing would render invisibly behind it.
 
 ## Product ladder — real, LIVE as of 2026-08-16 (was a chocolate-derived placeholder)
 
@@ -249,6 +285,21 @@ whether this matches intended rules — yes, this was a deliberate design decisi
 earlier in the project, not an oversight. Later purchases still count toward Task
 Center milestones (active-referral-count, L1-deposit-total), they just never re-trigger
 L1/L2/L3 commission.
+
+## Account identity: publicId ("ID:000000"), added 2026-08-16
+
+Every member has a permanent, server-issued, globally-unique account number shown on
+the Account screen as `ID:000000` (owner: "every registered user has a unique global
+recognized, server given id"). `publicId` on the user doc — a random 6-digit number
+(`generateUniquePublicId()` in `server.js`, same generate-check-retry shape as
+`generateUniqueReferralCode()`, NOT a shared incrementing counter, which would need its
+own lock and be a contention point on every registration). Assigned at the same moment
+as the referral code, inside `completeRegistrationCore`. **Every account that
+registered before this feature existed self-heals it lazily** the next time `GET
+/account` reads their doc (mirrors the existing checkin-streak self-heal pattern) —
+there was no bulk migration and none is needed; don't write one if asked to "backfill"
+existing users, `/account` already does it transparently and idempotently (same id
+persists on every later read, doesn't reassign).
 
 ## Repo / branch / infra
 

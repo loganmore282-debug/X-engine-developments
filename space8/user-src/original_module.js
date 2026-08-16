@@ -88,7 +88,8 @@ var ICONS = {
   assistant: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
   phone: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
-  bell: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  telegram: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 4-9.4 16-2.6-7-7-2.6Z"/><path d="M21 4 8.9 12.9"/></svg>'
 };
 function ico(name){ return ICONS[name] || ''; }
 
@@ -257,6 +258,23 @@ function bannerHtml(key, fallbackIcon){
   if (src) return '<div class="banner"><img src="' + esc(src) + '" alt=""></div>';
   return '<div class="banner"><div class="fallback-ico">' + ico(fallbackIcon||'satellite') + '</div></div>';
 }
+// Account screen only: the same admin-customizable 'rocherstack' banner
+// slot, but with the member's own identity spread across it instead of a
+// plain image/fallback-icon — the Space8 mark on one half, phone + the
+// server-issued account ID on the other. Falls back to a plain blue
+// gradient (not the generic satellite fallback-icon) when no custom image
+// is set, since that's the more likely default state and reads better
+// behind white text than the icon does.
+function identityBannerHtml(acc){
+  var src = STATE.banners['rocherstack'];
+  return '<div class="identity-banner' + (src?' has-img':'') + '"' + (src?' style="background-image:url(\'' + esc(src) + '\')"':'') + '>' +
+    '<div class="identity-mark"><svg viewBox="0 0 36 28" fill="none"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="currentColor"/></svg></div>' +
+    '<div class="identity-info">' +
+      '<div class="identity-phone">' + esc(acc.phone||'—') + '</div>' +
+      '<div class="identity-id mono">ID:' + esc(acc.publicId||'——————') + '</div>' +
+    '</div>' +
+  '</div>';
+}
 
 // ── HOME ──────────────────────────────────────────────────────────────
 async function renderHome(){
@@ -306,7 +324,7 @@ async function renderHome(){
   '</div>';
 
   html += '<div class="ticker-bar">' +
-    '<div class="ticker-icon">' + ico('bell') + '</div>' +
+    '<div class="ticker-icon" id="tickerBellBtn">' + ico('bell') + '</div>' +
     '<div class="ticker-track"><div class="ticker-items" id="tickerItems"></div></div>' +
     '<div class="ticker-icon" id="tickerRecordsBtn">' + ico('doc') + '</div>' +
   '</div>';
@@ -344,26 +362,68 @@ function planCardHtml(inv){
 }
 function renderTicker(feed){
   var track = $('tickerItems');
-  if (!track) return;
-  STATE.lastFeed = feed;
-  if (!feed.length) { track.innerHTML = '<span class="ticker-item">Waiting for activity…</span>'; return; }
-  var items = feed.slice(0,18).map(function(f){
-    var verb = f.type === 'withdrawal' ? 'withdrew' : 'deposited';
-    return '<span class="ticker-item">' + esc(f.phone||f.masked||'A member') + ' ' + verb + ' <span class="amt mono">' + ugx(f.amount) + '</span></span>';
-  }).join('');
-  track.innerHTML = items + items; // doubled so a -50% translate loop is seamless
+  if (track) {
+    STATE.lastFeed = feed;
+    if (!feed.length) track.innerHTML = '<span class="ticker-item">Waiting for activity…</span>';
+    else {
+      var items = feed.slice(0,18).map(function(f){
+        var verb = f.type === 'withdrawal' ? 'withdrew' : 'deposited';
+        return '<span class="ticker-item">' + esc(f.phone||f.masked||'A member') + ' ' + verb + ' <span class="amt mono">' + ugx(f.amount) + '</span></span>';
+      }).join('');
+      track.innerHTML = items + items; // doubled so a -50% translate loop is seamless
+    }
+  }
+  // Wiring these two buttons was previously INSIDE the `if (!feed.length)`
+  // branch above (an early return before this line), so on a fresh
+  // install with no site-wide activity yet, neither button ever got a
+  // click handler at all -- fixed by moving the wiring out here,
+  // unconditional on whether the ticker itself has anything to show.
+  var bellBtn = $('tickerBellBtn');
+  if (bellBtn) bellBtn.onclick = openNotificationsSheet;
   var recBtn = $('tickerRecordsBtn');
-  if (recBtn) recBtn.onclick = openActivitySheet;
+  if (recBtn) recBtn.onclick = openRecordsSheet;
 }
-function openActivitySheet(){
-  var feed = STATE.lastFeed || [];
-  openSheet('generic', '<div class="sheet-title">Recent Activity</div>' +
-    (feed.length ? feed.slice(0,30).map(function(f){
-      var verb = f.type === 'withdrawal' ? 'withdrew' : 'deposited';
-      return '<div class="member-row"><div class="info"><div class="phone">' + esc(f.phone||f.masked||'A member') + ' ' + verb + '</div></div>' +
-        '<span class="mono" style="font-weight:700">' + ugx(f.amount) + '</span></div>';
-    }).join('') : emptyState('doc','No activity yet.'))
-  );
+// Every transaction type ever written to the 'transactions' collection
+// (grepped every db.collection('transactions').add/.set(...) call site in
+// server.js to build this list) -- server-side is the single source of
+// truth for what's real; this is presentation only.
+var RECORD_META = {
+  deposit:    { label: 'Deposit' },
+  withdraw:   { label: 'Withdrawal' },
+  investment: { label: 'Investment' },
+  cashback:   { label: 'Daily Cashback' },
+  checkin:    { label: 'Check-in Reward' },
+  commission: { label: 'Referral Commission' },
+  team_reward:{ label: 'Task Center Reward' },
+  admin_credit:{ label: 'Credit' },
+  admin_debit: { label: 'Debit' },
+  promocode:  { label: 'Gift Code' }
+};
+function recordMeta(type){
+  return RECORD_META[type] || { label: type ? (type.charAt(0).toUpperCase() + type.slice(1)) : 'Transaction' };
+}
+// Full personal transaction history -- every deposit, withdrawal,
+// investment, daily cashback, check-in reward, referral commission, task
+// center reward, gift code redemption and admin credit/debit on THIS
+// account. Server-scoped to the caller's own userId (GET /transactions,
+// auth-gated) -- nothing here is guessable or another member's data, and
+// every row's date/time comes straight from the same server-timestamped
+// ledger every balance figure in the app is computed from, not a
+// client-side guess.
+async function openRecordsSheet(){
+  openSheet('generic', '<div class="sheet-title">Records</div><div id="recordsBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(4,'sk-card') + '</div>');
+  var r = await api('/transactions', null, 'GET');
+  var body = $('recordsBody'); if (!body) return;
+  var items = (r.status === 'success' && r.transactions) || [];
+  if (!items.length) { body.innerHTML = emptyState('doc','No transactions yet.'); return; }
+  body.innerHTML = items.map(function(t){
+    var meta = recordMeta(t.type);
+    var neg = (t.amount||0) < 0;
+    return '<div class="member-row"><div class="info"><div class="phone">' + esc(meta.label) + '</div>' +
+      '<div class="date">' + esc(t.description||'') + '<br>' + esc(t.date||'') + ' ' + esc(t.time||'') + '</div></div>' +
+      '<span class="mono" style="font-weight:700;color:' + (neg?'var(--danger)':'var(--blue)') + ';flex-shrink:0;margin-left:10px">' +
+        (neg?'−':'+') + ugx(Math.abs(t.amount||0)) + '</span></div>';
+  }).join('');
 }
 function wireHomeActions(){
   $('homeDepositBtn').onclick = openDepositSheet;
@@ -574,12 +634,15 @@ async function renderAccount(){
   STATE.loaded.account = true;
   var acc = STATE.account || {};
 
-  var html = bannerHtml('rocherstack', 'satellite');
-  html += '<div class="card profile-card">' +
-    '<div class="av">' + ico('wallet') + '</div>' +
-    '<div><div class="phone">' + esc(acc.phone) + '</div>' +
-    '<div class="code mono">Referral: ' + esc(acc.referralCode||'—') + '</div></div>' +
-    '<div class="iconbtn" id="shareRefBtn" style="margin-left:auto">' + ico('share') + '</div>' +
+  var html = identityBannerHtml(acc);
+
+  html += '<div class="card referral-card">' +
+    '<div class="referral-label">Your Referral Code</div>' +
+    '<div class="referral-row">' +
+      '<div class="referral-code mono">' + esc(acc.referralCode||'—') + '</div>' +
+      '<div class="iconbtn" id="shareRefBtn">' + ico('share') + '</div>' +
+    '</div>' +
+    '<div class="referral-hint">Server-issued and globally unique — share it to earn commission when someone you invite makes their first investment.</div>' +
   '</div>';
 
   html += '<div class="card giftcode-card">' +
@@ -588,6 +651,17 @@ async function renderAccount(){
       '<button class="btn btn-primary" id="giftCodeBtn">Redeem</button>' +
     '</div>' +
   '</div>';
+
+  var sett = STATE.settings || {};
+  if (sett.telegramGroup || sett.telegramChannel) {
+    html += '<div class="card telegram-card">' +
+      '<div class="referral-label">Join The Community</div>' +
+      '<div class="telegram-row">' +
+        (sett.telegramGroup ? '<button class="btn btn-secondary" id="telegramGroupBtn">' + ico('telegram') + '<span>Group</span></button>' : '') +
+        (sett.telegramChannel ? '<button class="btn btn-secondary" id="telegramChannelBtn">' + ico('telegram') + '<span>Channel</span></button>' : '') +
+      '</div>' +
+    '</div>';
+  }
 
   html += '<div class="matrix">' +
     '<div class="mtile" id="mBind">' + ico('lock') + '<span>Payout Account</span></div>' +
@@ -615,6 +689,8 @@ async function renderAccount(){
   $('logoutRow').onclick = doLogout;
   $('giftCodeBtn').onclick = redeemGiftCode;
   $('giftCodeInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('giftCodeBtn').click(); });
+  if ($('telegramGroupBtn')) $('telegramGroupBtn').onclick = function(){ window.open(sett.telegramGroup, '_blank'); };
+  if ($('telegramChannelBtn')) $('telegramChannelBtn').onclick = function(){ window.open(sett.telegramChannel, '_blank'); };
   qsa('.menu-row[data-key]').forEach(function(row){
     row.onclick = function(){ openInfoSheet(row.dataset.key); };
   });
@@ -853,6 +929,18 @@ function openAssistant(){
   history.pushState({ overlay: 'assist' }, '', '');
   if (!$('assistBody').childElementCount) {
     addMsg("Hi! I'm the Space8 assistant. Ask me anything about deposits, withdrawals, investing, referrals or your account.", 'bot');
+    var sett = STATE.settings || {};
+    var links = '';
+    if (sett.telegramGroup) links += '<button class="btn btn-secondary" id="assistGroupBtn">' + ico('telegram') + '<span>Telegram Group</span></button>';
+    links += '<button class="btn btn-secondary" id="assistCareBtn">' + ico('support') + '<span>Customer Care</span></button>';
+    $('assistLinks').innerHTML = links;
+    if ($('assistGroupBtn')) $('assistGroupBtn').onclick = function(){ window.open(sett.telegramGroup, '_blank'); };
+    // Pure DOM close (not closeSheet/history.back()) -- the assistant
+    // panel and a sheet are two different full-screen overlays sharing
+    // the same history slot mechanism; closing this one first keeps
+    // exactly one overlay "current" at a time instead of a sheet opening
+    // stacked behind the still-open assistant panel.
+    $('assistCareBtn').onclick = function(){ hideAssistant(); openInfoSheet('support'); };
     $('assistQuick').innerHTML = ASSIST_QUICK.map(function(q){ return '<div class="qchip">' + esc(q) + '</div>'; }).join('');
     qsa('.qchip').forEach(function(c){ c.onclick = function(){ assistSend(c.textContent); }; });
   }
