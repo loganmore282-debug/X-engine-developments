@@ -14,6 +14,58 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Accent settled on DEEP VIOLET (#6d28d9) — green abandoned after three rejected attempts
+
+Owner, after rejecting three greens in a row on brightness: *"it seems that we might be
+forcing out this color, let us get a good color because this is not good, not blue and
+not green, you are intelligent opus, make a high quality decision and make a best
+alternative color, blue was the best but dont, get another color."* That's an explicit
+delegation of the choice — not a request for another nudge along the green scale — so
+this round is a decision, not an increment.
+
+- **Chose Tailwind violet-700 `#6d28d9`.** Four reasons, all recorded in `CLAUDE.md`
+  so a future session doesn't relitigate this blindly:
+  1. **Unambiguously neither blue nor green.** Teal and indigo were both considered and
+     rejected precisely because they'd have restarted the same "is this blue/green?"
+     argument the owner just ended.
+  2. **Proven at exactly this job.** Nubank runs a full-canvas purple as the largest
+     fintech in Latin America — purple reads as trustworthy money in a mass-market,
+     emerging-market context, which is Space8's exact profile. This is not a novelty
+     pick.
+  3. **On-theme in a way green never was.** Space8 is satellites and deep space; violet
+     is the actual color of the cosmos. Green had no thematic justification at all.
+  4. **Resolves a real conflict the green created.** Admin's success-status token
+     `--ok` is green (`#0f9d58`), which had been sitting in hue conflict with a green
+     accent (flagged in `CLAUDE.md` during the green rounds, unresolved). Violet
+     separates them cleanly.
+  Started at violet-700 rather than 500/600 deliberately — the owner had already pushed
+  back on brightness twice, so entering low on the ramp was the safer opening position.
+- **Values applied** (same value-only-swap convention, token names untouched):
+  user `--blue` `#6d28d9`, `--blue-dim` `#5b21b6` (violet-800), `--blue-mute` `#a78bfa`
+  (violet-400), `--blue-glow` `rgba(109,40,217,.22)`, `--page-bg` `#6d28d9`,
+  `--surface-blue` `#ede9fe` (violet-100); admin `--gold` `#6d28d9` / `--gold-deep`
+  `#5b21b6`, plus the three literal non-token hexes — brand-mark gradient center
+  `#2e1065` (violet-950), button gradient highlight `#a78bfa` (violet-400), and the
+  `theme-color` meta + brand-mark icon stroke `#f5f3ff` (violet-50).
+- **`CLAUDE.md` rewritten for this section**, replacing the accumulated
+  three-attempts-at-green narrative with the decision + rationale above, plus the
+  Tailwind violet ramp to move along if brightness ever needs adjusting again
+  (400 `#a78bfa` → 500 `#8b5cf6` → 600 `#7c3aed` → 700 `#6d28d9` → 800 `#5b21b6`),
+  keeping `--blue-dim` one step darker and `--blue-mute` ~three steps lighter so the
+  relative gaps survive wherever `--blue` lands. Every stale green hex elsewhere in the
+  file (the `--blue-dim`/`--blue-mute` line, the admin palette paragraph, the literal-hex
+  list, the color-history chain) was updated in the same pass rather than left to rot.
+- **Verification:** full hex-color audit of both `*-src/index.html` files — zero
+  green-family or blue-family values left anywhere; rebuilt both `user/index.html` and
+  `admin/index.html`; `user/sw.js` bumped to `space8-shell-v227`; full `test-*.js`
+  suite green; Playwright screenshots of Home/Account (user) and the login screen
+  (admin) confirm the violet renders correctly, white cards and white nav/topbar text
+  keep full contrast against it, and the SW auto-update reload gate still behaves
+  (withholds while a money call is in flight, fires once clear).
+- Nothing left open from this round.
+
+---
+
 ## 2026-08-16 — Claude — Green retoned again — one step darker on the same Tailwind scale
 
 Owner, right after the previous entry's retone to `#22c55e` (Tailwind green-500):
