@@ -14,6 +14,62 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — ChatGPT review fixes + admin-configurable blurred auth background
+
+Owner had ChatGPT independently review the previous commit (b5de70f). It confirmed 3 real
+issues and no new XSS; owner then asked for a new feature (login/register background
+image, admin-uploadable, blurred, tabs/card kept). Both done in one round.
+
+- **ChatGPT-confirmed fix 1 — install-prompt reuse.** `promptInstallApp()` in
+  `user-src/original_module.js` used to clear `window._installPrompt` only after
+  `await`ing `userChoice`, so a fast double-tap on Get App could call `.prompt()`
+  twice on the same one-use browser event. Now clears the reference before calling
+  `.prompt()` and wraps the whole thing in try/catch with a fallback toast.
+- **ChatGPT-confirmed fix 2 — leftover "Payout Account" wording in the assistant.**
+  The `withdraw`, `pin`, and `security_general` intent replies in
+  `assistant-engine.js` still told members to use "Payout Account" after the UI was
+  renamed to "Withdrawal Account" earlier this round — those three replies were
+  display-text only and got missed. Fixed all three.
+- **ChatGPT-confirmed fix 3 — `multi_withdrawal_accounts` intent unreachable.** It
+  scored equally to `payout_account` on its main trigger phrase but had lower
+  priority (3 vs 4), so `payout_account` always won the tie and the dedicated reply
+  was never shown (the generic payout reply happened to still answer the question
+  adequately, so this was silent, not broken). Raised `multi_withdrawal_accounts` to
+  priority 5.
+- **Also fixed:** the previous log entry's intent count was wrong ("43→51") — actual
+  count is 43→50 (7 new intents, not 8); corrected in that entry.
+- **New: admin-configurable blurred background image on the Login/Register
+  screens.** Owner: "put a background image on authentication screens... maintain
+  the tabs of registration and login." New banner slot `authbg` (added to
+  `BANNER_KEYS` in `server.js` and `BANNER_LABELS` in `admin-src/index.html`,
+  labeled "Login / Register background") — uploads through the same admin Banners
+  page as every other slot, no new endpoint needed (`/admin/banners`,
+  `/admin/banners/clear`, `/public/banners` already handle any whitelisted key
+  generically). `boot()` in `user-src/original_module.js` sets a
+  `--auth-bg-url` CSS custom property on `<html>` from `STATE.banners.authbg` once
+  `/public/banners` resolves (this runs before login/auth state is known, so the
+  background is ready by the time either auth screen is shown). `.auth-screen` in
+  `user-src/index.html` grew a `::before` (the image, `filter:blur(20px)`,
+  `scale(1.08)` to hide blur edges) and a `::after` (a `rgba(--void, .78)` tint so
+  the busy photo doesn't fight the form's legibility) layered under `.auth-wrap`
+  (raised to `z-index:1`) — the Login/Register tab-switch, card, and form are
+  completely unchanged, only what renders behind them differs. Falls back to the
+  plain `--void` background exactly as before when no image is uploaded
+  (`var(--auth-bg-url, none)`), so nothing breaks for the admin who never touches
+  this slot.
+- **Verification:** `node -c assistant-engine.js`, `node -c user-src/original_module.js`;
+  rebuilt both `user/index.html` (`node build-core.js`) and `admin/index.html`
+  (`node build-admin.js`); `user/sw.js` bumped to `space8-shell-v222`; full
+  `test-*.js` suite green; Playwright screenshots of Login and Register with a
+  synthetic background image confirm the blur/tint/z-index stack renders correctly
+  and both screens stay fully legible and unchanged in structure, plus a no-image
+  baseline screenshot confirming the fallback is visually identical to before.
+- Nothing left open from this round. The admin still needs to actually upload an
+  image via Admin → Banners → "Login / Register background" for this to show
+  anything other than the plain background — that's an owner action, not code.
+
+---
+
 ## 2026-08-16 — Claude — Owner correction round 2: restored skeleton loaders ChatGPT's patch had silently removed, plus 12 more UI/copy fixes and assistant training expansion
 
 Owner reacted to the previous (ChatGPT) patch with a firm, specific correction list —
@@ -85,7 +141,7 @@ the same message.
   of those only touch `walletBalance`. This is a coherent, intentional split (earnings
   from investing + team-building rewards, vs. everything else that lands in the
   wallet), not a bug — no code change needed, just confirmed correct.
-- **Assistant training expanded** (`assistant-engine.js`, 43→51 intents): added
+- **Assistant training expanded** (`assistant-engine.js`, 43→50 intents): added
   `install_app` (ties into the new Get App feature), `cumulative_earnings` (explains
   the same split described above, live-grounded in the caller's actual `totalEarned`),
   `account_id`, `telegram_community`, `giftcode_case` (explains the strict-case

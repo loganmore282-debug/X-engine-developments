@@ -69,6 +69,11 @@ The owner was explicit and this must not be re-litigated without them saying so:
    shown as an upload option since nothing displays it. If a screen someday needs one of
    the removed slots back, re-add it to `BANNER_LABELS` (the whitelist already covers
    it) rather than reusing a still-orphaned key for something unrelated.
+   **A 7th slot, `authbg`, was added 2026-08-16** ("Login / Register background") —
+   the one exception to "only 6 real slots," since it's a genuinely new feature (a
+   blurred background image behind the Login/Register cards), not a restored dead
+   one. Added to both `BANNER_KEYS` (`server.js`) and `BANNER_LABELS`
+   (`admin-src/index.html`). See "Design system" below for how it renders.
 3. **User-facing app (`user-src/index.html` + `user-src/original_module.js`, and its built
    artifact `user/`) — REBUILT FROM SCRATCH, this is done as of the most recent session.**
    Zero lines of ChocoMCC's original frontend structure remain — the owner rejected an
@@ -114,6 +119,17 @@ app in `user-src/` was built directly against this.
   in `--blue` and would vanish), `.auth-screen` (an explicit earlier "no gradient, minimal,
   formal" decision, unrelated to this change, still holds), and `.assist-panel` (its
   own `.msg.user` bubbles are `var(--blue)` and would vanish on a `var(--blue)` panel).
+  **`.auth-screen`'s "no gradient, minimal" base still holds — 2026-08-16 added an
+  optional, admin-uploaded photo layered behind it, not a gradient.** Owner: "put a
+  background image on authentication screens... maintain the tabs of registration
+  and login." `.auth-screen::before` renders `var(--auth-bg-url, none)` (set from the
+  `authbg` banner slot in `boot()`) blurred (`filter:blur(20px)`, scaled up 1.08x to
+  hide the blur's edge falloff) with a `rgba(--void,.78)` tint over it
+  (`.auth-screen::after`) so the card and form stay just as legible as the plain
+  `--void` background did — `.auth-wrap` is raised to `z-index:1` above both layers,
+  untouched otherwise. With no image uploaded (the shipped default) this renders
+  identically to before — confirmed by screenshot comparison, not just reasoning
+  about the CSS.
   `--blue-dim: #1c48b3` / `--blue-mute: #7fa1f0` / `--blue-glow: rgba(46,107,255,.22)` are
   all derived from the same hue. **The CSS custom properties kept their `--blue*` names
   through every color change this session** (blue → sapphire → green → back to this

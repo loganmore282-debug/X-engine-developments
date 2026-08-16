@@ -860,10 +860,14 @@ async function promptInstallApp(){
   }
   var evt = window._installPrompt;
   if (evt) {
-    evt.prompt();
-    var choice = await evt.userChoice.catch(function(){ return null; });
     window._installPrompt = null;
-    if (choice && choice.outcome === 'accepted') toast('Installing Space8…');
+    try {
+      await evt.prompt();
+      var choice = await evt.userChoice;
+      if (choice && choice.outcome === 'accepted') toast('Installing Space8…');
+    } catch (_) {
+      toast('Use your browser menu to install the app.', true);
+    }
     return;
   }
   openSheet('generic', '<div class="sheet-title">Get App</div><div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim)">' +
@@ -1294,6 +1298,9 @@ async function boot(){
   if (setR.status === 'success') STATE.settings = setR.settings;
   var bannerR = await api('/public/banners');
   if (bannerR.status === 'success') STATE.banners = bannerR.banners || {};
+  if (STATE.banners.authbg) {
+    document.documentElement.style.setProperty('--auth-bg-url', 'url("' + STATE.banners.authbg + '")');
+  }
 }
 window.addEventListener('space8-auth', async function(e){
   var user = e.detail;

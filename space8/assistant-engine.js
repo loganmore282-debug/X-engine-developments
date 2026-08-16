@@ -129,7 +129,7 @@ const INTENTS = [
           extra = ` On UGX ${fmt2(ctx.entities.amount)}, the ${f}% fee is ${fmt(feeAmt)}, so you'd receive ${fmt(ctx.entities.amount - feeAmt)}. 💸`;
         }
       }
-      return `💸 Bind a payout account first (Account → Payout Account) if you haven't already, then tap Withdraw on Home. Minimum withdrawal is ${fmt(m)}, and a ${f}% fee applies. You'll need your withdrawal PIN to confirm — that's what keeps a withdrawal safe even if your phone isn't.${extra}`;
+      return `💸 Bind a withdrawal account first (Account → Withdrawal Account) if you haven't already, then tap Withdraw on Home. Minimum withdrawal is ${fmt(m)}, and a ${f}% fee applies. You'll need your withdrawal PIN to confirm — that's what keeps a withdrawal safe even if your phone isn't.${extra}`;
     } },
 
   { id: 'withdraw_timing', priority: 2, kw: { long: 1 },
@@ -174,7 +174,7 @@ const INTENTS = [
     reply: (ctx) => `📅 Tap Check In on Home once a day for ${fmt(ctx.settings.dailyCheckin)}. It follows the platform’s Uganda calendar day, and missing a day resets your streak, so consistency is what it rewards${ctx.account.checkinStreak ? ` — you're currently on a ${ctx.account.checkinStreak}-day streak 🔥` : ''}.` },
 
   { id: 'pin', priority: 2, kw: { pin: 3, pincode: 3 },
-    reply: () => "🔒 Your withdrawal PIN was set when you registered. To change it, go to Account → Security PIN — you'll need your current one first. It's required to bind a payout account and for every withdrawal, so even someone with your unlocked phone can't move money out without it." },
+    reply: () => "🔒 Your withdrawal PIN was set when you registered. To change it, go to Account → Security PIN — you'll need your current one first. It's required to bind a withdrawal account and for every withdrawal, so even someone with your unlocked phone can't move money out without it." },
 
   { id: 'balance', priority: 2, kw: { balance: 3, earning: 2, earned: 2, invested: 2, wallet: 2, worth: 1 },
     reply: (ctx) => `📊 Your wallet balance is ${fmt(ctx.account.walletBalance || 0)}, you've invested ${fmt(ctx.account.totalInvested || 0)} in total, and earned ${fmt(ctx.account.totalEarned || 0)} so far. Wallet balance is what you can deposit toward a new plan or withdraw right now — it's separate from money already locked into an active plan until that plan matures.` },
@@ -201,7 +201,7 @@ const INTENTS = [
 
   { id: 'security_general', priority: 1,
     kw: { secure: 2, security: 2, encrypted: 1, twofactor: 2 },
-    reply: () => `🔒 Your login is protected by Firebase Authentication, and every sensitive action (binding a payout account, withdrawing) is gated behind your withdrawal PIN on top of that. Your PIN itself is never stored in a readable form — only as a one-way hash.` },
+    reply: () => `🔒 Your login is protected by Firebase Authentication, and every sensitive action (binding a withdrawal account, withdrawing) is gated behind your withdrawal PIN on top of that. Your PIN itself is never stored in a readable form — only as a one-way hash.` },
 
   { id: 'about', priority: 1, kw: { space8: 2, platform: 2, legit: 2, legitimate: 2, safe: 2, scam: 2, trust: 2 },
     reply: () => pick([
@@ -260,7 +260,7 @@ const INTENTS = [
     phrase: [/(gift|redeem|promo) code.*(not work|invalid|wrong|failed|didn.?t work)/i, /code (not working|invalid)/i],
     reply: () => "🎁 Gift codes are case-sensitive, so double check you're typing capital and lowercase letters exactly as given — a code like \"fsT63\" won't work as \"fst63\" or \"FST63\". If you've copied it directly and it still fails, it may already be used or expired." },
 
-  { id: 'multi_withdrawal_accounts', priority: 3,
+  { id: 'multi_withdrawal_accounts', priority: 5,
     phrase: [/(more than one|multiple|two|several).*(withdrawal|payout) account/i, /add (another|a second) (withdrawal|payout) account/i],
     reply: () => '📱 Yes — you can bind more than one withdrawal account. Add each one from Account → Withdrawal Account, then pick which one to use each time you withdraw by tapping the account row on the Withdraw screen.' },
 

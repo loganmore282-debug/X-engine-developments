@@ -378,7 +378,7 @@ const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
 const BANNER_KEYS = new Set([
   'assortment', 'lavacake', 'barstack', 'giftbox', 'basket', 'marscrate',
   'ganache', 'factory2', 'factory1', 'darkbar', 'rocherstack', 'cookies',
-  'bonbon', 'truffle', 'snickersplate', 'snickerscookie'
+  'bonbon', 'truffle', 'snickersplate', 'snickerscookie', 'authbg'
 ]);
 // Hard cap on a single banner's stored size (raw data-URI string length) —
 // keeps one oversized upload from bloating the M0 free-tier database or
