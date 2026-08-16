@@ -40,7 +40,9 @@
 function normalize(s) {
   return String(s || '').toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
-function tokenize(s) { return normalize(s).split(' ').filter(Boolean); }
+const TOKEN_ALIASES={depost:'deposit',depsit:'deposit',deposite:'deposit',withdrawl:'withdrawal',withdrawel:'withdrawal',withraw:'withdrawal',invesment:'investment',investement:'investment',refferal:'referral',refferal:'referral',referal:'referral',commision:'commission',comission:'commission',promocode:'giftcode',momo:'mobilemoney',passwd:'password'};
+function tokenize(s){return normalize(s).split(' ').filter(Boolean).map(w=>TOKEN_ALIASES[w]||w);}
+function editDistanceOne(a,b){if(a===b)return true;if(a.length<5||b.length<5||Math.abs(a.length-b.length)>1)return false;let i=0,j=0,e=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue;}if(++e>1)return false;if(a.length>b.length)i++;else if(b.length>a.length)j++;else{i++;j++;}}return e+(i<a.length||j<b.length?1:0)<=1;}
 function stem(w) {
   if (w.length > 6 && w.endsWith('ing')) return w.slice(0, -3);
   if (w.length > 5 && w.endsWith('ed'))  return w.slice(0, -2);
@@ -142,17 +144,17 @@ const INTENTS = [
   { id: 'invest', priority: 2, kw: { invest: 3, investment: 2, plan: 2, product: 2, return: 2, profit: 2, cycle: 1, buy: 1 },
     reply: (ctx) => {
       const list = ctx.products.slice(0, 5).map(p => `${p.name} (${fmt(p.price)}, ${p.cycle} days, total ${fmt(p.expectedReturn)})`).join('; ');
-      return `🚀 Browse plans on the Products tab — each shows price, cycle length and total return. A few: ${list || 'plans are being set up — check back soon'}. Tap Invest on any plan to confirm; your return is paid in full once the plan matures, and you can hold more than one plan at a time if you want to diversify.`;
+      return `🚀 Browse plans on the Products tab — each shows price, cycle length and total return. A few: ${list || 'plans are being set up — check back soon'}. Tap Invest on any plan to confirm; cashback is credited daily throughout the plan cycle, and you can hold more than one plan at a time if you want to diversify.`;
     } },
 
   { id: 'maturity', priority: 2,
     kw: { maturity: 3, mature: 3, matures: 3 },
     phrase: [/when (do|does|will) i get (paid|my (money|return|payout))/i, /what happens (when|after) (my )?(plan|investment) (ends|finishes|matures)/i],
-    reply: (ctx) => `🚀 Each plan runs for its full cycle length (shown as "Cycle" on the plan card), and the entire total return is credited to your wallet automatically the moment it matures — no manual claim needed. You can track progress on the Home tab's active-plan cards.` },
+    reply: (ctx) => `🚀 Each plan runs for its full cycle length. Cashback is credited automatically day by day, and final settlement makes the paid total match the promised return. No manual claim is needed; track each plan separately on Home.` },
 
   { id: 'multi_invest', priority: 2,
     phrase: [/can i (buy|invest in|hold) (more than one|multiple|two|several|many)/i, /how many (plans|investments) can i/i],
-    reply: () => `🚀 Yes — you can invest in as many plans as your wallet balance allows, at the same time. Each one runs its own independent cycle and pays out its own return on its own schedule.` },
+    reply: () => `🚀 Yes — you can invest in as many plans as your wallet balance allows, at the same time. Each one runs its own independent cycle and credits its own daily cashback on its own schedule.` },
 
   { id: 'cancel', priority: 2,
     phrase: [/can i cancel/i, /get (a )?refund/i, /undo (my |the )?(investment|purchase|deposit)/i, /change my mind/i],
@@ -167,7 +169,7 @@ const INTENTS = [
     reply: () => `🎯 The Team tab's Task Center tracks milestones based on your team size and how much they've invested — hit a target and a bonus becomes claimable there. These are on top of the normal per-level commission, not instead of it.` },
 
   { id: 'checkin', priority: 2, kw: { checkin: 3, daily: 2, bonus: 2, streak: 2 },
-    reply: (ctx) => `📅 Tap Check In on Home once a day for ${fmt(ctx.settings.dailyCheckin)}. It resets every 24 hours, and missing a day resets your streak, so consistency is what it rewards${ctx.account.checkinStreak ? ` — you're currently on a ${ctx.account.checkinStreak}-day streak 🔥` : ''}.` },
+    reply: (ctx) => `📅 Tap Check In on Home once a day for ${fmt(ctx.settings.dailyCheckin)}. It follows the platform’s Uganda calendar day, and missing a day resets your streak, so consistency is what it rewards${ctx.account.checkinStreak ? ` — you're currently on a ${ctx.account.checkinStreak}-day streak 🔥` : ''}.` },
 
   { id: 'pin', priority: 2, kw: { pin: 3, pincode: 3 },
     reply: () => "🔒 Your withdrawal PIN was set when you registered. To change it, go to Account → Security PIN — you'll need your current one first. It's required to bind a payout account and for every withdrawal, so even someone with your unlocked phone can't move money out without it." },
@@ -193,7 +195,7 @@ const INTENTS = [
 
   { id: 'giftcode', priority: 2,
     kw: { giftcode: 3, redeem: 3, code: 1, voucher: 2, gift: 2 },
-    reply: () => `🎁 If you have a gift/redeem code, enter it wherever the app prompts for one during account actions — a valid code credits your wallet immediately. Codes are single-use per account.` },
+    reply: () => `🎁 If you have a gift/redeem code, open Account and enter it in the Gift Code box — a valid code credits your wallet immediately. Codes are single-use per account.` },
 
   { id: 'security_general', priority: 1,
     kw: { secure: 2, security: 2, encrypted: 1, twofactor: 2 },
@@ -201,13 +203,29 @@ const INTENTS = [
 
   { id: 'about', priority: 1, kw: { space8: 2, platform: 2, legit: 2, legitimate: 2, safe: 2, scam: 2, trust: 2 },
     reply: () => pick([
-      '🛰️ Space8 is a mobile-money investment platform — you invest in a satellite-themed plan and it pays out a fixed, pre-stated return at the end of its cycle. Deposits and withdrawals run through mobile money, and every transaction (deposit, investment, cashback, withdrawal) is logged on your Account history, nothing happens silently.',
-      "🛰️ On Space8, what you invest and what you're owed back is locked in and shown to you at purchase time — the price, cycle length and total return never change after you buy, even if the plan's terms change for future buyers. That's the core mechanic: fixed terms, transparent history."
+      '🛰️ Space8 is a mobile-money investment platform — you invest in a satellite-themed plan and it pays out a fixed, pre-stated return through automatic daily cashback across its cycle. Deposits and withdrawals run through mobile money, and every transaction (deposit, investment, cashback, withdrawal) is logged on your Account history, nothing happens silently.',
+      "🛰️ On Space8, what you invest and what you're owed back is locked in and shown to you at purchase time — the price, cycle length and total return never change after you buy, even if the plan's terms change for future buyers. That's the core mechanic: fixed terms, automatic daily cashback, and transparent history."
     ]) },
+
+
+  { id:'deposit_pending',priority:5,kw:{pending:3,stuck:3,missing:3,failed:3,deposit:2},phrase:[/deposit.*(pending|stuck|missing|not (showing|credited|received)|failed)/i,/(paid|money deducted).*deposit/i],reply:()=> '⏳ Confirm the mobile-money prompt was approved and keep the app open briefly while it checks MarzPay. Do not create repeated deposits rapidly. If money was deducted but the wallet is unchanged after several minutes, save the transaction reference and contact Support — never share your PIN.' },
+  { id:'withdraw_pending',priority:5,phrase:[/(withdraw|cashout).*(pending|stuck|missing|failed|processing|sending)/i],reply:()=> '⏳ Check Account → Withdrawals. Pending awaits approval; Sending/Processing means a payout attempt is underway and must not be submitted again blindly. If it stays unchanged unusually long, contact Support with the Space8 reference — never share your PIN.' },
+  { id:'commission_missing',priority:5,kw:{missing:3,zero:3,unpaid:3,commission:2,referral:1},phrase:[/(commission|referral).*(missing|not (paid|credited|showing)|zero)/i],reply:c=>`🤝 Commission is credited when an eligible referred member completes their first investment, not merely registration or deposit. Current Levels 1–3 are ${c.settings.commL1}% / ${c.settings.commL2}% / ${c.settings.commL3}%. If an eligible purchase completed with no credit, contact Support with the approximate time — never send passwords or PINs.`},
+  { id:'investment_missing',priority:5,phrase:[/(investment|plan).*(missing|not showing|disappeared|failed)/i,/money deducted.*(invest|plan)/i],reply:()=> '🚀 Refresh Home and Products → My Products. If wallet money was deducted but no plan appears, stop retrying and contact Support with the time and plan name so the records can be reconciled safely.' },
+  { id:'payout_account',priority:4,phrase:[/(bind|add|change|remove|delete).*(payout|mobile money|momo|account)/i,/payout account/i],reply:()=> '📱 Use Account → Payout Account. Enter your real Uganda mobile-money number and correct network. Binding, changing or removing payout details requires the withdrawal PIN.' },
+  { id:'password',priority:4,kw:{password:3,login:2,signin:2},phrase:[/forgot.*password/i,/change.*password/i,/can.t (login|sign in)/i],reply:()=> '🔐 Firebase Authentication handles your login password; staff and this assistant cannot read it. Use password recovery on the sign-in screen. Your withdrawal PIN is separate under Account → Security PIN.' },
+  { id:'history',priority:3,kw:{history:3,transaction:2,record:2,receipt:2},reply:()=> '🧾 Account contains Deposit and Withdrawal histories. Investment progress is on Home and Products → My Products. Keep the Space8 reference for anything Support must investigate.' },
+  { id:'notifications',priority:3,kw:{notification:3,alert:2,bell:2,push:2},reply:()=> '🔔 Tap the Home bell for announcements. Push alerts also require phone/browser notification permission; enable it in device settings and reopen Space8.' },
+  { id:'maintenance',priority:4,kw:{maintenance:3,offline:2,unavailable:2,downtime:2},reply:c=>c.settings.maintenanceMode?`🛠️ Space8 is under maintenance. ${c.settings.maintenanceMsg||'Please try again shortly.'}`:'✅ Space8 is not marked as under maintenance. Check your connection, avoid repeating money actions, and give Support the exact error.'},
+  { id:'rules',priority:3,kw:{rule:3,rules:3,policy:2,terms:2,privacy:2},reply:c=>c.settings.rulesText?`📋 Current rules: ${String(c.settings.rulesText).slice(0,900)}`:'📋 Open Account → Rules, Terms or Privacy. Those admin-managed pages are the source of truth.'},
+  { id:'announcement',priority:3,kw:{announcement:3,update:1,news:1},reply:c=>c.settings.annEnabled?`📢 ${c.settings.annTitle||'Announcement'}: ${c.settings.annBody||'Open Home for details.'}`:'📢 There is no active platform announcement right now.'},
+  { id:'network_error',priority:4,phrase:[/(network|connection|server).*(error|failed|problem|unavailable)/i,/something went wrong/i],reply:()=> '📶 Check data/Wi-Fi and reopen the app. Before retrying a deposit, investment or withdrawal, verify its status; save the exact error and reference for Support.'},
+  { id:'mobile_networks',priority:3,kw:{mtn:3,airtel:3,mobilemoney:2},reply:()=> '📱 Select the same network as the Uganda mobile-money number entered. Use 07XXXXXXXX or +2567XXXXXXXX, and never approve an unfamiliar prompt.'},
+  { id:'welcome_bonus',priority:3,phrase:[/(welcome|registration|signup).*(bonus|gift|reward)/i],reply:c=>`🎉 The current registration bonus is ${fmt(c.settings.welcomeBonus||0)}. It is credited once after registration; withdrawal rules may require buying a plan first.`},
 
   { id: 'howworks', priority: 2,
     phrase: [/how does (space8|it|this) work/i, /how does the platform work/i, /explain (space8|how this works)/i],
-    reply: (ctx) => `🛰️ Here's the flow: 1) Deposit mobile money into your wallet (free, min ${fmt(ctx.settings.minDeposit)}). 2) Invest wallet balance into a plan on the Products tab — price/cycle/return lock in at purchase. 3) The full return is credited automatically at maturity. 4) Withdraw to mobile money anytime from your wallet (min ${fmt(ctx.settings.minWithdraw)}, ${ctx.settings.withdrawFeePct}% fee). Referring people earns you a cut of what they invest, and daily check-ins add a small bonus on top. Ask me about any one of those steps for more detail.` }
+    reply: (ctx) => `🛰️ Here's the flow: 1) Deposit mobile money into your wallet (free, min ${fmt(ctx.settings.minDeposit)}). 2) Invest wallet balance into a plan on the Products tab — price/cycle/return lock in at purchase. 3) Cashback is credited automatically each day until the plan completes. 4) Withdraw to mobile money anytime from your wallet (min ${fmt(ctx.settings.minWithdraw)}, ${ctx.settings.withdrawFeePct}% fee). Referring people earns you a cut of what they invest, and daily check-ins add a small bonus on top. Ask me about any one of those steps for more detail.` }
 ];
 
 const FALLBACKS = [
@@ -218,14 +236,14 @@ const FALLBACKS = [
 
 function scoreText(text, tokens, intent) {
   let score = 0;
-  if (intent.kw) for (const [w, weight] of Object.entries(intent.kw)) if (tokens.includes(stem(w))) score += weight;
+  if(intent.kw)for(const[w,weight]of Object.entries(intent.kw)){const target=stem(w);if(tokens.includes(target))score+=weight;else if(tokens.some(t=>editDistanceOne(t,target)))score+=Math.max(1,weight-1);}
   if (intent.phrase) for (const re of intent.phrase) if (re.test(text)) score += 4;
   return score;
 }
 function classify(text) {
   const tokens = tokenize(text).map(stem);
   return INTENTS.map(intent => ({ intent, score: scoreText(text, tokens, intent) }))
-    .sort((a, b) => b.score - a.score || a.intent.priority - b.intent.priority);
+    .sort((a,b)=>b.score-a.score||b.intent.priority-a.intent.priority);
 }
 
 function matchProduct(products, tokens) {
@@ -283,10 +301,10 @@ function answerAssistant({ message, history, settings, products, account }) {
   const product = matchProduct(prods, tokens);
   if (product && (!top || top.score < 4)) {
     const daily = Math.round((product.expectedReturn || 0) / (product.cycle || 1));
-    return `🛰️ ${product.name}: price ${fmt(product.price)}, ${product.cycle}-day cycle, ${fmt(daily)}/day, total payout ${fmt(product.expectedReturn)} at maturity. Tap Invest on the Products tab to buy in.`;
+    return `🛰️ ${product.name}: price ${fmt(product.price)}, ${product.cycle}-day cycle, ${fmt(daily)}/day, total return ${fmt(product.expectedReturn)} across the cycle. Tap Invest on the Products tab to buy in.`;
   }
 
-  if (top && top.score >= 2) return top.intent.reply(ctx);
+  if(top&&top.score>=2){const primary=top.intent.reply(ctx);const second=scored.find(s=>s.intent.id!==top.intent.id&&s.score>=3);if(/\b(and|also|plus|both)\b/i.test(text)&&second)return primary+'\n\n'+second.intent.reply(ctx);return primary;}
 
   return pick(FALLBACKS);
 }
