@@ -2917,34 +2917,23 @@ app.post('/redeem', async (req, res) => {
   // any '$'/'.' key on every request body regardless, so this is
   // defense-in-depth, not the only guard.
   //
-  // Case handling: the current gift-code format (genGiftCode(), above) is
-  // mixed-case by design ("fsT63") but redemption is deliberately
-  // CASE-INSENSITIVE -- a customer typing a 5-character code by hand
-  // shouldn't fail because they typed "FST63" instead of "fsT63", for zero
-  // real security benefit (this is a DB-checked promo code, not a
-  // password). `raw` keeps the exact input for the invalid-attempt log;
-  // `upper`/`lower` below are only for matching.
+  // Strictly case-sensitive (owner explicit, 2026-08-16) -- no upper/lower
+  // normalization at all before matching. "gf64h" only ever matches
+  // "gf64h", never "GF64H" or "Gf64H".
   const raw = String(req.body.code || '').trim().slice(0, 32);
   if (!raw || !/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Enter a promo code' });
-  const upper = raw.toUpperCase(), lower = raw.toLowerCase();
   try {
-    // Locked per-CODE (not per user+code) — a shared multi-use code being
-    // redeemed by several different users at once must still serialise
-    // through one place, or two concurrent redemptions could both read the
-    // same usedBy array below maxUses and both slip through. Keyed on the
-    // lowercased form so the SAME code typed in different cases by
-    // different requests still serialises through the same lock.
-    await withLock('redeem:' + lower, async () => {
+    // Locked per-exact-code (not per user+code) — a shared multi-use code
+    // being redeemed by several different users at once must still
+    // serialise through one place, or two concurrent redemptions could
+    // both read the same usedBy array below maxUses and both slip
+    // through. Keyed on the raw (case-sensitive) input, matching how
+    // codes are actually looked up below.
+    await withLock('redeem:' + raw, async () => {
       const userSnap = await db.collection('users').doc(userId).get();
       if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
       if (userSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-      // Exact-uppercase match first: every OLD-format code (XXX-XXXX-XXXX,
-      // pre-2026-08-16) was stored all-uppercase with no codeLower field at
-      // all, so this is what keeps any still-active old code redeemable
-      // exactly as before. Falls back to the new codeLower match (the
-      // current 5-char mixed-case format) only if that first lookup misses.
-      let codeSnap = await db.collection('promoCodes').where('code', '==', upper).limit(1).get();
-      if (codeSnap.empty) codeSnap = await db.collection('promoCodes').where('codeLower', '==', lower).limit(1).get();
+      const codeSnap = await db.collection('promoCodes').where('code', '==', raw).limit(1).get();
       if (codeSnap.empty) {
         // A code that doesn't exist at all is the actual "guessing" signal --
         // an already-used or usage-capped code below is a REAL code, not a
@@ -4183,17 +4172,17 @@ app.get('/admin/referrals/list', async (req, res) => {
 // via generateUniqueGiftCode() re-querying the DB per candidate (same
 // pattern as generateUniqueReferralCode()) -- never by shape or a checksum.
 //
-// Redemption is intentionally CASE-INSENSITIVE even though generation is
-// mixed-case: a 5-character code a customer received by SMS/word-of-mouth
-// and has to type by hand shouldn't fail because they typed "FST63" or
-// "fst63" instead of "fsT63" — that's real support burden for zero actual
-// security benefit (this is a promo code checked against a DB record, not
-// a password). Every gift code doc stores a `codeLower` field alongside
-// the display-cased `code`; /redeem below matches on codeLower (falling
-// back to an exact `code` match first, which is what makes any
-// still-active OLD-format XXX-XXXX-XXXX code — those are already
-// all-uppercase — keep redeeming exactly as before, unaffected by this
-// change).
+// Redemption is CASE-SENSITIVE (owner explicit, 2026-08-16, reversing an
+// earlier case-insensitive design): "gf64h" must be typed exactly as
+// issued — "GF64H" is rejected even though it's the same letters, on
+// purpose. /redeem below matches the caller's raw input against the
+// stored `code` field with no case transformation at all. `codeLower`
+// still exists and is still checked at GENERATION time only
+// (generateUniqueGiftCode below) — that's a distinct concern from
+// redemption matching: it stops the system from ever handing out two
+// codes that differ only by case (e.g. "AbC12" and "abc12"), which would
+// be confusing/ambiguous to read back over SMS or phone regardless of
+// whether redemption itself is case-sensitive.
 const GIFTCODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 function genGiftCode() {
   return randFromAlphabet(GIFTCODE_CHARS, 5);

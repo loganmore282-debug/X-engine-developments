@@ -5,10 +5,12 @@
    server-side with unbiased sampling (crypto.randomInt per character, not
    byte%alphabet.length, which is measurably biased for a 54-character
    alphabet), globally unique with no repeats, hardened against injection
-   payloads, and with no double-claiming. Redemption is deliberately
-   CASE-INSENSITIVE (a customer typing a code by hand shouldn't fail
-   because they typed the wrong case) while an already-active OLD-format
-   code (uppercase, dash-separated) must still redeem exactly as before.
+   payloads, and with no double-claiming. Redemption is STRICTLY
+   CASE-SENSITIVE (owner explicit, 2026-08-16, reversing an earlier
+   case-insensitive design): "gf64h" only ever matches "gf64h", never
+   "GF64H" -- `codeLower` still exists but is only ever consulted at
+   generation time (to stop the system minting two codes that differ only
+   by case), never at redemption time.
 
    Proves, against the real server:
      - /admin/promocodes/generate produces codes in the exact 5-character
@@ -18,14 +20,16 @@
      - a large bulk generation (150 codes across 3 calls) is 100% free of
        duplicates, and no code collides with ones already in the DB
      - redemption works end-to-end with the new format (wallet credited, a
-       transaction + promoRedemptions record written) AND is
-       case-insensitive: a code generated as e.g. "fsT63" still redeems
-       when typed in a completely different case
+       transaction + promoRedemptions record written) using the EXACT case
+       the code was generated in
+     - redeeming with ANY letter's case flipped is rejected outright -- the
+       exact same code that would have redeemed correctly with its real
+       case never matches with even one character's case changed
      - an OLD-format XXX-XXXX-XXXX code (simulated directly in the mock
-       store, since the generator no longer produces this shape) still
-       redeems correctly -- proves the backward-compatible dual lookup
-       (exact `code` match first, then `codeLower`) actually works, not
-       just that new codes do
+       store, since the generator no longer produces this shape) redeems
+       when typed in its real (uppercase) case, but is rejected when typed
+       in lowercase -- case sensitivity applies uniformly, old-format codes
+       aren't a special exception
      - no double-claiming: the SAME user redeeming the SAME code twice is
        rejected the second time, and two genuinely concurrent redemption
        attempts by the same user against a multi-use code still only ever
@@ -139,7 +143,7 @@ async function setupUser(uid, phone) {
   const txs = [...collMap('transactions').values()].filter(x => x.userId === U1 && x.type === 'promocode');
   check('a promocode transaction record was written', txs.length === 1, txs);
 
-  console.log('\n== Redemption is case-insensitive: typed in a different case than generated ==');
+  console.log('\n== Redemption is STRICTLY case-sensitive: any case change is rejected ==');
   const U1b = 'gift-redeemer-1b';
   await setupUser(U1b, '0771000702');
   const caseCode = allNewCodes[1];
@@ -147,17 +151,19 @@ async function setupUser(uid, phone) {
   check('sanity: the flipped-case version is actually different from the original', flippedCase !== caseCode, { caseCode, flippedCase });
   const balBeforeCase = collMap('users').get(U1b).walletBalance;
   r = await call('POST', '/redeem', { token: 'uid:' + U1b, body: { code: flippedCase } });
-  check('redeeming with every letter\'s case flipped still succeeds', r.body?.status === 'success', { sent: flippedCase, generated: caseCode, body: r.body });
+  check('redeeming with every letter\'s case flipped is rejected outright', r.code === 400 && !/success/i.test(r.body?.status || ''), { sent: flippedCase, generated: caseCode, body: r.body });
   const balAfterCase = collMap('users').get(U1b).walletBalance;
-  check('wallet actually credited off the case-flipped redemption', balAfterCase > balBeforeCase, { balBeforeCase, balAfterCase });
-  const caseTxs = [...collMap('transactions').values()].filter(x => x.userId === U1b && x.type === 'promocode');
-  check('the recorded transaction shows the CANONICAL (originally-generated) case, not what the user typed', caseTxs[0]?.description?.includes(caseCode), caseTxs);
+  check('wallet untouched by the rejected case-mismatched attempt', balAfterCase === balBeforeCase, { balBeforeCase, balAfterCase });
+  r = await call('POST', '/redeem', { token: 'uid:' + U1b, body: { code: caseCode } });
+  check('the SAME code in its real, exact case redeems fine right after', r.body?.status === 'success', r.body);
+  const balAfterRealCase = collMap('users').get(U1b).walletBalance;
+  check('wallet credited once the exact case was used', balAfterRealCase > balAfterCase, { balAfterCase, balAfterRealCase });
 
-  console.log('\n== An OLD-format XXX-XXXX-XXXX code (pre-2026-08-16, no codeLower field) still redeems ==');
+  console.log('\n== An OLD-format XXX-XXXX-XXXX code redeems in its real case, rejected in any other ==');
   // The generator no longer produces this shape, but any code an admin
-  // minted before this change and never deactivated must keep working --
-  // simulated directly in the mock store, matching exactly how a real
-  // leftover old-format doc looks (no codeLower field at all).
+  // minted before this change and never deactivated must still be
+  // reachable -- simulated directly in the mock store, matching exactly
+  // how a real leftover old-format doc looks (no codeLower field at all).
   collMap('promoCodes').set('legacy-code-1', {
     code: 'ABC-1234-5678', reward: 2500, active: true, usedBy: [], maxUses: 1, createdAt: new Date()
   });
@@ -165,9 +171,13 @@ async function setupUser(uid, phone) {
   await setupUser(U1c, '0771000703');
   const balBeforeLegacy = collMap('users').get(U1c).walletBalance;
   r = await call('POST', '/redeem', { token: 'uid:' + U1c, body: { code: 'abc-1234-5678' } }); // typed lowercase on purpose
-  check('an old-format code (typed lowercase) still redeems via the exact-uppercase-match fallback', r.body?.status === 'success', r.body);
+  check('an old-format code typed in the WRONG case is rejected, not silently matched', r.code === 400 && !/success/i.test(r.body?.status || ''), r.body);
+  const balAfterWrongCaseLegacy = collMap('users').get(U1c).walletBalance;
+  check('wallet untouched by the wrong-case legacy attempt', balAfterWrongCaseLegacy === balBeforeLegacy, { balBeforeLegacy, balAfterWrongCaseLegacy });
+  r = await call('POST', '/redeem', { token: 'uid:' + U1c, body: { code: 'ABC-1234-5678' } }); // real (uppercase) case
+  check('the SAME old-format code in its real (uppercase) case redeems fine', r.body?.status === 'success', r.body);
   const balAfterLegacy = collMap('users').get(U1c).walletBalance;
-  check('wallet credited for the legacy code redemption', balAfterLegacy === balBeforeLegacy + 2500, { balBeforeLegacy, balAfterLegacy });
+  check('wallet credited for the correctly-cased legacy code redemption', balAfterLegacy === balBeforeLegacy + 2500, { balBeforeLegacy, balAfterLegacy });
 
   console.log('\n== No double-claiming: same user, same code, twice ==');
   r = await call('POST', '/redeem', { token: 'uid:' + U1, body: { code: testCode } });

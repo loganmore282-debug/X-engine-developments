@@ -14,6 +14,67 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Owner correction: reverted deposit account-picker, rebuilt withdrawal account selection as a real page navigation; visible reference IDs; strict-case gift codes
+
+Owner corrected the previous entry's UI round directly and firmly: the "select the
+account in payout accounts" instruction was about WITHDRAWALS only, never deposits, and
+even for withdrawals it should never have been an inline list embedded in the withdraw
+sheet — it should be a real navigation to the Payout Accounts page, tap an account
+there, and return automatically. Also flagged two more gaps: deposit/withdrawal records
+need a visible unique reference id, and gift-code redemption must be strictly
+case-sensitive (reversing an earlier, deliberate case-insensitive design).
+
+- **Deposits reverted to typing a phone/network fresh every time** — `openDepositSheet()`
+  in `user-src/original_module.js` restored to its pre-account-picker form. No server
+  change needed; `/deposit/marzpay` was never modified to require a bound account in the
+  first place.
+- **Withdrawal account selection rebuilt as a real page, not an inline list.**
+  `renderWithdrawSheet()` now shows the current account as ONE tappable row; tapping it
+  calls `openPayoutSheet(callback)`, which opens the Payout Accounts screen (the SAME
+  screen used from the Account tab) stacked on top, in a "choose" mode (list only, no
+  delete/add UI, each row tappable) — picking an account invokes the callback and the
+  picker closes itself automatically, revealing the withdraw sheet underneath with the
+  new account applied.
+  - **Found and fixed a real, previously-latent bug while building this**: the shared
+    `popstate` listener (`user-src/original_module.js`) unconditionally hid EVERY
+    currently-shown `.sheet-bg` on any back-navigation — harmless when only one sheet
+    was ever open at a time (true of every screen before this), but it meant closing
+    the new stacked picker also hid the Withdraw sheet underneath it, defeating the
+    "come back automatically" requirement entirely. Fixed with a `_sheetStack` array;
+    `hideSheet()`/popstate now only ever close the topmost sheet. Also stopped
+    `renderPayoutSheet()`'s internal re-renders (delete-pending toggle, cancel,
+    post-delete, post-add) from each pushing a NEW history/stack entry — they now
+    update `$('payoutSheet').innerHTML` directly since the sheet's own single
+    history/stack entry was already pushed once by `openPayoutSheet()`; previously the
+    phone Back button would have needed pressing once per internal interaction before
+    actually leaving the page.
+  - Verified visually via Playwright against the built artifact: opened Withdraw,
+    tapped the account row (picker opens stacked on top, both accounts visible),
+    tapped the second account, confirmed the picker closed AND Withdraw was still
+    showing underneath with the new account's holder/network/phone applied.
+- **Deposit/withdrawal reference IDs are now shown to the member.** The unique,
+  globally-unique reference (`uniqueRef('B')` in `server.js` — format `B` + 12
+  timestamp digits + 4 random digits, e.g. `B2608161823154821`, checked unique across
+  BOTH `pendingDeposits` and `withdrawals`) already existed and was already stored on
+  every deposit/withdrawal doc and its linked transaction row — it just was never
+  rendered anywhere. Added to Deposit/Withdrawal History rows and to Records rows that
+  carry one (`openHistorySheet`/`openRecordsSheet` in `user-src/original_module.js`).
+  No server-side generation change was needed — the format the owner asked for already
+  matched what `uniqueRef` produces.
+- **Gift/promo code redemption is now strictly case-sensitive**, reversing the
+  case-insensitive design from earlier the same day (see that entry further below —
+  `codeLower` fallback matching). `/redeem` in `server.js` now matches the caller's raw
+  input against the stored `code` field with zero case transformation anywhere in the
+  lookup or the per-code lock key. `codeLower` is untouched at generation time
+  (`generateUniqueGiftCode()`) — still prevents minting two codes that differ only by
+  case, a genuinely separate concern from redemption matching. Updated
+  `test-giftcode-format-security.js` (case-flip now asserted REJECTED, not accepted;
+  added a same-code-correct-case-succeeds follow-up) and
+  `test-checkin-giftcode-security.js` (wrong-case redemption now asserted rejected
+  before the correct-case one is tried) to match.
+- **Verification**: full `test-*.js` suite green. `node build-core.js` round-trip OK
+  (411,454 bytes). `user/sw.js` cache bumped to `space8-shell-v219`.
+
 ## 2026-08-16 — ChatGPT (finding) + Claude (fix + UI round) — Withdrawal double-submission race fixed; blue-box account cards, deletable payout accounts, deposit account picker, "No more data" empty states, deposit/withdrawal instructions
 
 Owner asked ChatGPT to review the prior money-safety audit commit. ChatGPT confirmed

@@ -132,11 +132,24 @@ function handleBanned(msg){
 
 // ── SHEETS (full pages, not modals — own history entry, phone Back closes
 // them without exiting the app) ────────────────────────────────────────
+// _sheetStack tracks genuine stacking (2026-08-16, added for the Payout
+// Accounts "choose an account for this withdrawal" picker, which opens ON
+// TOP of an already-open Withdraw sheet rather than replacing it) -- the
+// popstate listener used to unconditionally hide EVERY currently-shown
+// sheet on any back navigation, which was fine when only one sheet was
+// ever open at a time, but broke as soon as two were stacked: closing the
+// picker (a real back-navigation) also hid the Withdraw sheet underneath
+// it, defeating the whole "tap an account, come back automatically"
+// design. Now popstate only hides the TOPMOST sheet, leaving whatever's
+// stacked underneath alone -- correct for both the single-sheet case
+// (stack depth 1, unchanged behavior) and genuine stacking.
+var _sheetStack = [];
 function openSheet(name, html){
   var bg = $(name + 'SheetBg'), sheet = $(name + 'Sheet');
   sheet.innerHTML = html;
   bg.classList.add('show');
   document.body.style.overflow = 'hidden';
+  _sheetStack.push(name);
   history.pushState({ overlay: name }, '', '');
 }
 // Pure DOM close, no history interaction — this is what actually hides a
@@ -146,6 +159,8 @@ function openSheet(name, html){
 // hardware/gesture back button, which never went through closeSheet()).
 function hideSheet(name){
   $(name + 'SheetBg').classList.remove('show');
+  var i = _sheetStack.lastIndexOf(name);
+  if (i !== -1) _sheetStack.splice(i, 1);
   if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
 }
 function closeSheet(name){
@@ -153,7 +168,8 @@ function closeSheet(name){
   else hideSheet(name); // no matching history entry (shouldn't normally happen) — just hide directly
 }
 window.addEventListener('popstate', function(){
-  qsa('.sheet-bg.show').forEach(function(bg){ hideSheet(bg.id.replace('SheetBg', '')); });
+  var top = _sheetStack[_sheetStack.length - 1];
+  if (top) hideSheet(top);
   if ($('assistPanel').classList.contains('show')) hideAssistant();
 });
 qsa('.sheet-back').forEach(function(btn){
@@ -506,7 +522,8 @@ async function openRecordsSheet(){
     var meta = recordMeta(t.type);
     var neg = (t.amount||0) < 0;
     return '<div class="member-row record-row"><div class="info"><div class="phone">' + esc(meta.label) + '</div>' +
-      '<div class="date">' + esc(t.description||'') + '<br>' + esc(t.date||'') + ' ' + esc(t.time||'') + '</div></div>' +
+      '<div class="date">' + esc(t.description||'') + '<br>' + esc(t.date||'') + ' ' + esc(t.time||'') +
+      (t.ref ? '<br>Ref: ' + esc(t.ref) : '') + '</div></div>' +
       '<span class="mono" style="font-weight:700;color:' + (neg?'#ffd0d6':'#fff') + ';flex-shrink:0;margin-left:10px">' +
         (neg?'−':'+') + ugx(Math.abs(t.amount||0)) + '</span></div>';
   }).join('');
@@ -651,7 +668,7 @@ function openHistorySheet(kind){
       var s = String(x.status || '').toLowerCase();
       var pillClass = STATUS_DONE.indexOf(s) !== -1 ? 'pill-done' : STATUS_FAIL.indexOf(s) !== -1 ? 'pill-fail' : 'pill-active';
       return '<div class="member-row record-row"><div class="info"><div class="phone mono">' + ugx(x.amount) + '</div>' +
-      '<div class="date">' + esc(x.date) + ' ' + esc(x.time) + '</div></div>' +
+      '<div class="date">' + esc(x.date) + ' ' + esc(x.time) + (x.ref ? '<br>Ref: ' + esc(x.ref) : '') + '</div></div>' +
       '<span class="pill ' + pillClass + '">' + friendlyStatus(x.status) + '</span></div>';
     }).join('');
   });
@@ -836,10 +853,20 @@ async function openInfoSheet(key){
 // ── PAYOUT ACCOUNT / PIN ─────────────────────────────────────────────
 // Multiple mobile-money accounts can be bound (server already supports
 // this -- /bank/save always adds a new row, never overwrites) -- shown
-// here as a list so a member can hold more than one and pick between them
-// at withdraw/deposit time, and remove one they no longer use.
+// here as a list so a member can hold more than one, remove one they no
+// longer use, and (2026-08-16, owner correction) pick between them for a
+// WITHDRAWAL by navigating here as a real page, not an inline picker
+// embedded in the withdraw sheet: openPayoutSheet(pickCallback) opens this
+// same screen in "choose" mode -- tap any account, it calls the callback
+// with that account and this page closes on its own, dropping the member
+// straight back onto the withdraw sheet underneath (which was never
+// closed, just temporarily covered -- same stacked-sheet mechanism
+// openSheet() already uses everywhere else). Deposits do NOT use this at
+// all; they take a phone/network typed fresh each time, unchanged.
 var _payoutDeletePending = null;
-async function openPayoutSheet(){
+var _payoutPickCallback = null;
+async function openPayoutSheet(pickCallback){
+  _payoutPickCallback = pickCallback || null;
   openSheet('payout', '<div class="sk sk-line"></div>');
   await renderPayoutSheet();
 }
@@ -847,9 +874,10 @@ async function renderPayoutSheet(){
   var r = await api('/bank/list', null, 'GET');
   var accounts = r.status === 'success' ? r.accounts : [];
   STATE.bankAccounts = accounts;
+  var picking = !!_payoutPickCallback;
   var listHtml = accounts.length ? accounts.map(function(a){
-    var pending = _payoutDeletePending === a.id;
-    return '<div class="record-row acct-row" data-id="' + esc(a.id) + '">' +
+    var pending = !picking && _payoutDeletePending === a.id;
+    return '<div class="record-row acct-row' + (picking ? ' selectable' : '') + '" data-id="' + esc(a.id) + '">' +
       '<div class="info"><div class="phone">' + esc(a.holder) + '</div>' +
       '<div class="date">' + esc(a.network) + ' · ' + esc(a.phone) + '</div>' +
       (pending ?
@@ -859,27 +887,47 @@ async function renderPayoutSheet(){
           '<button class="btn-cancel-del" style="background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;font-size:12.5px">Cancel</button>' +
         '</div>' : '') +
       '</div>' +
-      (!pending ? '<button class="acct-del" data-del="' + esc(a.id) + '">' + ico('trash') + '</button>' : '') +
+      (picking ? ico('chev').replace('<svg ', '<svg class="chev" ') :
+        (!pending ? '<button class="acct-del" data-del="' + esc(a.id) + '">' + ico('trash') + '</button>' : '')) +
     '</div>';
   }).join('') : emptyState('wallet', 'No payout accounts bound yet.');
 
-  openSheet('payout',
-    '<div class="sheet-title">Payout Accounts</div>' +
-    '<div class="sheet-sub">Mobile-money accounts you can withdraw to.</div>' +
+  // Content-only update, no openSheet() here -- the sheet was already
+  // opened (and its one history/stack entry pushed) by openPayoutSheet()
+  // before this ever runs; re-pushing on every internal interaction
+  // (delete-pending toggle, cancel, post-delete, post-add) would mean the
+  // phone Back button has to be pressed once per interaction before it
+  // actually leaves the page.
+  $('payoutSheet').innerHTML =
+    '<div class="sheet-title">' + (picking ? 'Choose Payout Account' : 'Payout Accounts') + '</div>' +
+    '<div class="sheet-sub">' + (picking ? 'Tap the account to send this withdrawal to.' : 'Mobile-money accounts you can withdraw to.') + '</div>' +
     listHtml +
-    '<div class="plain-note">Withdrawals only ever go to an account bound here, never a number typed at withdrawal time. Add another account below, or remove one you no longer use with your withdrawal PIN.</div>' +
-    '<div class="auth-form">' +
-      '<div class="field">' + ico('wallet') + '<input id="payHolder" placeholder="Account holder name"></div>' +
-      '<select id="payNetwork" class="field" style="appearance:none">' +
-        '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
-        '<option value="Airtel Money">Airtel Money</option>' +
-      '</select>' +
-      '<div class="field">' + ico('phone') + '<input id="payPhone" placeholder="07XXXXXXXX"></div>' +
-      '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN"></div>' +
-      '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
-    '</div>' +
-    '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Payout Account</button>'
-  );
+    (picking ? '' :
+      '<div class="plain-note">Withdrawals only ever go to an account bound here, never a number typed at withdrawal time. Add another account below, or remove one you no longer use with your withdrawal PIN.</div>' +
+      '<div class="auth-form">' +
+        '<div class="field">' + ico('wallet') + '<input id="payHolder" placeholder="Account holder name"></div>' +
+        '<select id="payNetwork" class="field" style="appearance:none">' +
+          '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
+          '<option value="Airtel Money">Airtel Money</option>' +
+        '</select>' +
+        '<div class="field">' + ico('phone') + '<input id="payPhone" placeholder="07XXXXXXXX"></div>' +
+        '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN"></div>' +
+        '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
+      '</div>' +
+      '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Payout Account</button>');
+
+  if (picking) {
+    qsa('.acct-row', $('payoutSheet')).forEach(function(row){
+      row.onclick = function(){
+        var acct = accounts.find(function(a){ return a.id === row.dataset.id; });
+        var cb = _payoutPickCallback;
+        _payoutPickCallback = null;
+        closeSheet('payout');
+        if (cb && acct) cb(acct);
+      };
+    });
+    return;
+  }
 
   qsa('.acct-del').forEach(function(btn){
     btn.onclick = function(){ _payoutDeletePending = btn.dataset.del; renderPayoutSheet(); };
@@ -942,61 +990,33 @@ async function openPinSheet(){
 }
 
 // ── DEPOSIT ───────────────────────────────────────────────────────────
-// Deposits now pay FROM a saved payout account, same list withdrawals use,
-// rather than a phone/network typed fresh every time -- owner explicit:
-// "every time he wants to deposit he must select the account in payout
-// accounts." (This is a client-side convenience/consistency choice, not a
-// new server restriction -- /deposit/marzpay itself still just takes
-// whatever phone/network is sent, same as before; there's no money-safety
-// reason to lock deposits to a bound account the way withdrawals are,
-// since a deposit can only ever move money INTO this account, never out.)
-async function openDepositSheet(){
-  openSheet('deposit', '<div class="sk sk-line"></div>');
+// Deposits take a phone/network typed fresh each time, same as always --
+// the owner's "select the account in payout accounts" instruction was
+// specifically about WITHDRAWALS (2026-08-16 correction), not deposits.
+function openDepositSheet(){
+  var acc = STATE.account || {};
   var min = (STATE.settings||{}).minDeposit || 20000;
-  var r = await api('/bank/list', null, 'GET');
-  var accounts = r.status === 'success' ? r.accounts : [];
-  STATE.bankAccounts = accounts;
-  if (!accounts.length) {
-    openSheet('deposit',
-      '<div class="sheet-title">Deposit</div>' +
-      emptyState('lock', 'Bind a payout account first to deposit.') +
-      '<button class="btn btn-primary" id="goToBindBtnDep">Bind Payout Account</button>'
-    );
-    $('goToBindBtnDep').onclick = function(){ closeSheet('deposit'); openPayoutSheet(); };
-    return;
-  }
-  renderDepositSheet(accounts, accounts[0].id, min);
-}
-function renderDepositSheet(accounts, selectedId, min){
-  var listHtml = accounts.map(function(a){
-    var sel = a.id === selectedId;
-    return '<div class="record-row acct-row selectable' + (sel?' selected':'') + '" data-id="' + esc(a.id) + '">' +
-      '<span class="acct-check">' + (sel ? ico('check') : '') + '</span>' +
-      '<div class="info"><div class="phone">' + esc(a.holder) + '</div>' +
-      '<div class="date">' + esc(a.network) + ' · ' + esc(a.phone) + '</div></div>' +
-    '</div>';
-  }).join('');
   openSheet('deposit', bannerHtml('basket','deposit') +
     '<div class="sheet-title">Deposit Funds</div>' +
     '<div class="sheet-sub">Minimum deposit ' + ugx(min) + '.</div>' +
-    '<div class="plain-note">Choose which mobile-money account to pay from, then enter an amount. You\'ll get a payment prompt on that phone — enter your mobile money PIN there to approve. Your wallet updates automatically once the payment is confirmed.</div>' +
-    listHtml +
-    '<div class="auth-form" style="margin-top:14px">' +
+    '<div class="auth-form">' +
       '<div class="field">' + ico('deposit') + '<input id="depAmount" type="number" inputmode="numeric" placeholder="Amount (UGX)"></div>' +
+      '<div class="field">' + ico('phone') + '<input id="depPhone" type="tel" placeholder="07XXXXXXXX" value="' + esc(acc.phone||'') + '"></div>' +
+      '<select id="depNetwork" class="field" style="appearance:none">' +
+        '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
+        '<option value="Airtel Money">Airtel Money</option>' +
+      '</select>' +
     '</div>' +
     '<button class="btn btn-primary" id="submitDepositBtn" style="margin-top:14px">Deposit Now</button>'
   );
-  qsa('.acct-row', $('depositSheet')).forEach(function(row){
-    row.onclick = function(){ renderDepositSheet(accounts, row.dataset.id, min); };
-  });
   $('submitDepositBtn').onclick = async function(){
     var btn = $('submitDepositBtn');
     var amt = parseInt($('depAmount').value, 10);
-    var acct = accounts.find(function(a){ return a.id === selectedId; });
+    var phone = $('depPhone').value, network = $('depNetwork').value;
     if (!amt || amt < min) return toast('Enter at least ' + ugx(min), true);
-    if (!acct) return toast('Select which account to pay from', true);
+    if (!cleanPhone(phone)) return toast('Enter a valid mobile-money number', true);
     setBtnLoading(btn, true, 'Initiating…');
-    var r = await api('/deposit/marzpay', { amount: amt, phone: acct.phone, network: acct.network });
+    var r = await api('/deposit/marzpay', { amount: amt, phone: phone, network: network });
     setBtnLoading(btn, false);
     if (r.status === 'success') {
       toast('Check your phone to approve the payment');
@@ -1038,33 +1058,42 @@ async function openWithdrawSheet(){
   }
   var min = (STATE.settings||{}).minWithdraw || 20000;
   var feePct = (STATE.settings||{}).withdrawFeePct || 15;
-  renderWithdrawSheet(accounts, accounts[0].id, min, feePct);
+  renderWithdrawSheet(accounts[0], min, feePct, true);
 }
-function renderWithdrawSheet(accounts, selectedId, min, feePct){
-  var acct = accounts.find(function(a){ return a.id === selectedId; }) || accounts[0];
-  var listHtml = accounts.length > 1 ? accounts.map(function(a){
-    var sel = a.id === acct.id;
-    return '<div class="record-row acct-row selectable' + (sel?' selected':'') + '" data-id="' + esc(a.id) + '">' +
-      '<span class="acct-check">' + (sel ? ico('check') : '') + '</span>' +
-      '<div class="info"><div class="phone">' + esc(a.holder) + '</div>' +
-      '<div class="date">' + esc(a.network) + ' · ' + esc(a.phone) + '</div></div>' +
-    '</div>';
-  }).join('') : '';
-  openSheet('withdraw', bannerHtml('marscrate','withdraw') +
+// Owner correction, 2026-08-16: the account to withdraw to is picked by
+// navigating to the real Payout Accounts page (openPayoutSheet in "choose"
+// mode, stacked on top of this sheet) and tapping one there -- it returns
+// here automatically with the tapped account applied. NOT an inline list
+// embedded in this sheet (that was the wrong shape, tried and reverted).
+// isFirstRender controls whether this pushes a new history entry
+// (openSheet) or just updates the sheet's content in place (coming back
+// from the picker) -- re-pushing on every account change would mean the
+// phone Back button has to be pressed once per account switch before it
+// actually leaves the sheet.
+function renderWithdrawSheet(acct, min, feePct, isFirstRender){
+  var html = bannerHtml('marscrate','withdraw') +
     '<div class="sheet-title">Withdraw Funds</div>' +
-    '<div class="sheet-sub">' + (accounts.length > 1 ? 'Choose which payout account to send to.' : ('To ' + esc(acct.holder) + ' · ' + esc(acct.network) + ' · ' + esc(acct.phone))) + '</div>' +
     '<div class="plain-note">Enter the amount and your withdrawal PIN. The fee below is deducted automatically. Requests are reviewed and sent to your bound payout account — track the status anytime under Withdrawals in Products.</div>' +
-    listHtml +
-    '<div class="auth-form" style="margin-top:' + (listHtml?'14px':'0') + '">' +
+    '<div class="record-row acct-row selectable" id="wdAcctRow">' +
+      '<div class="info"><div class="phone">' + esc(acct.holder) + '</div>' +
+      '<div class="date">' + esc(acct.network) + ' · ' + esc(acct.phone) + '</div></div>' +
+      ico('chev').replace('<svg ', '<svg class="chev" ') +
+    '</div>' +
+    '<div class="auth-form" style="margin-top:14px">' +
       '<div class="field">' + ico('withdraw') + '<input id="wdAmount" type="number" inputmode="numeric" placeholder="Amount (UGX), min ' + ugx(min) + '"></div>' +
       '<div class="field-hint" id="feePreview">Fee ' + feePct + '% applies — enter an amount to see what you\'ll receive.</div>' +
       '<div class="field">' + ico('shield') + '<input id="wdPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit security PIN"></div>' +
     '</div>' +
-    '<button class="btn btn-primary" id="submitWithdrawBtn" style="margin-top:14px">Request Withdrawal</button>'
-  );
-  qsa('.acct-row', $('withdrawSheet')).forEach(function(row){
-    row.onclick = function(){ renderWithdrawSheet(accounts, row.dataset.id, min, feePct); };
-  });
+    '<button class="btn btn-primary" id="submitWithdrawBtn" style="margin-top:14px">Request Withdrawal</button>';
+
+  if (isFirstRender) openSheet('withdraw', html);
+  else $('withdrawSheet').innerHTML = html;
+
+  $('wdAcctRow').onclick = function(){
+    openPayoutSheet(function(newAcct){
+      renderWithdrawSheet(newAcct, min, feePct, false);
+    });
+  };
   $('wdAmount').addEventListener('input', function(){
     var amt = parseInt(this.value,10) || 0;
     var fee = Math.round(amt * feePct / 100);

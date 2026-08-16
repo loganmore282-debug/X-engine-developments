@@ -319,22 +319,54 @@ as one unbroken microtask chain with no genuine overlap possible between two "pa
 `fetch()` calls, which would make the guard look untestable/broken when it's actually
 correct.
 
-**Payout accounts are a real multi-account list, not a single bound account.** The
-server always supported this (`/bank/save` `.add()`s a new row every time, never
-overwrites; `/bank/delete` is PIN-gated and ownership-checked) but the UI only ever
-showed `accounts[0]` until 2026-08-16. Now: `openPayoutSheet()` lists every bound
-account with an inline (no popup) PIN-gated delete; `openDepositSheet()` requires
-picking one of the saved accounts to pay from (client-side convenience, not a new
-`/deposit/marzpay` server restriction — deposits still accept any phone/network sent,
-since money can only ever move IN, not out, through that endpoint); `openWithdrawSheet()`
-shows a picker too once more than one account exists, rather than silently using
-whichever was bound first. Records/History/Payout-account rows all share one visual
-treatment: solid `var(--blue)` background, square-ish corners (`.record-row` in
-`user-src/index.html`) — replacing an earlier pale-gradient rounded-card look, per the
-owner's explicit "blue and box not rounded." Every list empty-state the owner named
-(Records, Deposit/Withdrawal History, Notifications) reads "No more data" — Team
-referrals and Task Center empty states were deliberately left with their own wording,
-not touched.
+**Payout accounts are a real multi-account list, not a single bound account — but
+DEPOSITS never touch this list.** The server always supported multiple bound accounts
+(`/bank/save` `.add()`s a new row every time, never overwrites; `/bank/delete` is
+PIN-gated and ownership-checked) but the UI only ever showed `accounts[0]` until
+2026-08-16. `openPayoutSheet()` (Account tab) lists every bound account with an inline
+(no popup) PIN-gated delete. **Deposits are unrelated to this and take a phone/network
+typed fresh every time** (`openDepositSheet()`), unchanged from the original design —
+an earlier same-day pass wrongly required picking a saved account for deposits too;
+the owner corrected this explicitly ("who told you deposits should require picking a
+number... we concentrated on withdrawals"), and it was reverted the same day. Don't
+reintroduce a deposit account-picker without being asked again.
+
+**Withdrawal account selection is a real page navigation, not an inline list.**
+`openWithdrawSheet()` shows the currently-selected account as one tappable row; tapping
+it calls `openPayoutSheet(callback)`, which opens the SAME Payout Accounts screen
+stacked on top (in a "choose" mode — no delete/add UI, just the list, each row tappable)
+and invokes the callback with whichever account was tapped, closing itself automatically
+and revealing the withdraw sheet underneath, now showing the newly-picked account. This
+required fixing a real, previously-latent bug in the shared sheet mechanism:
+`window.addEventListener('popstate', ...)` used to hide EVERY currently-shown
+`.sheet-bg`, not just the most recently opened one, because nothing before this ever
+stacked two sheets — closing the picker (a real back-navigation) was also hiding
+Withdraw underneath it. Fixed with `_sheetStack` (`user-src/original_module.js`,
+`openSheet`/`hideSheet`/the popstate listener) so a back-navigation only ever closes the
+topmost sheet. If you add another stacked-sheet flow, this is why `_sheetStack` exists —
+don't revert to the old "hide everything visible" popstate logic.
+
+Records/History/Payout-account rows all share one visual treatment: solid `var(--blue)`
+background, square-ish corners (`.record-row` in `user-src/index.html`) — replacing an
+earlier pale-gradient rounded-card look, per the owner's explicit "blue and box not
+rounded." Every list empty-state the owner named (Records, Deposit/Withdrawal History,
+Notifications) reads "No more data" — Team referrals and Task Center empty states were
+deliberately left with their own wording, not touched.
+
+**Deposit/withdrawal reference IDs (`ref`, format `B` + 12 timestamp digits + 4 random
+digits, e.g. `B2608161823154821`) already existed server-side** (`uniqueRef('B')` in
+`server.js`, checked globally unique across BOTH `pendingDeposits` and `withdrawals`) —
+the gap the owner actually meant was that it was never SHOWN anywhere. Now displayed on
+Deposit/Withdrawal History rows and on Records rows that have one (deposit/withdraw
+transaction types only — checkin/commission/etc. don't carry a `ref`).
+
+**Gift/promo code redemption is STRICTLY case-sensitive**, changed 2026-08-16 (owner
+explicit, reversing the earlier "deliberately case-insensitive" design — don't
+resurrect that without being asked again). `/redeem` in `server.js` matches the caller's
+raw input against the stored `code` field with zero case transformation; `codeLower`
+still exists and is still checked, but ONLY at generation time
+(`generateUniqueGiftCode()`), to stop the system minting two codes that differ only by
+case — that's a distinct concern from redemption matching.
 
 **Referral commission is deliberately first-purchase-only, confirmed intentional —
 don't re-flag this as a bug.** L1/L2/L3 commission pays exactly once, off a member's

@@ -137,8 +137,11 @@ const countTx = (uid, type) => [...txns().values()].filter(t => t.userId === uid
 
   console.log('\n-- Valid code credits exactly once, then blocks re-use by the same user --');
   const bobStart = userDoc(B).walletBalance;
-  r = await call('POST', '/redeem', { token: 'uid:' + B, body: { code: 'sweet1' } }); // lowercase on purpose
-  check('redeem succeeds (case-insensitive) and pays 5000', r.body?.status === 'success' && r.body?.reward === 5000, r.body);
+  r = await call('POST', '/redeem', { token: 'uid:' + B, body: { code: 'sweet1' } }); // wrong case on purpose -- redemption is strictly case-sensitive
+  check('wrong-case redeem attempt is rejected, not silently matched', r.code === 400 && !/success/i.test(r.body?.status || ''), r.body);
+  check('wallet unchanged by the wrong-case attempt', userDoc(B).walletBalance === bobStart, userDoc(B).walletBalance);
+  r = await call('POST', '/redeem', { token: 'uid:' + B, body: { code: 'SWEET1' } }); // exact case, matches the seeded code
+  check('redeem succeeds with the exact case and pays 5000', r.body?.status === 'success' && r.body?.reward === 5000, r.body);
   check('wallet credited 5000', userDoc(B).walletBalance === bobStart + 5000, userDoc(B).walletBalance);
   r = await call('POST', '/redeem', { token: 'uid:' + B, body: { code: 'SWEET1' } });
   check('same user re-redeeming rejected', r.code === 400 && /already/i.test(r.body?.message || ''), r.body);
