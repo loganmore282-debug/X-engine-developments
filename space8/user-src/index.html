@@ -157,12 +157,16 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .toast.show{ opacity:1; transform:none; }
 
 /* ---------- skeletons ---------- */
-.sk{ background:linear-gradient(90deg, var(--surface-2) 25%, var(--line) 37%, var(--surface-2) 63%); background-size:400% 100%; animation:sk 1.4s ease infinite; border-radius:8px; }
+.sk{ background:linear-gradient(90deg, var(--surface-2) 25%, var(--line) 37%, var(--surface-2) 63%); background-size:400% 100%; animation:sk .68s ease-in-out infinite; border-radius:8px; }
 @keyframes sk{ 0%{background-position:100% 50%;} 100%{background-position:0 50%;} }
+@media (prefers-reduced-motion:reduce){ .sk{ animation-duration:1.2s; } }
 .sk-line{ height:12px; margin:6px 0; }
 .sk-card{ height:96px; border-radius:var(--radius-card); }
 .sk-row{ display:flex; gap:10px; align-items:center; }
 .sk-circle{ width:40px; height:40px; border-radius:50%; flex-shrink:0; }
+.record-row{ background:linear-gradient(135deg,rgba(46,107,255,.13),rgba(255,255,255,.92)); border:1px solid rgba(46,107,255,.26); border-radius:15px; padding:13px 14px; margin-bottom:9px; box-shadow:0 7px 18px -15px rgba(46,107,255,.72); }
+.record-row .phone{ color:var(--blue-dim); }
+.record-row .date{ color:var(--blue-mute); }
 
 /* ---------- sheets / modals ---------- */
 /* Full pages, not centered modals -- opening one is a real navigation (own
