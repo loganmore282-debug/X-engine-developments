@@ -249,7 +249,15 @@ $('registerBtn').onclick = async function(){
     if (pinR.status === 'error') toast('Account created, but the PIN could not be set — set it later in Account.', true);
   } catch (e) {
     setBtnLoading($('registerBtn'), false);
-    _registering = false;
+    // Only clear _registering if no Firebase account actually exists yet --
+    // fbCreateUser is the only call in this block that can genuinely throw
+    // (api() always resolves with {status:'error'}, never throws), but this
+    // check is written to hold regardless of exactly which line threw: if a
+    // Firebase user already exists at this point, the account WAS created,
+    // and the next retry must still skip fbCreateUser (via `resuming`
+    // above) rather than attempt it again and hit "already-in-use",
+    // stranding the account with no way to finish registering.
+    if (!(window.fbAuth && window.fbAuth.currentUser)) _registering = false;
     var msg = 'Could not create your account.';
     if (String(e.code).indexOf('email-already-in-use') !== -1) msg = 'This phone number is already registered.';
     else if (String(e.code).indexOf('weak-password') !== -1) msg = 'Choose a stronger password (min 6 characters).';

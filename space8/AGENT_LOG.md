@@ -14,6 +14,56 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Codex (findings) + Claude (fixes) — Second-pass audit of Claude's Task Center/banner/security-audit commits: 2 real bugs found and fixed
+
+Owner asked Codex to independently verify Claude's two prior commits (Task Center
+backend + banner `_tabBusy` fix; registration security audit + stuck-registration fix).
+Codex reviewed the actual diffs (not just this log) and reported 2 real defects; it
+could not append its own findings here because GitHub's safety layer rejected the
+full-file write (same class of block Codex has hit before on `server.js`) — recorded
+here by Claude instead, findings verified independently before fixing anything.
+
+- **Confirmed real: `annBgClear` (announcement-background "Clear" button in
+  `admin-src/index.html`) was never wrapped in `withTabBusy()`**, despite the prior
+  entry claiming "all 4 banner/settings upload+clear handlers" were. Re-grepped every
+  `fileToDataUrl`/image-related click/change handler in the file to confirm this was
+  the ONLY miss (the banner-slot `[data-clear]` handler, `annBgFile`, and the banner
+  `[data-file]` handler were genuinely wrapped; the product-edit modal's `pFile`/
+  `pImgClear` correctly don't need wrapping since `modalOpen()` already guards
+  `liveTick()` while any modal is open). Fixed by wrapping `annBgClear`'s handler the
+  same way as the other three.
+- **Confirmed real: `withTabBusy()` had no upper bound.** `.finally()` only runs once
+  the wrapped promise actually settles — a genuinely hung request (sent, no response,
+  connection never drops, which `fetch()` does not time out on by default) would leave
+  `_tabBusy = true` forever, silently disabling live refresh for that admin tab until a
+  manual page reload. Fixed with a 45s safety-valve `setTimeout` that force-clears
+  `_tabBusy` regardless of whether the wrapped promise ever settles (cleared normally
+  via `clearTimeout` on the happy path, so this changes nothing for a normal upload).
+- **Investigated, not a bug in practice, but hardened anyway**: Codex flagged that if
+  Firebase account creation succeeds but `/register` or the PIN-set call "throws," the
+  register button's catch block resets `_registering = false` unconditionally, which
+  would let a retry attempt `fbCreateUser` again and hit "already-in-use," re-stranding
+  the account. Traced this precisely: `api()` (`user-src/original_module.js`) always
+  resolves with `{status:'error',...}` on any network/server failure and never actually
+  throws, so in the CURRENT code the catch block can only be reached by `fbCreateUser`
+  itself rejecting — meaning no account was created yet, and the unconditional reset is
+  correct for every reachable path today. Still hardened it to check
+  `window.fbAuth.currentUser` before resetting `_registering`, so the logic is correct
+  by construction rather than by an implicit "api() never throws" invariant that a
+  future change could silently break.
+- **Everything else in Codex's pass matches independent verification already recorded
+  below/above**: both mission ladders, the L1-3-only team-deposit walk, claimed-flag
+  preservation across the ladder change, `wholeTeamDeposits` wired into both endpoints,
+  product-edit merge safety, the callback-injection defense-in-depth, no `/account`
+  strict-shape consumer, and the built artifacts being current. No action needed on any
+  of those.
+- **Verification**: `node build-admin.js` and `node build-core.js` both round-trip OK
+  (admin 603.5 KB, user 406,006 bytes). Full `test-*.js` suite green, including
+  `test-callback-forgery.js` (Codex's sandbox reported this one stalling on a cancelled
+  external-network approval — confirmed here it's fully mocked with no real network
+  dependency, so that was a sandbox limitation on Codex's side, not a real failure).
+  `user/sw.js` cache bumped to `space8-shell-v216`.
+
 ## 2026-08-16 — Claude — Registration/login security audit: found and fixed 1 real bug (stuck registration on a bad referral code), verified everything else already sound
 
 Owner asked for a full audit of registration/login: validation, encryption/hashing,

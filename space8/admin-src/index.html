@@ -465,7 +465,12 @@ let _live=true, _liveTimer=null;
 let _tabBusy = false;
 function withTabBusy(promise) {
   _tabBusy = true;
-  return Promise.resolve(promise).finally(() => { _tabBusy = false; });
+  // Safety valve: .finally() only fires once the promise actually settles,
+  // so a genuinely hung request (no response, connection never drops) would
+  // otherwise leave _tabBusy true -- and live refresh suppressed -- forever,
+  // until the admin reloads the page. This bounds the worst case instead.
+  const safety = setTimeout(() => { _tabBusy = false; }, 45000);
+  return Promise.resolve(promise).finally(() => { clearTimeout(safety); _tabBusy = false; });
 }
 const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','promocodes','transactions','referrals','settings','admins','auditlog']);
 // The list-style tabs (Users, Deposits, Withdrawals, Transactions,
@@ -1608,9 +1613,11 @@ async function renderSettings(){
   });
   const annBgClear = $('annBgClear');
   if (annBgClear) annBgClear.addEventListener('click', async()=>{
-    const d = await api('/admin/settings/update', { settings: { announcementBg: '' } });
-    toast(d.status==='success'?'Cleared':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if (d.status==='success') renderSettings();
+    await withTabBusy((async()=>{
+      const d = await api('/admin/settings/update', { settings: { announcementBg: '' } });
+      toast(d.status==='success'?'Cleared':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
   });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(),
