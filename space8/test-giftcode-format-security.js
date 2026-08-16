@@ -1,24 +1,37 @@
 /* SPACE8 GIFT-CODE FORMAT + SECURITY AUDIT
-   Owner asked for gift/promo codes in the shape XXX-XXXX-XXXX (a 3-letter
-   brand-style prefix from a curated pool, then two 4-character blocks),
-   generated server-side, globally unique with no repeats, cryptographically
-   unpredictable (not Math.random()), hardened against injection payloads,
-   and with no double-claiming.
+   Owner asked for gift/promo codes to be exactly 5 mixed-case alphanumeric
+   characters (e.g. "fsT63") -- shorter and more natural to type/share than
+   the old XXX-XXXX-XXXX shape this replaces, 2026-08-16 -- generated
+   server-side with unbiased sampling (crypto.randomInt per character, not
+   byte%alphabet.length, which is measurably biased for a 54-character
+   alphabet), globally unique with no repeats, hardened against injection
+   payloads, and with no double-claiming. Redemption is deliberately
+   CASE-INSENSITIVE (a customer typing a code by hand shouldn't fail
+   because they typed the wrong case) while an already-active OLD-format
+   code (uppercase, dash-separated) must still redeem exactly as before.
 
    Proves, against the real server:
-     - /admin/promocodes/generate produces codes in the exact XXX-XXXX-XXXX
-       shape, prefix always from the approved pool, both blocks only using
-       the unambiguous CODE_CHARS alphabet
+     - /admin/promocodes/generate produces codes in the exact 5-character
+       shape, only using the unambiguous mixed-case GIFTCODE_CHARS
+       alphabet (no I/l/O/0/1), and genuinely mixes case across a batch
+       (not accidentally all-uppercase)
      - a large bulk generation (150 codes across 3 calls) is 100% free of
        duplicates, and no code collides with ones already in the DB
-     - redemption still works end-to-end with the new format (wallet
-       credited, a transaction + promoRedemptions record written)
+     - redemption works end-to-end with the new format (wallet credited, a
+       transaction + promoRedemptions record written) AND is
+       case-insensitive: a code generated as e.g. "fsT63" still redeems
+       when typed in a completely different case
+     - an OLD-format XXX-XXXX-XXXX code (simulated directly in the mock
+       store, since the generator no longer produces this shape) still
+       redeems correctly -- proves the backward-compatible dual lookup
+       (exact `code` match first, then `codeLower`) actually works, not
+       just that new codes do
      - no double-claiming: the SAME user redeeming the SAME code twice is
        rejected the second time, and two genuinely concurrent redemption
        attempts by the same user against a multi-use code still only ever
        pay out once
      - a NoSQL-operator injection payload sent as the "code" field (e.g.
-       {"$ne": null}) is neutralised by stripMongoOperators + the new
+       {"$ne": null}) is neutralised by stripMongoOperators + the
        format/length guard, and never matches or crashes /redeem
      - a wildly oversized "code" string is rejected outright, never reaches
        the DB query
@@ -73,9 +86,8 @@ function collMap(name) {
   if (!mockdb.__store.has(name)) mockdb.__store.set(name, new Map());
   return mockdb.__store.get(name);
 }
-const PREFIX_ALPHABET = '[ABCDEFGHJKMNPQRSTUVWXYZ]{3}'; // must mirror server.js PROMO_PREFIX_CHARS exactly (letters only)
-const CODE_ALPHABET = '[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}'; // must mirror server.js CODE_CHARS exactly
-const FORMAT_RE = new RegExp(`^(${PREFIX_ALPHABET})-${CODE_ALPHABET}-${CODE_ALPHABET}$`);
+// Must mirror server.js GIFTCODE_CHARS exactly: mixed-case, no I/l/O/0/1.
+const GIFTCODE_ALPHABET_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789]{5}$/;
 
 async function setupUser(uid, phone) {
   await call('POST', '/account/create-profile', { token: 'uid:' + uid, body: { phone } });
@@ -85,19 +97,15 @@ async function setupUser(uid, phone) {
 (async () => {
   await new Promise(r => setTimeout(r, 600));
 
-  console.log('\n== Generated codes match the exact XXX-XXXX-XXXX shape ==');
+  console.log('\n== Generated codes match the exact 5-character mixed-case shape ==');
   let r = await ownerCall('/admin/promocodes/generate', { minAmount: 1000, maxAmount: 5000, count: 20, maxUses: 1 });
   check('generate succeeds', r.body?.status === 'success' && r.body.codes.length === 20, r.body);
   const batch1 = r.body.codes.map(c => c.code);
-  let allMatch = true;
-  const prefixesSeen = new Set();
-  for (const code of batch1) {
-    const m = FORMAT_RE.exec(code);
-    if (!m) { allMatch = false; continue; }
-    prefixesSeen.add(m[1]);
-  }
-  check('every generated code matches XXX-XXXX-XXXX using the unambiguous alphabet', allMatch, batch1);
-  check('prefixes are NOT drawn from a small fixed pool -- 20 codes produce well over a handful of distinct prefixes', prefixesSeen.size >= 10, [...prefixesSeen]);
+  const allMatch = batch1.every(code => GIFTCODE_ALPHABET_RE.test(code));
+  check('every generated code is exactly 5 characters from the unambiguous mixed-case alphabet', allMatch, batch1);
+  const hasUpper = batch1.some(code => /[A-Z]/.test(code));
+  const hasLower = batch1.some(code => /[a-z]/.test(code));
+  check('the batch genuinely mixes case -- at least one code has an uppercase letter AND at least one has a lowercase letter', hasUpper && hasLower, batch1);
 
   console.log('\n== Bulk generation (150 codes, 3 calls) has zero duplicates, none colliding with existing DB codes ==');
   const seenBefore = new Set(batch1);
@@ -123,13 +131,43 @@ async function setupUser(uid, phone) {
   const testCode = allNewCodes[0];
   const balBefore = collMap('users').get(U1).walletBalance;
   r = await call('POST', '/redeem', { token: 'uid:' + U1, body: { code: testCode } });
-  check('redemption of a fresh XXX-XXXX-XXXX code succeeds', r.body?.status === 'success', r.body);
+  check('redemption of a fresh 5-character code succeeds', r.body?.status === 'success', r.body);
   const balAfter = collMap('users').get(U1).walletBalance;
   check('wallet balance actually increased by the reward amount', balAfter === balBefore + (r.body.reward || 0) && (r.body.reward || 0) > 0, { balBefore, balAfter, reward: r.body.reward });
   const redemptions = [...collMap('promoRedemptions').values()].filter(x => x.userId === U1 && x.code === testCode);
-  check('a promoRedemptions record was written', redemptions.length === 1, redemptions);
+  check('a promoRedemptions record was written with the correct (canonically-cased) code', redemptions.length === 1, redemptions);
   const txs = [...collMap('transactions').values()].filter(x => x.userId === U1 && x.type === 'promocode');
   check('a promocode transaction record was written', txs.length === 1, txs);
+
+  console.log('\n== Redemption is case-insensitive: typed in a different case than generated ==');
+  const U1b = 'gift-redeemer-1b';
+  await setupUser(U1b, '0771000702');
+  const caseCode = allNewCodes[1];
+  const flippedCase = [...caseCode].map(ch => /[a-z]/.test(ch) ? ch.toUpperCase() : ch.toLowerCase()).join('');
+  check('sanity: the flipped-case version is actually different from the original', flippedCase !== caseCode, { caseCode, flippedCase });
+  const balBeforeCase = collMap('users').get(U1b).walletBalance;
+  r = await call('POST', '/redeem', { token: 'uid:' + U1b, body: { code: flippedCase } });
+  check('redeeming with every letter\'s case flipped still succeeds', r.body?.status === 'success', { sent: flippedCase, generated: caseCode, body: r.body });
+  const balAfterCase = collMap('users').get(U1b).walletBalance;
+  check('wallet actually credited off the case-flipped redemption', balAfterCase > balBeforeCase, { balBeforeCase, balAfterCase });
+  const caseTxs = [...collMap('transactions').values()].filter(x => x.userId === U1b && x.type === 'promocode');
+  check('the recorded transaction shows the CANONICAL (originally-generated) case, not what the user typed', caseTxs[0]?.description?.includes(caseCode), caseTxs);
+
+  console.log('\n== An OLD-format XXX-XXXX-XXXX code (pre-2026-08-16, no codeLower field) still redeems ==');
+  // The generator no longer produces this shape, but any code an admin
+  // minted before this change and never deactivated must keep working --
+  // simulated directly in the mock store, matching exactly how a real
+  // leftover old-format doc looks (no codeLower field at all).
+  collMap('promoCodes').set('legacy-code-1', {
+    code: 'ABC-1234-5678', reward: 2500, active: true, usedBy: [], maxUses: 1, createdAt: new Date()
+  });
+  const U1c = 'gift-redeemer-1c';
+  await setupUser(U1c, '0771000703');
+  const balBeforeLegacy = collMap('users').get(U1c).walletBalance;
+  r = await call('POST', '/redeem', { token: 'uid:' + U1c, body: { code: 'abc-1234-5678' } }); // typed lowercase on purpose
+  check('an old-format code (typed lowercase) still redeems via the exact-uppercase-match fallback', r.body?.status === 'success', r.body);
+  const balAfterLegacy = collMap('users').get(U1c).walletBalance;
+  check('wallet credited for the legacy code redemption', balAfterLegacy === balBeforeLegacy + 2500, { balBeforeLegacy, balAfterLegacy });
 
   console.log('\n== No double-claiming: same user, same code, twice ==');
   r = await call('POST', '/redeem', { token: 'uid:' + U1, body: { code: testCode } });

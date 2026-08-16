@@ -202,6 +202,20 @@ tab.
   deposit/withdrawal/investment/cashback/checkin/commission/task-reward/gift-code/admin
   credit-debit on their account, server-scoped to their own userId, real timestamps).
   `openActivitySheet` was removed as dead code once nothing pointed to it anymore.
+  Codex added a 12s background poll (`startLiveRefresh()`) that keeps account/plan data
+  fresh while the app is visible, no reload needed — but that re-renders the whole Home
+  page every tick via `el.innerHTML = html`, which was silently restarting the ticker's
+  24s CSS scroll animation from frame zero every single time (it never completed more
+  than half a loop). Fixed in `renderHome()`: the live `#tickerItems` DOM node is
+  detached before the rebuild and spliced back into the fresh HTML in place of the new
+  (empty) one whenever the feed content hasn't actually changed since last render — same
+  element, same running animation, preserved across the poll; it's only genuinely
+  replaced when there's real new activity. Also found and fixed a real bug while
+  touching this: the ticker was checking `f.type === 'withdrawal'` to decide the verb,
+  but the server's feed rows use a field named `kind` with the value `'withdraw'` — the
+  check never once matched, so the ticker had literally never shown "withdrew" for any
+  simulated withdrawal row, always defaulting to "deposited" regardless of the real
+  kind.
 - **Products** — shortcuts row, admin banner (`darkbar`), My Products + cumulative
   earnings summary, full product cards (name/price/cycle/daily income/total return/
   Invest), invest confirmation sheet.
@@ -286,20 +300,61 @@ earlier in the project, not an oversight. Later purchases still count toward Tas
 Center milestones (active-referral-count, L1-deposit-total), they just never re-trigger
 L1/L2/L3 commission.
 
-## Account identity: publicId ("ID:000000"), added 2026-08-16
+## Account identity: publicId ("ID:000000"), added 2026-08-16, made sequential 2026-08-16
 
 Every member has a permanent, server-issued, globally-unique account number shown on
 the Account screen as `ID:000000` (owner: "every registered user has a unique global
-recognized, server given id"). `publicId` on the user doc — a random 6-digit number
-(`generateUniquePublicId()` in `server.js`, same generate-check-retry shape as
-`generateUniqueReferralCode()`, NOT a shared incrementing counter, which would need its
-own lock and be a contention point on every registration). Assigned at the same moment
-as the referral code, inside `completeRegistrationCore`. **Every account that
-registered before this feature existed self-heals it lazily** the next time `GET
-/account` reads their doc (mirrors the existing checkin-streak self-heal pattern) —
-there was no bulk migration and none is needed; don't write one if asked to "backfill"
-existing users, `/account` already does it transparently and idempotently (same id
-persists on every later read, doesn't reassign).
+recognized, server given id"). Originally a random 6-digit number; same day, Codex
+relayed a follow-up owner decision to make it **sequential for new accounts only**
+(`000001`, `000002`, … — "existing account IDs remain unchanged"). `nextSequentialPublicId()`
+in `server.js`: a single shared counter doc (`collection('counters').doc('publicId')`),
+read-increment-write serialized through `withLock('publicid-counter', ...)` — the same
+"read-modify-write needs a lock, M0 has no real transactions" shape every other
+counter-like operation here already uses — with a uniqueness check-and-skip as a safety
+net against colliding with an account that still holds one of the original random ids
+(not the primary uniqueness mechanism, just free correctness). Called from inside
+`completeRegistrationCore`, so it's reachable both from the member's own `/register`
+AND from the admin's `/admin/user/complete-registration` — that's fine, unlike the
+doc-existence self-heal added earlier the same day (see `/register`'s own comments):
+the counter never trusts the caller's userId for anything except the final uniqueness
+check against real `users` docs, and `completeRegistrationCore` only ever reaches this
+line after already confirming the target doc exists — an admin can't reach it with a
+bogus/nonexistent userId either way, that 404s first. Assigned at registration
+completion, alongside the referral code.
+**Every account that registered before this feature existed self-heals it lazily** the
+next time `GET /account` reads their doc (mirrors the existing checkin-streak self-heal
+pattern, now assigning sequentially too) — there was no bulk migration and none is
+needed; don't write one if asked to "backfill" existing users, `/account` already does
+it transparently and idempotently (same id persists on every later read, doesn't
+reassign).
+
+## Gift codes: 5-character mixed-case, added 2026-08-16 (was XXX-XXXX-XXXX)
+
+`genGiftCode()`/`generateUniqueGiftCode()` in `server.js` — 5 characters from a
+54-character mixed-case unambiguous alphabet (`GIFTCODE_CHARS`, no I/l/O/0/1), e.g.
+`fsT63`, replacing the old 11-character `XXX-XXXX-XXXX` shape. **Redemption
+(`POST /redeem`) is deliberately case-insensitive** even though generation is
+mixed-case — a customer typing a short code by hand shouldn't fail over case, for zero
+real security benefit on a DB-checked promo code. Every code doc now stores a
+`codeLower` field alongside the display-cased `code`; `/redeem` tries an exact `code`
+match first (what keeps any still-active OLD-format code, which is already
+all-uppercase with no `codeLower` field, redeeming exactly as before), then falls back
+to a `codeLower` match for the new format. All random generation in this file
+(referral codes, gift codes) now goes through `randFromAlphabet()`, which uses
+`crypto.randomInt` per character instead of `byte % alphabet.length` — the latter is
+measurably biased whenever 256 isn't a clean multiple of the alphabet size (it wasn't,
+for the new 54-char gift-code alphabet).
+
+## Activity feed: 60 rows / ~4s cadence (was 18 rows / ~25s)
+
+`buildActivityFeed()`/`_activityFeed` cache in `server.js` — still fully simulated,
+still never real transaction data (see the big comment there), just more rows refreshed
+faster so it reads as more genuinely "live." The frontend's own 12s background poll
+(`startLiveRefresh()` in `original_module.js`, added by Codex) is the actual bottleneck
+on how often a given client SEES a refreshed feed — the server rebuilding every 4s
+mostly benefits multiple different users polling at different offsets within that
+window, not any single client. Left the client interval alone; a 4s client poll would
+meaningfully increase server load for little additional visible benefit.
 
 ## Repo / branch / infra
 

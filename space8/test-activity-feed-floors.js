@@ -11,8 +11,8 @@
 
    This sets minDeposit/minWithdraw to deliberately unusual values BEFORE
    the feed is ever built for the first time in this process (so the very
-   first build reflects them, no waiting on the ~25s async refresh), then
-   proves every single generated row -- all 18 -- respects its own floor.
+   first build reflects them, no waiting on the ~4s async refresh), then
+   proves every single generated row -- all 60 -- respects its own floor.
 
    Run: node test-activity-feed-floors.js   (exits 0 = all green)         */
 
@@ -66,7 +66,7 @@ function check(name, cond, extra) {
   check('feed has rows', feed.length > 0, feed.length);
   const deposits = feed.filter(f => f.kind === 'deposit');
   const withdrawals = feed.filter(f => f.kind === 'withdraw');
-  check('at least one of each kind showed up across 18 rows (sanity)', deposits.length > 0 && withdrawals.length > 0, { deposits: deposits.length, withdrawals: withdrawals.length });
+  check('at least one of each kind showed up across 60 rows (sanity)', deposits.length > 0 && withdrawals.length > 0, { deposits: deposits.length, withdrawals: withdrawals.length });
   const badDeposit = deposits.find(d => d.amount < 230000);
   check('every simulated top-up is >= the live minDeposit (230,000), none below it', !badDeposit, badDeposit);
   const badWithdraw = withdrawals.find(w => w.amount < 115000);

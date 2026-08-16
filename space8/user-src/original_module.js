@@ -307,6 +307,22 @@ async function renderHome(){
   var products = (STATE.products||[]).filter(function(p){ return p.active !== false; });
   var checkedIn = acc.lastCheckin && isToday(acc.lastCheckin);
 
+  // Preserve the ticker's own DOM node across this render when its feed
+  // data hasn't actually changed. `el.innerHTML = html` below rebuilds the
+  // ENTIRE Home page fresh every time it runs -- including on the silent
+  // 12s live-refresh timer -- which recreates #tickerItems as a brand-new
+  // element and restarts its 24s CSS marquee animation from frame zero.
+  // Detaching the still-animating node here and splicing it back in after
+  // the rebuild (in place of the fresh, empty placeholder the new HTML
+  // creates) keeps the SAME element -- and its running animation -- alive
+  // across the refresh; it's only actually replaced when the feed content
+  // genuinely changes.
+  var feed = feedR.status === 'success' ? (feedR.feed || feedR.items || []) : [];
+  var feedJson = JSON.stringify(feed);
+  var existingTicker = $('tickerItems');
+  var preservedTicker = (existingTicker && feedJson === STATE.lastFeedJson) ? existingTicker : null;
+  if (preservedTicker) preservedTicker.remove();
+
   var html = bannerHtml('barstack', 'satellite');
   html += '<div class="balance-card">' +
     '<div class="lab">Account Balance</div>' +
@@ -338,8 +354,12 @@ async function renderHome(){
   products.slice(0,10).forEach(function(p){ html += prodCardHtml(p); });
 
   el.innerHTML = html;
+  if (preservedTicker) {
+    var freshTicker = $('tickerItems');
+    if (freshTicker) freshTicker.replaceWith(preservedTicker);
+  }
   wireHomeActions();
-  renderTicker(feedR.status === 'success' ? feedR.feed || feedR.items || [] : []);
+  renderTicker(feed);
 }
 function isToday(dateStr){
   var d = new Date();
@@ -362,17 +382,37 @@ function planCardHtml(inv){
 }
 function renderTicker(feed){
   var track = $('tickerItems');
-  if (track) {
-    STATE.lastFeed = feed;
+  // Real bug found while wiring up the live 12s background refresh: every
+  // renderHome() call (including the silent periodic one) rebuilds this
+  // element's innerHTML unconditionally, which restarts the ticker's own
+  // 24s CSS scroll animation from position zero every time -- the marquee
+  // never completed more than half a loop before visibly snapping back to
+  // the start. Skipping the rebuild when the feed content hasn't actually
+  // changed since last render (the common case between server-side
+  // rebuilds) keeps the animation running smoothly; it only restarts when
+  // there's genuinely new activity to show.
+  var feedJson = JSON.stringify(feed);
+  var changed = feedJson !== STATE.lastFeedJson;
+  if (track && changed) {
+    STATE.lastFeedJson = feedJson;
     if (!feed.length) track.innerHTML = '<span class="ticker-item">Waiting for activity…</span>';
     else {
       var items = feed.slice(0,18).map(function(f){
-        var verb = f.type === 'withdrawal' ? 'withdrew' : 'deposited';
+        // Real bug found while testing the animation fix above: the
+        // server's feed rows (buildActivityFeed() in server.js) use a
+        // field named `kind` with values 'deposit'/'withdraw' -- this was
+        // checking `f.type === 'withdrawal'`, a field that was never even
+        // present on the object, so this ternary always fell through to
+        // "deposited" for every row regardless of what kind it actually
+        // was. The ticker has never once shown "withdrew" for a real
+        // simulated withdrawal.
+        var verb = f.kind === 'withdraw' ? 'withdrew' : 'deposited';
         return '<span class="ticker-item">' + esc(f.phone||f.masked||'A member') + ' ' + verb + ' <span class="amt mono">' + ugx(f.amount) + '</span></span>';
       }).join('');
       track.innerHTML = items + items; // doubled so a -50% translate loop is seamless
     }
   }
+  STATE.lastFeed = feed;
   // Wiring these two buttons was previously INSIDE the `if (!feed.length)`
   // branch above (an early return before this line), so on a fresh
   // install with no site-wide activity yet, neither button ever got a

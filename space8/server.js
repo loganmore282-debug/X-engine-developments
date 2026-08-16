@@ -386,8 +386,23 @@ const BANNER_KEYS = new Set([
 // bytes, accounting for base64's ~37% overhead.
 const BANNER_MAX_LEN = 2_800_000;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 ambiguity
+// Draws n characters from an arbitrary alphabet using crypto.randomInt --
+// Node's own implementation, not a hand-rolled byte%length -- which
+// rejection-samples internally so every character is exactly equally
+// likely. `byte % alphabet.length` (the previous approach here) is
+// measurably biased whenever 256 isn't a clean multiple of the alphabet
+// size, which it never is for these alphabets (e.g. 256 % 32 happens to be
+// 0 for the original 32-char CODE_CHARS, so that one case was actually
+// fine, but the new 54-char gift-code alphabet below is not: 256 % 54 = 40,
+// meaning the first 40 characters would each land about 0.7% more often
+// than the rest -- small, but real, and free to just not have).
+function randFromAlphabet(alphabet, n) {
+  let s = '';
+  for (let i = 0; i < n; i++) s += alphabet[crypto.randomInt(alphabet.length)];
+  return s;
+}
 function randCode(n = 6) {
-  return Array.from(crypto.randomBytes(n)).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
+  return randFromAlphabet(CODE_CHARS, n);
 }
 // 6-character alphanumeric, cryptographically random (crypto.randomBytes),
 // checked against every existing user's referralCode for global uniqueness,
@@ -402,19 +417,42 @@ async function generateUniqueReferralCode() {
   return randCode(8);
 }
 // Every member's permanent, server-issued, globally-unique account number --
-// shown on the Account screen as "ID:000000". Same generate-check-retry
-// shape as generateUniqueReferralCode() (a random 6-digit number, checked
-// against every existing user's publicId, retried up to 20 times before
-// falling back to a wider space) rather than a shared incrementing counter,
-// which would need its own lock and would be a single point of contention
-// on every single registration -- not worth it for a display-only id.
-async function generateUniquePublicId() {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const id = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-    const exists = await db.collection('users').where('publicId', '==', id).limit(1).get();
-    if (exists.empty) return id;
-  }
-  return String(crypto.randomInt(0, 10000000)).padStart(7, '0');
+// shown on the Account screen as "ID:000000". SEQUENTIAL now (owner:
+// "new accounts only: sequential IDs 000001, 000002, etc. Existing account
+// IDs remain unchanged") -- was originally a random 6-digit number
+// (generate-check-retry, same shape as generateUniqueReferralCode()); any
+// account that already has ONE of those random ids keeps it forever, this
+// function is only ever called to assign a publicId that doesn't exist yet
+// (a fresh registration, or the lazy self-heal on GET /account for an
+// account that registered before this feature existed at all -- see
+// there). A single shared counter doc (collection 'counters', doc
+// 'publicId'), read-increment-write serialized through one lock -- the
+// same "read-modify-write needs a lock, M0 has no real transactions" shape
+// every other counter-like operation in this file already uses (e.g.
+// promocode-generate above) -- rather than a real atomic
+// findOneAndUpdate-and-return, which this DB compat layer doesn't expose.
+// Still defends against colliding with one of the pre-existing RANDOM ids
+// this replaces (extremely unlikely given the current user count, but
+// free correctness, not the primary uniqueness mechanism) by skipping
+// forward past any counter value an old random-id account already holds.
+async function nextSequentialPublicId() {
+  return withLock('publicid-counter', async () => {
+    const ref = db.collection('counters').doc('publicId');
+    for (let guard = 0; guard < 50; guard++) {
+      const snap = await ref.get();
+      const current = (snap.exists && Number(snap.data().next)) || 1;
+      await ref.set({ next: current + 1 }, { merge: true });
+      const candidate = String(current).padStart(6, '0');
+      const clash = await db.collection('users').where('publicId', '==', candidate).limit(1).get();
+      if (clash.empty) return candidate;
+    }
+    // 50 consecutive collisions is not realistically reachable, but widen
+    // to 7 digits rather than ever get stuck if it somehow is.
+    const snap = await ref.get();
+    const current = Math.max((snap.exists && Number(snap.data().next)) || 0, 1000000);
+    await ref.set({ next: current + 1 }, { merge: true });
+    return String(current).padStart(7, '0');
+  });
 }
 // Transaction reference: a type letter, timestamp to the second, four random
 // digits — same shape used across the rest of the product line (Chronova/
@@ -1341,12 +1379,13 @@ app.get('/public/banks', async (_req, res) => {
 // ── ACTIVITY FEED — simulated, NOT real transactions (same as Chronova's
 // wireHtml()/buildActivityFeed(), explicitly the approved pattern for this
 // product line). Built ONCE here, server-side, and shared by every client
-// (cached ~25s) so everyone watching at the same moment sees the identical
+// (cached ~4s, tightened 2026-08-16 from ~25s so the feed feels genuinely
+// live) so everyone watching at the same moment sees the identical
 // feed — global/synchronized is the point, not authenticity. Never swap
 // this for real transaction data.
 const _WIRE_STEP = 5000, _WIRE_CAP = 500000; // matches the real min-withdraw multiple/ceiling
 // A broad spread of realistic deposit sizes — was previously just the raw
-// product-price list (as few as 7-10 distinct numbers), so an 18-row feed
+// product-price list (as few as 7-10 distinct numbers), so an 60-row feed
 // kept reusing the same handful of amounts and visibly looked like it was
 // "just rotating" instead of a real, varied stream of people topping up.
 // This ladder covers the whole realistic range at the round numbers a
@@ -1360,7 +1399,7 @@ const _DEPOSIT_LADDER = [
 ];
 // Draws a masked number never yet used in THIS batch (`used`) — plain
 // Math.random() draws let the same last-4-digits show up twice in one
-// 18-row feed often enough to be noticeable, which looked like the same
+// 60-row feed often enough to be noticeable, which looked like the same
 // "person" repeating.
 function maskedMsisdn(used) {
   for (let tries = 0; tries < 50; tries++) {
@@ -1398,7 +1437,7 @@ async function buildActivityFeed() {
   if (!withdrawPoolFiltered.length) withdrawPoolFiltered.push(minWit || 5000);
   const rows = [];
   const usedNumbers = new Set();
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 60; i++) {
     const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
     const pool = kind === 'deposit' ? depositPool : withdrawPoolFiltered;
     rows.push({ kind, phone: maskedMsisdn(usedNumbers), amount: pool[Math.floor(Math.random() * pool.length)] });
@@ -1412,7 +1451,7 @@ app.get('/public/activity-feed', async (_req, res) => {
     try { _activityFeed = await buildActivityFeed(); _activityTs = Date.now(); }
     catch (e) { console.error('Activity feed error:', e.message); }
     finally { _activityBuilding = false; }
-  } else if (!_activityBuilding && Date.now() - _activityTs > 25000) {
+  } else if (!_activityBuilding && Date.now() - _activityTs > 4000) {
     _activityBuilding = true;
     buildActivityFeed()
       .then(f => { _activityFeed = f; _activityTs = Date.now(); })
@@ -1592,7 +1631,7 @@ async function completeRegistrationCore(userId, referralCode) {
       referrerId = refSnap.docs[0].id;
     }
 
-    const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(), generateUniquePublicId()]);
+    const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(), nextSequentialPublicId()]);
     const sett = await getSettings();
     const WELCOME = Number(sett.welcomeBonus) || 0;
     const update = { registrationDone: true, referralCode: myRefCode, publicId: myPublicId, walletBalance: FieldValue.increment(WELCOME) };
@@ -1688,7 +1727,7 @@ app.get('/account', async (req, res) => {
     // finishes.
     let publicId = u.publicId || null;
     if (!publicId && u.registrationDone) {
-      publicId = await generateUniquePublicId();
+      publicId = await nextSequentialPublicId();
       await db.collection('users').doc(uid).update({ publicId }).catch(e => console.warn('publicId self-heal:', e.message));
     }
     res.json({ status: 'success', account: {
@@ -2809,31 +2848,53 @@ app.post('/redeem', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   // Bounded + shape-checked before it ever touches a query: no raw operator
-  // keys survive this (only A-Z0-9 and dashes pass), and stripMongoOperators
-  // (global middleware, app.use above) already strips any '$'/'.' key on
-  // every request body regardless, so this is defense-in-depth, not the
-  // only guard.
-  const code = String(req.body.code || '').trim().toUpperCase().slice(0, 32);
-  if (!code || !/^[A-Z0-9-]+$/.test(code)) return res.status(400).json({ status: 'error', message: 'Enter a promo code' });
+  // keys survive this (only letters/digits and dashes pass), and
+  // stripMongoOperators (global middleware, app.use above) already strips
+  // any '$'/'.' key on every request body regardless, so this is
+  // defense-in-depth, not the only guard.
+  //
+  // Case handling: the current gift-code format (genGiftCode(), above) is
+  // mixed-case by design ("fsT63") but redemption is deliberately
+  // CASE-INSENSITIVE -- a customer typing a 5-character code by hand
+  // shouldn't fail because they typed "FST63" instead of "fsT63", for zero
+  // real security benefit (this is a DB-checked promo code, not a
+  // password). `raw` keeps the exact input for the invalid-attempt log;
+  // `upper`/`lower` below are only for matching.
+  const raw = String(req.body.code || '').trim().slice(0, 32);
+  if (!raw || !/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Enter a promo code' });
+  const upper = raw.toUpperCase(), lower = raw.toLowerCase();
   try {
     // Locked per-CODE (not per user+code) — a shared multi-use code being
     // redeemed by several different users at once must still serialise
     // through one place, or two concurrent redemptions could both read the
-    // same usedBy array below maxUses and both slip through.
-    await withLock('redeem:' + code, async () => {
+    // same usedBy array below maxUses and both slip through. Keyed on the
+    // lowercased form so the SAME code typed in different cases by
+    // different requests still serialises through the same lock.
+    await withLock('redeem:' + lower, async () => {
       const userSnap = await db.collection('users').doc(userId).get();
       if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
       if (userSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-      const codeSnap = await db.collection('promoCodes').where('code', '==', code).limit(1).get();
+      // Exact-uppercase match first: every OLD-format code (XXX-XXXX-XXXX,
+      // pre-2026-08-16) was stored all-uppercase with no codeLower field at
+      // all, so this is what keeps any still-active old code redeemable
+      // exactly as before. Falls back to the new codeLower match (the
+      // current 5-char mixed-case format) only if that first lookup misses.
+      let codeSnap = await db.collection('promoCodes').where('code', '==', upper).limit(1).get();
+      if (codeSnap.empty) codeSnap = await db.collection('promoCodes').where('codeLower', '==', lower).limit(1).get();
       if (codeSnap.empty) {
         // A code that doesn't exist at all is the actual "guessing" signal --
         // an already-used or usage-capped code below is a REAL code, not a
         // guess, so those aren't logged here.
-        logSecurityEvent(userId, 'giftcode_invalid_attempt', { code });
+        logSecurityEvent(userId, 'giftcode_invalid_attempt', { code: raw });
         return res.status(400).json({ status: 'error', message: "That code isn't valid" });
       }
       const codeDoc = codeSnap.docs[0];
       const cd = codeDoc.data();
+      // The doc's own stored `code` -- correct display case -- not the
+      // caller's raw input, for anything shown back to the member later
+      // (their transaction history should read the code as it was
+      // actually issued, not however they happened to type it).
+      const code = cd.code;
       if (cd.active === false) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
       const usedBy = cd.usedBy || [];
       if (usedBy.indexOf(userId) !== -1) return res.status(400).json({ status: 'error', message: "You've already used this code" });
@@ -4049,28 +4110,34 @@ app.get('/admin/referrals/list', async (req, res) => {
 // like manually crediting a wallet: anyone who can mint one can redeem it
 // through any personal account and withdraw the payout)
 // ═══════════════════════════════════════════
-// XXX-XXXX-XXXX — no fixed word list for the prefix: all three segments,
-// prefix included, are generated fresh from crypto.randomBytes every time
-// (never Math.random(), never picked from a stored array), so nothing about
-// a code is drawn from a limited/predictable set. The prefix uses a
-// letters-only unambiguous alphabet (no I/L/O, matching CODE_CHARS' letters)
-// so it still reads like the XXX-XXXX-XXXX shape; the two 4-char blocks use
-// the same full CODE_CHARS alphabet as referral codes. A code is
-// "recognized" purely by an exact match against what the server itself
-// generated and stored — generateUniquePromoCode() below re-queries the DB
-// per candidate (same pattern as generateUniqueReferralCode()) so recognition
-// never depends on the prefix or shape, only on a real DB record existing.
-const PROMO_PREFIX_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ'; // letters only, no I/L/O ambiguity
-function randPrefix(n = 3) {
-  return Array.from(crypto.randomBytes(n)).map(b => PROMO_PREFIX_CHARS[b % PROMO_PREFIX_CHARS.length]).join('');
+// Five mixed-case alphanumeric characters, e.g. "fsT63" -- shorter and more
+// natural to read/type/share than the old XXX-XXXX-XXXX shape, per the
+// owner. Same unambiguous-character philosophy as CODE_CHARS (no I/l/O/0/1)
+// extended to both cases, generated with the same unbiased randFromAlphabet()
+// every other code in this file now uses. A code is still "recognized"
+// purely by an exact match against what the server generated and stored,
+// via generateUniqueGiftCode() re-querying the DB per candidate (same
+// pattern as generateUniqueReferralCode()) -- never by shape or a checksum.
+//
+// Redemption is intentionally CASE-INSENSITIVE even though generation is
+// mixed-case: a 5-character code a customer received by SMS/word-of-mouth
+// and has to type by hand shouldn't fail because they typed "FST63" or
+// "fst63" instead of "fsT63" — that's real support burden for zero actual
+// security benefit (this is a promo code checked against a DB record, not
+// a password). Every gift code doc stores a `codeLower` field alongside
+// the display-cased `code`; /redeem below matches on codeLower (falling
+// back to an exact `code` match first, which is what makes any
+// still-active OLD-format XXX-XXXX-XXXX code — those are already
+// all-uppercase — keep redeeming exactly as before, unaffected by this
+// change).
+const GIFTCODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+function genGiftCode() {
+  return randFromAlphabet(GIFTCODE_CHARS, 5);
 }
-function genPromoCode() {
-  return `${randPrefix(3)}-${randCode(4)}-${randCode(4)}`;
-}
-async function generateUniquePromoCode() {
+async function generateUniqueGiftCode() {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const code = genPromoCode();
-    const exists = await db.collection('promoCodes').where('code', '==', code).limit(1).get();
+    const code = genGiftCode();
+    const exists = await db.collection('promoCodes').where('codeLower', '==', code.toLowerCase()).limit(1).get();
     if (exists.empty) return code;
   }
   throw new Error('Could not generate a unique code right now, please try again');
@@ -4091,10 +4158,10 @@ app.post('/admin/promocodes/generate', async (req, res) => {
     await withLock('promocode-generate', async () => {
       const made = [];
       for (let i = 0; i < n; i++) {
-        const code = await generateUniquePromoCode();
+        const code = await generateUniqueGiftCode();
         const reward = Math.round(min + Math.random() * (max - min));
         await db.collection('promoCodes').add({
-          code, reward, active: true, usedBy: [],
+          code, codeLower: code.toLowerCase(), reward, active: true, usedBy: [],
           maxUses: maxUses ? Math.max(1, parseInt(maxUses)) : 1,
           createdAt: FieldValue.serverTimestamp(), createdBy: req.adminUser?.username || 'owner-key'
         });

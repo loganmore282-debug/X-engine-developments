@@ -14,6 +14,83 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Applied Codex's gift-code/referral/sequential-ID backend handoff; fixed 2 real bugs found in Codex's own committed frontend
+
+- **What changed**: Codex's entry below committed 2 frontend pieces directly (faster
+  skeletons + blue Records cards, live 12s account refresh + softer referral copy) and
+  described 4 backend changes it prepared but couldn't commit (GitHub's safety layer
+  blocked a full `server.js` replace). Verified and implemented all 4 backend pieces,
+  and found + fixed 2 real bugs in the frontend Codex DID commit while testing.
+  1. **Gift codes**: replaced the 11-character `XXX-XXXX-XXXX` format with exactly 5
+     mixed-case alphanumeric characters (`genGiftCode()`, e.g. `fsT63`) from a
+     54-character unambiguous alphabet. Made redemption case-insensitive (a `codeLower`
+     field alongside the display-cased `code`) — a customer typing a short code by hand
+     shouldn't fail over case, for zero real security benefit on a DB-checked promo
+     code — while keeping any still-active OLD-format code redeemable exactly as before
+     via a dual lookup (exact `code` match first, `codeLower` fallback second).
+  2. **Unbiased random sampling**: added `randFromAlphabet()` (crypto.randomInt per
+     character) and moved referral codes, gift codes, and everything else that used to
+     do `crypto.randomBytes(n).map(b => alphabet[b % alphabet.length])` onto it — that
+     pattern is measurably biased whenever 256 isn't a clean multiple of the alphabet
+     size, which was true for the old 32-char referral alphabet in a minor way and
+     would have been more true for a naive 54-char gift-code alphabet.
+  3. **Sequential publicId**: per a follow-up owner decision Codex relayed ("new
+     accounts only: sequential IDs 000001, 000002, etc. Existing account IDs remain
+     unchanged"), replaced the random-6-digit `generateUniquePublicId()` (shipped
+     earlier the same day) with `nextSequentialPublicId()` — a single shared counter
+     doc, read-increment-write serialized through one lock, with a uniqueness
+     check-and-skip safety net against colliding with an account that still holds one
+     of the original random ids. No bulk migration; the existing lazy self-heal on
+     `GET /account` now assigns sequentially too.
+  4. **Activity feed**: bumped the simulated feed from 18 to 60 rows and its server-side
+     rebuild cadence from ~25s to ~4s, per the ask. Noted (not acted on) that the
+     frontend's own 12s poll interval is the actual bottleneck on how often any single
+     client sees a refreshed feed — left that alone since a 4s client poll would add
+     real server load for little additional visible benefit to any one user.
+  5. **Bug found in Codex's own `228f38d` (live refresh)**: the 12s background poll
+     calls the full `renderHome()` on every tick, which rebuilds the entire Home page
+     via `el.innerHTML = html` — silently recreating `#tickerItems` as a brand-new DOM
+     node every time, which restarts its 24s CSS marquee animation from frame zero. The
+     ticker had never completed more than half a scroll loop before visibly snapping
+     back. Fixed by detaching the live ticker node before the rebuild and splicing it
+     back into the fresh HTML in place of the new (empty) placeholder whenever the feed
+     content hasn't actually changed since last render — same element, same running
+     animation, preserved across the poll; only genuinely replaced when there's real
+     new activity. Verified via DOM node IDENTITY (not just visual similarity): the
+     exact same node persists across a same-feed re-render, a different node appears on
+     a real update.
+  6. **Second bug found while fixing #5**: the ticker's deposit/withdrawal verb check
+     was `f.type === 'withdrawal'`, but the server's feed rows (`buildActivityFeed()`)
+     use a field named `kind` with the value `'withdraw'` — a double mismatch (wrong
+     field name AND wrong value) that meant this check had never once matched anything.
+     The ticker had literally never shown "withdrew" for any simulated withdrawal row in
+     its entire existence, always defaulting to "deposited" regardless of the real kind.
+     Fixed to `f.kind === 'withdraw'`.
+- **Why**: owner — "yeah, verify, supplement, modify and ship" — approving Codex's
+  handoff with the same standing instruction to check it against real code first, not
+  take it on faith, and to fix what actually needs fixing along the way.
+- **Verification**: full 63-file `test-*.js` suite passes. Updated
+  `test-giftcode-format-security.js` (was asserting the OLD XXX-XXXX-XXXX shape,
+  which is now the wrong thing to test for) with new checks for the 5-character
+  mixed-case shape, genuine case-mixing across a batch, case-insensitive redemption
+  (a code generated as e.g. "fsT63" redeemed with every letter's case flipped), and
+  an OLD-format code (simulated directly in the mock store) still redeeming correctly
+  — 25 checks, all pass. Updated `test-public-id.js` for the switch to sequential
+  generation: proves a run of consecutive registrations gets ids that are not just
+  unique but strictly contiguous (`n`, `n+1`, `n+2`, …), and that the counter correctly
+  skips past a value already squatted on by a simulated legacy random-id account
+  without ever overwriting it — 30 checks, all pass. Updated
+  `test-activity-feed-floors.js`'s stale "18 rows"/"~25s" comments to match. Playwright
+  end-to-end against the rebuilt artifact: DOM node identity check proves the ticker
+  animation fix actually works (not just "looks the same"); the withdraw-verb fix
+  confirmed showing "withdrew" correctly; balance/account figures and the
+  bell/records button wiring all still render and work correctly across multiple
+  re-renders. `node build-core.js` round-trip OK; `user/sw.js` cache bumped
+  `v212` → `v213` (had to bump twice this round — once after the first fix attempt,
+  again after discovering it was incomplete and fixing it properly at the `renderHome()`
+  level instead of just `renderTicker()`).
+- **Anything left open**: none for this piece.
+
 ## 2026-08-16 — Codex — Faster records UI and live member refresh committed; secure code/ID backend prepared for Claude
 
 - **What changed (committed)**:
