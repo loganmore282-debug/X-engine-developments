@@ -72,11 +72,22 @@ function collMap(name) {
 const users = () => collMap('users');
 const txs = () => collMap('transactions');
 let txN = 0;
+// Noon on the EAT (UTC+3) calendar day `daysAgo` days back, returned as the
+// real UTC instant that corresponds to it.
+//
+// This used to anchor to the UTC calendar day (`new Date()` then
+// setUTCHours(12)), which silently disagrees with the server for the three
+// hours between 00:00 and 03:00 EAT -- during that window the UTC date is
+// still the previous day, so every fixture landed one day earlier than
+// intended and streak-continuation assertions failed. That made the whole
+// check-in suite go red every night between 21:00 and 24:00 UTC and green
+// again afterwards. The server keys check-in days off eatNow() (UTC+3), so
+// the fixtures have to be built on that same calendar.
 function eatNoon(daysAgo) {
-  const d = new Date();
-  d.setUTCHours(12, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() - daysAgo);
-  return d;
+  const e = new Date(Date.now() + 3 * 3600000); // EAT wall clock
+  e.setUTCHours(12, 0, 0, 0);                   // noon on the EAT calendar day
+  e.setUTCDate(e.getUTCDate() - daysAgo);       // step back whole EAT days
+  return new Date(e.getTime() - 3 * 3600000);   // EAT wall clock -> UTC instant
 }
 function addCheckinTx(uid, daysAgo) {
   txs().set('rc-tx-' + (++txN), { userId: uid, type: 'checkin', amount: 500, description: 'Daily reward', createdAt: eatNoon(daysAgo) });
