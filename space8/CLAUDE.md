@@ -93,28 +93,29 @@ app in `user-src/` was built directly against this.
 
 - **Palette — vibrant color is the actual page CANVAS, white cards float on top.**
   **Currently GREEN as of 2026-08-16 (later the same day as the entries below) —
-  `--blue: #22c55e`, value-only swap, name unchanged** (owner: "change color from
+  `--blue: #16a34a`, value-only swap, name unchanged** (owner: "change color from
   blue to green... it should also be vibrant and bright"). The structural
   decision described in this whole section — `--page-bg` is the SAME accent
   color as `--blue`, ~80% coverage, white cards ~10% — is unchanged; only the
   hue flipped, again (this project has now gone blue → sapphire → green → blue
   → **green**, each time keeping the `--blue*` token names and swapping just
   the values — see the "kept their `--blue*` names" note a few lines down,
-  still the right call). **Two attempts at this same green, same day**: the
+  still the right call). **Three attempts at this same green, same day**: the
   first (`#2eff6b`, derived by swapping the G/B channels of the prior blue
-  value) came back "very bright" / too neon per the owner — reverted in favor
-  of a calmer, still-vibrant Tailwind-scale green (`#22c55e`, green-500) that
-  reads as a rich modern SaaS green rather than a highlighter. If asked to
-  adjust the green again, prefer picking from a standard, well-tested color
-  scale (Tailwind/Material/etc.) over a mechanically-derived value — the
-  channel-swap trick that worked fine for the blue→green HUE didn't
-  automatically produce the right INTENSITY, since maxing a channel to 255
-  reads as neon regardless of which channel it is. Don't revert to blue
-  without being asked again — but also don't be surprised if this flips
-  again; treat whatever `--blue` is actually SET to right now (check the
-  file, don't trust this paragraph's own hex codes going stale) as the
-  source of truth, and update this note in place when it changes rather than
-  layering on more history than this.
+  value) came back "very bright" / too neon; the second (`#22c55e`, Tailwind
+  green-500) came back "reduce brightness a bit again" — settled on
+  `#16a34a` (Tailwind green-600, one step darker on the same scale). If asked
+  to adjust the green again, keep moving along this same Tailwind green ramp
+  (`#4ade80` 400 → `#22c55e` 500 → `#16a34a` 600 → `#15803d` 700 → …) rather
+  than picking a fresh value each time — darker for "too bright/vibrant",
+  lighter for "too dark/dull" — and shift `--blue-dim`/`--blue-mute` one step
+  along with it (a full scale is in `user-src/index.html`'s current values
+  below; `--blue-dim` sits one step darker than `--blue`, `--blue-mute` two
+  steps lighter). Don't revert to blue without being asked again — but also
+  don't be surprised if this flips again; treat whatever `--blue` is actually
+  SET to right now (check the file, don't trust this paragraph's own hex
+  codes going stale) as the source of truth, and update this note in place
+  when it changes rather than layering on more history than this.
   The rest of this section (originally written for blue, 2026-08-16 earlier
   that day) still describes the correct STRUCTURE, just mentally substitute
   "green" for "blue" while reading it: `body`/`main`/every `.page` render
@@ -166,7 +167,7 @@ app in `user-src/` was built directly against this.
   add another settings field the admin renders back into HTML, check whether it
   needs the same clamp-and-validate treatment rather than assuming free text is
   safe just because the endpoint is owner-gated.
-  `--blue-dim: #16a34a` / `--blue-mute: #86efac` / `--blue-glow: rgba(34,197,94,.22)` are
+  `--blue-dim: #15803d` / `--blue-mute: #4ade80` / `--blue-glow: rgba(22,163,74,.22)` are
   all derived from the same hue (values current as of the 2026-08-16 blue→green swap
   noted at the top of this Palette section — check the file if this has moved on again).
   **The CSS custom properties kept their `--blue*` names through every color change this
@@ -184,7 +185,7 @@ app in `user-src/` was built directly against this.
   background was chosen over literally replicating the mobile blue-canvas treatment;
   revisit if the owner asks for closer matching), `--card:#ffffff`, `--ink:#0a1220`,
   `--sub:#5b6b84`, `--line:#d7dfec` — all copied from the user app's `--void`/`--surface`/
-  `--ink`/`--ink-dim`/`--line` values. `--gold:#22c55e` / `--gold-deep:#16a34a` /
+  `--ink`/`--ink-dim`/`--line` values. `--gold:#16a34a` / `--gold-deep:#15803d` /
   `--gold-ink:#fff` (variable names kept, same convention as `--blue*` above; values
   current as of the 2026-08-16 blue→green swap, always match `--blue`/`--blue-dim` in
   `user-src/index.html`) drive tabs, primary buttons, and the brand mark.
@@ -195,7 +196,7 @@ app in `user-src/` was built directly against this.
   itself is green too; flagged, not changed, revisit if it ever reads as ambiguous.**
   Literal (non-token) hex values that don't reference these variables get fixed on every
   accent change too — currently: the brand-mark radial-gradient center (`#14532d`), the
-  primary button's gradient highlight (`#86efac`), and the `theme-color` meta tag +
+  primary button's gradient highlight (`#4ade80`), and the `theme-color` meta tag +
   brand-mark SVG icon stroke (`#f0fdf4`). The modal backdrop tint (`rgba(10,18,32,.45)`)
   is a neutral dark scrim, not accent-hued — deliberately left alone across every color
   change so far. Same self-hosted Inter `@font-face` as the

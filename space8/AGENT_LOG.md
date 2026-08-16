@@ -14,6 +14,37 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Green retoned again — one step darker on the same Tailwind scale
+
+Owner, right after the previous entry's retone to `#22c55e` (Tailwind green-500):
+"reduce brightness abit again."
+
+- **Shifted one step down the same Tailwind green ramp** rather than picking a
+  fresh value: `--blue`/`--page-bg`/`--gold` → `#16a34a` (green-600, was
+  green-500). `--blue-dim`/`--gold-deep` → `#15803d` (green-700, was 600).
+  `--blue-mute` → `#4ade80` (green-400, was 300 — keeps it two steps lighter
+  than `--blue`, same relative gap as before). `--blue-glow` →
+  `rgba(22,163,74,.22)`. Admin's button-gradient highlight (the one literal,
+  non-token hex that mirrors `--blue-mute`) → `#4ade80` to match. The
+  brand-mark gradient center (`#14532d`, green-900) and the pale
+  `theme-color`/icon-stroke tint (`#f0fdf4`, green-50) didn't need to move —
+  already at the dark/light ends of the scale.
+- **`CLAUDE.md` updated to capture the pattern now that it's happened twice
+  in one day**: future brightness adjustments should move along this same
+  Tailwind green scale (400→500→600→700→…) rather than deriving a fresh
+  value each time — darker for "too bright," lighter for "too dark" — with
+  `--blue-dim` one step darker than `--blue` and `--blue-mute` two steps
+  lighter, kept in that same relative position whichever step `--blue` lands
+  on.
+- **Verification:** full hex-color audit of both `*-src/index.html` files;
+  rebuilt both `user/index.html` and `admin/index.html`; `user/sw.js` bumped
+  to `space8-shell-v226`; full `test-*.js` suite green; Playwright
+  screenshots of Home/Account (user) confirm the deeper tone renders
+  correctly and stays fully legible.
+- Nothing left open from this round.
+
+---
+
 ## 2026-08-16 — Claude — Green retoned — the first green (#2eff6b) was too bright/neon
 
 Owner, immediately after the previous entry's blue→green swap: "green is very bright,
