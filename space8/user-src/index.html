@@ -157,10 +157,13 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .sk-circle{ width:40px; height:40px; border-radius:50%; flex-shrink:0; }
 
 /* ---------- sheets / modals ---------- */
-.sheet-bg{ position:fixed; inset:0; background:rgba(6,10,18,.5); z-index:100; display:none; align-items:center; justify-content:center; padding:24px; }
+/* Full pages, not centered modals -- opening one is a real navigation (own
+   history entry, phone Back button closes it without exiting the app), not
+   a popup floating over the current screen. */
+.sheet-bg{ position:fixed; inset:0; background:var(--page-bg); z-index:100; display:none; flex-direction:column; }
 .sheet-bg.show{ display:flex; }
-.sheet{ background:var(--surface); width:100%; max-width:420px; border-radius:var(--radius-sheet); padding:24px 22px; max-height:82dvh; overflow-y:auto; }
-.sheet-grab{ display:none; }
+.sheet-head{ display:flex; align-items:center; padding:max(14px, env(safe-area-inset-top)) 16px 12px; flex-shrink:0; }
+.sheet{ background:var(--surface); flex:1; overflow-y:auto; border-radius:var(--radius-sheet) var(--radius-sheet) 0 0; padding:24px 22px calc(24px + env(safe-area-inset-bottom)); }
 .sheet-title{ font-weight:700; font-size:18px; margin:0 0 4px; }
 .sheet-sub{ color:var(--ink-dim); font-size:13px; margin:0 0 18px; }
 .sheet-close{ position:absolute; right:16px; top:16px; }
@@ -410,11 +413,11 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
   </div>
 </div>
 
-<div class="sheet-bg" id="depositSheetBg"><div class="sheet" id="depositSheet"></div></div>
-<div class="sheet-bg" id="withdrawSheetBg"><div class="sheet" id="withdrawSheet"></div></div>
-<div class="sheet-bg" id="investSheetBg"><div class="sheet" id="investSheet"></div></div>
-<div class="sheet-bg" id="payoutSheetBg"><div class="sheet" id="payoutSheet"></div></div>
-<div class="sheet-bg" id="genericSheetBg"><div class="sheet" id="genericSheet"></div></div>
+<div class="sheet-bg" id="depositSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="deposit"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="depositSheet"></div></div>
+<div class="sheet-bg" id="withdrawSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="withdraw"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="withdrawSheet"></div></div>
+<div class="sheet-bg" id="investSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="invest"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="investSheet"></div></div>
+<div class="sheet-bg" id="payoutSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="payout"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="payoutSheet"></div></div>
+<div class="sheet-bg" id="genericSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="generic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="genericSheet"></div></div>
 
 <div class="toast-bg" id="toastBg"><div class="toast" id="toast"></div></div>
 

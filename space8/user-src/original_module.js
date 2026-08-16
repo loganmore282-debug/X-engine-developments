@@ -128,19 +128,34 @@ function handleBanned(msg){
   setTimeout(function(){ doLogout(); }, 1500);
 }
 
-// ── SHEETS ────────────────────────────────────────────────────────────
+// ── SHEETS (full pages, not modals — own history entry, phone Back closes
+// them without exiting the app) ────────────────────────────────────────
 function openSheet(name, html){
   var bg = $(name + 'SheetBg'), sheet = $(name + 'Sheet');
-  sheet.innerHTML = '<div class="sheet-grab"></div>' + html;
+  sheet.innerHTML = html;
   bg.classList.add('show');
   document.body.style.overflow = 'hidden';
+  history.pushState({ overlay: name }, '', '');
+}
+// Pure DOM close, no history interaction — this is what actually hides a
+// sheet. Called both from closeSheet() below (an in-app close/cancel
+// button, which triggers history.back() and lets the resulting popstate
+// call this) and directly from the popstate listener (the phone's own
+// hardware/gesture back button, which never went through closeSheet()).
+function hideSheet(name){
+  $(name + 'SheetBg').classList.remove('show');
+  if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
 }
 function closeSheet(name){
-  $(name + 'SheetBg').classList.remove('show');
-  document.body.style.overflow = '';
+  if (history.state && history.state.overlay === name) history.back();
+  else hideSheet(name); // no matching history entry (shouldn't normally happen) — just hide directly
 }
-qsa('.sheet-bg').forEach(function(bg){
-  bg.addEventListener('click', function(e){ if (e.target === bg) bg.classList.remove('show'), document.body.style.overflow=''; });
+window.addEventListener('popstate', function(){
+  qsa('.sheet-bg.show').forEach(function(bg){ hideSheet(bg.id.replace('SheetBg', '')); });
+  if ($('assistPanel').classList.contains('show')) hideAssistant();
+});
+qsa('.sheet-back').forEach(function(btn){
+  btn.addEventListener('click', function(){ closeSheet(btn.dataset.close); });
 });
 
 // ── AUTH ──────────────────────────────────────────────────────────────
@@ -830,14 +845,19 @@ async function assistSend(text){
 }
 function openAssistant(){
   $('assistPanel').classList.add('show');
+  history.pushState({ overlay: 'assist' }, '', '');
   if (!$('assistBody').childElementCount) {
     addMsg("Hi! I'm the Space8 assistant. Ask me anything about deposits, withdrawals, investing, referrals or your account.", 'bot');
     $('assistQuick').innerHTML = ASSIST_QUICK.map(function(q){ return '<div class="qchip">' + esc(q) + '</div>'; }).join('');
     qsa('.qchip').forEach(function(c){ c.onclick = function(){ assistSend(c.textContent); }; });
   }
 }
+function hideAssistant(){ $('assistPanel').classList.remove('show'); }
 $('assistFab').onclick = openAssistant;
-$('assistClose').onclick = function(){ $('assistPanel').classList.remove('show'); };
+$('assistClose').onclick = function(){
+  if (history.state && history.state.overlay === 'assist') history.back();
+  else hideAssistant();
+};
 $('assistSend').onclick = function(){
   var input = $('assistInput');
   var text = input.value.trim();

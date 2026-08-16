@@ -14,6 +14,42 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Sheets now open as real full pages, not centered popups
+
+- **What changed**: converted the `.sheet-bg`/`.sheet` overlay system (Deposit,
+  Withdraw, Invest, Payout Account, Security PIN, Gift/Info, Activity, Notifications —
+  5 shared containers: `deposit`/`withdraw`/`invest`/`payout`/`generic`) from a
+  centered, backdrop-dimmed modal into a genuine full-page navigation. `.sheet-bg` is
+  now `position:fixed;inset:0;background:var(--page-bg)` with a new `.sheet-head` back
+  button (reusing the assistant chevron icon); `.sheet` is a full-height rounded-top
+  panel, not a `max-width:420px` card. `openSheet()` in `original_module.js` now does
+  `history.pushState({overlay:name}, '', '')` on open; a new shared `popstate` listener
+  hides whichever sheet (or the assistant panel) is currently open, so the phone's
+  hardware/gesture Back button closes the overlay instead of exiting the app. New
+  `hideSheet()` (pure DOM close) and updated `closeSheet()` (routes through
+  `history.back()` when the state matches, so in-app close buttons and hardware Back
+  both funnel through the same close path). Extended the identical pattern to the
+  assistant panel (`openAssistant()`/`#assistClose`).
+- **Why**: owner — "l also want want things to open to fresh page not in the
+  middle, so maintain skeleton loaders" — confirmed via AskUserQuestion that scope was
+  the sheets (not the tab-switch transition).
+- **Deliberately untouched**: every sheet's content-generating function
+  (`openDepositSheet`, `openWithdrawSheet`, `openHistorySheet`, `openInfoSheet`,
+  `openPinSheet`, `openInvestSheet`, `openPayoutSheet`, `openNotificationsSheet`,
+  `openActivitySheet`) and their skeleton-loader HTML — only the container chrome +
+  history wiring changed, to keep blast radius off any real-money transactional logic.
+- **Verification**: `node build-core.js` → round-trip OK. Playwright smoke test
+  (fresh headless Chromium, mocked auth) confirmed: sheet opens full-viewport
+  (`position:fixed`, `inset:0`) with a working back button and correct
+  `history.state`; clicking the back button closes it and clears history state;
+  browser/hardware Back (popstate) also closes it; the app itself stays mounted
+  (navbar still present) — it doesn't exit; the assistant panel opens/closes via the
+  same history mechanism; PIN sheet content still renders correctly. Full backend
+  suite re-run (53 `test-*.js` files) — all pass, as expected for a frontend-only
+  change. Bumped `user/sw.js` cache `v207` → `v208`.
+- **Anything left open**: none for this piece. Next up per the same user message:
+  admin banner residue check + admin theme re-match (separate, not yet started).
+
 ## 2026-08-16 — Claude — Reverted green → vibrant blue, and made blue the actual page CANVAS (not just an accent)
 
 - **What changed**: the owner sent 6 reference screenshots of another platform and said

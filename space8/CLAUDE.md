@@ -101,13 +101,26 @@ app in `user-src/` was built directly against this.
   light white mode"). The `prefers-color-scheme:dark` media block and `[data-theme="dark"]`
   overrides that used to exist have been deleted entirely; do not re-add device-driven dark
   mode without being asked again.
-- **No slide/bottom-sheet animation** — bottom sheets (`.sheet-bg`/`.sheet`) open as
-  centered, instantly-appearing modals (`align-items:center`, no transform/transition at
-  all), changed 2026-08-16 from an earlier slide-up-from-bottom pattern per the owner
-  ("sheets should not slide from down, rather should open from middle" + a general "stop
-  bringing animation" complaint). The one deliberate exception is the horizontal activity
-  ticker on Home, a continuous CSS-keyframe marquee — the owner asked for this "running
-  checker" by name, it is not the animation they meant to stop.
+- **Sheets are real full pages, not centered popups** — changed 2026-08-16 again per the
+  owner ("things to open to fresh page not in the middle"). `.sheet-bg` now covers the
+  full viewport (`position:fixed;inset:0;background:var(--page-bg)`), with a
+  `.sheet-head` back button (reusing the assistant panel's chevron) and the `.sheet`
+  itself as a full-height rounded-top panel — this is genuine navigation, not a modal.
+  5 containers share the mechanism: `deposit`, `withdraw`, `invest`, `payout`, `generic`
+  (the last used by history/info/PIN/notifications sheets via `openHistorySheet`/
+  `openInfoSheet`/`openPinSheet`/`openNotificationsSheet`). `openSheet(name, html)` in
+  `original_module.js` does `history.pushState({overlay:name}, '', '')` on open; a single
+  shared `popstate` listener hides whatever sheet (or the assistant panel) is currently
+  shown, so the phone's hardware/gesture Back button closes an open sheet instead of
+  exiting the app. `closeSheet(name)` (used by in-app Cancel/back buttons) calls
+  `history.back()` when the current history state matches, so both close paths funnel
+  through the same `hideSheet()`. The assistant panel (`openAssistant()`/`#assistClose`)
+  follows the identical pattern. Content-generating functions (`openDepositSheet` etc.)
+  and their skeleton-loader HTML were untouched — only the container chrome + history
+  wiring changed. No slide/transition animation was added (the owner has repeatedly
+  asked to "stop bringing animation") — the page appears instantly, same as the old
+  centered modal did. The one deliberate exception remains the horizontal activity
+  ticker on Home, a continuous CSS-keyframe marquee the owner asked for by name.
 - **No decorative card borders** ("no frames") — `.card`/`.prod-card`/`.plan-card`/etc.
   rely on `background:var(--surface)` against `var(--page-bg)` for grouping, not an outline.
   Functional element borders (form `.field`/`.auth-input`, `.btn-secondary`/`.btn-ghost`
