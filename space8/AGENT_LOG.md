@@ -14,6 +14,36 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Green retoned — the first green (#2eff6b) was too bright/neon
+
+Owner, immediately after the previous entry's blue→green swap: "green is very bright,
+use another green 💚 🟩" — both emoji land on a normal, mid-saturation green, not the
+lime/highlighter tone `#2eff6b` (derived by maxing the G channel to 255 via a G/B
+channel swap of the old blue) actually produced.
+
+- **Retoned to `#22c55e`** (a standard Tailwind green-500) — `--blue`/`--page-bg` in
+  `user-src/index.html`, `--gold` in `admin-src/index.html`. Rest of the scale follows
+  the same Tailwind green ramp instead of another mechanical derivation:
+  `--blue-dim`/`--gold-deep` → `#16a34a` (green-600), `--blue-mute` → `#86efac`
+  (green-300), `--blue-glow` → `rgba(34,197,94,.22)`, `--surface-blue` → `#dcfce7`
+  (green-100, still unused but kept consistent). The 3 literal non-token hex values
+  in admin also retoned to match: brand-mark gradient center → `#14532d` (green-900),
+  button gradient highlight → `#86efac` (green-300, same as `--blue-mute`),
+  `theme-color` meta + brand-mark icon stroke → `#f0fdf4` (green-50).
+- **Lesson captured in `CLAUDE.md`**: the channel-swap trick that correctly picked the
+  right HUE for blue→green didn't automatically produce the right INTENSITY — maxing a
+  channel to 255 reads as neon/highlighter regardless of which channel it is. Next time
+  the accent changes, pull from a known color scale (Tailwind/Material/etc.) instead of
+  deriving a fresh value mechanically.
+- **Verification:** full hex-color audit of both `*-src/index.html` files (no leftover
+  `#2eff6b`-family values anywhere); rebuilt both `user/index.html` and
+  `admin/index.html`; `user/sw.js` bumped to `space8-shell-v225`; full `test-*.js`
+  suite green; Playwright screenshots of Home/Account (user) and the login screen
+  (admin) confirm the calmer tone renders correctly and stays fully legible.
+- Nothing left open from this round.
+
+---
+
 ## 2026-08-16 — Claude — Accent color blue → vibrant green (user + admin); ported the missing half of the "app won't update" fix from the root-level ChocoMCC sw.js
 
 Owner: "change color from blue to green... do both admin and user, it should also be
