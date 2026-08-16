@@ -36,6 +36,12 @@ contains('what are the rules', ['One account per person.']);
 contains('forgot password', ['Firebase Authentication', 'password recovery']);
 contains('welcome registration bonus', ['UGX 5,000']);
 contains('MTN mobile money number', ['07XXXXXXXX', '+2567XXXXXXXX']);
+contains('my referral code didnt apply', ["can't be added", 'Support']);
+contains('i registered with the wrong phone number', ["isn't self-editable", 'Support']);
+
+const noRulesText = answerAssistant({ ...context, settings: { ...context.settings, rulesText: '' }, message: 'what are the rules and terms', history: [] });
+assert(!noRulesText.includes('Privacy'), 'rules fallback should not mention the removed Privacy Policy page: ' + noRulesText);
+assert(noRulesText.includes('Rules or Terms'), 'rules fallback should point to the two pages that still exist: ' + noRulesText);
 
 const contextual = answerAssistant({
   ...context,

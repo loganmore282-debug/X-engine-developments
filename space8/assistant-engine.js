@@ -8,9 +8,11 @@
 
    This is a rule-based engine, not a language model — there is no external
    API and nothing was "trained" on external text. What makes it feel more
-   capable than a flat FAQ table is: ~25 weighted intents covering the whole
+   capable than a flat FAQ table is: 40+ weighted intents covering the whole
    platform in real depth (not just "how do I X" but "why does X work that
-   way", timing, safety, edge cases), live product-name + money-amount
+   way", timing, safety, edge cases, stuck/pending problem reports), typo
+   normalization + conservative one-edit fuzzy keyword matching, live
+   product-name + money-amount
    extraction so answers react to specifics in the message, and two-turn
    context blending so short follow-ups land on the right topic.
 
@@ -40,7 +42,7 @@
 function normalize(s) {
   return String(s || '').toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
-const TOKEN_ALIASES={depost:'deposit',depsit:'deposit',deposite:'deposit',withdrawl:'withdrawal',withdrawel:'withdrawal',withraw:'withdrawal',invesment:'investment',investement:'investment',refferal:'referral',refferal:'referral',referal:'referral',commision:'commission',comission:'commission',promocode:'giftcode',momo:'mobilemoney',passwd:'password'};
+const TOKEN_ALIASES={depost:'deposit',depsit:'deposit',deposite:'deposit',withdrawl:'withdrawal',withdrawel:'withdrawal',withraw:'withdrawal',invesment:'investment',investement:'investment',refferal:'referral',referal:'referral',commision:'commission',comission:'commission',promocode:'giftcode',momo:'mobilemoney',passwd:'password'};
 function tokenize(s){return normalize(s).split(' ').filter(Boolean).map(w=>TOKEN_ALIASES[w]||w);}
 function editDistanceOne(a,b){if(a===b)return true;if(a.length<5||b.length<5||Math.abs(a.length-b.length)>1)return false;let i=0,j=0,e=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue;}if(++e>1)return false;if(a.length>b.length)i++;else if(b.length>a.length)j++;else{i++;j++;}}return e+(i<a.length||j<b.length?1:0)<=1;}
 function stem(w) {
@@ -217,11 +219,13 @@ const INTENTS = [
   { id:'history',priority:3,kw:{history:3,transaction:2,record:2,receipt:2},reply:()=> '🧾 Account contains Deposit and Withdrawal histories. Investment progress is on Home and Products → My Products. Keep the Space8 reference for anything Support must investigate.' },
   { id:'notifications',priority:3,kw:{notification:3,alert:2,bell:2,push:2},reply:()=> '🔔 Tap the Home bell for announcements. Push alerts also require phone/browser notification permission; enable it in device settings and reopen Space8.' },
   { id:'maintenance',priority:4,kw:{maintenance:3,offline:2,unavailable:2,downtime:2},reply:c=>c.settings.maintenanceMode?`🛠️ Space8 is under maintenance. ${c.settings.maintenanceMsg||'Please try again shortly.'}`:'✅ Space8 is not marked as under maintenance. Check your connection, avoid repeating money actions, and give Support the exact error.'},
-  { id:'rules',priority:3,kw:{rule:3,rules:3,policy:2,terms:2,privacy:2},reply:c=>c.settings.rulesText?`📋 Current rules: ${String(c.settings.rulesText).slice(0,900)}`:'📋 Open Account → Rules, Terms or Privacy. Those admin-managed pages are the source of truth.'},
+  { id:'rules',priority:3,kw:{rule:3,rules:3,policy:2,terms:2},reply:c=>c.settings.rulesText?`📋 Current rules: ${String(c.settings.rulesText).slice(0,900)}`:'📋 Open Account → Rules or Terms. Those admin-managed pages are the source of truth.'},
   { id:'announcement',priority:3,kw:{announcement:3,update:1,news:1},reply:c=>c.settings.annEnabled?`📢 ${c.settings.annTitle||'Announcement'}: ${c.settings.annBody||'Open Home for details.'}`:'📢 There is no active platform announcement right now.'},
   { id:'network_error',priority:4,phrase:[/(network|connection|server).*(error|failed|problem|unavailable)/i,/something went wrong/i],reply:()=> '📶 Check data/Wi-Fi and reopen the app. Before retrying a deposit, investment or withdrawal, verify its status; save the exact error and reference for Support.'},
   { id:'mobile_networks',priority:3,kw:{mtn:3,airtel:3,mobilemoney:2},reply:()=> '📱 Select the same network as the Uganda mobile-money number entered. Use 07XXXXXXXX or +2567XXXXXXXX, and never approve an unfamiliar prompt.'},
   { id:'welcome_bonus',priority:3,phrase:[/(welcome|registration|signup).*(bonus|gift|reward)/i],reply:c=>`🎉 The current registration bonus is ${fmt(c.settings.welcomeBonus||0)}. It is credited once after registration; withdrawal rules may require buying a plan first.`},
+  { id:'referral_not_applied',priority:5,phrase:[/referral code.*(didn.?t|did not|wasn.?t|was not|never) (apply|work|credit)/i,/(forgot|didn.?t|did not).{0,8}(enter|add|use).*(referral|invite) code/i,/add.*(referral|invite) code (after|later)/i],reply:()=> "🤝 A referral code only attaches if it's entered during registration, before the account is created — it can't be added or changed afterward, even by Support in most cases. If you registered with the correct code and it still isn't reflected on the referrer's Team tab, contact Support with both phone numbers and the registration date so it can be checked." },
+  { id:'phone_change',priority:4,phrase:[/(change|update|correct|fix).{0,20}(my )?(registered )?phone/i,/phone.{0,20}(is |was )?(wrong|incorrect)/i,/registered.{0,20}(wrong|incorrect) (phone|number)/i],reply:()=> "📱 Your registered phone number isn't self-editable in the app — it's tied to your account and payout history. If it's wrong or you've changed numbers, contact Support with your old and new number so it can be corrected safely." },
 
   { id: 'howworks', priority: 2,
     phrase: [/how does (space8|it|this) work/i, /how does the platform work/i, /explain (space8|how this works)/i],

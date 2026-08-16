@@ -14,6 +14,62 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Verified Codex's assistant expansion, fixed a stale reference, added 2 more intents
+
+- **What changed**: the owner asked me to check Codex's assistant-engine.js changes
+  (previous entry below) before trusting them, and to keep training the assistant
+  further.
+  - **Verification of Codex's work**: read the full diff and cross-checked its two
+    headline factual corrections against the real `server.js` logic rather than taking
+    the commit message's word for it. Confirmed accurate: (1) cashback genuinely settles
+    day-by-day (`settleInvestmentIfDue()`, "settle-on-read, no cron" — pays
+    `dailyPayout` per elapsed day, caught up lazily on read, NOT held until maturity —
+    the assistant's prior "credited... the moment it matures" copy, which I'd written
+    earlier this session, was actually wrong); (2) check-in genuinely resets on Uganda
+    calendar day (`/checkin`'s `today = nowStr().date` + `u.lastCheckin === today`
+    gate), not a rolling 24-hour timer as the old copy claimed. Also checked the
+    priority tie-break fix (`b.intent.priority-a.intent.priority`, was
+    `a...-b...`) against how priority is actually used across all 41 intents (5 =
+    urgent problem report, 1 = generic chit-chat) — descending is correct, the old
+    ascending order would have let generic FAQ replies win ties over stuck-deposit/
+    withdrawal reports. Ran `test-assistant-engine.js` (new) and the full 55-file
+    `test-*.js` suite — all pass. Manually probed typo tolerance, the priority fix, and
+    the dual-topic "and/also" handling with fresh cases beyond the committed tests — all
+    behaved correctly. Conclusion: Codex's changes are sound, no revert needed.
+  - **One real bug found and fixed**: the new `rules` intent's fallback reply pointed
+    users to "Account → Rules, Terms or Privacy" — but Privacy Policy was removed from
+    the Account menu earlier this session (`menuRow('lock','Privacy Policy','privacy')`
+    deleted, per the owner's "also remove privacy policy 🙄"). Codex's change predated
+    that removal being in its context, so the copy went stale on arrival. Fixed to
+    "Rules or Terms".
+  - **Two more intents added** (further training, per the owner's request): `phone_change`
+    (registered login phone isn't self-editable in-app — distinct from the payout
+    account number, which IS self-service via Account → Payout Account/`/bank/save`;
+    verified no self-service phone-update endpoint exists in `server.js`) and
+    `referral_not_applied` (a referral code only attaches at registration —
+    `referredBy` is written once in `completeRegistrationCore()`, with the only other
+    writer being the admin-only `/admin/user/attach-referrer` staff-fix path — so a
+    forgotten code genuinely can't be self-added after the fact). Also cleaned up a
+    harmless duplicate object key in `TOKEN_ALIASES` (`refferal` was listed twice) and
+    updated the file's header comment (stale "~25 weighted intents" → "40+").
+  - Iterated the two new intents' phrasing after finding real gaps: initial regexes
+    missed "forgot **to** add" (gap between verb and object) and reversed word order
+    ("phone number is wrong on my account" vs. the assumed "wrong phone number") —
+    caught by manually probing natural phrasings beyond the happy path, not just the
+    committed test cases. Deliberately kept the phone_change phrase matching anchored
+    to the specific word "phone" (not generic "number") after finding a false-positive
+    ("the number of days shown for my plan is wrong" nearly matched) — verified the
+    tightened version no longer misfires on that case while still catching the real one.
+- **Why**: owner — "codex has improved on the assistant, so read space8/AGENT_LOG.md
+  and see his contributions, whether they are right, also training the assistant more
+  further."
+- **Verification**: full 55-file `test-*.js` suite passes, including the real
+  end-to-end `test-assistant-smoke.js` (through the actual `POST /assistant/chat`
+  endpoint, not just the engine in isolation) and the new `test-assistant-engine.js`
+  cases for both new intents plus the Privacy-reference regression check. Manually
+  probed with messages not in any committed test.
+- **Anything left open**: none for this piece.
+
 ## 2026-08-16 — Codex — Expanded the Space8 assistant into broad, typo-tolerant website support
 
 - **What changed**:
