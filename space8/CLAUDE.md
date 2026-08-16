@@ -52,10 +52,23 @@ The owner was explicit and this must not be re-litigated without them saying so:
    Also removed a dead `SPACE8_IMAGES` base64 blob (~270KB, 10 orphaned space-photo
    product-thumbnail fallbacks whose keys — `comet`/`nebula`/`asteroid`/etc. — never
    matched any real product key in `DEFAULT_PRODUCTS`) and its 3 now-simplified call
-   sites. The chocolate-themed banner SLOT KEY NAMES (`ganache`/`truffle`/`bonbon`/
-   `snickersplate`/`snickerscookie`/`lavacake`/`factory1`/`factory2`) are unrelated,
-   cosmetic-only (never shown to users), and were deliberately left alone — renaming them
-   risks breaking already-admin-uploaded banners tied to those DB keys.
+   sites.
+   **Banner slots pruned, 2026-08-16 (owner: "very many residues banners in admin panel
+   which are useless... remove them")**: `admin-src/index.html`'s `BANNER_LABELS`
+   (controls which upload slots the admin UI shows) went from 16 entries to the 6 that
+   are actually wired to a real `bannerHtml()` call in the rebuilt `user-src/`:
+   `barstack` (Home), `giftbox` (Team), `basket` (Deposit sheet), `marscrate` (Withdraw
+   sheet), `darkbar` (Products), `rocherstack` (Account). The 10 removed
+   (`assortment`, `lavacake`, `ganache`, `factory2`, `factory1`, `cookies`, `bonbon`,
+   `truffle`, `snickersplate`, `snickerscookie`) were verified dead by grepping every
+   `bannerHtml()` call site — no code anywhere renders them; several referenced a
+   "Records" tab structure that doesn't exist in the rebuilt app at all (stale
+   ChocoMCC-era naming). This is an admin-UI-only change — server-side `BANNER_KEYS`
+   (the upload whitelist) still accepts all 16 old key names unchanged, so nothing
+   already stored under a removed key was touched or is at risk; it's just no longer
+   shown as an upload option since nothing displays it. If a screen someday needs one of
+   the removed slots back, re-add it to `BANNER_LABELS` (the whitelist already covers
+   it) rather than reusing a still-orphaned key for something unrelated.
 3. **User-facing app (`user-src/index.html` + `user-src/original_module.js`, and its built
    artifact `user/`) — REBUILT FROM SCRATCH, this is done as of the most recent session.**
    Zero lines of ChocoMCC's original frontend structure remain — the owner rejected an

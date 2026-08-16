@@ -99,12 +99,25 @@ app.use('/admin/', async (req, _res, next) => {
 // ── BODY PARSING ──
 // Every route gets a tight 64kb JSON cap by default — plenty for any normal
 // request, and it keeps a stray huge payload from tying up the process.
-// Banner uploads are the one legitimate exception (a base64 image can run
-// into the megabytes), so that single route gets its own larger parser
-// instead of loosening the limit for everything else.
+// A few admin routes are the legitimate exception (they carry a base64
+// image, which can run into the megabytes even after fileToDataUrl()
+// resizes/compresses it), so those get the larger parser instead of
+// loosening the limit for everything else.
+//
+// Real bug, confirmed live: /admin/products/save (product photo upload)
+// and /admin/settings/update (the announcement background image) both
+// also embed a base64 image, exactly like /admin/banners/set, but were
+// left on the 64kb parser -- any image big enough to push the request
+// over 64kb got a 413 from Express BEFORE the route handler ever ran.
+// Express's default 413 response isn't JSON, so the admin panel's
+// api()'s `await r.json()` threw, landing in its catch block and
+// reporting a generic "Network error" -- exactly what saving a product
+// photo looked like to the owner, with no indication it was actually a
+// request-size limit.
 const smallJsonParser  = express.json({ limit: '64kb' });
-const bannerJsonParser = express.json({ limit: '4mb' });
-app.use((req, res, next) => (req.path === '/admin/banners/set' ? bannerJsonParser : smallJsonParser)(req, res, next));
+const bigJsonParser    = express.json({ limit: '4mb' });
+const IMAGE_BODY_ROUTES = new Set(['/admin/banners/set', '/admin/products/save', '/admin/settings/update']);
+app.use((req, res, next) => (IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
 
@@ -1411,8 +1424,19 @@ app.get('/notifications', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   try {
+    // Real bug, confirmed live: this used to fold "no user doc" into the
+    // SAME branch as "banned" and answer both with code:'BANNED' -- the
+    // client's api() helper treats code:'BANNED' as a hard signal and
+    // force-logs the member out with an "Account suspended" toast on ANY
+    // endpoint, not just this one. A member whose doc lookup ever hiccups
+    // (or who's mid-registration-repair, see completeRegistrationCore) was
+    // getting told they were suspended and kicked out, when they were
+    // never banned at all. Matches the pattern every other endpoint here
+    // already uses (see /account, /checkin): not-found and banned are
+    // different states with different client-side handling.
     const userSnap = await db.collection('users').doc(userId).get();
-    if (!userSnap.exists || userSnap.data().status === 'banned')
+    if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (userSnap.data().status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const [mine, broadcasts] = await Promise.all([
       db.collection('notifications').where('userId', '==', userId).limit(50).get(),
@@ -1483,6 +1507,17 @@ app.post('/admin/notifications/create', async (req, res) => {
 // ═══════════════════════════════════════════
 // ACCOUNT / REGISTER / CHECK-IN
 // ═══════════════════════════════════════════
+// Shared by /account/create-profile below AND /register's own self-heal
+// (see completeRegistrationCore) -- one place defining what a brand-new
+// user's doc looks like, so the two never quietly drift apart.
+function defaultProfileDoc(phone) {
+  return {
+    phone: phone || '', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
+    checkinStreak: 0, lastCheckin: null, teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, teamCommission: 0,
+    referredBy: null, referralCode: null, registrationDone: false, status: 'active',
+    createdAt: FieldValue.serverTimestamp()
+  };
+}
 app.post('/account/create-profile', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -1498,12 +1533,7 @@ app.post('/account/create-profile', async (req, res) => {
     const ref = db.collection('users').doc(userId);
     const snap = await ref.get();
     if (snap.exists) return res.json({ status: 'success', message: 'Profile already exists' });
-    await ref.set({
-      phone, walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
-      checkinStreak: 0, lastCheckin: null, teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, teamCommission: 0,
-      referredBy: null, referralCode: null, registrationDone: false, status: 'active',
-      createdAt: FieldValue.serverTimestamp()
-    });
+    await ref.set(defaultProfileDoc(phone));
     res.json({ status: 'success' });
   } catch (e) {
     console.error('create-profile error:', e.message);
@@ -1526,6 +1556,12 @@ async function completeRegistrationCore(userId, referralCode) {
   return withLock('reg:' + userId, async () => {
     const userRef = db.collection('users').doc(userId);
     const userSnap = await userRef.get();
+    // Stays a 404 here on purpose, even though /register below now
+    // self-heals a missing doc before ever calling this function -- the
+    // OTHER caller, /admin/user/complete-registration, passes a userId
+    // straight from the request body with no verifyAuth() behind it, so
+    // auto-creating a doc here would let a typo'd/bogus userId phantom-
+    // create a brand new account with no real Firebase user behind it.
     if (!userSnap.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
     if (userSnap.data().registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userSnap.data().referralCode || null } };
@@ -1585,6 +1621,22 @@ app.post('/register', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
+    // Self-heal, real bug confirmed live: completeRegistrationCore requires
+    // this doc to already exist, and this used to be guaranteed by the
+    // frontend calling /account/create-profile before /register -- but the
+    // current frontend's register flow never actually makes that call, so
+    // every fresh registration hit completeRegistrationCore's 404 and
+    // failed with "User not found". Safe to auto-create here specifically
+    // (unlike inside completeRegistrationCore itself) because userId is a
+    // verifyAuth()-derived, currently-authenticated real Firebase uid, not
+    // an admin-supplied string -- see the comment on completeRegistrationCore
+    // for why /admin/user/complete-registration must stay 404-on-missing.
+    const ref = db.collection('users').doc(userId);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      const phone = cleanPhone(req.body.phone || '') || String(req.body.phone || '').trim();
+      await ref.set(defaultProfileDoc(phone));
+    }
     const result = await completeRegistrationCore(userId, req.body.referralCode);
     res.status(result.code).json(result.body);
   } catch (e) {

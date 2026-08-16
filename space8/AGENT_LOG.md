@@ -14,6 +14,98 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — 4 real bugs from a single owner bug-report message: false "suspended" toast, broken registration, blocked image uploads, admin banner residue
+
+- **What changed**: the owner listed 5 symptoms in one message. Investigated each
+  against the real code rather than guessing; all 4 concrete ones turned out to be
+  real, root-caused, fixed, and tested. The 5th was a requirement restating something
+  already fixed in the previous round — re-verified, still correct, no change needed.
+
+  1. **"click notifications bell it suspended account"** — `GET /notifications` folded
+     "no user doc found" into the SAME branch as "banned", answering both with
+     `code:'BANNED'`. The client's `api()` helper treats that exact code as a hard
+     signal on ANY endpoint: show "Account suspended" and force-logout. A member whose
+     doc lookup ever came back empty (not banned at all) was getting kicked out and
+     told they were suspended. Fixed to a plain 404 for "not found", matching the
+     pattern every other endpoint here already uses (`/account`, `/checkin`).
+
+  2. **"registration and login... sometimes user not found"** — traced to a real gap:
+     the register button handler (`user-src/original_module.js`) creates the Firebase
+     Auth user, then calls `POST /register` directly. `/register`'s
+     `completeRegistrationCore()` REQUIRES the member's Mongo doc to already exist and
+     404s "User not found" otherwise — and `/account/create-profile`, the ONLY endpoint
+     that ever creates that doc, is never called anywhere in the current frontend
+     (confirmed by grep — it's referenced only in comments and `server.js` itself).
+     This is a real regression from the "rebuild frontend from scratch" work: an older,
+     pre-rebuild version of this exact handler DID call create-profile first (confirmed
+     via `git log -S`), and that call was lost in the rewrite. Every fresh registration
+     through the real UI hit this 404. Fixed in `/register`'s own handler (NOT inside
+     the shared `completeRegistrationCore` — that function is also called by
+     `/admin/user/complete-registration`, which takes an unverified `userId` straight
+     from the request body, so auto-creating a doc there would let a typo'd/bogus id
+     phantom-create a fake account; `/register`'s `userId` is always a real,
+     `verifyAuth()`-derived Firebase uid, so self-healing only there is safe). Extracted
+     a shared `defaultProfileDoc()` so `/account/create-profile` and `/register` can't
+     drift on what a fresh doc looks like.
+
+  3. **"uploading images of another product... network error, meteosat1"** — every
+     admin route got a tight 64kb JSON body cap by design, with `/admin/banners/set`
+     bumped to 4mb as the one deliberate exception (a base64 image can run into the
+     hundreds of KB). `/admin/products/save` (product photo) and `/admin/settings/update`
+     (the announcement background image) carry the exact same kind of payload but were
+     left on the 64kb parser — any image large enough got a 413 from Express before the
+     route handler ran, and Express's default 413 response isn't JSON, so the admin
+     panel's `await r.json()` threw and its catch block reported a generic "Network
+     error" with zero indication it was a size limit. Fixed by adding both routes to
+     the same 4mb-parser exemption banners already had.
+
+  4. **"very many residues banners in admin panel which are useless"** — grepped every
+     `bannerHtml()` call site in the rebuilt `user-src/original_module.js` and
+     cross-referenced against all 16 slots listed in admin's `BANNER_LABELS`. 10 had
+     zero matching call site anywhere in the app (`assortment`/`lavacake` — the
+     login/register screens are a flat color, no background-image mechanism at all;
+     `ganache`/`factory2`/`factory1` — Support/About/Payout-Account sheets render no
+     banner; `cookies` — check-in is a button on Home, not its own screen; `bonbon` —
+     the Gift Code card has no thumbnail; `truffle`/`snickersplate`/`snickerscookie` —
+     all reference a "Records" tab structure that doesn't exist in the rebuilt app,
+     stale ChocoMCC-era naming never updated). Pruned `BANNER_LABELS` down to the 6
+     real ones (`barstack`/`giftbox`/`basket`/`marscrate`/`darkbar`/`rocherstack`).
+     Admin-UI-only change — server-side `BANNER_KEYS` (the upload whitelist) is
+     untouched, so nothing already stored under a removed key is at risk, it's just no
+     longer offered as an upload target since nothing displays it.
+
+  5. **"notifications in bell will only bring announcements from admin not other
+     staffs"** — re-verified against the fix from the previous entry
+     (`/admin/notifications/create` gated to `verifyOwner`, staff 401s). Confirmed still
+     correct; the 3 auto-generated notifications (check-in/investment/withdrawal) carry
+     no staff attribution visible to the member either. No change needed.
+
+- **Why**: owner reported all 5 in one message after using the app for real.
+- **Verification**: full 62-file `test-*.js` suite passes. 3 new dedicated test files,
+  each proving the bug existed pre-fix and is closed post-fix, not just "the endpoint
+  exists": `test-register-self-heal.js` (16 checks — registers exactly like the real
+  frontend does, with NO prior create-profile call, and also proves the admin
+  reconciliation tool's bogus-userId protection is unchanged), `test-notifications.js`
+  (extended, +2 checks for the BANNED-vs-404 fix), `test-admin-image-upload-size.js`
+  (6 checks — a realistic ~300KB image now succeeds on both routes, a >4mb body is
+  still correctly rejected, and an unrelated non-image route is still capped at 64kb).
+  Notably: every OTHER test file that registers a user calls `/account/create-profile`
+  manually first, mimicking the OLD frontend flow, not the current one — which is
+  exactly why 58+ previously-passing tests never caught bug #2; `test-register-self-heal.js`
+  deliberately does not call it, to match what the real app actually does and prevent
+  this regressing silently again. Playwright end-to-end: admin Banners tab renders
+  exactly the 6 correct slots (screenshot confirmed); the real registration form,
+  driven through the actual UI (fill fields, click Register), now sends `phone` with
+  the `/register` call and produces no error toast. `node build-core.js` and
+  `node build-admin.js` both round-trip OK; `user/sw.js` cache bumped `v209` → `v210`.
+- **Anything left open**: any account ALREADY stuck from bug #2 before this fix shipped
+  (Firebase Auth user exists, Mongo doc never created) isn't auto-healed by this fix —
+  `/register`'s self-heal only fires on that member's own next `/register` call, which a
+  returning user wouldn't normally trigger again. The owner's existing
+  `/admin/user/complete-registration` tool (Admins → find the user → Complete
+  registration) fixes any such account by hand if one turns up; flagging this so it's
+  not mistaken for "still broken" if it surfaces once more.
+
 ## 2026-08-16 — Claude — Verified + fixed Codex's notification backend, built and shipped the orbital loader/nav/notifications
 
 - **What changed**: Codex's two prior entries below handed off two things: a prepared

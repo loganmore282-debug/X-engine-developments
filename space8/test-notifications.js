@@ -195,6 +195,18 @@ function cleanPhoneLocal(raw) {
   users().get('nt-user-banned').status = 'banned';
   r = await call('GET', '/notifications', { token: 'uid:nt-user-banned' });
   check('banned member -> 403', r.code === 403, r.body);
+  check('banned member gets the real BANNED code (client force-logs out, correctly)', r.body?.code === 'BANNED', r.body);
+
+  console.log('\n== A missing user doc is NOT treated as banned (real bug: this used to force-logout a non-banned member) ==');
+  // The owner reported "when you click on notifications bell it suspended
+  // account" -- a real, currently-authenticated, non-banned member whose
+  // doc lookup for any reason comes back empty used to get code:'BANNED',
+  // and the client's api() helper treats THAT specific code as a hard
+  // signal to force-logout with an "Account suspended" toast, on ANY
+  // endpoint. A genuinely-missing doc must be a plain 404, never BANNED.
+  r = await call('GET', '/notifications', { token: 'uid:nt-user-no-doc-at-all' });
+  check('missing doc -> 404, not 403', r.code === 404, r.body);
+  check('missing doc response has NO code:\'BANNED\' (this is what used to force-logout an innocent member)', r.body?.code !== 'BANNED', r.body);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

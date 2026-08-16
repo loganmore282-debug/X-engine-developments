@@ -1177,23 +1177,30 @@ function editProduct(p, order){
 }
 
 // ── BANNERS ──
+// Pruned 2026-08-16 (owner: "there are very many residues banners in admin
+// panel which are useless... remove them") -- checked every one of the 16
+// slots that used to be listed here against the REAL rebuilt frontend
+// (grepped every bannerHtml() call site in user-src/original_module.js) and
+// found 10 with zero matching call site anywhere: assortment/lavacake (the
+// login/register screens are a flat color, no background-image mechanism
+// at all), ganache/factory2/factory1 (Support/About/Payout-Account sheets
+// render no banner), cookies (check-in is just a button on Home, not its
+// own screen), bonbon (the Gift Code card has no thumbnail), and
+// truffle/snickersplate/snickerscookie (all reference a "Records" tab
+// structure that doesn't exist in the rebuilt app -- ChocoMCC-era naming
+// that was never updated). Uploading to any of those 10 had zero visible
+// effect anywhere. The 6 below are the ones actually wired to a real
+// bannerHtml() call and worth keeping. (Server-side BANNER_KEYS still
+// whitelists the old key names too -- deliberately left as-is, so this is
+// purely an admin-UI cleanup, not a data/back-compat change; nothing reads
+// those keys anymore either way.)
 const BANNER_LABELS = {
-  assortment:    ['Login screen',            'Sign-in background photo'],
-  lavacake:      ['Register screen',         'Create-account background photo'],
   barstack:      ['Home screen',             'Top banner on the Home tab'],
   giftbox:       ['Team screen',             'Top banner on the Team tab'],
-  basket:        ['Add Funds screen',        'Deposit screen banner'],
-  marscrate:     ['Cash Out screen',         'Withdrawal screen banner'],
-  ganache:       ['Support screen',          'Customer Care banner'],
-  factory2:      ['About screen',            'About Us banner'],
-  factory1:      ['Bind Bank Card screen',   'Bank-binding banner'],
-  darkbar:       ['Shop / Records (Top-ups)','Shared by the Shop tab and the Records → Top-ups tab'],
-  rocherstack:   ['Account screen',          'Me tab banner'],
-  cookies:       ['Daily Reward screen',     'Check-in tab banner'],
-  bonbon:        ['Gift Code thumbnail',      'Small square icon on the Redeem card'],
-  truffle:       ['Records → Accrued tab',   'Records tab banner (Accrued Earnings)'],
-  snickersplate: ['Records → Cash Outs tab', 'Records tab banner (Cash-out history)'],
-  snickerscookie:['Product detail screen',   "Secondary banner below every plan's price card"]
+  basket:        ['Deposit screen',          'Banner on the Deposit sheet'],
+  marscrate:     ['Withdraw screen',         'Banner on the Withdraw sheet'],
+  darkbar:       ['Products screen',         'Top banner on the Products tab'],
+  rocherstack:   ['Account screen',          'Top banner on the Account tab']
 };
 async function renderBanners(){
   const r = await api('/admin/banners');

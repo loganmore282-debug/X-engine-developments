@@ -209,7 +209,7 @@ $('registerBtn').onclick = async function(){
   setBtnLoading($('registerBtn'), true, 'Creating account…');
   try {
     await window.fbCreateUser(phoneToEmail(phone), pass);
-    var r = await api('/register', { referralCode: ref || undefined }, 'POST', true);
+    var r = await api('/register', { referralCode: ref || undefined, phone: phone }, 'POST', true);
     if (r.status === 'error') { toast(r.message, true); }
     var pinR = await api('/account/payout-pin/set', { pin: pin });
     if (pinR.status === 'error') toast('Account created, but the PIN could not be set — set it later in Account.', true);
