@@ -641,30 +641,31 @@ function paintMembers(level, members){
   }).join('') + '</div>';
 }
 function renderTaskList(milestones){
-  var box = $('taskList');
-  if (!box) return;
-  if (!milestones.length) { box.innerHTML = emptyState('gift','No tasks available right now.'); return; }
-  box.innerHTML = milestones.map(function(m){
-    var pct = Math.min(100, Math.round((m.current/m.target)*100));
-    var label = m.type === 'deposit' ? ('Level 1 team deposits ' + ugx(m.target)) : (m.target + ' active level-1 referrals');
-    return '<div class="milestone-card ' + (m.claimed?'done':'') + '">' +
-      '<div class="ico">' + ico('gift') + '</div>' +
-      '<div class="info"><div class="t">' + label + '</div>' +
-      '<div class="p">Reward ' + ugx(m.reward) + (!m.claimed?' · ' + (m.type==='deposit'?ugx(m.current):m.current) + ' / ' + (m.type==='deposit'?ugx(m.target):m.target):'') + '</div>' +
-      (!m.claimed ? '<div class="bar"><i style="width:'+pct+'%"></i></div>' : '') + '</div>' +
-      (m.claimed ? '<span class="pill pill-done">' + ico('check') + '</span>' :
-        m.achieved ? '<div class="claim" data-target="'+m.target+'" data-type="'+m.type+'">Claim</div>' : '') +
-    '</div>';
+  var box = $('taskList'); if (!box) return;
+  if (!milestones.length) { box.innerHTML = emptyState('gift','No missions available right now.'); return; }
+  var groups = [
+    { key:'count', title:'Active Level-1 Missions', items:milestones.filter(function(m){ return m.type === 'count'; }) },
+    { key:'deposit', title:'Whole Team Deposit Missions', items:milestones.filter(function(m){ return m.type === 'deposit'; }) }
+  ];
+  box.innerHTML = groups.map(function(g){
+    return '<div class="section-title mission-title">' + g.title + '</div>' + g.items.map(function(m){
+      var pct = Math.min(100, Math.round((m.current/m.target)*100));
+      var label = m.type === 'deposit' ? ('Team deposits ' + ugx(m.target)) : (m.target + ' active Level-1 referrals');
+      return '<div class="milestone-card ' + (m.claimed?'done':'') + '">' +
+        '<div class="ico">' + ico('gift') + '</div><div class="info"><div class="t">' + label + '</div>' +
+        '<div class="p">Reward ' + ugx(m.reward) + (m.claimed ? ' · Claimed' : ' · ' + (m.type==='deposit'?ugx(m.current):m.current) + ' / ' + (m.type==='deposit'?ugx(m.target):m.target)) + '</div>' +
+        (!m.claimed ? '<div class="bar"><i style="width:'+pct+'%"></i></div>' : '') + '</div>' +
+        (m.claimed ? '<span class="pill pill-done">' + ico('check') + '</span>' : m.achieved ? '<button class="claim" data-target="'+m.target+'" data-type="'+m.type+'">Claim</button>' : '') +
+      '</div>';
+    }).join('');
   }).join('');
-  qsa('.claim', box).forEach(function(c){
-    c.onclick = async function(){
-      var r = await api('/team/milestone/claim', { target: c.dataset.target, type: c.dataset.type });
-      if (r.status === 'success') { toast(r.message); STATE.loaded.team = false; STATE.loaded.home = false; renderTeam(); }
-      else toast(r.message, true);
-    };
-  });
+  qsa('.claim', box).forEach(function(c){ c.onclick = async function(){
+    c.disabled = true; c.textContent = 'Claiming…';
+    var r = await api('/team/milestone/claim', { target:Number(c.dataset.target), type:c.dataset.type });
+    if (r.status === 'success') { toast(r.message); STATE.loaded.team=false; STATE.loaded.home=false; renderTeam(); }
+    else { c.disabled=false; c.textContent='Claim'; toast(r.message,true); }
+  }; });
 }
-
 // ── ACCOUNT ───────────────────────────────────────────────────────────
 async function renderAccount(){
   var el = $('page-account');
