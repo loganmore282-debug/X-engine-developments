@@ -14,6 +14,46 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Codex — Expanded the Space8 assistant into broad, typo-tolerant website support
+
+- **What changed**:
+  - Expanded `assistant-engine.js` from roughly 25 intent groups to 41, covering pending or
+    stuck deposits and withdrawals, missing investments and referral commissions, payout
+    accounts, password recovery, transaction history, notifications, maintenance,
+    admin-managed rules and announcements, network failures, MTN/Airtel number guidance,
+    and the registration bonus in addition to the existing core platform topics.
+  - Added normalization for common user misspellings such as “depost”, “withdrawl”,
+    “refferal” and “commision”, plus conservative one-edit fuzzy keyword matching for
+    longer words. Corrected the intent tie-breaker so high-priority problem reports beat
+    generic FAQ answers, and allowed an explicit “and/also/both” question to return two
+    relevant answers instead of silently dropping the second topic.
+  - Corrected material misinformation in the previous assistant copy: Space8 investment
+    cashback is settled automatically day by day across the plan cycle; it is not held in
+    full until maturity. Also corrected Gift Code navigation to Account and described
+    check-in as an Uganda calendar-day action rather than a rolling 24-hour timer.
+  - Added `test-assistant-engine.js` as a regression suite for typo handling, live
+    deposit/withdraw figures, pending-payment safety guidance, missing commission,
+    daily-cashback wording, live plan math, rules, password recovery, welcome bonus,
+    mobile-money formatting, and short follow-up context.
+- **Why**: The owner wants the in-app assistant to handle a very large variety of
+  Space8-related questions. A finite rule engine cannot literally pre-store billions of
+  questions, so this change improves scalable coverage through intent composition,
+  typo/fuzzy matching, live settings/product data, conversation context, and honest
+  escalation for account-specific payment problems rather than inventing an answer.
+- **Verification**: Parsed the final engine successfully as JavaScript, then exercised
+  targeted cases against representative live-style settings (UGX 20,000 minimum deposit,
+  UGX 5,000 minimum withdrawal, 15% fee, 28%/2%/1% commission and a 210-day product).
+  Confirmed correct replies for misspelled deposit/referral questions, a UGX 10,000
+  withdrawal fee/net calculation, pending deposit/withdrawal safety, daily cashback,
+  product daily-return calculation, live rules, password recovery, registration bonus,
+  MTN number format, and the contextual follow-up “and the fee?”. The same assertions are
+  committed in `test-assistant-engine.js` for the normal repository test loop.
+- **Left open / deferred**: Run the full `test-*.js` suite in a checked-out environment
+  and perform a real authenticated `POST /assistant/chat` device test after deployment.
+  This remains a deterministic, self-hosted support engine—not a general-purpose LLM—so
+  truly novel questions should continue to fall back or escalate safely instead of being
+  answered with fabricated platform policy.
+
 ## 2026-08-16 — Claude — Admin panel re-themed to match the user app; dead SPACE8_IMAGES blob removed
 
 - **What changed**: two parts of the same user message.
