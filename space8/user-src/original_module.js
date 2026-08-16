@@ -237,7 +237,12 @@ function showPage(name){
   window.scrollTo(0,0);
   loadPage(name);
 }
-qsa('.navitem').forEach(function(n){ n.addEventListener('click', function(){ showPage(n.dataset.page); }); });
+qsa('.navitem').forEach(function(n){ n.addEventListener('click', function(){
+  qsa('.navitem').forEach(function(item){ item.classList.remove('tap-glow'); });
+  n.classList.add('tap-glow');
+  setTimeout(function(){ n.classList.remove('tap-glow'); }, 360);
+  showPage(n.dataset.page);
+}); });
 
 function loadPage(name){
   if (name === 'home') renderHome();
@@ -871,33 +876,25 @@ $('assistInput').addEventListener('keydown', function(e){
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────────────
 async function openNotificationsSheet(){
-  var s = STATE.settings;
-  if (!s) { var setR = await api('/public/settings'); s = setR.status === 'success' ? setR.settings : {}; STATE.settings = s; }
-  var feed = STATE.lastFeed;
-  if (!feed) {
-    var feedR = await api('/public/activity-feed');
-    feed = feedR.status === 'success' ? (feedR.feed || feedR.items || []) : [];
-    STATE.lastFeed = feed;
-  }
+  var r = await api('/notifications', null, 'GET');
+  var items = r.status === 'success' ? (r.notifications || []) : [];
   var html = '<div class="sheet-title">Notifications</div>';
-  if (s.annEnabled && s.annTitle) {
-    html += '<div class="card" style="margin-bottom:16px">' +
-      '<div style="font-weight:700;margin-bottom:4px">' + esc(s.annTitle) + '</div>' +
-      (s.annBody ? '<div style="font-size:13px;color:var(--ink-dim);line-height:1.5">' + esc(s.annBody) + '</div>' : '') +
-      (s.annCtaLabel && s.annCtaUrl ? '<button class="btn btn-primary" style="margin-top:12px" id="notifCtaBtn">' + esc(s.annCtaLabel) + '</button>' : '') +
-    '</div>';
-  }
-  html += '<div class="section-title" style="margin-top:0">Recent Activity</div>';
-  html += feed.length ? feed.slice(0,20).map(function(f){
-    var verb = f.type === 'withdrawal' ? 'withdrew' : 'deposited';
-    return '<div class="member-row"><div class="info"><div class="phone">' + esc(f.phone||f.masked||'A member') + ' ' + verb + '</div></div>' +
-      '<span class="mono" style="font-weight:700">' + ugx(f.amount) + '</span></div>';
-  }).join('') : emptyState('doc','No activity yet.');
+  html += items.length ? items.map(function(n){
+    var unread = !n.readAt && !n.read;
+    return '<div class="card" style="margin-bottom:10px;border:' + (unread ? '1px solid var(--blue-glow)' : '1px solid transparent') + '">' +
+      '<div style="display:flex;gap:10px;align-items:flex-start"><div style="width:9px;height:9px;border-radius:50%;margin-top:6px;background:' + (unread ? 'var(--blue)' : 'var(--line)') + ';flex-shrink:0"></div><div style="min-width:0;flex:1">' +
+      '<div style="font-weight:700;margin-bottom:4px">' + esc(n.title || 'Space8 update') + '</div>' +
+      '<div style="font-size:13px;color:var(--ink-dim);line-height:1.5">' + esc(n.body || '') + '</div>' +
+      (n.createdAt ? '<div style="font-size:11px;color:var(--blue-mute);margin-top:8px">' + esc(timeAgo(n.createdAt)) + '</div>' : '') +
+      '</div></div></div>';
+  }).join('') : emptyState('doc','No notifications yet.');
   openSheet('generic', html);
-  var ctaBtn = $('notifCtaBtn');
-  if (ctaBtn) ctaBtn.onclick = function(){ window.open(s.annCtaUrl, '_blank'); };
+  var unreadIds = items.filter(function(n){ return n.id && !n.readAt && !n.read; }).map(function(n){ return n.id; });
+  if (unreadIds.length) api('/notifications/read', { ids: unreadIds }, 'POST', false).catch(function(){});
 }
 $('notifBtn').onclick = openNotificationsSheet;
+
+
 
 // ── BOOT ──────────────────────────────────────────────────────────────
 async function boot(){
