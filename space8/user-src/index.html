@@ -158,10 +158,10 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .sheet-close{ position:absolute; right:16px; top:16px; }
 
 /* ---------- home ---------- */
-.balance-card{ background:var(--ink); color:var(--void); border-radius:var(--radius-card); padding:22px; position:relative; overflow:hidden; }
+.balance-card{ background:var(--ink); color:var(--void); border-radius:var(--radius-card); padding:22px; position:relative; overflow:hidden; border:1.5px solid var(--blue); box-shadow:0 0 0 4px var(--blue-glow); }
 .balance-card .lab{ font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; opacity:.6; }
 .balance-card .amt{ font-weight:700; font-size:30px; margin:6px 0 18px; letter-spacing:-.01em; }
-.balance-split{ display:flex; gap:18px; border-top:1px solid rgba(255,255,255,.12); padding-top:14px; }
+.balance-split{ display:flex; gap:18px; border-top:1px solid var(--blue-dim); padding-top:14px; }
 .balance-split div{ flex:1; }
 .balance-split .lab2{ font-size:9.5px; text-transform:uppercase; opacity:.55; letter-spacing:.06em; }
 .balance-split .val2{ font-weight:700; font-size:15px; margin-top:3px; }
@@ -244,6 +244,11 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .profile-card .av svg{ width:27px; height:27px; stroke:var(--blue); }
 .profile-card .phone{ font-weight:700; font-size:16px; }
 .profile-card .code{ font-size:11.5px; color:var(--ink-dim); margin-top:3px; }
+
+.giftcode-card{ margin-bottom:20px; }
+.giftcode-row{ display:flex; align-items:center; gap:10px; }
+.giftcode-row .field{ flex:1; }
+.giftcode-row .btn{ width:auto; flex-shrink:0; padding:13px 20px; }
 
 .matrix{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:9px; margin-bottom:22px; }
 .mtile{ background:var(--surface); border-radius:14px; padding:12px 4px; display:flex; flex-direction:column; align-items:center; gap:7px; text-align:center; }

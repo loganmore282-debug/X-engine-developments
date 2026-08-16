@@ -14,6 +14,61 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Gift Code redemption UI built, balance card gets a blue lining
+
+- **What changed**:
+  - **Built a real Gift Code redemption UI — didn't exist anywhere before.**
+    `POST /redeem` has existed server-side all along (code-gated, single-use-
+    per-account, locked per-code against concurrent double-claims) and
+    `/redeem` was even already in the frontend's `MONEY_ENDPOINTS` no-retry
+    list, but there was never an actual input/button anywhere for a member to
+    use it — confirmed via grep before building anything. Added a `.card`-
+    wrapped row (gift icon + text field + Redeem button, new `.giftcode-row`/
+    `.giftcode-card` CSS) on the Account page, positioned per the owner's
+    request directly above the Payout Account/Deposits/Withdrawals/Security
+    PIN tile row — sharing that same card padding/margin rhythm rather than
+    sitting flush against the screen edge like a bare input would. New
+    `redeemGiftCode()` in `original_module.js`: validates non-empty, calls
+    `/redeem`, shows the real reward amount on success, updates
+    `STATE.account.walletBalance` optimistically and re-renders Home if it's
+    the active page so the new balance shows immediately without waiting for
+    a full refetch, surfaces the server's real error message on failure (bad
+    code / already used / usage cap / banned, all handled server-side already).
+  - **Balance card ("Account Balance" hero card on Home) gets a blue lining.**
+    The owner: "that balance card, fake color, let it have blue linning" — it
+    was solid `var(--ink)` (near-black) with zero blue, dragging down the
+    overall blue-dominant feel from recent entries despite being the single
+    most prominent card in the app. Added a `1.5px solid var(--blue)` border
+    plus a soft `var(--blue-glow)` outer ring, and changed the internal
+    divider line (between the balance and the earnings/invested split) from
+    plain white-alpha to `var(--blue-dim)` — so the card keeps its dark,
+    high-contrast "hero" treatment but now visibly reads as part of the blue
+    system instead of a black island.
+  - Bumped `user/sw.js` cache to `space8-shell-v204`.
+- **Why**: the owner sent two Home/Account screenshots from the live deployed
+  app and pointed at two specific gaps: no gift-code entry point positioned
+  where they wanted it, and the balance card not carrying any blue despite
+  being the most visually dominant element on Home.
+- **Verification**: `node -c server.js`/`assistant-engine.js` clean, `node
+  build-core.js` round-trip OK. Full `test-*.js` suite (55 files) — all green,
+  including the 3 checkin-streak tests that were failing in every prior entry
+  this session (re-ran them individually and confirmed they now pass too —
+  that failure really was the date/timezone-dependent flake it was always
+  flagged as, not a regression from anything touched here). Playwright smoke
+  test: filled and submitted the gift-code field against a mocked
+  `/redeem` returning `{status:'success',reward:5000}`, confirmed the real
+  request body (`{code:'WELCOME50'}`) and the real reward amount in the
+  resulting toast (not a hardcoded placeholder). Screenshots confirm the
+  gift-code card sits correctly between the profile card and the tile matrix
+  with balanced card padding, and the balance card now shows a clear blue
+  border + glow + blue divider line.
+- **Left open**: real end-to-end device/browser verification remains the
+  standing open item — this entry's gift-code flow specifically still needs a
+  real promo code created via the admin panel to test against a live
+  `/redeem` call.
+
+---
+
 ## 2026-08-16 — Claude — New team/deposit/withdraw icons, Home cards now match Products exactly, notification bell wired up, assistant knowledge deepened
 
 - **What changed**:

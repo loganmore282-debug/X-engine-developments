@@ -562,6 +562,13 @@ async function renderAccount(){
     '<div class="iconbtn" id="shareRefBtn" style="margin-left:auto">' + ico('share') + '</div>' +
   '</div>';
 
+  html += '<div class="card giftcode-card">' +
+    '<div class="giftcode-row">' +
+      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" placeholder="Enter gift code" autocapitalize="characters"></div>' +
+      '<button class="btn btn-primary" id="giftCodeBtn">Redeem</button>' +
+    '</div>' +
+  '</div>';
+
   html += '<div class="matrix">' +
     '<div class="mtile" id="mBind">' + ico('lock') + '<span>Payout Account</span></div>' +
     '<div class="mtile" id="mDeposits">' + ico('history') + '<span>Deposits</span></div>' +
@@ -586,6 +593,8 @@ async function renderAccount(){
   $('mPin').onclick = openPinSheet;
   $('shareRefBtn').onclick = function(){ shareReferral(acc.referralCode); };
   $('logoutRow').onclick = doLogout;
+  $('giftCodeBtn').onclick = redeemGiftCode;
+  $('giftCodeInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('giftCodeBtn').click(); });
   qsa('.menu-row[data-key]').forEach(function(row){
     row.onclick = function(){ openInfoSheet(row.dataset.key); };
   });
@@ -597,6 +606,22 @@ function shareReferral(code){
   var text = 'Join Space8 and start earning — use my referral code ' + code;
   if (navigator.share) navigator.share({ text: text }).catch(function(){});
   else { navigator.clipboard.writeText(code||''); toast('Referral code copied'); }
+}
+async function redeemGiftCode(){
+  var input = $('giftCodeInput');
+  var code = input.value.trim();
+  if (!code) return toast('Enter a gift code first', true);
+  var btn = $('giftCodeBtn');
+  setBtnLoading(btn, true, 'Redeeming…');
+  var r = await api('/redeem', { code: code });
+  setBtnLoading(btn, false);
+  if (r.status === 'success') {
+    toast('+' + ugx(r.reward) + ' credited!');
+    input.value = '';
+    if (STATE.account) STATE.account.walletBalance = (STATE.account.walletBalance || 0) + (r.reward || 0);
+    STATE.loaded.home = false;
+    if (STATE.currentPage === 'home') renderHome();
+  } else toast(r.message, true);
 }
 async function openInfoSheet(key){
   var s = STATE.settings || (await api('/public/settings')).settings || {};
