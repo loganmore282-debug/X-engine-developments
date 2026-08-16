@@ -14,6 +14,58 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Admin panel re-themed to match the user app; dead SPACE8_IMAGES blob removed
+
+- **What changed**: two parts of the same user message.
+  1. **Admin re-theme**: `admin-src/index.html`'s CSS `:root` token block went from a
+     dark theme with a violet accent (`--bg:#050507`, `--gold:#6C4EFF`) + system font to
+     a light theme with the SAME vibrant blue the user app uses (`--gold:#2e6bff`,
+     `--gold-deep:#1c48b3`), white cards (`--card:#fff`), dark ink text (`--ink:#0a1220`)
+     — all values copied straight from the user app's `--blue`/`--surface`/`--ink`
+     tokens. Variable NAMES were kept (only values changed), matching the low-risk
+     convention already used for `--blue*` in the user app. `--ok`/`--danger`/`--warn`/
+     `--sky` were re-picked for light-mode legibility (the originals were dark-chip
+     colors — pale text on near-black — which would be illegible inverted onto white).
+     Fixed 3 literal (non-token) hex colors that stopped making sense once the accent
+     went from violet to blue: the brand-mark gradient center, the primary button's
+     gradient highlight, and the modal backdrop tint. Added the same self-hosted Inter
+     `@font-face` the user app uses (duplicated — admin is a separate HTML build, not
+     shared code).
+  2. **Dead image blob removed**: `SPACE8_IMAGES` at the bottom of `admin-src/index.html`
+     was a ~270KB base64 blob of 10 space-photo product-thumbnail fallbacks
+     (`comet`/`nebula`/`asteroid`/`pulsar`/`quasar`/`neutron_star`/`supernova`/
+     `blackhole`/`magnetar`/`singularity`). None of these keys match any key in
+     `DEFAULT_PRODUCTS` in `server.js` (`sputnik1`/`explorer1`/`vanguard1`/etc., the
+     real 15-tier catalog) — fully orphaned, confirmed by cross-referencing both key
+     lists directly. Deleted the blob and simplified its 3 call sites (product grid
+     thumbnail, edit-product default image, image-preview updater) which all had
+     defensive `typeof SPACE8_IMAGES!=='undefined'` fallback branches for exactly this
+     scenario, so removing the var was a clean, low-risk deletion.
+- **Why**: owner — "some images in admin banners are residues or useless, check and
+  see, also change admin theme to match like userpanel theme." (The admin *banner
+  slot* system itself, separately confirmed via an earlier read-only investigation,
+  has no actual embedded chocolate/space photos — its slot key names are chocolate-
+  themed internally (`ganache`/`truffle`/`bonbon`/etc.) but cosmetic-only and were
+  deliberately left alone, since renaming risks breaking already-admin-uploaded
+  banners tied to those DB keys. `SPACE8_IMAGES` — a product-thumbnail fallback, not
+  technically a "banner" — is almost certainly what was meant; it's the only actual
+  dead image data found anywhere in the admin panel.)
+- **Verification**: `node build-admin.js` → clean build (306.9 KB before the font
+  addition, 605.6 KB after — the size increase is entirely the embedded Inter font,
+  same tradeoff the user app already makes). Full hex-color audit of the file (regex
+  scan for every literal `#hex`/`rgba()` outside the `:root` block) confirmed 100% of
+  color usage — including dynamically-generated inline styles in JS template strings
+  for charts/pills/stats — already routes through the CSS variable tokens, so the
+  value-only swap propagates everywhere with no missed spots. Playwright screenshots
+  (headless Chromium, mocked session) of the login screen, dashboard (stat cards +
+  recent transactions table), and withdrawals tab (status pills, filter chips, action
+  buttons) all show correct light-theme contrast, no leftover violet/dark-mode
+  remnants.
+- **Anything left open**: the admin's own page background is a light neutral
+  (`--bg:#f4f7fb`), not the full vibrant-blue canvas the user app's Home/Products/
+  Team/Account screens use — a deliberate call for a data-dense tables/charts/forms
+  tool, not an oversight. Revisit if the owner wants closer 1:1 matching.
+
 ## 2026-08-16 — Claude — Sheets now open as real full pages, not centered popups
 
 - **What changed**: converted the `.sheet-bg`/`.sheet` overlay system (Deposit,

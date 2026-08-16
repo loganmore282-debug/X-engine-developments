@@ -43,6 +43,19 @@ The owner was explicit and this must not be re-litigated without them saying so:
    processing/reconciler functions were deliberately left in place (harmless dead code,
    safer than surgically deleting logic shared with mobile-money withdrawals). See
    `AGENT_LOG.md` for the full breakdown of what was removed vs. deliberately kept.
+   **Visual theme update, 2026-08-16**: the owner later explicitly asked to "change admin
+   theme to match like userpanel theme" — this is a narrower, later override of the "keep
+   as-is" instruction above, scoped to visuals only (colors + font), not a walk-back of
+   "keep the ChocoMCC feature/logic reskin approach." Done as a value-only CSS variable
+   swap (see Palette section) — admin's own token NAMES (`--gold`, `--card`, `--bg`, etc.)
+   were kept, only values changed, same low-risk convention as the user app's `--blue*`.
+   Also removed a dead `SPACE8_IMAGES` base64 blob (~270KB, 10 orphaned space-photo
+   product-thumbnail fallbacks whose keys — `comet`/`nebula`/`asteroid`/etc. — never
+   matched any real product key in `DEFAULT_PRODUCTS`) and its 3 now-simplified call
+   sites. The chocolate-themed banner SLOT KEY NAMES (`ganache`/`truffle`/`bonbon`/
+   `snickersplate`/`snickerscookie`/`lavacake`/`factory1`/`factory2`) are unrelated,
+   cosmetic-only (never shown to users), and were deliberately left alone — renaming them
+   risks breaking already-admin-uploaded banners tied to those DB keys.
 3. **User-facing app (`user-src/index.html` + `user-src/original_module.js`, and its built
    artifact `user/`) — REBUILT FROM SCRATCH, this is done as of the most recent session.**
    Zero lines of ChocoMCC's original frontend structure remain — the owner rejected an
@@ -93,6 +106,27 @@ app in `user-src/` was built directly against this.
   the full rename. A single desaturated red (`--danger`) is the only non-blue color,
   reserved for genuine failure states. No violet, no gold, no green, no gradients
   anywhere.
+- **Admin panel palette (`admin-src/index.html`), re-themed 2026-08-16 to match the
+  above.** Was dark (`--bg:#050507`) with a violet accent (`--gold:#6C4EFF`, despite the
+  name) and a system font. Now: `--bg:#f4f7fb` (light neutral page, NOT the full blue
+  canvas the user app uses — admin is data-dense tables/charts/forms, so a light neutral
+  background was chosen over literally replicating the mobile blue-canvas treatment;
+  revisit if the owner asks for closer matching), `--card:#ffffff`, `--ink:#0a1220`,
+  `--sub:#5b6b84`, `--line:#d7dfec` — all copied from the user app's `--void`/`--surface`/
+  `--ink`/`--ink-dim`/`--line` values. `--gold:#2e6bff` / `--gold-deep:#1c48b3` /
+  `--gold-ink:#fff` (variable names kept, same convention as `--blue*` above) drive tabs,
+  primary buttons, and the brand mark — same hue as the user app's `--blue`/`--blue-dim`.
+  `--ok`/`--danger`/`--warn`/`--sky` were re-picked as legible light-mode status colors
+  (green/red/amber/teal) since the originals were tuned for dark chips (pale text on a
+  near-black pill) and would be illegible inverted onto white. Three literal (non-token)
+  hex values that no longer made sense once the accent went from violet to blue were also
+  fixed: the brand-mark radial-gradient center (`#1a1530`→`#12275c`), the primary button's
+  gradient highlight (`#F3C98A`→`#8fb4ff`), and the modal backdrop tint
+  (`rgba(40,26,16,.45)`→`rgba(10,18,32,.45)`). Same self-hosted Inter `@font-face` as the
+  user app was added (duplicated, not shared — admin is a separate build/HTML file).
+  Verified via Playwright screenshots (login, dashboard, withdrawals) — legible contrast
+  throughout, no leftover violet/dark-mode remnants found via a full hex-color audit of
+  the file (only the 3 above + the token block referenced any literal color).
 - **Typography**: a single self-hosted Inter variable font (weights 400–800, base64
   `@font-face`, changed 2026-08-16 from an earlier two-font Instrument Sans + Space Mono
   system per the owner). `.mono` only sets `font-variant-numeric:tabular-nums` now, no
