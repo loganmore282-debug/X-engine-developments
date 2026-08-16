@@ -192,7 +192,7 @@ const { answerAssistant } = require('./assistant-engine');
 // `settings`/`products` collections; these are only the boot fallback.
 const DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 5000, minDeposit: 20000,
-  dailyCheckin: 250, welcomeBonus: 5000, commL1: 28, commL2: 2, commL3: 1,
+  dailyCheckin: 300, welcomeBonus: 5000, commL1: 28, commL2: 2, commL3: 1,
   returnMultiple: 42, cycleDays: 210, maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
@@ -2721,6 +2721,16 @@ app.post('/withdraw/callback', async (req, res) => {
 // (not an in-memory map) so a lockout survives a server restart.
 const PAYOUT_PIN_LOCK_MS = 15 * 60 * 1000;
 const PAYOUT_PIN_MAX_FAILS = 5;
+// Rejects the 10 weakest of the 10,000 possible 4-digit PINs -- 0000, 1111,
+// 2222 ... 9999 -- real-world PIN-guessing lists put these among the very
+// first attempts against any account. Only ever applied where a NEW PIN is
+// being chosen (auto-setup below, and /account/payout-pin/change's newPin);
+// never applied to an existing PIN being entered to verify/unlock, since an
+// account that already has a weak PIN from before this check existed must
+// still be able to log in with it.
+function isWeakPin(pin) {
+  return /^(\d)\1{3}$/.test(String(pin || ''));
+}
 // allowAutoSetup=true (bind/delete/bank-withdraw): a member with no PIN yet
 // has whatever they type here become their PIN, and it authorizes this one
 // action in the same step -- no separate mandatory "set up your PIN first"
@@ -2742,6 +2752,7 @@ async function _payoutPinCheck(userId, pin, allowAutoSetup) {
     }
     if (!u.payoutPinHash) {
       if (!allowAutoSetup) return { ok: false, code: 'NO_PIN', message: 'No payout PIN is set yet.' };
+      if (isWeakPin(pin)) return { ok: false, code: 'WEAK_PIN', message: 'That PIN is too easy to guess (e.g. 1111, 2222). Choose 4 digits that are not all the same.' };
       await uRef.update({ payoutPinHash: scryptHash(pin), payoutPinFailCount: 0, payoutPinLockedUntil: null });
       return { ok: true, justSet: true };
     }
@@ -2774,6 +2785,7 @@ app.post('/account/payout-pin/change', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const newPin = String(req.body.newPin || '');
   if (!/^\d{4}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New PIN must be exactly 4 digits.' });
+  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', code: 'WEAK_PIN', message: 'That PIN is too easy to guess (e.g. 1111, 2222). Choose 4 digits that are not all the same.' });
   try {
     const check = await _payoutPinCheck(userId, req.body.oldPin, false);
     if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });

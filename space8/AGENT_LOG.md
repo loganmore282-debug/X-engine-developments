@@ -14,6 +14,95 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Deposits/withdrawals/checkin/giftcodes/PIN money-safety audit: 4 real changes shipped, everything else already sound
+
+Owner asked for a full pass over deposits, callbacks, records, withdrawals, checkin,
+gift codes, PIN input and registration input handling: verified Firebase auth on every
+money endpoint, encryption/hashing, idempotency, no double-crediting, fast/clean status
+reporting, and payload/injection safety — plus a checkin-amount fix, a "Coming Soon" ->
+"Upcoming" product-label change, and a PIN-strength rule (reject repeated-digit PINs).
+
+- **Auth coverage swept endpoint-by-endpoint** (every `app.post`/`app.get` in
+  `server.js`, ~95 routes): every member-facing money/account endpoint requires
+  `verifyAuth()` (a real Firebase ID token); every admin money endpoint requires
+  `verifyAdmin()`/`verifyOwner()`. The only routes without one of those are
+  legitimately public (`/health`, `/public/*`, root `/`), the two MarzPay webhooks
+  (`/deposit/callback`, `/withdraw/callback` — intentionally unauthenticated, gated
+  instead by an independent live re-check against MarzPay's own API before any money
+  moves, not by a bearer token MarzPay has no way to send), the admin login/logout
+  endpoints themselves, and `/admin/withdraw/quick-approve` (a documented, narrower
+  alternate credential for push-notification "Approve" — a per-device secret verified
+  with `safeEqual`, scoped to nothing but `processWithdrawalCore`). No gap found.
+- **Deposits/withdrawals/checkin/gift-code idempotency re-verified line by line**:
+  `creditDeposit()` (claim-before-credit via a status flip to `matched` BEFORE the
+  wallet increment, plus an in-process `_creditingDeposits` Set and a `withLock`),
+  `/withdraw/request`'s reserve-on-request inside one `db.runTransaction`,
+  `processWithdrawalCore`'s `_withdrawInFlight` guard and sending-marker-before-gateway-
+  call ordering, `/checkin`'s per-user lock with the `lastCheckin===today` guard
+  evaluated INSIDE the lock, and `/redeem`'s claim-before-credit with an atomic
+  `arrayUnion` re-check plus rollback if a race pushes a code past its usage cap. All
+  already correct — no double-credit path found anywhere in this surface.
+- **NoSQL-injection / payload safety**: re-confirmed the global `stripMongoOperators()`
+  middleware (every request body, every route) and spot-checked every endpoint that
+  takes a value into a `.where()` query for missing string coercion — all either coerce
+  via `String()`/`cleanPhone()`/a whitelist `Set`, or are already covered by the global
+  strip. No gap found (see the previous audit entry for the deeper trace on the two
+  webhook endpoints specifically).
+- **"Encryption" clarified rather than faked**: member passwords are 100%
+  Firebase-owned (never touch this codebase); admin passwords and the payout PIN are
+  scrypt-hashed with a per-secret random salt, verified with a timing-safe compare, and
+  never stored or returned in plaintext; everything is served over HTTPS (TLS in
+  transit) and MongoDB Atlas encrypts at rest. There is no reasonable form of
+  additional "encrypt the deposit record" the server itself could add without also
+  holding the decryption key (which would add complexity for zero real protection,
+  since the server still has to read balances/amounts to function) — didn't add
+  security theater here; flagging this explicitly so a future session doesn't invent
+  fake encryption to "complete" this ask.
+- **Real changes made**:
+  1. **Checkin bonus 250 -> 300 UGX** (`DEFAULT_SETTINGS.dailyCheckin` in `server.js`,
+     and the admin Settings form's matching fallback value in `admin-src/index.html`).
+     This is only the boot-fallback default — if the owner already has a different
+     value saved via the live admin Settings panel, that live value still wins and
+     needs updating there too; this change only affects a fresh/unconfigured install.
+  2. **Weak-PIN rejection**: a new `isWeakPin()` helper in `server.js`
+     (`/^(\d)\1{3}$/`) rejects a PIN made of a single repeated digit (0000-9999) at
+     BOTH places a member ever chooses a brand-new PIN — `_payoutPinCheck`'s
+     auto-setup branch (first-ever bind/withdraw/PIN-set) and
+     `/account/payout-pin/change`'s `newPin`. Deliberately NOT applied when verifying
+     an EXISTING pin, so an account that already had a weak PIN from before this
+     check existed can still sign in/withdraw with it. Mirrored client-side
+     (`user-src/original_module.js`, registration PIN fields + the PIN-change sheet)
+     for instant feedback; server remains authoritative either way.
+  3. **"Coming Soon" -> "Upcoming"** product-status label, both panels: the admin
+     product-list tag, the admin product-edit toggle, and the user-app product-card
+     badge (`admin-src/index.html` x2, `user-src/original_module.js` x1). The
+     underlying `comingSoon` field/data shape is unchanged (display text only) — no
+     server or DB migration needed.
+  4. **Transaction status display fixed to say Successful/Unsuccessful/Processing**:
+     `openHistorySheet()`'s deposit/withdrawal-history pill used to show the raw
+     internal state word (`matched`, `sending`, `initiating`, `processed`...) and its
+     "done" styling didn't even recognize `matched`/`processed` as complete (only
+     `success`/`completed`), so a fully successful deposit/withdrawal could still show
+     the in-progress pill color. Added a `friendlyStatus()` mapper collapsing every
+     internal state down to the three words a member actually needs, and fixed the
+     pill-class logic to match.
+- **Verification**: new dedicated `test-weak-pin-rejection.js` (32/32) covering all 10
+  repeated-digit values on auto-setup, `/account/payout-pin/set`, and
+  `/account/payout-pin/change`, plus proof that verifying an existing pin is never
+  blocked by this check. Kept this as its OWN test file rather than folding it into
+  `test-payout-pin.js` — that file was already close to the shared `apiLimiter` budget
+  (its fake `uid:xxx` test tokens don't parse as real JWTs, so `rlKeyByUser` falls back
+  to one shared IP-keyed bucket for every request in the file; adding ~15 more calls
+  tipped it over 60/min and caused spurious rate-limit failures with no relation to the
+  actual behavior being tested) — also fixed a few of that file's own pre-existing
+  literal PIN values (`1111`, `2222`, `4444` used as NEW pins) that would otherwise now
+  collide with the new weak-pin check. Rebuilt both `admin/` (607.2 KB) and `user/`
+  (407,504 bytes) — both round-trip OK. `user/sw.js` cache bumped to
+  `space8-shell-v217`. Full `test-*.js` suite green.
+- **Deferred**: registration/login input validation beyond the PIN/injection checks
+  above was already covered by the 2026-08-16 registration/login security-audit entry
+  further below — not re-litigated here.
+
 ## 2026-08-16 — Codex (findings) + Claude (fixes) — Second-pass audit of Claude's Task Center/banner/security-audit commits: 2 real bugs found and fixed
 
 Owner asked Codex to independently verify Claude's two prior commits (Task Center

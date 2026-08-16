@@ -168,17 +168,17 @@ async function freshFundedUser(uid, phone) {
   check('after first bind -> hasPayoutPin true', r.body?.hasPayoutPin === true, r.body);
 
   console.log('\n== POST /account/payout-pin/change ==');
-  r = await call('POST', '/account/payout-pin/change', { token: 'uid:' + C, body: { oldPin: '0000', newPin: '4444' } });
+  r = await call('POST', '/account/payout-pin/change', { token: 'uid:' + C, body: { oldPin: '0000', newPin: '6482' } });
   check('wrong old pin rejected', r.code === 400 && r.body?.code === 'WRONG_PIN', r.body);
   r = await call('POST', '/account/payout-pin/change', { token: 'uid:' + C, body: { oldPin: '3579', newPin: '44' } });
   check('malformed new pin rejected (not 4 digits)', r.code === 400, r.body);
-  r = await call('POST', '/account/payout-pin/change', { token: 'uid:' + C, body: { oldPin: '3579', newPin: '4444' } });
+  r = await call('POST', '/account/payout-pin/change', { token: 'uid:' + C, body: { oldPin: '3579', newPin: '6482' } });
   check('correct old pin + valid new pin succeeds', r.body?.status === 'success', r.body);
 
   console.log('-- After a change, the OLD pin no longer works and the NEW one does --');
   r = await call('POST', '/bank/save', { token: 'uid:' + C, body: { holder: 'C Two', network: 'Airtel Money', phone: '0771900302', pin: '3579' } });
   check('old pin rejected after change', r.code === 400 && r.body?.code === 'WRONG_PIN', r.body);
-  r = await call('POST', '/bank/save', { token: 'uid:' + C, body: { holder: 'C Two', network: 'Airtel Money', phone: '0771900302', pin: '4444' } });
+  r = await call('POST', '/bank/save', { token: 'uid:' + C, body: { holder: 'C Two', network: 'Airtel Money', phone: '0771900302', pin: '6482' } });
   check('new pin accepted after change', r.body?.status === 'success', r.body);
 
   console.log('\n-- Changing a pin that was never set is rejected cleanly --');
@@ -222,14 +222,14 @@ async function freshFundedUser(uid, phone) {
   console.log('-- Resetting an already-locked-out account also clears the lockout --');
   const G = 'pin-user-g';
   await freshFundedUser(G, '0771900701');
-  await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '1111' } });
+  await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '1359' } });
   for (let i = 0; i < 5; i++) {
     await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '0000' } });
   }
-  r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '1111' } });
+  r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '1359' } });
   check('sanity: account is locked even with the correct pin', r2.code === 400 && r2.body?.code === 'LOCKED', r2.body);
   await adminCall('/admin/user/reset-payout-pin', { userId: G });
-  r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '2222' } });
+  r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '2593' } });
   check('reset clears the lockout too -- a fresh pin works immediately', r2.body?.status === 'success' && r2.body?.pinJustSet === true, r2.body);
 
   console.log('\n== POST /account/payout-pin/set (registration-time PIN setup) ==');

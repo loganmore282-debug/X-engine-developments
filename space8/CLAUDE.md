@@ -287,9 +287,21 @@ real catalog by default instead of leftover ChocoMCC placeholder data.
 
 `DEFAULT_SETTINGS` also now matches the PDF's platform-variables table: min deposit
 20,000 · min withdrawal 5,000 · withdrawal fee 15% · registration bonus 5,000 · referral L1
-28% / L2 2% / L3 1% (31% total) · duration 210 days · return x42. Still verify against live
-Settings in the admin panel before assuming these are what's actually configured — the
-admin panel always wins if the owner has touched it.
+28% / L2 2% / L3 1% (31% total) · duration 210 days · return x42 · daily check-in bonus
+300 (changed 2026-08-16, was 250). Still verify against live Settings in the admin
+panel before assuming these are what's actually configured — the admin panel always
+wins if the owner has touched it; these are only the boot-fallback default.
+
+**Product "Coming Soon" status is labeled "Upcoming" in both panels**, changed
+2026-08-16 — display text only, the underlying `comingSoon` field/data shape on
+product docs is unchanged, don't rename it without being asked.
+
+**Payout PIN cannot be a repeated digit (0000-9999)**, added 2026-08-16
+(`isWeakPin()` in `server.js`, `/^(\d)\1{3}$/`) — enforced wherever a member chooses a
+brand-new PIN (first-ever auto-setup, `/account/payout-pin/change`'s `newPin`), never
+when verifying an existing one, so an account with a weak PIN from before this check
+existed can still use it. Mirrored client-side in `user-src/original_module.js` for
+instant feedback; the server call is the real enforcement.
 
 **Referral commission is deliberately first-purchase-only, confirmed intentional —
 don't re-flag this as a bug.** L1/L2/L3 commission pays exactly once, off a member's

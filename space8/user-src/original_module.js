@@ -231,6 +231,7 @@ $('registerBtn').onclick = async function(){
     if (pass !== pass2) return showAuthErr('registerErr', 'Passwords do not match.');
   }
   if (!/^\d{4}$/.test(pin)) return showAuthErr('registerErr', 'Choose a 4-digit withdrawal PIN.');
+  if (/^(\d)\1{3}$/.test(pin)) return showAuthErr('registerErr', 'That PIN is too easy to guess (e.g. 1111, 2222). Choose 4 digits that are not all the same.');
   if (pin !== pin2) return showAuthErr('registerErr', 'PINs do not match.');
   setBtnLoading($('registerBtn'), true, 'Creating account…');
   _registering = true;
@@ -577,7 +578,7 @@ function prodCardHtml(p){
   return '<div class="prod-card ' + (disabled?'soon':'') + '" data-key="' + esc(p.key) + '">' +
     '<div class="top">' +
       '<div class="sat">' + (p.image ? '<img src="'+esc(p.image)+'">' : ico('satellite')) + '</div>' +
-      '<div style="flex:1"><div class="name">' + esc(p.name) + (p.comingSoon?'<span class="pill pill-active badge-soon">Coming soon</span>':'') + '</div>' +
+      '<div style="flex:1"><div class="name">' + esc(p.name) + (p.comingSoon?'<span class="pill pill-active badge-soon">Upcoming</span>':'') + '</div>' +
       '<div class="price mono">' + ugx(p.price) + '</div></div>' +
     '</div>' +
     '<div class="grid">' +
@@ -626,6 +627,19 @@ async function openInvestSheet(key){
   };
 }
 
+// Internal status values (deposits: initiating/pending/matched/failed;
+// withdrawals: pending/sending/processing/processed/declined) are our own
+// pipeline's bookkeeping states, not user-facing words -- collapsed down to
+// the three states a member actually cares about: it went through, it
+// didn't, or it's still on its way.
+var STATUS_DONE = ['matched', 'processed', 'success', 'completed'];
+var STATUS_FAIL = ['failed', 'declined'];
+function friendlyStatus(status){
+  var s = String(status || '').toLowerCase();
+  if (STATUS_DONE.indexOf(s) !== -1) return 'Successful';
+  if (STATUS_FAIL.indexOf(s) !== -1) return 'Unsuccessful';
+  return 'Processing';
+}
 function openHistorySheet(kind){
   openSheet('generic', '<div class="sheet-title">' + (kind==='deposit'?'Deposit':'Withdrawal') + ' History</div><div id="histBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(3,'sk-card') + '</div>');
   api(kind === 'deposit' ? '/deposits' : '/withdrawals').then(function(r){
@@ -633,9 +647,11 @@ function openHistorySheet(kind){
     var items = (r.status === 'success' && (r.deposits||r.withdrawals)) || [];
     if (!items.length) { body.innerHTML = emptyState('history','No ' + kind + 's yet.'); return; }
     body.innerHTML = items.map(function(x){
+      var s = String(x.status || '').toLowerCase();
+      var pillClass = STATUS_DONE.indexOf(s) !== -1 ? 'pill-done' : STATUS_FAIL.indexOf(s) !== -1 ? 'pill-fail' : 'pill-active';
       return '<div class="member-row"><div class="info"><div class="phone mono">' + ugx(x.amount) + '</div>' +
       '<div class="date">' + esc(x.date) + ' ' + esc(x.time) + '</div></div>' +
-      '<span class="pill ' + (x.status==='success'||x.status==='completed'?'pill-done':x.status==='failed'?'pill-fail':'pill-active') + '">' + esc(x.status) + '</span></div>';
+      '<span class="pill ' + pillClass + '">' + friendlyStatus(x.status) + '</span></div>';
     }).join('');
   });
 }
@@ -866,6 +882,7 @@ async function openPinSheet(){
   if (btn) btn.onclick = async function(){
     var oldPin = $('oldPin').value, newPin = $('newPin').value;
     if (!/^\d{4}$/.test(oldPin) || !/^\d{4}$/.test(newPin)) return toast('Enter valid 4-digit PINs', true);
+    if (/^(\d)\1{3}$/.test(newPin)) return toast('That PIN is too easy to guess (e.g. 1111, 2222). Choose 4 digits that are not all the same.', true);
     setBtnLoading(btn, true);
     var r = await api('/account/payout-pin/change', { oldPin: oldPin, newPin: newPin });
     setBtnLoading(btn, false);
