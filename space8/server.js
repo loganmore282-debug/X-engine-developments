@@ -1394,6 +1394,76 @@ app.get('/public/activity-feed', async (_req, res) => {
   res.json({ status: 'success', feed: _activityFeed });
 });
 
+// ── MEMBER NOTIFICATIONS ───────────────────────────────────────────────
+// Database-backed records shown in the authenticated member notification bell.
+async function createMemberNotification(userId, title, body, type, data) {
+  if (!userId) return;
+  await db.collection('notifications').add({
+    userId, audience: 'member',
+    title: stripHtml(title || '').slice(0, 120),
+    body: stripHtml(body || '').slice(0, 600),
+    type: String(type || 'system').slice(0, 40),
+    data: data && typeof data === 'object' ? data : {},
+    readAt: null, createdAt: FieldValue.serverTimestamp()
+  });
+}
+app.get('/notifications', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const userSnap = await db.collection('users').doc(userId).get();
+    if (!userSnap.exists || userSnap.data().status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    const [mine, broadcasts] = await Promise.all([
+      db.collection('notifications').where('userId', '==', userId).limit(50).get(),
+      db.collection('notifications').where('audience', '==', 'all').limit(30).get()
+    ]);
+    const seen = new Set(), rows = [];
+    [...mine.docs, ...broadcasts.docs].forEach(doc => {
+      if (seen.has(doc.id)) return;
+      seen.add(doc.id);
+      const n = doc.data();
+      rows.push({ id: doc.id, title: n.title || 'Space8 update', body: n.body || '',
+        type: n.type || 'system', readAt: n.readAt || null, createdAt: n.createdAt || null });
+    });
+    rows.sort((a, b) => (tsMillis(b.createdAt) || 0) - (tsMillis(a.createdAt) || 0));
+    res.json({ status: 'success', notifications: rows.slice(0, 50) });
+  } catch (e) {
+    console.error('Notifications error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not load notifications' });
+  }
+});
+app.post('/notifications/read', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 50).filter(x => typeof x === 'string' && x.length <= 128) : [];
+  try {
+    await Promise.all(ids.map(async id => {
+      const ref = db.collection('notifications').doc(id);
+      const snap = await ref.get();
+      if (snap.exists && snap.data().userId === userId) await ref.update({ readAt: FieldValue.serverTimestamp() });
+    }));
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not mark notifications read' });
+  }
+});
+app.post('/admin/notifications/create', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const title = stripHtml(req.body.title || '').trim().slice(0, 120);
+  const body = stripHtml(req.body.body || '').trim().slice(0, 600);
+  if (!title || !body) return res.status(400).json({ status: 'error', message: 'Title and message are required' });
+  try {
+    await db.collection('notifications').add({
+      audience: 'all', title, body, type: 'announcement',
+      createdBy: req.adminUser?.username || 'owner', createdAt: FieldValue.serverTimestamp()
+    });
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not create notification' });
+  }
+});
+
 // ═══════════════════════════════════════════
 // ACCOUNT / REGISTER / CHECK-IN
 // ═══════════════════════════════════════════
@@ -1617,6 +1687,7 @@ app.post('/checkin', async (req, res) => {
         userId: uid, type: 'checkin', description: `Daily reward, day ${streak}`,
         amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
+      createMemberNotification(uid, 'Check-in reward received', `${fmtUGX(bonus)} was added for day ${streak}.`, 'checkin', { bonus, streak }).catch(e => console.warn('Check-in notification:', e.message));
       res.json({ status: 'success', bonus, streak });
     });
   } catch (e) {
@@ -1703,6 +1774,7 @@ app.post('/invest/create', async (req, res) => {
       });
     }));
     creditReferralCommission(invId, userId, tier.price).catch(e => console.error('Commission error:', e.message));
+    createMemberNotification(userId, 'Plan activated', `${tier.name} is now active. Cashback is credited automatically each day.`, 'investment', { investmentId: invId, tierKey: tier.key }).catch(e => console.warn('Investment notification:', e.message));
     res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.name} for ${fmtUGX(tier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -2133,6 +2205,7 @@ app.post('/withdraw/request', async (req, res) => {
     // sendAdminPush is the owner's OWN push notification (not shown to the
     // member) -- it's fine, and meant, to say "awaiting approval" here.
     sendWithdrawalPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}), awaiting approval`, witId);
+    createMemberNotification(userId, 'Withdrawal requested', `${fmtUGX(amt)} cash-out is pending. We will update its status here.`, 'withdrawal', { withdrawalId: witId, reference: ref }).catch(e => console.warn('Withdrawal notification:', e.message));
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, pinJustSet, message: `Cash-out requested — processing now` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
