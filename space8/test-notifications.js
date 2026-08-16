@@ -1,9 +1,7 @@
 /* SPACE8 MEMBER NOTIFICATIONS
-   Codex added GET /notifications, POST /notifications/read and owner
-   POST /admin/notifications/create, plus notification creation on
-   check-in/plan-activation/withdrawal-request (see AGENT_LOG.md). Verified
-   against the real server.js rather than taken on faith, and two real bugs
-   were found and fixed here:
+   The member bell is deliberately reserved for owner announcements. GET
+   /notifications returns global announcements and POST /notifications/read
+   records each member's read state independently.
 
      1. POST /admin/notifications/create (pushes a message to EVERY member)
         was gated by verifyAdmin -- reachable by any staff login -- despite
@@ -22,11 +20,9 @@
         GET /notifications, while member-specific notifications keep the
         original single readAt field (only one user could ever read those).
 
-   This test proves: member notifications are correctly scoped per-user
-   (never visible to nor markable-read by another user), the 3 real
-   creation triggers (check-in/invest/withdraw) actually produce a visible
-   notification, broadcasts are visible to every member and independently
-   markable-read per member, and the owner-only gate on creating one.
+   This test proves: money actions do not create bell messages, broadcasts
+   are visible to every member (including a member created afterwards), are
+   independently read per member, and only the owner may create one.
 
    Run: node test-notifications.js   (exits 0 = all green)                */
 
@@ -107,7 +103,7 @@ function cleanPhoneLocal(raw) {
   let r = await call('GET', '/notifications');
   check('no auth -> 401', r.code === 401, r.body);
 
-  console.log('\n== Two members, each gets their own check-in notification ==');
+  console.log('\n== Money actions do not create member-bell notifications ==');
   await registerFresh('nt-user-a', '0771950001');
   await registerFresh('nt-user-b', '0771950002');
   users().get('nt-user-a').walletBalance = 0;
@@ -118,27 +114,13 @@ function cleanPhoneLocal(raw) {
 
   r = await call('GET', '/notifications', { token: 'uid:nt-user-a' });
   const aNotifs = r.body?.notifications || [];
-  check('user A sees a check-in notification', aNotifs.some(n => n.type === 'checkin'), aNotifs);
-  check('user A\'s check-in notification starts unread', aNotifs.find(n => n.type === 'checkin')?.readAt === null, aNotifs);
+  check('user A sees no check-in notification', !aNotifs.some(n => n.type === 'checkin'), aNotifs);
 
   r = await call('GET', '/notifications', { token: 'uid:nt-user-b' });
   const bNotifs = r.body?.notifications || [];
-  check('user B does NOT see user A\'s check-in notification (scoped per-user)', !bNotifs.some(n => n.type === 'checkin'), bNotifs);
+  check('user B also sees no check-in notification', !bNotifs.some(n => n.type === 'checkin'), bNotifs);
 
-  console.log('\n== A member cannot mark another member\'s notification read ==');
-  const aCheckinId = aNotifs.find(n => n.type === 'checkin').id;
-  r = await call('POST', '/notifications/read', { token: 'uid:nt-user-b', body: { ids: [aCheckinId] } });
-  check('user B\'s read call for user A\'s id returns success (silently no-ops)', r.body?.status === 'success', r.body);
-  r = await call('GET', '/notifications', { token: 'uid:nt-user-a' });
-  check('user A\'s notification is STILL unread after user B tried to mark it read', r.body.notifications.find(n => n.id === aCheckinId)?.readAt === null, r.body.notifications);
-
-  console.log('\n== A member CAN mark their own notification read ==');
-  r = await call('POST', '/notifications/read', { token: 'uid:nt-user-a', body: { ids: [aCheckinId] } });
-  check('user A\'s own read call succeeds', r.body?.status === 'success', r.body);
-  r = await call('GET', '/notifications', { token: 'uid:nt-user-a' });
-  check('user A\'s notification is now read', !!r.body.notifications.find(n => n.id === aCheckinId)?.readAt, r.body.notifications);
-
-  console.log('\n== Plan activation and withdrawal requests also notify ==');
+  console.log('\n== Plan activation and withdrawal requests also stay out of the bell ==');
   users().get('nt-user-a').walletBalance = 5000000;
   r = await call('GET', '/public/products');
   const tierKey = (r.body?.products || [])[0]?.key;
@@ -151,11 +133,10 @@ function cleanPhoneLocal(raw) {
   r = await call('POST', '/withdraw/request', { token: 'uid:nt-user-a', body: { amount: 20000, holder: 'Tester', network: 'MTN Mobile Money', phone: '0771950001', pin: '1234' } });
   check('withdraw/request succeeds', r.body?.status === 'success', r.body);
 
-  await sleep(150); // notification creation is fire-and-forget (.catch), give it a tick
   r = await call('GET', '/notifications', { token: 'uid:nt-user-a' });
   const types = (r.body?.notifications || []).map(n => n.type);
-  check('investment notification created', types.includes('investment'), types);
-  check('withdrawal notification created', types.includes('withdrawal'), types);
+  check('investment notification was not created', !types.includes('investment'), types);
+  check('withdrawal notification was not created', !types.includes('withdrawal'), types);
 
   console.log('\n== Broadcasts: owner-only to create, visible to everyone, independently read per member ==');
   await ownerCall('/admin/admins/create', { username: 'ntstaff', password: 'whatever-123' });
@@ -189,6 +170,10 @@ function cleanPhoneLocal(raw) {
   r = await call('GET', '/notifications', { token: 'uid:nt-user-b' });
   bBroadcast = (r.body.notifications || []).find(n => n.id === bBroadcast.id);
   check('broadcast is STILL unread for user B (per-member read state, not shared)', bBroadcast?.readAt === null, bBroadcast);
+
+  await registerFresh('nt-user-late', '0771950004');
+  r = await call('GET', '/notifications', { token: 'uid:nt-user-late' });
+  check('a member who registers later still sees the older owner announcement', (r.body?.notifications || []).some(n => n.id === aBroadcast.id), r.body?.notifications);
 
   console.log('\n== Banned member cannot list notifications ==');
   await registerFresh('nt-user-banned', '0771950003');

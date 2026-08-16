@@ -1491,18 +1491,9 @@ app.get('/public/activity-feed', async (_req, res) => {
 });
 
 // ── MEMBER NOTIFICATIONS ───────────────────────────────────────────────
-// Database-backed records shown in the authenticated member notification bell.
-async function createMemberNotification(userId, title, body, type, data) {
-  if (!userId) return;
-  await db.collection('notifications').add({
-    userId, audience: 'member',
-    title: stripHtml(title || '').slice(0, 120),
-    body: stripHtml(body || '').slice(0, 600),
-    type: String(type || 'system').slice(0, 40),
-    data: data && typeof data === 'object' ? data : {},
-    readAt: null, createdAt: FieldValue.serverTimestamp()
-  });
-}
+// The member bell is deliberately reserved for owner announcements. They
+// are global records, so every account (including a new account) can see
+// the current and older announcements after signing in.
 app.get('/notifications', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
@@ -1521,12 +1512,9 @@ app.get('/notifications', async (req, res) => {
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (userSnap.data().status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    const [mine, broadcasts] = await Promise.all([
-      db.collection('notifications').where('userId', '==', userId).limit(50).get(),
-      db.collection('notifications').where('audience', '==', 'all').limit(30).get()
-    ]);
+    const broadcasts = await db.collection('notifications').where('audience', '==', 'all').limit(50).get();
     const seen = new Set(), rows = [];
-    [...mine.docs, ...broadcasts.docs].forEach(doc => {
+    broadcasts.docs.forEach(doc => {
       if (seen.has(doc.id)) return;
       seen.add(doc.id);
       const n = doc.data();
@@ -1535,7 +1523,7 @@ app.get('/notifications', async (req, res) => {
       // own notification -- every member sees the same doc. readBy is an
       // array of userIds who've opened the bell since this broadcast was
       // created; membership in it is this member's own read state.
-      const readAt = n.audience === 'all' ? ((n.readBy || []).includes(userId) ? true : null) : (n.readAt || null);
+      const readAt = (n.readBy || []).includes(userId) ? true : null;
       rows.push({ id: doc.id, title: n.title || 'Space8 update', body: n.body || '',
         type: n.type || 'system', readAt, createdAt: n.createdAt || null });
     });
@@ -1556,11 +1544,7 @@ app.post('/notifications/read', async (req, res) => {
       const snap = await ref.get();
       if (!snap.exists) return;
       const n = snap.data();
-      if (n.userId === userId) await ref.update({ readAt: FieldValue.serverTimestamp() });
-      // Broadcasts have no single owner -- record THIS member's read state
-      // in a shared readBy array instead of overwriting one readAt field
-      // every other member would also be judged against.
-      else if (n.audience === 'all') await ref.update({ readBy: FieldValue.arrayUnion(userId) });
+      if (n.audience === 'all') await ref.update({ readBy: FieldValue.arrayUnion(userId) });
     }));
     res.json({ status: 'success' });
   } catch (e) {
@@ -1853,7 +1837,6 @@ app.post('/checkin', async (req, res) => {
         userId: uid, type: 'checkin', description: `Daily reward, day ${streak}`,
         amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
-      createMemberNotification(uid, 'Check-in reward received', `${fmtUGX(bonus)} was added for day ${streak}.`, 'checkin', { bonus, streak }).catch(e => console.warn('Check-in notification:', e.message));
       res.json({ status: 'success', bonus, streak });
     });
   } catch (e) {
@@ -1940,7 +1923,6 @@ app.post('/invest/create', async (req, res) => {
       });
     }));
     creditReferralCommission(invId, userId, tier.price).catch(e => console.error('Commission error:', e.message));
-    createMemberNotification(userId, 'Plan activated', `${tier.name} is now active. Cashback is credited automatically each day.`, 'investment', { investmentId: invId, tierKey: tier.key }).catch(e => console.warn('Investment notification:', e.message));
     res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.name} for ${fmtUGX(tier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -2393,7 +2375,6 @@ app.post('/withdraw/request', async (req, res) => {
     // sendAdminPush is the owner's OWN push notification (not shown to the
     // member) -- it's fine, and meant, to say "awaiting approval" here.
     sendWithdrawalPush('New withdrawal request', `${fmtUGX(amt)} cash-out requested (net ${fmtUGX(net)}), awaiting approval`, witId);
-    createMemberNotification(userId, 'Withdrawal requested', `${fmtUGX(amt)} cash-out is pending. We will update its status here.`, 'withdrawal', { withdrawalId: witId, reference: ref }).catch(e => console.warn('Withdrawal notification:', e.message));
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, pinJustSet, message: `Cash-out requested — processing now` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });

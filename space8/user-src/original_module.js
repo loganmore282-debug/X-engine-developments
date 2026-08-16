@@ -45,6 +45,18 @@ function toast(msg, isErr){
   toast._tm = setTimeout(function(){ t.className = 'toast'; }, 3200);
 }
 
+function copyText(value, label){
+  value = String(value || '');
+  if (!value) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(value).then(function(){ toast((label || 'Value') + ' copied'); }).catch(function(){ toast('Could not copy', true); });
+  } else {
+    var area = document.createElement('textarea'); area.value = value; document.body.appendChild(area); area.select();
+    try { document.execCommand('copy'); toast((label || 'Value') + ' copied'); } catch (_) { toast('Could not copy', true); }
+    area.remove();
+  }
+}
+
 function setBtnLoading(btn, on, label){
   if (!btn) return;
   if (on){
@@ -197,6 +209,14 @@ function showAuthErr(id, msg){
   el.style.display = msg ? 'block' : 'none';
 }
 
+// Referral links are shareable as /register/ref=CODE. When the host is
+// configured to serve the app shell for that path, prefill the optional
+// field without trusting it; the server still validates the code on submit.
+var _refPath = location.pathname.match(/^\/register\/ref=([^/]+)$/);
+if (_refPath && $('regReferral')) {
+  try { $('regReferral').value = decodeURIComponent(_refPath[1]).slice(0, 32); } catch (_) {}
+}
+
 // True for the whole span between fbCreateUser() succeeding and /register
 // finishing (success OR failure). Firebase signs a newly-created user in
 // immediately, which fires the 'space8-auth' listener below on its own --
@@ -332,8 +352,8 @@ function identityBannerHtml(acc){
   return '<div class="identity-banner' + (src?' has-img':'') + '"' + (src?' style="background-image:url(\'' + esc(src) + '\')"':'') + '>' +
     '<div class="identity-mark"><svg viewBox="0 0 36 28" fill="none"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="currentColor"/></svg></div>' +
     '<div class="identity-info">' +
-      '<div class="identity-phone">' + esc(acc.phone||'—') + '</div>' +
-      '<div class="identity-id mono">ID:' + esc(acc.publicId||'——————') + '</div>' +
+      '<div class="identity-copyline"><span class="identity-phone">' + esc(acc.phone||'—') + '</span><button class="mini-copy" data-copy="' + esc(acc.phone||'') + '" data-copy-label="Account number" aria-label="Copy account number">' + ico('copy') + '</button></div>' +
+      '<div class="identity-copyline"><span class="identity-id mono">ID:' + esc(acc.publicId||'——————') + '</span><button class="mini-copy" data-copy="' + esc(acc.publicId||'') + '" data-copy-label="Account ID" aria-label="Copy account ID">' + ico('copy') + '</button></div>' +
     '</div>' +
   '</div>';
 }
@@ -680,7 +700,7 @@ function emptyState(icon, msg){
 // ── TEAM ──────────────────────────────────────────────────────────────
 async function renderTeam(){
   var el = $('page-team');
-  if (!STATE.loaded.team) el.innerHTML = '<div class="sk sk-card" style="height:110px;margin:16px 0"></div>' + skRows(3);
+  if (!STATE.loaded.team) el.innerHTML = '<div class="team-loading">Loading your team…</div>';
   var r = await api('/team/stats');
   if (r.status === 'success') STATE.teamStats = r;
   STATE.loaded.team = true;
@@ -694,7 +714,7 @@ async function renderTeam(){
   '</div>';
   [1,2,3].forEach(function(l){
     html += '<div class="section-title">Level ' + l + ' <span class="see-all">' + LEVEL_PCT[l] + '%</span></div>';
-    html += '<div id="teamMemberList' + l + '"><div class="sk sk-line" style="width:50%"></div></div>';
+    html += '<div id="teamMemberList' + l + '"><div class="team-loading">Loading level ' + l + '…</div></div>';
   });
   html += '<div class="section-title">Task Center</div><div id="taskList"></div>';
   el.innerHTML = html;
@@ -731,9 +751,9 @@ function renderTaskList(milestones){
       var label = m.type === 'deposit' ? ('Team deposits ' + ugx(m.target)) : (m.target + ' active Level-1 referrals');
       return '<div class="milestone-card ' + (m.claimed?'done':'') + '">' +
         '<div class="ico">' + ico('gift') + '</div><div class="info"><div class="t">' + label + '</div>' +
-        '<div class="p">Reward ' + ugx(m.reward) + (m.claimed ? ' · Claimed' : ' · ' + (m.type==='deposit'?ugx(m.current):m.current) + ' / ' + (m.type==='deposit'?ugx(m.target):m.target)) + '</div>' +
+        '<div class="p">Manual reward · ' + ugx(m.reward) + (m.claimed ? ' · Claimed' : ' · ' + (m.type==='deposit'?ugx(m.current):m.current) + ' / ' + (m.type==='deposit'?ugx(m.target):m.target)) + '</div>' +
         (!m.claimed ? '<div class="bar"><i style="width:'+pct+'%"></i></div>' : '') + '</div>' +
-        (m.claimed ? '<span class="pill pill-done">' + ico('check') + '</span>' : m.achieved ? '<button class="claim" data-target="'+m.target+'" data-type="'+m.type+'">Claim</button>' : '') +
+        (m.claimed ? '<span class="pill pill-done">' + ico('check') + '</span>' : m.achieved ? '<button class="claim" data-target="'+m.target+'" data-type="'+m.type+'">Claim reward</button>' : '<span class="mission-pending">In progress</span>') +
       '</div>';
     }).join('');
   }).join('');
@@ -759,9 +779,11 @@ async function renderAccount(){
     '<div class="referral-label">Your Referral Code</div>' +
     '<div class="referral-row">' +
       '<div class="referral-code mono">' + esc(acc.referralCode||'—') + '</div>' +
-      '<div class="iconbtn" id="shareRefBtn">' + ico('share') + '</div>' +
+      '<button class="iconbtn" id="copyRefCodeBtn" aria-label="Copy referral code">' + ico('copy') + '</button>' +
     '</div>' +
-    '<div class="referral-hint">Share this code to earn commission when someone you invite makes their first investment.</div>' +
+    '<div class="referral-label referral-link-label">Your Referral Link</div>' +
+    '<div class="referral-row referral-link-row"><div class="referral-link mono" id="referralLink">' + esc(referralLink(acc.referralCode)) + '</div><button class="iconbtn" id="shareRefBtn" aria-label="Share referral link">' + ico('share') + '</button></div>' +
+    '<div class="referral-hint">Copy your code or share your personal link to invite people.</div>' +
   '</div>';
 
   html += '<div class="card giftcode-card">' +
@@ -805,6 +827,8 @@ async function renderAccount(){
   $('mWithdrawals').onclick = function(){ openHistorySheet('withdrawal'); };
   $('mPin').onclick = openPinSheet;
   $('shareRefBtn').onclick = function(){ shareReferral(acc.referralCode); };
+  $('copyRefCodeBtn').onclick = function(){ copyText(acc.referralCode, 'Referral code'); };
+  qsa('.mini-copy', el).forEach(function(btn){ btn.onclick = function(){ copyText(btn.dataset.copy, btn.dataset.copyLabel); }; });
   $('logoutRow').onclick = doLogout;
   $('giftCodeBtn').onclick = redeemGiftCode;
   $('giftCodeInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('giftCodeBtn').click(); });
@@ -817,10 +841,14 @@ async function renderAccount(){
 function menuRow(icon, label, key){
   return '<div class="menu-row" data-key="' + key + '">' + ico(icon) + '<span>' + esc(label) + '</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>';
 }
+function referralLink(code){
+  return location.origin + '/register/ref=' + encodeURIComponent(String(code || ''));
+}
 function shareReferral(code){
-  var text = 'Join Space8 and start earning — use my referral code ' + code;
-  if (navigator.share) navigator.share({ text: text }).catch(function(){});
-  else { navigator.clipboard.writeText(code||''); toast('Referral code copied'); }
+  var link = referralLink(code);
+  var text = 'Join Space8 and start earning with my referral link.';
+  if (navigator.share) navigator.share({ title: 'Join Space8', text: text, url: link }).catch(function(){});
+  else copyText(link, 'Referral link');
 }
 async function redeemGiftCode(){
   var input = $('giftCodeInput');
@@ -1007,7 +1035,8 @@ function openDepositSheet(){
         '<option value="Airtel Money">Airtel Money</option>' +
       '</select>' +
     '</div>' +
-    '<button class="btn btn-primary" id="submitDepositBtn" style="margin-top:14px">Deposit Now</button>'
+    '<button class="btn btn-primary" id="submitDepositBtn" style="margin-top:14px">Deposit Now</button>' +
+    '<div class="instruction-card"><b>Deposit instructions</b><span>Enter the amount and mobile-money number above. Approve the prompt on that phone with your mobile-money PIN. Your wallet updates after confirmation.</span></div>'
   );
   $('submitDepositBtn').onclick = async function(){
     var btn = $('submitDepositBtn');
@@ -1048,17 +1077,20 @@ async function openWithdrawSheet(){
   var r = await api('/bank/list', null, 'GET');
   var accounts = r.status === 'success' ? r.accounts : [];
   if (!accounts.length) {
-    openSheet('withdraw',
+    $('withdrawSheet').innerHTML =
       '<div class="sheet-title">Withdraw</div>' +
       emptyState('lock', 'Bind a payout account first to withdraw.') +
-      '<button class="btn btn-primary" id="goToBindBtn">Bind Payout Account</button>'
-    );
-    $('goToBindBtn').onclick = function(){ closeSheet('withdraw'); openPayoutSheet(); };
+      '<button class="btn btn-primary" id="goToBindBtn">Bind Payout Account</button>';
+    // Do not call history.back() and push the Payout page in the same turn:
+    // browser back-navigation is asynchronous and could otherwise pop the
+    // newly-opened Payout page instead of the Withdraw page. Hide this
+    // empty state directly, then make Payout the one active sheet.
+    $('goToBindBtn').onclick = function(){ hideSheet('withdraw'); openPayoutSheet(); };
     return;
   }
   var min = (STATE.settings||{}).minWithdraw || 20000;
   var feePct = (STATE.settings||{}).withdrawFeePct || 15;
-  renderWithdrawSheet(accounts[0], min, feePct, true);
+  renderWithdrawSheet(accounts[0], min, feePct, false);
 }
 // Owner correction, 2026-08-16: the account to withdraw to is picked by
 // navigating to the real Payout Accounts page (openPayoutSheet in "choose"
@@ -1073,7 +1105,6 @@ async function openWithdrawSheet(){
 function renderWithdrawSheet(acct, min, feePct, isFirstRender){
   var html = bannerHtml('marscrate','withdraw') +
     '<div class="sheet-title">Withdraw Funds</div>' +
-    '<div class="plain-note">Enter the amount and your withdrawal PIN. The fee below is deducted automatically. Requests are reviewed and sent to your bound payout account — track the status anytime under Withdrawals in Products.</div>' +
     '<div class="record-row acct-row selectable" id="wdAcctRow">' +
       '<div class="info"><div class="phone">' + esc(acct.holder) + '</div>' +
       '<div class="date">' + esc(acct.network) + ' · ' + esc(acct.phone) + '</div></div>' +
@@ -1084,7 +1115,8 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
       '<div class="field-hint" id="feePreview">Fee ' + feePct + '% applies — enter an amount to see what you\'ll receive.</div>' +
       '<div class="field">' + ico('shield') + '<input id="wdPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit security PIN"></div>' +
     '</div>' +
-    '<button class="btn btn-primary" id="submitWithdrawBtn" style="margin-top:14px">Request Withdrawal</button>';
+    '<button class="btn btn-primary" id="submitWithdrawBtn" style="margin-top:14px">Request Withdrawal</button>' +
+    '<div class="instruction-card"><b>Withdrawal instructions</b><span>Choose the payout account, enter the amount and your security PIN. The displayed fee is deducted automatically. Each request is reviewed before money is sent.</span></div>';
 
   if (isFirstRender) openSheet('withdraw', html);
   else $('withdrawSheet').innerHTML = html;
