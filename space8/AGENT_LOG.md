@@ -14,6 +14,88 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Accent color blue → vibrant green (user + admin); ported the missing half of the "app won't update" fix from the root-level ChocoMCC sw.js
+
+Owner: "change color from blue to green... do both admin and user, it should also be
+vibrant and bright." In the same message, referencing a service-worker/cache fix
+from "ChocoMCC": "cache updates quickly and validates quickly without even deleting
+existing cache, deleting browsing data or deleting app." Both done.
+
+- **Color: value-only swap, same convention as every previous color change this
+  project** (blue → sapphire → green → blue → now green again) — CSS custom
+  property NAMES stay `--blue*`/`--gold*`, only their hex values change, per the
+  standing rule in this file (a full rename was judged higher-risk than swapping
+  5-6 token values at the source, and stays true here). New green derived by
+  swapping the G/B channels of each existing blue value (`#2e6bff` → `#2eff6b`,
+  `#1c48b3` → `#1cb348`, `#7fa1f0` → `#7ff0a1`) — a mechanical, reproducible
+  derivation that guarantees the new green has the exact same brightness/
+  saturation profile the owner's "vibrant and bright" blue already had, not a
+  guessed-at green that might read duller or muddier. Applied to
+  `user-src/index.html` (`--blue`/`--blue-dim`/`--blue-mute`/`--blue-glow`/
+  `--page-bg`/`--surface-blue`, the last currently unused but kept consistent)
+  and `admin-src/index.html` (`--gold`/`--gold-deep`, same values as
+  `--blue`/`--blue-dim` — matches the existing "same hue family" convention
+  documented in the Palette section). Also ran a full hex-color audit of both
+  files (same practice used for the original violet→blue admin swap) and found
+  3 literal, non-token blue hex values that needed the same treatment since they
+  don't reference the CSS variables: the admin brand-mark's radial-gradient
+  center (`#12275c`→`#125c27`), the admin primary button's gradient highlight
+  (`#8fb4ff`→`#8fffb4`), and the `theme-color` meta tag + brand-mark SVG icon
+  stroke color (`#f4f2ff`→`#f4fff2`, both pre-existing very-pale near-white
+  tints, updated for full consistency even though barely visible either way).
+  `--danger`/`--ok`/`--warn`/`--sky` (admin) and `--danger` (user) are
+  deliberately untouched — those are semantic status colors, not the accent,
+  same as every prior color pass. Note for a future session: `--ok` (admin
+  success-status green, `#0f9d58`) and the new accent green now sit closer
+  together in hue than accent-vs-success did under blue — flagged, not changed,
+  since the owner didn't ask about status-color distinction and this is a
+  judgment call for them if it ever reads as confusing in practice.
+- **Auto-update mechanism ported from the root-level `sw.js`'s own documented
+  history (its v121 entry, "the long-standing 'app still shows the old version
+  until you reinstall' problem, three separate causes stacked on top of each
+  other")** — Space8's `user/sw.js` already carried two of that fix's three
+  parts (network-first `cache:'no-cache'` navigation fetch, `skipWaiting()` +
+  `clients.claim()` so a new worker takes control immediately) and
+  `render.yaml` already had the matching `Cache-Control: no-cache` headers on
+  `index.html`/`sw.js`/`manifest.json` for both static sites — but the actual
+  CLIENT-SIDE half (detect a new build, reload once the new worker takes over)
+  was never ported into Space8's own registration script, which was still just
+  a bare `.register('/sw.js')` with no update-checking or reload logic at all.
+  This is almost certainly why this project's CLAUDE.md has repeatedly noted
+  "the owner hits stale-cache issues constantly" despite the cache-busting
+  version-bump discipline every prior round followed — bumping the SW's own
+  cache name only helps once a NEW service worker actually takes control,
+  which needed this missing piece. Added to both `user-src/index.html` and
+  `admin-src/index.html`'s registration scripts: check for an update on load,
+  on every tab foreground (`visibilitychange`/`focus`), and hourly
+  (`registration.update()`); on `controllerchange` (a new worker just took
+  over), reload the page automatically — but only once nothing money-sensitive
+  is in flight. For the user app, `window._moneyCallsInFlight` is a new counter
+  incremented/decremented around `api()` calls that hit `MONEY_ENDPOINTS`
+  (deposit/invest/withdraw/redeem/checkin/bank-save — that whitelist already
+  existed for retry-safety, reused here for the same reason). For admin, the
+  existing `_tabBusy` flag (already used to suppress live-refresh during an
+  upload/save so it doesn't get yanked mid-action) is reused as the same gate —
+  no new state needed there. Neither app will now force a reload out from under
+  an in-progress money action or admin edit; the reload just waits until that
+  clears, checking every 500ms.
+- **Verification:** `node -c user-src/original_module.js`; rebuilt both
+  `user/index.html` and `admin/index.html`; `user/sw.js` bumped to
+  `space8-shell-v224` (admin's `sw.js` deliberately never caches HTML — a
+  documented no-op by design — so it has no cache version to bump); full
+  `test-*.js` backend suite green (unaffected by this round, confirmed
+  anyway); a full hex-color audit of both `*-src/index.html` files (grep for
+  every `#RRGGBB` literal) confirms no blue-hued value was missed and nothing
+  unrelated (grays, danger/warn/ok/sky status colors) was touched; Playwright
+  screenshots of Home/Products/Account (user) and the login screen (admin)
+  confirm the vibrant green renders correctly and everything stays legible; a
+  scripted check of the reload-gate logic confirms it correctly withholds the
+  reload while `_moneyCallsInFlight > 0` and fires immediately once it drops
+  to 0.
+- Nothing left open from this round.
+
+---
+
 ## 2026-08-16 — Claude — ChatGPT review fixes: settings validation + assistant intent-scoring bug
 
 ChatGPT independently reviewed commit e850e90 and found 2 real issues (plus confirmed

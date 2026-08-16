@@ -119,6 +119,10 @@ function ico(name){ return ICONS[name] || ''; }
 var MONEY_ENDPOINTS = ['/deposit/marzpay', '/invest/create', '/withdraw/request', '/redeem', '/checkin', '/bank/save'];
 function isMoneyCall(path){ return MONEY_ENDPOINTS.some(function(p){ return path.indexOf(p) === 0; }); }
 
+// Tracked so a background service-worker update never yanks the page out
+// from under a deposit/withdrawal/investment/gift-code/check-in request that's
+// actually in flight -- see the reload gate in index.html's plain <script>.
+window._moneyCallsInFlight = 0;
 async function api(path, body, method, retryOnce){
   var token = null;
   try { if (window.fbAuth && window.fbAuth.currentUser) token = await window.fbAuth.currentUser.getIdToken(); } catch(e){}
@@ -135,14 +139,19 @@ async function api(path, body, method, retryOnce){
     if (json.status === 'error' && json.code === 'BANNED') { handleBanned(json.message); }
     return json;
   };
+  var isMoney = isMoneyCall(path);
+  if (isMoney) window._moneyCallsInFlight++;
   try {
-    return await doFetch();
-  } catch (netErr) {
-    var isMoney = isMoneyCall(path);
-    if (!isMoney && (retryOnce !== false)) {
-      try { return await doFetch(); } catch(e2){ return { status:'error', message:'Could not reach the server. Check your connection.' }; }
+    try {
+      return await doFetch();
+    } catch (netErr) {
+      if (!isMoney && (retryOnce !== false)) {
+        try { return await doFetch(); } catch(e2){ return { status:'error', message:'Could not reach the server. Check your connection.' }; }
+      }
+      return { status:'error', message:'Could not reach the server. Check your connection.' };
     }
-    return { status:'error', message:'Could not reach the server. Check your connection.' };
+  } finally {
+    if (isMoney) window._moneyCallsInFlight--;
   }
 }
 

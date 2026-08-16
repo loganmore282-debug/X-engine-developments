@@ -91,13 +91,27 @@ The owner was explicit and this must not be re-litigated without them saying so:
 Static mockup, still in the repo: **`space8/design/visual-system-mockup.html`**. The real
 app in `user-src/` was built directly against this.
 
-- **Palette — vibrant blue is the actual page CANVAS now, white cards float on top.**
-  As of 2026-08-16, `--blue: #2e6bff` and **`--page-bg` is the SAME blue** — this is a
-  structural change, not just an accent-color swap. The owner sent reference screenshots
-  of another platform and was explicit: "I wanted a vibrant blue which was throughout
-  like that platform, it taken like 80% and whites like 10%." (This followed a brief,
-  explicitly-confirmed detour to green, then back to blue — green is fully gone, don't
-  resurrect it without being asked again.) Concretely: `body`/`main`/every `.page` render
+- **Palette — vibrant color is the actual page CANVAS, white cards float on top.**
+  **Currently GREEN as of 2026-08-16 (later the same day as the entries below) —
+  `--blue: #2eff6b`, value-only swap, name unchanged** (owner: "change color from
+  blue to green... it should also be vibrant and bright"). The structural
+  decision described in this whole section — `--page-bg` is the SAME accent
+  color as `--blue`, ~80% coverage, white cards ~10% — is unchanged; only the
+  hue flipped, again (this project has now gone blue → sapphire → green → blue
+  → **green**, each time keeping the `--blue*` token names and swapping just
+  the values — see the "kept their `--blue*` names" note a few lines down,
+  still the right call). The new green was derived by swapping the G/B
+  channels of the exact prior blue value (`#2e6bff`→`#2eff6b`,
+  `#1c48b3`→`#1cb348`, `#7fa1f0`→`#7ff0a1`) specifically to preserve the same
+  brightness/saturation the owner had already approved as "vibrant," not a
+  freshly-guessed green. Don't revert to blue without being asked again — but
+  also don't be surprised if this flips again; treat whatever `--blue` is
+  actually SET to right now (check the file, don't trust this paragraph's own
+  hex codes going stale) as the source of truth, and update this note in place
+  when it changes rather than layering on more history than this.
+  The rest of this section (originally written for blue, 2026-08-16 earlier
+  that day) still describes the correct STRUCTURE, just mentally substitute
+  "green" for "blue" while reading it: `body`/`main`/every `.page` render
   directly on `--page-bg` (blue); `.topbar` and `.navbar` are blue with WHITE wordmark/
   nav-icon/nav-label text (`.navitem` inactive = `rgba(255,255,255,.68)`, active = `#fff`
   solid, same for `.svg-cart`/`.svg-team` fills); `.section-title` headers are white when
@@ -146,16 +160,17 @@ app in `user-src/` was built directly against this.
   add another settings field the admin renders back into HTML, check whether it
   needs the same clamp-and-validate treatment rather than assuming free text is
   safe just because the endpoint is owner-gated.
-  `--blue-dim: #1c48b3` / `--blue-mute: #7fa1f0` / `--blue-glow: rgba(46,107,255,.22)` are
-  all derived from the same hue. **The CSS custom properties kept their `--blue*` names
-  through every color change this session** (blue → sapphire → green → back to this
-  vibrant blue) rather than being renamed each time — a full rename across every
-  `var(--blue...)` reference in this ~600KB file was judged higher-risk (easy to miss an
-  occurrence) than swapping 5-6 token values at the source. If the accent color changes
-  again, prefer that same value-only-swap approach unless there's a strong reason to do
-  the full rename. A single desaturated red (`--danger`) is the only non-blue color,
-  reserved for genuine failure states. No violet, no gold, no green, no gradients
-  anywhere.
+  `--blue-dim: #1cb348` / `--blue-mute: #7ff0a1` / `--blue-glow: rgba(46,255,107,.22)` are
+  all derived from the same hue (values current as of the 2026-08-16 blue→green swap
+  noted at the top of this Palette section — check the file if this has moved on again).
+  **The CSS custom properties kept their `--blue*` names through every color change this
+  project has had** (blue → sapphire → green → blue → green again) rather than being
+  renamed each time — a full rename across every `var(--blue...)` reference in this
+  ~600KB file was judged higher-risk (easy to miss an occurrence) than swapping 5-6 token
+  values at the source. If the accent color changes again, prefer that same
+  value-only-swap approach unless there's a strong reason to do the full rename. A single
+  desaturated red (`--danger`) is the only color outside the accent hue family, reserved
+  for genuine failure states. No gradients anywhere.
 - **Admin panel palette (`admin-src/index.html`), re-themed 2026-08-16 to match the
   above.** Was dark (`--bg:#050507`) with a violet accent (`--gold:#6C4EFF`, despite the
   name) and a system font. Now: `--bg:#f4f7fb` (light neutral page, NOT the full blue
@@ -163,16 +178,21 @@ app in `user-src/` was built directly against this.
   background was chosen over literally replicating the mobile blue-canvas treatment;
   revisit if the owner asks for closer matching), `--card:#ffffff`, `--ink:#0a1220`,
   `--sub:#5b6b84`, `--line:#d7dfec` — all copied from the user app's `--void`/`--surface`/
-  `--ink`/`--ink-dim`/`--line` values. `--gold:#2e6bff` / `--gold-deep:#1c48b3` /
-  `--gold-ink:#fff` (variable names kept, same convention as `--blue*` above) drive tabs,
-  primary buttons, and the brand mark — same hue as the user app's `--blue`/`--blue-dim`.
+  `--ink`/`--ink-dim`/`--line` values. `--gold:#2eff6b` / `--gold-deep:#1cb348` /
+  `--gold-ink:#fff` (variable names kept, same convention as `--blue*` above; values
+  current as of the 2026-08-16 blue→green swap, always match `--blue`/`--blue-dim` in
+  `user-src/index.html`) drive tabs, primary buttons, and the brand mark.
   `--ok`/`--danger`/`--warn`/`--sky` were re-picked as legible light-mode status colors
   (green/red/amber/teal) since the originals were tuned for dark chips (pale text on a
-  near-black pill) and would be illegible inverted onto white. Three literal (non-token)
-  hex values that no longer made sense once the accent went from violet to blue were also
-  fixed: the brand-mark radial-gradient center (`#1a1530`→`#12275c`), the primary button's
-  gradient highlight (`#F3C98A`→`#8fb4ff`), and the modal backdrop tint
-  (`rgba(40,26,16,.45)`→`rgba(10,18,32,.45)`). Same self-hosted Inter `@font-face` as the
+  near-black pill) and would be illegible inverted onto white — **note `--ok` (success,
+  `#0f9d58`) and the accent `--gold` now sit closer together in hue now that the accent
+  itself is green too; flagged, not changed, revisit if it ever reads as ambiguous.**
+  Literal (non-token) hex values that don't reference these variables get fixed on every
+  accent change too — currently: the brand-mark radial-gradient center (`#125c27`), the
+  primary button's gradient highlight (`#8fffb4`), and the `theme-color` meta tag +
+  brand-mark SVG icon stroke (`#f4fff2`). The modal backdrop tint (`rgba(10,18,32,.45)`)
+  is a neutral dark scrim, not accent-hued — deliberately left alone across every color
+  change so far. Same self-hosted Inter `@font-face` as the
   user app was added (duplicated, not shared — admin is a separate build/HTML file).
   Verified via Playwright screenshots (login, dashboard, withdrawals) — legible contrast
   throughout, no leftover violet/dark-mode remnants found via a full hex-color audit of
@@ -501,6 +521,31 @@ on how often a given client SEES a refreshed feed — the server rebuilding ever
 mostly benefits multiple different users polling at different offsets within that
 window, not any single client. Left the client interval alone; a 4s client poll would
 meaningfully increase server load for little additional visible benefit.
+
+## Auto-update: devices pick up a new deploy without a manual cache-clear/reinstall
+
+Added 2026-08-16, ported from the root-level (repo-root, NOT this project's) `sw.js`'s
+own changelog comments, which document ChocoMCC's real history fixing this exact
+problem — "the long-standing 'app still shows the old version until you reinstall'
+problem," three separate causes stacked on top of each other. Two of the three were
+already present in Space8's `user/sw.js` and `render.yaml` (network-first
+`cache:'no-cache'` navigation fetch, `skipWaiting()`+`clients.claim()` in the worker
+itself, and `Cache-Control: no-cache` headers on `index.html`/`sw.js`/`manifest.json`
+for both `space8-app` and `space8-admin` in `render.yaml`) — but the CLIENT half
+(detect a new build, reload once it takes over) was missing from both apps'
+registration scripts, which is almost certainly the real root cause behind this file's
+repeated notes about the owner hitting stale-cache issues constantly, even with
+disciplined `CACHE = 'space8-shell-vN'` bumping every round. Now both
+`user-src/index.html` and `admin-src/index.html`'s registration scripts check for an
+update on load, on every tab foreground, and hourly (`registration.update()`), and
+reload automatically on `controllerchange` (a new worker just took over) — gated so it
+never yanks the page mid-action: the user app waits for `window._moneyCallsInFlight`
+(a new counter in `original_module.js`'s `api()`, incremented/decremented around calls
+to anything in the pre-existing `MONEY_ENDPOINTS` whitelist) to hit 0; admin reuses its
+existing `_tabBusy` flag (already used to suppress live-refresh during an
+upload/save). If you add a new money-moving member endpoint, add it to
+`MONEY_ENDPOINTS` — that whitelist now gates both the original retry-safety logic AND
+this reload gate, not just the former.
 
 ## Repo / branch / infra
 

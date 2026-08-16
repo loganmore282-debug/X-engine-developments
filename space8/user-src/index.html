@@ -17,7 +17,7 @@
   --void:   #f4f7fb;
   --surface:#ffffff;
   --surface-2:#eef2f8;
-  --surface-blue:#eaf1ff;
+  --surface-blue:#eafff1;
   --line:   #d7dfec;
   --ink:    #0a1220;
   --ink-dim:#5b6b84;
@@ -25,17 +25,17 @@
      canvas now, not just an accent: --page-bg below is the SAME blue, so
      white cards float on top of it the way the owner's reference platform
      does (~80% blue coverage, white cards ~10%). */
-  --blue:   #2e6bff;
-  --blue-dim:#1c48b3;
-  --blue-mute:#7fa1f0;
-  --blue-glow: rgba(46,107,255,.22);
+  --blue:   #2eff6b;
+  --blue-dim:#1cb348;
+  --blue-mute:#7ff0a1;
+  --blue-glow: rgba(46,255,107,.22);
   --danger: #d1293e;
   --danger-bg: rgba(209,41,62,.1);
   --radius-card: 20px;
   --radius-chip: 10px;
   --radius-btn: 14px;
   --radius-sheet: 24px;
-  --page-bg: #2e6bff;
+  --page-bg: #2eff6b;
   color-scheme: light;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -539,8 +539,34 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 <script data-nx-assets></script>
 <script data-nx-core></script>
 <script>
+  // Auto-update: a new deploy must reach an already-installed/open device on
+  // its own -- without the member manually clearing cache/data or reinstalling
+  // the app. sw.js already does its half (skipWaiting + clients.claim() so a
+  // fresh worker takes control immediately, network-first no-cache navigation
+  // so the shell itself isn't served stale); this is the other half, checking
+  // for a new build and reloading once one takes over. Reload is deliberately
+  // held back while a deposit/withdrawal/investment/gift-code/check-in
+  // request is actually in flight (window._moneyCallsInFlight, set in
+  // original_module.js's api()) so a background update can never yank the
+  // page out from under money actually moving.
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(()=>{}); });
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        var checkForUpdate = function(){ reg.update().catch(()=>{}); };
+        setInterval(checkForUpdate, 60 * 60 * 1000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+        window.addEventListener('focus', checkForUpdate);
+      }).catch(()=>{});
+    });
+    var _swReloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (_swReloading) return;
+      (function tryReload(){
+        if ((window._moneyCallsInFlight || 0) > 0) { setTimeout(tryReload, 500); return; }
+        _swReloading = true;
+        location.reload();
+      })();
+    });
   }
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
