@@ -297,8 +297,32 @@ first-ever investment (`isFirstInvestment` on the investment doc), never on late
 purchases/recharges by that same member. A second review (Codex, 2026-08-16) asked
 whether this matches intended rules — yes, this was a deliberate design decision made
 earlier in the project, not an oversight. Later purchases still count toward Task
-Center milestones (active-referral-count, L1-deposit-total), they just never re-trigger
-L1/L2/L3 commission.
+Center milestones (active-referral-count, whole-team-deposit-total), they just never
+re-trigger L1/L2/L3 commission.
+
+## Task Center ladders — real, LIVE as of 2026-08-16 (replaced a ChocoMCC-derived placeholder)
+
+`TEAM_MILESTONES`/`TEAM_DEPOSIT_MILESTONES` in `server.js` hold the owner's "Space8
+Mission & Reward Structure" schedule (relayed by Codex, applied by Claude same day —
+see `AGENT_LOG.md`). Don't assume the old ChocoMCC-era numbers below are still live if
+you see them referenced anywhere (old test fixtures, stale comments):
+- **Active Level-1 referral ladder** (flat UGX 1,500/referral): 2→3,000; 5→7,500;
+  10→15,000; 25→37,500; 50→75,000; 100→150,000; 200→300,000.
+- **Whole-team deposit ladder** (flat 2.5%): 100,000→2,500; 500,000→12,500;
+  1,000,000→25,000; 5,000,000→125,000; 10,000,000→250,000; 25,000,000→625,000;
+  50,000,000→1,250,000.
+- **Deposit progress is the WHOLE L1+L2+L3 team**, not direct-L1-only — `server.js`'s
+  `wholeTeamDeposits(userId)` walks the referral tree 3 levels deep
+  (`where('referredBy','in',parentIds)`, same pattern `/team/members` uses), summing
+  `totalDeposited` on every non-banned member found. The referral-COUNT ladder
+  (`activeL1Count()`) stays direct-L1-only — only the deposit ladder widened.
+  `/team/stats`'s response field is `teamDepositTotal` (an `l1DepositTotal` alias is
+  still sent too, same value, for backward compatibility).
+- Claim flags are keyed by target number (`milestoneClaimed_<target>`,
+  `depositMilestoneClaimed_<target>`), so a ladder-value change like this one never
+  needs migration code — any target number that exists in both the old and new tables
+  reads as already-claimed and is never repaid the new amount for the same number. Don't
+  add migration/reconciliation code for a future ladder change either; this is by design.
 
 ## Account identity: publicId ("ID:000000"), added 2026-08-16, made sequential 2026-08-16
 

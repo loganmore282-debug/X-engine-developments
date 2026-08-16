@@ -492,26 +492,37 @@ async function uniqueRef(letter) {
 // claimed explicitly (never auto-credited) via /team/milestone/claim, which
 // always recomputes the live count itself server-side — the client-reported
 // progress is informational only and is never trusted for the actual payout.
+// Ladder replaced 2026-08-16 to match the owner's "Space8 Mission & Reward
+// Structure" schedule (relayed by Codex). Reward rate is a flat UGX 1,500
+// per active Level-1 referral at every tier. Claim flags are keyed by
+// `target` (see /team/milestone/claim below) -- 5/10/25/50/100 exist in
+// BOTH the old and new tables, so anyone who already claimed one of those
+// under the old reward amount shows it as already-claimed here too and is
+// never paid the new (different) amount for the same number -- exactly the
+// "existing claimed missions stay claimed, not reset or paid again"
+// requirement, with no extra migration code needed.
 const TEAM_MILESTONES = [
-  { target:   5, reward:  10000 },
-  { target:  10, reward:  20000 },
-  { target:  20, reward:  50000 },
-  { target:  25, reward:  60000 },
-  { target:  50, reward: 100000 },
-  { target: 100, reward: 200000 },
+  { target:   2, reward:   3000 },
+  { target:   5, reward:   7500 },
+  { target:  10, reward:  15000 },
+  { target:  25, reward:  37500 },
+  { target:  50, reward:  75000 },
+  { target: 100, reward: 150000 },
+  { target: 200, reward: 300000 },
 ];
-// Second Task Center ladder: total money this user's LEVEL 1 referrals
-// (never L2/L3) have deposited, summed across their accounts. Same
-// manual-claim, server-recomputed pattern as TEAM_MILESTONES, but its own
-// claim-flag namespace so the two ladders can never collide or double-pay
-// each other.
+// Second Task Center ladder, replaced 2026-08-16 alongside the one above.
+// Reward rate is a flat 2.5% of the deposit target at every tier. Progress
+// now sums the WHOLE Level 1-3 team's deposits (was Level 1 only) -- see
+// wholeTeamDeposits() below. Same manual-claim, server-recomputed pattern,
+// its own claim-flag namespace so the two ladders can never collide.
 const TEAM_DEPOSIT_MILESTONES = [
-  { target:   90000, reward:   2000 },
-  { target:  270000, reward:   6000 },
-  { target:  500000, reward:  12000 },
-  { target: 1000000, reward:  25000 },
-  { target: 2000000, reward:  50000 },
-  { target: 5000000, reward: 150000 },
+  { target:   100000, reward:    2500 },
+  { target:   500000, reward:   12500 },
+  { target:  1000000, reward:   25000 },
+  { target:  5000000, reward:  125000 },
+  { target: 10000000, reward:  250000 },
+  { target: 25000000, reward:  625000 },
+  { target: 50000000, reward: 1250000 },
 ];
 // Recomputed live on every /team/stats read and every claim — never stored,
 // never trusted from the client, so a milestone can never be forged. Both
@@ -526,10 +537,28 @@ async function activeL1Count(userId) {
   snap.forEach(d => { const v = d.data(); if (v.status !== 'banned' && (v.totalInvested || 0) > 0) n += 1; });
   return n;
 }
-async function l1TeamDeposits(userId) {
-  const snap = await db.collection('users').where('referredBy', '==', userId).get();
+// Deposit-ladder progress, 2026-08-16: walks the WHOLE referral tree (L1 +
+// L2 + L3), not just direct L1 referrals (per the owner's Mission schedule,
+// relayed by Codex). Same level-by-level 'in' query walk /team/members
+// already uses below -- MongoDB's $in has no meaningful cap for realistic
+// team sizes here (this project runs on Mongo via a Firestore-shaped
+// compat layer, not real Firestore; a "Firestore 'in' limit" concern was
+// already checked and found not to apply to a different endpoint earlier
+// this session, for the same reason).
+async function wholeTeamDeposits(userId) {
+  let parentIds = [userId];
   let total = 0;
-  snap.forEach(d => { const v = d.data(); if (v.status !== 'banned') total += Number(v.totalDeposited || 0); });
+  for (let level = 1; level <= 3; level++) {
+    if (!parentIds.length) break;
+    const snap = await db.collection('users').where('referredBy', 'in', parentIds).get();
+    const nextIds = [];
+    snap.forEach(d => {
+      const v = d.data();
+      nextIds.push(d.id);
+      if (v.status !== 'banned') total += Number(v.totalDeposited || 0);
+    });
+    parentIds = nextIds;
+  }
   return total;
 }
 
@@ -1255,7 +1284,7 @@ app.get('/team/stats', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const l1ActiveCount = await activeL1Count(userId);
-    const l1DepositTotal = await l1TeamDeposits(userId);
+    const teamDepositTotal = await wholeTeamDeposits(userId);
     const uSnap = await db.collection('users').doc(userId).get();
     const u = uSnap.exists ? uSnap.data() : {};
     const milestones = [
@@ -1266,14 +1295,14 @@ app.get('/team/stats', async (req, res) => {
       })),
       ...TEAM_DEPOSIT_MILESTONES.map(m => ({
         type: 'deposit', target: m.target, reward: m.reward,
-        current: l1DepositTotal, achieved: l1DepositTotal >= m.target,
+        current: teamDepositTotal, achieved: teamDepositTotal >= m.target,
         claimed: !!u['depositMilestoneClaimed_' + m.target],
       })),
     ];
     const teamRewards = TEAM_MILESTONES.reduce((s, m) => s + (u['milestoneClaimed_' + m.target] ? m.reward : 0), 0)
                        + TEAM_DEPOSIT_MILESTONES.reduce((s, m) => s + (u['depositMilestoneClaimed_' + m.target] ? m.reward : 0), 0);
     res.json({
-      status: 'success', l1ActiveCount, l1DepositTotal, milestones,
+      status: 'success', l1ActiveCount, l1DepositTotal: teamDepositTotal, teamDepositTotal, milestones,
       counts: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
       commission: u.teamCommission || 0, teamRewards
     });
@@ -1289,7 +1318,7 @@ app.post('/team/milestone/claim', async (req, res) => {
   const m = table.find(x => x.target === target);
   if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
   try {
-    const progress = isDeposit ? await l1TeamDeposits(userId) : await activeL1Count(userId);
+    const progress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
     if (progress < m.target) {
       const need = isDeposit ? fmtUGX(m.target) : m.target;
       const have = isDeposit ? fmtUGX(progress) : progress;
@@ -1310,7 +1339,7 @@ app.post('/team/milestone/claim', async (req, res) => {
         });
         t.set(db.collection('transactions').doc(), {
           userId, type: 'team_reward',
-          description: isDeposit ? `Task Center: level 1 team deposits ${fmtUGX(m.target)}` : `Task Center: ${m.target} active referrals`,
+          description: isDeposit ? `Task Center: whole team deposits ${fmtUGX(m.target)}` : `Task Center: ${m.target} active referrals`,
           amount: m.reward, milestone: m.target, status: 'success',
           date, time, createdAt: FieldValue.serverTimestamp()
         });
@@ -3615,7 +3644,7 @@ app.post('/admin/deposit', async (req, res) => {
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
       // Counts toward totalDeposited (and therefore the referrer's Task
-      // Center "Level 1 team deposits" milestone via l1TeamDeposits) by
+      // Center "whole team deposits" milestone via wholeTeamDeposits) by
       // deliberate choice — an admin credit is most often standing in for
       // a real payment MarzPay's own gateway declined, so from the
       // member's (and their referrer's) side it should behave exactly
@@ -3771,7 +3800,7 @@ app.post('/admin/user/complete-registration', async (req, res) => {
 //     (their next purchase, if it's their first, pays normally through the
 //     ordinary /invest/create path).
 //   - Task Center milestones need NO separate sync step at all:
-//     activeL1Count()/l1TeamDeposits() are computed LIVE off referredBy on
+//     activeL1Count()/wholeTeamDeposits() are computed LIVE off referredBy on
 //     every read, never cached -- the moment referredBy is set, the
 //     referrer's Task Center progress already reflects it.
 app.post('/admin/user/attach-referrer', async (req, res) => {

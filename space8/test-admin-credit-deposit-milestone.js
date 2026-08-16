@@ -2,11 +2,11 @@
    Owner explicitly asked: admin wallet credits (/admin/deposit — usually
    standing in for a real payment MarzPay's own gateway declined) should
    count toward totalDeposited, exactly like a real deposit, so a referrer's
-   Task Center "Level 1 team deposits" milestone reflects it too.
+   Task Center "whole team deposits" milestone reflects it too.
 
    Proves, against the real server:
      - an admin credit increments the CREDITED USER's totalDeposited
-     - that increase is visible to their REFERRER's l1TeamDeposits total
+     - that increase is visible to their REFERRER's wholeTeamDeposits total
      - it can push the referrer's deposit-milestone ladder from not-yet-
        achieved to achieved, and the referrer can actually claim it
      - a staff (non-owner) admin still can't use this endpoint at all —
@@ -76,10 +76,10 @@ async function setupUser(uid, phone, referralCode) {
   await setupUser(A, '0771000601');
   const depBefore = userDoc(A).totalDeposited || 0;
   const balBefore = userDoc(A).walletBalance;
-  let r = await ownerCall('/admin/deposit', { userId: A, amount: 90000, note: 'Compensation for declined MarzPay payment' });
+  let r = await ownerCall('/admin/deposit', { userId: A, amount: 100000, note: 'Compensation for declined MarzPay payment' });
   check('admin credit succeeds', r.body?.status === 'success', r.body);
-  check('walletBalance credited', userDoc(A).walletBalance === balBefore + 90000, userDoc(A).walletBalance);
-  check('totalDeposited now counts the admin credit exactly like a real deposit', userDoc(A).totalDeposited === depBefore + 90000, userDoc(A).totalDeposited);
+  check('walletBalance credited', userDoc(A).walletBalance === balBefore + 100000, userDoc(A).walletBalance);
+  check('totalDeposited now counts the admin credit exactly like a real deposit', userDoc(A).totalDeposited === depBefore + 100000, userDoc(A).totalDeposited);
 
   console.log('\n== A staff (non-owner) admin still cannot touch this endpoint at all ==');
   await ownerCall('/admin/admins/create', { username: 'creditstaff', password: 'whatever-123' });
@@ -90,7 +90,7 @@ async function setupUser(uid, phone, referralCode) {
   check('staff (non-owner) admin session rejected from /admin/deposit', r.code === 401, r.body);
   check('totalDeposited untouched by the rejected staff attempt', userDoc(A).totalDeposited === depBeforeStaffAttempt, userDoc(A).totalDeposited);
 
-  console.log('\n== That increase is visible to the REFERRER\'s l1TeamDeposits total ==');
+  console.log('\n== That increase is visible to the REFERRER\'s wholeTeamDeposits total ==');
   const REF = 'the-referrer';
   await setupUser(REF, '0771000602');
   const refCode = userDoc(REF).referralCode;
@@ -99,20 +99,21 @@ async function setupUser(uid, phone, referralCode) {
   check('B is genuinely referred by REF', userDoc(B).referredBy === REF, userDoc(B));
 
   r = await call('GET', '/team/stats', { token: 'uid:' + REF });
-  const depositMilestoneBefore = r.body.milestones.find(m => m.type === 'deposit' && m.target === 90000);
-  check('before any credit, the 90,000 deposit milestone is not yet achieved', depositMilestoneBefore && !depositMilestoneBefore.achieved, depositMilestoneBefore);
+  const depositMilestoneBefore = r.body.milestones.find(m => m.type === 'deposit' && m.target === 100000);
+  check('before any credit, the 100,000 deposit milestone is not yet achieved', depositMilestoneBefore && !depositMilestoneBefore.achieved, depositMilestoneBefore);
 
-  await ownerCall('/admin/deposit', { userId: B, amount: 90000, note: 'Compensation for declined MarzPay payment' });
+  await ownerCall('/admin/deposit', { userId: B, amount: 100000, note: 'Compensation for declined MarzPay payment' });
   r = await call('GET', '/team/stats', { token: 'uid:' + REF });
-  check('l1DepositTotal now reflects the admin-credited amount', r.body.l1DepositTotal === 90000, r.body.l1DepositTotal);
-  const depositMilestoneAfter = r.body.milestones.find(m => m.type === 'deposit' && m.target === 90000);
-  check('the 90,000 deposit milestone is now achieved because of the admin credit', depositMilestoneAfter && depositMilestoneAfter.achieved, depositMilestoneAfter);
+  check('teamDepositTotal now reflects the admin-credited amount', r.body.teamDepositTotal === 100000, r.body.teamDepositTotal);
+  check('l1DepositTotal alias matches too', r.body.l1DepositTotal === 100000, r.body.l1DepositTotal);
+  const depositMilestoneAfter = r.body.milestones.find(m => m.type === 'deposit' && m.target === 100000);
+  check('the 100,000 deposit milestone is now achieved because of the admin credit', depositMilestoneAfter && depositMilestoneAfter.achieved, depositMilestoneAfter);
 
   console.log('\n== The referrer can actually claim the milestone the admin credit unlocked ==');
   const refBalBefore = userDoc(REF).walletBalance;
-  r = await call('POST', '/team/milestone/claim', { token: 'uid:' + REF, body: { target: 90000, type: 'deposit' } });
+  r = await call('POST', '/team/milestone/claim', { token: 'uid:' + REF, body: { target: 100000, type: 'deposit' } });
   check('claim succeeds', r.body?.status === 'success', r.body);
-  check('referrer actually paid the milestone reward (2,000)', userDoc(REF).walletBalance === refBalBefore + 2000, userDoc(REF).walletBalance);
+  check('referrer actually paid the milestone reward (2,500)', userDoc(REF).walletBalance === refBalBefore + 2500, userDoc(REF).walletBalance);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

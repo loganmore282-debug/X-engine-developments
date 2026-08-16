@@ -446,6 +446,27 @@ async function refreshBadges(){
 // Settings' rate fields or the Admins tab's "create admin" form) -- a tick
 // that would touch either just skips silently and tries again next cycle.
 let _live=true, _liveTimer=null;
+// Real bug, confirmed: an in-flight file upload (banner image, product
+// photo, announcement background) is exactly the kind of interruption
+// modalOpen()/contentHasFocus() DON'T reliably cover -- picking a photo on
+// mobile hands control to the OS's own photo-picker app for however long
+// the admin takes, and when the browser tab regains focus afterwards
+// there's no guarantee document.activeElement lands back on the file
+// input (many browsers reset focus to <body> after a backgrounded tab
+// returns). If the 30s live tick fires anywhere in that window on a
+// non-modal tab (banners, settings/announcement -- products' own upload
+// already sits inside a real modal, which modalOpen() already blocks),
+// the FULL panel gets torn down and rebuilt mid-upload: the file input
+// the OS dialog was bound to goes stale, and whatever else the admin was
+// mid-typing in that tab (e.g. a settings field) is silently wiped. This
+// explicit flag lets an upload (or any other operation vulnerable the
+// same way) suppress the tick directly, rather than relying on focus/
+// visibility heuristics that don't hold up across an OS-level app switch.
+let _tabBusy = false;
+function withTabBusy(promise) {
+  _tabBusy = true;
+  return Promise.resolve(promise).finally(() => { _tabBusy = false; });
+}
 const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','promocodes','transactions','referrals','settings','admins','auditlog']);
 // The list-style tabs (Users, Deposits, Withdrawals, Transactions,
 // Referrals) get their OWN quiet*() function here instead of the full
@@ -469,7 +490,7 @@ function contentHasFocus(){
 function liveTick(){
   if(document.hidden) return;
   refreshBadges().catch(()=>{});
-  if(!_live || modalOpen() || contentHasFocus() || !LIVE_TABS.has(_tab)) return;
+  if(!_live || modalOpen() || contentHasFocus() || _tabBusy || !LIVE_TABS.has(_tab)) return;
   const tab = _tab;
   const scrollY = window.scrollY;
   Promise.resolve((RENDERERS[tab]||(()=>{}))()).then(()=>{
@@ -1226,19 +1247,23 @@ async function renderBanners(){
       </div>`;
     }).join('')}`;
   document.querySelectorAll('[data-clear]').forEach(b=>b.addEventListener('click', async()=>{
-    const d = await api('/admin/banners/clear', { key: b.dataset.clear });
-    toast(d.status==='success'?'Reverted to the default image':(d.message||'Failed'), d.status==='success'?'ok':'err');
-    if (d.status==='success') renderBanners();
+    await withTabBusy((async()=>{
+      const d = await api('/admin/banners/clear', { key: b.dataset.clear });
+      toast(d.status==='success'?'Reverted to the default image':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderBanners();
+    })());
   }));
   document.querySelectorAll('[data-file]').forEach(inp=>inp.addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
-    try {
-      toast('Uploading…','ok');
-      const image = await fileToDataUrl(f,1280,0.82);
-      const d = await api('/admin/banners/set', { key: inp.dataset.file, image });
-      toast(d.status==='success'?'Banner saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') renderBanners();
-    } catch(err){ toast(err.message||'Could not read image','err'); }
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const image = await fileToDataUrl(f,1280,0.82);
+        const d = await api('/admin/banners/set', { key: inp.dataset.file, image });
+        toast(d.status==='success'?'Banner saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderBanners();
+      } catch(err){ toast(err.message||'Could not read image','err'); }
+    })());
   }));
 }
 
@@ -1571,13 +1596,15 @@ async function renderSettings(){
   });
   $('annBgFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
-    try {
-      toast('Uploading…','ok');
-      const dataUri = await fileToDataUrl(f,1280,0.82);
-      const d = await api('/admin/settings/update', { settings: { announcementBg: dataUri } });
-      toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') renderSettings();
-    } catch(err){ toast(err.message||'Could not read image','err'); }
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const dataUri = await fileToDataUrl(f,1280,0.82);
+        const d = await api('/admin/settings/update', { settings: { announcementBg: dataUri } });
+        toast(d.status==='success'?'Saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderSettings();
+      } catch(err){ toast(err.message||'Could not read image','err'); }
+    })());
   });
   const annBgClear = $('annBgClear');
   if (annBgClear) annBgClear.addEventListener('click', async()=>{

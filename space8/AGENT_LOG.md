@@ -14,6 +14,93 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Task Center backend shipped (Codex's handoff applied + corrected); admin banner-upload "disturbance" root-caused and fixed; product-edit "override" investigated (no bug found)
+
+- **Task Center backend (fulfills Codex's handoff above)**:
+  - `TEAM_MILESTONES` (active-Level-1-referral ladder) replaced with the owner's exact
+    schedule: 2→3,000; 5→7,500; 10→15,000; 25→37,500; 50→75,000; 100→150,000;
+    200→300,000 (flat UGX 1,500/referral).
+  - `TEAM_DEPOSIT_MILESTONES` replaced with: 100,000→2,500; 500,000→12,500;
+    1,000,000→25,000; 5,000,000→125,000; 10,000,000→250,000; 25,000,000→625,000;
+    50,000,000→1,250,000 (flat 2.5%).
+  - Deposit-ladder progress changed from direct-L1-only to the **whole L1+L2+L3 team**:
+    added `wholeTeamDeposits(userId)`, replacing `l1TeamDeposits(userId)`, walking the
+    referral tree one hop at a time (`where('referredBy','in',parentIds)`, 3 levels) —
+    the exact same pattern `/team/members` already used. `activeL1Count()` (the
+    referral-count ladder) is unchanged and correctly stays L1-only per the handoff.
+  - **Correction to Codex's handoff**: did NOT add "chunked queries to stay within
+    Firestore `in` limits" — this project runs on MongoDB via a Firestore-shaped compat
+    layer (`db.js`), not real Firestore, and Mongo's `$in` has no meaningful cap for
+    realistic team sizes. This exact "Firestore `in` limit doesn't apply here" correction
+    has already been made twice before this session for other endpoints — see the
+    2026-08-16 Codex-review-fixes entry below.
+  - `/team/stats` and `/team/milestone/claim` updated to call `wholeTeamDeposits()`.
+    Response field renamed `l1DepositTotal` → `teamDepositTotal` for clarity (scope is no
+    longer L1-only); **`l1DepositTotal` is still sent too, same value, as a
+    backward-compatible alias** — no other consumer was found referencing it, but keeping
+    it costs nothing and avoids a silent break if one exists outside this repo.
+  - **"Existing claimed missions stay claimed, not repaid"**: verified this holds for
+    free, with no migration code, because claim flags are keyed by target NUMBER
+    (`milestoneClaimed_<target>`, `depositMilestoneClaimed_<target>`) — every target that
+    exists in both the old and new tables (referral: 5, 10, 25, 50, 100; deposit: 500000,
+    1000000, 5000000) already reads as claimed under the new table too, and is never
+    paid the new (different) reward amount for the same number.
+  - Updated two stale code comments referencing the old function name (an admin-credit
+    comment, and the `/admin/user/attach-referrer` no-sync-needed comment) and the
+    milestone-reward transaction description string.
+  - `test-referral-milestones.js` and `test-admin-credit-deposit-milestone.js` rewritten
+    for the new ladder values (old targets like 90,000 / 270,000 / 2,000,000 / 20 no
+    longer exist in the tables and would have failed with "Unknown milestone"). Also
+    added genuinely new coverage in `test-referral-milestones.js`: an L2 member (referred
+    by an existing L1) and an L3 member (referred by that L2) with their own deposits now
+    provably count toward `teamDepositTotal` (1,500,000 → 2,000,000), while an L4 member's
+    deposits provably do NOT (the walk stops at 3 levels), and `l1ActiveCount` is provably
+    unaffected by L2/L3 activity.
+  - `user-src/original_module.js`'s `renderTeam()`/`renderTaskList()` checked — fully
+    data-driven off the `milestones[]` array from `/team/stats` (type/target/reward/
+    current/achieved/claimed), no hardcoded ladder numbers or old field names anywhere,
+    so no frontend logic changes were needed for this part.
+  - **Rebuilt `user/` from `user-src/`** — this was actually overdue independent of this
+    round: Codex's two committed frontend commits (`db4850e`, `1ced328`) had never been
+    built into the deployed `user/index.html` artifact (confirmed via `git log` on both
+    paths). `node build-core.js` run clean (round-trip OK, 405,936 bytes). Bumped
+    `user/sw.js`'s `CACHE` to `space8-shell-v214` so phones pick up both Codex's Task
+    Center UI and this ladder fix.
+  - **Verification**: `node --check server.js` clean. Full `test-*.js` suite (all files)
+    run — all green, including the rewritten/expanded Task Center tests.
+- **Admin banner-upload fix**: root-caused, not guessed. The admin panel's 30s
+  `liveTick()` poll does a full non-quiet re-render of the Banners and Settings tabs
+  (`renderBanners()`/`renderSettings()`), and neither existing guard (`modalOpen()`,
+  `contentHasFocus()`) reliably protects an in-flight async upload against a native OS
+  photo-picker app-switch on mobile — focus/visibility state doesn't track "an upload is
+  in progress" across that kind of interaction. That's the actual mechanism behind the
+  owner's "very disturbing while uploading" complaint: mid-upload, the tab could get
+  torn down and rebuilt under the user's thumb. Fixed with an explicit `_tabBusy` flag /
+  `withTabBusy(promise)` helper (deterministic, not a focus/visibility heuristic) added
+  to `liveTick()`'s guard and wrapped around all 4 banner/settings-image upload+clear
+  handlers (banner `[data-file]`, banner `[data-clear]`, announcement-background
+  `annBgFile`, `annBgClear`) in `admin-src/index.html`. Product-image upload in the
+  product-edit modal did NOT need this fix — it's already protected by `modalOpen()`
+  since it only ever runs inside an open modal. Rebuilt `admin/index.html` via
+  `node build-admin.js` (611.0 KB).
+- **Product-edit "override" investigated — no actual bug found.** Read `editProduct()`'s
+  form pre-fill and the `/admin/products/save` merge logic (`{merge:true}`, which
+  preserves any field not present in the submitted object), then independently confirmed
+  empirically with a targeted Playwright test against the built admin artifact:
+  intercepted the real save payload while editing ONLY a product's price, leaving its
+  image/name/etc. untouched — the payload sent every existing field (including the
+  product's base64 `image`), nothing was dropped or overridden. The owner's complaint is
+  most plausibly explained by the same `liveTick()` class of issue as the banner bug
+  (an in-flight edit getting stomped by a background refresh) rather than a data-merge
+  bug — worth revisiting if it recurs after the `_tabBusy` fix ships, since the product
+  modal itself was already `modalOpen()`-protected and this fix doesn't change that path.
+- **Verification**: full `test-*.js` suite green; `node --check server.js` clean;
+  `build-core.js` and `build-admin.js` both round-trip OK; ad-hoc Playwright checks for
+  the product-edit payload (scratch script, not committed — not a claimed regression
+  test, see note above).
+- **Deferred to a separate entry**: registration/login security audit (input validation,
+  hardening) — owner asked for this in the same message; not yet done as of this entry.
+
 ## 2026-08-16 — Codex — Task Center redesigned to Space8 Mission structure (backend reward handoff required)
 
 - **What changed (committed)**:
