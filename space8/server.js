@@ -199,7 +199,8 @@ const DEFAULT_SETTINGS = {
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
-  homeBannerTitle: '', homeBannerText: ''
+  homeBannerTitle: '', homeBannerText: '',
+  authBgBlurPx: 20, authBgTintPct: 78
 };
 // The real 15-plan catalog from the owner's PDF (Space8_Investment_Plans_
 // and_Variables.pdf) -- x42 total return over a fixed 210-day cycle for
@@ -1379,7 +1380,8 @@ app.get('/public/settings', async (_req, res) => {
       telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
       whatsappGroup: s.whatsappGroup || '', whatsappContact: s.whatsappContact || '',
       rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || '',
-      homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || ''
+      homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || '',
+      authBgBlurPx: s.authBgBlurPx, authBgTintPct: s.authBgTintPct
     } });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });

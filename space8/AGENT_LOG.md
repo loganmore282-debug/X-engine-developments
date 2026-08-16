@@ -14,6 +14,78 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Auth background blur/opacity sliders; Records confirmed complete; assistant grown to 100 intents
+
+Owner follow-up after the blurred auth-background feature: the fixed 20px/78% blur was
+too strong, wanted it admin-tunable; separately asked to confirm Records shows every
+transaction type; and asked to grow the assistant's training to "like 100" intents.
+
+- **Auth background blur/opacity are now admin-configurable**, not hardcoded. Two new
+  settings fields (`authBgBlurPx` default 20, `authBgTintPct` default 78) added to
+  `DEFAULT_SETTINGS` and the `/public/settings` whitelist in `server.js` — reuses the
+  existing generic `/admin/settings/update` endpoint, no new server route needed.
+  Admin → Banners page (`admin-src/index.html`) grew two range sliders (0–40px blur,
+  0–100% overlay opacity) inside the "Login / Register background" card, with a
+  dedicated Save button. `boot()` in `user-src/original_module.js` now also sets
+  `--auth-bg-blur`/`--auth-bg-tint` CSS custom properties from these settings (falls
+  back to the same 20px/78% defaults if the admin never touches them);
+  `user-src/index.html`'s `.auth-screen::before`/`::after` read the vars instead of
+  fixed values. Verified with a synthetic background image at both extremes
+  (4px/20% — image stays vivid and detailed; 38px/95% — nearly washed to a faint
+  tint) via Playwright, computed-style-checked at each step to be certain the
+  screenshots reflected the actual applied values, not a stale paint.
+- **Records screen confirmed to already include every transaction type** — read
+  `server.js`: `GET /transactions` queries the single `transactions` collection by
+  `userId` with no type filter, and every money-relevant server action (deposit ×2
+  call sites, withdraw-request, cashback, investment purchase, referral commission,
+  task-center reward, check-in, welcome credit, gift-code redemption) writes an entry
+  there. Client-side `RECORD_META` in `user-src/original_module.js` has a label for
+  every one of those `type` values, so nothing renders as a raw/unlabeled string
+  either. The owner's screenshot just showed a fresh test account with only a
+  check-in and the welcome credit on it — no code change needed, confirmed working
+  as designed. (Noted in passing, not fixed: a withdrawal's `transactions` doc
+  `status` field only gets synced once, when an admin starts processing it — never
+  on final success/decline — but Records doesn't render a status pill at all, so
+  this is invisible in the UI today; flagged for a future session if that ever
+  changes.)
+- **Assistant grown from 50 to exactly 100 intents** (`assistant-engine.js`) — added
+  50 new ones covering deposit/withdrawal specifics (min/max amounts, multiple
+  deposits per day, confirmation, wrong network), plan mechanics (comparison,
+  cheapest/priciest, daily income, total return, cycle, compounding, reinvesting,
+  upgrades, post-maturity), referrals/team (sharing, level breakdown, self-referral,
+  code lookup, team size), Task Center (claiming, mission types), check-in specifics
+  (reset time, exact amount, double-claim), security/trust (safety tips, phishing,
+  multiple accounts, account deletion, data privacy), platform meta (currency,
+  country, support hours/response time, app updates, stale cache, offline use,
+  notifications, dark mode, language, age, tax, ownership, investment risk,
+  guaranteed returns, plan-quantity limits, gift-code sourcing/value, and why money
+  is shown in full UGX not "23k"). Self-testing (a 100+ Playwright-free Node script
+  running `answerAssistant()` directly against representative phrasings for every
+  new intent, plus a regression pass against 16 classic phrasings for the original
+  50) caught and fixed 4 real routing bugs before they shipped: (1) an initial
+  `phrase` addition to the base `checkin` intent to also catch "check in" (two
+  words) ended up outscoring nearly every new checkin-specific intent and was
+  reverted; (2) `guaranteed_returns`'s regex only matched "guarantee...return" word
+  order, missing the equally natural "returns...guaranteed"; (3) `plan_quantity_limit`
+  required an exact "buy the same plan" phrasing that didn't match more natural
+  wording like "limit on buying the same plan"; (4) `payout_account`'s trigger regex
+  matched `delete|remove|...` + bare "account" for ANY kind of account, so "how do i
+  delete my account" wrongly returned withdrawal-account instructions instead of the
+  new `account_deletion` intent's reply — tightened to require "payout account" or
+  "withdrawal account" specifically. Also opportunistically fixed one pre-existing
+  gap noticed during testing (unrelated to this session's new intents): the original
+  `network_error` intent's phrase didn't match "the network is down" (only
+  error/failed/problem/unavailable), so "down" was added as an alternative.
+- **Verification:** `node -c assistant-engine.js`; a 51-message self-test script
+  covering every new intent's primary trigger phrase (no crashes, all sensible
+  routing after the 4 fixes above) plus a 16-message regression script confirming
+  none of the original 50 intents were shadowed; rebuilt both `user/index.html` and
+  `admin/index.html`; `user/sw.js` bumped to `space8-shell-v223`; full `test-*.js`
+  backend suite green.
+- Nothing left open from this round.
+
+---
+
 ## 2026-08-16 — Claude — ChatGPT review fixes + admin-configurable blurred auth background
 
 Owner had ChatGPT independently review the previous commit (b5de70f). It confirmed 3 real

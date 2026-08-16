@@ -123,13 +123,19 @@ app in `user-src/` was built directly against this.
   optional, admin-uploaded photo layered behind it, not a gradient.** Owner: "put a
   background image on authentication screens... maintain the tabs of registration
   and login." `.auth-screen::before` renders `var(--auth-bg-url, none)` (set from the
-  `authbg` banner slot in `boot()`) blurred (`filter:blur(20px)`, scaled up 1.08x to
-  hide the blur's edge falloff) with a `rgba(--void,.78)` tint over it
-  (`.auth-screen::after`) so the card and form stay just as legible as the plain
-  `--void` background did — `.auth-wrap` is raised to `z-index:1` above both layers,
-  untouched otherwise. With no image uploaded (the shipped default) this renders
-  identically to before — confirmed by screenshot comparison, not just reasoning
-  about the CSS.
+  `authbg` banner slot in `boot()`) blurred (`filter:blur(var(--auth-bg-blur,20px))`,
+  scaled up 1.08x to hide the blur's edge falloff) with a
+  `rgba(244,247,251,var(--auth-bg-tint,.78))` tint over it (`.auth-screen::after`) so
+  the card and form stay just as legible as the plain `--void` background did —
+  `.auth-wrap` is raised to `z-index:1` above both layers, untouched otherwise. With
+  no image uploaded (the shipped default) this renders identically to before —
+  confirmed by screenshot comparison, not just reasoning about the CSS.
+  **Blur/opacity are admin-tunable, not hardcoded**, added the same day after the
+  owner found the initial fixed 20px/78% too strong: `authBgBlurPx`/`authBgTintPct`
+  in `DEFAULT_SETTINGS` (`server.js`, defaults 20/78) reuse the existing generic
+  `/admin/settings/update` endpoint — no new server route. Two range sliders live in
+  Admin → Banners, inside the "Login / Register background" card (not a separate
+  Settings-page field, since they're conceptually tied to that one slot).
   `--blue-dim: #1c48b3` / `--blue-mute: #7fa1f0` / `--blue-glow: rgba(46,107,255,.22)` are
   all derived from the same hue. **The CSS custom properties kept their `--blue*` names
   through every color change this session** (blue → sapphire → green → back to this
@@ -271,7 +277,8 @@ tab.
   ("I don't have a Claude API key, I am not willing to buy it"). The actual logic lives
   in `assistant-engine.js`: stems/tokenizes the message (+ typo normalization and
   conservative one-edit fuzzy keyword matching, added by Codex, 2026-08-16), scores it
-  against 43 weighted intents (grown from an original ~16), fuzzy-matches specific
+  against 100 weighted intents (grown from an original ~16, via 43 then 50, now 100 —
+  2026-08-16), fuzzy-matches specific
   product names from the live catalog, extracts a money amount from the message to
   compute real withdrawal-fee math on the spot, and blends in the prior turn's topic
   for short ambiguous follow-ups. Every reply is grounded in a fresh

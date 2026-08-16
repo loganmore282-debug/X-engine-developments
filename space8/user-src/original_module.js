@@ -1301,6 +1301,10 @@ async function boot(){
   if (STATE.banners.authbg) {
     document.documentElement.style.setProperty('--auth-bg-url', 'url("' + STATE.banners.authbg + '")');
   }
+  var blurPx = (STATE.settings||{}).authBgBlurPx;
+  var tintPct = (STATE.settings||{}).authBgTintPct;
+  document.documentElement.style.setProperty('--auth-bg-blur', (blurPx != null ? blurPx : 20) + 'px');
+  document.documentElement.style.setProperty('--auth-bg-tint', (tintPct != null ? tintPct : 78) / 100);
 }
 window.addEventListener('space8-auth', async function(e){
   var user = e.detail;

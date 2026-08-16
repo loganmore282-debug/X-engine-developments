@@ -1230,9 +1230,12 @@ const BANNER_LABELS = {
   authbg:        ['Login / Register background', 'Blurred background image behind the login and register cards']
 };
 async function renderBanners(){
-  const r = await api('/admin/banners');
+  const [r, setR] = await Promise.all([api('/admin/banners'), api('/admin/settings')]);
   if(staleTab('banners')) return;
   const s = r.banners||{};
+  const sett = setR.settings||{};
+  const blurPx = sett.authBgBlurPx!=null ? sett.authBgBlurPx : 20;
+  const tintPct = sett.authBgTintPct!=null ? sett.authBgTintPct : 78;
   $('content').innerHTML = `
     <h2 class="sec">App banners</h2>
     <div class="panel-card">
@@ -1250,6 +1253,15 @@ async function renderBanners(){
           ${v?`<button class="btn danger sm" data-clear="${key}">Revert</button>`:''}
         </div>
         <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" data-file="${key}" accept="image/*" hidden></label>
+        ${key==='authbg' ? `
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+          <label>Background blur (px) — <span id="authBlurVal">${blurPx}</span></label>
+          <input id="authBlurRange" type="range" min="0" max="40" step="1" value="${blurPx}" style="width:100%">
+          <label style="margin-top:10px;display:block">Overlay opacity (%) — <span id="authTintVal">${tintPct}</span></label>
+          <input id="authTintRange" type="range" min="0" max="100" step="1" value="${tintPct}" style="width:100%">
+          <p class="muted" style="font-size:12px;margin:6px 0 0">Higher blur hides more image detail; higher overlay opacity fades the image more so the form stays readable. 0% opacity shows the image at full clarity behind the blur.</p>
+          <button class="btn block" id="saveAuthBgBtn" style="margin-top:10px">Save blur &amp; opacity</button>
+        </div>` : ''}
       </div>`;
     }).join('')}`;
   document.querySelectorAll('[data-clear]').forEach(b=>b.addEventListener('click', async()=>{
@@ -1271,6 +1283,19 @@ async function renderBanners(){
       } catch(err){ toast(err.message||'Could not read image','err'); }
     })());
   }));
+  if ($('authBlurRange')) {
+    $('authBlurRange').addEventListener('input', ()=>{ $('authBlurVal').textContent = $('authBlurRange').value; });
+    $('authTintRange').addEventListener('input', ()=>{ $('authTintVal').textContent = $('authTintRange').value; });
+    $('saveAuthBgBtn').addEventListener('click', async()=>{
+      await withTabBusy((async()=>{
+        const d = await api('/admin/settings/update', { settings: {
+          authBgBlurPx: parseInt($('authBlurRange').value,10),
+          authBgTintPct: parseInt($('authTintRange').value,10)
+        } });
+        toast(d.status==='success'?'Saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      })());
+    });
+  }
 }
 
 // ── GIFT CODES ──
