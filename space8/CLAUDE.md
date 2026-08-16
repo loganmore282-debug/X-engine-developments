@@ -60,27 +60,39 @@ The owner was explicit and this must not be re-litigated without them saying so:
 Static mockup, still in the repo: **`space8/design/visual-system-mockup.html`**. The real
 app in `user-src/` was built directly against this.
 
-- **Palette — white/ink + one DOMINANT accent color, nothing else.** As of 2026-08-16 the
-  accent is **green** (an emerald, `--blue: #0e8a5c`) — changed from blue per the owner:
-  "change to green... the color is dull" (asked to choose between "make blue shine" or a
-  full switch; confirmed explicitly: "Switch to green"). **The CSS custom properties kept
-  their `--blue*` names on purpose** (`--blue`, `--blue-dim: #0a6b47`, `--blue-mute:
-  #5fa187`, `--blue-glow: rgba(14,138,92,.20)`, `--surface-blue: #e7f6ef`) — a full
-  rename across every `var(--blue...)` reference in `user-src/index.html` was judged
-  higher-risk (easy to miss an occurrence) than just swapping the values, which is exactly
-  how blue itself already changed shade once earlier the same session (`#2e6bff` →
-  `#0f52ba` → now green). Don't be misled by the name when reading the CSS — check the
-  actual hex. Applied broadly on purpose: nearly every SVG icon (topbar, nav — active AND
-  inactive, form fields, ticker, account matrix, menu rows + chevrons), `.btn-secondary`/
-  `.btn-ghost` outlines, assistant quick-reply chips, `.section-title` headers, pale-tinted
-  stat cards (`.mystats .card`, `.mtile`, new `--surface-blue` token), and subtle card
-  linings (`.balance-card`, `.prod-card`, `.plan-card`). The two deliberate exceptions are
-  `.action-btn.done`/`.milestone-card.done` (kept gray — a semantic "already claimed"
-  muted state, not leftover neutral). A single desaturated red (`--danger`) is the only
-  non-accent color, reserved for genuine failure states. No violet, no gold, no gradients
-  anywhere (the auth screens and sheets are flat, no hero image/gradient — see below).
-  If the accent color changes again, prefer the same value-only-swap approach unless a
-  future session has a strong reason to do the full rename.
+- **Palette — vibrant blue is the actual page CANVAS now, white cards float on top.**
+  As of 2026-08-16, `--blue: #2e6bff` and **`--page-bg` is the SAME blue** — this is a
+  structural change, not just an accent-color swap. The owner sent reference screenshots
+  of another platform and was explicit: "I wanted a vibrant blue which was throughout
+  like that platform, it taken like 80% and whites like 10%." (This followed a brief,
+  explicitly-confirmed detour to green, then back to blue — green is fully gone, don't
+  resurrect it without being asked again.) Concretely: `body`/`main`/every `.page` render
+  directly on `--page-bg` (blue); `.topbar` and `.navbar` are blue with WHITE wordmark/
+  nav-icon/nav-label text (`.navitem` inactive = `rgba(255,255,255,.68)`, active = `#fff`
+  solid, same for `.svg-cart`/`.svg-team` fills); `.section-title` headers are white when
+  inside a `.page` (`.page .section-title` override) but stay the darker `--blue-dim` in
+  their base rule for contexts still on white (e.g. the "Recent Activity" sheet — don't
+  collapse that distinction). Every content card (`.card`, `.prod-card`, `.plan-card`,
+  `.mystats .card`, `.mtile`, `.menu-list`, `.shortcut`, `.banner` fallback) is now plain
+  white with **no colored border** — the blue-glow borders/tints from the immediately
+  prior (green, and blue-accent-on-white) design passes were deliberately removed because
+  they'd blend into a same-hue blue canvas or were simply redundant once white cards do
+  the contrast work on their own. Three surfaces were deliberately kept OFF the blue
+  canvas and given `--void` (light, near-white) backgrounds instead, because putting them
+  on `--blue` would break their own internal contrast: `#loadingScreen` (its mark is drawn
+  in `--blue` and would vanish), `.auth-screen` (an explicit earlier "no gradient, minimal,
+  formal" decision, unrelated to this change, still holds), and `.assist-panel` (its
+  own `.msg.user` bubbles are `var(--blue)` and would vanish on a `var(--blue)` panel).
+  `--blue-dim: #1c48b3` / `--blue-mute: #7fa1f0` / `--blue-glow: rgba(46,107,255,.22)` are
+  all derived from the same hue. **The CSS custom properties kept their `--blue*` names
+  through every color change this session** (blue → sapphire → green → back to this
+  vibrant blue) rather than being renamed each time — a full rename across every
+  `var(--blue...)` reference in this ~600KB file was judged higher-risk (easy to miss an
+  occurrence) than swapping 5-6 token values at the source. If the accent color changes
+  again, prefer that same value-only-swap approach unless there's a strong reason to do
+  the full rename. A single desaturated red (`--danger`) is the only non-blue color,
+  reserved for genuine failure states. No violet, no gold, no green, no gradients
+  anywhere.
 - **Typography**: a single self-hosted Inter variable font (weights 400–800, base64
   `@font-face`, changed 2026-08-16 from an earlier two-font Instrument Sans + Space Mono
   system per the owner). `.mono` only sets `font-variant-numeric:tabular-nums` now, no

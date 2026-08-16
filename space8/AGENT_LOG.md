@@ -14,6 +14,71 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Reverted green → vibrant blue, and made blue the actual page CANVAS (not just an accent)
+
+- **What changed**: the owner sent 6 reference screenshots of another platform and said
+  "change back to blue, I wanted a vibrant blue which was throughout like that platform,
+  it taken like 80% and whites like 10%... build that color which match our platform
+  perfectly and naturally." This was a bigger ask than a token swap — the reference
+  images show blue as the actual page BACKGROUND with white cards floating on top, not
+  blue accents on a white/light-gray page (which is what every previous round this
+  session, including the just-reverted green one, had actually been doing). Implemented
+  in `user-src/index.html`:
+  - `--blue: #2e6bff` (back to vibrant, closer to this project's ORIGINAL pre-session
+    blue than the darker Sapphire this session tried first) and, critically,
+    **`--page-bg` set to the SAME value** — `body`, `main`, every `.page`, `.topbar`,
+    `.navbar` all render on blue now, not light gray.
+  - `.topbar`: wordmark text and its dot turned white (were dark-on-light before).
+  - `.navbar`: background blue (was white), `border-top` removed, nav items turned white
+    (active) / `rgba(255,255,255,.68)` (inactive) — was blue-on-white, now white-on-blue,
+    covering the stroke AND `.svg-cart`/`.svg-team` fill variants.
+  - `.section-title`: kept its ORIGINAL rule (`--blue-dim` text) as the default — needed
+    for the one place a section-title sits on a WHITE background, the "Recent Activity"
+    sheet — and added a new `.page .section-title` (+ `.see-all`) override to white,
+    since every other section-title sits directly on the now-blue page canvas and
+    blue-dim-on-blue would be unreadable. This distinction matters; don't collapse it.
+  - Removed the `blue-glow` borders/tints added in the immediately prior two design
+    passes from `.balance-card`, `.plan-card`, `.prod-card`, `.mystats .card`, `.mtile` —
+    a blue-hued border or tint now blends into a same-hue blue canvas instead of standing
+    out, so those cards are back to plain white with no border. This is the correct
+    reversal specifically BECAUSE the canvas itself is now blue; those borders were the
+    right call on a light canvas, wrong on a blue one.
+  - `#loadingScreen`, `.auth-screen`, `.assist-panel` were deliberately kept OFF the blue
+    canvas (`background:var(--void)` instead of `var(--page-bg)`) because putting them on
+    solid `--blue` would break contrast against elements that are themselves drawn in
+    `--blue`: the loading mark, and the assistant's own `.msg.user` bubble color. Auth
+    staying light also happens to preserve an unrelated earlier explicit decision ("no
+    gradient, minimal, formal") — convenient, not the reason it was done.
+  - `.ticker-bar` (previously backgroundless, just sat on the page) got its own white
+    pill background — its `--ink-dim` text would otherwise be unreadable directly on
+    blue.
+  - `.banner`'s fallback (shown when no admin banner image is set) changed from
+    `--surface-2` (light gray) to `--surface` (white), for consistency with every other
+    surface now being either blue canvas or white card, no in-between gray.
+  - `.assist-fab` got a white ring (`box-shadow: 0 0 0 4px #fff, ...`) so it stays
+    visually separated whether it's floating over the blue canvas or a white card
+    underneath it.
+  - The loading-screen mark's 3 literal hex values (were `#0e8a5c` from the green
+    round) went back to `#2e6bff` to match.
+  - Bumped `user/sw.js` cache to `space8-shell-v207`.
+- **Why**: see above — a direct, specific, image-backed request, not a vague preference.
+  The green swap two entries back is now fully superseded; nothing about it survives.
+- **Verification**: `node build-core.js` round-trip OK. Grepped for any remaining
+  `0e8a5c` (green) — none. Full backend `test-*.js` suite (57 files) re-run, still green
+  (pure frontend change, as expected). Playwright screenshots across auth, Home,
+  Products, Team, Account, the deposit sheet, and the assistant panel confirm: the blue
+  canvas + white-card structure matches the reference images' visual proportion: nav/
+  topbar white-on-blue, section titles legible, balance card still reads clearly as the
+  dark focal point, sheets and the assistant panel correctly stayed light/white so their
+  own blue elements (buttons, user-message bubbles) don't vanish, auth screen unaffected.
+- **Left open**: real end-to-end device/browser verification remains the standing open
+  item. The app icon set is still the old (Sapphire-era) blue mark, unrelated to this
+  entry's page-canvas change — same open item as the prior color-round entries, still not
+  actioned, still needs the owner's go-ahead before touching (multi-file image
+  regeneration, not a CSS change).
+
+---
+
 ## 2026-08-16 — Claude — Dominant accent color switched from blue to green
 
 - **What changed**: `user-src/index.html`'s `:root` token block — `--blue: #0f52ba`
