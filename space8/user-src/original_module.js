@@ -419,7 +419,7 @@ async function openRecordsSheet(){
   body.innerHTML = items.map(function(t){
     var meta = recordMeta(t.type);
     var neg = (t.amount||0) < 0;
-    return '<div class="member-row"><div class="info"><div class="phone">' + esc(meta.label) + '</div>' +
+    return '<div class="member-row record-row"><div class="info"><div class="phone">' + esc(meta.label) + '</div>' +
       '<div class="date">' + esc(t.description||'') + '<br>' + esc(t.date||'') + ' ' + esc(t.time||'') + '</div></div>' +
       '<span class="mono" style="font-weight:700;color:' + (neg?'var(--danger)':'var(--blue)') + ';flex-shrink:0;margin-left:10px">' +
         (neg?'−':'+') + ugx(Math.abs(t.amount||0)) + '</span></div>';
@@ -642,7 +642,7 @@ async function renderAccount(){
       '<div class="referral-code mono">' + esc(acc.referralCode||'—') + '</div>' +
       '<div class="iconbtn" id="shareRefBtn">' + ico('share') + '</div>' +
     '</div>' +
-    '<div class="referral-hint">Server-issued and globally unique — share it to earn commission when someone you invite makes their first investment.</div>' +
+    '<div class="referral-hint">Share this code to earn commission when someone you invite makes their first investment.</div>' +
   '</div>';
 
   html += '<div class="card giftcode-card">' +
@@ -999,11 +999,30 @@ window.addEventListener('space8-auth', async function(e){
     $('screenRegister').style.display = 'none';
     $('app').style.display = 'flex';
     showPage('home');
+    startLiveRefresh();
   } else {
     $('app').style.display = 'none';
     showLoginScreen();
+    stopLiveRefresh();
     STATE.account = null;
     Object.keys(STATE.loaded).forEach(function(k){ STATE.loaded[k] = false; });
   }
 });
+
+// Lightweight server-confirmed live refresh: current account and plans are
+// refreshed in the background while the app is visible, without a browser reload.
+var _liveRefreshTimer = null;
+function startLiveRefresh(){
+  if (_liveRefreshTimer) return;
+  _liveRefreshTimer = setInterval(async function(){
+    if (document.hidden || !STATE.account || !window.fbAuth || !window.fbAuth.currentUser) return;
+    var results = await Promise.all([api('/account', null, 'GET', false), api('/investments', null, 'GET', false)]);
+    if (results[0].status === 'success') STATE.account = results[0].account;
+    if (results[1].status === 'success') STATE.investments = results[1].investments || [];
+    if (STATE.currentPage === 'home') renderHome();
+    else if (STATE.currentPage === 'products') renderProducts();
+  }, 12000);
+}
+function stopLiveRefresh(){ if (_liveRefreshTimer) { clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; } }
+document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE.account) { STATE.loaded.home = false; if (STATE.currentPage === 'home') renderHome(); } });
 boot();
