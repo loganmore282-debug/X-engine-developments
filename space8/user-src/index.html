@@ -249,17 +249,17 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .member-row .phone{ font-weight:700; font-size:13.5px; }
 .member-row .date{ font-size:11px; color:var(--ink-dim); margin-top:1px; }
 
-.milestone-card{ display:flex; align-items:center; gap:12px; padding:14px; background:var(--surface); border-radius:16px; margin-bottom:10px; }
-.milestone-card .ico{ width:44px; height:44px; border-radius:50%; background:var(--blue-glow); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.milestone-card{ display:flex; align-items:center; gap:14px; padding:17px; background:var(--surface); border:1px solid var(--line); border-radius:18px; margin-bottom:12px; box-shadow:0 10px 24px -22px rgba(46,107,255,.75); }
+.milestone-card .ico{ width:50px; height:50px; border-radius:50%; background:var(--blue-glow); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .milestone-card .ico svg{ width:20px; height:20px; stroke:var(--blue); }
 .milestone-card.done .ico{ background:var(--surface-2); }
 .milestone-card.done .ico svg{ stroke:var(--ink-dim); }
 .milestone-card .info{ flex:1; }
-.milestone-card .info .t{ font-weight:700; font-size:13px; }
-.milestone-card .info .p{ font-size:11px; color:var(--ink-dim); margin-top:2px; }
+.milestone-card .info .t{ font-weight:800; font-size:15px; color:var(--ink); }
+.milestone-card .info .p{ font-size:12px; color:var(--ink-dim); margin-top:2px; }
 .milestone-card .bar{ height:5px; background:var(--surface-2); border-radius:99px; margin-top:7px; overflow:hidden; }
 .milestone-card .bar i{ display:block; height:100%; background:var(--blue); }
-.milestone-card .claim{ font-size:10.5px; font-weight:700; color:var(--blue); border:1px solid var(--blue); border-radius:999px; padding:6px 12px; flex-shrink:0; }
+.milestone-card .claim{ font-size:12px; font-weight:700; color:var(--blue); border:1px solid var(--blue); border-radius:999px; padding:6px 12px; flex-shrink:0; }
 
 /* ---------- account ---------- */
 /* The member's own identity spread across the (admin-customizable)
