@@ -1234,8 +1234,13 @@ async function renderBanners(){
   if(staleTab('banners')) return;
   const s = r.banners||{};
   const sett = setR.settings||{};
-  const blurPx = sett.authBgBlurPx!=null ? sett.authBgBlurPx : 20;
-  const tintPct = sett.authBgTintPct!=null ? sett.authBgTintPct : 78;
+  // Clamp+coerce defensively even though the server now validates on save --
+  // this only guards against a value stored before that validation existed;
+  // esc() below is the actual XSS defense since these render into an HTML
+  // attribute.
+  const clampNum = (v, def, min, max) => { const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : def; };
+  const blurPx = clampNum(sett.authBgBlurPx, 20, 0, 40);
+  const tintPct = clampNum(sett.authBgTintPct, 78, 0, 100);
   $('content').innerHTML = `
     <h2 class="sec">App banners</h2>
     <div class="panel-card">

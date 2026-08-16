@@ -3197,10 +3197,25 @@ app.get('/admin/settings', async (req, res) => {
   try { res.json({ status: 'success', settings: await getSettings() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Free-form settings fields go straight through to the merge below, trusted
+// because /admin/settings/update is owner-gated -- but a few numeric fields
+// also get echoed back into rendered admin/client HTML attributes
+// (authBgBlurPx/authBgTintPct into slider `value="..."` in admin-src), so an
+// out-of-range or non-numeric value here isn't just cosmetic, it's a stored
+// self-XSS surface across admin sessions. Validate those specifically rather
+// than trusting the whole request body.
+const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100] };
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const updates = req.body.settings || {};
+    for (const [key, [min, max]] of Object.entries(SETTINGS_NUMERIC_RANGES)) {
+      if (!(key in updates)) continue;
+      const n = Number(updates[key]);
+      if (!Number.isFinite(n) || n < min || n > max)
+        return res.status(400).json({ status: 'error', message: `${key} must be a number between ${min} and ${max}` });
+      updates[key] = Math.round(n);
+    }
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
     logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });

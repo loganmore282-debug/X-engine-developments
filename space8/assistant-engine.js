@@ -150,8 +150,8 @@ const INTENTS = [
     } },
 
   { id: 'maturity', priority: 2,
-    kw: { maturity: 3, mature: 3, matures: 3 },
-    phrase: [/when (do|does|will) i get (paid|my (money|return|payout))/i, /what happens (when|after) (my )?(plan|investment) (ends|finishes|matures)/i],
+    kw: { maturity: 3, mature: 3 },
+    phrase: [/when (do|does|will) i get (paid|my (money|return|payout))/i, /what happens when (my )?(plan|investment) (ends|finishes|matures)/i],
     reply: (ctx) => `🚀 Each plan runs for its full cycle length. Cashback is credited automatically day by day, and final settlement makes the paid total match the promised return. No manual claim is needed; track each plan separately on Home.` },
 
   { id: 'multi_invest', priority: 2,

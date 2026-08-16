@@ -136,6 +136,16 @@ app in `user-src/` was built directly against this.
   `/admin/settings/update` endpoint — no new server route. Two range sliders live in
   Admin → Banners, inside the "Login / Register background" card (not a separate
   Settings-page field, since they're conceptually tied to that one slot).
+  **Server-side range validation added same day** (ChatGPT review caught the gap):
+  `SETTINGS_NUMERIC_RANGES` in `server.js` rejects (400, whole request, not a
+  silent partial-save) anything for these two keys that isn't a finite number in
+  0–40 / 0–100; valid fractional input rounds to an integer instead of being
+  rejected. `admin-src/index.html` also clamps defensively on read as a second
+  layer, since these values render into an HTML `value="..."` attribute (a stored
+  self-XSS surface for any value written before this validation existed). If you
+  add another settings field the admin renders back into HTML, check whether it
+  needs the same clamp-and-validate treatment rather than assuming free text is
+  safe just because the endpoint is owner-gated.
   `--blue-dim: #1c48b3` / `--blue-mute: #7fa1f0` / `--blue-glow: rgba(46,107,255,.22)` are
   all derived from the same hue. **The CSS custom properties kept their `--blue*` names
   through every color change this session** (blue → sapphire → green → back to this

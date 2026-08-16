@@ -14,6 +14,62 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — ChatGPT review fixes: settings validation + assistant intent-scoring bug
+
+ChatGPT independently reviewed commit e850e90 and found 2 real issues (plus confirmed
+the 4 previously-documented routing fixes all landed correctly and the checkin-intent
+revert was a true no-op).
+
+- **`/admin/settings/update` had no server-side validation for `authBgBlurPx`/
+  `authBgTintPct`.** The admin UI sliders are bounded (0–40, 0–100), but the
+  endpoint itself accepted any value for those two keys — negative numbers, huge
+  numbers, fractions, even a string like `20"><script>...` — and stored it
+  unvalidated. Since these two fields get echoed back into an HTML attribute
+  (`value="..."` on the admin Banners page's sliders), an out-of-range or
+  malicious string here was a stored self-XSS surface across admin sessions, not
+  just a cosmetic bug — worth taking seriously even though the endpoint is
+  owner-gated, since it's the kind of thing that compounds if the admin panel
+  ever grows multiple admin accounts. Fixed in two layers: `server.js`'s
+  `/admin/settings/update` now validates just these two keys via a
+  `SETTINGS_NUMERIC_RANGES` map (finite number, in-range, rounded to an integer;
+  the WHOLE update is rejected with a 400 if either field is out of range — no
+  silent partial-save of the other fields in the same request), and
+  `admin-src/index.html`'s `renderBanners()` independently clamps+coerces
+  whatever it reads back from `/admin/settings` before interpolating it into the
+  slider markup, as defense in depth against any value that predates this fix.
+  New `test-authbg-settings-validation.js` (14/14) proves: valid saves work,
+  out-of-range/negative/non-numeric values are rejected with 400, a rejected
+  field doesn't let the rest of that same request's fields silently save, valid
+  fractional input rounds rather than getting rejected, unrelated settings
+  fields are completely unaffected (the validation is scoped to just these two
+  keys), and non-admin requests still 401 as before.
+- **`after_maturity` was unreachable for its main trigger phrase** ("what happens
+  after my plan matures") — shadowed by the older `maturity` intent. Root cause
+  wasn't the regex overlap I'd already tightened in the previous commit; it was a
+  keyword-scoring bug: `maturity`'s `kw` dict had BOTH `mature` and `matures` as
+  separate weighted entries, but `stem()` reduces "matures" to "mature" at
+  tokenize time — meaning a message containing "matures" matched both kw entries
+  against the same single stemmed token and got double-counted (+6 instead of the
+  intended +3), which alone was enough to beat `after_maturity`'s phrase-only
+  score regardless of the wording fix already made. Removed the redundant
+  `matures` key (keeping just `mature`, which already covers both forms via
+  stemming) — "what happens after my plan matures" now correctly reaches
+  `after_maturity`, and "what happens when my plan matures" / "when do I get
+  paid" still correctly reach the base `maturity` intent (verified both
+  directions, no regression).
+- **Verification:** `node -c server.js`, `node -c assistant-engine.js`; new
+  `test-authbg-settings-validation.js` (14/14, own port per the project's
+  rate-limit-bucket-per-file convention); full `test-*.js` suite green; re-ran
+  the intent self-test scripts from the previous round to confirm no other
+  intent regressed. `user-src/` was untouched this round (server.js and
+  assistant-engine.js are backend files, admin-src/index.html is a separate
+  build) — did NOT rebuild/recommit `user/index.html` or bump `sw.js` since
+  there is nothing new for a client to see; rebuilt and committed
+  `admin/index.html` since `admin-src/index.html` did change.
+- Nothing left open from this round.
+
+---
+
 ## 2026-08-16 — Claude — Auth background blur/opacity sliders; Records confirmed complete; assistant grown to 100 intents
 
 Owner follow-up after the blurred auth-background feature: the fixed 20px/78% blur was
