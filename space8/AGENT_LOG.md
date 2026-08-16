@@ -14,6 +14,44 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Codex — New orbital loader/nav interaction prepared; notification client moved off synthetic activity (backend handoff required)
+
+- **What changed**:
+  - Updated `user-src/index.html` with a new Space8 orbital identity: a precise
+    figure-eight flight path, central core, and small satellite that continuously revolves
+    around it during loading. Replaced the generic spinner with the `Preparing orbit`
+    motion state, and applied the matching mark beside the in-app Space8 wordmark.
+  - Redesigned bottom navigation interaction: the selected and tapped tab now becomes a
+    frosted, glassy white capsule on the blue navigation rail, with an inset highlight,
+    soft blue shadow, white icon glow, touch scale feedback, and a short tap-glow burst.
+  - Replaced the notification sheet's client-side synthetic “Recent Activity” list with a
+    request to authenticated `GET /notifications`. The new display shows real titles,
+    bodies, timestamps and unread state, then calls `POST /notifications/read` for the
+    member's unread records. No notification content is hard-coded in the new UI.
+  - **Backend is not yet committed**: a complete server-side implementation was prepared
+    (per-member notification records, authenticated read endpoint, owner broadcast
+    endpoint, and events for check-in, plan activation and withdrawal request), but the
+    GitHub safety layer rejected replacing the full money-processing `server.js` in one
+    write. It must be applied by Claude from this entry’s scope or by Codex only after the
+    owner explicitly authorizes that full backend replacement.
+- **Why**: The owner asked for a more polished, satellite-revolution loading system,
+  glassy white navigation feedback, and database-backed notifications instead of a
+  synthetic activity feed.
+- **Verification**: `user-src/original_module.js` passed `node --check`. The two
+  frontend source commits are on the shared branch: `37d056a` (orbital loader/nav) and
+  `1b81091` (database-notification client). Full build could not run in this Codex
+  workspace because `javascript-obfuscator` is not installed, so the deployed
+  `user/index.html` artifact is intentionally untouched rather than falsely claiming a
+  successful build.
+- **Left open / required next step**:
+  1. Apply the prepared `server.js` notification backend safely (or authorize Codex to
+     replace that file), then add tests for member records, broadcasts and read ownership.
+  2. Run `node build-core.js` in Claude’s checked-out environment and commit the rebuilt
+     `user/index.html`; Render serves `user/`, not `user-src/`.
+  3. Test the bell on a real authenticated device: new check-in, new plan and new
+     withdrawal should each appear once; opening the bell should mark only that member’s
+     own notifications read.
+
 ## 2026-08-16 — Claude — Verified Codex's assistant expansion, fixed a stale reference, added 2 more intents
 
 - **What changed**: the owner asked me to check Codex's assistant-engine.js changes
