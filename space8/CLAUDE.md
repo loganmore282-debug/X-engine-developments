@@ -84,8 +84,13 @@ app in `user-src/` was built directly against this.
   nav-icon/nav-label text (`.navitem` inactive = `rgba(255,255,255,.68)`, active = `#fff`
   solid, same for `.svg-cart`/`.svg-team` fills); `.section-title` headers are white when
   inside a `.page` (`.page .section-title` override) but stay the darker `--blue-dim` in
-  their base rule for contexts still on white (e.g. the "Recent Activity" sheet — don't
-  collapse that distinction). Every content card (`.card`, `.prod-card`, `.plan-card`,
+  their base rule for any future sheet content that renders on white — don't collapse
+  that distinction, even though nothing currently uses a `.section-title` inside a sheet
+  (the notification bell's "Recent Activity" sub-heading that used to be the live
+  example was removed 2026-08-16 when Codex replaced the whole sheet with real
+  database-backed notifications, titled "Notifications" now, no `.section-title` inside
+  it at all — `.sheet-title` is a separate, always-white-context class, unaffected).
+  Every content card (`.card`, `.prod-card`, `.plan-card`,
   `.mystats .card`, `.mtile`, `.menu-list`, `.shortcut`, `.banner` fallback) is now plain
   white with **no colored border** — the blue-glow borders/tints from the immediately
   prior (green, and blue-accent-on-white) design passes were deliberately removed because

@@ -1423,8 +1423,14 @@ app.get('/notifications', async (req, res) => {
       if (seen.has(doc.id)) return;
       seen.add(doc.id);
       const n = doc.data();
+      // Broadcasts (audience:'all') have no single owning userId, so "read"
+      // can't live on a plain readAt field the way it does for a member's
+      // own notification -- every member sees the same doc. readBy is an
+      // array of userIds who've opened the bell since this broadcast was
+      // created; membership in it is this member's own read state.
+      const readAt = n.audience === 'all' ? ((n.readBy || []).includes(userId) ? true : null) : (n.readAt || null);
       rows.push({ id: doc.id, title: n.title || 'Space8 update', body: n.body || '',
-        type: n.type || 'system', readAt: n.readAt || null, createdAt: n.createdAt || null });
+        type: n.type || 'system', readAt, createdAt: n.createdAt || null });
     });
     rows.sort((a, b) => (tsMillis(b.createdAt) || 0) - (tsMillis(a.createdAt) || 0));
     res.json({ status: 'success', notifications: rows.slice(0, 50) });
@@ -1441,7 +1447,13 @@ app.post('/notifications/read', async (req, res) => {
     await Promise.all(ids.map(async id => {
       const ref = db.collection('notifications').doc(id);
       const snap = await ref.get();
-      if (snap.exists && snap.data().userId === userId) await ref.update({ readAt: FieldValue.serverTimestamp() });
+      if (!snap.exists) return;
+      const n = snap.data();
+      if (n.userId === userId) await ref.update({ readAt: FieldValue.serverTimestamp() });
+      // Broadcasts have no single owner -- record THIS member's read state
+      // in a shared readBy array instead of overwriting one readAt field
+      // every other member would also be judged against.
+      else if (n.audience === 'all') await ref.update({ readBy: FieldValue.arrayUnion(userId) });
     }));
     res.json({ status: 'success' });
   } catch (e) {
@@ -1449,7 +1461,11 @@ app.post('/notifications/read', async (req, res) => {
   }
 });
 app.post('/admin/notifications/create', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  // Owner-only, like every other broadcast-to-every-member action
+  // (/admin/settings/update controls the equivalent annEnabled/annTitle/
+  // annBody announcement) -- a staff login must not be able to push a
+  // message to the entire user base.
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const title = stripHtml(req.body.title || '').trim().slice(0, 120);
   const body = stripHtml(req.body.body || '').trim().slice(0, 600);
   if (!title || !body) return res.status(400).json({ status: 'error', message: 'Title and message are required' });

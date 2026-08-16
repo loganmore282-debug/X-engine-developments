@@ -14,6 +14,62 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Verified + fixed Codex's notification backend, built and shipped the orbital loader/nav/notifications
+
+- **What changed**: Codex's two prior entries below handed off two things: a prepared
+  `server.js` notification backend it couldn't commit directly (safety layer blocked a
+  full-file replace) plus already-committed `user-src/` changes (orbital loader, glassy
+  nav, notification client) that were never built into the deployed `user/index.html`.
+  Picked up both.
+  - **Reviewed the notification backend line-by-line before trusting it** (money app,
+    new auth-gated endpoints — verify first, same discipline as the assistant-engine
+    review above). Found and fixed 2 real bugs:
+    1. `POST /admin/notifications/create` (broadcasts a message to EVERY member) was
+       gated by `verifyAdmin` — reachable by any staff login — despite Codex's own
+       entry calling it "owner-only," and despite the existing equivalent mechanism
+       (`/admin/settings/update`'s `annEnabled`/`annTitle`/`annBody`) already being
+       `verifyOwner`-gated. Fixed to `verifyOwner` so staff can no longer message the
+       whole user base.
+    2. `POST /notifications/read` only ever wrote a single `readAt` field, gated on
+       `doc.userId === caller`. A broadcast doc (`audience:'all'`) has no `userId`, so
+       that check silently failed for every member on every broadcast — broadcasts
+       could never be marked read by anyone, staying permanently highlighted-unread in
+       every user's bell forever. Fixed with a per-member `readBy` array
+       (`FieldValue.arrayUnion`) for broadcasts specifically, read back as that
+       member's own unread state in `GET /notifications`; member-specific notifications
+       keep the original single `readAt` field unchanged (only one user could ever read
+       those, an array is unnecessary there).
+  - Reviewed the frontend orbital-loader/glassy-nav diff (`37d056a`) — pure CSS/SVG, no
+    logic risk, satellite orbit radius matches the path radius, no issues found.
+  - Added `test-notifications.js` (25 checks): per-user scoping (a member never sees or
+    can mark-read another member's notification), the 3 real creation triggers
+    (check-in/plan-activation/withdrawal-request) each actually produce a visible
+    notification, broadcast visibility + independent per-member read state, and the
+    owner-only gate on creating a broadcast — proves both fixes above, not just that
+    the endpoints exist.
+  - Ran `node build-core.js` (round-trip OK) and committed the rebuilt `user/index.html`
+    — this is the actual required next step both Codex entries below left open; Render
+    deploys from `user/`, not `user-src/`, so none of the loader/nav/notification work
+    was live until this build. Bumped `user/sw.js` cache `v208` → `v209`.
+- **Why**: owner sent a screenshot of Codex's own handoff message ("the ball is on your
+  side") asking Claude to finish what Codex couldn't: run the build and commit the
+  deployable artifact, plus (per this project's established practice) verify what Codex
+  shipped before trusting it, the same way the assistant-engine expansion was verified
+  earlier today.
+- **Verification**: full 58-file `test-*.js` suite passes (including the new
+  `test-notifications.js`, which fails without either fix — confirmed by running it
+  against the pre-fix code first). `node build-core.js` → round-trip OK. Playwright
+  smoke test against the built `user/index.html` (fresh headless Chromium, mocked
+  `/notifications`+`/notifications/read`): loading screen shows the new orbital
+  mark + "Preparing orbit" status text; tapping a nav item applies the glassy
+  `tap-glow`/`active` treatment; opening the bell calls the real `/notifications`
+  endpoint and renders real title/body/timestamp content (not the old synthetic
+  activity feed), then calls `/notifications/read` for the unread ones.
+- **Anything left open**: real-device verification (per Codex's own note) — new
+  check-in/plan/withdrawal should each produce exactly one notification on a live
+  account, and the bell's read-marking should survive a real app reopen. Can't be done
+  from this sandbox; flagging for the owner same as before.
+
 ## 2026-08-16 — Codex — Database-backed member notifications backend committed
 
 - **What changed**:
