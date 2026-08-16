@@ -14,6 +14,97 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Owner correction round 2: restored skeleton loaders ChatGPT's patch had silently removed, plus 12 more UI/copy fixes and assistant training expansion
+
+Owner reacted to the previous (ChatGPT) patch with a firm, specific correction list —
+most importantly that the patch had silently swapped Team's skeleton-loader animation
+for plain "Loading your team…"/"Loading level X…" text, something never flagged before
+applying it. That regression is fixed; everything else below is genuinely new work from
+the same message.
+
+- **Skeleton loaders restored on Team** — both `.team-loading` text occurrences in
+  `renderTeam()` (`user-src/original_module.js`) reverted back to `sk`/`skRows()`
+  skeleton markup. Swept the rest of the file for any other silent skeleton→text
+  swaps from the same patch; found none elsewhere.
+- **"Get App" added to the Account menu**, between Terms of Service/Support and Log
+  Out. `user-src/index.html` now captures `beforeinstallprompt` into
+  `window._installPrompt` (was never wired up before — this project had no PWA
+  install mechanism at all until now). `promptInstallApp()` calls `.prompt()` if the
+  browser offered one, tells the member the app's already installed if
+  `display-mode: standalone` matches, otherwise shows a plain-language "use your
+  browser's Add to Home Screen" fallback for browsers that don't fire the event
+  (iOS Safari, mainly).
+- **Check-in claimed state now reads "✓ Claimed"** (was "Claimed" with a separate,
+  easy-to-miss check icon) — `renderHome()`'s check-in button label.
+- **New big centered success popup** (`showSuccessPopup(msg)`, `#successPopupBg` in
+  `index.html`) — a full-screen dim overlay with a large blue tick and a message,
+  auto-dismissing after 1.6s. Fires on successful login (right after `fbSignIn`
+  resolves) and successful registration (right before `enterApp()`). Deliberately a
+  plain opacity fade, no slide/scale animation, consistent with the owner's earlier
+  repeated "stop bringing animation" instruction — this is a new, explicitly-requested
+  exception to the no-modal-popups sheet convention, not a walk-back of it.
+- **Payout Account delete/add buttons investigated, confirmed NOT a regression** —
+  `grep`-verified both are fully present and wired (`acct-del`, `savePayoutBtn`) in
+  the actual code, untouched by the ChatGPT patch. Almost certainly a stale
+  service-worker cache on the owner's device; `user/sw.js` cache bumped this round
+  (`v220`→`v221`) which should force a refresh on next load.
+- **"Payout Accounts" renamed to "Withdrawal Accounts" throughout the UI** — sheet
+  title, "Choose Payout Account"/"Add Payout Account" button text, the Account-screen
+  matrix tile, the Products-screen shortcut, empty-state and toast copy, and the
+  assistant's own reply text (`assistant-engine.js`'s `payout_account` intent).
+  Deliberately display-text only — internal identifiers (`openPayoutSheet`,
+  `_payoutPickCallback`, `#payoutSheet`, `/bank/save`, `/account/payout-pin/*`) were
+  left alone, same "rename the label, not the code" approach as the earlier "Coming
+  Soon"→"Upcoming" change.
+- **`.sheet-title` reduced 18px→15px**, `.sheet-head`/`.sheet` top padding trimmed too
+  — the owner's "header title is abit big, so field of view is small" complaint,
+  reclaiming vertical space on every full-page sheet.
+- **Deposit/withdrawal instruction cards rewritten as numbered steps** (`<ol><li>`
+  inside `.instruction-card`, new CSS rules for the list) instead of one dense
+  paragraph — 5 steps each in `openDepositSheet()`/`renderWithdrawSheet()`.
+- **"No more data" now also appears as an end-of-list footer on POPULATED lists**
+  (`listEndFooter()` helper), not just the empty-state case — added to Records,
+  Deposit/Withdrawal History, and each Team level's referral list. Caught and fixed a
+  real contrast bug while verifying this visually: Team's page background is the
+  vibrant blue canvas, and the footer's default `--ink-dim` text (correct for the
+  white `.sheet` background Records/History render on) was nearly invisible there —
+  added a `.page .list-end{color:rgba(255,255,255,.7)}` override, same pattern
+  `.page .section-title` already uses for the same page-vs-sheet contrast issue.
+- **Task Center "In progress" → "Not yet reached"** on unachieved milestone cards —
+  clearer about what the state actually means (target not hit yet, not "something is
+  currently running").
+- **Product/invest buttons: "Invest" → "Purchase"** — both the product-card button and
+  the invest-confirmation sheet's "Confirm & Invest" → "Confirm & Purchase". Scoped to
+  buttons only, per the owner's own wording; left other "invest" copy (toasts, the
+  assistant's replies) alone.
+- **Cumulative Earnings verified accurate, explained to the owner** — read `server.js`:
+  `totalEarned` is incremented in exactly two places, the daily-cashback/maturity
+  credit path (`~line 1133`) and claimed Task Center milestone rewards (`~line 1337`).
+  It deliberately excludes referral commission (own `teamCommission` field, shown as
+  Team's "Total Commission"), the check-in bonus, welcome bonus, and gift codes — all
+  of those only touch `walletBalance`. This is a coherent, intentional split (earnings
+  from investing + team-building rewards, vs. everything else that lands in the
+  wallet), not a bug — no code change needed, just confirmed correct.
+- **Assistant training expanded** (`assistant-engine.js`, 43→51 intents): added
+  `install_app` (ties into the new Get App feature), `cumulative_earnings` (explains
+  the same split described above, live-grounded in the caller's actual `totalEarned`),
+  `account_id`, `telegram_community`, `giftcode_case` (explains the strict-case
+  redemption rule added earlier this session), `multi_withdrawal_accounts`, and
+  `checkin_streak_reset`. Also updated the existing `payout_account` intent's reply
+  and phrase list for the Withdrawal Accounts rename above.
+- **Verification:** `node -c assistant-engine.js`; rebuilt `user/index.html` from
+  `user-src/` twice (once initially, once more after the list-end contrast fix found
+  during visual verification — final build 418,745 bytes); `user/sw.js` bumped to
+  `space8-shell-v221`; full `test-*.js` suite green both before and after the rebuild;
+  Playwright spot-check against the built artifact covering all 13 items (check-in
+  label, Purchase button text, "Not yet reached" copy, list-end footers on Team/
+  Records with the contrast fix confirmed visually, Get App row, Withdrawal Account
+  labels/sheet title/delete+add buttons, numbered instruction steps, and the success
+  popup) — all confirmed correct by both DOM assertions and screenshots.
+- Nothing left open from this round.
+
+---
+
 ## 2026-08-16 — ChatGPT — Second-pass review of payout-sheet correction; announcement-only member bell and account UX polish
 
 - **Independent review of `3e4242b` / `fb4c4ea`:** confirmed the raw, case-sensitive `/redeem` lookup is safe with a raw lock key because gift-code generation prevents case-only duplicates through `codeLower`; the two differently-cased inputs therefore cannot address one shared code document or race its `maxUses` cap. Confirmed deposit/withdrawal references are escaped before rendering and the blue record-row layout is content-height based. Confirmed `renderDepositSheet` is gone and Payout Account re-renders correctly keep the sheet open without pushing extra history entries. A normal Account-tab opening clears a stale picker callback, so backing out of a picker cannot make a later management view act as a picker.

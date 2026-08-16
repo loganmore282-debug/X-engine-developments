@@ -237,10 +237,13 @@ tab.
   Code card ("Join The Community") with Group/Channel buttons wired to
   `settings.telegramGroup`/`telegramChannel` — both fields already existed
   server-side (`/public/settings`) but were never surfaced anywhere in the frontend
-  before this. Then: 4-tile matrix (payout account / deposits / withdrawals / security
-  PIN), About/Rules/Terms/Support sheets sourced from `/public/settings` (**no
-  Privacy** — removed earlier this session, "also remove privacy policy 🙄" — don't
-  re-add it without being asked), logout.
+  before this. Then: 4-tile matrix (withdrawal account / deposits / withdrawals /
+  security PIN), About/Rules/Terms/Support sheets sourced from `/public/settings`
+  (**no Privacy** — removed earlier this session, "also remove privacy policy 🙄" —
+  don't re-add it without being asked), a **Get App** row (between Support and Log
+  Out, added 2026-08-16 — `promptInstallApp()` in `original_module.js`, backed by
+  `beforeinstallprompt` capture in `index.html`'s plain `<script>`, the first PWA
+  install affordance this project has had), logout.
 - **"Show"** — still does not exist anywhere, frontend or backend. The owner's original
   description: users upload a screenshot of their withdrawal/payment and are granted a
   reward — a proof-of-payment social feature, genuinely new (upload flow, storage, admin
@@ -331,9 +334,18 @@ the owner corrected this explicitly ("who told you deposits should require picki
 number... we concentrated on withdrawals"), and it was reverted the same day. Don't
 reintroduce a deposit account-picker without being asked again.
 
+**UI label is "Withdrawal Accounts", not "Payout Accounts"**, changed 2026-08-16 —
+display text only (sheet title, button labels, matrix/shortcut tile, toasts, the
+assistant's own reply copy). The function/variable/element names below
+(`openPayoutSheet`, `_payoutPickCallback`, `#payoutSheet`, `/bank/save`,
+`/account/payout-pin/*`) were deliberately left as "payout" internally — same
+"rename the label, not the code" approach as "Coming Soon"→"Upcoming". Don't be
+confused seeing both words in this file: "payout" = the code/API layer, "withdrawal
+account" = what the member actually sees.
+
 **Withdrawal account selection is a real page navigation, not an inline list.**
 `openWithdrawSheet()` shows the currently-selected account as one tappable row; tapping
-it calls `openPayoutSheet(callback)`, which opens the SAME Payout Accounts screen
+it calls `openPayoutSheet(callback)`, which opens the SAME Withdrawal Accounts screen
 stacked on top (in a "choose" mode — no delete/add UI, just the list, each row tappable)
 and invokes the callback with whichever account was tapped, closing itself automatically
 and revealing the withdraw sheet underneath, now showing the newly-picked account. This

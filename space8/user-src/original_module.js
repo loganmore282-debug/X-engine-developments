@@ -45,6 +45,14 @@ function toast(msg, isErr){
   toast._tm = setTimeout(function(){ t.className = 'toast'; }, 3200);
 }
 
+function showSuccessPopup(msg){
+  var bg = $('successPopupBg');
+  $('successPopupMsg').textContent = msg;
+  bg.className = 'success-popup-bg show';
+  clearTimeout(showSuccessPopup._tm);
+  showSuccessPopup._tm = setTimeout(function(){ bg.className = 'success-popup-bg'; }, 1600);
+}
+
 function copyText(value, label){
   value = String(value || '');
   if (!value) return;
@@ -102,7 +110,8 @@ var ICONS = {
   phone: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
   telegram: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 4-9.4 16-2.6-7-7-2.6Z"/><path d="M21 4 8.9 12.9"/></svg>',
-  trash: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>'
 };
 function ico(name){ return ICONS[name] || ''; }
 
@@ -247,6 +256,7 @@ $('loginBtn').onclick = async function(){
     return showAuthErr('loginErr', 'Incorrect phone number or password.');
   }
   setBtnLoading($('loginBtn'), false);
+  showSuccessPopup('Login successful');
 };
 
 $('registerBtn').onclick = async function(){
@@ -303,6 +313,7 @@ $('registerBtn').onclick = async function(){
   }
   _registering = false;
   setBtnLoading($('registerBtn'), false);
+  showSuccessPopup('Registration successful');
   enterApp();
 };
 
@@ -418,7 +429,7 @@ async function renderHome(){
   html += '<div class="action-row">' +
     '<div class="action-btn" id="homeDepositBtn"><div class="ico">' + ico('deposit') + '</div><span>Deposit</span></div>' +
     '<div class="action-btn" id="homeWithdrawBtn"><div class="ico">' + ico('withdraw') + '</div><span>Withdraw</span></div>' +
-    '<div class="action-btn ' + (checkedIn?'done':'') + '" id="homeCheckinBtn"><div class="ico">' + ico(checkedIn?'check':'checkin') + '</div><span>' + (checkedIn?'Claimed':'Check In') + '</span></div>' +
+    '<div class="action-btn ' + (checkedIn?'done':'') + '" id="homeCheckinBtn"><div class="ico">' + ico(checkedIn?'check':'checkin') + '</div><span>' + (checkedIn?'✓ Claimed':'Check In') + '</span></div>' +
   '</div>';
 
   html += '<div class="ticker-bar">' +
@@ -546,7 +557,7 @@ async function openRecordsSheet(){
       (t.ref ? '<br>Ref: ' + esc(t.ref) : '') + '</div></div>' +
       '<span class="mono" style="font-weight:700;color:' + (neg?'#ffd0d6':'#fff') + ';flex-shrink:0;margin-left:10px">' +
         (neg?'−':'+') + ugx(Math.abs(t.amount||0)) + '</span></div>';
-  }).join('');
+  }).join('') + listEndFooter();
 }
 function wireHomeActions(){
   $('homeDepositBtn').onclick = openDepositSheet;
@@ -590,7 +601,7 @@ async function renderProducts(){
 
   var html = bannerHtml('darkbar', 'satellite');
   html += '<div class="shortcut-row">' +
-    '<div class="shortcut" id="shBind">' + ico('lock') + '<span>Payout Account</span></div>' +
+    '<div class="shortcut" id="shBind">' + ico('lock') + '<span>Withdrawal Account</span></div>' +
     '<div class="shortcut" id="shDeposits">' + ico('history') + '<span>Deposits</span></div>' +
     '<div class="shortcut" id="shWithdrawals">' + ico('wallet') + '<span>Withdrawals</span></div>' +
   '</div>';
@@ -624,7 +635,7 @@ function prodCardHtml(p){
       '<div><div class="lab">Daily</div><div class="val mono">' + ugx(daily) + '</div></div>' +
       '<div><div class="lab">Total</div><div class="val mono">' + ugx(p.expectedReturn) + '</div></div>' +
     '</div>' +
-    '<button class="btn btn-primary invest-btn" ' + (disabled?'disabled':'') + '>Invest</button>' +
+    '<button class="btn btn-primary invest-btn" ' + (disabled?'disabled':'') + '>Purchase</button>' +
   '</div>';
 }
 
@@ -646,7 +657,7 @@ async function openInvestSheet(key){
       '</div>' +
     '</div>' +
     (!can ? '<div class="auth-err" style="display:block;margin-bottom:14px">Insufficient balance. You have ' + ugx(bal) + '.</div>' : '') +
-    '<button class="btn btn-primary" id="confirmInvestBtn" ' + (!can?'disabled':'') + '>Confirm & Invest</button>' +
+    '<button class="btn btn-primary" id="confirmInvestBtn" ' + (!can?'disabled':'') + '>Confirm & Purchase</button>' +
     '<button class="btn btn-secondary" style="margin-top:10px" id="cancelInvestBtn">Cancel</button>'
   );
   $('cancelInvestBtn').onclick = function(){ closeSheet('invest'); };
@@ -690,17 +701,20 @@ function openHistorySheet(kind){
       return '<div class="member-row record-row"><div class="info"><div class="phone mono">' + ugx(x.amount) + '</div>' +
       '<div class="date">' + esc(x.date) + ' ' + esc(x.time) + (x.ref ? '<br>Ref: ' + esc(x.ref) : '') + '</div></div>' +
       '<span class="pill ' + pillClass + '">' + friendlyStatus(x.status) + '</span></div>';
-    }).join('');
+    }).join('') + listEndFooter();
   });
 }
 function emptyState(icon, msg){
   return '<div class="empty-state">' + ico(icon) + '<p>' + esc(msg) + '</p></div>';
 }
+function listEndFooter(){
+  return '<div class="list-end">No more data</div>';
+}
 
 // ── TEAM ──────────────────────────────────────────────────────────────
 async function renderTeam(){
   var el = $('page-team');
-  if (!STATE.loaded.team) el.innerHTML = '<div class="team-loading">Loading your team…</div>';
+  if (!STATE.loaded.team) el.innerHTML = '<div class="sk sk-card" style="height:110px;margin:16px 0"></div>' + skRows(3);
   var r = await api('/team/stats');
   if (r.status === 'success') STATE.teamStats = r;
   STATE.loaded.team = true;
@@ -714,7 +728,7 @@ async function renderTeam(){
   '</div>';
   [1,2,3].forEach(function(l){
     html += '<div class="section-title">Level ' + l + ' <span class="see-all">' + LEVEL_PCT[l] + '%</span></div>';
-    html += '<div id="teamMemberList' + l + '"><div class="team-loading">Loading level ' + l + '…</div></div>';
+    html += '<div id="teamMemberList' + l + '"><div class="sk sk-line" style="width:50%"></div></div>';
   });
   html += '<div class="section-title">Task Center</div><div id="taskList"></div>';
   el.innerHTML = html;
@@ -736,7 +750,7 @@ function paintMembers(level, members){
   box.innerHTML = '<div class="card">' + members.map(function(m){
     return '<div class="member-row"><div class="av">' + esc(String(m.phone||'?').slice(-2)) + '</div>' +
       '<div class="info"><div class="phone">' + esc(m.phone) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + (m.hasInvested?' · Active':'') + '</div></div></div>';
-  }).join('') + '</div>';
+  }).join('') + '</div>' + listEndFooter();
 }
 function renderTaskList(milestones){
   var box = $('taskList'); if (!box) return;
@@ -753,7 +767,7 @@ function renderTaskList(milestones){
         '<div class="ico">' + ico('gift') + '</div><div class="info"><div class="t">' + label + '</div>' +
         '<div class="p">Manual reward · ' + ugx(m.reward) + (m.claimed ? ' · Claimed' : ' · ' + (m.type==='deposit'?ugx(m.current):m.current) + ' / ' + (m.type==='deposit'?ugx(m.target):m.target)) + '</div>' +
         (!m.claimed ? '<div class="bar"><i style="width:'+pct+'%"></i></div>' : '') + '</div>' +
-        (m.claimed ? '<span class="pill pill-done">' + ico('check') + '</span>' : m.achieved ? '<button class="claim" data-target="'+m.target+'" data-type="'+m.type+'">Claim reward</button>' : '<span class="mission-pending">In progress</span>') +
+        (m.claimed ? '<span class="pill pill-done">' + ico('check') + '</span>' : m.achieved ? '<button class="claim" data-target="'+m.target+'" data-type="'+m.type+'">Claim reward</button>' : '<span class="mission-pending">Not yet reached</span>') +
       '</div>';
     }).join('');
   }).join('');
@@ -805,7 +819,7 @@ async function renderAccount(){
   }
 
   html += '<div class="matrix">' +
-    '<div class="mtile" id="mBind">' + ico('lock') + '<span>Payout Account</span></div>' +
+    '<div class="mtile" id="mBind">' + ico('lock') + '<span>Withdrawal Account</span></div>' +
     '<div class="mtile" id="mDeposits">' + ico('history') + '<span>Deposits</span></div>' +
     '<div class="mtile" id="mWithdrawals">' + ico('wallet') + '<span>Withdrawals</span></div>' +
     '<div class="mtile" id="mPin">' + ico('shield') + '<span>Security PIN</span></div>' +
@@ -816,6 +830,7 @@ async function renderAccount(){
     menuRow('doc','Rules & Regulations','rules') +
     menuRow('shield','Terms of Service','terms') +
     menuRow('support','Support','support') +
+    '<div class="menu-row" id="getAppRow">' + ico('download') + '<span>Get App</span></div>' +
   '</div>';
   html += '<div class="menu-list" style="margin-top:14px">' +
     '<div class="menu-row" id="logoutRow">' + ico('logout') + '<span>Log Out</span></div>' +
@@ -830,6 +845,7 @@ async function renderAccount(){
   $('copyRefCodeBtn').onclick = function(){ copyText(acc.referralCode, 'Referral code'); };
   qsa('.mini-copy', el).forEach(function(btn){ btn.onclick = function(){ copyText(btn.dataset.copy, btn.dataset.copyLabel); }; });
   $('logoutRow').onclick = doLogout;
+  $('getAppRow').onclick = promptInstallApp;
   $('giftCodeBtn').onclick = redeemGiftCode;
   $('giftCodeInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('giftCodeBtn').click(); });
   if ($('telegramGroupBtn')) $('telegramGroupBtn').onclick = function(){ window.open(sett.telegramGroup, '_blank'); };
@@ -837,6 +853,21 @@ async function renderAccount(){
   qsa('.menu-row[data-key]').forEach(function(row){
     row.onclick = function(){ openInfoSheet(row.dataset.key); };
   });
+}
+async function promptInstallApp(){
+  if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+    return toast('Space8 is already installed on this device.');
+  }
+  var evt = window._installPrompt;
+  if (evt) {
+    evt.prompt();
+    var choice = await evt.userChoice.catch(function(){ return null; });
+    window._installPrompt = null;
+    if (choice && choice.outcome === 'accepted') toast('Installing Space8…');
+    return;
+  }
+  openSheet('generic', '<div class="sheet-title">Get App</div><div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim)">' +
+    'Open your browser menu and choose "Add to Home Screen" (or "Install App") to install Space8 on this device.</div>');
 }
 function menuRow(icon, label, key){
   return '<div class="menu-row" data-key="' + key + '">' + ico(icon) + '<span>' + esc(label) + '</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>';
@@ -918,7 +949,7 @@ async function renderPayoutSheet(){
       (picking ? ico('chev').replace('<svg ', '<svg class="chev" ') :
         (!pending ? '<button class="acct-del" data-del="' + esc(a.id) + '">' + ico('trash') + '</button>' : '')) +
     '</div>';
-  }).join('') : emptyState('wallet', 'No payout accounts bound yet.');
+  }).join('') : emptyState('wallet', 'No withdrawal accounts bound yet.');
 
   // Content-only update, no openSheet() here -- the sheet was already
   // opened (and its one history/stack entry pushed) by openPayoutSheet()
@@ -927,7 +958,7 @@ async function renderPayoutSheet(){
   // phone Back button has to be pressed once per interaction before it
   // actually leaves the page.
   $('payoutSheet').innerHTML =
-    '<div class="sheet-title">' + (picking ? 'Choose Payout Account' : 'Payout Accounts') + '</div>' +
+    '<div class="sheet-title">' + (picking ? 'Choose Withdrawal Account' : 'Withdrawal Accounts') + '</div>' +
     '<div class="sheet-sub">' + (picking ? 'Tap the account to send this withdrawal to.' : 'Mobile-money accounts you can withdraw to.') + '</div>' +
     listHtml +
     (picking ? '' :
@@ -942,7 +973,7 @@ async function renderPayoutSheet(){
         '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN"></div>' +
         '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
       '</div>' +
-      '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Payout Account</button>');
+      '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Withdrawal Account</button>');
 
   if (picking) {
     qsa('.acct-row', $('payoutSheet')).forEach(function(row){
@@ -989,7 +1020,7 @@ async function renderPayoutSheet(){
     setBtnLoading(btn, true, 'Saving…');
     var r2 = await api('/bank/save', { holder: holder, network: network, phone: phone, pin: pin });
     setBtnLoading(btn, false);
-    if (r2.status === 'success') { toast('Payout account saved'); STATE.bankAccounts = null; STATE.hasPayoutPin = true; renderPayoutSheet(); }
+    if (r2.status === 'success') { toast('Withdrawal account saved'); STATE.bankAccounts = null; STATE.hasPayoutPin = true; renderPayoutSheet(); }
     else toast(r2.message, true);
   };
 }
@@ -1036,7 +1067,13 @@ function openDepositSheet(){
       '</select>' +
     '</div>' +
     '<button class="btn btn-primary" id="submitDepositBtn" style="margin-top:14px">Deposit Now</button>' +
-    '<div class="instruction-card"><b>Deposit instructions</b><span>Enter the amount and mobile-money number above. Approve the prompt on that phone with your mobile-money PIN. Your wallet updates after confirmation.</span></div>'
+    '<div class="instruction-card"><b>Deposit instructions</b><ol>' +
+      '<li>Enter the amount you want to deposit, at least ' + ugx(min) + '.</li>' +
+      '<li>Enter the mobile-money number to pay from, and pick the correct network.</li>' +
+      '<li>Tap Deposit Now — a payment prompt will appear on that phone.</li>' +
+      '<li>Approve the prompt using your mobile-money PIN.</li>' +
+      '<li>Your wallet balance updates automatically once payment is confirmed.</li>' +
+    '</ol></div>'
   );
   $('submitDepositBtn').onclick = async function(){
     var btn = $('submitDepositBtn');
@@ -1079,8 +1116,8 @@ async function openWithdrawSheet(){
   if (!accounts.length) {
     $('withdrawSheet').innerHTML =
       '<div class="sheet-title">Withdraw</div>' +
-      emptyState('lock', 'Bind a payout account first to withdraw.') +
-      '<button class="btn btn-primary" id="goToBindBtn">Bind Payout Account</button>';
+      emptyState('lock', 'Bind a withdrawal account first to withdraw.') +
+      '<button class="btn btn-primary" id="goToBindBtn">Bind Withdrawal Account</button>';
     // Do not call history.back() and push the Payout page in the same turn:
     // browser back-navigation is asynchronous and could otherwise pop the
     // newly-opened Payout page instead of the Withdraw page. Hide this
@@ -1116,7 +1153,13 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
       '<div class="field">' + ico('shield') + '<input id="wdPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit security PIN"></div>' +
     '</div>' +
     '<button class="btn btn-primary" id="submitWithdrawBtn" style="margin-top:14px">Request Withdrawal</button>' +
-    '<div class="instruction-card"><b>Withdrawal instructions</b><span>Choose the payout account, enter the amount and your security PIN. The displayed fee is deducted automatically. Each request is reviewed before money is sent.</span></div>';
+    '<div class="instruction-card"><b>Withdrawal instructions</b><ol>' +
+      '<li>Tap the account row above to choose which withdrawal account receives the money.</li>' +
+      '<li>Enter the amount you want to withdraw, at least ' + ugx(min) + '.</li>' +
+      '<li>Enter your 4-digit security PIN to confirm.</li>' +
+      '<li>The withdrawal fee (' + feePct + '%) is deducted automatically — the fee preview above shows what you\'ll actually receive.</li>' +
+      '<li>Tap Request Withdrawal. Each request is reviewed before money is sent.</li>' +
+    '</ol></div>';
 
   if (isFirstRender) openSheet('withdraw', html);
   else $('withdrawSheet').innerHTML = html;

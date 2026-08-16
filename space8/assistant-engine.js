@@ -214,7 +214,7 @@ const INTENTS = [
   { id:'withdraw_pending',priority:5,phrase:[/(withdraw|cashout).*(pending|stuck|missing|failed|processing|sending)/i],reply:()=> '⏳ Check Account → Withdrawals. Pending awaits approval; Sending/Processing means a payout attempt is underway and must not be submitted again blindly. If it stays unchanged unusually long, contact Support with the Space8 reference — never share your PIN.' },
   { id:'commission_missing',priority:5,kw:{missing:3,zero:3,unpaid:3,commission:2,referral:1},phrase:[/(commission|referral).*(missing|not (paid|credited|showing)|zero)/i],reply:c=>`🤝 Commission is credited when an eligible referred member completes their first investment, not merely registration or deposit. Current Levels 1–3 are ${c.settings.commL1}% / ${c.settings.commL2}% / ${c.settings.commL3}%. If an eligible purchase completed with no credit, contact Support with the approximate time — never send passwords or PINs.`},
   { id:'investment_missing',priority:5,phrase:[/(investment|plan).*(missing|not showing|disappeared|failed)/i,/money deducted.*(invest|plan)/i],reply:()=> '🚀 Refresh Home and Products → My Products. If wallet money was deducted but no plan appears, stop retrying and contact Support with the time and plan name so the records can be reconciled safely.' },
-  { id:'payout_account',priority:4,phrase:[/(bind|add|change|remove|delete).*(payout|mobile money|momo|account)/i,/payout account/i],reply:()=> '📱 Use Account → Payout Account. Enter your real Uganda mobile-money number and correct network. Binding, changing or removing payout details requires the withdrawal PIN.' },
+  { id:'payout_account',priority:4,phrase:[/(bind|add|change|remove|delete).*(payout|withdrawal|mobile money|momo|account)/i,/(payout|withdrawal) account/i],reply:()=> '📱 Use Account → Withdrawal Account. Enter your real Uganda mobile-money number and correct network. You can bind more than one account and switch between them when withdrawing; adding, deleting or picking one still requires your withdrawal PIN for deletes.' },
   { id:'password',priority:4,kw:{password:3,login:2,signin:2},phrase:[/forgot.*password/i,/change.*password/i,/can.t (login|sign in)/i],reply:()=> '🔐 Firebase Authentication handles your login password; staff and this assistant cannot read it. Use password recovery on the sign-in screen. Your withdrawal PIN is separate under Account → Security PIN.' },
   { id:'history',priority:3,kw:{history:3,transaction:2,record:2,receipt:2},reply:()=> '🧾 Account contains Deposit and Withdrawal histories. Investment progress is on Home and Products → My Products. Keep the Space8 reference for anything Support must investigate.' },
   { id:'notifications',priority:3,kw:{notification:3,alert:2,bell:2,push:2},reply:()=> '🔔 Tap the Home bell for announcements. Push alerts also require phone/browser notification permission; enable it in device settings and reopen Space8.' },
@@ -229,7 +229,44 @@ const INTENTS = [
 
   { id: 'howworks', priority: 2,
     phrase: [/how does (space8|it|this) work/i, /how does the platform work/i, /explain (space8|how this works)/i],
-    reply: (ctx) => `🛰️ Here's the flow: 1) Deposit mobile money into your wallet (free, min ${fmt(ctx.settings.minDeposit)}). 2) Invest wallet balance into a plan on the Products tab — price/cycle/return lock in at purchase. 3) Cashback is credited automatically each day until the plan completes. 4) Withdraw to mobile money anytime from your wallet (min ${fmt(ctx.settings.minWithdraw)}, ${ctx.settings.withdrawFeePct}% fee). Referring people earns you a cut of what they invest, and daily check-ins add a small bonus on top. Ask me about any one of those steps for more detail.` }
+    reply: (ctx) => `🛰️ Here's the flow: 1) Deposit mobile money into your wallet (free, min ${fmt(ctx.settings.minDeposit)}). 2) Invest wallet balance into a plan on the Products tab — price/cycle/return lock in at purchase. 3) Cashback is credited automatically each day until the plan completes. 4) Withdraw to mobile money anytime from your wallet (min ${fmt(ctx.settings.minWithdraw)}, ${ctx.settings.withdrawFeePct}% fee). Referring people earns you a cut of what they invest, and daily check-ins add a small bonus on top. Ask me about any one of those steps for more detail.` },
+
+  { id: 'install_app', priority: 3,
+    kw: { install: 3, app: 2, homescreen: 3, download: 2 },
+    phrase: [/(install|download|add).*(app|to (my )?home ?screen)/i, /get the app/i, /is there an app/i],
+    reply: () => "📲 Space8 works as an installable app right from your browser — no app store needed. Open Account and tap Get App (it's just above Log Out). If your browser doesn't support one-tap install, use its menu and choose \"Add to Home Screen\" instead." },
+
+  { id: 'cumulative_earnings', priority: 3,
+    kw: { cumulative: 3, earning: 2, earnings: 2 },
+    phrase: [/cumulative earning/i, /how (are|is) .*(cumulative|total) earning.*(count|calculat|work)/i],
+    reply: (ctx) => `📊 Cumulative Earnings (shown on Products) adds up money your active and completed plans have actually paid out — daily cashback plus final maturity payouts — together with any Task Center rewards you've claimed. It doesn't include referral commission, check-in bonuses, the welcome bonus or gift codes; those show separately (commission is under Team → Total Commission, everything together is your wallet balance).${ctx.account.totalEarned != null ? ' Yours is currently ' + fmt(ctx.account.totalEarned) + '.' : ''}` },
+
+  { id: 'account_id', priority: 3,
+    kw: { id: 2, memberid: 3, publicid: 3, accountid: 3 },
+    phrase: [/(my|the) (account|member|user) id/i, /what('?s| is) my id/i],
+    reply: (ctx) => `🆔 Every Space8 account gets a permanent, unique ID (shown as "ID:" on your Account screen) — it's assigned automatically when you register and never changes.${ctx.account.publicId ? ' Yours is ID:' + ctx.account.publicId + '.' : ''}` },
+
+  { id: 'telegram_community', priority: 2,
+    kw: { telegram: 3, community: 2, group: 1, channel: 1 },
+    phrase: [/telegram (group|channel)/i, /join.*(community|telegram)/i],
+    reply: (ctx) => {
+      const s = ctx.settings, parts = [];
+      if (s.telegramGroup) parts.push('Group: ' + s.telegramGroup);
+      if (s.telegramChannel) parts.push('Channel: ' + s.telegramChannel);
+      return parts.length ? `💬 Join us on Telegram — ${parts.join(', ')}. You'll also find both links under Account → Join The Community.` : '💬 Telegram links aren\'t set up yet — check Account → Join The Community for updates.';
+    } },
+
+  { id: 'giftcode_case', priority: 4,
+    phrase: [/(gift|redeem|promo) code.*(not work|invalid|wrong|failed|didn.?t work)/i, /code (not working|invalid)/i],
+    reply: () => "🎁 Gift codes are case-sensitive, so double check you're typing capital and lowercase letters exactly as given — a code like \"fsT63\" won't work as \"fst63\" or \"FST63\". If you've copied it directly and it still fails, it may already be used or expired." },
+
+  { id: 'multi_withdrawal_accounts', priority: 3,
+    phrase: [/(more than one|multiple|two|several).*(withdrawal|payout) account/i, /add (another|a second) (withdrawal|payout) account/i],
+    reply: () => '📱 Yes — you can bind more than one withdrawal account. Add each one from Account → Withdrawal Account, then pick which one to use each time you withdraw by tapping the account row on the Withdraw screen.' },
+
+  { id: 'checkin_streak_reset', priority: 3,
+    phrase: [/(streak|check ?in).*(reset|broke|broken|lost|missed)/i, /missed (a|my) (day|checkin)/i],
+    reply: (ctx) => `📅 The check-in streak needs a check-in every calendar day to keep growing — miss a day and it resets back to day 1 on your next check-in. The bonus itself (${fmt(ctx.settings.dailyCheckin)}) doesn't change either way, only the streak count does.` }
 ];
 
 const FALLBACKS = [
