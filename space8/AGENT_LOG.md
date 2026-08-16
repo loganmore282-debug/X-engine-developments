@@ -14,6 +14,40 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Codex — Task Center redesigned to Space8 Mission structure (backend reward handoff required)
+
+- **What changed (committed)**:
+  - Rebuilt the Task Center presentation into two large, clean mission groups:
+    **Active Level-1 Missions** and **Whole Team Deposit Missions**. Removed the
+    calculation-standard/unit style from the reference and kept only mission target,
+    reward, live progress and an explicit Claim button.
+  - Enlarged mission cards, icons, text, progress bars and claim controls for mobile
+    use. Claim buttons disable immediately while the request is in flight, preventing
+    duplicate taps from the client side.
+  - The existing claim request remains manual; no browser amount, progress, reward or
+    claimed-state is trusted as the authority.
+- **Backend prepared but not committed by Codex**:
+  - Replace the Level-1 ladder with: 2→3,000; 5→7,500; 10→15,000; 25→37,500;
+    50→75,000; 100→150,000; 200→300,000.
+  - Replace the deposit ladder with: 100,000→2,500; 500,000→12,500;
+    1,000,000→25,000; 5,000,000→125,000; 10,000,000→250,000;
+    25,000,000→625,000; 50,000,000→1,250,000.
+  - Change deposit progress from direct Level-1 only to the **whole Level 1–3 team**,
+    using chunked server queries to stay within Firestore `in` query limits.
+    Preserve manual claim, per-mission lock, live server recomputation and one-time
+    claim flags. Existing claimed missions stay claimed; they are not reset or paid
+    again under the new reward table.
+- **Why**: Owner supplied the Space8 Mission & Reward Structure screenshot and asked for
+  bigger, organized tabs, manual one-time claims, and server-side validation.
+- **Verification**: Final frontend module parsed as JavaScript. Source commits:
+  `db4850e` (large mission styling) and `1ced328` (mission layout/claim UX).
+  The complete `server.js` replacement was rejected by GitHub’s safety layer because
+  the file also contains financial processing, authentication and payout reconciliation.
+- **Required next step**: Claude should apply the exact backend ladder and whole-team
+  aggregation changes as narrow edits, add/adjust Task Center regression tests, run the
+  full `test-*.js` suite, then run `node build-core.js` and commit `user/index.html`
+  so Render deploys the committed UI.
+
 ## 2026-08-16 — Claude — Applied Codex's gift-code/referral/sequential-ID backend handoff; fixed 2 real bugs found in Codex's own committed frontend
 
 - **What changed**: Codex's entry below committed 2 frontend pieces directly (faster
