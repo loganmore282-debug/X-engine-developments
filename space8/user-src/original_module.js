@@ -180,6 +180,22 @@ function showAuthErr(id, msg){
   el.style.display = msg ? 'block' : 'none';
 }
 
+// True for the whole span between fbCreateUser() succeeding and /register
+// finishing (success OR failure). Firebase signs a newly-created user in
+// immediately, which fires the 'space8-auth' listener below on its own --
+// without this flag that listener would drop the person straight into the
+// app the instant the Firebase account exists, even if /register then
+// fails (e.g. a bad referral code) and never actually finished creating
+// their Space8 profile. See the listener and enterApp() below.
+var _registering = false;
+function enterApp(){
+  $('screenLogin').style.display = 'none';
+  $('screenRegister').style.display = 'none';
+  $('app').style.display = 'flex';
+  showPage('home');
+  startLiveRefresh();
+}
+
 $('loginBtn').onclick = async function(){
   showAuthErr('loginErr', '');
   var phone = cleanPhone($('loginPhone').value);
@@ -202,26 +218,46 @@ $('registerBtn').onclick = async function(){
   var pass = $('regPassword').value, pass2 = $('regPassword2').value;
   var pin = $('regPin').value, pin2 = $('regPin2').value;
   var ref = $('regReferral').value.trim();
-  if (!phone) return showAuthErr('registerErr', 'Enter a valid Uganda phone number (07XXXXXXXX).');
-  if (pass.length < 6) return showAuthErr('registerErr', 'Password must be at least 6 characters.');
-  if (pass !== pass2) return showAuthErr('registerErr', 'Passwords do not match.');
+  // A previous attempt in THIS session may have already created the
+  // Firebase account and then failed on /register (wrong referral code,
+  // dropped connection, etc.) -- retrying fbCreateUser for the same phone
+  // would only fail with "already in use". Detected by _registering still
+  // being true (only a just-failed registration leaves it that way) plus a
+  // real signed-in Firebase user.
+  var resuming = !!(_registering && window.fbAuth && window.fbAuth.currentUser);
+  if (!resuming) {
+    if (!phone) return showAuthErr('registerErr', 'Enter a valid Uganda phone number (07XXXXXXXX).');
+    if (pass.length < 6) return showAuthErr('registerErr', 'Password must be at least 6 characters.');
+    if (pass !== pass2) return showAuthErr('registerErr', 'Passwords do not match.');
+  }
   if (!/^\d{4}$/.test(pin)) return showAuthErr('registerErr', 'Choose a 4-digit withdrawal PIN.');
   if (pin !== pin2) return showAuthErr('registerErr', 'PINs do not match.');
   setBtnLoading($('registerBtn'), true, 'Creating account…');
+  _registering = true;
   try {
-    await window.fbCreateUser(phoneToEmail(phone), pass);
+    if (!resuming) await window.fbCreateUser(phoneToEmail(phone), pass);
     var r = await api('/register', { referralCode: ref || undefined, phone: phone }, 'POST', true);
-    if (r.status === 'error') { toast(r.message, true); }
+    if (r.status === 'error') {
+      // Firebase account exists, but the Space8 profile isn't finished --
+      // stay on this screen (never silently enter the app half-registered)
+      // and let them fix the referral code and try again; _registering
+      // stays true so the retry above skips fbCreateUser.
+      setBtnLoading($('registerBtn'), false);
+      return showAuthErr('registerErr', (r.message || 'Could not finish creating your account.') + ' You are signed in — fix the referral code (or clear it) and tap Create Account again.');
+    }
     var pinR = await api('/account/payout-pin/set', { pin: pin });
     if (pinR.status === 'error') toast('Account created, but the PIN could not be set — set it later in Account.', true);
   } catch (e) {
     setBtnLoading($('registerBtn'), false);
+    _registering = false;
     var msg = 'Could not create your account.';
     if (String(e.code).indexOf('email-already-in-use') !== -1) msg = 'This phone number is already registered.';
     else if (String(e.code).indexOf('weak-password') !== -1) msg = 'Choose a stronger password (min 6 characters).';
     return showAuthErr('registerErr', msg);
   }
+  _registering = false;
   setBtnLoading($('registerBtn'), false);
+  enterApp();
 };
 
 function doLogout(){
@@ -1036,11 +1072,26 @@ window.addEventListener('space8-auth', async function(e){
   var user = e.detail;
   $('loadingScreen').style.display = 'none';
   if (user) {
-    $('screenLogin').style.display = 'none';
-    $('screenRegister').style.display = 'none';
-    $('app').style.display = 'flex';
-    showPage('home');
-    startLiveRefresh();
+    // A registration attempt currently in flight (its own handler above
+    // will call enterApp() once /register actually finishes) -- don't race
+    // it into the app early on a Firebase account that doesn't have a
+    // finished Space8 profile yet.
+    if (_registering) return;
+    // Self-heal: covers a Firebase account left over from a PAST failed
+    // registration attempt (a previous session, or this one after a
+    // wrong-referral-code retry was abandoned) -- /register is idempotent
+    // (locked + a registrationDone guard, see completeRegistrationCore in
+    // server.js), so calling it again with no referral code is always safe
+    // and guarantees the account eventually gets a real profile, welcome
+    // bonus and referral code of its own instead of staying permanently
+    // half-registered just because the original code was wrong once.
+    try {
+      var accR = await api('/account');
+      if (accR.status === 'success' && accR.account && accR.account.registrationDone === false) {
+        await api('/register', {}, 'POST', true);
+      }
+    } catch (_) {}
+    enterApp();
   } else {
     $('app').style.display = 'none';
     showLoginScreen();

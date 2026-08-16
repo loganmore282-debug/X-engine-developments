@@ -485,6 +485,22 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    *design* critique behind it (cards read as white-with-blue-accents, not genuinely
    blue-dominant) was valid and acted on using the current blue family instead (see
    `AGENT_LOG.md`).
+7. **Registration/login security audit — DONE as of 2026-08-16.** Full pass over
+   `verifyAuth`/`verifyAdmin`, `/register`, admin login/sessions, PIN hashing, and the
+   global middleware stack (see `AGENT_LOG.md` for the full breakdown). Everything
+   checked was already sound (Firebase owns member passwords entirely — this codebase
+   never sees one; scrypt+salt+timing-safe-compare for admin passwords and the payout
+   PIN; a global `stripMongoOperators()` middleware already neutralizes NoSQL-injection
+   attempts on every request body, including the two intentionally-unauthenticated
+   MarzPay webhooks). One real bug found and fixed: a WRONG referral code at
+   registration used to strand a member permanently (Firebase account created, backend
+   `/register` never completes, no retry path in the UI). `GET /account` now returns
+   `registrationDone`; the client (`user-src/original_module.js`'s `space8-auth`
+   listener + a `_registering` flag) now keeps a failed registration on-screen for an
+   immediate retry AND silently self-heals any account that reaches the app with
+   `registrationDone: false` for any reason, by retrying the idempotent `/register`
+   with no code. Don't re-run this audit from scratch in a future session — read the
+   2026-08-16 AGENT_LOG.md entry first, it has the full list of what was checked.
 
 ## Secrets — NEVER commit
 

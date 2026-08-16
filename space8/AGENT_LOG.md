@@ -14,6 +14,92 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Registration/login security audit: found and fixed 1 real bug (stuck registration on a bad referral code), verified everything else already sound
+
+Owner asked for a full audit of registration/login: validation, encryption/hashing,
+hack-resistance, wrong-input handling. Read `verifyAuth`/`verifyAdmin`, `/register`,
+`/account/create-profile`, `/account`, admin login/session code, PIN handling, the
+global middleware stack, and the client-side Firebase auth wiring in `user-src/`.
+
+- **What's already solid (verified, not just assumed)**:
+  - Member identity is 100% delegated to Firebase Auth — `server.js` never sees or
+    stores a member password; `verifyAuth()` only ever accepts a token that passes
+    `admin.auth().verifyIdToken()`. Passwords never transit this codebase's own DB.
+  - Admin passwords: scrypt with a random 16-byte salt per password
+    (`scryptHash`/`scryptVerify`), `crypto.timingSafeEqual` on the compare, session
+    tokens are `crypto.randomBytes(32)` with a 12h server-side expiry
+    (`adminSessions`), and a per-username lockout (5 fails → 15min, independent of the
+    IP-based rate limiter, so spraying one username from many IPs still locks).
+  - `helmet` (HSTS, no-sniff, frameguard, no-referrer), a 64kb JSON body cap on every
+    route except the 3 that legitimately need a bigger one for base64 images, and
+    2-tier rate limiting (per-user AND a stricter IP-only backstop specifically so a
+    forged-but-unverified Bearer token can't get a fresh rate-limit bucket every
+    request) are all already in place and already correctly reasoned about in the
+    code's own comments.
+  - `stripMongoOperators()` — a global `app.use` middleware (line ~136) that
+    recursively deletes any request-body key starting with `$` or containing `.`,
+    before ANY route handler runs. Checked whether this actually closes a real hole:
+    traced `/deposit/callback` and `/withdraw/callback` (both intentionally
+    unauthenticated MarzPay webhooks) where a `reference`/`marzReference` value flows
+    unstringified into `db.collection(...).where('marzReference','==',reference)` —
+    an object like `{"$ne": null}` submitted as `reference` WOULD be a classic NoSQL
+    injection into that filter if it reached MongoDB unmodified. Confirmed it can't:
+    the global middleware strips the `$ne` key before the handler runs, leaving
+    `reference = {}`, and `{marzReference:{}}` matches nothing. Also independently
+    confirmed a SECOND, unrelated layer would have stopped real fraud even without the
+    middleware — this code never trusts a webhook's claimed status by itself; it
+    always re-verifies against MarzPay's own live API before crediting or declining
+    (see the existing "SECURITY" comments at both callbacks). Two independent defenses
+    for the same class of attack — no change made, nothing to fix, documented here so
+    a future session doesn't waste time re-flagging it as new.
+  - `cleanPhone()` strictly validates Uganda mobile format (`+2567XXXXXXXX`, must be
+    exactly 9 local digits starting with 7) and returns `null` on anything else — every
+    money-relevant caller checks for that `null`. `NETWORK_NAMES` whitelists mobile-
+    money networks against a fixed `Set`, so a forged value can never reach storage or
+    a payout call.
+  - Payout PIN: 4-digit, scrypt-hashed (`payoutPinHash`), with its own fail-count +
+    lockout (`payoutPinFailCount`/`payoutPinLockedUntil`) independent of the login
+    lockout — already effectively bank-grade for a 4-digit PIN's threat model.
+- **Real bug found and fixed: a wrong referral code at registration could strand a
+  member permanently.** `user-src/original_module.js`'s register flow calls Firebase's
+  `createUserWithEmailAndPassword` FIRST, which immediately fires `onAuthStateChanged`
+  and drops the user into the main app UI, decoupled from whether the follow-up
+  `POST /register` (which assigns the referral code, welcome bonus, and flips
+  `registrationDone`) actually succeeded. A member who mistyped/misremembered a
+  referral code got a 400 from `/register`, saw a toast, and then landed in the app
+  anyway with `registrationDone` permanently `false` — no welcome bonus, no referral
+  code of their own to share, and no way in the UI to ever retry. (An admin-side fix
+  for exactly this stuck state already existed — `/admin/user/complete-registration`,
+  see the 2026-08-16 registration-reconciliation entry — but it requires the owner to
+  notice and act; nothing let the member self-serve.) Fixed with two matching pieces:
+  1. `server.js`'s `GET /account` now also returns `registrationDone` (previously
+     computed server-side but never sent to the client).
+  2. `user-src/original_module.js`: a `_registering` flag now holds off the
+     `space8-auth` listener's auto-navigation while a registration attempt is actually
+     in flight, so a `/register` failure keeps the user on the register screen with a
+     clear "you're signed in — fix the code and try again" message instead of silently
+     dropping them into a broken home screen; retrying skips `fbCreateUser` (which
+     would otherwise fail with "already in use" since Firebase already created that
+     account on the first attempt). Separately, the `space8-auth` listener now also
+     self-heals any account that reaches the app with `registrationDone: false` for
+     ANY reason (a past session's abandoned attempt, a dropped connection) by silently
+     retrying `/register` with no code — safe because `completeRegistrationCore` is
+     idempotent (locked + a `registrationDone` guard), so this can never double-credit
+     the welcome bonus or re-run team-count increments; it only ever finishes an
+     incomplete signup.
+  - **Verification**: added a new section to `test-registration-reconciliation.js`
+    proving `GET /account` exposes `registrationDone` and that retrying `/register`
+    with no code after a bad-code rejection genuinely finishes registration (welcome
+    bonus lands, a real referral code gets assigned) — this is the exact server-side
+    behavior the new client self-heal depends on. Full `test-*.js` suite green.
+    `node build-core.js` round-trip OK (407,723 bytes); `user/sw.js` cache bumped to
+    `space8-shell-v215`.
+- **Not changed, deliberately**: password minimum length stays Firebase's default
+  (6 chars, enforced client-side too) — raising it is a product decision for the owner,
+  not a "hack" fix, and wasn't flagged as broken. `cors({origin:'*'})` stays as-is —
+  this API is Bearer-token authenticated (never cookies), so a wildcard origin doesn't
+  expose CSRF-style risk the way it would for a cookie-authenticated API.
+
 ## 2026-08-16 — Claude — Task Center backend shipped (Codex's handoff applied + corrected); admin banner-upload "disturbance" root-caused and fixed; product-edit "override" investigated (no bug found)
 
 - **Task Center backend (fulfills Codex's handoff above)**:

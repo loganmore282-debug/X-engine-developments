@@ -162,6 +162,30 @@ async function registerFully(uid, phone, referralCode) {
   r = await ownerCall('/admin/user/complete-registration', { referralCode: '' });
   check('missing userId -> 400', r.code === 400, r.body);
 
+  console.log('\n== GET /account exposes registrationDone, so the client can self-heal a stuck signup ==');
+  // 2026-08-16: registering with a WRONG referral code used to leave a
+  // member stuck forever with no way to notice or retry -- Firebase already
+  // signed them in, so the app just showed them the (broken, half-empty)
+  // home screen with no obvious "finish registering" affordance. The client
+  // now checks account.registrationDone on every fresh sign-in and, if
+  // false, silently retries /register with no code (see the 'space8-auth'
+  // listener in original_module.js) -- this proves the two pieces that fix
+  // depends on: the field is actually present in the response, and a
+  // no-referral-code retry after a bad-code rejection genuinely finishes
+  // registration rather than erroring again.
+  const HEAL = 'rr-self-heal';
+  await createProfileOnly(HEAL, '0771950005');
+  r = await call('POST', '/register', { token: 'uid:' + HEAL, body: { referralCode: 'TOTALLY-BOGUS' } });
+  check('bad referral code on first attempt is rejected, not silently ignored', r.code === 400 && r.body?.code === 'BAD_REFERRAL', r.body);
+  r = await call('GET', '/account', { token: 'uid:' + HEAL });
+  check('/account reports registrationDone: false right after the rejected attempt', r.body?.account?.registrationDone === false, r.body?.account);
+  r = await call('POST', '/register', { token: 'uid:' + HEAL, body: {} });
+  check('retrying /register with no code (what the client self-heal does) succeeds', r.body?.status === 'success', r.body);
+  check('welcome bonus actually landed', userDoc(HEAL).walletBalance === r.body.welcomeBonus, userDoc(HEAL));
+  r = await call('GET', '/account', { token: 'uid:' + HEAL });
+  check('/account now reports registrationDone: true', r.body?.account?.registrationDone === true, r.body?.account);
+  check('a real referral code was assigned despite the earlier bad-code rejection', typeof r.body?.account?.referralCode === 'string' && r.body.account.referralCode.length > 0, r.body?.account);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });
