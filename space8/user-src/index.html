@@ -17,14 +17,19 @@
   --void:   #f4f7fb;
   --surface:#ffffff;
   --surface-2:#eef2f8;
-  --surface-blue:#eaf1fc;
+  --surface-blue:#e7f6ef;
   --line:   #d7dfec;
   --ink:    #0a1220;
   --ink-dim:#5b6b84;
-  --blue:   #0f52ba;
-  --blue-dim:#0b3e8f;
-  --blue-mute:#5d80b8;
-  --blue-glow: rgba(15,82,186,.20);
+  /* Variables keep the "--blue*" names (avoids a risky mass-rename across
+     every var(--blue...) reference in this file) but now hold the app's
+     dominant GREEN -- an emerald, chosen to read as elegant/jewel-toned
+     rather than neon, at a similar depth/contrast to the sapphire blue it
+     replaced so every existing text/icon/border use stays legible. */
+  --blue:   #0e8a5c;
+  --blue-dim:#0a6b47;
+  --blue-mute:#5fa187;
+  --blue-glow: rgba(14,138,92,.20);
   --danger: #d1293e;
   --danger-bg: rgba(209,41,62,.1);
   --radius-card: 20px;
@@ -296,9 +301,9 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 
 <div id="loadingScreen">
   <svg class="mark" viewBox="0 0 200 200" fill="none">
-    <circle cx="100" cy="62" r="46" stroke="#0f52ba" stroke-width="16"/>
-    <circle cx="100" cy="138" r="46" stroke="#0f52ba" stroke-width="16"/>
-    <circle cx="132" cy="28" r="10" fill="#0f52ba"/>
+    <circle cx="100" cy="62" r="46" stroke="#0e8a5c" stroke-width="16"/>
+    <circle cx="100" cy="138" r="46" stroke="#0e8a5c" stroke-width="16"/>
+    <circle cx="132" cy="28" r="10" fill="#0e8a5c"/>
   </svg>
   <div class="spin"></div>
 </div>

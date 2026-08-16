@@ -14,6 +14,43 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Dominant accent color switched from blue to green
+
+- **What changed**: `user-src/index.html`'s `:root` token block — `--blue: #0f52ba`
+  (Sapphire) → `--blue: #0e8a5c` (an emerald green), with companions recalculated from
+  the new hue: `--blue-dim: #0a6b47`, `--blue-mute: #5fa187`, `--blue-glow:
+  rgba(14,138,92,.20)`, `--surface-blue: #e7f6ef`. Also updated the 3 literal `#0f52ba`
+  hex values in the loading-screen mark SVG (the one place a color is hardcoded instead
+  of referencing the CSS variable) to match. **Deliberately did NOT rename the CSS
+  custom properties** (`--blue`, `--blue-dim`, etc. keep their old names holding a new
+  green value) — a full rename across every `var(--blue...)` reference in this ~600KB
+  file was judged a needless risk (easy to miss one occurrence) versus just swapping the
+  5 values at the source, which is exactly the same approach already used earlier this
+  session when blue itself changed from `#2e6bff` to `#0f52ba`. Flagged clearly in
+  `CLAUDE.md` so a future session reading the CSS isn't confused by a "--blue" variable
+  holding green. Bumped `user/sw.js` cache to `space8-shell-v206`.
+- **Why**: the owner's message ("change to green... the color is dull, or make that blue
+  shine") was ambiguous between two very different asks — a full rebrand vs. a shade
+  tweak — so this was clarified with `AskUserQuestion` rather than guessed, given how
+  much of this session's own work (and the prior "make blue dominant" round) was built
+  specifically around blue. The owner confirmed: full switch to green.
+- **Verification**: `node build-core.js` round-trip OK. Grepped for any remaining
+  `0f52ba`/`2e6bff` literal hex across both `user-src/index.html` and
+  `user-src/original_module.js` — none left. Backend `test-*.js` suite (57 files) re-run
+  and still fully green, as expected for a pure-CSS change. Playwright screenshots of
+  Home/Products/Account confirm the swap propagated everywhere blue previously appeared
+  (nav, section headers, icons, balance-card lining, stat-tile backgrounds, buttons, the
+  loading-screen mark) with no leftover blue and no rendering errors.
+- **Left open**: the app icon set (`icon-192.png`/`icon-512.png`/maskable variants/
+  favicon — the "Orbital 8" mark) is still rendered in the OLD blue and was intentionally
+  left alone this entry, since the ask was clearly about the in-app UI theme, not a full
+  brand-mark regeneration — flag to the owner that the icon may now look mismatched
+  against the new green UI, and ask before touching it (it's a multi-file Playwright
+  re-render job, not a CSS tweak). `admin-src/`/`admin/` were also not touched, per the
+  standing three-part-split rule (admin panel styling changes are out of scope here).
+
+---
+
 ## 2026-08-16 — Claude — Codex review verified and acted on: 4 real money-safety bugs fixed, design finding partially applied
 
 - **What changed**: the owner relayed a Codex review of this branch listing 8 numbered

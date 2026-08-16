@@ -60,20 +60,27 @@ The owner was explicit and this must not be re-litigated without them saying so:
 Static mockup, still in the repo: **`space8/design/visual-system-mockup.html`**. The real
 app in `user-src/` was built directly against this.
 
-- **Palette — white/ink + one DOMINANT blue, nothing else.** `--blue: #0f52ba` (Sapphire —
-  changed 2026-08-16 from an earlier brighter `#2e6bff` per the owner: "why is blue not
-  dominant, I want it everywhere... use another elegant good blue"). Also `--blue-dim:
-  #0b3e8f` (darker, hover/pressed/claim-pill borders), `--blue-mute: #5d80b8` (muted-but-
-  still-blue, used for inactive states so they read as part of the blue family rather than
-  plain gray), `--blue-glow: rgba(15,82,186,.20)` (icon-circle backgrounds + button shadow
-  color, reused for both). Blue is applied broadly on purpose: nearly every SVG icon
-  (topbar, nav — active AND inactive, form fields, ticker, account matrix, menu rows +
-  chevrons), `.btn-secondary`/`.btn-ghost` outlines, assistant quick-reply chips. The two
-  deliberate exceptions are `.action-btn.done`/`.milestone-card.done` (kept gray — a
-  semantic "already claimed" muted state, not leftover neutral). A single desaturated red
-  (`--danger`) is the only non-blue accent, reserved for genuine failure states. No violet,
-  no gold, no green, no gradients anywhere (the auth screens and sheets are flat, no hero
-  image/gradient — see below).
+- **Palette — white/ink + one DOMINANT accent color, nothing else.** As of 2026-08-16 the
+  accent is **green** (an emerald, `--blue: #0e8a5c`) — changed from blue per the owner:
+  "change to green... the color is dull" (asked to choose between "make blue shine" or a
+  full switch; confirmed explicitly: "Switch to green"). **The CSS custom properties kept
+  their `--blue*` names on purpose** (`--blue`, `--blue-dim: #0a6b47`, `--blue-mute:
+  #5fa187`, `--blue-glow: rgba(14,138,92,.20)`, `--surface-blue: #e7f6ef`) — a full
+  rename across every `var(--blue...)` reference in `user-src/index.html` was judged
+  higher-risk (easy to miss an occurrence) than just swapping the values, which is exactly
+  how blue itself already changed shade once earlier the same session (`#2e6bff` →
+  `#0f52ba` → now green). Don't be misled by the name when reading the CSS — check the
+  actual hex. Applied broadly on purpose: nearly every SVG icon (topbar, nav — active AND
+  inactive, form fields, ticker, account matrix, menu rows + chevrons), `.btn-secondary`/
+  `.btn-ghost` outlines, assistant quick-reply chips, `.section-title` headers, pale-tinted
+  stat cards (`.mystats .card`, `.mtile`, new `--surface-blue` token), and subtle card
+  linings (`.balance-card`, `.prod-card`, `.plan-card`). The two deliberate exceptions are
+  `.action-btn.done`/`.milestone-card.done` (kept gray — a semantic "already claimed"
+  muted state, not leftover neutral). A single desaturated red (`--danger`) is the only
+  non-accent color, reserved for genuine failure states. No violet, no gold, no gradients
+  anywhere (the auth screens and sheets are flat, no hero image/gradient — see below).
+  If the accent color changes again, prefer the same value-only-swap approach unless a
+  future session has a strong reason to do the full rename.
 - **Typography**: a single self-hosted Inter variable font (weights 400–800, base64
   `@font-face`, changed 2026-08-16 from an earlier two-font Instrument Sans + Space Mono
   system per the owner). `.mono` only sets `font-variant-numeric:tabular-nums` now, no
