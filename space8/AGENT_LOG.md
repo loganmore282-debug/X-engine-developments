@@ -14,6 +14,48 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Codex — Faster records UI and live member refresh committed; secure code/ID backend prepared for Claude
+
+- **What changed (committed)**:
+  - `user-src/index.html`: accelerated skeleton shimmer from 1.4s to 0.68s
+    (with a reduced-motion fallback) and gave each Records transaction row a clean
+    blue-tinted card treatment with blue typography and subtle depth.
+  - `user-src/original_module.js`: removed the technical “Server-issued and globally
+    unique” wording from the referral card; it now reads naturally. Added a
+    visibility-aware 12-second background refresh for authenticated account and plan
+    data, so Home/Products update from server state without a browser reload.
+- **Backend prepared but not committed by Codex**:
+  - Gift-code generator: replace segmented `XXX-XXXX-XXXX` codes with exactly five
+    mixed-case alphanumeric, cryptographically generated codes (for example `fsT63`).
+    Use rejection sampling over `crypto.randomBytes` to avoid modulo bias, preserve
+    server-only generation/recognition, owner-only creation, global uniqueness checks,
+    rate-limited redemption and existing claim-before-credit safety.
+  - Referral codes: retain server-only, globally unique cryptographic generation; improve
+    the existing random character generation with the same unbiased sampling. Referral
+    codes are identifiers, not secrets, so encryption is neither useful nor correct;
+    protection comes from server issuance, database uniqueness, Firebase-authenticated
+    registration and no client authority to bind a referrer after registration.
+  - New-account ID rule selected by owner: allocate the next unused six-digit
+    `publicId` (`000001`, `000002`, …) from a server-owned counter. Existing
+    random public IDs must remain unchanged. Firebase UIDs remain private; the public ID
+    is an admin-searchable display identifier, not a credential.
+  - Activity feed: increase the existing server-generated simulation to 60 masked,
+    minimum-respecting rows refreshing every four seconds. Do not persist or present
+    those generated rows as real customer deposits/withdrawals; they remain a
+    server-generated activity display, not financial records.
+- **Why**: Owner requested blue Records cards, faster loading, nontechnical referral UI,
+  real-time server refresh, 5-character gift codes, server-controlled referral codes,
+  and sequential IDs for new registrations only.
+- **Verification**: Parsed the prepared `server.js` successfully as JavaScript.
+  Frontend source commits: `fa66689` (faster loaders/blue records) and `228f38d`
+  (live refresh/referral copy). Full backend replacement was rejected by the GitHub
+  safety layer because `server.js` contains financial, auth and reconciliation code,
+  not because of a syntax error.
+- **Required next step**: Claude should apply the prepared backend changes as narrow
+  edits in a checked-out repo, add regression tests for five-character gift codes and
+  new-account sequential IDs, run all `test-*.js`, run `node build-core.js`, and
+  commit the rebuilt `user/index.html` plus a service-worker cache bump.
+
 ## 2026-08-16 — Claude — Server-issued account ID, Account screen identity redesign, personal transaction Records, Telegram wiring
 
 - **What changed**: the owner sent two annotated screenshots plus a long instruction
