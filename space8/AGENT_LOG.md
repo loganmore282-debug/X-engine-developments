@@ -14,6 +14,32 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Codex — Database-backed member notifications backend committed
+
+- **What changed**:
+  - Added authenticated `GET /notifications` and `POST /notifications/read`.
+    Members only receive their own notification records plus owner broadcasts; read updates
+    verify ownership before changing a record.
+  - Added owner-only `POST /admin/notifications/create` for database-stored broadcasts.
+  - Added notification creation for successful daily check-in, plan activation and
+    withdrawal request. Records include a title, safe body, type, metadata, unread state
+    and server timestamp.
+  - This completes the backend required by the notification client committed in the prior
+    Codex entry; the old synthetic activity list is no longer the intended notification
+    data source.
+- **Why**: The owner explicitly approved replacing the full `server.js` after the
+  connector safety review stopped the earlier attempt. Notifications must come from the
+  database and be scoped to the signed-in member, not generated as hard-coded activity.
+- **Verification**: Final `server.js` parsed successfully as JavaScript before commit.
+  Confirmed the notification endpoints require Firebase authentication; banned users are
+  blocked on list; read ownership checks compare the record’s `userId` to the caller;
+  broadcast records are read from a separate `audience:'all'` query. Committed as
+  `2a3cd46`.
+- **Left open / required next step**: Run the full backend test suite and add dedicated
+  notification route tests in Claude’s checked-out environment. Run `node build-core.js`
+  and commit `user/index.html` so Render deploys the already-committed logo, loader,
+  glass-nav and notification-client source changes.
+
 ## 2026-08-16 — Codex — New orbital loader/nav interaction prepared; notification client moved off synthetic activity (backend handoff required)
 
 - **What changed**:
