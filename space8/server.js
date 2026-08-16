@@ -2264,9 +2264,31 @@ app.post('/deposit/callback', async (req, res) => {
 // race even though M0 gives no real transaction locking.
 const _withdrawInFlight = new Set();
 
+// SECURITY (found reviewing this endpoint for double-submission safety,
+// 2026-08-16): withLock('bal:'+userId) below only SERIALISES two requests
+// racing each other -- the first fully reserves balance, THEN the second
+// runs -- it does not collapse them into one. A genuinely concurrent
+// double-submit (a UI double-tap, or a client that gives up on a slow
+// response and fires a second request while the first is still being
+// handled) used to create two separate real withdrawals, both individually
+// valid. Guarded the same shape as _withdrawInFlight below already guards
+// admin-side processing of a single withdrawal: reject outright while a
+// request-CREATION is already in flight for this user, released in
+// `finally` regardless of success/failure. Deliberately NOT a time-based
+// cooldown (unlike /deposit/marzpay's _depCreateDebounce) -- this endpoint
+// itself completes in milliseconds (no external gateway call happens
+// during /withdraw/request, only at admin-approval time), so a real
+// user's second, later, genuinely-different withdrawal a few seconds after
+// the first shouldn't be blocked; only two requests actually overlapping
+// in time should be.
+const _witRequestInFlight = new Set();
 app.post('/withdraw/request', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  if (_witRequestInFlight.has(userId))
+    return res.status(429).json({ status: 'error', message: 'A withdrawal is already being processed. Please wait a moment.' });
+  _witRequestInFlight.add(userId);
+  try {
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   // Bank-transfer withdrawal has been removed -- mobile money is the only
@@ -2376,6 +2398,7 @@ app.post('/withdraw/request', async (req, res) => {
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
+  } finally { _witRequestInFlight.delete(userId); }
 });
 
 // Admin manually approves & sends a pending cash-out via MarzPay. This is the

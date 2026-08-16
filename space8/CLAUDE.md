@@ -303,6 +303,39 @@ when verifying an existing one, so an account with a weak PIN from before this c
 existed can still use it. Mirrored client-side in `user-src/original_module.js` for
 instant feedback; the server call is the real enforcement.
 
+**Withdrawal requests are guarded against genuine concurrent double-submission**,
+added 2026-08-16 (`_witRequestInFlight` in `server.js`, a per-user `Set`, not a
+time-based cooldown — see `/deposit/marzpay`'s `_depCreateDebounce` for the OTHER
+pattern used elsewhere). If you ever need to add a similar guard to another
+member-facing money endpoint, default to the in-flight-`Set` shape (correct for an
+endpoint that itself completes fast, no external gateway call at request time) over a
+wall-clock debounce (correct for an endpoint where the client legitimately waits
+several seconds for a slow external call, like MarzPay collection) — using the wrong
+one either misses genuine races or blocks legitimate rapid-but-distinct requests.
+Testing a `Set`-based concurrency guard against the in-memory mock DB needs a real
+macrotask yield inserted into the test's own `runTransaction` (see
+`test-withdrawal-concurrency-guard.js`) — the mock otherwise resolves a whole request
+as one unbroken microtask chain with no genuine overlap possible between two "parallel"
+`fetch()` calls, which would make the guard look untestable/broken when it's actually
+correct.
+
+**Payout accounts are a real multi-account list, not a single bound account.** The
+server always supported this (`/bank/save` `.add()`s a new row every time, never
+overwrites; `/bank/delete` is PIN-gated and ownership-checked) but the UI only ever
+showed `accounts[0]` until 2026-08-16. Now: `openPayoutSheet()` lists every bound
+account with an inline (no popup) PIN-gated delete; `openDepositSheet()` requires
+picking one of the saved accounts to pay from (client-side convenience, not a new
+`/deposit/marzpay` server restriction — deposits still accept any phone/network sent,
+since money can only ever move IN, not out, through that endpoint); `openWithdrawSheet()`
+shows a picker too once more than one account exists, rather than silently using
+whichever was bound first. Records/History/Payout-account rows all share one visual
+treatment: solid `var(--blue)` background, square-ish corners (`.record-row` in
+`user-src/index.html`) — replacing an earlier pale-gradient rounded-card look, per the
+owner's explicit "blue and box not rounded." Every list empty-state the owner named
+(Records, Deposit/Withdrawal History, Notifications) reads "No more data" — Team
+referrals and Task Center empty states were deliberately left with their own wording,
+not touched.
+
 **Referral commission is deliberately first-purchase-only, confirmed intentional —
 don't re-flag this as a bug.** L1/L2/L3 commission pays exactly once, off a member's
 first-ever investment (`isFirstInvestment` on the investment doc), never on later

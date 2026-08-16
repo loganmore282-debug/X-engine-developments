@@ -89,7 +89,8 @@ var ICONS = {
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
   phone: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
-  telegram: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 4-9.4 16-2.6-7-7-2.6Z"/><path d="M21 4 8.9 12.9"/></svg>'
+  telegram: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 4-9.4 16-2.6-7-7-2.6Z"/><path d="M21 4 8.9 12.9"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
 };
 function ico(name){ return ICONS[name] || ''; }
 
@@ -500,13 +501,13 @@ async function openRecordsSheet(){
   var r = await api('/transactions', null, 'GET');
   var body = $('recordsBody'); if (!body) return;
   var items = (r.status === 'success' && r.transactions) || [];
-  if (!items.length) { body.innerHTML = emptyState('doc','No transactions yet.'); return; }
+  if (!items.length) { body.innerHTML = emptyState('doc','No more data'); return; }
   body.innerHTML = items.map(function(t){
     var meta = recordMeta(t.type);
     var neg = (t.amount||0) < 0;
     return '<div class="member-row record-row"><div class="info"><div class="phone">' + esc(meta.label) + '</div>' +
       '<div class="date">' + esc(t.description||'') + '<br>' + esc(t.date||'') + ' ' + esc(t.time||'') + '</div></div>' +
-      '<span class="mono" style="font-weight:700;color:' + (neg?'var(--danger)':'var(--blue)') + ';flex-shrink:0;margin-left:10px">' +
+      '<span class="mono" style="font-weight:700;color:' + (neg?'#ffd0d6':'#fff') + ';flex-shrink:0;margin-left:10px">' +
         (neg?'−':'+') + ugx(Math.abs(t.amount||0)) + '</span></div>';
   }).join('');
 }
@@ -645,11 +646,11 @@ function openHistorySheet(kind){
   api(kind === 'deposit' ? '/deposits' : '/withdrawals').then(function(r){
     var body = $('histBody'); if (!body) return;
     var items = (r.status === 'success' && (r.deposits||r.withdrawals)) || [];
-    if (!items.length) { body.innerHTML = emptyState('history','No ' + kind + 's yet.'); return; }
+    if (!items.length) { body.innerHTML = emptyState('history','No more data'); return; }
     body.innerHTML = items.map(function(x){
       var s = String(x.status || '').toLowerCase();
       var pillClass = STATUS_DONE.indexOf(s) !== -1 ? 'pill-done' : STATUS_FAIL.indexOf(s) !== -1 ? 'pill-fail' : 'pill-active';
-      return '<div class="member-row"><div class="info"><div class="phone mono">' + ugx(x.amount) + '</div>' +
+      return '<div class="member-row record-row"><div class="info"><div class="phone mono">' + ugx(x.amount) + '</div>' +
       '<div class="date">' + esc(x.date) + ' ' + esc(x.time) + '</div></div>' +
       '<span class="pill ' + pillClass + '">' + friendlyStatus(x.status) + '</span></div>';
     }).join('');
@@ -833,37 +834,87 @@ async function openInfoSheet(key){
 }
 
 // ── PAYOUT ACCOUNT / PIN ─────────────────────────────────────────────
+// Multiple mobile-money accounts can be bound (server already supports
+// this -- /bank/save always adds a new row, never overwrites) -- shown
+// here as a list so a member can hold more than one and pick between them
+// at withdraw/deposit time, and remove one they no longer use.
+var _payoutDeletePending = null;
 async function openPayoutSheet(){
   openSheet('payout', '<div class="sk sk-line"></div>');
+  await renderPayoutSheet();
+}
+async function renderPayoutSheet(){
   var r = await api('/bank/list', null, 'GET');
   var accounts = r.status === 'success' ? r.accounts : [];
   STATE.bankAccounts = accounts;
-  var existing = accounts[0];
+  var listHtml = accounts.length ? accounts.map(function(a){
+    var pending = _payoutDeletePending === a.id;
+    return '<div class="record-row acct-row" data-id="' + esc(a.id) + '">' +
+      '<div class="info"><div class="phone">' + esc(a.holder) + '</div>' +
+      '<div class="date">' + esc(a.network) + ' · ' + esc(a.phone) + '</div>' +
+      (pending ?
+        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center">' +
+          '<input type="password" inputmode="numeric" maxlength="4" placeholder="PIN" class="del-pin" style="width:64px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:8px 10px;color:#fff;font-size:14px">' +
+          '<button class="btn-confirm-del" style="background:#fff;color:var(--danger);border:none;border-radius:8px;padding:8px 12px;font-weight:700;font-size:12.5px">Delete</button>' +
+          '<button class="btn-cancel-del" style="background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:600;font-size:12.5px">Cancel</button>' +
+        '</div>' : '') +
+      '</div>' +
+      (!pending ? '<button class="acct-del" data-del="' + esc(a.id) + '">' + ico('trash') + '</button>' : '') +
+    '</div>';
+  }).join('') : emptyState('wallet', 'No payout accounts bound yet.');
+
   openSheet('payout',
-    '<div class="sheet-title">Payout Account</div>' +
-    '<div class="sheet-sub">' + (existing ? 'Your bound mobile-money payout details.' : 'Bind a mobile-money account to receive withdrawals.') + '</div>' +
+    '<div class="sheet-title">Payout Accounts</div>' +
+    '<div class="sheet-sub">Mobile-money accounts you can withdraw to.</div>' +
+    listHtml +
+    '<div class="plain-note">Withdrawals only ever go to an account bound here, never a number typed at withdrawal time. Add another account below, or remove one you no longer use with your withdrawal PIN.</div>' +
     '<div class="auth-form">' +
-      '<div class="field">' + ico('wallet') + '<input id="payHolder" placeholder="Account holder name" value="' + esc(existing?existing.holder:'') + '"></div>' +
+      '<div class="field">' + ico('wallet') + '<input id="payHolder" placeholder="Account holder name"></div>' +
       '<select id="payNetwork" class="field" style="appearance:none">' +
-        '<option value="MTN Mobile Money" ' + (existing&&existing.network==='MTN Mobile Money'?'selected':'') + '>MTN Mobile Money</option>' +
-        '<option value="Airtel Money" ' + (existing&&existing.network==='Airtel Money'?'selected':'') + '>Airtel Money</option>' +
+        '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
+        '<option value="Airtel Money">Airtel Money</option>' +
       '</select>' +
-      '<div class="field">' + ico('phone') + '<input id="payPhone" placeholder="07XXXXXXXX" value="' + esc(existing?existing.phone:'') + '"></div>' +
+      '<div class="field">' + ico('phone') + '<input id="payPhone" placeholder="07XXXXXXXX"></div>' +
       '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN"></div>' +
       '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
     '</div>' +
-    '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Save Payout Account</button>'
+    '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Payout Account</button>'
   );
+
+  qsa('.acct-del').forEach(function(btn){
+    btn.onclick = function(){ _payoutDeletePending = btn.dataset.del; renderPayoutSheet(); };
+  });
+  qsa('.btn-cancel-del').forEach(function(btn){
+    btn.onclick = function(){ _payoutDeletePending = null; renderPayoutSheet(); };
+  });
+  qsa('.btn-confirm-del').forEach(function(btn){
+    btn.onclick = async function(){
+      var row = btn.closest('.acct-row');
+      var pin = qs('.del-pin', row).value;
+      if (!/^\d{4}$/.test(pin)) return toast('Enter your 4-digit PIN', true);
+      btn.textContent = '…'; btn.disabled = true;
+      var r2 = await api('/bank/delete', { id: _payoutDeletePending, pin: pin });
+      if (r2.status === 'success') {
+        toast('Account removed');
+        _payoutDeletePending = null;
+        STATE.bankAccounts = null;
+        renderPayoutSheet();
+      } else {
+        toast(r2.message, true);
+        btn.textContent = 'Delete'; btn.disabled = false;
+      }
+    };
+  });
   $('savePayoutBtn').onclick = async function(){
     var btn = $('savePayoutBtn');
     var holder = $('payHolder').value.trim(), network = $('payNetwork').value;
     var phone = $('payPhone').value, pin = $('payPin').value;
     if (!holder || !cleanPhone(phone) || !/^\d{4}$/.test(pin)) return toast('Fill in all fields correctly', true);
     setBtnLoading(btn, true, 'Saving…');
-    var r = await api('/bank/save', { holder: holder, network: network, phone: phone, pin: pin });
+    var r2 = await api('/bank/save', { holder: holder, network: network, phone: phone, pin: pin });
     setBtnLoading(btn, false);
-    if (r.status === 'success') { toast('Payout account saved'); closeSheet('payout'); STATE.bankAccounts = null; STATE.hasPayoutPin = true; }
-    else toast(r.message, true);
+    if (r2.status === 'success') { toast('Payout account saved'); STATE.bankAccounts = null; STATE.hasPayoutPin = true; renderPayoutSheet(); }
+    else toast(r2.message, true);
   };
 }
 async function openPinSheet(){
@@ -891,30 +942,61 @@ async function openPinSheet(){
 }
 
 // ── DEPOSIT ───────────────────────────────────────────────────────────
-function openDepositSheet(){
-  var acc = STATE.account || {};
+// Deposits now pay FROM a saved payout account, same list withdrawals use,
+// rather than a phone/network typed fresh every time -- owner explicit:
+// "every time he wants to deposit he must select the account in payout
+// accounts." (This is a client-side convenience/consistency choice, not a
+// new server restriction -- /deposit/marzpay itself still just takes
+// whatever phone/network is sent, same as before; there's no money-safety
+// reason to lock deposits to a bound account the way withdrawals are,
+// since a deposit can only ever move money INTO this account, never out.)
+async function openDepositSheet(){
+  openSheet('deposit', '<div class="sk sk-line"></div>');
   var min = (STATE.settings||{}).minDeposit || 20000;
+  var r = await api('/bank/list', null, 'GET');
+  var accounts = r.status === 'success' ? r.accounts : [];
+  STATE.bankAccounts = accounts;
+  if (!accounts.length) {
+    openSheet('deposit',
+      '<div class="sheet-title">Deposit</div>' +
+      emptyState('lock', 'Bind a payout account first to deposit.') +
+      '<button class="btn btn-primary" id="goToBindBtnDep">Bind Payout Account</button>'
+    );
+    $('goToBindBtnDep').onclick = function(){ closeSheet('deposit'); openPayoutSheet(); };
+    return;
+  }
+  renderDepositSheet(accounts, accounts[0].id, min);
+}
+function renderDepositSheet(accounts, selectedId, min){
+  var listHtml = accounts.map(function(a){
+    var sel = a.id === selectedId;
+    return '<div class="record-row acct-row selectable' + (sel?' selected':'') + '" data-id="' + esc(a.id) + '">' +
+      '<span class="acct-check">' + (sel ? ico('check') : '') + '</span>' +
+      '<div class="info"><div class="phone">' + esc(a.holder) + '</div>' +
+      '<div class="date">' + esc(a.network) + ' · ' + esc(a.phone) + '</div></div>' +
+    '</div>';
+  }).join('');
   openSheet('deposit', bannerHtml('basket','deposit') +
     '<div class="sheet-title">Deposit Funds</div>' +
     '<div class="sheet-sub">Minimum deposit ' + ugx(min) + '.</div>' +
-    '<div class="auth-form">' +
+    '<div class="plain-note">Choose which mobile-money account to pay from, then enter an amount. You\'ll get a payment prompt on that phone — enter your mobile money PIN there to approve. Your wallet updates automatically once the payment is confirmed.</div>' +
+    listHtml +
+    '<div class="auth-form" style="margin-top:14px">' +
       '<div class="field">' + ico('deposit') + '<input id="depAmount" type="number" inputmode="numeric" placeholder="Amount (UGX)"></div>' +
-      '<div class="field">' + ico('phone') + '<input id="depPhone" type="tel" placeholder="07XXXXXXXX" value="' + esc(acc.phone||'') + '"></div>' +
-      '<select id="depNetwork" class="field" style="appearance:none">' +
-        '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
-        '<option value="Airtel Money">Airtel Money</option>' +
-      '</select>' +
     '</div>' +
     '<button class="btn btn-primary" id="submitDepositBtn" style="margin-top:14px">Deposit Now</button>'
   );
+  qsa('.acct-row', $('depositSheet')).forEach(function(row){
+    row.onclick = function(){ renderDepositSheet(accounts, row.dataset.id, min); };
+  });
   $('submitDepositBtn').onclick = async function(){
     var btn = $('submitDepositBtn');
     var amt = parseInt($('depAmount').value, 10);
-    var phone = $('depPhone').value, network = $('depNetwork').value;
+    var acct = accounts.find(function(a){ return a.id === selectedId; });
     if (!amt || amt < min) return toast('Enter at least ' + ugx(min), true);
-    if (!cleanPhone(phone)) return toast('Enter a valid mobile-money number', true);
+    if (!acct) return toast('Select which account to pay from', true);
     setBtnLoading(btn, true, 'Initiating…');
-    var r = await api('/deposit/marzpay', { amount: amt, phone: phone, network: network });
+    var r = await api('/deposit/marzpay', { amount: amt, phone: acct.phone, network: acct.network });
     setBtnLoading(btn, false);
     if (r.status === 'success') {
       toast('Check your phone to approve the payment');
@@ -954,19 +1036,35 @@ async function openWithdrawSheet(){
     $('goToBindBtn').onclick = function(){ closeSheet('withdraw'); openPayoutSheet(); };
     return;
   }
-  var acct = accounts[0];
   var min = (STATE.settings||{}).minWithdraw || 20000;
   var feePct = (STATE.settings||{}).withdrawFeePct || 15;
+  renderWithdrawSheet(accounts, accounts[0].id, min, feePct);
+}
+function renderWithdrawSheet(accounts, selectedId, min, feePct){
+  var acct = accounts.find(function(a){ return a.id === selectedId; }) || accounts[0];
+  var listHtml = accounts.length > 1 ? accounts.map(function(a){
+    var sel = a.id === acct.id;
+    return '<div class="record-row acct-row selectable' + (sel?' selected':'') + '" data-id="' + esc(a.id) + '">' +
+      '<span class="acct-check">' + (sel ? ico('check') : '') + '</span>' +
+      '<div class="info"><div class="phone">' + esc(a.holder) + '</div>' +
+      '<div class="date">' + esc(a.network) + ' · ' + esc(a.phone) + '</div></div>' +
+    '</div>';
+  }).join('') : '';
   openSheet('withdraw', bannerHtml('marscrate','withdraw') +
     '<div class="sheet-title">Withdraw Funds</div>' +
-    '<div class="sheet-sub">To ' + esc(acct.holder) + ' · ' + esc(acct.network) + ' · ' + esc(acct.phone) + '</div>' +
-    '<div class="auth-form">' +
+    '<div class="sheet-sub">' + (accounts.length > 1 ? 'Choose which payout account to send to.' : ('To ' + esc(acct.holder) + ' · ' + esc(acct.network) + ' · ' + esc(acct.phone))) + '</div>' +
+    '<div class="plain-note">Enter the amount and your withdrawal PIN. The fee below is deducted automatically. Requests are reviewed and sent to your bound payout account — track the status anytime under Withdrawals in Products.</div>' +
+    listHtml +
+    '<div class="auth-form" style="margin-top:' + (listHtml?'14px':'0') + '">' +
       '<div class="field">' + ico('withdraw') + '<input id="wdAmount" type="number" inputmode="numeric" placeholder="Amount (UGX), min ' + ugx(min) + '"></div>' +
       '<div class="field-hint" id="feePreview">Fee ' + feePct + '% applies — enter an amount to see what you\'ll receive.</div>' +
       '<div class="field">' + ico('shield') + '<input id="wdPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit security PIN"></div>' +
     '</div>' +
     '<button class="btn btn-primary" id="submitWithdrawBtn" style="margin-top:14px">Request Withdrawal</button>'
   );
+  qsa('.acct-row', $('withdrawSheet')).forEach(function(row){
+    row.onclick = function(){ renderWithdrawSheet(accounts, row.dataset.id, min, feePct); };
+  });
   $('wdAmount').addEventListener('input', function(){
     var amt = parseInt(this.value,10) || 0;
     var fee = Math.round(amt * feePct / 100);
@@ -1077,7 +1175,7 @@ async function openNotificationsSheet(){
       '<div style="font-size:13px;color:var(--ink-dim);line-height:1.5">' + esc(n.body || '') + '</div>' +
       (n.createdAt ? '<div style="font-size:11px;color:var(--blue-mute);margin-top:8px">' + esc(timeAgo(n.createdAt)) + '</div>' : '') +
       '</div></div></div>';
-  }).join('') : emptyState('doc','No notifications yet.');
+  }).join('') : emptyState('doc','No more data');
   openSheet('generic', html);
   var unreadIds = items.filter(function(n){ return n.id && !n.readAt && !n.read; }).map(function(n){ return n.id; });
   if (unreadIds.length) api('/notifications/read', { ids: unreadIds }, 'POST', false).catch(function(){});

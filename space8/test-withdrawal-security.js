@@ -162,6 +162,15 @@ async function setupFundedUser(uid, phone, balance) {
   check('exactly 2 withdrawal docs total for carol (never 3)', [...withdrawals().values()].filter(w => w.userId === C).length === 2,
     [...withdrawals().values()].filter(w => w.userId === C).length);
   check('wallet debited for exactly one more withdrawal from the race', userDoc(C).walletBalance === carolBalBeforeRace - 20000, userDoc(C).walletBalance);
+  // Note: with the _witRequestInFlight guard added 2026-08-16, this race is
+  // now actually decided by that guard (rejecting the second request
+  // outright) before either one ever reaches the daily-cap check inside
+  // the transaction -- the observable result (exactly one success) is
+  // unchanged, so this test still holds. The guard itself, isolated from
+  // the daily cap, has its own dedicated coverage in
+  // test-withdrawal-concurrency-guard.js (this file's fake "uid:x" tokens
+  // share one rate-limit bucket with no headroom left to add more calls
+  // here).
 
   console.log('\n-- The cap is genuinely admin-editable and takes effect immediately --');
   // Admin master key goes in the Authorization header, per verifyAdmin()'s legacy-key path.

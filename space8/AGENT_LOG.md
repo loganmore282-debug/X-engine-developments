@@ -14,6 +14,102 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — ChatGPT (finding) + Claude (fix + UI round) — Withdrawal double-submission race fixed; blue-box account cards, deletable payout accounts, deposit account picker, "No more data" empty states, deposit/withdrawal instructions
+
+Owner asked ChatGPT to review the prior money-safety audit commit. ChatGPT confirmed
+everything else (auth coverage, weak-PIN check, checkin default, friendlyStatus mapping,
+Coming Soon->Upcoming, deposit/checkin/giftcode idempotency) but found one real gap
+Claude's audit missed: `/withdraw/request` had no protection against a genuinely
+concurrent double-submit (a UI double-tap, or a client that gives up on a slow response
+and fires a second request while the first is still being handled) — `withLock('bal:'+
+userId)` only SERIALISES two such requests (first fully reserves balance, then the
+second runs), it does not collapse them into one, so both could succeed and create two
+separate real withdrawals.
+
+- **Fix**: `_witRequestInFlight`, a `Set` guarding withdrawal-request CREATION per user,
+  checked/added synchronously (no `await` between check and add, so no race is possible
+  in the check itself) and released in `finally`. Deliberately NOT a time-based
+  cooldown like `/deposit/marzpay`'s `_depCreateDebounce` — first tried exactly that
+  (matching the deposit pattern), but `/withdraw/request` itself completes in
+  milliseconds (no external gateway call happens at request time, only later at
+  admin-approval), so a flat cooldown blocked a lot of legitimate same-user sequential
+  test scenarios (and would equally have blocked a real user's second, later, genuinely
+  different withdrawal) that a race-only guard doesn't. Confirmed by reverting to the
+  in-flight guard: the full suite went from ~28 failures (across
+  `test-abuse-analytics.js`, `test-push-notifications.js`, `test-settings-wired.js`,
+  `test-withdrawal-security.js`) back to 0.
+- **New `test-withdrawal-concurrency-guard.js`** (own file/port — `test-withdrawal-
+  security.js`'s fake `uid:x` tokens already share one rate-limit bucket with no
+  headroom) proves: two truly concurrent identical requests -> exactly one succeeds,
+  one gets 429 "already being processed"; a later, non-overlapping second withdrawal is
+  NOT blocked; the guard is per-user (two different users racing never block each
+  other). Getting genuine HTTP-level concurrency to actually reproduce against the
+  in-memory mock DB took real work — the mock resolves every DB op as one unbroken
+  microtask chain with no yield point, so two "concurrent" `fetch()` calls fired via
+  `Promise.all` were provably NOT overlapping at the server (confirmed by timestamped
+  debug logging) until a genuine macrotask yield (`setTimeout`, matching the phase of
+  the existing artificial `verifyIdToken` delay — `setImmediate` land in a different
+  event-loop phase and didn't interleave reliably) was added to the test's own local
+  `runTransaction` wrapper. Left a comment trail in that file for the next session
+  since this is a genuinely non-obvious Node event-loop characteristic, not a code bug.
+- **Also swept**: `verifyAuth`, `isWeakPin`, `friendlyStatus`, deposit/checkin/giftcode
+  idempotency — all re-checked against ChatGPT's report, no further changes needed.
+
+Same session, the owner also asked for a UI/UX round on top of this:
+- **Solid blue, square-cornered cards** ("blue and box not rounded") replacing the old
+  pale-gradient rounded `.record-row` used by Records, Deposit/Withdrawal History, and
+  now Payout Accounts too. Text color needed a real CSS-specificity fix along the way:
+  `.record-row .date{color:#fff}` and `.member-row .date{color:var(--ink-dim)}` are
+  equal-specificity descendant selectors, and `.member-row .date` (defined later in the
+  file) was silently winning wherever a row had both classes (Records, History) —
+  fixed with a `.member-row.record-row .date` override, which is unambiguously more
+  specific regardless of source order. Verified visually via a Playwright pass against
+  the built artifact with a mocked API (not a committed test — this is presentation
+  styling, not money-safety logic).
+- **"No more data"** replaces "No transactions yet." / "No deposits yet." / "No
+  withdrawals yet." / "No notifications yet." across Records, Deposit History,
+  Withdrawal History, and Notifications (`emptyState()` call sites in
+  `user-src/original_module.js`). Team-referrals and Task-Center empty states were left
+  alone — the owner named notifications/records/withdrawals specifically.
+  **Deposit/withdrawal history pill contrast was ALSO fixed while touching this file**:
+  `friendlyStatus()`'s pill background/text now uses translucent-white for
+  Processing/Successful and solid-white-with-red-text for Unsuccessful, since the row
+  itself is now solid blue (the old pale pill colors were tuned for a white row).
+- **Payout accounts are now a real list, not a single-account form.** The server
+  already fully supported multiple bound accounts (`/bank/save` always `.add()`s a new
+  row, never overwrites; `/bank/delete` already existed, PIN-gated, ownership-checked)
+  — the frontend just never surfaced more than `accounts[0]`. `openPayoutSheet()`
+  rewritten to list every bound account as a blue-box card with a trash-icon delete
+  button (new `trash` SVG added to `ICONS`); deleting asks for the withdrawal PIN
+  inline (no PIN, no delete — same PIN gate the endpoint already enforces) via an
+  inline expand-in-place row, not a popup (matches the app's no-modals convention).
+  Adding a new account no longer replaces the form's meaning ("Save" -> "Add Payout
+  Account"), since a save is now always additive.
+- **Deposits now require selecting a saved payout account** instead of typing a fresh
+  phone/network every time — owner's explicit ask. `openDepositSheet()` fetches
+  `/bank/list` first; if nothing's bound yet, prompts to bind one (same empty-state
+  pattern `/withdraw/request` already used); otherwise shows the accounts as
+  selectable blue-box cards (tap to switch) and submits using the selected account's
+  phone/network. This is a client-side convenience/consistency choice, not a new
+  server restriction — `/deposit/marzpay` itself is unchanged and still just takes
+  whatever phone/network is sent, since there's no money-safety reason (unlike
+  withdrawals) to lock a deposit's source to a bound account.
+  **`openWithdrawSheet()` extended the same way** for consistency, now that multiple
+  accounts can exist: previously hardcoded to `accounts[0]` (whichever was bound
+  first, silently), now shows a picker when more than one account exists.
+- **Deposit and withdrawal instructions added as plain, unframed text** (new
+  `.plain-note` class — no border, no card background, matching the owner's explicit
+  "just open, not framed in anything or lined") describing the actual mechanics: for
+  deposit, the mobile-money PIN prompt and auto-confirmation; for withdrawal, the fee
+  deduction and admin-review/tracking flow.
+- **Verification**: full `test-*.js` suite green (including the new concurrency-guard
+  file). `node build-core.js` round-trip OK (413,448 bytes). `user/sw.js` cache bumped
+  to `space8-shell-v218`. UI changes verified visually via Playwright screenshots
+  against the built artifact (payout list + inline delete, deposit account picker,
+  withdrawal account picker, Records/History blue cards with correct
+  Successful/Unsuccessful/Processing pills, both empty states) — not committed as
+  screenshots, just used to confirm rendering before shipping.
+
 ## 2026-08-16 — Claude — Deposits/withdrawals/checkin/giftcodes/PIN money-safety audit: 4 real changes shipped, everything else already sound
 
 Owner asked for a full pass over deposits, callbacks, records, withdrawals, checkin,
