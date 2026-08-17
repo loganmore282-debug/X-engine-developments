@@ -33,7 +33,11 @@ contains('my refferal commision is zero', ['first investment', '28% / 2% / 1%'])
 contains('how is investment paid', ['credited daily']);
 contains('how much is Sputnik 1', ['UGX 15,000', 'UGX 2,500/day']);
 contains('what are the rules', ['One account per person.']);
-contains('forgot password', ['Firebase Authentication', 'password recovery']);
+// Codex-verified real bug (2026-08-17): the sign-in screen has no
+// self-service password reset (confirmed against user-src/index.html's
+// #screenLogin markup) -- the assistant used to claim one existed. Now it
+// correctly points to Support instead.
+contains('forgot password', ['Firebase Authentication', 'contact Support']);
 contains('welcome registration bonus', ['UGX 5,000']);
 contains('MTN mobile money number', ['07XXXXXXXX', '+2567XXXXXXXX']);
 contains('my referral code didnt apply', ["can't be added", 'Support']);

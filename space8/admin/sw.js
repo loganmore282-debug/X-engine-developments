@@ -9,7 +9,15 @@ self.addEventListener('fetch', () => {});
 // rather than the Firebase Messaging SDK's own background handler, so this
 // file stays a plain no-op service worker plus exactly these two listeners;
 // no caching logic is ever added here.
-const SERVER = 'https://mybusinessuganda.onrender.com';
+// Codex-verified real bug (2026-08-17): this pointed at a stale/wrong
+// backend domain left over from before a rename -- admin-src/index.html
+// (and the user app) both use mycallbackurl.onrender.com, but this file
+// alone still said mybusinessuganda.onrender.com. Since this constant is
+// what the one-tap "Approve" button on a push notification posts to, that
+// mismatch meant tapping Approve straight from a notification (no admin
+// panel open) silently failed every time -- it was POSTing to a domain
+// that isn't this app's real backend.
+const SERVER = 'https://mycallbackurl.onrender.com';
 self.addEventListener('push', e => {
   let payload = {};
   try { payload = e.data ? e.data.json() : {}; } catch (_) {}

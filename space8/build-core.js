@@ -125,8 +125,27 @@ log('round-trip    : OK');
 // Classic (non-module) script — top-level `function foo(){}` in a script
 // inserted this way still becomes `window.foo`, so every onclick="foo()"
 // already in the HTML keeps working unchanged.
+// Codex-verified real gap (2026-08-17): DecompressionStream was used
+// unconditionally with no feature check, so a browser/WebView without it
+// (older Android WebView, some in-app browsers) silently never ran the app
+// at all -- it just sat on the loading screen forever with nothing in the
+// console pointing at why. A full pure-JS inflate fallback would mean
+// carrying an extra decompressor through the same obfuscation pipeline that
+// protects this file, which is a much bigger change than this warrants;
+// this at least turns a silent, indefinite hang into a message the member
+// (or whoever they show it to) can actually act on.
 const loaderIife =
 `(function(){
+if (typeof DecompressionStream === 'undefined') {
+  var show=function(){
+    var m=document.createElement('div');
+    m.style.cssText='position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:#0b0f14;color:#fff;font-family:sans-serif;font-size:15px;line-height:1.5';
+    m.textContent='This browser is too old to run Space8. Please update your browser (or open this link in Chrome) and try again.';
+    document.body.appendChild(m);
+  };
+  if (document.body) show(); else document.addEventListener('DOMContentLoaded', show);
+  return;
+}
 const _d=atob("${b64}");
 const _b=new Uint8Array(_d.length);
 for(let i=0;i<_d.length;i++)_b[i]=_d.charCodeAt(i);

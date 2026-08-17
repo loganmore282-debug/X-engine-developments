@@ -1044,7 +1044,7 @@ async function renderWithdrawals(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
       <button class="btn sm ghost" id="witSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own — mobile money AND bank transfer both go through the same MarzPay gateway and the same manual release.</p>
+    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own — mobile money is the only withdrawal rail members can request today (an old bank-transfer option some historical records may still show has been retired).</p>
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>

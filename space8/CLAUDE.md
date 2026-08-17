@@ -2430,6 +2430,21 @@ discoveries:**
 
 See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
 
+0. **Codex full-codebase audit (27 findings) — DONE as of 2026-08-17.** Went through
+   all 27 one by one: fixed every confirmed real bug (product/settings validation,
+   stored XSS escaping, delete-user reordering, session-epoch stale-response guard,
+   admin credit/debit bounds, nested-sheet Back-button bug, Team member cache
+   staleness, EAT day-boundary mismatch, ghost-account registration-failure handling,
+   broadcast audit-log gap, reconciler oldest-first ordering, 4 factually-wrong
+   assistant replies, stale push-approval domain, SW-reload-mid-claim, no
+   DecompressionStream fallback, misleading bank-transfer admin copy). Documented
+   (not changed) the items that are already-accepted architectural tradeoffs
+   (the non-atomic-transaction crash windows), confirmed-intentional past decisions
+   (staff-deletion attribution erasure), or out-of-proportion infra investments (CI
+   rebuild gate, mock-DB transaction fidelity). New `test-codex-round2-fixes.js`
+   (24/24); full suite 68/68. Read the 2026-08-17 "Codex full-codebase audit" entry
+   in `AGENT_LOG.md` before re-auditing this codebase from scratch — most of what a
+   fresh audit would find has already been triaged.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

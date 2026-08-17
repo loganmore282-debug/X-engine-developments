@@ -14,6 +14,147 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Codex full-codebase audit (27 findings): verified, fixed, documented, one by one; rebuilt and shipped
+
+- **What changed**: Owner asked Codex to do a full audit of every script/file in
+  `space8/`. It returned 27 findings (8 Critical/High, 10 Medium, 6 Low-but-real, 3
+  "checks that held up"). Owner's instruction was explicit: verify each one against
+  real code, fix what's real, document what's an accepted tradeoff or lower priority,
+  certify with tests, build, ship. Went through all 27 one by one rather than trusting
+  the report at face value — several findings described the SAME already-accepted
+  architectural tradeoff restated at new call sites (not new bugs), one (#8, staff-
+  deletion erasing audit attribution) is a confirmed-intentional past owner decision
+  with its own passing test, and one (#26, anti-clone guard allowing `*.onrender.com`)
+  is an explicitly-documented deliberate fallback for an in-progress domain migration
+  that would risk locking out the real production deploy if tightened blind.
+- **Critical/High fixed** (`server.js`): `sanitizeProductInput()` on
+  `/admin/products/save` (allowlisted key/name/price/cycle/expectedReturn, finite +
+  bounded); `SETTINGS_CRITICAL_RANGES` + `SETTINGS_BOOLEAN_FIELDS` on
+  `/admin/settings/update` (was raw-merging `withdrawFeePct:-100` and the truthy
+  string `"false"` straight into the DB); client-side `escNl()`/`safeExternalUrl()` in
+  `user-src/original_module.js` for About/Rules text and every `window.open()` call
+  site (stored XSS from a compromised owner session); `/admin/user/delete` reordered
+  (unsettled-activity check first, Firebase deletion before Mongo mutation, downline
+  reparenting) so it can't corrupt the referral tree or strand a payment; `STATE.
+  authEpoch` session-generation guard in `renderHome`/`renderProducts`/`renderTeam`/
+  `renderAccount`/`renderPayoutSheet` (a stale response landing after sign-out/switch
+  could leak the previous member's data onto the new one's screen); `/admin/deposit`
+  and `/admin/debit` now reject non-finite/negative/over-`MAX_MONEY_AMOUNT` amounts.
+- **Medium fixed**: nested-sheet Back-button bug (item #9) — `openPlanDetailSheet()`
+  used to share the exact same `'generic'` sheet slot/name as `openMyProductsSheet()`,
+  so opening a plan from My Products then pressing Back closed the whole overlay
+  instead of revealing My Products underneath (a ghost stack entry, same root cause as
+  the withdraw+picker stacking bug fixed earlier this session, just not caught for
+  this pair) — gave Plan Detail its own `planDetailSheetBg`/`planDetailSheet` slot in
+  `user-src/index.html` so it stacks correctly, matching the withdraw+payout-picker
+  precedent. Team member list cache (#10) — `STATE.teamMembers[level]` was cached for
+  the whole session with no invalidation, so a referral joining after the first Team
+  visit never appeared even though the Total Referrals counter above it kept
+  refreshing live — `renderTeam()` now fetches stats first and invalidates only the
+  level(s) whose cached length disagrees with the fresh count, keeping the original
+  flicker-avoidance fix (Round ~58) intact for the common no-change case. Stale
+  Cumulative Earnings + wrong day boundary (#11) — `isToday()`/check-in's optimistic
+  `lastCheckin` used device-local time against a server value stamped in East Africa
+  Time (`eatDateStr()` helper now shared by both, matching `server.js`'s `nowStr()`
+  exactly); `doCheckin()`'s optimistic update now also bumps `totalEarned` alongside
+  `walletBalance` (server already credits both together). Ghost-account recovery
+  (#12) — the `space8-auth` listener's self-heal `/register` call used to ignore its
+  own response and always call `enterApp()`; a failed self-heal (rate limit, ban,
+  dropped connection) now routes to the exact same register-screen retry flow the
+  explicit Create Account button already uses on failure, instead of an empty/broken
+  app shell. Broadcast audit gap (#15, the real half) — `/admin/notifications/create`
+  now calls `logAdminAction(req,'broadcast_sent',...)`; the readBy-array growth
+  concern (same finding, other half) is a genuine MongoDB-doc-limit risk at a scale
+  this single-market platform isn't near yet — documented, not restructured this
+  round. Push-approval stale domain (#16) — `admin/sw.js`'s `SERVER` constant pointed
+  at `mybusinessuganda.onrender.com`, a leftover from before a rename;
+  `admin-src/index.html` already used `mycallbackurl.onrender.com` — the one-tap
+  push-notification "Approve" button was silently POSTing to a dead domain. Reconciler
+  starvation (#17) — `reconcilePendingDeposits()`/`reconcilePendingWithdrawals()`/
+  `reconcileCashback()` all queried with a `.limit()` but no `.orderBy()`, so at high
+  enough volume the same arbitrary subset could be retried every sweep while records
+  past the cap never got checked — added `.orderBy('createdAt','asc')` to all three so
+  the cap is always the OLDEST-waiting records, self-rotating as they resolve. Assistant
+  giving materially wrong advice (#19) — 4 separate stale/false claims in
+  `assistant-engine.js`: claimed a password-reset option exists on the sign-in screen
+  (it never has — fixed to say "contact Support", 3 call sites); claimed Cumulative
+  Earnings excludes commission/check-in/gift codes (it's included them since an
+  earlier round — only the one-time welcome bonus is actually excluded, both the short
+  and "In detail" replies corrected); claimed no upper deposit limit exists (there's
+  been a `MAX_MONEY_AMOUNT` cap since an earlier round — both replies corrected);
+  claimed bans are always manual (confirmed a real automatic-ban mechanism exists at
+  `server.js`'s `banUserAutomatically`/`_depAttemptsSucceeded` — reply now mentions
+  both paths). SW-reload-mid-claim (#20) — `/team/milestone/claim` was missing from
+  `MONEY_ENDPOINTS`, so a service-worker update activating mid-claim could force-
+  reload before the success toast showed, then a retry said "Already claimed" with no
+  explanation — added.
+- **Low-but-real fixed**: DecompressionStream had no feature-detection fallback (#22)
+  — an older browser/WebView without it just hung on the loading screen forever with
+  no explanation; `build-core.js`'s loader IIFE now shows a plain "update your
+  browser" message instead of silently hanging (a full pure-JS inflate fallback would
+  mean carrying an extra decompressor through the same obfuscation pipeline that
+  protects this file — out of proportion to this warrants). Misleading admin bank-
+  transfer copy (#27) — `admin-src/index.html`'s Withdrawals tab claimed "mobile money
+  AND bank transfer both go through the same MarzPay gateway", but `/withdraw/request`
+  hardcodes `method:'mobile_money'` and can never create a new bank-method withdrawal
+  (the `isBank` code paths and MarzPay bank-transfer helpers are kept ONLY to keep
+  reconciling any pre-existing `method:'bank'` records, not dead code) — copy corrected
+  to say mobile money is the only rail members can request today.
+- **Regression caught by the existing test suite, fixed same round**: the new
+  `sanitizeProductInput()` (added earlier this round for #2) originally REQUIRED
+  `cycle`/`expectedReturn` on every product, breaking the existing, intentional,
+  already-tested "product with neither falls back to `cycleDays`/`returnMultiple`
+  settings" feature (`/invest/create`'s `Number(tier.cycle) || sett.cycleDays`) —
+  `test-settings-wired.js` failed with `"Unknown product"` on the very product it's
+  designed to test. Fixed by making `cycle`/`expectedReturn` genuinely optional in the
+  sanitizer (validated only when actually supplied, stored as `null` otherwise so the
+  existing `||` fallback keeps working) rather than loosening or removing the
+  validation itself.
+- **Documented, not changed** (with reasoning, not silence): #1's crash-window claims
+  across cashback/deposit/withdrawal/commission/gift-code are the SAME safe-failure-
+  direction tradeoff (advance the ledger/status before the money moves, so a crash's
+  failure mode is under-pay-and-fixable rather than silent double-pay) already
+  accepted and documented throughout this codebase — a real atomic-transaction or
+  durable-outbox fix is a dedicated-round architecture change, not an audit side
+  effect. #8 (staff-deletion erasing audit attribution) is confirmed intentional —
+  explicit code comment plus an existing passing test (`test-admin-delete-
+  namestamp.js`) enforcing exactly this behavior. #21 (CI should rebuild and fail on
+  generated-file diffs) and #23 (mock DB doesn't model production's non-atomic queued-
+  commit transaction semantics) are real but are test/deploy-infrastructure
+  investments, not code bugs — this session's own manual rebuild+test+bump-cache+
+  commit discipline is the current compensating control for #21. #24 (one test's
+  MarzPay fallback mock is incomplete, so it waits for a real timeout instead of
+  asserting deterministically) is a test-quality nit with no production impact. #25
+  (a few admin settings fields like `brandTagline`/`homeBannerTitle` are saved but not
+  yet consumed by the user SPA) is cosmetic, low severity. #26 (anti-clone guard
+  allows any `*.onrender.com`) has an explicit code comment marking it a deliberate
+  fallback during an in-progress custom-domain migration — tightening it blind risks
+  self-destructing the real app if the frontend is still actually served from an
+  onrender.com host.
+- **Verification**: New `test-codex-round2-fixes.js` (24 checks) covering every
+  server-side fix from this round with direct HTTP-level proof (product/settings
+  validation rejecting bad input, admin credit/debit bounds, `/transactions` returning
+  the genuinely-newest 100 rows via real `orderBy` not limit-then-sort, recount
+  including `admin_credit` in `totalDeposited`, bank-save's concurrent-duplicate lock,
+  the new broadcast audit-log entry, and the reconcilers' oldest-first ordering proven
+  by tracking actual MarzPay call order). Fixed the one existing test this round's
+  changes broke (`test-assistant-engine.js` asserted the old, inaccurate "password
+  recovery" claim — updated to assert the corrected "contact Support" wording). Client-
+  side-only fixes (#9, #10, #11, #12, #20) have no automated coverage — this test
+  harness only ever drives `server.js` over HTTP, like every other `test-*.js` in this
+  suite; verified by direct code-reading against the exact failure scenario instead.
+  **Full suite: 68/68 test files green** (including the new file). `node --check` on
+  every touched file. `node build-core.js` — round-trip OK, `user/index.html`
+  rebuilt (438,604 bytes). `user/sw.js` cache bumped `v247` → `v248`.
+- **Left open**: the four items documented-not-fixed above (#1's architectural crash
+  windows, #21 CI rebuild gate, #23 mock DB transaction-semantics fidelity, #24's one
+  incomplete test mock, #25's unused admin settings fields) remain exactly that —
+  documented, deliberately not touched this round. Real end-to-end device/browser
+  verification (register/login/deposit/invest/withdraw/referral/check-in/assistant/PIN
+  against the live Firebase project + live backend) still has not happened in an
+  actual browser — everything above is verified by the test suite plus direct code-
+  reading, not a live device.
+
 ## 2026-08-17 — Claude — Second ChatGPT pass on the investment/referral/task-center audit: 4 real bugs fixed, 2 genuine architectural tradeoffs documented (not hastily patched)
 
 - **What changed** (all `server.js`, server-only, no rebuild needed):

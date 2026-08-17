@@ -801,12 +801,18 @@ async function invalidateSessionsFor(username) {
 // Fire-and-forget audit trail — who did what, from where. Never blocks the
 // action itself if logging fails.
 function logAdminAction(req, action, meta) {
+  // Codex-verified real gap (2026-08-17): a failed audit-log write used to
+  // vanish completely (empty catch) -- the triggering admin action still
+  // succeeds either way (a logging hiccup must never block or roll back a
+  // real action), but silently losing the ONE record whose whole purpose
+  // is an audit trail defeats the point. Loud server-side logging at least
+  // makes a failed write operationally visible instead of invisible.
   db.collection('adminAuditLog').doc().set({
     actor: req.adminUser?.username || 'owner-key',
     role: req.adminUser?.role || 'owner',
     action, meta: meta || {}, ip: req.ip,
     createdAt: FieldValue.serverTimestamp()
-  }).catch(() => {});
+  }).catch(e => console.error('Audit log write failed:', action, e.message));
 }
 
 // ── ADMIN PUSH NOTIFICATIONS ──
@@ -1768,6 +1774,12 @@ app.post('/admin/notifications/create', async (req, res) => {
       audience: 'all', title, body, type: 'announcement',
       createdBy: req.adminUser?.username || 'owner', createdAt: FieldValue.serverTimestamp()
     });
+    // Codex-verified real gap (2026-08-17): the notification doc's own
+    // createdBy field records who sent it, but that's not the same as an
+    // audit-log entry -- the admin panel's audit trail (adminAuditLog, what
+    // every other admin action already writes to) had no record at all that
+    // a broadcast to the entire user base happened.
+    logAdminAction(req, 'broadcast_sent', { title });
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not create notification' });
@@ -3236,10 +3248,21 @@ app.post('/bank/save', async (req, res) => {
     // phone -- a wrong-PIN attempt against an already-bound number must
     // still count as a wrong-PIN attempt, not silently get reclassified as
     // "duplicate" before the PIN is even checked.
-    const dupSnap = await db.collection('bankAccounts')
-      .where('userId', '==', userId).where('phone', '==', phone).limit(1).get();
-    if (!dupSnap.empty) return res.status(400).json({ status: 'error', message: 'This number is already saved as a withdrawal account.' });
-    await db.collection('bankAccounts').add({ userId, holder, network, phone, createdAt: FieldValue.serverTimestamp() });
+    // Codex-verified real bug (2026-08-17): the check-then-insert just
+    // below had no lock at all, so two near-simultaneous submits (a
+    // double-tap, or a client retry after a slow/ambiguous response) could
+    // both pass the "not a duplicate yet" check before either write
+    // landed, creating two identical rows. Same withLock idiom every other
+    // check-then-write in this codebase already uses for exactly this
+    // race shape.
+    const dup = await withLock('bank-save:' + userId, async () => {
+      const dupSnap = await db.collection('bankAccounts')
+        .where('userId', '==', userId).where('phone', '==', phone).limit(1).get();
+      if (!dupSnap.empty) return true;
+      await db.collection('bankAccounts').add({ userId, holder, network, phone, createdAt: FieldValue.serverTimestamp() });
+      return false;
+    });
+    if (dup) return res.status(400).json({ status: 'error', message: 'This number is already saved as a withdrawal account.' });
     res.json({ status: 'success', pinJustSet: !!pinCheck.justSet });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save the bank account' });
@@ -3370,13 +3393,24 @@ app.get('/transactions', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    // Sort in JS after fetching, not orderBy in the query itself — same
-    // pattern Chronova's equivalent endpoint (/account/transactions) uses,
-    // ported here to remove any doubt about the where+orderBy+limit combo.
-    const snap = await db.collection('transactions').where('userId', '==', userId).limit(300).get();
-    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
-    const page = list.slice(0, 100);
+    // Codex-verified real bug (2026-08-17): this used to fetch by userId
+    // with a bare .limit(300) BEFORE sorting in JS -- Mongo's own
+    // .limit(), unlike Firestore's, has no "give me these in natural/
+    // insertion order" guarantee an app can rely on, so a user with more
+    // than 300 lifetime transactions could have their limited-to-300
+    // subset silently miss genuinely recent rows, then sort/slice THAT
+    // incomplete set down to "the newest 100" -- newest-looking, but not
+    // actually complete. The original comment ("ported from Chronova to
+    // remove any doubt about the where+orderBy+limit combo") was
+    // defending against a real Firestore gotcha (a compound where+orderBy
+    // needs a manually-created composite index or the query throws) that
+    // doesn't apply here -- this project runs on real MongoDB via a
+    // Firestore-shaped compat layer, and Mongo's own .sort().limit() (see
+    // db.js's Query class) has no such requirement. orderBy+limit at the
+    // DB level is what every OTHER already-correct paginated endpoint in
+    // this codebase already does (e.g. the checkin-streak history read).
+    const snap = await db.collection('transactions').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
+    const page = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     // Same live-rename treatment as GET /investments: 'Bought X' and
     // 'X daily cashback' descriptions were written with the product's name
     // at that moment, so a later admin rename never showed up here even
@@ -3417,12 +3451,10 @@ app.get('/deposits', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    // Same pattern as Chronova's /account/deposits — fetch by userId only
-    // and sort in JS, not orderBy in the Mongo query itself.
-    const snap = await db.collection('pendingDeposits').where('userId', '==', userId).limit(200).get();
+    // Same orderBy-at-the-DB-level fix as /transactions above.
+    const snap = await db.collection('pendingDeposits').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
-    res.json({ status: 'success', deposits: list.slice(0, 100) });
+    res.json({ status: 'success', deposits: list });
   } catch (e) {
     console.error('Deposits list error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your top-ups' });
@@ -3433,10 +3465,10 @@ app.get('/withdrawals', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('withdrawals').where('userId', '==', userId).limit(200).get();
+    // Same orderBy-at-the-DB-level fix as /transactions above.
+    const snap = await db.collection('withdrawals').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    list.sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
-    res.json({ status: 'success', withdrawals: list.slice(0, 100) });
+    res.json({ status: 'success', withdrawals: list });
   } catch (e) {
     console.error('Withdrawals list error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your cash-outs' });
@@ -3613,6 +3645,27 @@ app.get('/admin/settings', async (req, res) => {
 // self-XSS surface across admin sessions. Validate those specifically rather
 // than trusting the whole request body.
 const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100], appBgBlurPx: [0, 40], appBgTintPct: [0, 100], cardBlurPx: [0, 24], cardOpacityPct: [0, 100], authCardBlurPx: [0, 24], authCardOpacityPct: [0, 100], annBgBlurPx: [0, 40], annBgTintPct: [0, 100] };
+// Codex-verified real bug (2026-08-17): SETTINGS_NUMERIC_RANGES only ever
+// validated the purely-visual slider fields (blur/tint/opacity) -- every
+// FINANCIAL/behavior-critical setting was stored completely raw, with no
+// type or range check at all. Concrete failures this let through:
+// withdrawFeePct: -100 -> fee = round(amt * -100/100) = -amt, so
+// net = amt - fee = 2*amt in /withdraw/request, paying out DOUBLE the
+// requested amount. A negative welcomeBonus/dailyCheckin would silently
+// DEBIT a member's wallet at registration/check-in instead of crediting
+// it. maintenanceMode stored as the STRING "false" (not the boolean
+// false) is truthy in JS, wrongly locking every member out of the whole
+// app via the maintenance-mode gate. Same treatment as the visual
+// sliders: a strict numeric range for every money/rate field, plus
+// explicit boolean coercion (never trusting the wire type) for the
+// fields that gate real behavior.
+const SETTINGS_CRITICAL_RANGES = {
+  withdrawFeePct: [0, 100], minWithdraw: [0, MAX_MONEY_AMOUNT], minDeposit: [0, MAX_MONEY_AMOUNT],
+  dailyCheckin: [0, MAX_MONEY_AMOUNT], welcomeBonus: [0, MAX_MONEY_AMOUNT],
+  commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
+  returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
+};
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'annEnabled'];
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -3623,6 +3676,16 @@ app.post('/admin/settings/update', async (req, res) => {
       if (!Number.isFinite(n) || n < min || n > max)
         return res.status(400).json({ status: 'error', message: `${key} must be a number between ${min} and ${max}` });
       updates[key] = Math.round(n);
+    }
+    for (const [key, [min, max]] of Object.entries(SETTINGS_CRITICAL_RANGES)) {
+      if (!(key in updates)) continue;
+      const n = Number(updates[key]);
+      if (!Number.isFinite(n) || n < min || n > max)
+        return res.status(400).json({ status: 'error', message: `${key} must be a number between ${min} and ${max}` });
+      updates[key] = Math.round(n);
+    }
+    for (const key of SETTINGS_BOOLEAN_FIELDS) {
+      if (key in updates) updates[key] = updates[key] === true || updates[key] === 'true';
     }
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
@@ -3677,24 +3740,71 @@ app.get('/admin/products', async (req, res) => {
   try { res.json({ status: 'success', products: await getProducts() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Codex-verified real bug (2026-08-17): /admin/products/save used to
+// Object.assign() the caller's raw product straight into the DB with zero
+// field validation -- a negative price passed the `bal < tier.price` check
+// in /invest/create backwards (bal is never less than a negative number)
+// and then INCREASED the buyer's wallet balance via `bal - tier.price`.
+// This is owner-only (verifyOwner), but every other admin-facing money
+// input in this codebase (deposit/withdraw amounts, admin credit/debit,
+// settings ranges) is validated as real defense-in-depth regardless of who
+// can reach it, and this was the one write path that wasn't. Returns null
+// (caller turns that into a 400) rather than throwing, so one malformed
+// product in a batch save reports clearly instead of a generic 500.
+function sanitizeProductInput(p, fallbackOrder) {
+  const key = String(p?.key || '').trim();
+  if (!key || key.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(key)) return null;
+  const name = String(p?.name || '').trim().slice(0, 100);
+  if (!name) return null;
+  const price = Number(p?.price);
+  if (!Number.isFinite(price) || price <= 0 || price > MAX_MONEY_AMOUNT) return null;
+  // cycle/expectedReturn are genuinely OPTIONAL per product -- a product can
+  // be saved with neither, and /invest/create falls back to the platform-wide
+  // cycleDays/returnMultiple settings for it (Number(tier.cycle) || sett.
+  // cycleDays, same for expectedReturn). Test-verified real regression
+  // (2026-08-17): this sanitizer originally required both on every product,
+  // which broke that exact, already-relied-upon fallback -- any save of a
+  // fallback-style product was rejected outright as "invalid". Only
+  // validate them when the caller actually supplied a value; null lets the
+  // existing `||` fallback keep working exactly as before.
+  let cycle = null;
+  if (p?.cycle != null && p.cycle !== '') {
+    cycle = Number(p.cycle);
+    if (!Number.isFinite(cycle) || cycle <= 0 || cycle > 3650 || !Number.isInteger(cycle)) return null;
+  }
+  let expectedReturn = null;
+  if (p?.expectedReturn != null && p.expectedReturn !== '') {
+    expectedReturn = Number(p.expectedReturn);
+    if (!Number.isFinite(expectedReturn) || expectedReturn <= 0 || expectedReturn > MAX_MONEY_AMOUNT) return null;
+  }
+  const image = typeof p?.image === 'string' ? p.image.slice(0, BANNER_MAX_LEN) : '';
+  const order = p?.order != null ? Number(p.order) : fallbackOrder;
+  return {
+    key, name, price: Math.round(price), cycle: cycle != null ? Math.round(cycle) : null,
+    expectedReturn: expectedReturn != null ? Math.round(expectedReturn) : null,
+    image, active: p?.active !== false, comingSoon: p?.comingSoon === true,
+    order: Number.isFinite(order) ? order : fallbackOrder, deleted: false,
+  };
+}
 app.post('/admin/products/save', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
+    const sanitized = [];
+    for (let i = 0; i < list.length; i++) {
+      const clean = sanitizeProductInput(list[i], i);
+      if (!clean) return res.status(400).json({ status: 'error', message: `Product #${i + 1} (${list[i]?.name || list[i]?.key || 'unnamed'}) has an invalid key, name, price, or (if given) cycle/return -- nothing was saved.` });
+      sanitized.push(clean);
+    }
     const batch = db.batch();
-    // `order` is preserved from the submitted product itself when given
-    // (the admin form always sends one) — indexing by array position would
-    // stamp every product 0 whenever only a single product is saved at a
-    // time, which is the normal case here.
-    // `deleted:false` clears any earlier soft-delete tombstone on this key
-    // (see /admin/products/delete) so re-saving a previously-deleted
-    // product actually brings it back instead of the merge silently
-    // reviving the old tombstone flag.
-    list.forEach((p, i) => batch.set(db.collection('products').doc(p.key),
-      Object.assign({}, p, { order: p.order != null ? Number(p.order) : i, deleted: false }), { merge: true }));
+    // `deleted:false` (set inside sanitizeProductInput) clears any earlier
+    // soft-delete tombstone on this key (see /admin/products/delete) so
+    // re-saving a previously-deleted product actually brings it back
+    // instead of the merge silently reviving the old tombstone flag.
+    sanitized.forEach(p => batch.set(db.collection('products').doc(p.key), p, { merge: true }));
     await batch.commit();
     _productsCacheTs = 0;
-    logAdminAction(req, 'products_saved', { count: list.length });
+    logAdminAction(req, 'products_saved', { count: sanitized.length });
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save products' });
@@ -3803,7 +3913,17 @@ app.get('/admin/users/recount', async (req, res) => {
       const t = d.data();
       if (!t.userId) return;
       const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
-      if (t.type === 'deposit') row.deposited += finiteMoney(t.amount);
+      // Codex-verified real bug (2026-08-17): totalDeposited is live-
+      // credited by BOTH a real 'deposit' AND an owner's manual
+      // 'admin_credit' (see /admin/deposit -- it deliberately increments
+      // totalDeposited too, standing in for a real payment MarzPay's own
+      // gateway declined, so a referrer's Task Center deposit-milestone
+      // progress isn't broken by using it). This recount only ever summed
+      // 'deposit', so running "Recalculate totals" after an owner manually
+      // credited someone would silently ERASE that credit's contribution
+      // to their totalDeposited -- same class of gap already fixed for
+      // totalEarned below.
+      if (t.type === 'deposit' || t.type === 'admin_credit') row.deposited += finiteMoney(t.amount);
       // "Cumulative Earnings" (totalEarned) is credited live from 5 sources:
       // maturity/daily payout (cashback), referral commission, task-center
       // reward, gift-code redemption, and check-in bonus -- this recount has
@@ -4073,8 +4193,15 @@ const _adminDebitDebounce = new Map();
 app.post('/admin/deposit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, amount, note } = req.body;
+  // Codex-verified real bug (2026-08-17): `parseFloat` + a bare truthiness
+  // check let a NEGATIVE amount straight through -- `!amt` is false for
+  // any nonzero number, positive or negative, so `amount: -50000` would
+  // silently DEBIT the wallet via FieldValue.increment(amt) below while
+  // still labelling the transaction row 'admin_credit' with a negative
+  // amount. No finite/positive/MAX_MONEY_AMOUNT check either.
   const amt = parseFloat(amount || 0);
-  if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
+    return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtUGX(MAX_MONEY_AMOUNT)}) required` });
   const lastCredit = _adminCreditDebounce.get(userId) || 0;
   if (Date.now() - lastCredit < 10000)
     return res.status(429).json({ status: 'error', message: 'This user was just credited seconds ago. Wait a moment before crediting again, to rule out a double-submit.' });
@@ -4108,8 +4235,11 @@ app.post('/admin/deposit', async (req, res) => {
 app.post('/admin/debit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, amount, note } = req.body;
+  // Codex-verified: Math.abs() already stops a negative-amount inversion
+  // trick here, but there was still no finite/MAX_MONEY_AMOUNT bound.
   const amt = Math.abs(parseFloat(amount || 0));
-  if (!userId || !amt) return res.status(400).json({ status: 'error', message: 'userId and amount required' });
+  if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
+    return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtUGX(MAX_MONEY_AMOUNT)}) required` });
   const lastDebit = _adminDebitDebounce.get(userId) || 0;
   if (Date.now() - lastDebit < 10000)
     return res.status(429).json({ status: 'error', message: 'This user was just debited seconds ago. Wait a moment before debiting again, to rule out a double-submit.' });
@@ -4373,7 +4503,53 @@ app.post('/admin/user/delete', async (req, res) => {
     const uSnap = await db.collection('users').doc(userId).get();
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = uSnap.data();
+    // Codex-verified real bug (2026-08-17): deleting a member with a
+    // deposit still in flight at the payment gateway (status 'pending'/
+    // 'initiating') or a withdrawal not yet resolved ('pending'/'sending'/
+    // 'processing') used to just wipe those records outright -- if MarzPay
+    // settles that payment AFTER the local record is gone, there's no
+    // trace of it anywhere, and for a withdrawal specifically the wallet
+    // debit already happened at request time with nothing left to show
+    // for it. Block deletion until an admin resolves those first (declines
+    // the withdrawal, or lets the deposit finish/fail) -- the same
+    // "unsettled activity" gate other risky admin actions in this codebase
+    // already apply.
+    const [pendingDepSnap, pendingWitSnap] = await Promise.all([
+      db.collection('pendingDeposits').where('userId', '==', userId).where('status', 'in', ['pending', 'initiating']).limit(1).get(),
+      db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['pending', 'sending', 'processing']).limit(1).get(),
+    ]);
+    if (!pendingDepSnap.empty || !pendingWitSnap.empty)
+      return res.status(400).json({ status: 'error', message: 'This member has a deposit or withdrawal still in progress. Resolve it first, then delete the account.' });
+    // Codex-verified real bug: Firebase auth deletion failure was silently
+    // swallowed (console.warn only) AFTER the Mongo profile was already
+    // gone -- a surviving Firebase account then logging in again would hit
+    // the ghost-account self-heal (see /register's missing-doc self-heal)
+    // and silently CREATE A BRAND NEW profile, effectively un-deleting the
+    // account without the admin ever knowing. Firebase deletion now runs
+    // FIRST: if it genuinely fails (not just "already didn't exist" --
+    // auth/user-not-found is treated as success, since that just means a
+    // previous attempt already got this far), nothing in Mongo is touched
+    // at all, so a failure here always leaves a fully consistent state
+    // instead of an orphaned Firebase account.
     try {
+      await admin.auth().deleteUser(userId);
+    } catch (fbErr) {
+      if (fbErr.code !== 'auth/user-not-found')
+        return res.status(500).json({ status: 'error', message: 'Could not delete the Firebase login for this account -- nothing was deleted. ' + fbErr.message });
+    }
+    // Codex-verified real bug: the deleted member's own DOWNLINE (anyone
+    // whose referredBy pointed at them) was left pointing at a now-deleted
+    // document -- every future chain walk for those members (commission
+    // crediting, team counts) would just find "referrer doesn't exist" and
+    // silently stop, permanently losing L2/L3 attribution up through the
+    // deleted account for everyone below them. Splice them onto the
+    // deleted member's OWN referrer instead, preserving the rest of the
+    // tree's shape.
+    try {
+      const downlineSnap = await db.collection('users').where('referredBy', '==', userId).get();
+      for (const d of downlineSnap.docs) {
+        await d.ref.update({ referredBy: u.referredBy || null });
+      }
       if (u.referredBy) {
         await db.collection('users').doc(u.referredBy).update({ teamL1Count: FieldValue.increment(-1) });
         const l1 = await db.collection('users').doc(u.referredBy).get();
@@ -4385,7 +4561,7 @@ app.post('/admin/user/delete', async (req, res) => {
           if (l3Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(-1) });
         }
       }
-    } catch (chainErr) { console.warn('delete: team-count fix:', chainErr.message); }
+    } catch (chainErr) { console.error('delete: referral-tree repair:', chainErr.message); }
     const wipe = async (coll, field = 'userId') => {
       const snap = await db.collection(coll).where(field, '==', userId).get();
       let n = 0;
@@ -4400,7 +4576,6 @@ app.post('/admin/user/delete', async (req, res) => {
       bankAccounts:  await wipe('bankAccounts'),
     };
     await db.collection('users').doc(userId).delete();
-    try { await admin.auth().deleteUser(userId); } catch (fbErr) { console.warn('delete: firebase auth:', fbErr.message); }
     logAdminAction(req, 'user_deleted', { userId, removed });
     res.json({ status: 'success', message: 'Account and all its data deleted', removed });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -5041,7 +5216,15 @@ async function reconcilePendingDeposits() {
   _sweepingDeposits = true;
   let settled = 0;
   try {
-    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').limit(50).get();
+    // Codex-verified real gap (2026-08-17): no orderBy meant this returned
+    // whatever arbitrary subset the DB felt like handing back, every single
+    // sweep -- at high enough pending volume, the same "first" subset could
+    // be retried on repeat while records past the cap never got checked at
+    // all. Oldest-first makes the cap self-rotating: whichever records have
+    // been waiting longest are always the ones this sweep looks at, so once
+    // they resolve (and drop off 'pending') the next-oldest naturally enters
+    // the window instead of the same stale head of the collection.
+    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {
       const dep = doc.data();
       if (!dep.marzTxUuid) continue;
@@ -5058,7 +5241,7 @@ async function reconcilePendingDeposits() {
     // recheck recent failures too, bounded to the last 48h so it can never
     // turn into hammering MarzPay with ancient history.
     const cutoffMs = Date.now() - 48 * 3600000;
-    const failedSnap = await db.collection('pendingDeposits').where('status', '==', 'failed').limit(80).get();
+    const failedSnap = await db.collection('pendingDeposits').where('status', '==', 'failed').orderBy('createdAt', 'asc').limit(80).get();
     for (const doc of failedSnap.docs) {
       const dep = doc.data();
       if (!dep.marzTxUuid || tsMillis(dep.createdAt) < cutoffMs) continue;
@@ -5084,7 +5267,9 @@ async function reconcilePendingDeposits() {
 async function reconcilePendingWithdrawals() {
   let settled = 0;
   try {
-    const snap = await db.collection('withdrawals').where('status', '==', 'processing').limit(50).get();
+    // Oldest-first, same reasoning as reconcilePendingDeposits above --
+    // Codex-verified real gap (2026-08-17).
+    const snap = await db.collection('withdrawals').where('status', '==', 'processing').orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {
       const wit = doc.data();
       const isBank = wit.method === 'bank';
@@ -5203,7 +5388,14 @@ async function reconcileCashback() {
   if (_sweepingCashback) return;
   _sweepingCashback = true;
   try {
-    const snap = await db.collection('investments').where('status', '==', 'active').limit(CASHBACK_SWEEP_LIMIT).get();
+    // Oldest-first, same reasoning as reconcilePendingDeposits above --
+    // Codex-verified real gap (2026-08-17): beyond CASHBACK_SWEEP_LIMIT
+    // simultaneously active investments, an unordered scan could keep
+    // returning the same subset every second while the rest never get
+    // checked. Oldest-active-first means whichever investments have been
+    // open longest (the ones most likely to actually be due) are always
+    // covered, and the window rotates forward on its own as they mature.
+    const snap = await db.collection('investments').where('status', '==', 'active').orderBy('createdAt', 'asc').limit(CASHBACK_SWEEP_LIMIT).get();
     for (const doc of snap.docs) {
       await settleInvestmentIfDue(doc).catch(e => console.error('Reconcile cashback error:', e.message));
     }

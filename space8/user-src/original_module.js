@@ -7,7 +7,18 @@ var STATE = {
   account: null, products: null, investments: null, settings: null,
   teamStats: null, teamMembers: {1:null,2:null,3:null}, teamExpanded: {1:false,2:false,3:false}, bankAccounts: null,
   hasPayoutPin: false, banners: {}, currentPage: 'home',
-  loaded: { home:false, products:false, team:false, account:false }
+  loaded: { home:false, products:false, team:false, account:false },
+  // Codex-verified real bug (2026-08-17): bumped every time the
+  // 'space8-auth' listener fires (sign-in OR sign-out) -- an async render
+  // function captures this value before its own fetch, then checks it's
+  // unchanged before committing anything to the DOM/STATE. Without it: User
+  // A opens a page, signs out before the response lands, User B signs in
+  // on the same device within that window, and A's now-late response can
+  // overwrite B's screen or cached data with A's own. resetUserState()
+  // (below) already clears CACHED state on sign-out, but that alone
+  // doesn't stop an already IN-FLIGHT request's response from landing
+  // after the fact -- this closes that separate race.
+  authEpoch: 0,
 };
 // ChatGPT-verified bug (2026-08-17): on a shared device, a real sign-out
 // only ever cleared STATE.account/STATE.loaded -- STATE.teamMembers/
@@ -40,6 +51,32 @@ function $(id){ return document.getElementById(id); }
 function qs(sel, root){ return (root||document).querySelector(sel); }
 function qsa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Codex-verified real stored-XSS bug (2026-08-17): openInfoSheet() used to
+// insert admin-set aboutText/rulesText straight into innerHTML with NO
+// esc() call, unlike the 'support' entry right next to it in the same
+// function (which correctly wraps its fields in esc()) -- an inconsistency
+// that gave away the intent was always plain text, not admin-authored
+// HTML. A compromised owner session (or an admin pasting content from an
+// untrusted source without realizing it contains markup) could plant
+// <img src=x onerror="..."> as the About/Rules text and have it execute
+// in EVERY member's browser the moment they open that screen. escNl()
+// escapes first, THEN converts newlines to <br> -- the admin panel's own
+// textarea placeholder says "leave a blank line between paragraphs", so
+// this preserves that formatting without ever trusting raw HTML.
+function escNl(s){ return esc(s).replace(/\n/g, '<br>'); }
+// Codex-verified real gap, same trust boundary as the XSS fix above: every
+// admin-set external link (Telegram group/channel, announcement CTA) used
+// to be handed straight to window.open() with no scheme check --
+// window.open() (unlike a plain <a> click) will actually EXECUTE a
+// javascript: URL in this page's own context. Only the owner can set these
+// (verifyOwner-gated on the server), so this is defense-in-depth against a
+// compromised owner session, not a public attack surface, but it's the
+// same cheap check every other admin-set external value in this app now
+// gets.
+function safeExternalUrl(url){
+  var u = String(url || '').trim();
+  return /^https?:\/\//i.test(u) ? u : '';
+}
 function cleanPhone(p){
   var d = String(p||'').replace(/\D/g,'');
   if (d.startsWith('0')) d = '256' + d.slice(1);
@@ -141,7 +178,13 @@ var ICONS = {
 function ico(name){ return ICONS[name] || ''; }
 
 // ── API LAYER ─────────────────────────────────────────────────────────
-var MONEY_ENDPOINTS = ['/deposit/marzpay', '/invest/create', '/withdraw/request', '/redeem', '/checkin', '/bank/save'];
+// Codex-verified real gap (2026-08-17): /team/milestone/claim moves real
+// money (a Task Center reward) but was missing from this list, so a
+// service-worker update activating mid-claim could force-reload the page
+// (see the controllerchange listener in index.html) before the success
+// toast ever showed -- the server may have paid it, but the client would
+// reload and a retry then just say "Already claimed" with no explanation.
+var MONEY_ENDPOINTS = ['/deposit/marzpay', '/invest/create', '/withdraw/request', '/redeem', '/checkin', '/bank/save', '/team/milestone/claim'];
 function isMoneyCall(path){ return MONEY_ENDPOINTS.some(function(p){ return path.indexOf(p) === 0; }); }
 
 // Tracked so a background service-worker update never yanks the page out
@@ -437,7 +480,7 @@ function maybeShowAnnouncement(){
   if (tgUrl) {
     tgBtn.style.display = 'flex';
     tgBtn.innerHTML = ico('telegram') + '<span>Telegram</span>';
-    tgBtn.onclick = function(){ window.open(tgUrl, '_blank'); hideAnnouncement(); };
+    tgBtn.onclick = function(){ var u = safeExternalUrl(tgUrl); if (u) window.open(u, '_blank'); hideAnnouncement(); };
   } else {
     tgBtn.style.display = 'none';
   }
@@ -499,6 +542,14 @@ function identityBannerHtml(acc){
 
 // ── HOME ──────────────────────────────────────────────────────────────
 async function renderHome(){
+  // Codex-verified real bug (2026-08-17): captured before the fetch below,
+  // checked again right after it resolves -- if a sign-out/sign-in
+  // happened while this was in flight (STATE.authEpoch bumped), this
+  // render is for a session that's no longer current, so it must not
+  // commit anything to STATE or the DOM (that would either leak the
+  // previous member's data onto the new one's screen, or stomp the new
+  // member's own already-rendered page with stale data).
+  var epoch = STATE.authEpoch;
   var el = $('page-home');
   if (!STATE.loaded.home) {
     el.innerHTML =
@@ -516,6 +567,7 @@ async function renderHome(){
     STATE.settings ? Promise.resolve({status:'success',settings:STATE.settings}) : api('/public/settings'),
     api('/public/activity-feed')
   ]);
+  if (epoch !== STATE.authEpoch) return;
   var accR = results[0], invR = results[1], prodR = results[2], setR = results[3], feedR = results[4];
   if (accR.status === 'success') STATE.account = accR.account;
   if (invR.status === 'success' && invR.investments) STATE.investments = invR.investments;
@@ -579,10 +631,18 @@ async function renderHome(){
     row.onclick = function(){ openPlanDetailSheet(row.dataset.id); };
   });
 }
+// Matches server.js's nowStr().date exactly: East Africa Time (UTC+3), NOT
+// device-local time. Codex-verified real bug (2026-08-17): this used to use
+// new Date() (device-local), so a device with the wrong clock/timezone, or
+// simply any user outside Kampala, could see the check-in button's
+// done/not-done state disagree with what the server actually recorded --
+// most visibly right around the EAT midnight boundary.
+function eatDateStr(){
+  var d = new Date(Date.now() + 3 * 3600000);
+  return String(d.getUTCMonth()+1).padStart(2,'0') + '/' + String(d.getUTCDate()).padStart(2,'0') + '/' + d.getUTCFullYear();
+}
 function isToday(dateStr){
-  var d = new Date();
-  var mm = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
-  return dateStr === (mm + '/' + dd + '/' + d.getFullYear());
+  return dateStr === eatDateStr();
 }
 // Simple list row (icon, name + "Day X of Y", chevron) -- owner explicit:
 // "I don't want active plans to be like that [the rounded ring card], I
@@ -643,18 +703,28 @@ function openPlanDetailSheet(id){
   var inv = (STATE.investments||[]).find(function(i){ return i.id === id; });
   if (!inv) return;
   var d = planDetailHtml(inv);
-  openSheet('generic', d.html);
+  // Own sheet slot ('planDetail'), NOT the shared 'generic' one -- Plan
+  // Detail is opened from inside My Products, which itself already occupies
+  // the 'generic' slot. Codex-verified real bug (2026-08-17): both used to
+  // call openSheet('generic', ...), so _sheetStack held two entries with the
+  // SAME name pointing at the SAME #genericSheet DOM node. hideSheet() only
+  // pops one matching entry per Back press but unconditionally hides the
+  // shared bg regardless of stack depth, so a single Back from Plan Detail
+  // closed the whole overlay (My Products' content was already gone --
+  // overwritten by Plan Detail's own innerHTML) instead of revealing My
+  // Products underneath, leaving a ghost entry in _sheetStack. Giving Plan
+  // Detail its own bg/container (see index.html's planDetailSheetBg) makes
+  // this stack correctly like the withdraw+payout-picker case already does.
+  openSheet('planDetail', d.html);
   if (d.nextMs) startPlanCountdown(d.nextMs, id);
 }
-// True only if the generic sheet is open AND still showing THIS plan's
-// detail view -- the member may have closed it and opened something else
-// entirely (Records, Password Management, another plan) while a delayed
-// refresh below was in flight; a bare "is some sheet open" check isn't
-// enough to tell those apart, since every generic-sheet feature shares the
-// same #genericSheet container.
+// True only if the planDetail sheet is open AND still showing THIS plan's
+// detail view -- the member may have closed it while a delayed refresh
+// below was in flight; a bare "is some sheet open" check isn't enough to
+// tell those apart.
 function isPlanDetailShowing(id){
-  if (!$('genericSheetBg').classList.contains('show')) return false;
-  var wrap = qs('[data-plan-detail]', $('genericSheet'));
+  if (!$('planDetailSheetBg').classList.contains('show')) return false;
+  var wrap = qs('[data-plan-detail]', $('planDetailSheet'));
   return !!wrap && wrap.dataset.planDetail === id;
 }
 // Re-renders the SAME already-open detail sheet in place (no openSheet(), no
@@ -665,7 +735,7 @@ function renderPlanDetail(id){
   var inv = (STATE.investments||[]).find(function(i){ return i.id === id; });
   if (!inv) return;
   var d = planDetailHtml(inv);
-  $('genericSheet').innerHTML = d.html;
+  $('planDetailSheet').innerHTML = d.html;
   if (d.nextMs) startPlanCountdown(d.nextMs, id);
 }
 // The server's own 1s cashback reconciler (reconcileCashback() in server.js)
@@ -829,14 +899,22 @@ async function doCheckin(){
   var r = await api('/checkin', {});
   if (r.status === 'success') {
     toast('+' + ugx(r.bonus) + ' added — day ' + r.streak + ' streak');
+    // totalEarned bumped alongside walletBalance -- Codex-verified real bug
+    // (2026-08-17): server.js increments both together for a check-in (see
+    // its own comment on /checkin), but this optimistic update only ever
+    // bumped walletBalance, so Cumulative Earnings on Home/Products looked
+    // stale (too low) until the next full account refetch.
     STATE.account.walletBalance = (STATE.account.walletBalance||0) + r.bonus;
-    STATE.account.lastCheckin = new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'}).replace(/(\d+)\/(\d+)\/(\d+)/, function(_,m,d,y){ return m.padStart(2,'0')+'/'+d.padStart(2,'0')+'/'+y; });
+    STATE.account.totalEarned = (STATE.account.totalEarned||0) + r.bonus;
+    STATE.account.lastCheckin = eatDateStr();
     renderHome();
   } else toast(r.message, true);
 }
 
 // ── PRODUCTS ──────────────────────────────────────────────────────────
 async function renderProducts(){
+  // See renderHome()'s authEpoch comment.
+  var epoch = STATE.authEpoch;
   var el = $('page-products');
   if (!STATE.loaded.products) el.innerHTML = '<div class="sk sk-card" style="height:110px;margin:16px 0"></div>' + skRows(4);
   var results = await Promise.all([
@@ -844,6 +922,7 @@ async function renderProducts(){
     STATE.investments ? Promise.resolve({status:'success', investments:STATE.investments}) : api('/investments'),
     STATE.account ? Promise.resolve({status:'success', account:STATE.account}) : api('/account')
   ]);
+  if (epoch !== STATE.authEpoch) return;
   if (results[0].status === 'success') STATE.products = results[0].products;
   if (results[1].status === 'success' && results[1].investments) STATE.investments = results[1].investments;
   if (results[2].status === 'success') STATE.account = results[2].account;
@@ -1000,8 +1079,37 @@ function listEndFooter(){
 // back to real breakdown"). `STATE.teamMembers[level]` cache is preserved so
 // a second visit in the same session still skips re-fetching.
 async function renderTeam(){
+  // See renderHome()'s authEpoch comment. Checked in TWO places here: once
+  // inside each per-level member fetch's own .then() (that write to
+  // STATE.teamMembers[l] is a cache side effect that happens BEFORE the
+  // outer Promise.all below settles, so a single end-of-function check
+  // alone wouldn't stop a stale write from re-populating the cache right
+  // after resetUserState() just cleared it on a sign-out/sign-in), and
+  // again before committing anything to the DOM.
+  var epoch = STATE.authEpoch;
   var el = $('page-team');
   if (!STATE.loaded.team) el.innerHTML = '<div class="sk sk-card" style="height:110px;margin:16px 0"></div>' + skRows(3);
+  // Stats are fetched (never cached) BEFORE deciding whether to reuse each
+  // level's cached member list. Codex-verified real bug (2026-08-17): the
+  // member-list cache used to be trusted unconditionally for an entire
+  // session, so a referral who joined or invested after the referrer's
+  // first Team visit never appeared in that level's list even though the
+  // Total Referrals / commission figures above it kept refreshing live --
+  // the count and the list underneath it could visibly disagree. Comparing
+  // the fresh count against the cached list's length catches exactly that
+  // and invalidates only the level(s) that actually changed, so a revisit
+  // with no real change still skips re-fetching (the original flicker fix
+  // this cache exists for is untouched).
+  var statsR = await api('/team/stats');
+  if (epoch !== STATE.authEpoch) return;
+  if (statsR.status === 'success') STATE.teamStats = statsR;
+  STATE.loaded.team = true;
+  var freshCounts = (STATE.teamStats || {}).counts || {};
+  [1,2,3].forEach(function(l){
+    if (STATE.teamMembers[l] && STATE.teamMembers[l].length !== (freshCounts['l'+l] || 0)) {
+      STATE.teamMembers[l] = null;
+    }
+  });
   // Each level resolves to { members, failed } rather than a bare array, so
   // a fetch error can be told apart from a genuinely empty level both when
   // rendering (a failed fetch must not read as "No referrals yet") and when
@@ -1012,16 +1120,15 @@ async function renderTeam(){
   var memberFetches = [1,2,3].map(function(l){
     if (STATE.teamMembers[l]) return Promise.resolve({ members: STATE.teamMembers[l], failed: false });
     return api('/team/members?level=' + l, null, 'GET').then(function(r){
+      if (epoch !== STATE.authEpoch) return { members: [], failed: true };
       if (r.status !== 'success') return { members: [], failed: true };
       var members = r.members || [];
       STATE.teamMembers[l] = members;
       return { members: members, failed: false };
     });
   });
-  var results = await Promise.all([api('/team/stats')].concat(memberFetches));
-  var statsR = results[0];
-  if (statsR.status === 'success') STATE.teamStats = statsR;
-  STATE.loaded.team = true;
+  var results = [statsR].concat(await Promise.all(memberFetches));
+  if (epoch !== STATE.authEpoch) return;
   var s = STATE.teamStats || { counts:{l1:0,l2:0,l3:0}, commission:0, milestones:[] };
   var LEVEL_PCT = { 1:28, 2:2, 3:1 };
 
@@ -1084,9 +1191,12 @@ function renderTaskList(milestones){
 }
 // ── ACCOUNT ───────────────────────────────────────────────────────────
 async function renderAccount(){
+  // See renderHome()'s authEpoch comment.
+  var epoch = STATE.authEpoch;
   var el = $('page-account');
   if (!STATE.loaded.account) el.innerHTML = '<div class="sk sk-card" style="height:90px;margin:16px 0"></div>' + skRows(2);
   var r = STATE.account ? {status:'success', account:STATE.account} : await api('/account');
+  if (epoch !== STATE.authEpoch) return;
   if (r.status === 'success') STATE.account = r.account;
   STATE.loaded.account = true;
   var acc = STATE.account || {};
@@ -1153,8 +1263,8 @@ async function renderAccount(){
   $('getAppRow').onclick = promptInstallApp;
   $('giftCodeBtn').onclick = redeemGiftCode;
   $('giftCodeInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('giftCodeBtn').click(); });
-  if ($('telegramGroupBtn')) $('telegramGroupBtn').onclick = function(){ window.open(sett.telegramGroup, '_blank'); };
-  if ($('telegramChannelBtn')) $('telegramChannelBtn').onclick = function(){ window.open(sett.telegramChannel, '_blank'); };
+  if ($('telegramGroupBtn')) $('telegramGroupBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramGroup); if (u) window.open(u, '_blank'); };
+  if ($('telegramChannelBtn')) $('telegramChannelBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramChannel); if (u) window.open(u, '_blank'); };
   qsa('.menu-row[data-key]').forEach(function(row){
     row.onclick = function(){ openInfoSheet(row.dataset.key); };
   });
@@ -1213,8 +1323,8 @@ async function redeemGiftCode(){
 async function openInfoSheet(key){
   var s = STATE.settings || (await api('/public/settings')).settings || {};
   var map = {
-    about: ['About Space8', s.aboutText || 'Space8 lets you invest in satellite-themed plans and earn daily returns.'],
-    rules: ['Rules', s.rulesText || 'Standard platform rules apply.'],
+    about: ['About Space8', s.aboutText ? escNl(s.aboutText) : 'Space8 lets you invest in satellite-themed plans and earn daily returns.'],
+    rules: ['Rules', s.rulesText ? escNl(s.rulesText) : 'Standard platform rules apply.'],
     support: ['Support', 'Telegram: ' + esc(s.supportTelegram||'—') + '<br>WhatsApp: ' + esc(s.whatsappContact||'—') + '<br>Hours: ' + esc(s.supportHours||'—')]
   };
   var m = map[key] || ['Info',''];
@@ -1242,7 +1352,12 @@ async function openPayoutSheet(pickCallback){
   await renderPayoutSheet();
 }
 async function renderPayoutSheet(){
+  // See renderHome()'s authEpoch comment -- withdrawal-account phone/holder
+  // details are exactly the kind of per-user data this guard exists to
+  // keep from leaking onto a DIFFERENT member's screen on a shared device.
+  var epoch = STATE.authEpoch;
   var r = await api('/bank/list', null, 'GET');
+  if (epoch !== STATE.authEpoch) return;
   var accounts = r.status === 'success' ? (r.accounts || []) : [];
   STATE.bankAccounts = accounts;
   var picking = !!_payoutPickCallback;
@@ -1601,7 +1716,7 @@ function openAssistant(){
     if (sett.telegramGroup) links += '<button class="btn btn-secondary" id="assistGroupBtn">' + ico('telegram') + '<span>Telegram Group</span></button>';
     links += '<button class="btn btn-secondary" id="assistCareBtn">' + ico('support') + '<span>Customer Care</span></button>';
     $('assistLinks').innerHTML = links;
-    if ($('assistGroupBtn')) $('assistGroupBtn').onclick = function(){ window.open(sett.telegramGroup, '_blank'); };
+    if ($('assistGroupBtn')) $('assistGroupBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramGroup); if (u) window.open(u, '_blank'); };
     // Pure DOM close (not closeSheet/history.back()) -- the assistant
     // panel and a sheet are two different full-screen overlays sharing
     // the same history slot mechanism; closing this one first keeps
@@ -1712,6 +1827,9 @@ function preloadImages(){
 }
 window.addEventListener('space8-auth', async function(e){
   var user = e.detail;
+  // Bumped on EVERY auth transition (sign-in or sign-out) -- see STATE's
+  // authEpoch comment for why this exists.
+  STATE.authEpoch++;
   // Wait for boot() (settings/banners/products fetch + image preload) so the
   // loading screen stays up until images are already cached, instead of
   // handing off to Home/Products/the auth screens and having their images
@@ -1749,7 +1867,25 @@ window.addEventListener('space8-auth', async function(e){
       var accR = await api('/account');
       var needsRegister = (accR.status === 'success' && accR.account && accR.account.registrationDone === false) ||
         (accR.status === 'error' && accR.code === 'NOT_FOUND');
-      if (needsRegister) await api('/register', {}, 'POST', true);
+      if (needsRegister) {
+        var regR = await api('/register', {}, 'POST', true);
+        if (regR.status === 'error') {
+          // Codex-verified real bug (2026-08-17): this used to ignore the
+          // response entirely and always fall through to enterApp(), so a
+          // failed self-heal (rate limit, banned account, dropped
+          // connection) dropped the member into an empty/broken app shell
+          // with no profile instead of a recoverable state. Route to the
+          // exact same register-screen retry flow the explicit Create
+          // Account button already uses on failure -- _registering stays
+          // true, so tapping Create Account again skips fbCreateUser and
+          // just retries /register.
+          $('app').style.display = 'none';
+          _registering = true;
+          showRegisterScreen();
+          showAuthErr('registerErr', (regR.message || 'Could not finish creating your account.') + ' You are signed in — fix the referral code (or clear it) and tap Create Account again.');
+          return;
+        }
+      }
     } catch (_) {}
     enterApp();
   } else {
