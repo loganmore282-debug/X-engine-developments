@@ -14,6 +14,52 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Admin-configurable website background image (appbg), reusing the auth-bg mechanism
+
+Owner: *"now we shall use image like the one on background of login and register, so
+the same default blur, so it will be background, so what I upload here in admin
+changes website background like we did on register and login."*
+
+- **New 8th banner slot, `appbg`** ("Website background" in admin), added right
+  alongside the existing `authbg` ("Login / Register background") slot — same
+  upload flow, same PNG/JPEG/WEBP/GIF validation, same ~2MB cap (`BANNER_KEYS` in
+  `server.js`).
+- **CSS**: `#app::before`/`#app::after` (in `user-src/index.html`) reuse the exact
+  `authbg` pattern — blurred image layer + tint overlay — but `position:fixed`
+  (not `absolute`) with negative z-index (`-2`/`-1`) so it acts as a true fixed
+  wallpaper behind the scrolling Home/Products/Team/Account content, rather than a
+  once-per-viewport backdrop like the non-scrolling auth screen. `.topbar`'s own
+  `background:var(--page-bg)` was removed (now transparent) so the wallpaper shows
+  through it too; `.navbar` was deliberately left opaque white so the bottom nav
+  stays legible regardless of what image gets uploaded.
+- **`boot()`** (`original_module.js`) sets `--app-bg-url`/`--app-bg-blur`/
+  `--app-bg-tint` from `STATE.banners.appbg` and `appBgBlurPx`/`appBgTintPct`
+  settings — mirrors the existing `authbg` block line-for-line.
+- **Server**: `appBgBlurPx: 20, appBgTintPct: 78` added to `DEFAULT_SETTINGS`,
+  echoed in `/public/settings`, and validated in `SETTINGS_NUMERIC_RANGES`
+  (0–40 / 0–100, same as `authBg*` — same stored-self-XSS rationale, since these
+  render into an admin slider `value="..."` attribute).
+- **Admin UI**: `appbg` added to `BANNER_LABELS`; its own blur/opacity slider block
+  (`appBlurRange`/`appTintRange`/`saveAppBgBtn`) added inside that upload card,
+  wired identically to the `authbg` sliders already in the Banners tab.
+- **Tests**: extended `test-authbg-settings-validation.js` (not a new file — same
+  validation code path) with 5 more assertions covering `appBgBlurPx`/
+  `appBgTintPct` accept/reject/persist behavior. All pass, 19/19.
+- **Verification**: full `test-*.js` suite green. Rebuilt both `user/` and
+  `admin/` via `build-core.js`/`build-admin.js` — both round-trip OK. Bumped
+  `user/sw.js` cache `v230` → `v231` (admin's `sw.js` has no cache versioning, a
+  deliberate no-op service worker, so nothing to bump there). Verified via
+  Playwright: a sample SVG "photo" data URI set as `--app-bg-url` at the default
+  20px/78% renders a subtle tinted wash behind Home/Account; at 6px/35% the image
+  is clearly visible behind fully-legible cards. Confirmed the admin Banners tab
+  renders the new "Website background" card with working sliders via
+  `switchTab('banners')`.
+- Nothing left open — owner still needs to actually upload a real photo and
+  redeploy `server.js` to Railway for the settings to take effect live (the usual
+  reminder: server-side changes need a manual Railway redeploy).
+
+---
+
 ## 2026-08-17 — Claude — Removed blue as the page canvas; blue is accent-only again
 
 Owner: *"now remove background blue."*

@@ -200,7 +200,8 @@ const DEFAULT_SETTINGS = {
   whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
   homeBannerTitle: '', homeBannerText: '',
-  authBgBlurPx: 20, authBgTintPct: 78
+  authBgBlurPx: 20, authBgTintPct: 78,
+  appBgBlurPx: 20, appBgTintPct: 78
 };
 // The real 15-plan catalog from the owner's PDF (Space8_Investment_Plans_
 // and_Variables.pdf) -- x42 total return over a fixed 210-day cycle for
@@ -379,7 +380,7 @@ const NETWORK_NAMES = new Set(['MTN Mobile Money', 'Airtel Money']);
 const BANNER_KEYS = new Set([
   'assortment', 'lavacake', 'barstack', 'giftbox', 'basket', 'marscrate',
   'ganache', 'factory2', 'factory1', 'darkbar', 'rocherstack', 'cookies',
-  'bonbon', 'truffle', 'snickersplate', 'snickerscookie', 'authbg'
+  'bonbon', 'truffle', 'snickersplate', 'snickerscookie', 'authbg', 'appbg'
 ]);
 // Hard cap on a single banner's stored size (raw data-URI string length) —
 // keeps one oversized upload from bloating the M0 free-tier database or
@@ -1381,7 +1382,8 @@ app.get('/public/settings', async (_req, res) => {
       whatsappGroup: s.whatsappGroup || '', whatsappContact: s.whatsappContact || '',
       rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || '',
       homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || '',
-      authBgBlurPx: s.authBgBlurPx, authBgTintPct: s.authBgTintPct
+      authBgBlurPx: s.authBgBlurPx, authBgTintPct: s.authBgTintPct,
+      appBgBlurPx: s.appBgBlurPx, appBgTintPct: s.appBgTintPct
     } });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });
@@ -3200,11 +3202,11 @@ app.get('/admin/settings', async (req, res) => {
 // Free-form settings fields go straight through to the merge below, trusted
 // because /admin/settings/update is owner-gated -- but a few numeric fields
 // also get echoed back into rendered admin/client HTML attributes
-// (authBgBlurPx/authBgTintPct into slider `value="..."` in admin-src), so an
+// (authBgBlurPx/authBgTintPct/appBgBlurPx/appBgTintPct into slider `value="..."` in admin-src), so an
 // out-of-range or non-numeric value here isn't just cosmetic, it's a stored
 // self-XSS surface across admin sessions. Validate those specifically rather
 // than trusting the whole request body.
-const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100] };
+const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100], appBgBlurPx: [0, 40], appBgTintPct: [0, 100] };
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

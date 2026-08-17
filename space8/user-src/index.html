@@ -84,10 +84,11 @@ svg{display:block;}
 .auth-err{ display:none; background:var(--danger-bg); color:var(--danger); border-radius:10px; padding:11px 13px; font-size:13px; font-weight:600; margin-bottom:14px; }
 
 #app{ display:none; min-height:100dvh; flex-direction:column; }
+#app::before{ content:''; position:fixed; inset:-24px; background-image:var(--app-bg-url, none); background-size:cover; background-position:center; filter:blur(var(--app-bg-blur, 20px)); transform:scale(1.08); z-index:-2; pointer-events:none; }
+#app::after{ content:''; position:fixed; inset:0; background:rgba(238,241,246, var(--app-bg-tint, .78)); z-index:-1; pointer-events:none; }
 .topbar{
   display:flex; align-items:center; justify-content:space-between;
   padding:max(14px, env(safe-area-inset-top)) 18px 12px; position:sticky; top:0; z-index:20;
-  background:var(--page-bg);
 }
 .wordmark{ font-weight:700; font-size:18px; letter-spacing:-.01em; display:flex; align-items:center; gap:2px; }
 .wordmark .dot{ color:var(--blue); }

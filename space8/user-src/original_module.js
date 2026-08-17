@@ -1314,6 +1314,13 @@ async function boot(){
   var tintPct = (STATE.settings||{}).authBgTintPct;
   document.documentElement.style.setProperty('--auth-bg-blur', (blurPx != null ? blurPx : 20) + 'px');
   document.documentElement.style.setProperty('--auth-bg-tint', (tintPct != null ? tintPct : 78) / 100);
+  if (STATE.banners.appbg) {
+    document.documentElement.style.setProperty('--app-bg-url', 'url("' + STATE.banners.appbg + '")');
+  }
+  var appBlurPx = (STATE.settings||{}).appBgBlurPx;
+  var appTintPct = (STATE.settings||{}).appBgTintPct;
+  document.documentElement.style.setProperty('--app-bg-blur', (appBlurPx != null ? appBlurPx : 20) + 'px');
+  document.documentElement.style.setProperty('--app-bg-tint', (appTintPct != null ? appTintPct : 78) / 100);
 }
 window.addEventListener('space8-auth', async function(e){
   var user = e.detail;

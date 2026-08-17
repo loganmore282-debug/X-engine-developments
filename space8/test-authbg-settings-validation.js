@@ -92,6 +92,20 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/settings/update', { body: { settings: { authBgBlurPx: 10 } } });
   check('non-admin request rejected (401)', r.code === 401, r.body);
 
+  // appBgBlurPx/appBgTintPct (the website-background sliders added
+  // alongside the login/register ones) go through the same
+  // SETTINGS_NUMERIC_RANGES check — prove they're actually wired in, not
+  // just copy-pasted into the admin UI with no server-side range.
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { appBgBlurPx: 15, appBgTintPct: 60 } } });
+  check('appBg valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved appBg blur', r.body.settings.appBgBlurPx === 15, r.body.settings);
+  check('public settings reflects saved appBg tint', r.body.settings.appBgTintPct === 60, r.body.settings);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { appBgBlurPx: 999 } } });
+  check('appBg blur above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { appBgTintPct: -1 } } });
+  check('appBg negative tint rejected', r.code === 400 && r.body.status === 'error', r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

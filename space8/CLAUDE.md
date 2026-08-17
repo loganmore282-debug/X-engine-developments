@@ -74,6 +74,10 @@ The owner was explicit and this must not be re-litigated without them saying so:
    blurred background image behind the Login/Register cards), not a restored dead
    one. Added to both `BANNER_KEYS` (`server.js`) and `BANNER_LABELS`
    (`admin-src/index.html`). See "Design system" below for how it renders.
+   **An 8th slot, `appbg`, was added 2026-08-17** ("Website background") — same
+   mechanism as `authbg` (blurred image + tint overlay, admin-tunable blur/opacity),
+   but applied to the main app shell (Home/Products/Team/Account) instead of just
+   the auth screens. See "Design system" below for how it renders.
 3. **User-facing app (`user-src/index.html` + `user-src/original_module.js`, and its built
    artifact `user/`) — REBUILT FROM SCRATCH, this is done as of the most recent session.**
    Zero lines of ChocoMCC's original frontend structure remain — the owner rejected an
@@ -169,6 +173,34 @@ app in `user-src/` was built directly against this.
   add another settings field the admin renders back into HTML, check whether it
   needs the same clamp-and-validate treatment rather than assuming free text is
   safe just because the endpoint is owner-gated.
+  **Website background (`appbg`), added 2026-08-17** — owner: "use image like the
+  one on background of login and register... same default blur, so it will be
+  background." Identical mechanism to `authbg` above, applied to `#app` (the
+  Home/Products/Team/Account shell) instead of the auth screens: `#app::before`
+  renders `var(--app-bg-url, none)` blurred (`filter:blur(var(--app-bg-blur,20px))`,
+  scaled 1.08x) and `#app::after` tints it (`rgba(238,241,246,var(--app-bg-tint,.78))`
+  — same hex as `--page-bg`). Both pseudo-elements are `position:fixed` (not
+  `absolute` like `.auth-screen`'s, since `#app`'s content scrolls but the wallpaper
+  shouldn't move) with negative z-index (`-2`/`-1`) so they sit behind `main`'s
+  normal-flow content but the whole thing is still contained within `#app`, which
+  is why `.topbar`'s own `background:var(--page-bg)` was removed (now transparent)
+  — otherwise it would opaquely cover the wallpaper at the top of the screen.
+  `.navbar` was deliberately left opaque (`background:var(--surface)`) rather than
+  also made transparent, so the bottom nav stays a stable, legible dock regardless
+  of what image gets uploaded. `boot()` sets `--app-bg-url`/`--app-bg-blur`/
+  `--app-bg-tint` from `STATE.banners.appbg` and `appBgBlurPx`/`appBgTintPct`
+  settings, mirroring the `authbg` block right above it. Server-side: `appbg` added
+  to `BANNER_KEYS`; `appBgBlurPx: 20, appBgTintPct: 78` added to `DEFAULT_SETTINGS`
+  and the `/public/settings` response; `appBgBlurPx`/`appBgTintPct` added to
+  `SETTINGS_NUMERIC_RANGES` (same 0–40/0–100 validation as `authBg*`, same
+  self-XSS rationale — admin renders these into a slider `value="..."` attribute
+  too). Admin UI: `appbg` added to `BANNER_LABELS` ("Website background"), with its
+  own blur/opacity slider block (`appBlurRange`/`appTintRange`/`saveAppBgBtn`)
+  inside that upload card, wired identically to the `authbg` sliders just above it
+  in the Banners tab. Covered by `test-authbg-settings-validation.js` (extended
+  with `appBg*` cases — same file, same validation code path, not a separate file).
+  With no image uploaded (the shipped default) this renders identically to before —
+  confirmed by screenshot comparison, not just reasoning about the CSS.
   `--blue-dim: #1c48b3` / `--blue-mute: #7fa1f0` / `--blue-glow: rgba(46,107,255,.22)` are
   all derived from the same hue (the confirmed original values — see the top of this
   Palette section — check the file if this has moved on again).
