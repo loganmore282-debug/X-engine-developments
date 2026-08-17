@@ -14,6 +14,57 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Removed blue as the page canvas; blue is accent-only again
+
+Owner: *"now remove background blue."*
+
+- **What changed**: `user-src/index.html` only (admin was never on the blue-canvas
+  pattern — its `--bg` was already a light neutral, confirmed unchanged). Decoupled
+  `--page-bg` from `--blue`: was `#2e6bff` (same as `--blue`), now `#eef1f6` (a light
+  neutral, matching the `theme-color` meta tag which — turns out — had been `#eef1f6`
+  the whole time and was never updated during the canvas era, an oversight that's now
+  moot since it matches again). `--blue`/`--blue-dim`/`--blue-mute`/`--blue-glow` were
+  left untouched at the values restored the prior session (`#2e6bff` family) — only the
+  canvas STRUCTURE was reverted, not the hue, since the immediately preceding owner
+  instruction ("return to blue as it was") confirmed `#2e6bff` as the correct blue.
+- **Structural CSS reverted**, pulled from git history (`d449b19`, the last commit
+  before the blue-canvas experiment began) for the correct pre-canvas pattern, then
+  applied with the current `#2e6bff`-family values (not `d449b19`'s older sapphire
+  `#0f52ba` — only the structure was borrowed, not the hue): `.wordmark`/`.wordmark
+  .dot` — removed hardcoded `color:#fff`, dot now `var(--blue)`. `.navbar` — was
+  `background:var(--blue)` (solid blue bar), now `background:var(--surface)` +
+  `border-top:1px solid var(--line)` (plain white bar on the light page). `.navitem`
+  and all its states (base, svg, `.svg-cart`/`.svg-team`, `.active`/`.tap-glow`,
+  `:active`) — removed hardcoded `rgba(255,255,255,...)` colors, glow/backdrop-filter
+  effects (`box-shadow`, `backdrop-filter:blur(12px)`, `drop-shadow` on svg) that only
+  made sense against a saturated blue fill; replaced with plain `--blue-mute`
+  (inactive) / `--blue` + `--blue-glow` background chip (active) coloring. Removed the
+  `.page .section-title{color:#fff}` / `.page .section-title .see-all{color:#fff}`
+  override entirely — `.section-title`'s base `--blue-dim` color already reads fine on
+  the light page-bg. Removed `.page .list-end{color:rgba(255,255,255,.7)}` override for
+  the same reason — base `.list-end{color:var(--ink-dim)}` applies everywhere now.
+- **Left alone, deliberately**: `.record-row` (owner explicit: "blue and box not
+  rounded") and `.instruction-card` (numbered deposit/withdraw steps) — both are
+  independent solid-`--blue`-background components unrelated to the page-canvas
+  decision, not touched. `.sheet-bg` still uses `background:var(--page-bg)` — no code
+  change needed there, it now correctly renders light since the token value changed.
+- **Verification**: full hex-color audit
+  (`grep -oE "#[0-9a-fA-F]{6}\b" user-src/index.html | sort | uniq -c`) — no stray
+  literal hexes left over from the canvas era. Confirmed `admin-src/index.html`'s
+  `--bg:#f4f7fb` was already untouched/light (grep, no edit needed). Rebuilt via
+  `node build-core.js` — round-trip OK. Bumped `user/sw.js` cache
+  `space8-shell-v229` → `v230`. Ran the full `test-*.js` suite (all pass, none newly
+  broken). Visually verified via Playwright (Home/Products/Account screenshots at
+  420×900) — light neutral canvas throughout, blue consistently used only for the
+  wordmark dot, icons, buttons, active nav state, and the profile card.
+- **`CLAUDE.md`'s Palette section rewritten** to describe "blue as accent, light
+  canvas" as the current structure (superseding the "vibrant blue is the actual page
+  CANVAS" framing from 2026-08-16), condensing the canvas experiment into the color
+  history paragraph rather than keeping its full rationale block.
+- Nothing left open.
+
+---
+
 ## 2026-08-16 — Claude — Accent color restored to the original vibrant blue (#2e6bff), ending the color saga
 
 Owner: *"return to blue as it was."*

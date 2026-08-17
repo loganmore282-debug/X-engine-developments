@@ -91,21 +91,25 @@ The owner was explicit and this must not be re-litigated without them saying so:
 Static mockup, still in the repo: **`space8/design/visual-system-mockup.html`**. The real
 app in `user-src/` was built directly against this.
 
-- **Palette — vibrant blue is the actual page CANVAS, white cards float on top.**
-  **Restored to the ORIGINAL vibrant blue as of 2026-08-16 — `--blue: #2e6bff`,
-  `--page-bg` the SAME blue.** The owner's own words: "return to blue as it
-  was." This is the stable, settled state — treat it as the default unless
+- **Palette — blue is an ACCENT color, page canvas is light neutral.**
+  **Settled state as of 2026-08-17 — `--blue: #2e6bff` stays, but `--page-bg`
+  is DECOUPLED from it (`--page-bg: #eef1f6`, a light neutral).** The owner's
+  own words: "now remove background blue." This reverses an earlier
+  structural experiment (2026-08-16) that made `--page-bg` equal `--blue`
+  (~80% blue page coverage, white cards floating on top). That experiment is
+  over — treat "blue as accent only, light canvas" as the default unless
   explicitly told otherwise again.
   **Color history, for context only, condensed** (full blow-by-blow in
   `AGENT_LOG.md` if ever genuinely needed — do not restate it here again):
-  this project cycled blue → sapphire → green (3 rejected attempts, too
-  bright each time) → violet (an explicit owner delegation, "you decide") →
-  dark navy (`#0D1B2A`–`#1B263B`, from a ChocoMCC reference graphic) → and
-  now **back to this original blue**, confirmed via git history
-  (`835facb`/`6acac9b`) rather than reconstructed from memory, so the exact
-  values below are byte-for-byte what shipped before the saga started.
+  this project cycled blue (accent) → blue-as-canvas → sapphire → green (3
+  rejected attempts, too bright each time) → violet (an explicit owner
+  delegation, "you decide") → dark navy (`#0D1B2A`–`#1B263B`, from a ChocoMCC
+  reference graphic) → back to blue-as-canvas (confirmed via git history
+  `835facb`/`6acac9b`, byte-exact) → and now **blue-as-accent again**, with
+  the pre-canvas structural CSS pattern restored via git history (`d449b19`,
+  the last commit before the canvas experiment began).
   **Exact values**: `--blue: #2e6bff` · `--blue-dim: #1c48b3` · `--blue-mute:
-  #7fa1f0` · `--blue-glow: rgba(46,107,255,.22)` · `--page-bg: #2e6bff` ·
+  #7fa1f0` · `--blue-glow: rgba(46,107,255,.22)` · `--page-bg: #eef1f6` ·
   `--surface-blue: #eaf1ff` (unused, kept consistent regardless).
   **If asked to change the accent again**: use the same value-only-swap
   approach (token names stay `--blue*`, only hex values move — see the
@@ -114,34 +118,30 @@ app in `user-src/` was built directly against this.
   `admin-src/index.html` every time, not just the token block — this file's
   own history has literal, non-token hex values (brand-mark gradient center,
   button gradient highlight, `theme-color` meta + icon stroke, in admin) that
-  must be updated in lockstep or they silently keep the old color. If ever
-  asked to "go back" again, prefer restoring the confirmed original above
-  over reconstructing values from this file's prose, which summarizes rather
-  than guarantees byte-exact accuracy — git history is the source of truth.
-  The rest of this section (originally written for blue, 2026-08-16 earlier
-  that day) still describes the correct STRUCTURE, just mentally substitute
-  the current accent for "blue" while reading it: `body`/`main`/every `.page` render
-  directly on `--page-bg` (blue); `.topbar` and `.navbar` are blue with WHITE wordmark/
-  nav-icon/nav-label text (`.navitem` inactive = `rgba(255,255,255,.68)`, active = `#fff`
-  solid, same for `.svg-cart`/`.svg-team` fills); `.section-title` headers are white when
-  inside a `.page` (`.page .section-title` override) but stay the darker `--blue-dim` in
-  their base rule for any future sheet content that renders on white — don't collapse
-  that distinction, even though nothing currently uses a `.section-title` inside a sheet
-  (the notification bell's "Recent Activity" sub-heading that used to be the live
-  example was removed 2026-08-16 when Codex replaced the whole sheet with real
-  database-backed notifications, titled "Notifications" now, no `.section-title` inside
-  it at all — `.sheet-title` is a separate, always-white-context class, unaffected).
-  Every content card (`.card`, `.prod-card`, `.plan-card`,
-  `.mystats .card`, `.mtile`, `.menu-list`, `.shortcut`, `.banner` fallback) is now plain
-  white with **no colored border** — the blue-glow borders/tints from the immediately
-  prior (green, and blue-accent-on-white) design passes were deliberately removed because
-  they'd blend into a same-hue blue canvas or were simply redundant once white cards do
-  the contrast work on their own. Three surfaces were deliberately kept OFF the blue
-  canvas and given `--void` (light, near-white) backgrounds instead, because putting them
-  on `--blue` would break their own internal contrast: `#loadingScreen` (its mark is drawn
-  in `--blue` and would vanish), `.auth-screen` (an explicit earlier "no gradient, minimal,
-  formal" decision, unrelated to this change, still holds), and `.assist-panel` (its
-  own `.msg.user` bubbles are `var(--blue)` and would vanish on a `var(--blue)` panel).
+  must be updated in lockstep or they silently keep the old color. Git
+  history is the source of truth for exact values — don't reconstruct from
+  this file's prose, which summarizes rather than guarantees byte accuracy.
+  **Current structure** (post-2026-08-17 revert): `body`/`main`/every `.page`
+  render on the light `--page-bg`; `.topbar` uses `background:var(--page-bg)`
+  (blends into the page, no visual separation needed); `.navbar` is
+  `background:var(--surface)` with a `border-top:1px solid var(--line)`, plain
+  white bar sitting on the light page. `.wordmark`/`.wordmark .dot` use
+  `var(--blue)` for the dot, no color override on the wordmark text itself
+  (default `--ink`). `.navitem` uses `--blue-mute` (inactive) / `--blue`
+  (active, via `--blue-glow` background chip) for text+icon color — no
+  hardcoded whites, no glow/backdrop-filter effects (those only made sense
+  against a saturated blue fill). `.section-title` stays `--blue-dim` (its
+  base rule) everywhere, including inside `.page` — the `.page .section-title
+  {color:#fff}` override from the canvas era was removed since it's no
+  longer needed or correct. Same for `.page .list-end` (removed; base
+  `.list-end{color:var(--ink-dim)}` applies everywhere now). `.sheet-bg` still
+  uses `background:var(--page-bg)` (now light, correctly matches the topbar).
+  Independent blue-background cards that are NOT tied to the page-canvas
+  decision — `.record-row` (owner explicit: "blue and box not rounded"),
+  `.instruction-card` (numbered deposit/withdraw steps) — were left alone;
+  they're deliberate solid-blue components regardless of what the page
+  background is. Three surfaces that were already off any blue treatment
+  remain unaffected: `#loadingScreen`, `.auth-screen`, `.assist-panel`.
   **`.auth-screen`'s "no gradient, minimal" base still holds — 2026-08-16 added an
   optional, admin-uploaded photo layered behind it, not a gradient.** Owner: "put a
   background image on authentication screens... maintain the tabs of registration
