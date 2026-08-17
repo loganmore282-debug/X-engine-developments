@@ -5,7 +5,7 @@ var SERVER = 'https://mycallbackurl.onrender.com';
 
 var STATE = {
   account: null, products: null, investments: null, settings: null,
-  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null,
+  teamStats: null, teamMembers: {1:null,2:null,3:null}, teamExpanded: {1:false,2:false,3:false}, bankAccounts: null,
   hasPayoutPin: false, banners: {}, currentPage: 'home',
   loaded: { home:false, products:false, team:false, account:false }
 };
@@ -584,9 +584,9 @@ function planDetailHtml(inv){
         detailField('Purchase Date', esc(inv.date||'-')) +
         detailField('Purchase Time', esc(inv.time||'-')) +
         detailField('Price', ugx(inv.amount)) +
-        detailField('Daily Return', ugx(inv.dailyPayout)) +
+        detailField('Daily Profit', ugx(inv.dailyPayout)) +
         detailField('Total Return', ugx(inv.expectedReturn)) +
-        detailField('Earned So Far', ugx(inv.paidOut)) +
+        detailField('Accumulated Profit', ugx(inv.paidOut)) +
       '</div>' +
     '</div>' +
     '<div class="card" style="text-align:center">' +
@@ -987,19 +987,30 @@ async function renderTeam(){
     '<div class="card"><div class="lab">Total Referrals</div><div class="val">' + ((s.counts.l1||0)+(s.counts.l2||0)+(s.counts.l3||0)) + '</div></div>' +
     '<div class="card"><div class="lab">Total Commission</div><div class="val mono">' + ugx(s.commission) + '</div></div>' +
   '</div>';
+  var TEAM_PAGE_SIZE = 5;
   [1,2,3].forEach(function(l){
     var lvl = results[l] || { members: [], failed: true };
     html += '<div class="section-title">Level ' + l + ' <span class="see-all">' + LEVEL_PCT[l] + '%</span></div>';
+    var expanded = !!STATE.teamExpanded[l];
+    var visible = expanded ? lvl.members : lvl.members.slice(0, TEAM_PAGE_SIZE);
     html += lvl.failed ? emptyState('cluster','Could not load this level — reopen the Team tab to retry.') :
       lvl.members.length ?
-      '<div class="card">' + lvl.members.map(function(m){
+      '<div class="card">' + visible.map(function(m){
         return '<div class="member-row"><div class="av">' + esc(String(m.phone||'?').slice(-2)) + '</div>' +
-          '<div class="info"><div class="phone">' + esc(m.phone) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + (m.hasInvested?' · Active':'') + '</div></div></div>';
-      }).join('') + '</div>' + listEndFooter() :
+          '<div class="info"><div class="phone">' + esc(m.phone) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + '</div></div>' +
+          '<span class="pill ' + (m.hasInvested?'pill-active':'pill-pending') + '">' + (m.hasInvested?'Active':'Pending') + '</span></div>';
+      }).join('') + '</div>' +
+      (lvl.members.length > TEAM_PAGE_SIZE ? '<div class="view-more-row"><button class="view-more-lvl" data-level="' + l + '">' + (expanded ? 'View less' : 'View more (' + (lvl.members.length - TEAM_PAGE_SIZE) + ')') + '</button></div>' : '') +
+      listEndFooter() :
       emptyState('cluster','No referrals at this level yet.');
   });
   html += '<div class="section-title">Task Center</div><div id="taskList"></div>';
   el.innerHTML = html;
+  qsa('.view-more-lvl', el).forEach(function(btn){ btn.onclick = function(){
+    var l = Number(btn.dataset.level);
+    STATE.teamExpanded[l] = !STATE.teamExpanded[l];
+    renderTeam();
+  }; });
   renderTaskList(s.milestones||[]);
 }
 function renderTaskList(milestones){
@@ -1052,7 +1063,7 @@ async function renderAccount(){
 
   html += '<div class="card giftcode-card">' +
     '<div class="giftcode-row">' +
-      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" placeholder="Enter gift code" autocapitalize="characters" autocomplete="off"></div>' +
+      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" maxlength="5" placeholder="Enter gift code" autocapitalize="characters" autocomplete="off"></div>' +
       '<button class="btn btn-primary" id="giftCodeBtn">Redeem</button>' +
     '</div>' +
   '</div>';
@@ -1231,7 +1242,7 @@ async function renderPayoutSheet(){
           '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
           '<option value="Airtel Money">Airtel Money</option>' +
         '</select>' +
-        '<div class="field">' + ico('phone') + '<input id="payPhone" placeholder="07XXXXXXXX"></div>' +
+        '<div class="field">' + ico('phone') + '<input id="payPhone" type="tel" inputmode="tel" maxlength="10" placeholder="07XXXXXXXX"></div>' +
         '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN" autocomplete="one-time-code"></div>' +
         '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
       '</div>' +
@@ -1366,8 +1377,8 @@ function openDepositSheet(){
     '<div class="sheet-title">Deposit Funds</div>' +
     '<div class="sheet-sub">Minimum deposit ' + ugx(min) + '.</div>' +
     '<div class="auth-form">' +
-      '<div class="field">' + ico('deposit') + '<input id="depAmount" type="number" inputmode="numeric" placeholder="Amount (UGX)"></div>' +
-      '<div class="field">' + ico('phone') + '<input id="depPhone" type="tel" placeholder="07XXXXXXXX" value="' + esc(acc.phone||'') + '"></div>' +
+      '<div class="field">' + ico('deposit') + '<input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Amount (UGX)"></div>' +
+      '<div class="field">' + ico('phone') + '<input id="depPhone" type="tel" inputmode="tel" maxlength="10" placeholder="07XXXXXXXX" value="' + esc(acc.phone||'') + '"></div>' +
       '<select id="depNetwork" class="field" style="appearance:none">' +
         '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
         '<option value="Airtel Money">Airtel Money</option>' +
@@ -1452,7 +1463,7 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
       ico('chev').replace('<svg ', '<svg class="chev" ') +
     '</div>' +
     '<div class="auth-form" style="margin-top:14px">' +
-      '<div class="field">' + ico('withdraw') + '<input id="wdAmount" type="number" inputmode="numeric" placeholder="Amount (UGX), min ' + ugx(min) + '"></div>' +
+      '<div class="field">' + ico('withdraw') + '<input id="wdAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Amount (UGX), min ' + ugx(min) + '"></div>' +
       '<div class="field-hint" id="feePreview">Fee ' + feePct + '% applies — enter an amount to see what you\'ll receive.</div>' +
       '<div class="field">' + ico('shield') + '<input id="wdPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit security PIN"></div>' +
     '</div>' +

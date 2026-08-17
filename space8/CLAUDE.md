@@ -1782,6 +1782,119 @@ unnoticed money-safety race, not just a records-writing cosmetic gap.
   both correctly updated). Full `test-*.js` suite green, 64/64. Server-only
   changes, no rebuild needed.
 
+## Round 16 of the same day, 2026-08-17 — owner's 8-screenshot bug report: input glitches/overrides, abnormal admin total, referral-link 404, label renames, Team page paging/status, cumulative-earnings gap
+
+Owner sent 8 screenshots and one message covering 11 distinct items: unbounded
+gift-code/deposit/withdrawal/phone inputs letting garbled 20+ digit values
+reach the server, an abnormal "Total Invested" figure in the admin panel, a
+referral link that 404s, two label renames, Team-page paging, and an explicit
+requirement that "Cumulative Earnings" include every real income source. No
+ChatGPT this round — investigated and fixed directly, same as Round 14.
+
+1. **Gift code input had no length limit** — screenshot showed
+   `GOTTDOOYDOYDYOD` overflowing the field. Gift codes are generated as
+   exactly 5 characters (`genGiftCode()`/`GIFTCODE_CHARS`), and `/redeem`
+   already capped server-side input at 32 chars, so this was purely a
+   client polish gap. Added `maxlength="5"` to `giftCodeInput`.
+2. **Deposit/withdrawal amount inputs had no digit limit** — screenshots
+   showed a garbled string of zeros and a withdrawal fee computed off it
+   ("Fee UGX 74,999,999,999,999,990,000,000,000,000"). Fixed both ends:
+   - Server: added `MAX_MONEY_AMOUNT = 999_999_999` (9 digits) and a check
+     in both `/deposit/marzpay` and `/withdraw/request` rejecting anything
+     over it — this is the real fix, since a client limit alone is
+     bypassable by any direct API call.
+   - Client: `depAmount`/`wdAmount` needed `maxlength="9"`, but HTML's
+     `maxlength` attribute silently does nothing on `type="number"` inputs
+     (a fresh discovery this round) — switched both to
+     `type="text" inputmode="numeric" maxlength="9"`, which keeps the
+     numeric mobile keyboard via `inputmode` while making `maxlength`
+     actually take effect.
+3. **Phone number inputs had no digit limit** — screenshots showed 20+
+   digit garbled "phone numbers" in login/register/deposit/withdrawal-
+   account forms. Added `maxlength="10"` to `loginPhone`, `regPhone` (both
+   in `user-src/index.html`), and `payPhone`, `depPhone` (both in
+   `user-src/original_module.js`).
+4. **Admin panel's "Total Invested" showing an absurd figure** (owner
+   screenshot: "UGX 30,000,015,000,015,000") — root cause: the dashboard's
+   own aggregation loops (`/admin/stats` and the Analytics endpoint) did a
+   bare `total += u.totalInvested` with no type coercion. If even ONE
+   user's stored money field was ever a STRING (the pre-existing
+   totalInvested string-concatenation corruption already documented
+   earlier in this file, only partially repaired), JS's `+=` silently
+   coerces the ENTIRE running total to a string from that account onward —
+   every subsequent user's numeric contribution gets string-concatenated
+   instead of added for the rest of the loop, producing an ever-growing,
+   very-real-looking but wildly wrong number. Ruled out `FieldValue
+   .increment()` itself as an ongoing source by reading `db.js` — it
+   compiles to a real MongoDB `$inc`, which throws on a non-numeric field
+   rather than silently corrupting it, so this was specifically the admin
+   dashboard's own less-defensive summing code, a NEW instance of the same
+   bug class. Fixed by `Number(...)`-coercing every summed field
+   (`walletBalance`, `totalDeposited`, `totalWithdrawn`, `totalInvested`,
+   `totalEarned`, `teamCommission`) at both aggregation sites. This stops
+   any future poisoning but does NOT retroactively repair whatever account
+   is already corrupted in the live database — the owner still needs to
+   run Admin → Users → "Recalculate totals" (`/admin/users/recount`) once
+   to clean it up for good.
+5. **Referral link opens to a "Not Found" page** — investigated the
+   deployment architecture, not the application code. `space8/render.yaml`
+   already has the correct SPA rewrite rule for the `space8-app` static
+   site (`routes: - type: rewrite, source: /*, destination: /index.html`),
+   so a deep link like `/?ref=CODE` should already resolve correctly by
+   the committed config. This means the 404 is a Render dashboard/deploy-
+   sync issue, not a code bug requiring a repo change — the owner should
+   check the `space8-app` static site's Redirects/Rewrites settings on
+   Render's dashboard and confirm a redeploy actually picked up
+   `render.yaml`'s route block (same class of gotcha as "owner forgets to
+   redeploy server.js", just on the frontend/routing side).
+6. **Label renames** (plan-detail sheet, `user-src/original_module.js`):
+   "Daily Return" → "Daily Profit", "Earned So Far" → "Accumulated Profit".
+7. **Team page: cap each level's referral list to 5 with a "View more"
+   expand** — `renderTeam()` used to render every member unconditionally.
+   Added `STATE.teamExpanded = {1:false,2:false,3:false}`, slice each
+   level's member list to 5 unless expanded, and a "View more (N)"/"View
+   less" button per level that toggles the flag and re-renders (no
+   network refetch — `STATE.teamMembers[l]` is already cached from the
+   first load).
+8. **Team page: explicit Active/Pending status badges** — member rows
+   used to only append " · Active" for invested members and show nothing
+   for the rest, which reads as broken/missing rather than "pending" for
+   anyone who hasn't invested yet. Added a `pill-active`/`pill-pending`
+   badge per row, driven by the `hasInvested` field `/team/members`
+   already returns (`(d.totalInvested || 0) > 0`).
+9. **"Cumulative Earnings" (`totalEarned`) was silently missing 3 of its
+   5 required income sources.** The owner was explicit that it must
+   include check-in, referrals, task rewards, gift codes, and daily
+   profit. Auditing every place `totalEarned` gets touched found it
+   already correctly included maturity/cashback payout and Task Center
+   milestone rewards, but:
+   - `/checkin` credited `walletBalance` and never `totalEarned` at all.
+   - `creditReferralCommission` credited `walletBalance` + `teamCommission`
+     and never `totalEarned`.
+   - `/redeem` (gift code) credited `walletBalance` and never `totalEarned`.
+   All three now increment `totalEarned` alongside their existing credit.
+   **Also caught a second-order bug this would have caused**: the admin
+   "Recalculate totals" tool (`/admin/users/recount`) rebuilds `totalEarned`
+   from transaction history, but only ever summed `type === 'cashback'`
+   transactions — the very next time an admin clicked recalculate, it
+   would have silently WIPED OUT every user's checkin/referral/task-reward/
+   gift-code earnings back down to cashback-only. Fixed the recount to sum
+   all 5 earning transaction types (`cashback`, `commission`, `team_reward`,
+   `promocode`, `checkin`), keeping it in permanent lockstep with what's
+   credited live.
+- **Verification**: new `test-round16-limits-and-earnings.js` (14/14) —
+  proves the 9-digit deposit/withdrawal cap is enforced server-side (not
+  just client-side), the admin total stays numeric and sane when one
+  user's field is stored as a string, `totalEarned` actually increases
+  from a real check-in / referral commission / gift-code redemption, and
+  `/admin/users/recount` reconstructs `totalEarned` as the sum of all 5
+  transaction types from a seeded ledger. Full `test-*.js` suite green,
+  65/65 (64 existing + the new file). Rebuilt `user/index.html` via
+  `node build-core.js` (round-trip OK) and bumped `user/sw.js`'s cache to
+  `space8-shell-v243` since `user-src/` changed. Admin panel (`admin-src/`)
+  needed no changes or rebuild — it only displays the numbers `/admin
+  /stats` sends, it doesn't aggregate them itself.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

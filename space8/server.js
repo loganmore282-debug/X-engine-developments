@@ -403,6 +403,15 @@ const BANNER_KEYS = new Set([
 // slowing down every client's /public/banners fetch. ~2MB of actual image
 // bytes, accounting for base64's ~37% overhead.
 const BANNER_MAX_LEN = 2_800_000;
+// Owner: "amounts of deposits should be limited to 9-digits, even on
+// withdrawals limited to 9-digits" -- confirmed real: neither /deposit/
+// marzpay nor /withdraw/request had ANY upper bound on the client-supplied
+// amount before this, only isNaN/<=0. A glitched/garbled client-side
+// amount (missing maxlength on the input -- fixed separately in
+// user-src/) could reach the server as a huge integer and be accepted
+// outright. 999,999,999 (9 digits) is comfortably above any real UGX
+// mobile-money transaction MarzPay would ever actually process.
+const MAX_MONEY_AMOUNT = 999_999_999;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 ambiguity
 // Draws n characters from an arbitrary alphabet using crypto.randomInt --
 // Node's own implementation, not a hand-rolled byte%length -- which
@@ -1332,8 +1341,12 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
       // but the credit write never landed" (a single lost payment, visible
       // and fixable by hand), never a silently repeating double-pay.
       await invRef.update({ commissionPaidLevels: FieldValue.arrayUnion(i) });
+      // Same totalEarned gap as /checkin: referral commission only ever
+      // touched walletBalance + teamCommission, so referral income was
+      // silently missing from "Cumulative Earnings" on the client.
       await db.collection('users').doc(id).update({
-        walletBalance: FieldValue.increment(reward), teamCommission: FieldValue.increment(reward)
+        walletBalance: FieldValue.increment(reward), teamCommission: FieldValue.increment(reward),
+        totalEarned: FieldValue.increment(reward)
       });
       await db.collection('transactions').add({
         userId: id, type: 'commission', description: `Level ${i + 1} reward`,
@@ -1989,7 +2002,12 @@ app.post('/checkin', async (req, res) => {
       const yStr = yPad(yesterday.getUTCMonth() + 1) + '/' + yPad(yesterday.getUTCDate()) + '/' + yesterday.getUTCFullYear();
       const streak = real.lastCheckin === yStr ? real.streak + 1 : 1;
       const bonus = sett.dailyCheckin;
-      await ref.update({ walletBalance: FieldValue.increment(bonus), lastCheckin: today, checkinStreak: streak });
+      // totalEarned ("Cumulative Earnings" on the client) previously only
+      // counted maturity payouts and task-center rewards -- check-in bonus
+      // credited the wallet but never this field, so the owner's "cumulative
+      // income must include checkin" requirement wasn't met. Incrementing
+      // both together keeps them in lockstep going forward.
+      await ref.update({ walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckin: today, checkinStreak: streak });
       const { date, time } = nowStr();
       await db.collection('transactions').add({
         userId: uid, type: 'checkin', description: `Daily reward, day ${streak}`,
@@ -2125,6 +2143,7 @@ app.post('/deposit/marzpay', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtUGX(MAX_MONEY_AMOUNT)}).` });
   try {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
@@ -2431,6 +2450,7 @@ app.post('/withdraw/request', async (req, res) => {
   try {
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtUGX(MAX_MONEY_AMOUNT)}).` });
   // Bank-transfer withdrawal has been removed -- mobile money is the only
   // withdrawal rail. method is intentionally never read from the client.
   const method = 'mobile_money';
@@ -3220,7 +3240,12 @@ app.post('/redeem', async (req, res) => {
         await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId) }).catch(() => {});
         return res.status(400).json({ status: 'error', message: 'This code has reached its usage limit' });
       }
-      await db.collection('users').doc(userId).update({ walletBalance: FieldValue.increment(reward) });
+      // Same totalEarned gap as /checkin and referral commission: gift-code
+      // reward only ever touched walletBalance, so redeemed codes were
+      // silently missing from "Cumulative Earnings" on the client.
+      await db.collection('users').doc(userId).update({
+        walletBalance: FieldValue.increment(reward), totalEarned: FieldValue.increment(reward)
+      });
       await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
       const { date, time } = nowStr();
       await db.collection('transactions').add({
@@ -3676,7 +3701,12 @@ app.get('/admin/users/recount', async (req, res) => {
       if (!t.userId) return;
       const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
       if (t.type === 'deposit') row.deposited += Number(t.amount) || 0;
-      else if (t.type === 'cashback') row.earned += Number(t.amount) || 0;
+      // "Cumulative Earnings" (totalEarned) is credited live from 5 sources:
+      // maturity/daily payout (cashback), referral commission, task-center
+      // reward, gift-code redemption, and check-in bonus -- this recount has
+      // to sum the exact same 5 transaction types or "Recalculate totals"
+      // would silently erase whichever of them it left out for every user.
+      else if (t.type === 'cashback' || t.type === 'commission' || t.type === 'team_reward' || t.type === 'promocode' || t.type === 'checkin') row.earned += Number(t.amount) || 0;
       if (t.type === 'checkin') (checkinDays[t.userId] || (checkinDays[t.userId] = new Set())).add(eatDayKey(t.createdAt));
     });
     // totalInvested is a plain cumulative counter (never derived server-side
@@ -4559,12 +4589,25 @@ app.get('/admin/stats', async (req, res) => {
         totalEarned = 0, totalCommissions = 0, referredUsers = 0, bannedUsers = 0;
     usersSnap.forEach(d => {
       const u = d.data();
-      totalWallet      += u.walletBalance   || 0;
-      totalDeposited   += u.totalDeposited  || 0;
-      totalWithdrawn   += u.totalWithdrawn  || 0;
-      totalInvested    += u.totalInvested   || 0;
-      totalEarned      += u.totalEarned     || 0;
-      totalCommissions += u.teamCommission  || 0;
+      // Real bug, confirmed live (owner screenshot: "Total invested UGX
+      // 30,000,015,000,015,000"): if even ONE user's money field is ever
+      // stored as a string (the pre-existing totalInvested string-
+      // concatenation corruption documented at /admin/users/recount below
+      // is exactly this), `runningTotal += "a string"` in JS coerces the
+      // running total itself to a string from that point on -- every
+      // SUBSEQUENT user's numeric contribution gets string-concatenated
+      // instead of added, producing an absurd, ever-growing digit string
+      // for the rest of the loop. Number()-coercing each addend keeps the
+      // running total numeric no matter what shape any single stored
+      // value is in. Doesn't repair the corrupted source field itself --
+      // that still needs Admin -> Users -> "Recalculate totals" -- but
+      // stops one bad account from poisoning this entire dashboard figure.
+      totalWallet      += Number(u.walletBalance)  || 0;
+      totalDeposited   += Number(u.totalDeposited) || 0;
+      totalWithdrawn   += Number(u.totalWithdrawn) || 0;
+      totalInvested    += Number(u.totalInvested)  || 0;
+      totalEarned      += Number(u.totalEarned)    || 0;
+      totalCommissions += Number(u.teamCommission) || 0;
       if (u.referredBy) referredUsers++;
       if (u.status === 'banned') bannedUsers++;
     });
@@ -4711,8 +4754,9 @@ app.post('/admin/analytics', async (req, res) => {
       const ms = tsMillis(u.createdAt);
       if (ms >= sinceMs) { newUsers++; const { day } = eatParts(u.createdAt); ensureDay(day).users++; }
       if ((u.totalInvested || 0) > 0) activeInvestors++;
-      investedAmount += u.totalInvested || 0;
-      commissionsPaid += u.teamCommission || 0;
+      // Same string-poisoning fix as the dashboard stats above.
+      investedAmount += Number(u.totalInvested) || 0;
+      commissionsPaid += Number(u.teamCommission) || 0;
       if ((u.teamL1Count || 0) > 0 || (u.teamCommission || 0) > 0)
         referrers.push({ phone: u.phone || '', team: u.teamL1Count || 0, earned: u.teamCommission || 0 });
       if ((u.totalDeposited || 0) > 0) depositors.push({ phone: u.phone || '', amount: u.totalDeposited || 0 });

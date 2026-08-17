@@ -14,6 +14,89 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Owner's 8-screenshot bug report: input caps, abnormal admin total, referral-link 404, label renames, Team paging/status, cumulative-earnings gap
+
+- **What changed**: 11-item fix round from a single owner message + 8
+  screenshots (no ChatGPT this round, direct investigation like Round 14):
+  - `server.js`: added `MAX_MONEY_AMOUNT = 999_999_999` (9 digits) with a
+    server-side check in `/deposit/marzpay` and `/withdraw/request`;
+    `Number(...)`-coerced every summed field in both the `/admin/stats` and
+    Analytics dashboard aggregation loops; `/checkin`, `creditReferral
+    Commission`, and `/redeem` now all increment `totalEarned` alongside
+    their existing `walletBalance` credit; `/admin/users/recount` now sums
+    all 5 earning transaction types (`cashback`, `commission`,
+    `team_reward`, `promocode`, `checkin`) instead of only `cashback`.
+  - `user-src/index.html`: `maxlength="10"` on `loginPhone`/`regPhone`.
+  - `user-src/original_module.js`: `maxlength="5"` on `giftCodeInput`;
+    `depAmount`/`wdAmount` switched `type="number"` → `type="text"
+    inputmode="numeric" maxlength="9"`; `maxlength="10"` on `payPhone`/
+    `depPhone`; "Daily Return"→"Daily Profit", "Earned So Far"→
+    "Accumulated Profit"; `renderTeam()` now caps each level to 5 members
+    with a "View more"/"View less" toggle (`STATE.teamExpanded`), and each
+    member row shows an explicit Active/Pending pill instead of a
+    conditional " · Active" suffix.
+  - `user-src/index.html` (CSS): `.pill-pending`, `.view-more-row`,
+    `.view-more-lvl` styles added.
+  - `user/sw.js`: cache bumped `space8-shell-v242` → `v243`.
+  - New `test-round16-limits-and-earnings.js`.
+- **Why**: Owner reported (with screenshots) that unbounded gift-code/
+  deposit/withdrawal/phone inputs were letting garbled 20+ digit values
+  reach the server (e.g. a withdrawal fee computed as "UGX
+  74,999,999,999,999,990,000,000,000,000"), the admin panel showed an
+  absurd "Total Invested UGX 30,000,015,000,015,000", the referral link
+  404s, two labels needed renaming, Team page needed paging + accurate
+  status, and "Cumulative Earnings" needed to demonstrably include every
+  real income source (checkin/referrals/task rewards/gift codes/daily
+  profit) — auditing every `totalEarned` write site found it was actually
+  missing 3 of those 5.
+- **Root causes, not just symptoms**:
+  - HTML `maxlength` silently does nothing on `<input type="number">` —
+    discovered while implementing the amount caps; required the
+    `type="text"` + `inputmode="numeric"` substitution to actually work.
+  - The admin total's corruption is the same string-poisoning bug class
+    already documented earlier in this log for `totalInvested`: JS's `+=`
+    coerces an entire running total to a string the moment it hits even
+    one string-typed addend, corrupting every subsequent user's
+    contribution for the rest of that loop. Confirmed (by reading `db.js`)
+    that `FieldValue.increment()` itself is NOT the source — it compiles
+    to a real MongoDB `$inc`, which throws rather than silently
+    corrupting — so this was specifically the dashboard's own
+    less-defensive summing code.
+  - Referral link 404: `space8/render.yaml` already has the correct SPA
+    rewrite rule for the `space8-app` static site — this is a Render
+    dashboard/deploy-sync issue, not a code bug. No repo change possible;
+    owner needs to check Render's Redirects/Rewrites settings for that
+    service.
+  - `totalEarned` gap: `/checkin`, `creditReferralCommission`, and
+    `/redeem` all credited `walletBalance` (and in the referral case,
+    `teamCommission`) but never `totalEarned`. Fixing this alone would
+    have created a second-order bug: `/admin/users/recount` rebuilds
+    `totalEarned` from transaction history but only summed `cashback`
+    transactions, so the next "Recalculate totals" click would have wiped
+    out the newly-credited checkin/referral/task/giftcode earnings for
+    every user. Fixed both halves together.
+- **Verification**: `test-round16-limits-and-earnings.js` (14/14) — proves
+  the 9-digit amount cap is enforced server-side independent of the client
+  input, the admin total stays a sane number when one user's field is a
+  string, `totalEarned` measurably increases from a real checkin/referral-
+  commission/giftcode-redemption call, and `/admin/users/recount`
+  reconstructs `totalEarned` as the exact sum of all 5 transaction types
+  from a seeded ledger. Full `test-*.js` suite green, 65/65 (64 existing +
+  the new file). `node build-core.js` round-trip OK; `user/sw.js` cache
+  bumped to `v243`. Admin panel needed no rebuild — it only displays the
+  numbers `/admin/stats` already sends.
+- **Left open**:
+  - The referral-link 404 needs the owner to check Render's dashboard
+    Redirects/Rewrites config for `space8-app` — no further code action
+    possible from this session.
+  - The admin dashboard fix stops FUTURE poisoning of the total but does
+    not retroactively repair whatever account is already corrupted live —
+    owner still needs to run Admin → Users → "Recalculate totals" once.
+  - Have not deployed/verified any of this against the live Render
+    services or a real device yet — the owner still needs Render to
+    actually pick up this commit (autoDeploy) for any of this to take
+    effect in production.
+
 ## 2026-08-17 — Claude — ChatGPT verified the withdrawal-records fix; found a real unguarded success/failure race plus a missing 4th resolution path
 
 Owner: "now let us also ask chatgpt." Sent the withdrawal-records-finalize

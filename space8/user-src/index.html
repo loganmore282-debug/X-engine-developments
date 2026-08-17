@@ -147,6 +147,11 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .pill-active{ background:var(--blue-glow); color:var(--blue-dim); }
 .pill-done{ background:var(--surface-2); color:var(--ink-dim); }
 .pill-fail{ background:var(--danger-bg); color:var(--danger); }
+.pill-pending{ background:var(--surface-2); color:var(--ink-dim); }
+.member-row .pill{ flex-shrink:0; }
+
+.view-more-row{ text-align:center; margin-top:10px; }
+.view-more-lvl{ background:none; border:none; color:var(--blue); font-size:12.5px; font-weight:700; padding:8px; cursor:pointer; }
 
 .banner{ border-radius:var(--radius-card); overflow:hidden; position:relative; height:132px; background:var(--surface); margin-bottom:18px; display:flex; align-items:flex-end; }
 .banner img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
@@ -422,7 +427,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
       <div class="auth-err" id="loginErr"></div>
       <div class="auth-form">
         <div><label class="auth-label" for="loginPhone">Phone Number</label>
-          <input class="auth-input" id="loginPhone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="tel"></div>
+          <input class="auth-input" id="loginPhone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="tel" maxlength="10"></div>
         <div><label class="auth-label" for="loginPassword">Password</label>
           <div class="auth-pwrow">
             <input class="auth-input" id="loginPassword" type="password" placeholder="Enter password" autocomplete="current-password">
@@ -444,7 +449,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
       <div class="auth-err" id="registerErr"></div>
       <div class="auth-form">
         <div><label class="auth-label" for="regPhone">Phone Number</label>
-          <input class="auth-input" id="regPhone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="tel"></div>
+          <input class="auth-input" id="regPhone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="tel" maxlength="10"></div>
         <div><label class="auth-label" for="regPassword">Password</label>
           <div class="auth-pwrow">
             <input class="auth-input" id="regPassword" type="password" placeholder="Create password" autocomplete="new-password">
