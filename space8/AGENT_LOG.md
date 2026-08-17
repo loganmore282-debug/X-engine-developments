@@ -14,6 +14,52 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Real Telegram logo + SIM-card icon replace inline SVGs (announcement dialog, Support screen, Withdrawal Account)
+
+- **What changed**: `ICONS.telegram` and `ICONS.lock`
+  (`user-src/original_module.js`) now return `<img src="...">` tags
+  pointing at two new raster files instead of inline `<svg>` markup:
+  - `user/telegram-icon.png` — the owner's supplied real Telegram app logo
+    (blue circle + white paper plane), background-removed from a fully
+    opaque white background via a 4-corner-seeded BFS flood-fill (not a
+    blanket white-to-transparent pass, which would have also erased the
+    icon's own white paper-plane shape inside the circle).
+  - `user/simcard-icon.png` — the owner's supplied SIM-card line-art icon,
+    background removed, recolored from black strokes to the app's blue
+    (`#2e6bff`, matching every sibling icon's stroke color) via a
+    whiteness→alpha + solid-recolor pass, then rotated -90° (portrait to
+    landscape) per the owner's explicit "it should be horizontal not
+    vertical" instruction.
+  Because both are single, central `ICONS` map entries, every call site
+  picks up the change automatically with zero per-site edits: the
+  announcement dialog's Telegram button, the Support screen's Telegram
+  contact rows, Account's "Join The Community" buttons, and the
+  assistant's quick-link button all now show the real Telegram logo;
+  both "Withdrawal Account" spots (Home shortcut + Account matrix tile)
+  now show the horizontal SIM-card icon instead of the old padlock SVG.
+  Added matching `img` sizing rules in `user-src/index.html` alongside
+  each existing `svg` sibling rule (`.pillbtn`, `.shortcut`,
+  `.telegram-row .btn`, `.mtile`, `.menu-row`, `.assist-links .btn`), so
+  every context renders the new icons at the same size the old SVGs used.
+- **Why**: owner, verbatim: *"bro replace as soon as possible, l need real
+  telegram icons not svg,right from dialog telegram button, there is
+  svg,l need that icon,also in support, also remove padlock svg on
+  withdrawal account and use that svg,but it should be horizontal not
+  vertical like you are seeing"* — supplied a real Telegram logo image and
+  a SIM-card icon image as the two references.
+- **Verification**: confirmed via grep that no `.replace('<svg ', ...)`
+  call site exists for `ico('telegram')` or `ico('lock')` that the new
+  `<img>` markup would break (only an unrelated `ico('chev')` call does
+  this). `node build-core.js` round-trip OK. Full `test-*.js` suite green,
+  68/68 (pure client-side markup/asset change, no server logic touched).
+  Bumped `user/sw.js` cache `v252` → `v253` and added both new icon files
+  to the SW `SHELL` precache array (small, frequently-visible UI-chrome
+  icons, same precedent as `giftbox.png` — unlike the About page's
+  on-demand article photos, which were deliberately left out of SHELL).
+- **Left open**: real-device visual check (same standing caveat as every
+  other client-only change this session — the sandbox can't reach a live
+  browser).
+
 ## 2026-08-17 — Claude — About page rebuilt as a long, photo-illustrated company story
 
 - **What changed**: `openAboutSheet()` (new function) replaces the old flat,

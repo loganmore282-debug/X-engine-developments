@@ -688,9 +688,9 @@
 //   3. The navigation fetch itself didn't bypass the HTTP cache. It does now.
 // Also: the Add Funds quick-amount chips now include 350,000 / 500,000 /
 // 800,000, wrapping onto a second row.
-const CACHE = 'space8-shell-v252';
+const CACHE = 'space8-shell-v253';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png'];
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();
