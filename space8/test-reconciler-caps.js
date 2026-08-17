@@ -151,8 +151,13 @@ async function setupUser(uid, phone) {
       userId: buyerId, tierKey: 'sputnik1', tierLabel: 'Sputnik 1',
       amount: 15000, cycle: 210, expectedReturn: 630000,
       status: 'active', dailyPayout: 3000, payoutsTotal: 210, payoutsMade: 0, paidOut: 0,
-      createdAt: new Date(), // fresh, well inside the reconciler's 10-minute window
-      isFirstInvestment: true, commissionPaidLevels: [],
+      createdAt: new Date(),
+      // reconcileCommissions() now queries commissionPending==true directly
+      // (superseding the old createdAt-window+limit approach this test used
+      // to exercise) -- seeded true here to simulate a real purchase whose
+      // original fire-and-forget creditReferralCommission() call never
+      // landed, exactly the case this reconciler exists to catch.
+      isFirstInvestment: true, commissionPaidLevels: [], commissionPending: true,
       date: '01/01/2026', time: '00:00:00',
     });
     commInvIds.push(id);
@@ -168,6 +173,9 @@ async function setupUser(uid, phone) {
   const referrerBalAfter = users().get(referrer).walletBalance || 0;
   check('referrer wallet actually received commission for all of them (28% of 15,000 = 4,200 each)',
     referrerBalAfter - referrerBalBefore === 4200 * COMMISSION_N, { delta: referrerBalAfter - referrerBalBefore, expected: 4200 * COMMISSION_N });
+  const stillPendingCount = commInvIds.filter(id => investments().get(id).commissionPending === true).length;
+  check('commissionPending cleared on every resolved investment, so the reconciler stops re-checking them forever',
+    stillPendingCount === 0, stillPendingCount);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

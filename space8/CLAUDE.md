@@ -2206,6 +2206,164 @@ stranded with zero automatic recovery, permanently.
   extended an existing file rather than adding a new one). `node
   build-core.js` round-trip OK; `user/sw.js` cache bumped `v246` → `v247`.
 
+## Round 22 of the same day, 2026-08-17 — second ChatGPT pass on the investment/referral/task-center audit; 4 real bugs fixed, 2 genuine architectural tradeoffs documented (not hastily patched)
+
+Owner re-sent the exact same broad audit request from Round 18 and asked
+ChatGPT to review it independently a second time. It found real issues
+Round 18 missed — verified each against the actual code (including reading
+`db.js`'s `Transaction` class implementation directly to settle exactly how
+non-atomic `db.runTransaction` really is) before touching anything.
+
+**Fixed — 4 real, containable bugs:**
+1. **Pathological daily-payout math could permanently strand an
+   investment.** `settleInvestmentIfDue()`'s old flat `dailyPayout * daysDue`
+   rate (exact remainder only computed on the FINAL day) can't overshoot for
+   any built-in tier (`cycleDays=210` / `returnMultiple=42` always divides
+   evenly), but an admin-configured custom product with an unlucky
+   `expectedReturn`/`cycle` ratio could round UP enough that the running
+   total already exceeds `expectedReturn` before the completion day arrives
+   — ChatGPT's worked example: `expectedReturn=105, cycle=210` →
+   `dailyPayout=round(105/210)=1` → 209 days of paying 1 each already totals
+   209, so the old "final day" branch computes `max(0,105-209)=0`, hits
+   `if(amount<=0)return`, and NEVER completes — `payoutsMade` frozen short
+   of total forever, `status` stuck `'active'` forever, re-checked and
+   skipped by every future sweep. Fixed with cumulative-target allocation:
+   the running total credited by day N is now always
+   `round(expectedReturn * N / total)`, which telescopes to EXACTLY
+   `expectedReturn` at `N=total` for ANY ratio (not just ones that divide
+   evenly) — produces IDENTICAL per-day amounts to the old approach for
+   every ratio that DOES divide evenly, so this is a pure generalization,
+   not a behavior change for any existing built-in tier. Also: the
+   completion tick now ALWAYS flips the investment to `'matured'` even if
+   the misconfigured-product math leaves nothing left to credit, so it can
+   never get stuck the way it used to.
+2. **`/admin/user/attach-referrer` could be raced into a genuine 2-node
+   referral cycle.** Its `withLock('reg:'+userId,...)` only serializes
+   against that SAME user's own concurrent self-registration — it does
+   NOTHING to stop two DIFFERENT concurrent attach-referrer calls from
+   racing each other, since `'reg:A'` and `'reg:B'` are different lock
+   keys. Concrete exploit: fire "attach B as A's referrer" and "attach A as
+   B's referrer" close together — both requests' cycle-check walks run
+   concurrently, both see a clean chain (neither has a `referredBy` yet),
+   both pass, both writes land: `A.referredBy=B` AND `B.referredBy=A`, a
+   real cycle that would later let a buyer appear as their own L2 referrer
+   in `creditReferralCommission()`. Fixed by wrapping the whole route in an
+   additional global `withLock('attach-referrer',...)`, nested OUTSIDE the
+   existing per-user lock — this admin-only, rare operation can afford full
+   serialization at effectively zero cost.
+3. **That same route's cycle-detection walk capped at 25 hops — too
+   shallow for a chain that's organically grown deeper.** A real referral
+   chain (unrelated to the 3-level commission structure, which only ever
+   looks 3 hops deep) can exceed 25 hops over enough real registrations;
+   past that depth the walk exhausts its budget and exits WITHOUT throwing
+   before ever reaching back to the account being attached, silently
+   letting a real (longer) cycle through undetected. Raised to 1000 hops —
+   effectively unlimited for any realistic chain, while still bounding
+   worst-case runtime against an already-corrupted loop from some other
+   cause.
+4. **`/team/milestone/claim`'s progress check had a real TOCTOU gap.**
+   Progress (`activeL1Count()`/`wholeTeamDeposits()`) was computed ONCE,
+   before the lock, and never re-verified at commit time. Concrete
+   scenario: a member has exactly the target's worth of active L1
+   referrals, passes the check, and in the gap before the transaction
+   actually commits, one of those referrals gets banned (`activeL1Count`
+   excludes banned members) — the claim would still pay out against
+   now-stale progress. Fixed by re-verifying progress live, inside the
+   lock, immediately before the credit — the check outside the lock stays
+   too, purely as a cheap fast-fail for obvious non-qualifiers so they
+   don't have to wait on the lock just to be told no.
+- Also: **`reconcileCommissions()`'s time-windowed query was replaced
+  entirely**, not just its cap raised again — see below, this is really
+  part of the SAME finding class as items above, not a separate one.
+- Minor: fixed a stale doc comment (`32^8` → the alphabet is actually 31
+  characters, `31^8`) — no behavior change, just accuracy.
+
+**A deeper architectural fix, not just a bigger number — `commissionPending`
+flag replaces `reconcileCommissions()`'s time-window entirely:**
+ChatGPT correctly pointed out that Round 18's fix (raising the query's
+`.limit()` from 50 to 500) treated the SYMPTOM, not the actual wrong query
+shape: `where('createdAt','>',cutoff).limit(N)` with no `orderBy` was a
+platform-wide, unindexed scan of EVERY investment from the last 10 minutes,
+first-purchase or not, even though `creditReferralCommission()` is a no-op
+for the overwhelming majority of them. At high enough volume, more real
+investments than N in any rolling 10-minute window would still silently
+starve whichever ones land past the cap, aging out of the window with no
+retry ever happening. Replaced with a `commissionPending` boolean: set
+`true` only at creation for a first-investment (the only kind that ever
+pays commission), cleared by `creditReferralCommission()` itself the
+moment it determines there's truly nothing left to retry for that
+investment (every early-return path now clears it too, not just the
+success path). `reconcileCommissions()` now queries
+`where('commissionPending','==',true)` directly — no time window, no
+arbitrary cap needed at all, since the pending set is inherently tiny (only
+the rare handful whose original fire-and-forget call is still outstanding
+or failed), not "everything recent."
+
+**Confirmed real, deliberately documented instead of hastily patched —
+genuine architectural tradeoffs already baked into this codebase, not new
+discoveries:**
+- **Crash-window under-payment risk** (raised independently for cashback
+  in `settleInvestmentIfDue()`, commission in `creditReferralCommission()`,
+  and Task Center in `/team/milestone/claim`): all three follow the SAME
+  deliberate pattern established across many earlier rounds — advance the
+  ledger/claim-flag BEFORE the money actually moves, so a normal THROWN
+  error rolls back cleanly and the safe failure direction is "under-pay,
+  visibly fixable by hand" rather than "silently double-pay forever."
+  ChatGPT is right that this doesn't protect against the PROCESS itself
+  being killed between two sequential writes (a normal `try/catch` can't
+  catch that) — confirmed by reading `db.js`'s `Transaction` class
+  directly: `db.runTransaction()` QUEUES `t.update()`/`t.set()` calls
+  during the callback and only applies them one-at-a-time, sequentially,
+  during `_commit()` AFTER the callback returns — it provides genuinely
+  ZERO atomicity beyond code-organization convenience, exactly as this
+  file's comments have said all along, now directly verified against the
+  implementation rather than taken on faith. A real fix needs either (a)
+  actual MongoDB multi-document transactions via real sessions (worth
+  investigating whether Atlas M0/shared-tier genuinely lacks this or
+  whether that's an inherited assumption from a template this project was
+  forked from — MongoDB replica sets, which M0 IS, have supported
+  multi-document ACID transactions since server v4.0, so this may be worth
+  re-checking rather than assumed) or (b) a durable outbox/job-queue
+  pattern. Both are real architecture changes, not something to improvise
+  as a side effect of an audit — flagged here for a dedicated future round
+  with explicit sign-off, not attempted this round.
+- **Referral code / public ID generation is not horizontally-scaling
+  safe.** `withLock()` is in-process only; a second Node instance sharing
+  the same database would NOT be serialized against the first, and there's
+  no database-level unique index on `referralCode`/`publicId` as a
+  backstop. Not a bug on the CURRENT single-process deployment (confirmed:
+  `render.yaml`'s `space8-server` has no multi-instance config, and this
+  exact "runs as a single Node process" assumption is already the
+  foundation every `withLock()` call in this codebase depends on) — but
+  must be revisited (unique index + duplicate-key-aware retry in
+  `tryClaim()`) BEFORE ever scaling this service to more than one instance.
+  Noting this explicitly so it isn't silently forgotten if that ever
+  happens.
+- **`reconcileCashback()`'s poll-everything-active shape** (vs. an
+  indexed `nextPayoutAt`-based "only fetch what's actually due" query)
+  is a real, valid architectural improvement ChatGPT suggested — NOT
+  implemented this round because, unlike `commissionPending` (safe to
+  introduce with zero migration story, since it only matters for
+  investments created AFTER this deploy), a recurring `nextPayoutAt`
+  field would need a migration/backfill for every EXISTING active
+  investment, or the query would silently stop sweeping all of them the
+  moment this shipped. Left as a recommended future improvement, not
+  attempted as a rushed side effect of this round.
+- **Verification**: new `test-round2-audit-fixes.js` (16/16) — proves the
+  pathological-product fix converges to EXACTLY `expectedReturn` through
+  genuine day-by-day accumulation (not just checking the final state) and
+  always reaches `matured`; proves two concurrent attach-referrer calls
+  can no longer both land (exactly one succeeds, the other is rejected as
+  a loop); proves a 29-hop cycle (deeper than the old 25-hop cap, within
+  the new 1000-hop one) is now correctly caught; proves a Task Center
+  claim is refused once live progress has genuinely dropped below target
+  rather than paid against stale data. Also updated `test-reconciler-
+  caps.js`'s commission section to seed `commissionPending: true` directly
+  (the old time-window-based seeding no longer applies) and added a check
+  that the flag is actually cleared once resolved. Full `test-*.js` suite
+  green, 67/67. Server-only change, no `user-src/`/`admin-src/` rebuild
+  needed.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

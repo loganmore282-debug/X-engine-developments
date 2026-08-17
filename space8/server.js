@@ -457,8 +457,9 @@ function randCode(n = 6) {
 // 2. After 20 collisions the OLD code returned randCode(8) with NO
 //    uniqueness check at all -- an unchecked return, not just a
 //    low-probability one. Now keeps checking with the wider 8-char
-//    alphabet (32^8 ≈ 1.1 trillion combinations) instead of ever handing
-//    back an unverified code.
+//    alphabet (31^8 ≈ 853 billion combinations -- CODE_CHARS is 31
+//    characters, not 32; corrected 2026-08-17, no behavior change) instead
+//    of ever handing back an unverified code.
 // Takes the registering user's own id so the winning code can be RESERVED
 // (written onto that user's own doc) while still holding the lock.
 // ChatGPT review, confirmed real (round 2): the first version of this lock
@@ -1235,10 +1236,38 @@ async function settleInvestmentIfDue(doc) {
       if (fDue <= 0) return;
       const newMade = fMade + fDue;
       const willComplete = newMade >= fTotal;
-      const amount = willComplete
-        ? Math.max(0, (Number(f.expectedReturn) || 0) - (Number(f.paidOut) || 0))
-        : (Number(f.dailyPayout) || 0) * fDue;
-      if (amount <= 0) return;
+      const fExpected = Number(f.expectedReturn) || 0;
+      const fPaidOut = Number(f.paidOut) || 0;
+      // ChatGPT-verified real bug (2026-08-17): the old flat `dailyPayout *
+      // fDue` (with the exact remainder only computed on the FINAL day) can
+      // permanently strand an investment whenever dailyPayout rounds UP
+      // enough that the running total overshoots expectedReturn before the
+      // completion day arrives -- a normal built-in tier can't trigger this
+      // (cycleDays=210 / returnMultiple=42 always divides evenly), but an
+      // admin-configured custom product with an unlucky expectedReturn/cycle
+      // ratio can. Worked example: expectedReturn=105, cycle=210 ->
+      // dailyPayout=Math.round(105/210)=1 -> 209 days of paying 1 each
+      // already totals 209, so the "final day" branch computes
+      // max(0, 105-209)=0, hits `if (amount<=0) return` below, and NEVER
+      // completes -- payoutsMade frozen at 209/210 forever, status stuck
+      // 'active' forever, re-checked and skipped by every future sweep.
+      // Fixed with cumulative-target allocation: the running total credited
+      // by day N is always round(expectedReturn * N / total), which is
+      // monotonic non-decreasing and telescopes to EXACTLY expectedReturn at
+      // N=total for ANY ratio (not just ones that divide evenly) -- makes
+      // the old special-cased "final day remainder" branch unnecessary, and
+      // produces IDENTICAL per-day amounts to the old flat-rate approach for
+      // every ratio that DOES divide evenly (so this is a pure generalization,
+      // not a behavior change for any existing built-in tier).
+      const target = Math.round(fExpected * newMade / fTotal);
+      const amount = Math.max(0, target - fPaidOut);
+      // A misconfigured product can still make `amount` land at 0 even ON
+      // the completion day (expectedReturn <= what was already paid out by
+      // the rounding above) -- that must still flip the investment to
+      // 'matured' so it stops being checked forever; only a tick that is
+      // genuinely neither due for money NOR the completion tick has nothing
+      // to do at all.
+      if (amount <= 0 && !willComplete) return;
       // RECORD-BEFORE-CREDIT. db.js's runTransaction is NOT atomic on M0 — it
       // replays queued writes one at a time — so a failure part-way through
       // leaves whatever already ran committed. Crediting the wallet first and
@@ -1254,6 +1283,11 @@ async function settleInvestmentIfDue(doc) {
         payoutsMade: newMade, paidOut: FieldValue.increment(amount),
         status: willComplete ? 'matured' : 'active'
       });
+      // Nothing left to credit -- only reachable via the misconfigured-
+      // product completion case above (amount<=0 but willComplete) -- the
+      // ledger update just above already recorded the completion; a $0
+      // wallet credit and a $0 transaction row would be pure noise.
+      if (amount <= 0) return;
       try {
         await db.collection('users').doc(f.userId).update({
           walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount)
@@ -1304,17 +1338,21 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
     // rather than only at the call site so the periodic reconciler — which
     // re-invokes this for any investment created recently, first or not —
     // can never accidentally pay a later purchase.
-    if (invSnap.data().isFirstInvestment !== true) return;
+    if (invSnap.data().isFirstInvestment !== true) { await invRef.update({ commissionPending: false }); return; }
     const paidLevels = invSnap.data().commissionPaidLevels || [];
 
     const sett = await getSettings();
     const buyerSnap = await db.collection('users').doc(buyerId).get();
     // Don't pay commission on a purchase from an account that's since been
     // banned — checking the REFERRED member's own status, not just the
-    // referrer's, before any reward goes out.
-    if (!buyerSnap.exists || buyerSnap.data().status === 'banned') return;
+    // referrer's, before any reward goes out. Both of these are standing,
+    // not transient, conditions (a buyer's referredBy is set once at
+    // registration and never changes; a ban isn't expected to reverse
+    // itself) -- commissionPending is cleared rather than left for the
+    // reconciler to keep re-checking forever for no reason.
+    if (!buyerSnap.exists || buyerSnap.data().status === 'banned') { await invRef.update({ commissionPending: false }); return; }
     const l1Id = buyerSnap.data().referredBy;
-    if (!l1Id) return;
+    if (!l1Id) { await invRef.update({ commissionPending: false }); return; }
     const rates = [sett.commL1, sett.commL2, sett.commL3];
     const l1Snap = await db.collection('users').doc(l1Id).get();
     // Each chain entry carries its own already-fetched snapshot so we never
@@ -1364,6 +1402,13 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
         amount: reward, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
       });
     }
+    // Reached the end of the chain with no throw -- every applicable level
+    // is now either paid or was legitimately skipped (no referrer at that
+    // level, that referrer banned, a 0% rate). Nothing left for the
+    // reconciler to ever retry here. If a write above throws instead, this
+    // line is never reached and commissionPending stays true on purpose,
+    // so the next sweep picks up exactly where this attempt left off.
+    await invRef.update({ commissionPending: false });
   });
 }
 
@@ -1448,6 +1493,10 @@ app.post('/team/milestone/claim', async (req, res) => {
   const m = table.find(x => x.target === target);
   if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
   try {
+    // Cheap fast-fail check OUTSIDE the lock -- good UX (don't make someone
+    // who obviously isn't there yet wait on the lock just to be told so),
+    // but NOT the authoritative gate: see the re-check inside the lock
+    // below for why.
     const progress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
     if (progress < m.target) {
       const need = isDeposit ? fmtUGX(m.target) : m.target;
@@ -1456,7 +1505,19 @@ app.post('/team/milestone/claim', async (req, res) => {
     }
     const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
     let done = false;
+    let stillShort = false;
     await withLock('milestoneclaim:' + userId + ':' + claimFlag, async () => {
+      // ChatGPT-verified real gap (2026-08-17): progress used to only ever
+      // be checked ONCE, before this lock/transaction. Concrete scenario:
+      // a member has exactly the target's worth of active L1 referrals,
+      // passes the check above, and in the gap before this transaction
+      // actually commits, one of those referrals gets banned (activeL1Count
+      // excludes banned members) -- the claim would still pay out against
+      // now-stale progress. Re-verified live here, immediately before the
+      // credit, closing that window down to essentially nothing (this is
+      // the only work done between the check and the write).
+      const liveProgress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
+      if (liveProgress < m.target) { stillShort = true; return; }
       await db.runTransaction(async t => {
         const uRef = db.collection('users').doc(userId);
         const fresh = await t.get(uRef);
@@ -1476,6 +1537,7 @@ app.post('/team/milestone/claim', async (req, res) => {
         done = true;
       });
     });
+    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now — please try again.' });
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
     res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
   } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
@@ -2112,10 +2174,27 @@ app.post('/invest/create', async (req, res) => {
         firstInvestmentDone: true
       });
       const { date, time } = nowStr();
+      // ChatGPT-verified real gap (2026-08-17): reconcileCommissions() used
+      // to query `investments where createdAt > (now - 10min) limit 500` --
+      // a platform-wide, unindexed, time-windowed scan that (a) can starve
+      // at high volume (more than 500 real investments in any rolling
+      // 10-minute window means whichever land past the cap silently never
+      // get retried) and (b) still re-scans every investment from the last
+      // 10 minutes on every tick even though creditReferralCommission() is
+      // a no-op for the overwhelming majority of them (only ones whose
+      // ORIGINAL fire-and-forget call in this route genuinely failed need
+      // anything done at all). commissionPending (true only for a
+      // first-investment, since only those ever pay commission; absent/
+      // false for every later purchase) turns the reconciler's query into
+      // "find the ones that still need work" directly -- no time window,
+      // no arbitrary cap needed, and the pending set is inherently tiny
+      // (only ever the rare handful whose fire-and-forget call is still
+      // outstanding or failed) rather than "everything recent."
       t.set(invRef, {
         userId, tierKey: tier.key, tierLabel: tier.name, amount: tier.price, cycle, expectedReturn,
         status: 'active', dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-        isFirstInvestment, commissionPaidLevels: [], date, time, createdAt: FieldValue.serverTimestamp()
+        isFirstInvestment, commissionPaidLevels: [], commissionPending: isFirstInvestment === true,
+        date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'investment', description: `Bought ${tier.name}`, amount: -tier.price,
@@ -4173,7 +4252,23 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
   const code = String(req.body.referralCode || '').trim().toUpperCase();
   if (!code) return res.status(400).json({ status: 'error', message: 'Enter the referrer\'s referral code' });
   try {
-    const result = await withLock('reg:' + userId, async () => {
+    // ChatGPT-verified real bug (2026-08-17): the per-user 'reg:'+userId
+    // lock does nothing to stop TWO DIFFERENT attach-referrer calls from
+    // racing each other, because they lock on DIFFERENT keys. Concrete
+    // exploit: an admin (or two admins) fires "attach B as A's referrer"
+    // and "attach A as B's referrer" at close to the same moment --
+    // 'reg:A' and 'reg:B' are different locks, so both requests run the
+    // cycle-check walk concurrently, BOTH see a clean chain (neither A nor
+    // B has a referredBy yet), BOTH pass, and both writes land: A.referredBy
+    // = B AND B.referredBy = A, a genuine 2-node cycle that would later let
+    // a buyer appear as their own L2 referrer in creditReferralCommission().
+    // This tool is owner-only and rare (not a hot path like real
+    // registration), so serializing every call through one extra global
+    // lock is free in practice and closes the race entirely -- nested
+    // outside the existing per-user lock, which stays in place to protect
+    // against a DIFFERENT race: this admin action landing at the same
+    // moment as that same user's own concurrent self-registration.
+    const result = await withLock('attach-referrer', () => withLock('reg:' + userId, async () => {
       const userRef = db.collection('users').doc(userId);
       const userSnap = await userRef.get();
       if (!userSnap.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
@@ -4194,10 +4289,16 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
       // Defensive cycle guard: the normal client flow can never produce a
       // loop (a brand new signup has no downline yet), but this admin tool
       // can attach a referrer to an account that's been active -- possibly
-      // referring others of its own -- for a while. Bounded walk, this
-      // chain is never more than a handful of hops deep in practice.
+      // referring others of its own -- for a while. ChatGPT-verified real
+      // gap: 25 hops is a real depth an organically-grown referral chain
+      // can exceed over enough registrations -- the walk would exhaust its
+      // budget and silently exit WITHOUT throwing before ever reaching
+      // back to userId, letting a real (longer) cycle through undetected.
+      // Raised to 1000 -- effectively unlimited for any realistic chain,
+      // while still bounding worst-case runtime against an already-
+      // corrupted loop in the data from some other cause.
       let walk = referrerId, hops = 0;
-      while (walk && hops < 25) {
+      while (walk && hops < 1000) {
         if (walk === userId) return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That would create a referral loop -- the chosen referrer is already downstream of this member.' } };
         const s = await db.collection('users').doc(walk).get();
         walk = s.exists ? s.data().referredBy : null;
@@ -4224,7 +4325,7 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
       }
 
       return { code: 200, body: { status: 'success', referrerId, commissionTriggered } };
-    });
+    }));
     if (result.body?.status === 'success')
       logAdminAction(req, 'referrer_attached', { userId, referrerId: result.body.referrerId, referralCode: code, commissionTriggered: result.body.commissionTriggered });
     res.status(result.code).json(result.body);
@@ -5027,30 +5128,34 @@ async function reconcilePendingWithdrawals() {
   } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
   return settled;
 }
-// Re-invokes commission crediting for recent purchases — safe to call
-// repeatedly since creditReferralCommission() skips any level already
-// marked paid. This is what actually makes referral crediting survive a
-// restart: if the server died between the purchase committing and the
-// commission finishing, this picks up exactly where it left off within one
-// reconciler tick instead of leaving the referrer permanently unpaid.
-// Owner audit, 2026-08-17: same class of gap as CASHBACK_SWEEP_LIMIT above
-// -- 50 was an arbitrary cap on how many investments from the last 10
-// minutes this retry pass can see, across the WHOLE platform, every 30s.
-// creditReferralCommission() itself is a no-op the moment a level is
-// already claimed, so this only ever does real work for a purchase whose
-// original fire-and-forget call in /invest/create genuinely failed --
-// rare -- but a high-volume 10-minute window (a promo, a payday spike)
-// could still exceed 50 real investments and silently leave whichever ones
-// land past the cap un-retried until they age out of the window entirely.
-// Bumped to 500 for the same reason as the cashback sweep: pure DB read
-// (no external call) per candidate, so a wider net costs nothing extra on
-// the overwhelming majority of ticks where nothing here actually needed
-// retrying in the first place.
-const COMMISSION_RECONCILE_LIMIT = 500;
+// Re-invokes commission crediting for purchases still marked pending — safe
+// to call repeatedly since creditReferralCommission() skips any level
+// already marked paid, and clears commissionPending itself once there is
+// truly nothing left to do for that investment. This is what actually makes
+// referral crediting survive a restart: if the server died between the
+// purchase committing and the commission finishing, this picks up exactly
+// where it left off within one reconciler tick instead of leaving the
+// referrer permanently unpaid.
+// ChatGPT-verified real gap (2026-08-17), superseding the earlier fix that
+// just raised this query's LIMIT from 50 to 500: the underlying query shape
+// itself was wrong, not just its size -- `where('createdAt', '>', cutoff)
+// .limit(N)`, with no orderBy, was a platform-wide, unindexed, time-windowed
+// scan of EVERY investment from the last 10 minutes, first-purchase or not,
+// even though creditReferralCommission() is a no-op for the overwhelming
+// majority of them. At high enough volume, more real investments than N in
+// any rolling 10-minute window would still silently starve whichever ones
+// land past the cap, aging out of the window with no retry ever happening.
+// commissionPending (set true only at creation for a first-investment, the
+// only kind that ever pays commission, and cleared the moment
+// creditReferralCommission() determines there's nothing left to retry for
+// that investment) turns this into "find the ones that still need work"
+// directly -- no time window, no arbitrary cap needed at all, since the
+// pending set is inherently tiny (only the rare handful whose original
+// fire-and-forget call is still outstanding or failed), not "everything
+// recent."
 async function reconcileCommissions() {
   try {
-    const cutoff = new Date(Date.now() - 10 * 60000);
-    const snap = await db.collection('investments').where('createdAt', '>', cutoff).limit(COMMISSION_RECONCILE_LIMIT).get();
+    const snap = await db.collection('investments').where('commissionPending', '==', true).limit(5000).get();
     for (const doc of snap.docs) {
       const inv = doc.data();
       await creditReferralCommission(doc.id, inv.userId, inv.amount).catch(e => console.error('Reconcile commission error:', e.message));

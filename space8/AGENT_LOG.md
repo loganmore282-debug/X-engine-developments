@@ -14,6 +14,68 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Second ChatGPT pass on the investment/referral/task-center audit: 4 real bugs fixed, 2 genuine architectural tradeoffs documented (not hastily patched)
+
+- **What changed** (all `server.js`, server-only, no rebuild needed):
+  - `settleInvestmentIfDue()`: replaced flat `dailyPayout * daysDue` (exact
+    remainder only on the final day) with cumulative-target allocation
+    (`round(expectedReturn * N / total)` per day) — telescopes to exactly
+    `expectedReturn` for ANY ratio, not just evenly-dividing ones; the
+    completion tick now always flips to `'matured'` even if nothing's left
+    to credit.
+  - `/admin/user/attach-referrer`: wrapped in an additional global
+    `withLock('attach-referrer',...)` (nested outside the existing
+    per-user lock); cycle-detection walk raised from 25 to 1000 hops.
+  - `/team/milestone/claim`: progress now re-verified live, inside the
+    lock, immediately before crediting — not just once, before it.
+  - `reconcileCommissions()`: replaced its `createdAt`-window + `.limit()`
+    query entirely with a `commissionPending` boolean (set at investment
+    creation, cleared by `creditReferralCommission()` on every exit path
+    once nothing's left to retry) — no time window, no arbitrary cap.
+  - New `test-round2-audit-fixes.js` (16 checks); updated
+    `test-reconciler-caps.js`'s commission section for the new mechanism.
+- **Why**: Owner re-sent the same broad investment/referral/task-center
+  audit request from the earlier round and asked ChatGPT to review it a
+  second, independent time. It found real gaps the first pass missed.
+  Verified every finding against the actual code before touching
+  anything — including reading `db.js`'s `Transaction` class directly to
+  settle exactly how non-atomic `db.runTransaction()` really is (confirmed:
+  it queues writes during the callback and applies them one-at-a-time,
+  sequentially, only during `_commit()` — genuinely zero atomicity beyond
+  code-organization convenience).
+- **Two findings were real but deliberately NOT hastily patched** — both
+  are the SAME architectural tradeoff already accepted throughout this
+  codebase (advance the ledger/claim-flag before the money moves, so a
+  crash's failure direction is safe-under-payment rather than silent
+  double-payment), just newly confirmed to have a genuine crash-WINDOW gap
+  a normal `try/catch` can't close (a process kill between two sequential
+  writes, not a thrown error). A real fix needs either actual MongoDB
+  multi-document transactions (worth re-checking whether Atlas M0 genuinely
+  lacks these — replica sets have supported them since server v4.0, so
+  this may be an inherited assumption rather than a verified platform
+  limit) or a durable outbox pattern — both real architecture changes
+  deserving their own dedicated round with explicit sign-off, not
+  something to improvise as a side effect of an audit. Documented clearly
+  in CLAUDE.md instead. Same treatment for the referral-code/public-ID
+  generation's in-process-only locking (not horizontally-scaling safe,
+  but not a bug on the current single-instance deployment either) and
+  `reconcileCashback()`'s poll-everything-active query shape (a real,
+  valid `nextPayoutAt`-indexed improvement ChatGPT suggested, deferred
+  specifically because — unlike `commissionPending` — it needs a
+  migration/backfill story for every EXISTING active investment that
+  `commissionPending` didn't, since that only ever matters for investments
+  created after the deploy).
+- **Verification**: `test-round2-audit-fixes.js` proves the pathological-
+  product fix converges to EXACTLY `expectedReturn` through genuine
+  day-by-day accumulation (hand-traced expected values at each step, not
+  just checking the final state); proves two concurrent attach-referrer
+  calls can no longer both land; proves a 29-hop cycle (deeper than the
+  old cap) is now caught; proves a Task Center claim is refused once live
+  progress has genuinely dropped below target. Full `test-*.js` suite
+  green, 67/67.
+- **Left open**: the two documented architectural items above, explicitly
+  flagged for a future dedicated round rather than silently deferred.
+
 ## 2026-08-17 — Claude — Fixed a real "ghost account" bug: signs in fine, but a Space8 profile was never actually created, and the existing self-heal never caught it
 
 - **What changed**: `server.js` — `GET /account`'s 404 for a missing user
