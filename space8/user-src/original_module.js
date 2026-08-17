@@ -356,7 +356,35 @@ function showPage(name){
   $('assistFab').style.display = name === 'account' ? 'flex' : 'none';
   window.scrollTo(0,0);
   loadPage(name);
+  if (name === 'home') maybeShowAnnouncement();
 }
+
+// Owner: "l want a dialog with a background image SETTABLE from admin,plus
+// blur and opusity ... with telegram button and cancel." Admin's own help
+// text (unchanged by this feature) says it shows every time a member opens
+// the app and every time they return to Home from another tab -- both of
+// those are exactly the two callers of showPage('home') (enterApp() and the
+// bottom-nav click handler), so hooking it there covers both without a
+// separate timer/listener.
+function maybeShowAnnouncement(){
+  var sett = STATE.settings || {};
+  if (!sett.annEnabled || !sett.annBody) return;
+  $('announceTitle').textContent = sett.annTitle || 'Notice';
+  $('announceText').textContent = sett.annBody;
+  var tgUrl = sett.telegramGroup || sett.telegramChannel;
+  var tgBtn = $('announceTgBtn');
+  if (tgUrl) {
+    tgBtn.style.display = 'flex';
+    tgBtn.innerHTML = ico('telegram') + '<span>Telegram</span>';
+    tgBtn.onclick = function(){ window.open(tgUrl, '_blank'); hideAnnouncement(); };
+  } else {
+    tgBtn.style.display = 'none';
+  }
+  $('announceBg').classList.add('show');
+}
+function hideAnnouncement(){ $('announceBg').classList.remove('show'); }
+$('announceCancelBtn').onclick = hideAnnouncement;
+$('announceBg').addEventListener('click', function(e){ if (e.target.id === 'announceBg') hideAnnouncement(); });
 qsa('.navitem').forEach(function(n){ n.addEventListener('click', function(){
   qsa('.navitem').forEach(function(item){ item.classList.remove('tap-glow'); });
   n.classList.add('tap-glow');
@@ -779,7 +807,7 @@ function prodCardHtml(p){
   return '<div class="prod-card ' + (disabled?'soon':'') + '" data-key="' + esc(p.key) + '">' +
     '<div class="top">' +
       '<div class="sat">' + (p.image ? '<img src="'+esc(p.image)+'">' : ico('satellite')) + '</div>' +
-      '<div class="name">' + esc(p.name) + (p.comingSoon?'<span class="pill pill-active badge-soon">Upcoming</span>':'') + '</div>' +
+      '<div class="name">' + esc(p.name) + '</div>' +
     '</div>' +
     '<div class="grid">' +
       '<div><div class="lab">Price</div><div class="val mono">' + ugx(p.price) + '</div></div>' +
@@ -787,7 +815,7 @@ function prodCardHtml(p){
       '<div><div class="lab">Amount</div><div class="val mono">' + ugx(p.expectedReturn) + '</div></div>' +
       '<div><div class="lab">Duration</div><div class="val">' + (p.cycle||'-') + ' days</div></div>' +
     '</div>' +
-    '<button class="btn btn-primary invest-btn" ' + (disabled?'disabled':'') + '>Purchase</button>' +
+    '<button class="btn btn-primary invest-btn" ' + (disabled?'disabled':'') + '>' + (p.comingSoon?'Coming Soon':'Purchase') + '</button>' +
   '</div>';
 }
 
@@ -1121,6 +1149,14 @@ async function renderPayoutSheet(){
     '</div>';
   }).join('') : emptyState('wallet', 'No withdrawal accounts bound yet.');
 
+  // In picking mode with nothing to pick from yet, show the add-account
+  // form right here instead of a dead end -- owner, 2026-08-17: "in most
+  // cases if one has no, it says add payout account after he taps on it
+  // and comes back to withdrawal screen automatically." Saving here
+  // re-renders this same picker (still in picking mode, see savePayoutBtn
+  // below), which now has a real account to tap -- no separate detour.
+  var showAddForm = !picking || !accounts.length;
+
   // Content-only update, no openSheet() here -- the sheet was already
   // opened (and its one history/stack entry pushed) by openPayoutSheet()
   // before this ever runs; re-pushing on every internal interaction
@@ -1129,10 +1165,10 @@ async function renderPayoutSheet(){
   // actually leaves the page.
   $('payoutSheet').innerHTML =
     '<div class="sheet-title">' + (picking ? 'Choose Withdrawal Account' : 'Withdrawal Accounts') + '</div>' +
-    '<div class="sheet-sub">' + (picking ? 'Tap the account to send this withdrawal to.' : 'Mobile-money accounts you can withdraw to.') + '</div>' +
+    '<div class="sheet-sub">' + (picking ? (accounts.length ? 'Tap the account to send this withdrawal to.' : 'Add a withdrawal account below, then tap it to continue.') : 'Mobile-money accounts you can withdraw to.') + '</div>' +
     listHtml +
-    (picking ? '' :
-      '<div class="plain-note">Withdrawals only ever go to an account bound here, never a number typed at withdrawal time. Add another account below, or remove one you no longer use with your withdrawal PIN.</div>' +
+    (!showAddForm ? '' :
+      (picking ? '' : '<div class="plain-note">Withdrawals only ever go to an account bound here, never a number typed at withdrawal time. Add another account below, or remove one you no longer use with your withdrawal PIN.</div>') +
       '<div class="auth-form">' +
         '<div class="field">' + ico('wallet') + '<input id="payHolder" placeholder="Account holder name"></div>' +
         '<select id="payNetwork" class="field" style="appearance:none">' +
@@ -1144,6 +1180,20 @@ async function renderPayoutSheet(){
         '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
       '</div>' +
       '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Withdrawal Account</button>');
+
+  if (showAddForm) {
+    $('savePayoutBtn').onclick = async function(){
+      var btn = $('savePayoutBtn');
+      var holder = $('payHolder').value.trim(), network = $('payNetwork').value;
+      var phone = $('payPhone').value, pin = $('payPin').value;
+      if (!holder || !cleanPhone(phone) || !/^\d{4}$/.test(pin)) return toast('Fill in all fields correctly', true);
+      setBtnLoading(btn, true, 'Saving…');
+      var r2 = await api('/bank/save', { holder: holder, network: network, phone: phone, pin: pin });
+      setBtnLoading(btn, false);
+      if (r2.status === 'success') { toast('Withdrawal account saved'); STATE.bankAccounts = null; STATE.hasPayoutPin = true; renderPayoutSheet(); }
+      else toast(r2.message, true);
+    };
+  }
 
   if (picking) {
     qsa('.acct-row', $('payoutSheet')).forEach(function(row){
@@ -1182,17 +1232,6 @@ async function renderPayoutSheet(){
       }
     };
   });
-  $('savePayoutBtn').onclick = async function(){
-    var btn = $('savePayoutBtn');
-    var holder = $('payHolder').value.trim(), network = $('payNetwork').value;
-    var phone = $('payPhone').value, pin = $('payPin').value;
-    if (!holder || !cleanPhone(phone) || !/^\d{4}$/.test(pin)) return toast('Fill in all fields correctly', true);
-    setBtnLoading(btn, true, 'Saving…');
-    var r2 = await api('/bank/save', { holder: holder, network: network, phone: phone, pin: pin });
-    setBtnLoading(btn, false);
-    if (r2.status === 'success') { toast('Withdrawal account saved'); STATE.bankAccounts = null; STATE.hasPayoutPin = true; renderPayoutSheet(); }
-    else toast(r2.message, true);
-  };
 }
 async function openPinSheet(){
   var status = await api('/account/payout-pin/status', null, 'GET');
@@ -1321,31 +1360,28 @@ function pollDepositStatus(id){
 }
 
 // ── WITHDRAW ──────────────────────────────────────────────────────────
-async function openWithdrawSheet(){
-  openSheet('withdraw', '<div class="sk sk-line"></div>');
-  var r = await api('/bank/list', null, 'GET');
-  var accounts = r.status === 'success' ? (r.accounts || []) : [];
-  if (!accounts.length) {
-    $('withdrawSheet').innerHTML =
-      '<div class="sheet-title">Withdraw</div>' +
-      emptyState('lock', 'Bind a withdrawal account first to withdraw.') +
-      '<button class="btn btn-primary" id="goToBindBtn">Bind Withdrawal Account</button>';
-    // Do not call history.back() and push the Payout page in the same turn:
-    // browser back-navigation is asynchronous and could otherwise pop the
-    // newly-opened Payout page instead of the Withdraw page. Hide this
-    // empty state directly, then make Payout the one active sheet.
-    $('goToBindBtn').onclick = function(){ hideSheet('withdraw'); openPayoutSheet(); };
-    return;
-  }
+function openWithdrawSheet(){
   var min = (STATE.settings||{}).minWithdraw || 20000;
   var feePct = (STATE.settings||{}).withdrawFeePct || 15;
-  renderWithdrawSheet(accounts[0], min, feePct, false);
+  renderWithdrawSheet(null, min, feePct, true);
 }
 // Owner correction, 2026-08-16: the account to withdraw to is picked by
 // navigating to the real Payout Accounts page (openPayoutSheet in "choose"
 // mode, stacked on top of this sheet) and tapping one there -- it returns
 // here automatically with the tapped account applied. NOT an inline list
 // embedded in this sheet (that was the wrong shape, tried and reverted).
+// **No account is ever auto-selected, even when exactly one is bound** --
+// owner, 2026-08-17: "he picks the number from withdrawal accounts even if
+// it is 1, it should not auto select." The sheet always opens with a
+// "Select payout account" placeholder row (acct === null) and only shows a
+// real account once the member has explicitly tapped through the picker,
+// same blue .acct-row styling either way. A member with ZERO bound
+// accounts still taps this same row: openPayoutSheet's picker (see
+// renderPayoutSheet) now shows the add-account form INLINE whenever
+// picking with nothing to pick from yet, so adding one there re-renders
+// the same picker with the new account now tappable -- no separate
+// "bind first" detour, and it returns to this sheet automatically via the
+// same pickCallback every other picker selection already uses.
 // isFirstRender controls whether this pushes a new history entry
 // (openSheet) or just updates the sheet's content in place (coming back
 // from the picker) -- re-pushing on every account change would mean the
@@ -1355,8 +1391,8 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
   var html = bannerHtml('marscrate','withdraw') +
     '<div class="sheet-title">Withdraw Funds</div>' +
     '<div class="record-row acct-row selectable" id="wdAcctRow">' +
-      '<div class="info"><div class="phone">' + esc(acct.holder) + '</div>' +
-      '<div class="date">' + esc(acct.network) + ' · ' + esc(acct.phone) + '</div></div>' +
+      '<div class="info"><div class="phone">' + (acct ? esc(acct.holder) : 'Select payout account') + '</div>' +
+      (acct ? '<div class="date">' + esc(acct.network) + ' · ' + esc(acct.phone) + '</div>' : '') + '</div>' +
       ico('chev').replace('<svg ', '<svg class="chev" ') +
     '</div>' +
     '<div class="auth-form" style="margin-top:14px">' +
@@ -1364,7 +1400,7 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
       '<div class="field-hint" id="feePreview">Fee ' + feePct + '% applies — enter an amount to see what you\'ll receive.</div>' +
       '<div class="field">' + ico('shield') + '<input id="wdPin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit security PIN"></div>' +
     '</div>' +
-    '<button class="btn btn-primary" id="submitWithdrawBtn" style="margin-top:14px">Request Withdrawal</button>' +
+    '<button class="btn btn-primary" id="submitWithdrawBtn" style="margin-top:14px" ' + (acct?'':'disabled') + '>Request Withdrawal</button>' +
     '<div class="instruction-card"><b>Withdrawal instructions</b><ol>' +
       '<li>Tap the account row above to choose which withdrawal account receives the money.</li>' +
       '<li>Enter the amount you want to withdraw, at least ' + ugx(min) + '.</li>' +
@@ -1388,6 +1424,7 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
   });
   $('submitWithdrawBtn').onclick = async function(){
     var btn = $('submitWithdrawBtn');
+    if (!acct) return toast('Select a payout account first', true);
     var amt = parseInt($('wdAmount').value, 10);
     var pin = $('wdPin').value;
     if (!amt || amt < min) return toast('Enter at least ' + ugx(min), true);
@@ -1528,6 +1565,13 @@ async function boot(){
   var authCardOpacityPct = (STATE.settings||{}).authCardOpacityPct;
   document.documentElement.style.setProperty('--auth-card-blur', (authCardBlurPx != null ? authCardBlurPx : 0) + 'px');
   document.documentElement.style.setProperty('--auth-card-alpha', (authCardOpacityPct != null ? authCardOpacityPct : 100) / 100);
+  if ((STATE.settings||{}).announcementBg) {
+    document.documentElement.style.setProperty('--ann-bg-url', 'url("' + STATE.settings.announcementBg + '")');
+  }
+  var annBlurPx = (STATE.settings||{}).annBgBlurPx;
+  var annTintPct = (STATE.settings||{}).annBgTintPct;
+  document.documentElement.style.setProperty('--ann-bg-blur', (annBlurPx != null ? annBlurPx : 6) + 'px');
+  document.documentElement.style.setProperty('--ann-bg-tint', (annTintPct != null ? annTintPct : 55) / 100);
   // Fetched here (not left to renderHome/renderProducts' own first call) so
   // the images below are already warm in the browser's cache by the time
   // either page actually renders -- renderHome/renderProducts both already

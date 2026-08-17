@@ -196,6 +196,7 @@ const DEFAULT_SETTINGS = {
   returnMultiple: 42, cycleDays: 210, maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
+  annBgBlurPx: 6, annBgTintPct: 55,
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   whatsappGroup: '', whatsappContact: '',
   rulesText: '', brandTagline: '', aboutText: '',
@@ -1379,6 +1380,7 @@ app.get('/public/settings', async (_req, res) => {
       requireInvestToWithdraw: s.requireInvestToWithdraw !== false,
       annEnabled: !!s.annEnabled, annTitle: s.annTitle || '', annBody: s.annBody || '',
       annCtaLabel: s.annCtaLabel || '', annCtaUrl: s.annCtaUrl || '', announcementBg: s.announcementBg || '',
+      annBgBlurPx: s.annBgBlurPx, annBgTintPct: s.annBgTintPct,
       supportTelegram: s.supportTelegram || '',
       telegramGroup: s.telegramGroup || '', telegramChannel: s.telegramChannel || '', supportHours: s.supportHours || '',
       whatsappGroup: s.whatsappGroup || '', whatsappContact: s.whatsappContact || '',
@@ -3222,7 +3224,7 @@ app.get('/admin/settings', async (req, res) => {
 // out-of-range or non-numeric value here isn't just cosmetic, it's a stored
 // self-XSS surface across admin sessions. Validate those specifically rather
 // than trusting the whole request body.
-const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100], appBgBlurPx: [0, 40], appBgTintPct: [0, 100], cardBlurPx: [0, 24], cardOpacityPct: [0, 100], authCardBlurPx: [0, 24], authCardOpacityPct: [0, 100] };
+const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100], appBgBlurPx: [0, 40], appBgTintPct: [0, 100], cardBlurPx: [0, 24], cardOpacityPct: [0, 100], authCardBlurPx: [0, 24], authCardOpacityPct: [0, 100], annBgBlurPx: [0, 40], annBgTintPct: [0, 100] };
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

@@ -1054,6 +1054,159 @@ to be much simpler and had nothing to do with network timing at all.
   showing — the matrices differ, confirming genuine rotation (not just a
   static ring anymore).
 
+## Round 8 of the same day, 2026-08-17 — deposits-in-Records check, Coming Soon relabel, forced payout-account selection, dead Home banner removed, real announcement dialog built, notification admin UI added
+
+One long owner message, six distinct asks, quoted in full since each part
+matters: *"bro ,make sure also deposits are recorded in records,bro change
+from upcoming to "coming soon" it should not be badged ,it should replace
+the area of purchase button, so purchase word goes away,not the button, the
+button should remain.also l want when one wants to withdrawal, he picks the
+number from withdrawal accounts even if it is 1,it should not auto select
+,so one needs to click and select a withdrawal account,so that blue card
+will remain,it will say [Select payout account] [.....................>]
+so in most cases if one has no ,it says add payout account after he taps on
+it and comes back to withdrawal screen automatically also bro ,also in
+admin there is a residue of saying that home screen banner 😳 in setting,
+and also announcement dialog not working 😕, l want a dialog with a
+background image SETTABLE from admin,plus blur and opusity, l want it very
+good,with telegram button and cancel,,also l can't see where to send
+notifications???,l want my old notifications to even show up in newly
+created accounts,and notifications."*
+
+- **Deposits in Records — investigated, NOT a bug.** `RECORD_META` already
+  maps `deposit → 'Deposit'`, `openRecordsSheet()` doesn't filter by type,
+  and all 3 server-side deposit-crediting paths write `type:'deposit'`
+  transaction rows. The account in the owner's screenshot simply had no
+  completed real deposits — its balance came entirely from an
+  `admin_credit` entry, correctly shown as "Credit" in that same
+  screenshot. No code change; reported back instead of "fixed."
+- **"Upcoming" badge → "Coming Soon" button label.** `prodCardHtml()`
+  (`user-src/original_module.js`) no longer renders the
+  `<span class="pill badge-soon">Upcoming</span>` next to the product name
+  at all — the word is gone, not just relabeled. The Purchase button itself
+  is untouched (still `disabled` when `p.active===false || p.comingSoon`),
+  only its label now reads `p.comingSoon ? 'Coming Soon' : 'Purchase'`.
+  Dead `.badge-soon` CSS rule removed from `user-src/index.html`;
+  `.prod-card.soon{ opacity:.6; }` kept since it still drives the disabled
+  look.
+- **Withdrawal accounts: forced explicit tap-to-select, even with exactly
+  one account.** Owner: *"it should not auto select ,so one needs to click
+  and select a withdrawal account,so that blue card will remain,it will say
+  [Select payout account] [.....................>]"*. `openWithdrawSheet()`
+  no longer fetches `/bank/list` up front or auto-picks anything — it opens
+  straight into `renderWithdrawSheet(null, min, feePct, true)`. The sheet
+  now always starts with a blue `.record-row.acct-row` reading "Select
+  payout account" with a chevron; tapping it opens the existing Payout
+  Accounts sheet in its established picking mode (`_payoutPickCallback`,
+  the same stacked-sheet mechanism the earlier withdrawal-picker feature
+  already used) and `renderWithdrawSheet()` re-renders with the chosen
+  account once picked. "Request Withdrawal" stays disabled until an account
+  is actually selected. **Zero-accounts case**: `renderPayoutSheet()` now
+  shows the "Add Withdrawal Account" form inline even while in picking mode
+  when the account list is empty (previously the add-form was hidden
+  whenever `_payoutPickCallback` was set, so a first-time withdrawer with no
+  saved accounts hit a dead end) — saving auto-refreshes the picker list, so
+  they can then tap the account they just added and land back on the
+  Withdraw sheet automatically, matching *"after he taps on it and comes
+  back to withdrawal screen automatically."* The now-redundant old
+  `savePayoutBtn` handler at the bottom of `renderPayoutSheet()` was
+  deleted (superseded by the new one that covers both the normal and
+  picking-with-zero-accounts cases).
+  **Bonus defensive fix** (found via a test mock that omitted `/bank/list`):
+  both `openWithdrawSheet()`/`renderPayoutSheet()` did
+  `r.status==='success' ? r.accounts : []`, which throws if a success
+  response ever arrives with no `accounts` array — changed to
+  `(r.accounts || [])` in both places.
+- **Dead "Home screen banner" admin section removed.** Owner: *"in admin
+  there is a residue of saying that home screen banner"*. Grepped
+  `original_module.js` for `homeBannerTitle|homeBannerText` — zero matches;
+  the real app never reads either field. Removed the whole panel-card
+  (`#hbTitle`, `#hbText`, "Save home banner text") and its handler from
+  `admin-src/index.html`. Server-side `homeBannerTitle`/`homeBannerText` in
+  `DEFAULT_SETTINGS` were left alone (same "don't touch storage, just stop
+  showing a dead control" precedent as the 10-banner-slot pruning from an
+  earlier round).
+- **Announcement dialog — built from scratch, not "fixed."** Grepping
+  `original_module.js` for `annEnabled|annTitle|annBody|annCtaLabel|
+  annCtaUrl|announcementBg` came back with zero matches: despite
+  `admin-src/index.html` already having a Title/Body/enabled form wired to
+  `/admin/settings/update` and an image-upload card wired to the same
+  endpoint, **nothing in the real app ever read any of it or rendered a
+  dialog** — the owner's "not working" was literally true, there was no
+  client-side implementation at all. Built now, end to end:
+  - `server.js`: new `annBgBlurPx` (default 6) / `annBgTintPct` (default
+    55) added to `DEFAULT_SETTINGS`, the `/public/settings` response, and
+    `SETTINGS_NUMERIC_RANGES` (`[0,40]` / `[0,100]`) — same shape as the
+    4 existing blur/tint pairs (authBg, appBg, card, authCard).
+  - `admin-src/index.html`: added a blur/opacity slider pair under the
+    existing "Announcement banner image" card (renamed "Announcement
+    background image" to match what it now actually does), wired to
+    `saveAnnBgBtn` → `/admin/settings/update`. Also fixed the section's own
+    stale help text, which claimed *"the dialog's own two buttons are your
+    Telegram Channel and Telegram Group links"* — the owner asked for ONE
+    Telegram button, not two, so the text (and the real implementation) now
+    say the button uses `telegramGroup` if set, else `telegramChannel`.
+  - `user-src/index.html`: new `.announce-bg`/`.announce-sheet` CSS — a
+    slide-up bottom sheet (not tied to the `_sheetStack`/history-back
+    system, since this is a dismissible notice that appears automatically
+    rather than something the user navigates to) with a dark navy base
+    (`#0d1b2a`) so it reads as "plain dark background" with no image set,
+    plus a blurred/tinted `::before`/`::after` image layer exactly like the
+    `authbg`/`appbg` pattern (`--ann-bg-url`/`--ann-bg-blur`/`--ann-bg-tint`
+    custom properties, set in `boot()`). Two `.pillbtn` buttons (Cancel,
+    Telegram — the Telegram one hidden entirely via `style.display='none'`
+    when neither `telegramGroup` nor `telegramChannel` is set, leaving
+    Cancel alone at full width).
+  - `user-src/original_module.js`: new `maybeShowAnnouncement()`, called
+    from inside `showPage()` whenever `name==='home'` — this single hook
+    covers both "opens the app" (`enterApp()` calls `showPage('home')`) and
+    "switches back to Home from Shop/Rewards/Team/Me" (the bottom-nav click
+    handler also calls `showPage('home')`), matching admin's own help text
+    for when it should appear, without a separate timer or listener. Gated
+    on `annEnabled` and a non-empty `annBody`. Telegram tap calls
+    `window.open(url,'_blank')` then closes; Cancel and tapping the dark
+    scrim both close with no history/back-button interaction (it's a
+    notice, not a page).
+  - **Verified via Playwright** (6 cases): shows on first Home visit with
+    the mocked image+telegram settings; Telegram tap opens the right URL
+    and closes the dialog; shows again on a subsequent Home return (nav
+    away then back) and Cancel closes it; `annEnabled:false` never shows
+    it; no telegram links set → Telegram button genuinely hidden (`display:
+    none`), Cancel alone fills the row; no `announcementBg` set → renders
+    cleanly on the dark fallback with no console errors. Screenshots
+    confirm the visual: dimmed Home page behind a bottom sheet with a dark
+    card, white title/body text, and pill Cancel/Telegram buttons.
+- **Notification sending — the endpoint already existed, the admin UI to
+  reach it never did.** Owner: *"l can't see where to send
+  notifications???"* — correct: `server.js`'s `/admin/notifications/create`
+  (owner-only broadcast to every member's bell, already covered by
+  `test-notifications.js`) had zero call sites anywhere in
+  `admin-src/index.html`. Added a "Send notification" panel-card to the
+  Settings tab, above the Announcement dialog card (title + message +
+  "Send to all members" button), wired straight to that existing endpoint.
+- **"Old notifications should show up in newly created accounts" — already
+  true, verified not a bug.** `GET /notifications` queries
+  `notifications` where `audience==='all'` with no `createdAt` /
+  account-creation-time filtering at all, so a brand-new account already
+  sees every broadcast ever sent, not just ones sent after it registered.
+  `test-notifications.js` has an explicit assertion for exactly this
+  ("a member who registers later still sees the older owner announcement")
+  and it was already green before this round — this was fixed in an
+  earlier round of this same session (see that test file's own header
+  comment) and never regressed. No code change; reported back instead of
+  "fixed." If the owner is still seeing this on their phone, the standard
+  cause is `server.js` on Railway not yet redeployed — remind them which
+  file to push there.
+- **Verification**: full `test-*.js` suite green (62/62) both after the
+  user-app changes and again after the admin-app changes. Rebuilt both
+  `user/` and `admin/`. Bumped `user/sw.js` cache `v237` → `v238`.
+  Playwright covered the announcement dialog (6 cases, see above); the
+  Coming-Soon relabel, forced payout-account selection, and dead-banner
+  removal are straightforward markup/logic changes verified by reading the
+  rebuilt output and the green test suite (`test-payoutbug.js` and the
+  broader suite already exercise the withdrawal-account flow this round
+  changed).
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

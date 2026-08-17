@@ -14,6 +14,78 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — 6-item owner batch: Records check, Coming Soon relabel, forced payout-account tap-select, dead Home-banner removal, real announcement dialog built, notification-send admin UI added
+
+Owner's message covered six separate asks in one breath (deposits in
+Records, Upcoming→Coming Soon, forced withdrawal-account selection, a
+"Home screen banner" admin residue, a non-working announcement dialog, and
+"I can't see where to send notifications"). Two of the six turned out to be
+already-correct behavior, not bugs — reported back instead of "fixed."
+
+- **Deposits in Records**: investigated, not a bug. `RECORD_META` already
+  maps `deposit→'Deposit'`, nothing filters transactions by type. The
+  account in the owner's screenshot had no completed deposits — its
+  balance was entirely an `admin_credit`, correctly labeled "Credit" in the
+  same screenshot. No code change.
+- **"Upcoming" badge → "Coming Soon" button label**: removed the
+  `badge-soon` pill from `prodCardHtml()` entirely (word is gone, not
+  relabeled); the Purchase button itself stays, its label now switches to
+  "Coming Soon" when `p.comingSoon` (`disabled` logic unchanged). Dead
+  `.badge-soon` CSS removed.
+- **Forced tap-to-select withdrawal account**: `openWithdrawSheet()` no
+  longer auto-fetches/auto-picks even a single account — it always opens on
+  a blue "Select payout account [>]" row; tapping it opens the existing
+  picker sheet (reusing the `_payoutPickCallback` stacked-sheet mechanism).
+  Zero-accounts case: `renderPayoutSheet()` now shows the add-account form
+  inline while picking (previously hidden), so a first-timer can add one
+  and land back on Withdraw automatically. Removed the now-dead duplicate
+  `savePayoutBtn` handler this superseded. Bonus fix: `(r.accounts || [])`
+  guards in both call sites against a success response missing `accounts`.
+- **Dead "Home screen banner" admin section removed**: confirmed via grep
+  (`homeBannerTitle|homeBannerText` — zero matches in `original_module.js`)
+  that this admin form field is never read by the real app; deleted the
+  panel-card + handler from `admin-src/index.html`. Server-side settings
+  left untouched.
+- **Announcement dialog built from scratch**: confirmed via grep
+  (`annEnabled|annTitle|annBody|announcementBg` — zero matches client-side)
+  that despite admin already having a form for this, nothing in the real
+  app ever rendered a dialog at all. Added `annBgBlurPx`/`annBgTintPct`
+  settings (server.js, same pattern as authBg/appBg/card/authCard), a
+  blur/opacity slider pair in admin, and the actual dialog in
+  `user-src/`: a slide-up bottom sheet (dark navy base, optional
+  blurred/tinted background image via `::before`/`::after`, matching the
+  authbg/appbg CSS pattern) with Cancel + Telegram pill buttons (Telegram
+  sourced from `telegramGroup` or `telegramChannel`, hidden entirely if
+  neither is set). Also fixed admin's own stale help text, which claimed
+  two Telegram buttons when the owner asked for one. Shown via a single
+  `maybeShowAnnouncement()` hook inside `showPage()` on `name==='home'`,
+  covering both "app open" and "return to Home from another tab" per
+  admin's existing (now finally true) help text.
+- **Notification-send admin UI added**: `/admin/notifications/create`
+  (owner-only broadcast-to-bell endpoint, already tested in
+  `test-notifications.js`) had zero call sites in `admin-src/index.html` —
+  the owner's "I can't see where to send notifications" was literally
+  correct, there was no UI for it. Added a "Send notification" card to the
+  Settings tab (title + message + send button) wired to the existing
+  endpoint.
+- **"Old notifications visible to new accounts"**: already true, verified
+  not a bug. `GET /notifications` has no account-creation-time filter on
+  broadcasts; `test-notifications.js` already asserts a member who
+  registers later still sees an older broadcast, and that test was already
+  green (fixed in an earlier round this session, per that test file's own
+  header). No code change — if still not visible on the owner's phone, the
+  likely cause is `server.js` not yet redeployed on Railway.
+- **Verification**: full `test-*.js` suite green, 62/62, run twice (after
+  the user-app changes and again after the admin-app changes). Rebuilt
+  `user/` and `admin/` via `build-core.js`/`build-admin.js`. Bumped
+  `user/sw.js` cache `v237`→`v238`. Playwright: 6 scenarios against the
+  announcement dialog (shows on Home open, Telegram tap opens the right
+  URL and closes it, shows again on Home return and Cancel closes it,
+  `annEnabled:false` never shows it, no-telegram-links hides the button
+  entirely, no-background-image renders cleanly) — all passed, screenshots
+  confirm the visual design.
+- Nothing deferred from this batch.
+
 ## 2026-08-17 — Claude — Found the REAL reason spinners looked frozen: no @keyframes spin rule existed
 
 Owner: *"why is the spin loader always stuck bro?????????????, please make

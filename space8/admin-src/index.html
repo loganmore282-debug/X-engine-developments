@@ -1603,6 +1603,9 @@ async function renderSettings(){
   if(staleTab('settings')) return;
   const s = r.settings||{};
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
+  const clampNum = (val, def, min, max) => { const n = Number(val); return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : def; };
+  const annBlurPx = clampNum(s.annBgBlurPx, 6, 0, 40);
+  const annTintPct = clampNum(s.annBgTintPct, 55, 0, 100);
   $('content').innerHTML = `
     <h2 class="sec">Rates &amp; limits</h2>
     <div class="panel-card">
@@ -1633,6 +1636,14 @@ async function renderSettings(){
       <button class="btn block" id="saveRates">Save rates</button>
     </div>
 
+    <h2 class="sec">Send notification</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Posts straight to every member's notification bell — separate from the announcement popup below. Every account, including ones created after you send it, will see it in their bell.</p>
+      <label>Title</label><input id="nTitle" placeholder="e.g. Scheduled maintenance">
+      <label>Message</label><textarea id="nBody" rows="5" placeholder="Write what you want every member to see…"></textarea>
+      <button class="btn block" id="sendNotifBtn">Send to all members</button>
+    </div>
+
     <h2 class="sec">Announcement dialog</h2>
     <div class="panel-card">
       <div class="switch-row"><span><b>Show announcement popup</b></span>
@@ -1640,18 +1651,26 @@ async function renderSettings(){
       <label>Title (hero text)</label><input id="aTitle" value="${esc(v('annTitle','Notice'))}">
       <label>Body</label><textarea id="aBody" rows="7" placeholder="Write the announcement…">${esc(v('annBody',''))}</textarea>
       <button class="btn block" id="saveAnn">Save announcement</button>
-      <p class="muted" style="margin-top:10px">Shows every time a member opens the app, and every time they switch back to the Home tab from Shop, Rewards, Team or Me. The dialog's own two buttons are your Telegram Channel and Telegram Group links, set below under Support contacts — nothing to configure here for those.</p>
+      <p class="muted" style="margin-top:10px">Shows every time a member opens the app, and every time they switch back to the Home tab from Shop, Rewards, Team or Me. The dialog has a Telegram button (your Telegram Group link if set, otherwise your Telegram Channel link — both set below under Support contacts) and a Cancel button — nothing to configure here for those.</p>
     </div>
 
-    <h2 class="sec">Announcement banner image</h2>
+    <h2 class="sec">Announcement background image</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Shown at the top of the announcement popup, above the title. Leave unset to keep the plain mark instead.</p>
+      <p class="muted" style="margin-top:0">Fills the announcement popup behind the title and body, blurred and tinted like the app/login backgrounds. Leave unset to keep a plain dark background instead.</p>
       <div class="banner-row">
         ${s.announcementBg?`<img class="img-thumb" src="${esc(s.announcementBg)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25"></div>'}
         <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${s.announcementBg?'Uploaded image':'<span class="muted">Not set</span>'}</div>
         ${s.announcementBg?`<button class="btn danger sm" id="annBgClear">Clear</button>`:''}
       </div>
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="annBgFile" accept="image/*" hidden></label>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+        <label>Background blur (px) — <span id="annBlurVal">${annBlurPx}</span></label>
+        <input id="annBlurRange" type="range" min="0" max="40" step="1" value="${annBlurPx}" style="width:100%">
+        <label style="margin-top:10px;display:block">Overlay opacity (%) — <span id="annTintVal">${annTintPct}</span></label>
+        <input id="annTintRange" type="range" min="0" max="100" step="1" value="${annTintPct}" style="width:100%">
+        <p class="muted" style="font-size:12px;margin:6px 0 0">Higher blur hides more image detail; higher overlay opacity fades the image more so the title and body stay readable. 0% opacity shows the image at full clarity behind the blur.</p>
+        <button class="btn block" id="saveAnnBgBtn" style="margin-top:10px">Save blur &amp; opacity</button>
+      </div>
     </div>
 
     <h2 class="sec">Support contacts</h2>
@@ -1678,14 +1697,6 @@ async function renderSettings(){
       <label>About text (shown on the app's About page)</label>
       <textarea id="abText" rows="8" placeholder="Describe Space8 for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
       <button class="btn block" id="saveAbout">Save about page</button>
-    </div>
-
-    <h2 class="sec">Home screen banner</h2>
-    <div class="panel-card">
-      <p class="muted" style="margin-top:0">Optional title + sentence shown over the Home screen's banner image. Leave both blank to show just the image, no text.</p>
-      <label>Title</label><input id="hbTitle" value="${esc(v('homeBannerTitle',''))}" placeholder="e.g. Welcome to Space8">
-      <label>Sentence</label><input id="hbText" value="${esc(v('homeBannerText',''))}" placeholder="e.g. Grow your money with Space8.">
-      <button class="btn block" id="saveHomeBanner">Save home banner text</button>
     </div>`;
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
@@ -1698,6 +1709,15 @@ async function renderSettings(){
       maintenanceMsg:$('sMaintMsg').value.trim()
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('sendNotifBtn').addEventListener('click', async()=>{
+    const title = $('nTitle').value.trim(), body = $('nBody').value.trim();
+    if (!title || !body) return toast('Title and message are required', 'err');
+    await withTabBusy((async()=>{
+      const d = await api('/admin/notifications/create', { title, body });
+      toast(d.status==='success'?'Sent to every member':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') { $('nTitle').value = ''; $('nBody').value = ''; }
+    })());
   });
   $('saveAnn').addEventListener('click', async()=>{
     const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value };
@@ -1723,6 +1743,17 @@ async function renderSettings(){
       if (d.status==='success') renderSettings();
     })());
   });
+  $('annBlurRange').addEventListener('input', ()=>{ $('annBlurVal').textContent = $('annBlurRange').value; });
+  $('annTintRange').addEventListener('input', ()=>{ $('annTintVal').textContent = $('annTintRange').value; });
+  $('saveAnnBgBtn').addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/settings/update', { settings: {
+        annBgBlurPx: parseInt($('annBlurRange').value,10),
+        annBgTintPct: parseInt($('annTintRange').value,10)
+      } });
+      toast(d.status==='success'?'Saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    })());
+  });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(),
       telegramGroup:$('spTgGroup').value.trim(), telegramChannel:$('spTgChan').value.trim(),
@@ -1737,10 +1768,6 @@ async function renderSettings(){
   $('saveAbout').addEventListener('click', async()=>{
     const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'About saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
-  });
-  $('saveHomeBanner').addEventListener('click', async()=>{
-    const upd = { homeBannerTitle:$('hbTitle').value.trim(), homeBannerText:$('hbText').value.trim() };
-    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Home banner saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
 }
 
