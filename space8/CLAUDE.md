@@ -1286,6 +1286,36 @@ admin's Title/Body fields directly).
   Screenshots confirm the icon sits exactly where the owner circled it and
   the full rules message now fits without scrolling.
 
+## Round 10 of the same day, 2026-08-17 — Deposit/Withdraw Records shortcuts corrected to per-screen history, not the combined list
+
+Owner, immediately after Round 9 shipped: *"unfortunately you misunderstood,
+l said on withdrawals, the records svg opens the withdrawals history/
+records,and also for deposit svg of records,opens deposits history, not
+records, so records combines all transactions, but here it goes
+specifically."* Round 9's shortcut buttons both opened the same combined
+Records sheet (every transaction type) — correct location, wrong content.
+
+- `openRecordsSheet()` (`user-src/original_module.js`) now takes 3 optional
+  params: `filterType`, `title`, `emptyMsg`. Called with none of them (the
+  home activity-ticker's own records button, unchanged) it's still the full
+  combined view titled "Records". The two new header buttons now pass
+  `'deposit'`/`'Deposit History'`/`'No deposits yet'` and
+  `'withdraw'`/`'Withdrawal History'`/`'No withdrawals yet'` — filtering the
+  same `/transactions` response client-side on `t.type` (confirmed against
+  `server.js`'s actual write sites: the field is `'deposit'`/`'withdraw'`,
+  matching `RECORD_META`'s keys exactly) before rendering, with its own
+  sheet title and a screen-specific empty-state message instead of the
+  generic "No more data".
+- **Verification**: full `test-*.js` suite green (62/62). Rebuilt `user/`,
+  bumped `user/sw.js` cache `v240`→`v241`. Playwright: Deposit sheet's
+  shortcut against a 5-item mixed mock transaction list shows exactly the
+  2 deposit rows titled "Deposit History"; Withdraw sheet's shortcut shows
+  exactly the 1 withdraw row titled "Withdrawal History"; the Home
+  activity-ticker's own records icon (called separately, not through the
+  Deposit/Withdraw path) still shows the full combined list, confirming
+  that path is untouched; an empty deposit-only mock correctly renders "No
+  deposits yet" instead of the generic empty-list wording.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

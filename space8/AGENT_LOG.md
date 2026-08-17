@@ -14,6 +14,29 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Deposit/Withdraw Records shortcuts fixed to open per-screen history, not the combined list
+
+Owner, right after the previous entry shipped: "on withdrawals, the records
+svg opens the withdrawals history/records, and also for deposit svg of
+records, opens deposits history, not records, so records combines all
+transactions, but here it goes specifically." The shortcut icons were in
+the right place but both opened the same combined Records sheet.
+
+- `openRecordsSheet()` in `original_module.js` gained 3 optional params
+  (`filterType`, `title`, `emptyMsg`) — called with none of them (the home
+  ticker's own records button) it's still the unfiltered combined view.
+  The Deposit/Withdraw header shortcuts now pass `'deposit'`/`'withdraw'`
+  (matching the real `t.type` values server.js actually writes) plus a
+  screen-specific title ("Deposit History"/"Withdrawal History") and empty
+  message ("No deposits yet"/"No withdrawals yet"). Filtering happens
+  client-side on the same `/transactions` call already used everywhere
+  else — no new endpoint.
+- **Verification**: full suite green (62/62). Rebuilt `user/`, bumped
+  `sw.js` cache `v240`→`v241`. Playwright confirmed Deposit's shortcut
+  shows only deposit rows, Withdraw's shows only withdraw rows, the home
+  ticker's combined view is untouched, and the empty-state wording is
+  correctly per-screen.
+
 ## 2026-08-17 — Claude — Announcement dialog taller + fixed scroll-chaining into dashboard, Records shortcut added to Deposit/Withdraw headers
 
 Owner, with two screenshots circling the empty top-right corner on Deposit

@@ -221,12 +221,14 @@ qsa('.sheet-back').forEach(function(btn){
 });
 // Records shortcut in the Deposit/Withdraw sheet headers -- owner wanted a
 // quick way to jump to transaction history from those two screens without
-// backing out first. openRecordsSheet() stacks the Records sheet ('generic')
-// on top via the existing _sheetStack mechanism, so the phone Back button
-// (or the sheet's own back arrow) returns to Deposit/Withdraw underneath,
-// same as the withdrawal-account picker already stacks on top of Withdraw.
-$('depositRecordsBtn').onclick = openRecordsSheet;
-$('withdrawRecordsBtn').onclick = openRecordsSheet;
+// backing out first, but scoped to THAT screen's own history, not the
+// combined Records list (see openRecordsSheet's own comment above). Stacks
+// onto the 'generic' sheet slot via the existing _sheetStack mechanism, so
+// the phone Back button (or the sheet's own back arrow) returns to
+// Deposit/Withdraw underneath, same as the withdrawal-account picker
+// already stacks on top of Withdraw.
+$('depositRecordsBtn').onclick = function(){ openRecordsSheet('deposit', 'Deposit History', 'No deposits yet'); };
+$('withdrawRecordsBtn').onclick = function(){ openRecordsSheet('withdraw', 'Withdrawal History', 'No withdrawals yet'); };
 
 // ── AUTH ──────────────────────────────────────────────────────────────
 function showLoginScreen(){ $('screenRegister').style.display = 'none'; $('screenLogin').style.display = 'flex'; }
@@ -725,12 +727,24 @@ function recordMeta(type){
 // every row's date/time comes straight from the same server-timestamped
 // ledger every balance figure in the app is computed from, not a
 // client-side guess.
-async function openRecordsSheet(){
-  openSheet('generic', '<div class="sheet-title">Records</div><div id="recordsBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(4,'sk-card') + '</div>');
+// filterType/title/emptyMsg are optional -- the home activity-ticker's own
+// records button calls this with none of them (the combined, everything
+// view). The Deposit/Withdraw sheet header shortcuts pass 'deposit'/
+// 'withdraw' so each screen's shortcut opens ONLY that screen's own
+// history, not the combined list -- owner: "on withdrawals, the records
+// svg opens the withdrawals history/records, and also for deposit svg of
+// records, opens deposits history, not records, so records combines all
+// transactions, but here it goes specifically." Filtering happens
+// client-side on the same /transactions response the combined view already
+// uses -- no new endpoint needed, `t.type` is the same field RECORD_META
+// keys off of ('deposit', 'withdraw', ...).
+async function openRecordsSheet(filterType, title, emptyMsg){
+  openSheet('generic', '<div class="sheet-title">' + esc(title || 'Records') + '</div><div id="recordsBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(4,'sk-card') + '</div>');
   var r = await api('/transactions', null, 'GET');
   var body = $('recordsBody'); if (!body) return;
   var items = (r.status === 'success' && r.transactions) || [];
-  if (!items.length) { body.innerHTML = emptyState('doc','No more data'); return; }
+  if (filterType) items = items.filter(function(t){ return t.type === filterType; });
+  if (!items.length) { body.innerHTML = emptyState('doc', emptyMsg || 'No more data'); return; }
   body.innerHTML = items.map(function(t){
     var meta = recordMeta(t.type);
     var neg = (t.amount||0) < 0;
