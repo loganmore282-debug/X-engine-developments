@@ -1244,10 +1244,22 @@ async function renderBanners(){
   const tintPct = clampNum(sett.authBgTintPct, 78, 0, 100);
   const appBlurPx = clampNum(sett.appBgBlurPx, 20, 0, 40);
   const appTintPct = clampNum(sett.appBgTintPct, 78, 0, 100);
+  const cardBlurPx = clampNum(sett.cardBlurPx, 0, 0, 24);
+  const cardOpacityPct = clampNum(sett.cardOpacityPct, 100, 0, 100);
   $('content').innerHTML = `
     <h2 class="sec">App banners</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Every custom image the app shows is set here. An empty slot uses the built-in default artwork.</p>
+    </div>
+    <div class="panel-card">
+      <label style="font-weight:700">Card appearance</label>
+      <p class="muted" style="margin:2px 0 8px;font-size:12px">Makes the white cards (Home, Products, Team, Account, Login/Register) translucent so a background image shows through them too, with their own blur — separate from the background image's own blur above. Defaults (100% opacity, 0px blur) look exactly like solid white cards.</p>
+      <label>Card blur (px) — <span id="cardBlurVal">${cardBlurPx}</span></label>
+      <input id="cardBlurRange" type="range" min="0" max="24" step="1" value="${cardBlurPx}" style="width:100%">
+      <label style="margin-top:10px;display:block">Card opacity (%) — <span id="cardOpacityVal">${cardOpacityPct}</span></label>
+      <input id="cardOpacityRange" type="range" min="0" max="100" step="1" value="${cardOpacityPct}" style="width:100%">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Lower opacity lets more of the background show through the card; very low values can hurt readability of text on the card.</p>
+      <button class="btn block" id="saveCardBgBtn" style="margin-top:10px">Save card blur &amp; opacity</button>
     </div>
     ${Object.keys(BANNER_LABELS).map(key=>{
       const [label,hint] = BANNER_LABELS[key];
@@ -1321,6 +1333,19 @@ async function renderBanners(){
         const d = await api('/admin/settings/update', { settings: {
           appBgBlurPx: parseInt($('appBlurRange').value,10),
           appBgTintPct: parseInt($('appTintRange').value,10)
+        } });
+        toast(d.status==='success'?'Saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      })());
+    });
+  }
+  if ($('cardBlurRange')) {
+    $('cardBlurRange').addEventListener('input', ()=>{ $('cardBlurVal').textContent = $('cardBlurRange').value; });
+    $('cardOpacityRange').addEventListener('input', ()=>{ $('cardOpacityVal').textContent = $('cardOpacityRange').value; });
+    $('saveCardBgBtn').addEventListener('click', async()=>{
+      await withTabBusy((async()=>{
+        const d = await api('/admin/settings/update', { settings: {
+          cardBlurPx: parseInt($('cardBlurRange').value,10),
+          cardOpacityPct: parseInt($('cardOpacityRange').value,10)
         } });
         toast(d.status==='success'?'Saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
       })());

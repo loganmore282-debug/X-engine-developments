@@ -132,14 +132,26 @@ async function api(path, body, method, retryOnce){
   };
   if (token) opts.headers['Authorization'] = 'Bearer ' + token;
   if (body) opts.body = JSON.stringify(body);
-  var doFetch = async function(){
-    var res = await fetch(SERVER + path, opts);
-    var json;
-    try { json = await res.json(); } catch(e) { json = { status:'error', message:'Unexpected response from server' }; }
-    if (json.status === 'error' && json.code === 'BANNED') { handleBanned(json.message); }
-    return json;
-  };
   var isMoney = isMoneyCall(path);
+  // A plain fetch() with no timeout can hang indefinitely on a slow/cold-
+  // starting server -- there's nothing to catch, so the caller's spinner
+  // (setBtnLoading) never clears and just looks permanently stuck. Money
+  // calls get a longer allowance (a real Railway cold start can take a
+  // while and these must not be aborted mid-transaction any sooner than
+  // necessary) but every call now fails, visibly, rather than hanging forever.
+  var doFetch = async function(){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, isMoney ? 40000 : 20000);
+    try {
+      var res = await fetch(SERVER + path, Object.assign({}, opts, { signal: ctrl.signal }));
+      var json;
+      try { json = await res.json(); } catch(e) { json = { status:'error', message:'Unexpected response from server' }; }
+      if (json.status === 'error' && json.code === 'BANNED') { handleBanned(json.message); }
+      return json;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   if (isMoney) window._moneyCallsInFlight++;
   try {
     try {
@@ -836,8 +848,7 @@ async function renderAccount(){
 
   html += '<div class="menu-list">' +
     menuRow('info','About Space8','about') +
-    menuRow('doc','Rules & Regulations','rules') +
-    menuRow('shield','Terms of Service','terms') +
+    menuRow('doc','Rules','rules') +
     menuRow('support','Support','support') +
     '<div class="menu-row" id="getAppRow">' + ico('download') + '<span>Get App</span></div>' +
   '</div>';
@@ -914,8 +925,7 @@ async function openInfoSheet(key){
   var s = STATE.settings || (await api('/public/settings')).settings || {};
   var map = {
     about: ['About Space8', s.aboutText || 'Space8 lets you invest in satellite-themed plans and earn daily returns.'],
-    rules: ['Rules & Regulations', s.rulesText || 'Standard platform rules apply.'],
-    terms: ['Terms of Service', s.rulesText || 'By using Space8 you agree to our terms of service.'],
+    rules: ['Rules', s.rulesText || 'Standard platform rules apply.'],
     support: ['Support', 'Telegram: ' + esc(s.supportTelegram||'—') + '<br>WhatsApp: ' + esc(s.whatsappContact||'—') + '<br>Hours: ' + esc(s.supportHours||'—')]
   };
   var m = map[key] || ['Info',''];
@@ -1281,10 +1291,11 @@ $('assistInput').addEventListener('keydown', function(e){
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────────────
 async function openNotificationsSheet(){
+  openSheet('generic', '<div class="sheet-title">Notifications</div><div id="notifBody">' + skRows(3) + '</div>');
   var r = await api('/notifications', null, 'GET');
+  var body = $('notifBody'); if (!body) return;
   var items = r.status === 'success' ? (r.notifications || []) : [];
-  var html = '<div class="sheet-title">Notifications</div>';
-  html += items.length ? items.map(function(n){
+  body.innerHTML = items.length ? items.map(function(n){
     var unread = !n.readAt && !n.read;
     return '<div class="card" style="margin-bottom:10px;border:' + (unread ? '1px solid var(--blue-glow)' : '1px solid transparent') + '">' +
       '<div style="display:flex;gap:10px;align-items:flex-start"><div style="width:9px;height:9px;border-radius:50%;margin-top:6px;background:' + (unread ? 'var(--blue)' : 'var(--line)') + ';flex-shrink:0"></div><div style="min-width:0;flex:1">' +
@@ -1292,8 +1303,7 @@ async function openNotificationsSheet(){
       '<div style="font-size:13px;color:var(--ink-dim);line-height:1.5">' + esc(n.body || '') + '</div>' +
       (n.createdAt ? '<div style="font-size:11px;color:var(--blue-mute);margin-top:8px">' + esc(timeAgo(n.createdAt)) + '</div>' : '') +
       '</div></div></div>';
-  }).join('') : emptyState('doc','No more data');
-  openSheet('generic', html);
+  }).join('') + listEndFooter() : emptyState('doc','No more data');
   var unreadIds = items.filter(function(n){ return n.id && !n.readAt && !n.read; }).map(function(n){ return n.id; });
   if (unreadIds.length) api('/notifications/read', { ids: unreadIds }, 'POST', false).catch(function(){});
 }
@@ -1321,6 +1331,10 @@ async function boot(){
   var appTintPct = (STATE.settings||{}).appBgTintPct;
   document.documentElement.style.setProperty('--app-bg-blur', (appBlurPx != null ? appBlurPx : 20) + 'px');
   document.documentElement.style.setProperty('--app-bg-tint', (appTintPct != null ? appTintPct : 78) / 100);
+  var cardBlurPx = (STATE.settings||{}).cardBlurPx;
+  var cardOpacityPct = (STATE.settings||{}).cardOpacityPct;
+  document.documentElement.style.setProperty('--card-blur', (cardBlurPx != null ? cardBlurPx : 0) + 'px');
+  document.documentElement.style.setProperty('--card-alpha', (cardOpacityPct != null ? cardOpacityPct : 100) / 100);
 }
 window.addEventListener('space8-auth', async function(e){
   var user = e.detail;
@@ -1371,4 +1385,22 @@ function startLiveRefresh(){
 }
 function stopLiveRefresh(){ if (_liveRefreshTimer) { clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; } }
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE.account) { STATE.loaded.home = false; if (STATE.currentPage === 'home') renderHome(); } });
+
+// Hide the "Space8" wordmark once the page scrolls -- the topbar has no
+// opaque background of its own (it sits on the app wallpaper, see
+// #app::before/::after above), so on scroll the wordmark used to overlap
+// scrolled-past content instead of a solid bar. Fades back in near the top.
+(function(){
+  var topbar = $('topbar');
+  if (!topbar) return;
+  var ticking = false;
+  window.addEventListener('scroll', function(){
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function(){
+      topbar.classList.toggle('scrolled', window.scrollY > 12);
+      ticking = false;
+    });
+  }, { passive: true });
+})();
 boot();

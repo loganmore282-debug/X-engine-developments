@@ -201,7 +201,8 @@ const DEFAULT_SETTINGS = {
   rulesText: '', brandTagline: '', aboutText: '',
   homeBannerTitle: '', homeBannerText: '',
   authBgBlurPx: 20, authBgTintPct: 78,
-  appBgBlurPx: 20, appBgTintPct: 78
+  appBgBlurPx: 20, appBgTintPct: 78,
+  cardBlurPx: 0, cardOpacityPct: 100
 };
 // The real 15-plan catalog from the owner's PDF (Space8_Investment_Plans_
 // and_Variables.pdf) -- x42 total return over a fixed 210-day cycle for
@@ -1383,7 +1384,8 @@ app.get('/public/settings', async (_req, res) => {
       rulesText: s.rulesText || '', brandTagline: s.brandTagline || '', aboutText: s.aboutText || '',
       homeBannerTitle: s.homeBannerTitle || '', homeBannerText: s.homeBannerText || '',
       authBgBlurPx: s.authBgBlurPx, authBgTintPct: s.authBgTintPct,
-      appBgBlurPx: s.appBgBlurPx, appBgTintPct: s.appBgTintPct
+      appBgBlurPx: s.appBgBlurPx, appBgTintPct: s.appBgTintPct,
+      cardBlurPx: s.cardBlurPx, cardOpacityPct: s.cardOpacityPct
     } });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });
@@ -3206,7 +3208,7 @@ app.get('/admin/settings', async (req, res) => {
 // out-of-range or non-numeric value here isn't just cosmetic, it's a stored
 // self-XSS surface across admin sessions. Validate those specifically rather
 // than trusting the whole request body.
-const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100], appBgBlurPx: [0, 40], appBgTintPct: [0, 100] };
+const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100], appBgBlurPx: [0, 40], appBgTintPct: [0, 100], cardBlurPx: [0, 24], cardOpacityPct: [0, 100] };
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

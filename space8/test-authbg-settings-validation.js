@@ -106,6 +106,17 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { appBgTintPct: -1 } } });
   check('appBg negative tint rejected', r.code === 400 && r.body.status === 'error', r.body);
 
+  // cardBlurPx/cardOpacityPct (the frosted-glass card sliders) — same check.
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { cardBlurPx: 10, cardOpacityPct: 70 } } });
+  check('card valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved card blur', r.body.settings.cardBlurPx === 10, r.body.settings);
+  check('public settings reflects saved card opacity', r.body.settings.cardOpacityPct === 70, r.body.settings);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { cardBlurPx: 999 } } });
+  check('card blur above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { cardOpacityPct: -1 } } });
+  check('card negative opacity rejected', r.code === 400 && r.body.status === 'error', r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

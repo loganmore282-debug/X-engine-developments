@@ -32,6 +32,8 @@
   --radius-btn: 14px;
   --radius-sheet: 24px;
   --page-bg: #eef1f6;
+  --card-alpha: 1;
+  --card-blur: 0px;
   color-scheme: light;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -69,7 +71,7 @@ svg{display:block;}
 .auth-wrap{ position:relative; z-index:1; width:100%; max-width:380px; }
 .auth-word{ font-weight:700; font-size:20px; letter-spacing:-.01em; text-align:center; margin-bottom:32px; }
 .auth-word .dot{ color:var(--blue); }
-.auth-card{ background:var(--surface); border-radius:var(--radius-card); padding:26px 22px; }
+.auth-card{ background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); border-radius:var(--radius-card); padding:26px 22px; }
 .auth-title{ font-weight:700; font-size:19px; letter-spacing:-.01em; margin:0 0 22px; text-align:center; }
 .auth-form{ display:flex; flex-direction:column; gap:15px; }
 .auth-label{ display:block; font-size:11.5px; font-weight:700; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px 2px; }
@@ -90,8 +92,9 @@ svg{display:block;}
   display:flex; align-items:center; justify-content:space-between;
   padding:max(14px, env(safe-area-inset-top)) 18px 12px; position:sticky; top:0; z-index:20;
 }
-.wordmark{ font-weight:700; font-size:18px; letter-spacing:-.01em; display:flex; align-items:center; gap:2px; }
+.wordmark{ font-weight:700; font-size:18px; letter-spacing:-.01em; display:flex; align-items:center; gap:2px; transition:opacity .18s ease, transform .18s ease; }
 .wordmark .dot{ color:var(--blue); }
+.topbar.scrolled .wordmark{ opacity:0; transform:translateY(-6px); pointer-events:none; }
 .iconbtn{ width:40px; height:40px; border-radius:11px; background:var(--surface); display:flex; align-items:center; justify-content:center; }
 .iconbtn svg{ width:20px; height:20px; stroke:var(--blue); }
 
@@ -133,7 +136,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .field-eye{ cursor:pointer; }
 .field-hint{ font-size:12px; color:var(--ink-dim); margin:-4px 2px 0; }
 
-.card{ background:var(--surface); border-radius:var(--radius-card); padding:18px; }
+.card{ background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); border-radius:var(--radius-card); padding:18px; }
 .section-title{ font-weight:700; font-size:16px; letter-spacing:-.01em; margin:26px 0 12px; display:flex; align-items:center; justify-content:space-between; color:var(--blue-dim); }
 .section-title .see-all{ font-size:11px; color:var(--blue); text-transform:uppercase; letter-spacing:.04em; }
 
@@ -229,7 +232,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .ticker-item{ font-size:12.5px; color:var(--ink-dim); white-space:nowrap; }
 .ticker-item .amt{ color:var(--ink); font-weight:700; }
 
-.plan-card{ position:relative; border-radius:var(--radius-card); background:var(--surface); padding:16px; display:flex; align-items:center; gap:14px; margin-bottom:10px; }
+.plan-card{ position:relative; border-radius:var(--radius-card); background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); padding:16px; display:flex; align-items:center; gap:14px; margin-bottom:10px; }
 .plan-ring{ width:56px; height:56px; flex-shrink:0; position:relative; }
 .plan-ring svg{ width:100%; height:100%; }
 .plan-ring .pct{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; }
@@ -241,16 +244,16 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 
 /* ---------- products ---------- */
 .shortcut-row{ display:flex; gap:8px; margin-bottom:16px; }
-.shortcut{ flex:1; background:var(--surface); border-radius:14px; padding:12px 8px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.shortcut{ flex:1; background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); border-radius:14px; padding:12px 8px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; }
 .shortcut svg{ width:22px; height:22px; stroke:var(--blue); }
 .shortcut span{ font-size:10.5px; font-weight:700; }
 
 .mystats{ display:flex; gap:10px; margin-bottom:20px; }
-.mystats .card{ flex:1; padding:14px; background:var(--surface); }
+.mystats .card{ flex:1; padding:14px; }
 .mystats .lab{ font-size:9.5px; text-transform:uppercase; color:var(--blue-dim); letter-spacing:.05em; }
 .mystats .val{ font-weight:700; font-size:16px; margin-top:5px; }
 
-.prod-card{ border-radius:var(--radius-card); background:var(--surface); padding:16px; margin-bottom:12px; }
+.prod-card{ border-radius:var(--radius-card); background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); padding:16px; margin-bottom:12px; }
 .prod-card .top{ display:flex; gap:12px; align-items:flex-start; }
 .prod-card .sat{ width:56px; height:56px; border-radius:14px; background:var(--surface-2); flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
 .prod-card .sat img{ width:100%; height:100%; object-fit:cover; }
@@ -284,7 +287,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .member-row.record-row .phone{ color:#fff; }
 .member-row.record-row .date{ color:rgba(255,255,255,.88); }
 
-.milestone-card{ display:flex; align-items:center; gap:16px; min-height:96px; padding:20px 18px; background:var(--surface); border:1px solid var(--line); border-radius:20px; margin-bottom:14px; box-shadow:0 14px 30px -24px rgba(46,107,255,.75); }
+.milestone-card{ display:flex; align-items:center; gap:16px; min-height:96px; padding:20px 18px; background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); border:1px solid var(--line); border-radius:20px; margin-bottom:14px; box-shadow:0 14px 30px -24px rgba(46,107,255,.75); }
 .milestone-card .ico{ width:54px; height:54px; border-radius:16px; background:var(--blue-glow); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .milestone-card .ico svg{ width:20px; height:20px; stroke:var(--blue); }
 .milestone-card.done .ico{ background:var(--surface-2); }
@@ -339,11 +342,11 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .telegram-row .btn svg{ width:17px; height:17px; }
 
 .matrix{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:9px; margin-bottom:22px; }
-.mtile{ background:var(--surface); border-radius:14px; padding:12px 4px; display:flex; flex-direction:column; align-items:center; gap:7px; text-align:center; }
+.mtile{ background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); border-radius:14px; padding:12px 4px; display:flex; flex-direction:column; align-items:center; gap:7px; text-align:center; }
 .mtile svg{ width:22px; height:22px; stroke:var(--blue); }
 .mtile span{ font-size:9.5px; font-weight:700; }
 
-.menu-list{ border-radius:var(--radius-card); overflow:hidden; background:var(--surface); }
+.menu-list{ border-radius:var(--radius-card); overflow:hidden; background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); }
 .menu-row{ display:flex; align-items:center; gap:12px; padding:15px 16px; border-top:1px solid var(--line); }
 .menu-row:first-child{ border-top:none; }
 .menu-row svg{ width:21px; height:21px; stroke:var(--blue); flex-shrink:0; }
@@ -460,7 +463,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 </div>
 
 <div id="app">
-  <div class="topbar">
+  <div class="topbar" id="topbar">
     <div class="wordmark" aria-label="Space8"><svg viewBox="0 0 36 28" width="29" height="23" fill="none" aria-hidden="true"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="currentColor"/></svg><span>Space</span><span class="dot">8</span></div>
     <div class="iconbtn" id="notifBtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
   </div>

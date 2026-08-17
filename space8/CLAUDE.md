@@ -330,9 +330,15 @@ tab.
   `settings.telegramGroup`/`telegramChannel` — both fields already existed
   server-side (`/public/settings`) but were never surfaced anywhere in the frontend
   before this. Then: 4-tile matrix (withdrawal account / deposits / withdrawals /
-  security PIN), About/Rules/Terms/Support sheets sourced from `/public/settings`
+  security PIN), About/Rules/Support sheets sourced from `/public/settings`
   (**no Privacy** — removed earlier this session, "also remove privacy policy 🙄" —
-  don't re-add it without being asked), a **Get App** row (between Support and Log
+  don't re-add it without being asked; **Rules & Regulations and Terms of Service
+  merged into one "Rules" row 2026-08-17** — owner: "combine regulations and
+  terms, so you will say Rules." They already shared the same `s.rulesText`
+  backing field, so this was a pure UI/menu-map simplification, not a data
+  change: `terms` removed from both the `menuRow()` list and `openInfoSheet`'s
+  `map` in `original_module.js`; `assistant-engine.js` replies that said
+  "Account → Terms of Service" now say "Account → Rules"), a **Get App** row (between Support and Log
   Out, added 2026-08-16 — `promptInstallApp()` in `original_module.js`, backed by
   `beforeinstallprompt` capture in `index.html`'s plain `<script>`, the first PWA
   install affordance this project has had), logout.
@@ -609,6 +615,64 @@ existing `_tabBusy` flag (already used to suppress live-refresh during an
 upload/save). If you add a new money-moving member endpoint, add it to
 `MONEY_ENDPOINTS` — that whitelist now gates both the original retry-safety logic AND
 this reload gate, not just the former.
+
+## Responsiveness fixes, 2026-08-17 (owner: spinners "always stuck", notif bell "takes long to respond")
+
+- **`api()` in `original_module.js` had no fetch timeout** — a plain `fetch()` with no
+  `AbortController` can hang indefinitely on a slow/cold-starting Railway instance, and
+  since nothing ever rejects, the caller's `setBtnLoading` spinner never clears — this
+  reads to the owner as a permanently "stuck" loader (login, register, deposit, every
+  button that goes through `api()`), even though the code path itself was already
+  correct (every call site does clear the spinner on both success and the `catch`
+  branch). Fixed by wrapping every `doFetch()` in an `AbortController` with a timeout —
+  20s for ordinary calls, 40s for `MONEY_ENDPOINTS` calls (given more slack since these
+  must not be aborted mid-transaction any sooner than truly necessary). A timed-out
+  call now behaves exactly like any other network failure (existing catch/retry/error
+  message path), so the spinner clears and the user gets an actual error instead of an
+  infinite wait.
+- **`openNotificationsSheet()` was the one sheet in the whole app that didn't follow
+  the established skeleton-then-fill pattern** — it awaited the full `/notifications`
+  round-trip BEFORE calling `openSheet()` at all, so tapping the bell showed literally
+  nothing until the network resolved (the exact "why does it take long to respond"
+  complaint). Every other sheet (Records, Deposit/Withdraw History, Team, Account,
+  Products) opens immediately with a `skRows()` skeleton via `openSheet()`, then fills
+  `$('sheetIdBody').innerHTML` once the data lands. `openNotificationsSheet` now
+  follows the same idiom (`#notifBody` + skeleton first, then fill, plus the
+  `listEndFooter()` "No more data" footer on a non-empty result, matching Records).
+- **"Space8" wordmark now fades out on scroll** — owner: "when one starts to scroll
+  down, space8 word should go away not to spill." Side effect of the 2026-08-17
+  "remove background blue" + "website background" changes: `.topbar` no longer has an
+  opaque background of its own (it now sits transparently on the `#app` wallpaper), so
+  on scroll the wordmark text used to visually overlap scrolled-past cards instead of
+  a solid bar hiding them. A `scroll` listener (rAF-throttled, `passive:true`) toggles
+  `.topbar.scrolled` once `window.scrollY > 12`, which fades `.wordmark` to
+  `opacity:0` (CSS transition, not JS-animated) and fades back in near the top. The
+  notification bell icon is untouched — only the wordmark text/logo hides, per the
+  owner's wording ("space8 word", not the whole topbar).
+- **Frosted-glass cards, admin-settable, separate from the background image's own
+  blur** — owner: "let those cards be inclusive... so let it not be white... their
+  blur will also be different so also SETTABLE." New tokens `--card-alpha` (default
+  `1`) and `--card-blur` (default `0px`) on `:root`; the app's actual content-card
+  family — `.card`, `.auth-card`, `.prod-card`, `.plan-card`, `.mystats .card`,
+  `.mtile`, `.menu-list`, `.shortcut`, `.milestone-card` (the same set CLAUDE.md
+  already enumerated as "every content card" — see Design system above) — now render
+  `background:rgba(255,255,255,var(--card-alpha,1))` plus
+  `backdrop-filter:blur(var(--card-blur,0px))` instead of flat `background:var(--surface)`.
+  Deliberately NOT applied to `.iconbtn`, `.field`, `.btn-secondary`, `.sheet`,
+  `.navbar`, `.success-popup`, `.action-btn`, `.ticker-bar`/`.ticker-icon`, `.msg.bot`,
+  `.qchip`, or `.banner` — those are functional chrome (input fields, buttons, the nav
+  dock) rather than content cards, and making them translucent risked legibility (e.g.
+  an input field needs a stable readable background while typing). Defaults render
+  byte-identical to the old solid-white look (alpha 1, blur 0px), so nothing changes
+  until the owner actually moves a slider. `boot()` sets `--card-alpha`/`--card-blur`
+  from new `cardOpacityPct`/`cardBlurPx` settings (server `DEFAULT_SETTINGS`,
+  `/public/settings`, `SETTINGS_NUMERIC_RANGES` — blur 0–24, opacity 0–100, same
+  self-XSS rationale as `authBg*`/`appBg*` since these also render into an admin
+  slider `value="..."` attribute). Admin UI: a new standalone "Card appearance" panel
+  in the Banners tab (not tied to any one image slot, since it affects every card
+  everywhere) with its own blur/opacity sliders, wired the same way as the
+  `authbg`/`appbg` slider blocks. Covered by the same
+  `test-authbg-settings-validation.js` (extended again, not a new file).
 
 ## Repo / branch / infra
 

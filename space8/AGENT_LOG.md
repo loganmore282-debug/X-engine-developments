@@ -14,6 +14,80 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Frosted-glass cards + notif skeleton + fetch timeout + scroll-hide wordmark + Rules/Terms merge
+
+Owner (one message, five asks): *"let those cards be inclusive, however I can set
+their blur too, so let it not be white, so let us also take a background, but their
+blur will also be different so also SETTABLE, bro also why when I tap on
+notifications bell on the activity checker it takes long to respond, also bro, the
+loaders are always stuck ie on logging in registration, and more those spin loaders
+in userpanel, also I want when one starts to scroll down, space8 word should go away
+not to spill, also bro combine regulations and terms, so you will say 'Rules'."*
+
+- **Frosted-glass content cards, admin-settable.** New `--card-alpha`/`--card-blur`
+  tokens; the app's card family (`.card`, `.auth-card`, `.prod-card`, `.plan-card`,
+  `.mystats .card`, `.mtile`, `.menu-list`, `.shortcut`, `.milestone-card`) switched
+  from flat `background:var(--surface)` to
+  `rgba(255,255,255,var(--card-alpha,1))` + `backdrop-filter:blur(var(--card-blur,0px))`.
+  Deliberately left `.iconbtn`/`.field`/`.btn-secondary`/`.sheet`/`.navbar`/
+  `.success-popup`/`.action-btn`/`.ticker-bar`/`.msg.bot`/`.qchip`/`.banner` opaque —
+  functional chrome, not content cards; glass on an input field or the nav dock would
+  hurt legibility. New server settings `cardBlurPx: 0, cardOpacityPct: 100` (defaults
+  = today's exact look, nothing changes until the owner moves a slider), validated in
+  `SETTINGS_NUMERIC_RANGES` (0–24 / 0–100). New standalone "Card appearance" panel in
+  Admin → Banners (not tied to one image slot, since it's global) with its own
+  blur/opacity sliders — deliberately separate settings from `appBgBlurPx`/
+  `appBgTintPct`, since the owner explicitly asked for the card's blur to be "also
+  different" from the background image's own blur.
+- **Notification bell — root cause of the "takes long to respond" complaint found and
+  fixed.** `openNotificationsSheet()` was the one sheet in the app that awaited the
+  full `/notifications` network round-trip BEFORE calling `openSheet()` at all —
+  every other sheet (Records, History, etc.) opens instantly with a `skRows()`
+  skeleton, then fills in. Brought `openNotificationsSheet` in line with that
+  established pattern.
+- **Root cause of "stuck" spinners found and fixed**: `api()` had no fetch timeout —
+  a hung/very slow request (cold Railway instance) never rejects, so the caller's
+  `setBtnLoading` spinner just sits there forever, reading as permanently broken.
+  Every `setBtnLoading` call site was already correct (spinner cleared on both
+  success and catch) — the bug was the unbounded `fetch()` itself. Added an
+  `AbortController` timeout inside `doFetch()`: 20s for ordinary calls, 40s for
+  `MONEY_ENDPOINTS` calls (more slack so a real-but-slow deposit/withdrawal isn't
+  falsely aborted). A timeout now surfaces as an ordinary network-failure error
+  through the existing catch/retry path, so the spinner clears either way.
+- **Wordmark fades out on scroll.** Side effect of the earlier "remove background
+  blue"/"website background" work: `.topbar` no longer has an opaque background of
+  its own, so on scroll the "Space8" wordmark visually overlapped scrolled-past
+  content instead of a solid bar hiding it — this is what the owner meant by "should
+  go away not to spill." Added a `#topbar` id, a rAF-throttled `scroll` listener that
+  toggles `.topbar.scrolled` past `window.scrollY > 12`, and a CSS opacity transition
+  on `.wordmark` (fades out on scroll, back in near the top). Only the wordmark
+  fades — the notification bell icon is untouched.
+- **"Rules & Regulations" and "Terms of Service" merged into a single "Rules" menu
+  row.** They already shared the exact same `s.rulesText` backing field server-side
+  (`terms` in `openInfoSheet`'s map was reading `s.rulesText`, same as `rules` —
+  genuinely redundant content, not just similar wording), so this was a pure
+  UI/menu-map simplification: removed the `terms` `menuRow()` call and its
+  `openInfoSheet` map entry, relabeled `rules` to "Rules". Also swept
+  `assistant-engine.js` for stale "Account → Terms of Service" wording in 5 replies
+  (`data_privacy`, `how_platform_earns`, `platform_closes`, `regulated`,
+  `are_you_sure`) and updated them to say "Account → Rules" so the assistant doesn't
+  point users at a menu item that no longer exists.
+- **Tests**: extended `test-authbg-settings-validation.js` again (5 more assertions
+  for `cardBlurPx`/`cardOpacityPct` — same validation code path as `authBg*`/
+  `appBg*`). Full suite green, 100+ files.
+- **Verification**: rebuilt both `user/` and `admin/` (round-trip OK both). Bumped
+  `user/sw.js` cache `v231` → `v232`. Playwright: confirmed the notification sheet
+  opens with a visible skeleton within 150ms of tapping the bell (vs. a simulated
+  1.2s network delay) and fills in once data arrives with the "No more data" footer;
+  confirmed `.wordmark` opacity goes `1` → `0` on scroll; confirmed the Account menu
+  shows "Rules" with no leftover "Terms of Service"/"Rules & Regulations" text;
+  confirmed cards render visibly translucent (background image showing through) at
+  a sample 55% opacity / 10px blur setting on both Home (Products card) and Account.
+- Nothing left open — as always, `server.js` needs a manual Railway redeploy for the
+  new settings keys to take effect live.
+
+---
+
 ## 2026-08-17 — Claude — Admin-configurable website background image (appbg), reusing the auth-bg mechanism
 
 Owner: *"now we shall use image like the one on background of login and register, so
