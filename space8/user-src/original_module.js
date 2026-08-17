@@ -175,7 +175,8 @@ var ICONS = {
   download: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>',
   key: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.6 12.4 8.4-8.4M15 8l3 3M18 5l3 3"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.6-4.8A8.5 8.5 0 1 1 8.4 19.6Z"/><path d="M8.5 9.3c0 3.5 2.7 6.2 6.2 6.2.6 0 1-.5.9-1.1l-.3-1.1a.9.9 0 0 0-1-.6l-1.2.2a5 5 0 0 1-2.9-2.9l.2-1.2a.9.9 0 0 0-.6-1L8.7 7.5a.9.9 0 0 0-1.1.9c0 .3 0 .6.1.9Z"/></svg>',
-  clock: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>'
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+  space8logo: '<svg viewBox="0 0 36 28" fill="none"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="currentColor"/></svg>'
 };
 function ico(name){ return ICONS[name] || ''; }
 
@@ -516,8 +517,12 @@ function showPage(name){
   qsa('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + name); });
   qsa('.navitem').forEach(function(n){ n.classList.toggle('active', n.dataset.page === name); });
   // Assistant bubble is Account-only -- owner: "ai assistant bubble should
-  // be in account, so remove it from home, team, products."
+  // be in account, so remove it from home, team, products." Gift-code FAB
+  // (owner: "3d image of giftCodebox will be on top of where the chat
+  // assistant is") shares the same Account-only scope, stacked directly
+  // above it.
   $('assistFab').style.display = name === 'account' ? 'flex' : 'none';
+  $('giftFab').style.display = name === 'account' ? 'flex' : 'none';
   window.scrollTo(0,0);
   loadPage(name);
   if (name === 'home') maybeShowAnnouncement();
@@ -1204,12 +1209,33 @@ async function renderTeam(){
       return { members: members, failed: false };
     });
   });
+  // Owner: "referral links tab should be Migrated to team, so it will start
+  // up after the banner" -- was on Account; STATE.account is almost always
+  // already populated by the time Team is reachable (Home renders first on
+  // every app entry), but fetched here too so a referral code/link is never
+  // missing on this card specifically.
+  if (!STATE.account) {
+    var accR = await api('/account');
+    if (epoch !== STATE.authEpoch) return;
+    if (accR.status === 'success') STATE.account = accR.account;
+  }
+  var acc = STATE.account || {};
   var results = [statsR].concat(await Promise.all(memberFetches));
   if (epoch !== STATE.authEpoch) return;
   var s = STATE.teamStats || { counts:{l1:0,l2:0,l3:0}, commission:0, milestones:[] };
   var LEVEL_PCT = { 1:28, 2:2, 3:1 };
 
   var html = bannerHtml('giftbox', 'cluster');
+  html += '<div class="card referral-card">' +
+    '<div class="referral-label">Your Referral Code</div>' +
+    '<div class="referral-row">' +
+      '<div class="referral-code mono">' + esc(acc.referralCode||'—') + '</div>' +
+      '<button class="iconbtn" id="copyRefCodeBtn" aria-label="Copy referral code">' + ico('copy') + '</button>' +
+    '</div>' +
+    '<div class="referral-label referral-link-label">Your Referral Link</div>' +
+    '<div class="referral-row referral-link-row"><div class="referral-link mono" id="referralLink">' + esc(referralLink(acc.referralCode)) + '</div><button class="iconbtn" id="shareRefBtn" aria-label="Share referral link">' + ico('share') + '</button></div>' +
+    '<div class="referral-hint">Copy your code or share your personal link to invite people.</div>' +
+  '</div>';
   html += '<div class="mystats">' +
     '<div class="card"><div class="lab">Total Referrals</div><div class="val">' + ((s.counts.l1||0)+(s.counts.l2||0)+(s.counts.l3||0)) + '</div></div>' +
     '<div class="card"><div class="lab">Total Commission</div><div class="val mono">' + ugx(s.commission) + '</div></div>' +
@@ -1223,7 +1249,7 @@ async function renderTeam(){
     html += lvl.failed ? emptyState('cluster','Could not load this level — reopen the Team tab to retry.') :
       lvl.members.length ?
       '<div class="card">' + visible.map(function(m){
-        return '<div class="member-row"><div class="av">' + esc(String(m.phone||'?').slice(-2)) + '</div>' +
+        return '<div class="member-row"><div class="av">' + ico('space8logo') + '</div>' +
           '<div class="info"><div class="phone">' + esc(m.phone) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + '</div></div>' +
           '<span class="pill ' + (m.hasInvested?'pill-active':'pill-pending') + '">' + (m.hasInvested?'Active':'Pending') + '</span></div>';
       }).join('') + '</div>' +
@@ -1233,6 +1259,8 @@ async function renderTeam(){
   });
   html += '<div class="section-title">Task Center</div><div id="taskList"></div>';
   el.innerHTML = html;
+  $('shareRefBtn').onclick = function(){ shareReferral(acc.referralCode); };
+  $('copyRefCodeBtn').onclick = function(){ copyText(acc.referralCode, 'Referral code'); };
   qsa('.view-more-lvl', el).forEach(function(btn){ btn.onclick = function(){
     var l = Number(btn.dataset.level);
     STATE.teamExpanded[l] = !STATE.teamExpanded[l];
@@ -1293,24 +1321,6 @@ async function renderAccount(){
 
   var html = identityBannerHtml(acc);
 
-  html += '<div class="card referral-card">' +
-    '<div class="referral-label">Your Referral Code</div>' +
-    '<div class="referral-row">' +
-      '<div class="referral-code mono">' + esc(acc.referralCode||'—') + '</div>' +
-      '<button class="iconbtn" id="copyRefCodeBtn" aria-label="Copy referral code">' + ico('copy') + '</button>' +
-    '</div>' +
-    '<div class="referral-label referral-link-label">Your Referral Link</div>' +
-    '<div class="referral-row referral-link-row"><div class="referral-link mono" id="referralLink">' + esc(referralLink(acc.referralCode)) + '</div><button class="iconbtn" id="shareRefBtn" aria-label="Share referral link">' + ico('share') + '</button></div>' +
-    '<div class="referral-hint">Copy your code or share your personal link to invite people.</div>' +
-  '</div>';
-
-  html += '<div class="card giftcode-card">' +
-    '<div class="giftcode-row">' +
-      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" maxlength="5" placeholder="Enter gift code" autocapitalize="characters" autocomplete="off"></div>' +
-      '<button class="btn btn-primary" id="giftCodeBtn">Redeem</button>' +
-    '</div>' +
-  '</div>';
-
   var sett = STATE.settings || {};
   if (sett.telegramGroup || sett.telegramChannel) {
     html += '<div class="card telegram-card">' +
@@ -1346,13 +1356,9 @@ async function renderAccount(){
   $('mWithdrawals').onclick = function(){ openHistorySheet('withdrawal'); };
   $('mPin').onclick = openPinSheet;
   $('passwordRow').onclick = openPasswordSheet;
-  $('shareRefBtn').onclick = function(){ shareReferral(acc.referralCode); };
-  $('copyRefCodeBtn').onclick = function(){ copyText(acc.referralCode, 'Referral code'); };
   qsa('.mini-copy', el).forEach(function(btn){ btn.onclick = function(){ copyText(btn.dataset.copy, btn.dataset.copyLabel); }; });
   $('logoutRow').onclick = doLogout;
   $('getAppRow').onclick = promptInstallApp;
-  $('giftCodeBtn').onclick = redeemGiftCode;
-  $('giftCodeInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('giftCodeBtn').click(); });
   if ($('telegramGroupBtn')) $('telegramGroupBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramGroup); if (u) window.open(u, '_blank'); };
   if ($('telegramChannelBtn')) $('telegramChannelBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramChannel); if (u) window.open(u, '_blank'); };
   qsa('.menu-row[data-key]').forEach(function(row){
@@ -1420,7 +1426,32 @@ async function redeemGiftCode(){
     STATE.loaded.products = false;
     if (STATE.currentPage === 'home') renderHome();
     else if (STATE.currentPage === 'products') renderProducts();
+    closeSheet('generic');
   } else toast(r.message, true);
+}
+// Owner: "let gift code be given a quick access... 3d image of
+// giftCodebox... when tapped one goes to a screen for giftCodes iput, so
+// there will be just a line so where one puts a code, and down it redeem
+// button, and also a saying that you can get gift codes from telegram
+// group." Reuses the same #giftCodeInput/#giftCodeBtn ids and
+// redeemGiftCode() the old inline Account card used -- that card is gone
+// now, this sheet is its only home.
+async function openGiftCodeSheet(){
+  var sett = STATE.settings || (await api('/public/settings')).settings || {};
+  var html = '<div class="sheet-title">Gift Code</div>' +
+    '<div class="card giftcode-card">' +
+      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" maxlength="5" placeholder="Enter gift code" autocapitalize="characters" autocomplete="off"></div>' +
+      '<button class="btn btn-primary" id="giftCodeBtn" style="width:100%;margin-top:12px">Redeem</button>' +
+    '</div>' +
+    '<div style="text-align:center;font-size:12.5px;color:var(--ink-dim);margin-top:16px;padding:0 8px">' +
+      (sett.telegramGroup ?
+        'You can get gift codes from our <span id="giftTgLink" style="color:var(--blue);font-weight:700;cursor:pointer">Telegram group</span>.' :
+        'You can get gift codes from our Telegram group.') +
+    '</div>';
+  openSheet('generic', html);
+  $('giftCodeBtn').onclick = redeemGiftCode;
+  $('giftCodeInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('giftCodeBtn').click(); });
+  if ($('giftTgLink')) $('giftTgLink').onclick = function(){ var u = safeExternalUrl(sett.telegramGroup); if (u) window.open(u, '_blank'); };
 }
 async function openInfoSheet(key){
   var s = STATE.settings || (await api('/public/settings')).settings || {};
@@ -1869,6 +1900,7 @@ function openAssistant(){
 }
 function hideAssistant(){ $('assistPanel').classList.remove('show'); }
 $('assistFab').onclick = openAssistant;
+$('giftFab').onclick = openGiftCodeSheet;
 $('assistClose').onclick = function(){
   if (history.state && history.state.overlay === 'assist') history.back();
   else hideAssistant();

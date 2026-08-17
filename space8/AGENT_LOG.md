@@ -14,6 +14,49 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Floating gift-code quick access, referral card migrated to Team, member avatars use the Space8 logo
+
+- **What changed**:
+  - **Floating gift-code button** (`user/giftbox.png`, new; `openGiftCodeSheet()`,
+    new function): a 3D gift-box photo the owner supplied, background-removed
+    (Python `rembg` + `Pillow`, trimmed to its bounding box, padded, resized to
+    240x240 with real alpha transparency) and dropped in as a static asset the
+    same way `icon-192.png` already is. Floats as its own tap target directly
+    above the assistant bubble (same Account-only visibility scope,
+    `giftFloat` CSS animation — a slow, minimal `translateY` bob, "balancing in
+    air"). Tapping it opens a new, focused Gift Code screen: one input line,
+    a Redeem button below it, and a line pointing at the Telegram group (tappable
+    when one's configured) -- replacing the old inline "Enter gift code" card
+    that used to sit on Account. `redeemGiftCode()` (unchanged logic, reused
+    as-is via the same input/button ids) now also closes the sheet on a
+    successful redeem.
+  - **Referral code/link card migrated from Account to Team** (owner: "referral
+    links tab should be Migrated to team, so it will start up after the
+    banner"): moved verbatim, now the first thing under Team's own banner,
+    above the Total Referrals/Commission stats. `renderTeam()` fetches
+    `/account` itself now if `STATE.account` isn't already populated (normally
+    already is, since Home always renders first on entry) so the card's
+    referral code/link is never missing.
+  - **Team member avatars now show the Space8 logo, not phone digits** (owner:
+    "you see those referrals, dont entertainment [sic] numbers again as
+    profile cover, so use space8 logo"): the `.av` circle in each Level
+    1/2/3 member row used to show the last 2 digits of their phone number as
+    plain text; now shows the same infinity-mark SVG used on Account's
+    identity banner (added as `ico('space8logo')`).
+- **Why**: one owner message combining a UX feature request (quick gift-code
+  access, "big critical change"), a decluttering request (referral card off
+  Account), and a visual-privacy request (no phone digits as an avatar).
+- **Verification**: `node --check` on `original_module.js`; `build-core.js`
+  round-trip OK. Full suite still 68/68 (server.js untouched this round --
+  everything here is client-only UI, same as every other client-only change
+  this session, verified by direct code-reading and the build's own syntax
+  check rather than an automated test). `user/sw.js`'s SHELL precache list now
+  includes `/giftbox.png`; cache bumped `v250` → `v251`.
+- **Left open**: real-device visual check of the float animation, the new
+  Gift Code screen's layout, and the relocated referral card on Team --
+  same as every other client-only change this session, not yet checked in an
+  actual browser/phone.
+
 ## 2026-08-17 — Claude — Auto-login on Chrome autofill, Support screen rebuilt as its own page + settable banner, boot() parallelized, missing support fields fixed
 
 - **What changed**:
