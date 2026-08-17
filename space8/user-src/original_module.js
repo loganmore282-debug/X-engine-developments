@@ -515,11 +515,9 @@ function fmtCountdown(ms){
 function detailField(lab, val){
   return '<div><div style="font-size:10px;color:var(--ink-dim);text-transform:uppercase">' + esc(lab) + '</div><div style="font-weight:700" class="mono">' + val + '</div></div>';
 }
-function openPlanDetailSheet(id){
-  var inv = (STATE.investments||[]).find(function(i){ return i.id === id; });
-  if (!inv) return;
+function planDetailHtml(inv){
   var nextMs = nextCashbackMs(inv);
-  openSheet('generic',
+  var html =
     '<div class="sheet-title">' + esc(inv.tierLabel) + '</div>' +
     '<div class="card" style="margin-bottom:14px">' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
@@ -534,17 +532,52 @@ function openPlanDetailSheet(id){
     '<div class="card" style="text-align:center">' +
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);margin-bottom:6px">' + (nextMs ? 'Next Cashback In' : 'Status') + '</div>' +
       '<div id="planCountdownVal" class="mono" style="font-size:26px;font-weight:700;color:var(--blue)">' + (nextMs ? fmtCountdown(nextMs - Date.now()) : 'Matured') + '</div>' +
-    '</div>'
-  );
-  if (nextMs) startPlanCountdown(nextMs);
+    '</div>';
+  return { html: html, nextMs: nextMs };
 }
-function startPlanCountdown(targetMs){
+function openPlanDetailSheet(id){
+  var inv = (STATE.investments||[]).find(function(i){ return i.id === id; });
+  if (!inv) return;
+  var d = planDetailHtml(inv);
+  openSheet('generic', d.html);
+  if (d.nextMs) startPlanCountdown(d.nextMs, id);
+}
+// Re-renders the SAME already-open detail sheet in place (no openSheet(), no
+// new history entry) -- used by startPlanCountdown() once a plan's countdown
+// hits zero, so the sheet picks up the day the server just credited instead
+// of sitting frozen at 00:00:00 until the member manually reopens it.
+function renderPlanDetail(id){
+  var inv = (STATE.investments||[]).find(function(i){ return i.id === id; });
+  if (!inv) return;
+  var d = planDetailHtml(inv);
+  $('genericSheet').innerHTML = d.html;
+  if (d.nextMs) startPlanCountdown(d.nextMs, id);
+}
+// The server's own 1s cashback reconciler (reconcileCashback() in server.js)
+// runs independently of this client-side timer, so a short delay here gives
+// it a moment to actually land the credit before we re-fetch -- otherwise a
+// re-fetch at the exact instant the countdown hits zero would often still
+// read the pre-credit state and show the same "00:00:00" over again.
+async function refreshPlanDetailAfterMaturity(invId){
+  await new Promise(function(r){ setTimeout(r, 1500); });
+  if (!$('genericSheetBg').classList.contains('show')) return;
+  var r = await api('/investments', null, 'GET');
+  if (r.status === 'success' && r.investments) STATE.investments = r.investments;
+  if (!$('genericSheetBg').classList.contains('show')) return;
+  renderPlanDetail(invId);
+}
+function startPlanCountdown(targetMs, invId){
   if (_planCountdownTimer) clearInterval(_planCountdownTimer);
   var tick = function(){
     var el = $('planCountdownVal');
     if (!el) { clearInterval(_planCountdownTimer); _planCountdownTimer = null; return; }
     var remaining = targetMs - Date.now();
-    if (remaining <= 0) { el.textContent = '00:00:00'; clearInterval(_planCountdownTimer); _planCountdownTimer = null; return; }
+    if (remaining <= 0) {
+      el.textContent = '00:00:00';
+      clearInterval(_planCountdownTimer); _planCountdownTimer = null;
+      refreshPlanDetailAfterMaturity(invId);
+      return;
+    }
     el.textContent = fmtCountdown(remaining);
   };
   tick();
@@ -808,11 +841,28 @@ function listEndFooter(){
 }
 
 // ── TEAM ──────────────────────────────────────────────────────────────
+// Fetches team stats and every level's member list TOGETHER (Promise.all)
+// and renders the whole page in one pass -- previously each level's members
+// were fetched and painted separately AFTER the stats-only shell already
+// rendered, so a visit showed skeleton -> per-level placeholder bars -> real
+// breakdown, three visible stages instead of one clean loading transition
+// (owner: "when you open team it first opens then shows those bars then
+// back to real breakdown"). `STATE.teamMembers[level]` cache is preserved so
+// a second visit in the same session still skips re-fetching.
 async function renderTeam(){
   var el = $('page-team');
   if (!STATE.loaded.team) el.innerHTML = '<div class="sk sk-card" style="height:110px;margin:16px 0"></div>' + skRows(3);
-  var r = await api('/team/stats');
-  if (r.status === 'success') STATE.teamStats = r;
+  var memberFetches = [1,2,3].map(function(l){
+    if (STATE.teamMembers[l]) return Promise.resolve(STATE.teamMembers[l]);
+    return api('/team/members?level=' + l, null, 'GET').then(function(r){
+      var members = r.status === 'success' ? (r.members || []) : [];
+      STATE.teamMembers[l] = members;
+      return members;
+    });
+  });
+  var results = await Promise.all([api('/team/stats')].concat(memberFetches));
+  var statsR = results[0];
+  if (statsR.status === 'success') STATE.teamStats = statsR;
   STATE.loaded.team = true;
   var s = STATE.teamStats || { counts:{l1:0,l2:0,l3:0}, commission:0, milestones:[] };
   var LEVEL_PCT = { 1:28, 2:2, 3:1 };
@@ -823,30 +873,18 @@ async function renderTeam(){
     '<div class="card"><div class="lab">Total Commission</div><div class="val mono">' + ugx(s.commission) + '</div></div>' +
   '</div>';
   [1,2,3].forEach(function(l){
+    var members = results[l] || [];
     html += '<div class="section-title">Level ' + l + ' <span class="see-all">' + LEVEL_PCT[l] + '%</span></div>';
-    html += '<div id="teamMemberList' + l + '"><div class="sk sk-line" style="width:50%"></div></div>';
+    html += members.length ?
+      '<div class="card">' + members.map(function(m){
+        return '<div class="member-row"><div class="av">' + esc(String(m.phone||'?').slice(-2)) + '</div>' +
+          '<div class="info"><div class="phone">' + esc(m.phone) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + (m.hasInvested?' · Active':'') + '</div></div></div>';
+      }).join('') + '</div>' + listEndFooter() :
+      emptyState('cluster','No referrals at this level yet.');
   });
   html += '<div class="section-title">Task Center</div><div id="taskList"></div>';
   el.innerHTML = html;
-
-  [1,2,3].forEach(function(l){ loadTeamMembers(l); });
   renderTaskList(s.milestones||[]);
-}
-async function loadTeamMembers(level){
-  var box = $('teamMemberList' + level);
-  if (STATE.teamMembers[level]) { paintMembers(level, STATE.teamMembers[level]); return; }
-  var r = await api('/team/members?level=' + level, null, 'GET');
-  if (r.status === 'success') { STATE.teamMembers[level] = r.members || []; paintMembers(level, STATE.teamMembers[level]); }
-  else if (box) box.innerHTML = emptyState('cluster','Could not load your team.');
-}
-function paintMembers(level, members){
-  var box = $('teamMemberList' + level);
-  if (!box) return;
-  if (!members.length) { box.innerHTML = emptyState('cluster','No referrals at this level yet.'); return; }
-  box.innerHTML = '<div class="card">' + members.map(function(m){
-    return '<div class="member-row"><div class="av">' + esc(String(m.phone||'?').slice(-2)) + '</div>' +
-      '<div class="info"><div class="phone">' + esc(m.phone) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + (m.hasInvested?' · Active':'') + '</div></div></div>';
-  }).join('') + '</div>' + listEndFooter();
 }
 function renderTaskList(milestones){
   var box = $('taskList'); if (!box) return;
@@ -898,7 +936,7 @@ async function renderAccount(){
 
   html += '<div class="card giftcode-card">' +
     '<div class="giftcode-row">' +
-      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" placeholder="Enter gift code" autocapitalize="characters"></div>' +
+      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" placeholder="Enter gift code" autocapitalize="characters" autocomplete="off"></div>' +
       '<button class="btn btn-primary" id="giftCodeBtn">Redeem</button>' +
     '</div>' +
   '</div>';
@@ -1070,7 +1108,7 @@ async function renderPayoutSheet(){
           '<option value="Airtel Money">Airtel Money</option>' +
         '</select>' +
         '<div class="field">' + ico('phone') + '<input id="payPhone" placeholder="07XXXXXXXX"></div>' +
-        '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN"></div>' +
+        '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN" autocomplete="off"></div>' +
         '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
       '</div>' +
       '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Withdrawal Account</button>');
@@ -1132,8 +1170,8 @@ async function openPinSheet(){
     '<div class="sheet-sub">' + (has ? 'Change your 4-digit withdrawal PIN.' : 'No withdrawal PIN on this account yet — it should have been set at registration. Contact support if this looks wrong.') + '</div>' +
     (has ?
       '<div class="auth-form">' +
-        '<div class="field">' + ico('shield') + '<input id="oldPin" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN"></div>' +
-        '<div class="field">' + ico('shield') + '<input id="newPin" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN"></div>' +
+        '<div class="field">' + ico('shield') + '<input id="oldPin" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN" autocomplete="off"></div>' +
+        '<div class="field">' + ico('shield') + '<input id="newPin" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" autocomplete="off"></div>' +
       '</div><button class="btn btn-primary" id="changePinBtn" style="margin-top:14px">Change PIN</button>' : '')
   );
   var btn = $('changePinBtn');
@@ -1159,9 +1197,9 @@ function openPasswordSheet(){
     '<div class="sheet-title">Password Management</div>' +
     '<div class="sheet-sub">Change the password you use to log in.</div>' +
     '<div class="auth-form">' +
-      '<div class="field">' + ico('key') + '<input id="curPassword" type="password" placeholder="Current password"></div>' +
-      '<div class="field">' + ico('key') + '<input id="newPassword" type="password" placeholder="New password (min 6 characters)"></div>' +
-      '<div class="field">' + ico('key') + '<input id="newPassword2" type="password" placeholder="Confirm new password"></div>' +
+      '<div class="field">' + ico('key') + '<input id="curPassword" type="password" autocomplete="current-password" placeholder="Current password"></div>' +
+      '<div class="field">' + ico('key') + '<input id="newPassword" type="password" autocomplete="new-password" placeholder="New password (min 6 characters)"></div>' +
+      '<div class="field">' + ico('key') + '<input id="newPassword2" type="password" autocomplete="new-password" placeholder="Confirm new password"></div>' +
     '</div>' +
     '<button class="btn btn-primary" id="changePasswordBtn" style="margin-top:14px">Change Password</button>'
   );

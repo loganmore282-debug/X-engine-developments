@@ -847,6 +847,84 @@ assistant bubble should only show on Account; nav active state should be
   current password shows an error toast, correct current password shows
   "Password changed."
 
+## Round 5 of the same day, 2026-08-17 — ChatGPT review findings + owner bug reports, all fixed/triaged
+
+Owner ran a ChatGPT review over the last 3 commits (see the review-prompt
+workflow this project uses — a diff-embedded prompt, or a short prompt
+pointing at this file's own entries, both work) and separately reported 3
+more issues from actually using the live app. Five real items, one
+pre-existing data issue correctly triaged as "not a code bug."
+
+- **Assistant gave the wrong location for Active Plans** (ChatGPT catch).
+  Several `assistant-engine.js` replies still said "Active Plans show on Home
+  with a progress ring" — stale from before the Round 3/4 redesign that moved
+  this behind Products → My Products. Fixed 5 replies (`my_plans_where`,
+  `plan_progress`, `history`, the inline "track each plan" reply, and the
+  `maturity` DEEP-map entry) to say "Products → My Products." Corpus/engine
+  tests re-run clean (2219 assertions, wording-only change, no routing
+  impact).
+- **Live cashback countdown froze permanently at 00:00:00** (ChatGPT catch).
+  `startPlanCountdown()` cleared its own interval at zero and did nothing
+  else — the server's independent 1s reconciler (`reconcileCashback()` in
+  `server.js`) credits the day right around then, but the open detail sheet
+  never knew. Split the sheet's HTML-building into `planDetailHtml()`
+  (shared), `openPlanDetailSheet()` (first open, pushes history) and a new
+  `renderPlanDetail()` (in-place re-render, no history push). Added
+  `refreshPlanDetailAfterMaturity()`: waits 1.5s (lets the server's own tick
+  land first), re-fetches `/investments`, and — only if the sheet is still
+  open (`#genericSheetBg.classList.contains('show')`, checked before AND
+  after the fetch in case the member closed it while waiting) — re-renders
+  with the fresh `payoutsMade`/`paidOut`, which naturally restarts the
+  countdown for the next day (or shows "Matured" if that was the last one).
+  Verified with Playwright: a plan timed to mature in ~2s showed the
+  countdown reach zero, `/investments` got refetched exactly once, and the
+  sheet updated to the new `paidOut` figure with a fresh ~24h countdown.
+- **Team page: three visible loading stages, owner: "it first opens then
+  shows those bars then back to real breakdown."** `renderTeam()` used to
+  render a stats-only shell (with a `sk-line` placeholder per level) as soon
+  as `/team/stats` resolved, THEN fetch each level's members separately and
+  paint them in one at a time — skeleton → per-level placeholder bars → real
+  breakdown, three stages. Now `/team/stats` and all 3
+  `/team/members?level=N` calls run together via `Promise.all`, and the
+  whole page (stats + all 3 levels' real content) renders in one pass — one
+  skeleton, then done. `loadTeamMembers()`/`paintMembers()` folded inline;
+  `STATE.teamMembers[level]` caching preserved. Verified with Playwright: no
+  leftover `.sk.sk-line` element after render, real member row shown
+  immediately.
+- **"Total Invested" showing an absurd figure (UGX 1,500,015,000) — investigated,
+  confirmed a PRE-EXISTING data issue with an existing repair tool, not a
+  new bug.** The number is explained exactly by string concatenation:
+  `"15000" + "15000"` (two 15,000 UGX purchases) === `"1500015000"`. This
+  exact failure mode is already documented in `server.js` around
+  `/admin/users/recount` (~line 3408) — an old code path once did naive `+=`
+  on a `totalInvested` field that had ever been stored as a string, and
+  `/invest/create` was hardened months before today's session to
+  `Number()`-coerce before adding (can't happen again going forward), but
+  that fix doesn't retroactively repair a value already corrupted from
+  before it existed. Admin → Users → **"Recalculate totals"** button
+  (owner-only, wired to `/admin/users/recount`) rebuilds `totalInvested` for
+  every user from the authoritative source (summing real `investments`
+  records) and only writes accounts that are actually wrong. No code change
+  — just needs running once from the admin panel.
+- **Browser autofill polluted the gift-code field with a phone number after
+  changing password.** None of the new Password Management fields
+  (`curPassword`/`newPassword`/`newPassword2`) had `autocomplete` hints, and
+  neither did `giftCodeInput` — this app already has an established
+  convention for this (`loginPassword`/`regPassword`/`regPassword2`/`regPin`
+  in `index.html` all set it correctly), the new sheet just didn't follow
+  it. Added `autocomplete="current-password"`/`"new-password"` to the
+  password fields (matching the login/register convention exactly) and
+  `autocomplete="off"` to `giftCodeInput`. While fixing this, found and
+  closed the same gap on 3 more PIN fields that had it missing too
+  (`payPin`, `oldPin`, `newPin`) — all now `autocomplete="off"`, matching
+  `regPin`. `payPhone`/`depPhone` were left alone (no `type="tel"` either,
+  but that's a pre-existing gap the owner didn't report and suggesting the
+  user's own phone there via `autocomplete="tel"` is arguably desirable
+  anyway, not a bug — separate from this fix's scope).
+- **Verification**: full `test-*.js` suite green. Rebuilt `user/` (admin
+  untouched — nothing in this round touched `admin-src/`). Bumped
+  `user/sw.js` cache `v234` → `v235`.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

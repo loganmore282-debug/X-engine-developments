@@ -14,6 +14,57 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — ChatGPT review + owner bug reports: countdown freeze, Team flicker, autofill leak fixed
+
+Owner ran a ChatGPT review over the last 3 commits and separately reported 3
+issues from using the live app: *"when you open team it first opens then
+shows those bars then back to real breakdown... total invested shows
+abnormal figures which are not even right... after changing password, the
+number auto fills in area where gift codes is put, what a f***."*
+
+- **Assistant's Active Plans location was stale** (ChatGPT catch) — 5 replies
+  in `assistant-engine.js` still said "Home with a progress ring," fixed to
+  "Products → My Products" to match the Round 3/4 redesign.
+- **Live cashback countdown froze at 00:00:00 forever** (ChatGPT catch) — it
+  cleared its own timer at zero and never refetched or restarted. Added
+  `refreshPlanDetailAfterMaturity()`: waits 1.5s for the server's own 1s
+  reconciler to land the credit, re-fetches `/investments`, re-renders the
+  same open sheet in place (new `renderPlanDetail()`, no extra history
+  entry) with the fresh numbers, which naturally starts the next day's
+  countdown. Verified with Playwright: countdown hit zero, `/investments`
+  refetched exactly once, sheet updated to the new `paidOut` figure with a
+  fresh countdown running.
+- **Team page's 3-stage loading flicker fixed** — was skeleton → per-level
+  placeholder bars → real breakdown (3 separate async stages as each of 3
+  `/team/members?level=N` calls resolved independently after the stats
+  shell already painted). Now `/team/stats` + all 3 member-level calls run
+  together via `Promise.all` and the whole page renders once. Verified: no
+  leftover skeleton element, real data shown on first paint.
+- **"Total Invested: UGX 1,500,015,000" — investigated and explained, not a
+  new bug.** `"15000"+"15000"` (string concat) === `"1500015000"` exactly.
+  This is a known, already-documented historical corruption class (an old
+  code path did naive `+=` on a field once stored as a string) that
+  `/invest/create` was hardened against months ago (`Number()`-coerces
+  before adding) — but that fix doesn't retroactively repair values already
+  corrupted before it landed. Admin already has the repair tool: Users →
+  "Recalculate totals" (`/admin/users/recount`), rebuilds `totalInvested`
+  from the real investment ledger, only touches accounts that are actually
+  wrong. No code change needed, just told the owner to click that button.
+- **Browser autofill leak fixed** — the new Password Management fields and
+  `giftCodeInput` were the only inputs in the app missing `autocomplete`
+  hints (every other password/PIN field already had them, an established
+  convention this new sheet just didn't follow). Added
+  `current-password`/`new-password` to the password fields and `off` to
+  `giftCodeInput`; also closed the same gap on `payPin`/`oldPin`/`newPin`
+  while in there.
+- **Verification**: full test suite green. Rebuilt `user/` only. Bumped
+  `user/sw.js` cache `v234` → `v235`.
+- Nothing left open except the admin needing to click "Recalculate totals"
+  once for the totalInvested repair — that's a manual admin action, not
+  something a code change can do.
+
+---
+
 ## 2026-08-17 — Claude — Real withdrawal-accounts bug fixed, Active Plans relocated, password management added
 
 Owner: *"let us make those card increased in size... details well organised...
