@@ -14,6 +14,32 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Added space8-ex.com to the domain lock; re-confirmed referral-link 404 is a Render dashboard gap
+
+- **What changed**: `guard-src.js`'s `hostOk()` allowlist gained
+  `space8-ex.com` and `www.space8-ex.com` (owner request). Rebuilt
+  `user/index.html` via `build-core.js`, bumped `user/sw.js` cache
+  `v244` → `v245`.
+- **Why**: Owner shared a screenshot of a referral link opening to a plain
+  "Not Found" page and asked to add `space8-ex.com` to the domain guard.
+- **Referral-link 404, re-diagnosed (third time this file has this note)**:
+  confirmed again this is not a code bug. Referral links are a client-side
+  path (`/register/ref=CODE`, from `referralLink()`), which only resolves
+  if the static host rewrites every unmatched path to `/index.html` first.
+  `render.yaml` already declares that rewrite for `space8-app`. The
+  screenshot's bare "Not Found" is Render's own static-host 404, meaning
+  the LIVE service still isn't applying the rule — a Render dashboard sync
+  gap, not something another commit can fix. Needs the owner to open the
+  `space8-app` static site's Redirects/Rewrites tab on Render directly and
+  add `/*` → `/index.html` as a Rewrite.
+- **Verification**: standalone Node script exercising the exact updated
+  `hostOk()` logic against every intended host (still resolves true) and a
+  lookalike domain (`space8-ex.com.evil.com`, still correctly resolves
+  false — exact-match, not substring). `node build-core.js` round-trip OK.
+  Full `test-*.js` suite green, 66/66 (server.js untouched this round).
+- **Left open**: the Render dashboard config fix above — cannot be done
+  from this session, needs the owner's Render access.
+
 ## 2026-08-17 — Claude — Full audit of investment timing, server-side monitoring, referral chain/commission accuracy, Task Center safeguards
 
 - **What changed**:

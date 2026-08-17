@@ -2056,6 +2056,52 @@ sweeps, not the request-time crediting logic itself:**
   suite green, 66/66 (65 existing + this new file). Server-only change
   (`server.js` + `test-mockdb.js`), no `user-src/`/`admin-src/` rebuild needed.
 
+## Round 19 of the same day, 2026-08-17 — added space8-ex.com to the domain lock; re-diagnosed the referral-link "Not Found" as a Render dashboard config gap, not code
+
+Owner sent a screenshot of a shared referral link (`https://space8-app
+.onrender.com/register/ref=87A79Q`) opening to a plain black "Not Found"
+page, and asked to add `space8-ex.com` to "script guard or arc guard."
+
+1. **`guard-src.js`'s domain lock** (the `hostOk()` check baked into
+   `user/index.html`'s `<script data-nx-guard>` — wipes the page and
+   bounces to `https://space8.com/` on any host NOT in its allowlist, to
+   stop a cloned/rehosted phishing copy from running) only allowed
+   `space8.com`/`www.space8.com`/`localhost`/`127.0.0.1` plus any
+   `*.onrender.com` subdomain. Added `space8-ex.com` and
+   `www.space8-ex.com`. Sanity-checked the updated `hostOk()` logic
+   directly (not just re-reading it): every intended host still resolves
+   `true`, and a lookalike like `space8-ex.com.evil.com` still correctly
+   resolves `false` (exact hostname match, not a substring/prefix check —
+   adding a new allowed domain can't accidentally open a bypass for
+   attacker-controlled subdomains of it).
+2. **Referral-link "Not Found"**: re-confirmed this is NOT a code bug on
+   this branch. Referral links are generated client-side as `origin +
+   '/register/ref=' + code` (`referralLink()`), a PATH segment — not a
+   real file, so it only resolves at all if the static host rewrites every
+   unmatched path to `/index.html` first (the client then reads
+   `location.pathname` itself to pull the code out). `render.yaml`'s
+   `space8-app` service already declares exactly that rewrite
+   (`routes: - type: rewrite, source: /*, destination: /index.html`) and
+   already did the last two times this was checked. The screenshot's
+   plain "Not Found" (not a browser error page, not the app's own UI) is
+   Render's static-host default response for an unmatched path with NO
+   rewrite actually in effect — meaning the live `space8-app` service
+   still isn't applying this rule, i.e. Render's Blueprint sync hasn't (or
+   can't) retroactively push a `render.yaml` route change onto an
+   already-provisioned static site. **This needs a manual fix on Render's
+   own dashboard, not a repo change**: open the `space8-app` static site →
+   Redirects/Rewrites tab → add `Source: /*` → `Destination: /index.html`
+   → **Rewrite** (not Redirect) directly there. Flagging this AGAIN in
+   this file (see the Round 16 entry for the first flag) since apparently
+   it hasn't been actioned yet — this is the actual blocker, not anything
+   fixable by another `git push`.
+- **Verification**: `node build-core.js` round-trip OK (guard-src.js feeds
+  into the build); `user/sw.js` cache bumped `v244` → `v245`. Full
+  `test-*.js` suite green, 66/66 (no server.js logic touched this round,
+  so no new/changed test needed — the guard change was verified directly
+  via a standalone Node check of the exact `hostOk()` logic instead, since
+  it's plain client-side JS with no existing harness coverage).
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's
