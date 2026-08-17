@@ -222,13 +222,21 @@ qsa('.sheet-back').forEach(function(btn){
 // Records shortcut in the Deposit/Withdraw sheet headers -- owner wanted a
 // quick way to jump to transaction history from those two screens without
 // backing out first, but scoped to THAT screen's own history, not the
-// combined Records list (see openRecordsSheet's own comment above). Stacks
-// onto the 'generic' sheet slot via the existing _sheetStack mechanism, so
-// the phone Back button (or the sheet's own back arrow) returns to
+// combined Records list. ChatGPT review caught that the first cut of this
+// called openRecordsSheet() filtering /transactions -- but /transactions
+// only ever gets a row once a deposit is actually credited (see the
+// comment on GET /deposits in server.js), so a pending or failed deposit
+// would silently vanish from this shortcut while still showing correctly
+// on the real Deposit History screen. openHistorySheet() (already used by
+// Account -> Deposit History / Withdrawal History) is the correct source:
+// it hits /deposits or /withdrawals and renders the real
+// Processing/Successful/Unsuccessful status pill. Stacks onto the
+// 'generic' sheet slot via the existing _sheetStack mechanism, so the
+// phone Back button (or the sheet's own back arrow) returns to
 // Deposit/Withdraw underneath, same as the withdrawal-account picker
 // already stacks on top of Withdraw.
-$('depositRecordsBtn').onclick = function(){ openRecordsSheet('deposit', 'Deposit History', 'No deposits yet'); };
-$('withdrawRecordsBtn').onclick = function(){ openRecordsSheet('withdraw', 'Withdrawal History', 'No withdrawals yet'); };
+$('depositRecordsBtn').onclick = function(){ openHistorySheet('deposit'); };
+$('withdrawRecordsBtn').onclick = function(){ openHistorySheet('withdrawal'); };
 
 // ── AUTH ──────────────────────────────────────────────────────────────
 function showLoginScreen(){ $('screenRegister').style.display = 'none'; $('screenLogin').style.display = 'flex'; }
@@ -727,24 +735,31 @@ function recordMeta(type){
 // every row's date/time comes straight from the same server-timestamped
 // ledger every balance figure in the app is computed from, not a
 // client-side guess.
-// filterType/title/emptyMsg are optional -- the home activity-ticker's own
-// records button calls this with none of them (the combined, everything
-// view). The Deposit/Withdraw sheet header shortcuts pass 'deposit'/
-// 'withdraw' so each screen's shortcut opens ONLY that screen's own
-// history, not the combined list -- owner: "on withdrawals, the records
-// svg opens the withdrawals history/records, and also for deposit svg of
-// records, opens deposits history, not records, so records combines all
-// transactions, but here it goes specifically." Filtering happens
-// client-side on the same /transactions response the combined view already
-// uses -- no new endpoint needed, `t.type` is the same field RECORD_META
-// keys off of ('deposit', 'withdraw', ...).
-async function openRecordsSheet(filterType, title, emptyMsg){
-  openSheet('generic', '<div class="sheet-title">' + esc(title || 'Records') + '</div><div id="recordsBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(4,'sk-card') + '</div>');
+// Reached only from the home activity-ticker's own records icon now --
+// the Deposit/Withdraw sheet header shortcuts use openHistorySheet()
+// instead (see its own comment), since /transactions can't show a
+// pending/failed deposit or withdrawal the way /deposits and /withdrawals
+// can.
+//
+// _genericAsyncSeq guard (shared with openHistorySheet() below): both
+// functions render into the SAME 'generic' sheet slot's body element,
+// looked up by id AFTER their own await/then. ChatGPT review caught that
+// with no guard, opening one of these, backing out fast, then opening the
+// other (or the same one again) before the first response lands lets the
+// slower response win and overwrite whichever sheet is now actually open
+// with stale content under the wrong title. Each render captures the
+// sequence number at the START of its own call and bails silently if a
+// newer generic-sheet render has since taken over by the time its
+// response arrives.
+var _genericAsyncSeq = 0;
+async function openRecordsSheet(){
+  var seq = ++_genericAsyncSeq;
+  openSheet('generic', '<div class="sheet-title">Records</div><div id="recordsBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(4,'sk-card') + '</div>');
   var r = await api('/transactions', null, 'GET');
+  if (seq !== _genericAsyncSeq) return;
   var body = $('recordsBody'); if (!body) return;
   var items = (r.status === 'success' && r.transactions) || [];
-  if (filterType) items = items.filter(function(t){ return t.type === filterType; });
-  if (!items.length) { body.innerHTML = emptyState('doc', emptyMsg || 'No more data'); return; }
+  if (!items.length) { body.innerHTML = emptyState('doc', 'No more data'); return; }
   body.innerHTML = items.map(function(t){
     var meta = recordMeta(t.type);
     var neg = (t.amount||0) < 0;
@@ -904,9 +919,15 @@ function friendlyStatus(status){
   if (STATUS_FAIL.indexOf(s) !== -1) return 'Unsuccessful';
   return 'Processing';
 }
+// See _genericAsyncSeq's comment above openRecordsSheet() -- shares the
+// same guard since both render into the same 'generic' sheet slot and can
+// race against each other now that Deposit/Withdraw's header shortcuts
+// make it easy to hop between this and the combined Records view quickly.
 function openHistorySheet(kind){
+  var seq = ++_genericAsyncSeq;
   openSheet('generic', '<div class="sheet-title">' + (kind==='deposit'?'Deposit':'Withdrawal') + ' History</div><div id="histBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(3,'sk-card') + '</div>');
   api(kind === 'deposit' ? '/deposits' : '/withdrawals').then(function(r){
+    if (seq !== _genericAsyncSeq) return;
     var body = $('histBody'); if (!body) return;
     var items = (r.status === 'success' && (r.deposits||r.withdrawals)) || [];
     if (!items.length) { body.innerHTML = emptyState('history','No more data'); return; }

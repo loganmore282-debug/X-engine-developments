@@ -1316,6 +1316,76 @@ Records sheet (every transaction type) — correct location, wrong content.
   that path is untouched; an empty deposit-only mock correctly renders "No
   deposits yet" instead of the generic empty-list wording.
 
+## Round 11 of the same day, 2026-08-17 — third ChatGPT pass, 4/4 confirmed real (wrong data source, a genuine race, a missing click-lock, a missing orderBy)
+
+Owner: *"now let us again ask chatgpt, you already remember our last ask to
+chatgpt, so from there to this commit,let us tell it to make a review."*
+Pointed ChatGPT at `AGENT_LOG.md` again, scoped to the 5 newest entries
+(everything since the last review). All 4 findings verified against the
+real code before touching anything, per the established practice — every
+one held up:
+
+1. **Wrong data source for the Round 10 Deposit/Withdraw Records
+   shortcuts.** `openRecordsSheet()` filters `/transactions` — but
+   `server.js`'s own comment on `GET /deposits` says outright: *"the
+   generic /transactions list only ever gets a row once a deposit is
+   actually credited... this is the only place a user can see one that's
+   still processing or that never went through."* A pending or failed
+   deposit/withdrawal would silently be invisible from the new shortcut
+   while still showing correctly on the real Deposit/Withdrawal History
+   screen (Account → Deposit History, already built, using
+   `openHistorySheet()` against `/deposits`/`/withdrawals` with real
+   Processing/Successful/Unsuccessful status pills). Fixed by pointing both
+   shortcuts at `openHistorySheet('deposit'|'withdrawal')` instead —
+   `openRecordsSheet()` reverted back to its simple no-args combined-view
+   form (the filterType/title/emptyMsg params added in Round 10 are gone,
+   since nothing needs them anymore).
+2. **Genuine stale-response race**, present in both `openRecordsSheet()`
+   and `openHistorySheet()`: each looks up its body element by id (
+   `$('recordsBody')` / `$('histBody')`) *after* its own `await`/`.then()`,
+   with nothing to check it's still the sheet that's actually showing.
+   Failure scenario: open Deposit History, back out fast, open Withdrawal
+   History before the first request lands — if the slower response arrives
+   second it overwrites the CURRENT sheet's content with the wrong data
+   under the right title. Fixed with a shared `_genericAsyncSeq` counter:
+   each render captures the sequence number at the start of its own call
+   and silently bails if a newer 'generic'-sheet render has taken over by
+   the time its response lands. Scoped to just these two functions (the
+   ones now reachable via the new rapid Deposit/Withdraw ↔ Records
+   navigation) rather than sweeping every other `openSheet('generic', ...)`
+   call site in the file.
+3. **"Send notification" had no click-lock.** `withTabBusy()` only
+   suppresses the admin panel's background live-refresh tick — it never
+   disables a button. Every other state-mutating admin button in
+   `admin-src/index.html` already does `btn.disabled=true` / restore around
+   its request except this one, added fresh in Round 8. A fast double-tap
+   (easy on mobile) fired two separate `POST /admin/notifications/create`
+   calls, each inserting its own broadcast — every member would get the
+   same announcement twice. Fixed to match the established pattern.
+4. **`/notifications` had no `orderBy` before `.limit(50)`.** Once more
+   than 50 broadcasts exist, the fetched 50 aren't guaranteed to be the
+   newest 50 — the `rows.sort()` afterward can only reorder what was
+   actually fetched, so a genuinely newer broadcast could be silently
+   excluded. Fixed by adding `.orderBy('createdAt', 'desc')` before
+   `.limit(50)` — the exact same `.where().orderBy().limit()` shape already
+   used elsewhere in `server.js` (`/checkin`, `adminAuditLog`, etc.).
+- **Verification**: full `test-*.js` suite green (62/62, including
+  `test-notifications.js` unaffected by the added `orderBy`). Rebuilt both
+  `user/` and `admin/`. Bumped `user/sw.js` cache `v241`→`v242`. Playwright:
+  confirmed the Deposit shortcut now shows a pending deposit with a
+  "Processing" pill (impossible before this fix, since `/transactions`
+  never has that row); confirmed the Withdraw shortcut shows
+  Processing/Unsuccessful pills from `/withdrawals`; confirmed the race
+  guard directly — fired a deliberately-delayed deposit-history call, then
+  immediately opened withdrawal-history, waited past the slow response's
+  arrival, and confirmed the sheet still reads "Withdrawal History" (the
+  stale deposit response was correctly discarded). The admin click-lock and
+  `orderBy` fixes are small, mechanical, and match long-established patterns
+  elsewhere in the same files — verified by reading the change and a
+  successful `build-admin.js` syntax check rather than a dedicated
+  Playwright pass, since the other three fixes already got full live
+  coverage this round.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

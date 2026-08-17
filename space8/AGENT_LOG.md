@@ -14,6 +14,42 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Third ChatGPT review pass: 4/4 confirmed real (wrong data source, a stale-response race, a missing admin click-lock, a missing orderBy)
+
+Owner asked for another ChatGPT review, scoped to the 5 newest AGENT_LOG
+entries (everything since the last review). All 4 findings verified
+against the actual code before fixing anything — all 4 held up.
+
+1. **Round 10's Deposit/Withdraw Records shortcuts used the wrong
+   endpoint.** They filtered `/transactions`, but server.js's own comment
+   says `/transactions` only ever gets a row once a deposit is credited —
+   pending/failed ones only exist in `/deposits`/`/withdrawals`. Fixed by
+   pointing both shortcuts at the already-existing `openHistorySheet()`
+   (used elsewhere for Account → Deposit/Withdrawal History), which hits
+   the right endpoints and renders real Processing/Successful/Unsuccessful
+   status pills. `openRecordsSheet()` reverted to its simple no-args form.
+2. **Real stale-response race** in both `openRecordsSheet()` and
+   `openHistorySheet()` — each looks up its body element by id after its
+   own await, with no check it's still the active sheet. Fast
+   navigate-away-and-back between the two could let a slower response
+   overwrite the wrong sheet with the wrong data. Fixed with a shared
+   `_genericAsyncSeq` counter both functions check before writing.
+3. **"Send notification" had no click-lock** — `withTabBusy()` only
+   suppresses background refresh, doesn't disable the button, unlike every
+   other admin action button in the file. A fast double-tap could send the
+   same broadcast twice. Fixed to match the established disable/restore
+   pattern.
+4. **`/notifications` had no `orderBy` before `.limit(50)`** — once more
+   than 50 broadcasts exist, the fetched 50 aren't guaranteed newest, so a
+   genuinely newer one could be excluded before the in-memory sort even
+   runs. Added `.orderBy('createdAt', 'desc')`, matching the same shape
+   already used elsewhere in server.js.
+- **Verification**: full suite green (62/62). Rebuilt both apps, bumped
+  `sw.js` cache `v241`→`v242`. Playwright confirmed the pending-deposit
+  Processing pill now shows, confirmed withdrawal pills, and directly
+  proved the race fix by racing a deliberately-delayed call against a fast
+  one and confirming the fast one's sheet survives.
+
 ## 2026-08-17 — Claude — Deposit/Withdraw Records shortcuts fixed to open per-screen history, not the combined list
 
 Owner, right after the previous entry shipped: "on withdrawals, the records

@@ -1522,7 +1522,13 @@ app.get('/notifications', async (req, res) => {
     if (!userSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (userSnap.data().status === 'banned')
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    const broadcasts = await db.collection('notifications').where('audience', '==', 'all').limit(50).get();
+    // ChatGPT review caught a real bug: this had no orderBy before .limit(50)
+    // -- once more than 50 broadcasts exist, an arbitrary (not necessarily
+    // newest) 50 get fetched, and the rows.sort() below can only reorder
+    // what was actually fetched, so a genuinely newer broadcast could be
+    // excluded entirely. Same .where().orderBy('createdAt','desc').limit()
+    // shape already used elsewhere in this file (e.g. /checkin, adminAuditLog).
+    const broadcasts = await db.collection('notifications').where('audience', '==', 'all').orderBy('createdAt', 'desc').limit(50).get();
     const seen = new Set(), rows = [];
     broadcasts.docs.forEach(doc => {
       if (seen.has(doc.id)) return;

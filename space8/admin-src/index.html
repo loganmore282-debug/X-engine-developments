@@ -1711,13 +1711,24 @@ async function renderSettings(){
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('sendNotifBtn').addEventListener('click', async()=>{
+    const btn = $('sendNotifBtn');
+    if (btn.disabled) return;
     const title = $('nTitle').value.trim(), body = $('nBody').value.trim();
     if (!title || !body) return toast('Title and message are required', 'err');
+    // ChatGPT review caught this had no click-lock -- withTabBusy() only
+    // suppresses the background live-refresh tick, it never disabled the
+    // button, so two fast taps (easy on mobile) fired two separate POST
+    // /admin/notifications/create calls, each inserting its own broadcast
+    // doc -- every member would get the same announcement twice. Every
+    // other state-mutating admin button in this file already disables
+    // itself while its request is in flight; this one just hadn't.
+    btn.disabled = true; const restore = btn.textContent; btn.textContent = 'Sending…';
     await withTabBusy((async()=>{
       const d = await api('/admin/notifications/create', { title, body });
       toast(d.status==='success'?'Sent to every member':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') { $('nTitle').value = ''; $('nBody').value = ''; }
     })());
+    btn.disabled = false; btn.textContent = restore;
   });
   $('saveAnn').addEventListener('click', async()=>{
     const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value };
