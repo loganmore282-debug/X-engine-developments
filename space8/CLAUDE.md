@@ -91,42 +91,48 @@ The owner was explicit and this must not be re-litigated without them saying so:
 Static mockup, still in the repo: **`space8/design/visual-system-mockup.html`**. The real
 app in `user-src/` was built directly against this.
 
-- **Palette — vibrant color is the actual page CANVAS, white cards float on top.**
-  **Currently DEEP VIOLET as of 2026-08-16 — `--blue: #6d28d9` (Tailwind
-  violet-700), value-only swap, token name unchanged.** The structural
-  decision described in this whole section — `--page-bg` is the SAME accent
-  color as `--blue`, ~80% coverage, white cards ~10% — is unchanged; only the
-  hue moved.
-  **How this landed, and why not to relitigate it lightly:** the owner asked
-  for blue→green, then rejected three greens in a row on brightness
-  (`#2eff6b` "very bright", `#22c55e` "reduce brightness abit again",
-  `#16a34a` "not good") before saying: *"it seems that we might be forcing
-  out this color... you are intelligent opus, make a high quality decision
-  and make a best alternative color, blue was the best but dont, get another
-  color."* That was an explicit delegation of the choice, not a request for
-  another nudge along a scale. Violet was chosen on four grounds, all of
-  which still hold and are worth knowing before changing it again:
-  (1) it is unambiguously neither blue nor green — teal or indigo would have
-  restarted the same argument; (2) it is proven at exactly this job — Nubank
-  runs a full-canvas purple as the largest fintech in Latin America, so it
-  reads as trustworthy money in a mass-market emerging-market context, not
-  as novelty; (3) it is genuinely on-theme — Space8 is satellites and deep
-  space, and violet is the actual color of the cosmos, which green never had
-  any reason to be; (4) it fixed a real conflict the green created — admin's
-  success-status color `--ok` is green (`#0f9d58`), which was colliding with
-  a green accent (that collision is noted further down and is now resolved).
-  Started at violet-700 rather than 500/600 deliberately, since the owner had
-  already pushed back on brightness twice.
-  If asked to adjust the violet, move along the Tailwind violet ramp
-  (`#a78bfa` 400 → `#8b5cf6` 500 → `#7c3aed` 600 → `#6d28d9` 700 → `#5b21b6`
-  800 → …) rather than picking a fresh value — lighter for "too dark/heavy",
-  darker for "too bright" — keeping `--blue-dim` one step darker than
-  `--blue` and `--blue-mute` roughly three steps lighter, so the relative
-  gaps survive whichever step `--blue` lands on. Don't revert to blue without
-  being asked again. Treat whatever `--blue` is actually SET to right now
-  (check the file; don't trust this paragraph's hex codes if they've gone
-  stale) as the source of truth, and update this note in place when it
-  changes rather than layering on more history than this.
+- **Palette — a single accent color is the actual page CANVAS, white cards float on top.**
+  **Currently DARK NAVY as of 2026-08-16 — `--blue: #1B263B`, value-only
+  swap, token name unchanged.** The structural decision described in this
+  whole section — `--page-bg` is the SAME accent color as `--blue`, ~80%
+  coverage, white cards ~10% — is unchanged; only the hue/lightness moved.
+  **This is NOT a return to device-driven dark mode.** The owner's earlier,
+  still-standing instruction ("I don't need dark mode, I need light white
+  mode," see the Light theme bullet below) is about `prefers-color-scheme`
+  theming and swapping surface/card colors by device setting — neither
+  happens here. Cards are still solid white (`--surface:#fff`), body text is
+  still dark-on-white (`--ink`), there is still no `[data-theme="dark"]` or
+  `prefers-color-scheme` block anywhere in the file. All that changed is
+  which single accent hue fills the page canvas behind those white cards —
+  it happens to now be a dark color instead of a bright one, which is a
+  color choice, not a theme-forcing mechanism.
+  **History, briefly** (full detail in `AGENT_LOG.md` if ever needed — don't
+  restate it here again): blue → sapphire → green (3 rejected attempts on
+  brightness) → violet (an explicit "you decide" delegation, chosen for
+  being unambiguous, proven at this job, and on-theme for a space brand) →
+  **dark navy** (owner supplied an exact hex range, `#0D1B2A` to `#1B263B`,
+  referencing a ChocoMCC "New Platform" teaser graphic's background, and
+  said "remove your violets balance everything").
+  **Values**: `--blue: #1B263B` (lighter end of the given range — used as
+  page canvas, primary button fill, and icon-stroke-on-white); `--blue-dim:
+  #0D1B2A` (the darkest end — used for text/borders that need to read on
+  white, e.g. `.section-title`); `--blue-mute: #4a5b78` (a lighter slate-navy
+  tint for low-weight elements like the menu-row chevron — the given hex
+  range has no light end, so this was picked off the same hue rather than
+  from the literal range, same as `--blue-glow` always has been). One thing
+  worth watching, not a bug: `--blue-dim` (`#0D1B2A`) now sits very close to
+  `--ink` (`#0a1220`, this file's ordinary body-text color) — harmless here
+  since neither is a semantic status color (unlike the earlier green-accent-
+  vs-`--ok` conflict below), but if a future session ever needs a THIRD
+  distinct dark tone on the same white surface, check this collision first.
+  If asked to adjust the navy, move within the owner's own given range
+  first (`#0D1B2A` darker ↔ `#1B263B` lighter) before reaching for an
+  unrelated hue — keeping `--blue-dim` at or below the range's dark end and
+  `--blue-mute` as a lighter tint of the same hue. Don't revert to violet or
+  any brighter color without being asked again. Treat whatever `--blue` is
+  actually SET to right now (check the file; don't trust this paragraph's
+  hex codes if they've gone stale) as the source of truth, and update this
+  note in place when it changes rather than layering on more history.
   The rest of this section (originally written for blue, 2026-08-16 earlier
   that day) still describes the correct STRUCTURE, just mentally substitute
   the current accent for "blue" while reading it: `body`/`main`/every `.page` render
@@ -178,11 +184,11 @@ app in `user-src/` was built directly against this.
   add another settings field the admin renders back into HTML, check whether it
   needs the same clamp-and-validate treatment rather than assuming free text is
   safe just because the endpoint is owner-gated.
-  `--blue-dim: #5b21b6` / `--blue-mute: #a78bfa` / `--blue-glow: rgba(109,40,217,.22)` are
-  all derived from the same hue (values current as of the 2026-08-16 violet swap
+  `--blue-dim: #0D1B2A` / `--blue-mute: #4a5b78` / `--blue-glow: rgba(27,38,59,.22)` are
+  all derived from the same hue (values current as of the 2026-08-16 dark-navy swap
   noted at the top of this Palette section — check the file if this has moved on again).
   **The CSS custom properties kept their `--blue*` names through every color change this
-  project has had** (blue → sapphire → green → blue → green → violet) rather than being
+  project has had** (blue → sapphire → green → blue → green → violet → dark navy) rather than being
   renamed each time — a full rename across every `var(--blue...)` reference in this
   ~600KB file was judged higher-risk (easy to miss an occurrence) than swapping 5-6 token
   values at the source. If the accent color changes again, prefer that same
@@ -196,19 +202,19 @@ app in `user-src/` was built directly against this.
   background was chosen over literally replicating the mobile blue-canvas treatment;
   revisit if the owner asks for closer matching), `--card:#ffffff`, `--ink:#0a1220`,
   `--sub:#5b6b84`, `--line:#d7dfec` — all copied from the user app's `--void`/`--surface`/
-  `--ink`/`--ink-dim`/`--line` values. `--gold:#6d28d9` / `--gold-deep:#5b21b6` /
+  `--ink`/`--ink-dim`/`--line` values. `--gold:#1B263B` / `--gold-deep:#0D1B2A` /
   `--gold-ink:#fff` (variable names kept, same convention as `--blue*` above; values
-  current as of the 2026-08-16 violet swap, always match `--blue`/`--blue-dim` in
+  current as of the 2026-08-16 dark-navy swap, always match `--blue`/`--blue-dim` in
   `user-src/index.html`) drive tabs, primary buttons, and the brand mark.
   `--ok`/`--danger`/`--warn`/`--sky` were re-picked as legible light-mode status colors
   (green/red/amber/teal) since the originals were tuned for dark chips (pale text on a
   near-black pill) and would be illegible inverted onto white. (A green accent briefly
-  put `--ok` (success, `#0f9d58`) into hue conflict with `--gold`; the move to violet
+  put `--ok` (success, `#0f9d58`) into hue conflict with `--gold`; the move off green
   resolved that — worth re-checking if the accent ever goes green-adjacent again.)
   Literal (non-token) hex values that don't reference these variables get fixed on every
-  accent change too — currently: the brand-mark radial-gradient center (`#2e1065`), the
-  primary button's gradient highlight (`#a78bfa`), and the `theme-color` meta tag +
-  brand-mark SVG icon stroke (`#f5f3ff`). The modal backdrop tint (`rgba(10,18,32,.45)`)
+  accent change too — currently: the brand-mark radial-gradient center (`#0D1B2A`), the
+  primary button's gradient highlight (`#4a5b78`), and the `theme-color` meta tag +
+  brand-mark SVG icon stroke (`#e8ecf2`). The modal backdrop tint (`rgba(10,18,32,.45)`)
   is a neutral dark scrim, not accent-hued — deliberately left alone across every color
   change so far. Same self-hosted Inter `@font-face` as the
   user app was added (duplicated, not shared — admin is a separate build/HTML file).

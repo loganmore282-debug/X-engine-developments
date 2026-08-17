@@ -14,6 +14,53 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Accent color: violet → dark navy (#1B263B/#0D1B2A)
+
+Owner sent a "New Platform In Development" teaser graphic from ChocoMCC's own
+management (dark navy background, white bold text, thin blue gradient underline,
+cursive signature) and said: *"let us change to this color in background Dark Navy
+Blue (#0D1B2A to #1B263B range), remove your violets balance everything."*
+
+- **Value-only swap, same convention as every prior color change.** `--blue`/
+  `--page-bg` → `#1B263B` (lighter end of the owner's given range — used as page
+  canvas, primary button fill, and icon-stroke-on-white). `--blue-dim` → `#0D1B2A`
+  (the darkest end — text/borders on white, e.g. `.section-title`). `--blue-mute` →
+  `#4a5b78` (a lighter slate-navy tint for low-weight elements like the menu-row
+  chevron — the given range has no light end, so this was picked off the same hue,
+  same as `--blue-glow` always has been). `--blue-glow` → `rgba(27,38,59,.22)`.
+  `--surface-blue` (unused, kept consistent) → `#e8ecf2`. Admin's `--gold`/
+  `--gold-deep` mirror `--blue`/`--blue-dim` exactly, and its 3 literal non-token
+  hexes retoned to match: brand-mark gradient center → `#0D1B2A`, button gradient
+  highlight → `#4a5b78`, `theme-color` meta + brand-mark icon stroke → `#e8ecf2`.
+- **This is NOT a return to device-driven dark mode** — worth stating plainly since
+  the owner has an earlier, still-standing "light white mode only" instruction.
+  Cards stay solid white, body text stays dark-on-white, no `prefers-color-scheme`
+  or `[data-theme]` block was touched or re-added. Only the single accent hue that
+  fills the page canvas changed, from bright to dark — a color choice, not a theme
+  toggle. Documented explicitly in `CLAUDE.md` so a future session doesn't misread
+  this as reintroducing dark mode.
+- **One thing flagged, not fixed:** `--blue-dim` (`#0D1B2A`) now sits very close to
+  `--ink` (`#0a1220`, ordinary body text). Harmless — neither is a semantic status
+  color, unlike the earlier green-accent-vs-`--ok` conflict — but noted in
+  `CLAUDE.md` in case a third distinct dark tone is ever needed on the same white
+  surface.
+- **`CLAUDE.md`'s Palette section condensed**: the accumulated blue→sapphire→
+  green(×3)→violet narrative was compressed to one line of history plus the current
+  values, rather than layering a fifth full rationale block on top of the existing
+  ones — matches the standing instruction already in that section to update in
+  place rather than accumulate.
+- **Verification:** full hex-color audit of both `*-src/index.html` files (no blue/
+  green/violet remnants — see AGENT_LOG entries above for exactly what those looked
+  like); rebuilt both `user/index.html` and `admin/index.html`; `user/sw.js` bumped
+  to `space8-shell-v228`; full `test-*.js` backend suite green; Playwright
+  screenshots of Home/Account (user) and the login screen (admin) confirm the dark
+  navy renders correctly, white cards and white nav/topbar text keep full contrast
+  against it, and it reads as the intended premium/space aesthetic rather than
+  reintroduced dark mode.
+- Nothing left open from this round.
+
+---
+
 ## 2026-08-16 — Claude — Assistant: 1,024 verified training utterances, conversational layer, and a corpus test that found ~270 silent routing bugs
 
 Owner: *"now bump the ai assistant to 1000, so should interact with a user, explain, etc."*
