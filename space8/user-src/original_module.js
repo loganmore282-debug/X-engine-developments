@@ -1362,7 +1362,11 @@ async function renderAccount(){
   if ($('telegramGroupBtn')) $('telegramGroupBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramGroup); if (u) window.open(u, '_blank'); };
   if ($('telegramChannelBtn')) $('telegramChannelBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramChannel); if (u) window.open(u, '_blank'); };
   qsa('.menu-row[data-key]').forEach(function(row){
-    row.onclick = function(){ row.dataset.key === 'support' ? openSupportSheet() : openInfoSheet(row.dataset.key); };
+    row.onclick = function(){
+      if (row.dataset.key === 'support') openSupportSheet();
+      else if (row.dataset.key === 'about') openAboutSheet();
+      else openInfoSheet(row.dataset.key);
+    };
   });
 }
 async function promptInstallApp(){
@@ -1456,11 +1460,49 @@ async function openGiftCodeSheet(){
 async function openInfoSheet(key){
   var s = STATE.settings || (await api('/public/settings')).settings || {};
   var map = {
-    about: ['About Space8', s.aboutText ? escNl(s.aboutText) : 'Space8 lets you invest in satellite-themed plans and earn daily returns.'],
     rules: ['Rules', s.rulesText ? escNl(s.rulesText) : 'Standard platform rules apply.']
   };
   var m = map[key] || ['Info',''];
   openSheet('generic', '<div class="sheet-title">' + m[0] + '</div><div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim)">' + m[1] + '</div>');
+}
+// Owner: rebuild About as a long, photo-illustrated company story (heritage,
+// engineering, our companies) instead of the old flat admin-editable text
+// blurb. Fully static/hardcoded on purpose, not sourced from the aboutText
+// setting -- this is a curated, structured piece with embedded photos, not
+// a plain text field. Photos are the ones the owner supplied with any real,
+// identifiable third-party branding filtered out first (two had visible
+// "SPACEX" signage, one a real "RAL Space" facility sign, one a real
+// "SpacePrep" building render, one a Soyuz spacecraft, one a lunar lander
+// with a legible mission name, one a technician's visible name badge) --
+// using those specific real companies'/people's imagery as if it were
+// Space8's own would misleadingly imply an affiliation that doesn't exist.
+// Only the unbranded, generic photos made it in.
+async function openAboutSheet(){
+  var html = '<div class="sheet-title">About Space8</div>' +
+    '<img class="about-photo" src="about-2.jpg" alt="Satellite constellation">' +
+    '<div class="about-body">' +
+      '<p>Space8 was built around one obsession: getting hardware to survive the unforgiving trip from a factory floor to a stable orbit, then keep working long after everyone has stopped watching. What began as a small team chasing that exact problem has grown into a name behind some of the quietest, most dependable satellite work most people never hear about — because a spacecraft that does its job right rarely makes headlines.</p>' +
+
+      '<div class="about-section-title">A Heritage Built in Clean Rooms</div>' +
+      '<img class="about-photo" src="about-1.jpg" alt="Satellite in orbit">' +
+      '<p>Long before Space8 was a name on a badge, it was a habit: build it right, test it twice, and never ship what you would not personally trust in vacuum. That discipline came from years of hands-on orbital work — antenna arrays tuned by feel, harnesses routed a second time because the first route was merely good enough, thermal blankets stitched and re-stitched until they were right. Every platform that has ever carried the Space8 name inherited that same stubbornness.</p>' +
+
+      '<div class="about-section-title">Precision, By Hand</div>' +
+      '<img class="about-photo" src="about-3.jpg" alt="Engineers integrating satellite hardware">' +
+      '<p>Behind every finished spacecraft is a slower, quieter story: engineers in clean-room suits, torque wrenches calibrated that morning, a checklist that gets followed exactly because the alternative is unacceptable. Our integration teams treat every harness, every fastener, and every solder joint as the one thing standing between a mission succeeding and a mission going silent. That patience is not a phase we grow out of — it is the actual product.</p>' +
+
+      '<div class="about-section-title">The Space8 Group</div>' +
+      '<img class="about-photo" src="about-4.jpg" alt="Team preparing a satellite for launch">' +
+      '<p>Space8 today is less a single workshop and more a small constellation of its own — a group of focused teams, each owning one hard problem end to end:</p>' +
+      '<p><b>Space8 Orbital Systems</b> — spacecraft bus design, structural engineering, and full satellite integration.</p>' +
+      '<p><b>Space8 Payload Works</b> — sensor packages, imaging instruments, and communications payloads built to spec.</p>' +
+      '<p><b>Space8 Ground Network</b> — the mission control, tracking, and downlink infrastructure that keeps a spacecraft in reach long after launch.</p>' +
+      '<p><b>Space8 Materials Lab</b> — thermal, structural, and radiation-hardened materials research feeding straight back into everything above it.</p>' +
+
+      '<div class="about-section-title">Where We\'re Headed</div>' +
+      '<p>Orbit keeps getting more crowded, and the margin for error keeps getting thinner — which is exactly the kind of problem this team has always been built for. Space8 keeps doubling down on the unglamorous fundamentals: better materials, tighter tolerances, longer-lived hardware, and people who care enough to double-check their own work. That is the whole philosophy, really. Everything else is just the application of it.</p>' +
+    '</div>';
+  openSheet('generic', html);
 }
 // Owner: rebuild Support as its own screen (photo header, tappable contact
 // rows, a highlighted hours card) instead of the old flat text dump that

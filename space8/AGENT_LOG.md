@@ -14,6 +14,52 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — About page rebuilt as a long, photo-illustrated company story
+
+- **What changed**: `openAboutSheet()` (new function) replaces the old flat,
+  admin-editable `aboutText` blurb with a full illustrated article: heritage,
+  engineering philosophy, four fictional divisions ("Space8 Orbital Systems",
+  "Space8 Payload Works", "Space8 Ground Network", "Space8 Materials Lab"),
+  and a closing section — four static photos (`user/about-1.jpg` through
+  `about-4.jpg`) embedded between sections. Fully hardcoded, not sourced from
+  the `aboutText` setting (that field still exists in the DB/admin panel,
+  just unused by this screen now — a curated, structured piece with embedded
+  photos doesn't fit a plain admin text field).
+  Owner explicitly said not to mention mobile money, Uganda, or "investment
+  platform" anywhere in this copy — checked the final text for all three
+  before shipping.
+- **Photo selection — filtered before use**: the owner supplied 12 photos.
+  8 had visible, identifiable real-world branding/ownership that would
+  misleadingly suggest Space8 is affiliated with (or literally IS) an actual
+  company or vehicle if used as "our own" imagery — excluded: two showed
+  real "SPACEX" signage/rocket markings, one the real UK "RAL Space" facility
+  sign, one a real "SpacePrep" building render, one a real Soyuz spacecraft
+  (visible Cyrillic markings), one a lunar lander render with a legible
+  mission name, and one a technician photo with a legible name badge (a real,
+  identifiable person). Only the 4 fully generic/unbranded photos (a CGI
+  satellite+dish, a satellite constellation graphic, and two clean-room
+  team photos with no legible markings) were used, resized to 900px wide
+  and compressed (`Pillow`, ~20-53KB each) and dropped in as static assets
+  the same way `icon-192.png`/`giftbox.png` already are.
+- **Why**: owner asked for a long About Us covering satellite building,
+  heritage, and "companies" (plural — hence the four fictional divisions),
+  with the supplied photos embedded. The photo-filtering reasoning was
+  proactive, not requested — flagged to the owner in-chat before proceeding,
+  since presenting real, identifiable companies'/people's property as
+  Space8's own would be a real problem regardless of the app's already-
+  established fictional space theme.
+- **Verification**: `node --check` on `original_module.js`; `build-core.js`
+  round-trip OK. Full suite still 68/68 (server.js untouched — this is
+  entirely client-side static content). New CSS (`.about-photo`,
+  `.about-section-title`, `.about-body`) added for natural-aspect-ratio
+  article images, distinct from the fixed-height `.banner` class used
+  elsewhere. `user/sw.js` cache bumped `v251` → `v252` (About's 4 new
+  photos are NOT added to the SHELL precache list, same as banner images --
+  fetched on demand when the screen is actually opened, not on every
+  install).
+- **Left open**: real-device visual check of the new About page layout, same
+  as every other client-only change this session.
+
 ## 2026-08-17 — Claude — Floating gift-code quick access, referral card migrated to Team, member avatars use the Space8 logo
 
 - **What changed**:
