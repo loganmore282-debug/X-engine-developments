@@ -14,6 +14,158 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Codex re-verification of the audit-fix commit: 6 real gaps found and fixed, 1 architectural limit found and documented instead of faked
+
+- **What changed**: Asked Codex to re-check its own 27 findings against commit
+  8ba9559 (the previous entry below) one by one, plus a fresh pass. It confirmed
+  21 of 21 claimed fixes as genuinely fixed, agreed with the reasoning on every
+  item left intentionally unchanged, and found 6 real remaining gaps plus 3 real
+  test-quality issues. Verified every claim against the actual code before
+  touching anything (same discipline as every other round this session) --
+  all 6 were real, all fixed:
+  - **Zero-cost product** (`server.js` `sanitizeProductInput()`): checked the RAW
+    price/expectedReturn for `> 0`, then rounded afterward -- `price: 0.4` passed
+    (0.4 > 0) and rounded down to a stored price of 0, letting a free,
+    positive-return product be created and purchased. Fixed to round FIRST, then
+    validate the value actually being stored/charged (`< 1` rejected, not `<= 0`).
+  - **Delete-user team-count math** (`/admin/user/delete`): the old incremental
+    fix only ever decremented the deleted member's own referrer's L1 count by 1,
+    never accounting for the reparented downline sitting one level closer to
+    every ancestor above the deleted member (an old L2 becomes a new L1, etc).
+    For A→B→C→D with B deleted, the true post-delete state (A→C→D) is
+    L1=1/L2=1/L3=0, but the old code left A at L1=0/L2=1/L3=1. Replaced with a
+    new `recomputeTeamCounts()` helper that rebuilds every user's L1/L2/L3 counts
+    from the actual (already-repaired) referredBy chain -- no incremental math,
+    which can't safely track an arbitrary-depth/width subtree shifting up a
+    level. **Caught a real ordering bug in this very fix while writing its test**:
+    running the recompute BEFORE the deleted user's own doc was actually removed
+    double-counted the deleted user's immediate downline (once for the
+    about-to-be-deleted user, once for whoever got reparented onto the same
+    referrer) -- moved the recompute to after the doc delete, confirmed correct
+    by the new test.
+  - **Stale purchase terms** (`/invest/create`): `liveTier` was fetched inside
+    the purchase lock and used ONLY for the active/comingSoon availability
+    re-check -- every actual money figure (price, cycle, expectedReturn,
+    dailyPayout) still came from the STALE snapshot read before the lock. An
+    admin price/cycle/return edit landing in that gap would charge/pay out the
+    OLD terms despite the code appearing to re-verify against the new ones.
+    `cycle`/`expectedReturn`/`dailyPayout` now computed from `liveTier` inside
+    the lock; every downstream `tier.price`/`tier.name` reference switched to
+    `liveTier.price`/`liveTier.name`.
+  - **Shared-device data leak, still real in 3 places** authEpoch didn't cover
+    yet (`user-src/original_module.js`): (1) `doLogout()` only cleared STATE
+    and called `fbSignOut()` -- authEpoch itself only bumped inside the
+    `space8-auth` listener, which fires after Firebase's OWN async sign-out
+    completes, leaving a real gap where an in-flight request from the old
+    session could still pass the (unchanged) epoch check; now bumped
+    synchronously in `doLogout()` itself. (2) `openRecordsSheet()`,
+    `openHistorySheet()`, and `openNotificationsSheet()` all render into the
+    shared `#genericSheet` container after an await but only checked
+    `_genericAsyncSeq` (a NEWER generic-sheet open taking over) -- none checked
+    authEpoch, so the SAME sheet staying open across a sign-out/sign-in let a
+    stale response render the previous member's records/history/notifications
+    over the new member's session; all three now also check authEpoch.
+    (3) `startLiveRefresh()`'s interval callback wrote straight into
+    `STATE.account`/`STATE.investments` with no guard at all -- `stopLiveRefresh()`
+    (called on sign-out) only stops FUTURE ticks, it can't cancel a fetch already
+    in flight; now captures/checks authEpoch before committing. Also added
+    `closeAllSheets()` (called from both `doLogout()` and the sign-out branch):
+    sheets/the assistant panel live OUTSIDE `#app` in the DOM, so hiding `#app`
+    on sign-out never actually closed an already-rendered, already-open sheet --
+    it just sat there, fully painted with the previous member's data, until
+    manually closed.
+  - **Team cache staleness for a same-count change** (`renderTeam()`): the
+    count-based cache invalidation from the previous round only caught a
+    referral joining/leaving a level -- a referral flipping Pending→Active
+    (their first investment) with the level's TOTAL count unchanged left the
+    cached row showing the stale Pending status forever. Fixed by also
+    invalidating a level's cache if it contains ANY member still reading
+    Pending (hasInvested can only ever go false→true, never back, so a level is
+    only safe to fully trust once everything in it already reads Active).
+  - **Gift-code and Task Center claims left Cumulative Earnings stale**: both
+    `redeemGiftCode()` and the milestone-claim handler only ever bumped
+    `walletBalance` locally (Task Center bumped neither), even though
+    server.js credits `totalEarned` alongside `walletBalance` for both (types
+    `promocode` and `team_reward`). Both now also bump `totalEarned` locally and
+    invalidate `STATE.loaded.products` (not just `.home`).
+  - **3 more factually-wrong assistant replies** (`assistant-engine.js`,
+    separate occurrences from the ones already fixed the previous round): the
+    `deposit_max` intent, the `max_withdraw_limit` intent, and the
+    `min_withdraw_specific` "In detail" reply all still claimed no deposit/
+    withdrawal cap exists. Corrected to reference the real `MAX_MONEY_AMOUNT`
+    cap. The `banned` "In detail" reply (parallel to the short reply already
+    fixed) still claimed suspension is "always" manual -- corrected to match.
+  - **Missing compound Mongo indexes** (`db.js`): a round of fixes added
+    several equality-plus-sort queries (`where().orderBy('createdAt',...)`)
+    with no matching compound index -- on Atlas M0 an unindexed sort isn't just
+    slow, it can hit MongoDB's 32MB in-memory sort limit and throw outright once
+    a collection is large enough. Added the 7 compound indexes Codex
+    specifically named.
+  - **Admin credit/debit accepted fractional amounts** (`/admin/deposit`,
+    `/admin/debit`): `parseFloat()` let a non-whole-UGX amount through; now
+    rounds before validating (same round-before-validate pattern as the
+    zero-cost product fix).
+  - **`reconcileCommissions()` still had an unordered 5000-item cap**: added
+    the same `orderBy('createdAt','asc')` fix already applied to the other
+    reconcilers, for consistency/fairness even though the pending set is
+    normally tiny by design.
+  - **Delete-user's swallowed transient-failure gap**: a DB failure during
+    downline reparenting used to be silently console-logged while the deletion
+    proceeded anyway, with no visibility in the actual response. Now surfaces a
+    `treeRepairFailed` flag and an explicit message telling the admin to run
+    "Recalculate totals" if it happens -- not a full resumable-deletion-state
+    redesign (Firebase is already gone by this point in the flow; aborting here
+    would leave a worse, half-deleted state), just honest visibility instead of
+    silence.
+- **Genuine architectural limit found, NOT hastily "fixed"**: while trying to
+  properly test the reconciler oldest-first fix at real scale (seeding 5010
+  investments/pending-commissions, over the 5000 cap), discovered the
+  oldest-first ordering fix from the previous round does NOT fully solve
+  starvation for `reconcileCashback()`/`reconcileCommissions()` the way it does
+  for `reconcilePendingDeposits()`/`reconcilePendingWithdrawals()`. Deposits/
+  withdrawals DRAIN out of their queried status once resolved, so oldest-first
+  there guarantees full eventual coverage as the window rotates forward. Active
+  investments do NOT leave `status:'active'` until maturity (up to 210 days), so
+  once a platform has more than `CASHBACK_SWEEP_LIMIT` (5000) investments open
+  at once, the SAME oldest 5000 win every single tick, indefinitely -- whichever
+  rank 5001+ get no proactive sweep credit until enough older ones mature. No
+  money is ever lost (`settleAllForUser()` on the owner's own next `/account` or
+  `/investments` read still catches them up correctly), but "instant" background
+  crediting stops being instant for that portion at that scale. A real fix needs
+  a different query shape entirely (an indexed `nextDueAt` field per investment,
+  updated by `settleInvestmentIfDue()`, queried directly instead of a blanket
+  `where('status','active')` -- naturally self-draining, not capped) -- a real
+  architecture change, not an audit-round fix. Documented here rather than
+  claiming it's solved; `test-reconciler-caps.js` stays at its original seed
+  sizes (proven to fully drain) with an explicit header comment explaining why
+  it does NOT test at 5000+ scale.
+- **Test-quality fixes** (Codex's 3 "Low" findings, all confirmed real):
+  `test-codex-round2-fixes.js`'s ordering assertion had a vacuous
+  `... || newest.description === 'x'` OR that could never actually fail (every
+  seeded row shared that description) -- rewritten with unique per-row markers
+  and exact-match assertions across all three endpoints (`/transactions`,
+  `/deposits`, `/withdrawals`), not just the first row. `test-callback-forgery.js`'s
+  MarzPay mock didn't cover the `/transactions/{uuid}` fallback path
+  `_marzFetchTxStatus()` actually uses after 2 failed attempts -- confirmed it
+  really does fall through to a REAL network call in that scenario (which is
+  what interrupted Codex's own sandbox run); added a matching mock, which
+  immediately caught a real test-logic issue of its own (the mock's first draft
+  turned a "genuinely unavailable" scenario into "available but ambiguous",
+  changing which code path the test actually exercised) -- fixed and reverified.
+- **Verification**: `test-codex-round2-fixes.js` extended to 39 checks (added
+  zero-cost-product rejection and the full A→B→C→D delete-user team-count
+  scenario -- the delete-user test is what caught the recompute-ordering bug
+  above before it shipped). Full suite: 68/68 test files green, including the
+  now-fully-offline `test-callback-forgery.js`. `node --check` on every touched
+  file. Rebuilt via `build-core.js` (round-trip OK); `user/sw.js` cache bumped
+  `v248` → `v249`.
+- **Left open**: the reconciler starvation-at-scale gap above (needs a
+  `nextDueAt`-indexed redesign); the same 4 items already documented as
+  deferred in the previous entry (crash-window architecture, CI rebuild gate,
+  mock-DB transaction-semantics fidelity, unused admin settings fields) remain
+  exactly that. Real end-to-end device/browser verification still has not
+  happened.
+
 ## 2026-08-17 — Claude — Codex full-codebase audit (27 findings): verified, fixed, documented, one by one; rebuilt and shipped
 
 - **What changed**: Owner asked Codex to do a full audit of every script/file in

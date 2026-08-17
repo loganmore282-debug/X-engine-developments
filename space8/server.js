@@ -2133,10 +2133,8 @@ app.post('/invest/create', async (req, res) => {
   if (tier.active === false || tier.comingSoon) return res.status(400).json({ status: 'error', message: 'This product is not available right now.' });
   try {
     const sett = await getSettings();
-    const cycle = Number(tier.cycle) || sett.cycleDays;
-    const expectedReturn = Number(tier.expectedReturn) || Math.round(tier.price * sett.returnMultiple);
-    const dailyPayout = Math.round(expectedReturn / cycle);
     let invId;
+    let liveTier, cycle, expectedReturn, dailyPayout;
     await withLock('bal:' + userId, () => db.runTransaction(async t => {
       // Re-checked again, right here, immediately before any money actually
       // moves -- the check above (line ~1128) runs at the top of the
@@ -2150,14 +2148,27 @@ app.post('/invest/create', async (req, res) => {
       // a pure purchase-time gate: it never touches or reverses an
       // investment someone already legitimately holds from before the
       // product was paused, only blocks a brand new one from being created.
-      const liveTier = await getProductByKey(tier.key);
+      liveTier = await getProductByKey(tier.key);
       if (!liveTier || liveTier.active === false || liveTier.comingSoon) throw new Error('This product is not available right now.');
+      // Codex-verified real bug (2026-08-17): liveTier was fetched and used
+      // ONLY for the active/comingSoon availability check above -- every
+      // actual money figure (price, cycle, expectedReturn, dailyPayout)
+      // still came from the STALE `tier` snapshot read before this lock was
+      // even entered. If an admin changed a product's price/cycle/return in
+      // the gap between the two reads, the purchase charged and recorded
+      // the OLD terms despite re-checking "is this product still live"
+      // against the NEW ones. Recomputed here, from liveTier, so the
+      // numbers that actually get charged/paid out are the same ones just
+      // verified as current.
+      cycle = Number(liveTier.cycle) || sett.cycleDays;
+      expectedReturn = Number(liveTier.expectedReturn) || Math.round(liveTier.price * sett.returnMultiple);
+      dailyPayout = Math.round(expectedReturn / cycle);
       const uRef = db.collection('users').doc(userId);
       const fresh = await t.get(uRef);
       if (!fresh.exists) throw new Error('User not found');
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       const bal = fresh.data().walletBalance || 0;
-      if (bal < tier.price) throw new Error(`Need ${fmtUGX(tier.price)}, have ${fmtUGX(bal)}`);
+      if (bal < liveTier.price) throw new Error(`Need ${fmtUGX(liveTier.price)}, have ${fmtUGX(bal)}`);
       // Referral commission is a one-time reward for the buyer's first-ever
       // investment. firstInvestmentDone is the authoritative flag going
       // forward, but it never existed on accounts that invested before this
@@ -2179,8 +2190,8 @@ app.post('/invest/create', async (req, res) => {
       // from the value just read and writing them as plain numbers is just
       // as race-safe as increment() here, and it self-heals a corrupted
       // string field back to numeric the moment this runs.
-      const newBalance = (Number(fresh.data().walletBalance) || 0) - tier.price;
-      const newInvested = (Number(fresh.data().totalInvested) || 0) + tier.price;
+      const newBalance = (Number(fresh.data().walletBalance) || 0) - liveTier.price;
+      const newInvested = (Number(fresh.data().totalInvested) || 0) + liveTier.price;
       t.update(uRef, {
         walletBalance: newBalance, totalInvested: newInvested,
         firstInvestmentDone: true
@@ -2203,18 +2214,18 @@ app.post('/invest/create', async (req, res) => {
       // (only ever the rare handful whose fire-and-forget call is still
       // outstanding or failed) rather than "everything recent."
       t.set(invRef, {
-        userId, tierKey: tier.key, tierLabel: tier.name, amount: tier.price, cycle, expectedReturn,
+        userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
         status: 'active', dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
         isFirstInvestment, commissionPaidLevels: [], commissionPending: isFirstInvestment === true,
         date, time, createdAt: FieldValue.serverTimestamp()
       });
       t.set(db.collection('transactions').doc(), {
-        userId, type: 'investment', description: `Bought ${tier.name}`, amount: -tier.price,
+        userId, type: 'investment', description: `Bought ${liveTier.name}`, amount: -liveTier.price,
         status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
-    creditReferralCommission(invId, userId, tier.price).catch(e => console.error('Commission error:', e.message));
-    res.json({ status: 'success', investmentId: invId, message: `Bought ${tier.name} for ${fmtUGX(tier.price)}` });
+    creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('Commission error:', e.message));
+    res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtUGX(liveTier.price)}` });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   }
@@ -3756,8 +3767,14 @@ function sanitizeProductInput(p, fallbackOrder) {
   if (!key || key.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(key)) return null;
   const name = String(p?.name || '').trim().slice(0, 100);
   if (!name) return null;
-  const price = Number(p?.price);
-  if (!Number.isFinite(price) || price <= 0 || price > MAX_MONEY_AMOUNT) return null;
+  // Codex-verified real bug (2026-08-17): the raw (pre-round) value was
+  // checked for > 0, then rounded afterward -- price: 0.4 passed the check
+  // (0.4 > 0) and then rounded down to a stored price of 0, letting a
+  // zero-cost, positive-return product be saved and purchased for free.
+  // Round FIRST, then validate the value that's actually going to be
+  // stored and charged.
+  const price = Math.round(Number(p?.price));
+  if (!Number.isFinite(price) || price < 1 || price > MAX_MONEY_AMOUNT) return null;
   // cycle/expectedReturn are genuinely OPTIONAL per product -- a product can
   // be saved with neither, and /invest/create falls back to the platform-wide
   // cycleDays/returnMultiple settings for it (Number(tier.cycle) || sett.
@@ -3774,14 +3791,15 @@ function sanitizeProductInput(p, fallbackOrder) {
   }
   let expectedReturn = null;
   if (p?.expectedReturn != null && p.expectedReturn !== '') {
-    expectedReturn = Number(p.expectedReturn);
-    if (!Number.isFinite(expectedReturn) || expectedReturn <= 0 || expectedReturn > MAX_MONEY_AMOUNT) return null;
+    // Same round-before-validate fix as price above.
+    expectedReturn = Math.round(Number(p.expectedReturn));
+    if (!Number.isFinite(expectedReturn) || expectedReturn < 1 || expectedReturn > MAX_MONEY_AMOUNT) return null;
   }
   const image = typeof p?.image === 'string' ? p.image.slice(0, BANNER_MAX_LEN) : '';
   const order = p?.order != null ? Number(p.order) : fallbackOrder;
   return {
-    key, name, price: Math.round(price), cycle: cycle != null ? Math.round(cycle) : null,
-    expectedReturn: expectedReturn != null ? Math.round(expectedReturn) : null,
+    key, name, price, cycle,
+    expectedReturn,
     image, active: p?.active !== false, comingSoon: p?.comingSoon === true,
     order: Number.isFinite(order) ? order : fallbackOrder, deleted: false,
   };
@@ -4199,7 +4217,12 @@ app.post('/admin/deposit', async (req, res) => {
   // silently DEBIT the wallet via FieldValue.increment(amt) below while
   // still labelling the transaction row 'admin_credit' with a negative
   // amount. No finite/positive/MAX_MONEY_AMOUNT check either.
-  const amt = parseFloat(amount || 0);
+  // Codex-verified real gap (2026-08-17): parseFloat() still let a
+  // fractional amount (e.g. 5000.75) through -- every other money figure in
+  // this app is a whole UGX integer, so round FIRST, then validate what's
+  // actually going to be credited (same round-before-validate fix as
+  // sanitizeProductInput's price/expectedReturn).
+  const amt = Math.round(parseFloat(amount || 0));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
     return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtUGX(MAX_MONEY_AMOUNT)}) required` });
   const lastCredit = _adminCreditDebounce.get(userId) || 0;
@@ -4236,8 +4259,9 @@ app.post('/admin/debit', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, amount, note } = req.body;
   // Codex-verified: Math.abs() already stops a negative-amount inversion
-  // trick here, but there was still no finite/MAX_MONEY_AMOUNT bound.
-  const amt = Math.abs(parseFloat(amount || 0));
+  // trick here. Round-before-validate for the same fractional-amount
+  // reason as /admin/deposit above.
+  const amt = Math.round(Math.abs(parseFloat(amount || 0)));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
     return res.status(400).json({ status: 'error', message: `userId and a valid amount (1 - ${fmtUGX(MAX_MONEY_AMOUNT)}) required` });
   const lastDebit = _adminDebitDebounce.get(userId) || 0;
@@ -4491,6 +4515,42 @@ app.post('/admin/user/reconcile-checkin', async (req, res) => {
     res.json({ status: 'success', before, after, changed });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Recomputes teamL1Count/teamL2Count/teamL3Count for EVERY user from the
+// CURRENT referredBy chain. This is the one ground-truth way to fix these
+// counts after an operation that changes the tree's shape (e.g. deleting a
+// member and reparenting their downline onto their own referrer) --
+// deleting one ancestor shifts every descendant up exactly one level for
+// everyone still above them (an old L2 becomes L1, an old L3 becomes L2,
+// etc.), which no incremental +1/-1 on just the immediate chain can safely
+// track for an arbitrary-depth or arbitrary-width subtree. Deliberately
+// separate from /admin/users/recount's own inline version below (which
+// also repairs totalDeposited/totalEarned/streak/totalInvested in the same
+// pass) rather than refactored to share code, so this narrower, more
+// frequently-triggered path can't regress that already-verified endpoint.
+async function recomputeTeamCounts() {
+  const usersSnap = await db.collection('users').limit(10000).get();
+  const referredByMap = {};
+  usersSnap.forEach(d => { referredByMap[d.id] = d.data().referredBy || null; });
+  const teamCounts = {};
+  const bump = (id, field) => { if (!id) return; (teamCounts[id] || (teamCounts[id] = { l1: 0, l2: 0, l3: 0 }))[field]++; };
+  Object.keys(referredByMap).forEach(uid => {
+    const l1Id = referredByMap[uid];
+    if (!l1Id) return;
+    bump(l1Id, 'l1');
+    const l2Id = referredByMap[l1Id];
+    if (l2Id && l2Id !== l1Id) {
+      bump(l2Id, 'l2');
+      const l3Id = referredByMap[l2Id];
+      if (l3Id && l3Id !== l2Id && l3Id !== l1Id) bump(l3Id, 'l3');
+    }
+  });
+  const batch = db.batch();
+  usersSnap.forEach(d => {
+    const team = teamCounts[d.id] || { l1: 0, l2: 0, l3: 0 };
+    batch.update(d.ref, { teamL1Count: team.l1, teamL2Count: team.l2, teamL3Count: team.l3 });
+  });
+  await batch.commit();
+}
 // PERMANENT account deletion: removes the user and ALL their data, fixes the
 // referrer's team counts up the chain, and frees the phone number in
 // Firebase so it can register again. Requires confirm:"DELETE".
@@ -4545,23 +4605,16 @@ app.post('/admin/user/delete', async (req, res) => {
     // deleted account for everyone below them. Splice them onto the
     // deleted member's OWN referrer instead, preserving the rest of the
     // tree's shape.
+    let treeRepairFailed = false;
     try {
       const downlineSnap = await db.collection('users').where('referredBy', '==', userId).get();
       for (const d of downlineSnap.docs) {
         await d.ref.update({ referredBy: u.referredBy || null });
       }
-      if (u.referredBy) {
-        await db.collection('users').doc(u.referredBy).update({ teamL1Count: FieldValue.increment(-1) });
-        const l1 = await db.collection('users').doc(u.referredBy).get();
-        const l2Id = l1.exists ? l1.data().referredBy : null;
-        if (l2Id) {
-          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(-1) });
-          const l2 = await db.collection('users').doc(l2Id).get();
-          const l3Id = l2.exists ? l2.data().referredBy : null;
-          if (l3Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(-1) });
-        }
-      }
-    } catch (chainErr) { console.error('delete: referral-tree repair:', chainErr.message); }
+    } catch (chainErr) {
+      console.error('delete: downline reparent:', chainErr.message);
+      treeRepairFailed = true;
+    }
     const wipe = async (coll, field = 'userId') => {
       const snap = await db.collection(coll).where(field, '==', userId).get();
       let n = 0;
@@ -4576,8 +4629,37 @@ app.post('/admin/user/delete', async (req, res) => {
       bankAccounts:  await wipe('bankAccounts'),
     };
     await db.collection('users').doc(userId).delete();
-    logAdminAction(req, 'user_deleted', { userId, removed });
-    res.json({ status: 'success', message: 'Account and all its data deleted', removed });
+    // Codex-verified real bug (2026-08-17): the old fix here only ever
+    // decremented the deleted member's OWN referrer's teamL1Count by 1, as
+    // if the whole subtree had simply vanished -- it never accounted for
+    // the reparented downline now sitting ONE LEVEL CLOSER to every
+    // ancestor above the deleted member (an old L2 becomes a new L1, an
+    // old L3 becomes a new L2, etc.). Concretely, for A -> B -> C -> D with
+    // B deleted: the old code left A at L1=0/L2=1/L3=1 when the true
+    // post-delete state (A -> C -> D) is L1=1/L2=1/L3=0. No incremental
+    // math can safely track an arbitrary-depth/width subtree shifting up a
+    // level, so this recomputes every user's counts from the actual
+    // (already-repaired) referredBy chain instead of trying to patch
+    // deltas. Deliberately run AFTER the deleted user's own doc is gone
+    // (test-verified real ordering bug caught while adding coverage for
+    // this fix, 2026-08-17): running it earlier, while B's own doc still
+    // existed with referredBy still pointing at A, double-counted A's L1 --
+    // once for B (about to be deleted) and once for C (freshly reparented
+    // onto A) -- overcounting by exactly the width of the deleted member's
+    // own immediate downline.
+    try {
+      await recomputeTeamCounts();
+    } catch (chainErr) {
+      console.error('delete: team-count recompute:', chainErr.message);
+      treeRepairFailed = true;
+    }
+    logAdminAction(req, 'user_deleted', { userId, removed, treeRepairFailed });
+    res.json({
+      status: 'success', removed, treeRepairFailed,
+      message: treeRepairFailed
+        ? 'Account and all its data deleted, but the referral-tree/team-count repair failed partway through -- run "Recalculate totals" from Users to fix any affected counts.'
+        : 'Account and all its data deleted',
+    });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -5340,7 +5422,14 @@ async function reconcilePendingWithdrawals() {
 // recent."
 async function reconcileCommissions() {
   try {
-    const snap = await db.collection('investments').where('commissionPending', '==', true).limit(5000).get();
+    // Codex-verified real gap (2026-08-17): the pending set is normally
+    // tiny by design (cleared the moment commission resolves -- see
+    // commissionPending's own comment), but the 5000 cap had no orderBy,
+    // so IF it were ever exceeded (a systemic outage, a large backlog),
+    // the same arbitrary subset could be retried every tick while records
+    // past the cap never got checked -- same starvation shape already
+    // fixed for the other reconcilers, same oldest-first fix here too.
+    const snap = await db.collection('investments').where('commissionPending', '==', true).orderBy('createdAt', 'asc').limit(5000).get();
     for (const doc of snap.docs) {
       const inv = doc.data();
       await creditReferralCommission(doc.id, inv.userId, inv.amount).catch(e => console.error('Reconcile commission error:', e.message));

@@ -2430,21 +2430,34 @@ discoveries:**
 
 See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
 
-0. **Codex full-codebase audit (27 findings) — DONE as of 2026-08-17.** Went through
-   all 27 one by one: fixed every confirmed real bug (product/settings validation,
-   stored XSS escaping, delete-user reordering, session-epoch stale-response guard,
-   admin credit/debit bounds, nested-sheet Back-button bug, Team member cache
-   staleness, EAT day-boundary mismatch, ghost-account registration-failure handling,
-   broadcast audit-log gap, reconciler oldest-first ordering, 4 factually-wrong
-   assistant replies, stale push-approval domain, SW-reload-mid-claim, no
-   DecompressionStream fallback, misleading bank-transfer admin copy). Documented
-   (not changed) the items that are already-accepted architectural tradeoffs
-   (the non-atomic-transaction crash windows), confirmed-intentional past decisions
-   (staff-deletion attribution erasure), or out-of-proportion infra investments (CI
-   rebuild gate, mock-DB transaction fidelity). New `test-codex-round2-fixes.js`
-   (24/24); full suite 68/68. Read the 2026-08-17 "Codex full-codebase audit" entry
-   in `AGENT_LOG.md` before re-auditing this codebase from scratch — most of what a
-   fresh audit would find has already been triaged.
+0. **Codex full-codebase audit (27 findings) + re-verification pass — DONE as of
+   2026-08-17.** First pass: went through all 27 findings one by one, fixed every
+   confirmed real bug (product/settings validation, stored XSS escaping, delete-user
+   reordering, session-epoch stale-response guard, admin credit/debit bounds,
+   nested-sheet Back-button bug, Team member cache staleness, EAT day-boundary
+   mismatch, ghost-account registration-failure handling, broadcast audit-log gap,
+   reconciler oldest-first ordering, 4 factually-wrong assistant replies, stale
+   push-approval domain, SW-reload-mid-claim, no DecompressionStream fallback,
+   misleading bank-transfer admin copy), documented (not changed) the genuine
+   architectural tradeoffs/intentional decisions/infra investments. Then asked Codex
+   to re-verify its own findings against the fix commit — it confirmed 21/21 claimed
+   fixes and found 6 more real gaps: a fractional product price could round to a
+   free UGX-0 plan, delete-user's team-count math was wrong for a multi-level
+   referral chain (fixed with a full recompute, which then caught ANOTHER real
+   ordering bug of its own while writing the test for it), a purchase could charge
+   stale price/cycle/return after an admin edit mid-request, 3 more assistant
+   replies still claimed no deposit/withdrawal cap, Team cache still went stale on a
+   Pending→Active flip with no headcount change, and a real shared-device data leak
+   through open sheets/notifications/the live-refresh timer that the session-epoch
+   guard didn't yet cover everywhere. Also found and accepted (not faked) a genuine
+   architectural limit: the reconciler oldest-first fix does NOT fully solve
+   starvation for cashback/commission reconcilers past their 5000 cap the way it
+   does for deposits/withdrawals, since active investments don't drain out of
+   `status:'active'` until maturity — needs a `nextDueAt`-indexed redesign, not an
+   audit-round patch. `test-codex-round2-fixes.js` now 39/39; full suite 68/68. Read
+   BOTH 2026-08-17 AGENT_LOG.md entries ("Codex full-codebase audit" and "Codex
+   re-verification of the audit-fix commit") before re-auditing this codebase from
+   scratch — most of what a fresh audit would find has already been triaged.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

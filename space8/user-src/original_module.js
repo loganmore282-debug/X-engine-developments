@@ -278,6 +278,20 @@ function closeSheet(name){
   if (history.state && history.state.overlay === name) history.back();
   else hideSheet(name); // no matching history entry (shouldn't normally happen) — just hide directly
 }
+// Codex-verified real bug (2026-08-17): sheets/the assistant panel live
+// OUTSIDE #app in the DOM (see index.html), so the sign-out branch's
+// `$('app').style.display = 'none'` never actually hid a sheet that was
+// already fully rendered and open at the moment of sign-out -- on a shared
+// device, that member's already-painted screen (Records, deposit/withdraw
+// history, notifications, withdrawal accounts, an open plan detail, an
+// assistant conversation) stayed visibly on screen straight through the
+// next person's sign-in, even though every async render path is now
+// authEpoch-guarded against NEW stale writes. Called on every sign-out so
+// nothing already on screen survives the handoff.
+function closeAllSheets(){
+  while (_sheetStack.length) hideSheet(_sheetStack[_sheetStack.length - 1]);
+  if ($('assistPanel').classList.contains('show')) hideAssistant();
+}
 window.addEventListener('popstate', function(){
   var top = _sheetStack[_sheetStack.length - 1];
   if (top) hideSheet(top);
@@ -446,7 +460,18 @@ $('registerBtn').onclick = async function(){
 };
 
 function doLogout(){
+  // Codex-verified real bug (2026-08-17): authEpoch used to only bump
+  // inside the 'space8-auth' listener, which only fires once Firebase's
+  // OWN async sign-out actually completes -- a real gap between tapping
+  // Logout and that event landing. An in-flight request started under the
+  // OLD session that resolves during that gap still saw the OLD (unchanged)
+  // epoch as current, so it could write stale data back into STATE right
+  // after resetUserState() just cleared it. Bumping here, synchronously,
+  // the instant logout is requested, closes that gap instead of relying
+  // solely on the listener's own (later) bump.
+  STATE.authEpoch++;
   resetUserState();
+  closeAllSheets();
   window.fbSignOut();
 }
 
@@ -866,10 +891,18 @@ function recordMeta(type){
 // response arrives.
 var _genericAsyncSeq = 0;
 async function openRecordsSheet(){
+  // Codex-verified real bug (2026-08-17): _genericAsyncSeq alone only
+  // catches a NEWER generic-sheet render taking over -- it does nothing if
+  // the SAME sheet stays open across a sign-out/sign-in on a shared device,
+  // since no new generic-sheet open happens to bump it. This in-flight
+  // /transactions response could then render the PREVIOUS member's records
+  // into a sheet now sitting on top of the NEXT member's session. authEpoch
+  // (see STATE's own comment) catches exactly that.
   var seq = ++_genericAsyncSeq;
+  var epoch = STATE.authEpoch;
   openSheet('generic', '<div class="sheet-title">Records</div><div id="recordsBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(4,'sk-card') + '</div>');
   var r = await api('/transactions', null, 'GET');
-  if (seq !== _genericAsyncSeq) return;
+  if (seq !== _genericAsyncSeq || epoch !== STATE.authEpoch) return;
   var body = $('recordsBody'); if (!body) return;
   var items = (r.status === 'success' && r.transactions) || [];
   if (!items.length) { body.innerHTML = emptyState('doc', 'No more data'); return; }
@@ -1046,10 +1079,12 @@ function friendlyStatus(status){
 // race against each other now that Deposit/Withdraw's header shortcuts
 // make it easy to hop between this and the combined Records view quickly.
 function openHistorySheet(kind){
+  // Same authEpoch reasoning as openRecordsSheet() above.
   var seq = ++_genericAsyncSeq;
+  var epoch = STATE.authEpoch;
   openSheet('generic', '<div class="sheet-title">' + (kind==='deposit'?'Deposit':'Withdrawal') + ' History</div><div id="histBody"><div class="sk sk-line" style="width:60%"></div>' + skRows(3,'sk-card') + '</div>');
   api(kind === 'deposit' ? '/deposits' : '/withdrawals').then(function(r){
-    if (seq !== _genericAsyncSeq) return;
+    if (seq !== _genericAsyncSeq || epoch !== STATE.authEpoch) return;
     var body = $('histBody'); if (!body) return;
     var items = (r.status === 'success' && (r.deposits||r.withdrawals)) || [];
     if (!items.length) { body.innerHTML = emptyState('history','No more data'); return; }
@@ -1106,9 +1141,16 @@ async function renderTeam(){
   STATE.loaded.team = true;
   var freshCounts = (STATE.teamStats || {}).counts || {};
   [1,2,3].forEach(function(l){
-    if (STATE.teamMembers[l] && STATE.teamMembers[l].length !== (freshCounts['l'+l] || 0)) {
-      STATE.teamMembers[l] = null;
-    }
+    if (!STATE.teamMembers[l]) return;
+    if (STATE.teamMembers[l].length !== (freshCounts['l'+l] || 0)) { STATE.teamMembers[l] = null; return; }
+    // Codex-verified real bug (2026-08-17): a headcount match alone isn't
+    // enough -- a cached member can flip from Pending to Active (invests
+    // for the first time) with the level's TOTAL count unchanged, and that
+    // status is exactly what the Active/Pending pill shows. hasInvested can
+    // only ever go false -> true, never back, so a cached list is only
+    // truly safe to reuse once every member in it already reads Active;
+    // any remaining Pending entry might have since flipped.
+    if (STATE.teamMembers[l].some(function(m){ return !m.hasInvested; })) STATE.teamMembers[l] = null;
   });
   // Each level resolves to { members, failed } rather than a bare array, so
   // a fetch error can be told apart from a genuinely empty level both when
@@ -1185,7 +1227,20 @@ function renderTaskList(milestones){
   qsa('.claim', box).forEach(function(c){ c.onclick = async function(){
     c.disabled = true; c.textContent = 'Claiming…';
     var r = await api('/team/milestone/claim', { target:Number(c.dataset.target), type:c.dataset.type });
-    if (r.status === 'success') { toast(r.message); STATE.loaded.team=false; STATE.loaded.home=false; renderTeam(); }
+    if (r.status === 'success') {
+      toast(r.message);
+      // Codex-verified real bug (2026-08-17): this used to update neither
+      // walletBalance nor totalEarned locally at all -- server.js credits
+      // both together for a Task Center reward (type 'team_reward'), so
+      // Cumulative Earnings AND wallet balance both looked stale (too low)
+      // on Home/Products until whatever next forced a real refetch.
+      if (STATE.account && r.amount) {
+        STATE.account.walletBalance = (STATE.account.walletBalance || 0) + r.amount;
+        STATE.account.totalEarned = (STATE.account.totalEarned || 0) + r.amount;
+      }
+      STATE.loaded.team=false; STATE.loaded.home=false; STATE.loaded.products=false;
+      renderTeam();
+    }
     else { c.disabled=false; c.textContent='Claim'; toast(r.message,true); }
   }; });
 }
@@ -1315,9 +1370,21 @@ async function redeemGiftCode(){
   if (r.status === 'success') {
     toast('+' + ugx(r.reward) + ' credited!');
     input.value = '';
-    if (STATE.account) STATE.account.walletBalance = (STATE.account.walletBalance || 0) + (r.reward || 0);
+    // totalEarned bumped alongside walletBalance -- Codex-verified real bug
+    // (2026-08-17): server.js credits both together for a gift-code
+    // redemption (type 'promocode' is one of totalEarned's live sources),
+    // but this only ever bumped walletBalance, so Cumulative Earnings on
+    // Home/Products looked stale (too low) until whatever next forced a
+    // real refetch. STATE.loaded.products invalidated too, not just home,
+    // so Products' own cached figure doesn't stay wrong either.
+    if (STATE.account) {
+      STATE.account.walletBalance = (STATE.account.walletBalance || 0) + (r.reward || 0);
+      STATE.account.totalEarned = (STATE.account.totalEarned || 0) + (r.reward || 0);
+    }
     STATE.loaded.home = false;
+    STATE.loaded.products = false;
     if (STATE.currentPage === 'home') renderHome();
+    else if (STATE.currentPage === 'products') renderProducts();
   } else toast(r.message, true);
 }
 async function openInfoSheet(key){
@@ -1746,8 +1813,19 @@ $('assistInput').addEventListener('keydown', function(e){
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────────────
 async function openNotificationsSheet(){
+  // Codex-verified real bug (2026-08-17): this had NEITHER the
+  // _genericAsyncSeq nor the authEpoch guard the sibling generic-sheet
+  // functions above already use, despite rendering into the exact same
+  // shared #genericSheet container after an await -- a sign-out/sign-in on
+  // a shared device while this was in flight could render the PREVIOUS
+  // member's notifications (and mark them read under whichever account is
+  // ACTUALLY signed in by the time the response lands) into the new
+  // member's screen.
+  var seq = ++_genericAsyncSeq;
+  var epoch = STATE.authEpoch;
   openSheet('generic', '<div class="sheet-title">Notifications</div><div id="notifBody">' + skRows(3) + '</div>');
   var r = await api('/notifications', null, 'GET');
+  if (seq !== _genericAsyncSeq || epoch !== STATE.authEpoch) return;
   var body = $('notifBody'); if (!body) return;
   var items = r.status === 'success' ? (r.notifications || []) : [];
   body.innerHTML = items.length ? items.map(function(n){
@@ -1900,6 +1978,7 @@ window.addEventListener('space8-auth', async function(e){
     if (_refCode) showRegisterScreen(); else showLoginScreen();
     stopLiveRefresh();
     resetUserState();
+    closeAllSheets();
   }
 });
 
@@ -1910,7 +1989,17 @@ function startLiveRefresh(){
   if (_liveRefreshTimer) return;
   _liveRefreshTimer = setInterval(async function(){
     if (document.hidden || !STATE.account || !window.fbAuth || !window.fbAuth.currentUser) return;
+    // Codex-verified real bug (2026-08-17): stopLiveRefresh() (called on
+    // sign-out) only clears the interval so no FUTURE tick fires -- it
+    // can't cancel a tick whose fetch was already in flight. That response
+    // used to write straight into STATE.account/STATE.investments with no
+    // check at all, so it could land after a sign-out + a DIFFERENT
+    // member's sign-in on the same device and silently overwrite their
+    // just-loaded session with the previous member's data. Same authEpoch
+    // guard every other async render already uses.
+    var epoch = STATE.authEpoch;
     var results = await Promise.all([api('/account', null, 'GET', false), api('/investments', null, 'GET', false)]);
+    if (epoch !== STATE.authEpoch) return;
     if (results[0].status === 'success') STATE.account = results[0].account;
     if (results[1].status === 'success') STATE.investments = results[1].investments || [];
     if (STATE.currentPage === 'home') renderHome();

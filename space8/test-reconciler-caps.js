@@ -14,16 +14,42 @@
      proactively (settleAllForUser() on the owning user's own next /account
      or /investments read still caught it up correctly, so no money was
      ever LOST, but crediting stopped being "instant" for those accounts).
-   - reconcileCommissions(): capped at 50 investments from the last 10
-     minutes per 30s tick, across every user combined. Same gap for the
-     retry safety net behind /invest/create's fire-and-forget commission
-     credit.
+   - reconcileCommissions(): originally capped at 50 investments from the
+     last 10 minutes per 30s tick, across every user combined -- since
+     superseded by a commissionPending flag (set at investment creation,
+     cleared once nothing's left to retry), which replaced the time-window
+     entirely but kept a 5000-item cap (same number as cashback).
 
-   Both bumped (500 -> 5000, 50 -> 500). This proves the NEW caps actually
-   let more than the OLD cap's worth of due work get processed in a single
-   sweep, by seeding just over the old ceiling and confirming ~all of it is
-   credited on the very next tick -- not just re-reading the source for the
-   new number.
+   Codex-verified real test gap (2026-08-17), and a real remaining
+   limitation found while trying to fix it properly: this test used to only
+   seed just past the OLD ceilings (520, 60) -- proof the caps were RAISED,
+   not proof the CURRENT ceiling (5000) doesn't itself starve records past
+   it. Seeding 5010 (strictly over the current cap) and watching what
+   actually happens showed exactly 5000/5010 credited and STAYING at
+   5000/5010 across repeated sweeps -- confirming this is a genuinely
+   deeper gap than "add orderBy" fixes: pendingDeposits/withdrawals DRAIN
+   out of their queried status once resolved, so oldest-first there
+   guarantees eventual full coverage as the window rotates forward. Active
+   investments do NOT leave status:'active' until maturity (up to 210
+   days), so once a platform has more than CASHBACK_SWEEP_LIMIT (5000)
+   investments open at once, the SAME oldest 5000 win every single tick,
+   indefinitely, and whichever ones rank 5001+ get no proactive sweep
+   credit until enough of the older ones mature. No money is ever lost --
+   settleAllForUser() on the owning user's own next /account or
+   /investments read still catches them up correctly -- but "instant"
+   background crediting stops being instant for that portion once the
+   platform is that large. A real fix needs a genuinely different query
+   shape (e.g. an indexed nextDueAt field per investment, updated by
+   settleInvestmentIfDue(), queried as `where('nextDueAt','<=',now)`
+   instead of a blanket `where('status','active')` -- a naturally
+   self-draining, bounded-to-what's-actually-due set, not a cap on an
+   ever-growing one). That's a real architecture change, not an audit-
+   round fix -- documented in AGENT_LOG.md instead of rushed here.
+
+   This file therefore stays at the ORIGINAL seed sizes (520 / 60) -- proven
+   to fully drain within the wait windows below -- rather than claiming
+   5000+ concurrent investments/pending-commissions are fully protected,
+   which they are not yet.
 
    Run: node test-reconciler-caps.js   (exits 0 = all green, ~17s)        */
 
@@ -83,7 +109,7 @@ async function setupUser(uid, phone) {
   await new Promise(r => setTimeout(r, 600));
 
   console.log('\n== reconcileCashback() must credit MORE than the old 500-item cap in one sweep ==');
-  const CASHBACK_N = 520; // strictly more than the old 500 cap
+  const CASHBACK_N = 520; // strictly more than the old 500 cap -- see file header for why this ISN'T 5010
   const cbUsers = 8;
   const perUser = Math.ceil(CASHBACK_N / cbUsers);
   const cashbackUserIds = [];
@@ -120,7 +146,7 @@ async function setupUser(uid, phone) {
     creditedCount === seededInvIds.length, { credited: creditedCount, total: seededInvIds.length });
 
   console.log('\n== reconcileCommissions() must retry MORE than the old 50-item cap in one sweep ==');
-  const COMMISSION_N = 60; // strictly more than the old 50 cap
+  const COMMISSION_N = 60; // strictly more than the old 50 cap -- see file header for why this ISN'T 5010
   const referrer = 'comm-referrer';
   await setupUser(referrer, '0772699999');
   const refCode = users().get(referrer).referralCode;

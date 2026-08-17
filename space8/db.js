@@ -67,6 +67,19 @@ async function ensureIndexes() {
     ['bankAccounts',    { userId: 1 }],
     ['adminSessions',   { username: 1 }],
     ['adminAuditLog',   { createdAt: -1 }],
+    // Codex-verified real gap (2026-08-17): a round of fixes added several
+    // equality-plus-sort queries (orderBy('createdAt', ...) after a
+    // where()) without the matching compound index -- on Atlas M0, an
+    // unindexed sort isn't just slow, it can hit MongoDB's 32MB in-memory
+    // sort limit and throw outright once a collection is large enough,
+    // which would be a genuine outage for that query, not just latency.
+    ['transactions',    { userId: 1, createdAt: -1 }],
+    ['pendingDeposits', { userId: 1, createdAt: -1 }],
+    ['pendingDeposits', { status: 1, createdAt: 1 }],
+    ['withdrawals',     { userId: 1, createdAt: -1 }],
+    ['withdrawals',     { status: 1, createdAt: 1 }],
+    ['investments',     { status: 1, createdAt: 1 }],
+    ['investments',     { commissionPending: 1 }],
   ];
   // ONE AT A TIME — M0's free tier has very little real concurrency headroom.
   // Firing all of these at once (Promise.all/allSettled) queued many simultaneous

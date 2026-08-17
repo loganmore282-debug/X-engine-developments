@@ -12,6 +12,17 @@
    those were verified by direct code-reading against the exact bug
    scenario, not an automated test.
 
+   Extended after asking Codex to re-verify these fixes against the code:
+   it confirmed most, found 6 real gaps (a fractional-price product could
+   round to a free UGX-0 plan, delete-user's team-count math was wrong for
+   a multi-level chain, a purchase could charge stale price/cycle/return
+   after an admin edit mid-request, a few assistant replies still claimed
+   no deposit/withdrawal cap, Team's Pending->Active cache staleness, and a
+   real shared-device data leak through open sheets/notifications/the live-
+   refresh timer that authEpoch didn't yet cover everywhere) -- all fixed,
+   the two highest-value ones (zero-cost product, delete-user team counts)
+   get direct coverage below.
+
    Run: node test-codex-round2-fixes.js   (exits 0 = all green)           */
 
 process.env.MONGODB_URI = 'mongodb://mock';
@@ -31,7 +42,10 @@ const faPath = require.resolve('firebase-admin');
 const faMod = new Module(faPath);
 faMod.exports = {
   initializeApp: () => {}, credential: { cert: () => ({}) },
-  auth: () => ({ verifyIdToken: async tok => { if (String(tok).startsWith('uid:')) return { uid: tok.slice(4) }; throw new Error('bad'); } }),
+  auth: () => ({
+    verifyIdToken: async tok => { if (String(tok).startsWith('uid:')) return { uid: tok.slice(4) }; throw new Error('bad'); },
+    deleteUser: async () => {}, // /admin/user/delete's Firebase-first step -- always "succeeds" here
+  }),
 };
 faMod.loaded = true;
 require.cache[faPath] = faMod;
@@ -125,30 +139,52 @@ async function setupUser(uid, phone) {
   check('admin debit beyond MAX_MONEY_AMOUNT rejected', r.code === 400, r.body);
 
   console.log('\n== Records/deposits/withdrawals: real DB-level ordering, not limit-then-JS-sort ==');
-  const ordUser = 'order-user';
-  await setupUser(ordUser, '0772600002');
-  // Seed 120 transactions with SCRAMBLED insertion vs. createdAt order --
-  // the old bug (limit-before-sort) could silently drop genuinely-recent
-  // rows for a high-volume user. 120 so it exceeds the /transactions
-  // GET route's own limit(100) if it were still limiting before sorting.
-  const N = 120;
-  const txIds = [];
-  for (let i = 0; i < N; i++) {
-    const id = nextId('ordtx');
-    // Insert in REVERSE chronological insertion order on purpose: the
-    // NEWEST record (i = N-1, so createdAt is latest) is added FIRST,
-    // so a naive "insertion order" read (no real orderBy) would put it
-    // at the wrong end and a limit(100)-then-sort could drop it.
-    const created = new Date(Date.now() - (N - 1 - i) * 1000);
-    transactions().set(id, { userId: ordUser, type: 'cashback', description: 'x', amount: 1, status: 'success', date: '01/01/2026', time: '00:00:00', createdAt: created });
-    txIds.push({ id, created });
+  // Codex-verified real test gap (2026-08-17): the original version of this
+  // check asserted `... || newest.description === 'x'`, and every seeded
+  // row shared that same description -- the ordering half of the OR could
+  // never actually fail, so this never proved anything about order. Each
+  // seeded row now carries a UNIQUE marker in its description (its
+  // insertion index) instead, so asserting on that marker is an exact,
+  // non-vacuous proof of which row genuinely landed first -- and all three
+  // endpoints (not just /transactions) are covered.
+  async function assertNewestFirst(kind, endpoint, coll, extraFields, tokenPrefix) {
+    const user = tokenPrefix + '-order-user';
+    // Seeded directly rather than via /account/create-profile + /register --
+    // /register's own welcome-bonus write adds an EXTRA transaction row
+    // outside this test's control, which would shift the expected marker
+    // positions below by one. Same "seed the doc shape directly" technique
+    // test-reconciler-caps.js already uses for this exact reason.
+    users().set(user, {
+      phone: '077260' + (tokenPrefix === 'tx' ? '0010' : tokenPrefix === 'dep' ? '0011' : '0012'),
+      walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
+      registrationDone: true, status: 'active', teamL1Count: 0, teamL2Count: 0, teamL3Count: 0,
+    });
+    const N = 120; // exceeds the route's own limit(100)
+    const ids = [];
+    for (let i = 0; i < N; i++) {
+      const id = nextId(tokenPrefix + 'ord');
+      // Insert in REVERSE chronological insertion order on purpose: the
+      // NEWEST record (i = N-1) is added FIRST, so a naive "insertion
+      // order" read (no real orderBy) would put it at the wrong end and a
+      // limit(100)-then-sort could drop it.
+      const created = new Date(Date.now() - (N - 1 - i) * 1000);
+      coll().set(id, Object.assign({ userId: user, createdAt: created, marker: 'M' + i }, extraFields(i)));
+      ids.push(id);
+    }
+    const r = await call('GET', endpoint, { token: 'uid:' + user });
+    const items = r.body[kind] || [];
+    check(endpoint + ' returns exactly 100 (capped, but the newest 100 -- none of the true newest dropped)', items.length === 100, items.length);
+    check(endpoint + " returns the GENUINELY newest row (marker 'M119') first -- exact match, not a vacuous OR",
+      items[0] && items[0].marker === 'M119', items[0]);
+    check(endpoint + " row 99 back is marker 'M20' (the 100th-newest), proving the whole window is correctly ordered, not just the first row",
+      items[99] && items[99].marker === 'M20', items[99]);
   }
-  const txR = await call('GET', '/transactions', { token: 'uid:' + ordUser });
-  const newest = txR.body.transactions[0];
-  const expectedNewestCreated = txIds[txIds.length - 1].created.getTime();
-  check('/transactions returns the GENUINELY most recent row first (real orderBy, not limit-then-sort)',
-    Math.abs(new Date(newest.createdAt).getTime() - expectedNewestCreated) < 2000 || newest.description === 'x', { got: newest });
-  check('/transactions returns exactly 100 (capped, but the newest 100 -- none of the true newest dropped)', txR.body.transactions.length === 100, txR.body.transactions.length);
+  await assertNewestFirst('transactions', '/transactions', transactions,
+    i => ({ type: 'cashback', description: 'x', amount: 1, status: 'success', date: '01/01/2026', time: '00:00:00' }), 'tx');
+  await assertNewestFirst('deposits', '/deposits', pendingDeposits,
+    i => ({ amount: 1000, status: 'matched', date: '01/01/2026', time: '00:00:00' }), 'dep');
+  await assertNewestFirst('withdrawals', '/withdrawals', () => collMap('withdrawals'),
+    i => ({ amount: 20000, net: 17000, status: 'processed', date: '01/01/2026', time: '00:00:00' }), 'wit');
 
   console.log('\n== Recount: admin_credit counted toward totalDeposited, not just real deposit ==');
   const recountUser = 'recount-user';
@@ -208,6 +244,34 @@ async function setupUser(uid, phone) {
   const orderedUuidsSeen = marzCallOrder.filter(u => u.startsWith('ORD-UUID-'));
   check('oldest pending deposit (ORD-UUID-2) checked before the newer ones', orderedUuidsSeen.indexOf('ORD-UUID-2') !== -1 && orderedUuidsSeen.indexOf('ORD-UUID-2') < orderedUuidsSeen.indexOf('ORD-UUID-0'), orderedUuidsSeen);
   check('all 3 seeded pending deposits were actually checked in this one sweep', orderedUuidsSeen.length === 3, orderedUuidsSeen);
+
+  console.log('\n== Product save: fractional price/expectedReturn can no longer round down to a free (UGX 0) product ==');
+  r = await call('POST', '/admin/products/save', { admin: true, body: { products: [{ key: 'zerocost', name: 'Zero Cost', price: 0.4, cycle: 1, expectedReturn: 1000 }] } });
+  check('price:0.4 (rounds to 0) rejected, not silently saved as a free product', r.code === 400, r.body);
+  r = await call('POST', '/admin/products/save', { admin: true, body: { products: [{ key: 'zeroret', name: 'Zero Return', price: 15000, cycle: 1, expectedReturn: 0.4 }] } });
+  check('expectedReturn:0.4 (rounds to 0) also rejected', r.code === 400, r.body);
+  const zeroCostSaved = [...collMap('products').values()].some(p => p.key === 'zerocost');
+  check('the rejected zero-cost product was never actually persisted', !zeroCostSaved, zeroCostSaved);
+
+  console.log('\n== Delete-user: team counts correctly recomputed for a multi-level chain, not just decremented by 1 ==');
+  // A -> B -> C -> D. Delete B. True post-delete tree is A -> C -> D, so A's
+  // counts should become L1=1 (C, was L2)/L2=1 (D, was L3)/L3=0 -- NOT the
+  // old buggy behavior of just decrementing A's L1Count by 1 and leaving
+  // L2/L3 untouched (which left A at L1=0/L2=1/L3=1, the exact wrong values
+  // Codex reproduced).
+  const A = 'chain-A', B = 'chain-B', C = 'chain-C', D = 'chain-D';
+  users().set(A, { phone: '0772610001', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, referredBy: null, registrationDone: true, status: 'active', teamL1Count: 1, teamL2Count: 1, teamL3Count: 1 });
+  users().set(B, { phone: '0772610002', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, referredBy: A, registrationDone: true, status: 'active', teamL1Count: 1, teamL2Count: 1, teamL3Count: 0 });
+  users().set(C, { phone: '0772610003', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, referredBy: B, registrationDone: true, status: 'active', teamL1Count: 1, teamL2Count: 0, teamL3Count: 0 });
+  users().set(D, { phone: '0772610004', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0, referredBy: C, registrationDone: true, status: 'active', teamL1Count: 0, teamL2Count: 0, teamL3Count: 0 });
+  const delR = await call('POST', '/admin/user/delete', { admin: true, body: { userId: B, confirm: 'DELETE' } });
+  check('delete succeeds', delR.code === 200, delR.body);
+  const cAfter = users().get(C);
+  check('C reparented directly onto A (was B -> A, B deleted)', cAfter.referredBy === A, cAfter.referredBy);
+  const aAfter = users().get(A);
+  check('A.teamL1Count is now 1 (C, promoted from L2)', aAfter.teamL1Count === 1, aAfter.teamL1Count);
+  check('A.teamL2Count is now 1 (D, promoted from L3)', aAfter.teamL2Count === 1, aAfter.teamL2Count);
+  check('A.teamL3Count is now 0 (nothing left 3 hops down)', aAfter.teamL3Count === 0, aAfter.teamL3Count);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

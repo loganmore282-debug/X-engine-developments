@@ -99,6 +99,33 @@ global.fetch = async (url, opts) => {
     if (status === undefined) return { ok: false, status: 500, json: async () => ({ error: 'simulated failure' }) };
     return json({ status: 'success', data: { transaction: { status } } });
   }
+  // Codex-verified real gap (2026-08-17): _marzFetchTxStatus() (server.js)
+  // falls back to GET /transactions/{uuid} after 2 failed attempts against
+  // the primary endpoint -- exactly what the sendTxForUuid-undefined branch
+  // above simulates. Unmocked, that fallback fell through to the REAL
+  // `fetch`, so any scenario exercising it made a genuine network call to
+  // MarzPay's real API instead of staying fully offline/deterministic --
+  // fine when a real connection happens to be reachable and fast, but a
+  // real hang/timeout risk (and a non-deterministic result) in a sandboxed
+  // or offline test run. Mirrors whatever the primary endpoint mocks
+  // already know for this uuid, so behavior stays consistent with
+  // whichever scenario is running instead of introducing a third source
+  // of truth.
+  const txMatch = u.match(/\/transactions\/([^/?]+)/);
+  if (txMatch) {
+    const uuid = txMatch[1];
+    const sendStatus = sendTxForUuid[uuid];
+    const collectTx = collectTxForUuid[uuid];
+    if (sendStatus !== undefined) return json({ status: 'success', data: { transaction: { status: sendStatus } } });
+    if (collectTx) return json({ status: 'success', data: { transaction: { status: collectTx.status, reference: collectTx.reference } } });
+    // A uuid that's genuinely absent from both maps means THIS scenario is
+    // simulating total unavailability (see the sendTxForUuid-undefined
+    // branch above) -- a non-ok response here (not a well-formed "not
+    // found" JSON) is what actually reproduces that, matching
+    // _marzFetchTxStatus()'s own `if (resp.ok) {...} else {...}` branch in
+    // server.js and its final `return { status: '', reference: null }`.
+    return { ok: false, status: 404, json: async () => ({ error: 'transaction not found' }) };
+  }
   return realFetch(url, opts);
 };
 
