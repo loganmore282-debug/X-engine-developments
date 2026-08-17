@@ -14,6 +14,43 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — ChatGPT verified the withdrawal-records fix; found a real unguarded success/failure race plus a missing 4th resolution path
+
+Owner: "now let us also ask chatgpt." Sent the withdrawal-records-finalize
+diff for verification. Found 5 real issues, the most important being a
+genuine money-safety race, not just a cosmetic records gap:
+
+1. A fourth resolution path was missed: /admin/withdraw/reject (owner
+   force-decline) never finalized the Records row. Added the call.
+2. processWithdrawalCore's sandbox-success branch updated the transaction
+   status but never its description -- fixed by routing through the shared
+   finalize helper like every other path.
+3. The real bug: every FAILURE/refund path already used withLock('bal:'+
+   userId,...) + a status-checked transaction, but the SUCCESS paths
+   (webhook, poll, reconciler) each did a bare unconditional update with no
+   lock at all. Confirmed db.js's runTransaction has zero real isolation
+   (no session, no optimistic concurrency) -- withLock is the only actual
+   serialization in this codebase. A failure branch could correctly
+   decline-and-refund a withdrawal, and an unsynchronized success branch
+   resolving moments later could silently overwrite that back to
+   'processed' with no re-check. Fixed with a new markWithdrawalProcessed()
+   helper sharing the same lock key, only finalizing the Records row when
+   the transition is confirmed to have actually happened.
+4. finalizeWithdrawalTransactionRecord's .limit(1) only repaired one
+   matching row -- widened to repair every match (bounded) in case old
+   data ever left duplicates.
+5. Round 14's summary wording could be misread as claiming both deposit
+   AND withdrawal webhooks always require strict independent verification
+   -- true for deposits, deliberately not true for withdrawal success
+   (already-fixed prior incident). Added a precision note rather than
+   rewriting history.
+
+Verification: test-withdrawal-record-finalize.js expanded 17 -> 31 checks,
+including a genuine Promise.all concurrency test (poll success vs admin
+reject racing for the same withdrawal) proving the lock fix actually holds,
+and a real sandbox-approval run (the fetch mock now answers send-money with
+{status:'sandbox'} to drive the real code path). Full suite green, 64/64.
+
 ## 2026-08-17 — Claude — Direct review (no ChatGPT) of deposits/withdrawals/callbacks/records/status validation: found and fixed a real "stuck at processing forever" bug in 3 places
 
 Owner: "bro now check on deposits, withdrawals, callbacks speed, records

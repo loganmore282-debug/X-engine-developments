@@ -2563,15 +2563,60 @@ app.post('/withdraw/request', async (req, res) => {
 // movement, which has already happened by the time this runs.
 async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome) {
   try {
-    const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+    // ChatGPT review, round 2: `.limit(1)` only ever repaired ONE matching
+    // row. There's exactly one normal creation path (/withdraw/request,
+    // inside the same atomic write as the withdrawal itself) so duplicates
+    // shouldn't occur under current code -- but if past data/manual repair
+    // ever left more than one row sharing a withdrawalId, `.limit(1)` would
+    // update an arbitrary one and leave the rest permanently stale with no
+    // way to tell. Updating every match closes that instead of assuming it
+    // can't happen. A small bounded limit, not unbounded, since this is
+    // still meant to match a handful of rows at most.
+    const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(10).get();
     if (txSnap.empty) return;
-    const txDoc = txSnap.docs[0];
-    const oldDesc = txDoc.data().description || '';
-    const newDesc = outcome === 'processed'
-      ? oldDesc.replace(/, processing$/, '')
-      : oldDesc.replace(/, processing$/, ' — failed, refunded to wallet');
-    await txDoc.ref.update({ status: outcome === 'processed' ? 'success' : 'failed', description: newDesc });
+    const newStatus = outcome === 'processed' ? 'success' : 'failed';
+    await Promise.all(txSnap.docs.map(txDoc => {
+      const oldDesc = txDoc.data().description || '';
+      // If the description isn't shaped the way /withdraw/request always
+      // writes it (the only normal creation path), the regex intentionally
+      // doesn't guess at rewriting arbitrary text -- the status field alone
+      // (always updated) is still the source of truth either way.
+      const newDesc = outcome === 'processed'
+        ? oldDesc.replace(/, processing$/, '')
+        : oldDesc.replace(/, processing$/, ' — failed, refunded to wallet');
+      return txDoc.ref.update({ status: newStatus, description: newDesc });
+    }));
   } catch (e) { console.warn('finalizeWithdrawalTransactionRecord (non-critical):', e.message); }
+}
+// Guarded transition to 'processed' -- ChatGPT review, round 2, confirmed
+// real: every FAILURE/refund path in this file already goes through
+// withLock('bal:'+userId, ...) + a runTransaction that re-reads status and
+// only writes if it's still 'processing' (STATUS-BEFORE-REFUND, see those
+// comments) -- but the SUCCESS paths (webhook, client poll, reconciler)
+// each did a bare, unconditional `doc.ref.update({status:'processed'})`
+// with no lock and no re-check at all. db.runTransaction here is NOT a
+// real MongoDB transaction (see db.js -- no session, no optimistic
+// concurrency, just sequential get/update calls); withLock is the ONLY
+// actual serialization this codebase has. Without this success path
+// sharing that SAME 'bal:'+userId lock key, a genuine race was possible:
+// a failure branch could correctly decline-and-refund a withdrawal, and a
+// success branch resolving moments later (a different resolver's stale
+// read, or MarzPay itself reporting differently to two near-simultaneous
+// checks) could silently overwrite that back to 'processed' with no
+// re-verification -- a withdrawal shown processed while the wallet was
+// already refunded. Returns whether THIS call actually performed the
+// transition, so the caller only finalizes the Records row (below) when
+// the write is confirmed to have genuinely happened -- not just attempted
+// and silently swallowed on failure.
+async function markWithdrawalProcessed(witRef, userId) {
+  let didTransition = false;
+  await withLock('bal:' + userId, () => db.runTransaction(async t => {
+    const fresh = await t.get(witRef);
+    if (!fresh.exists || fresh.data().status !== 'processing') return;
+    t.update(witRef, { status: 'processed', processedAt: FieldValue.serverTimestamp() });
+    didTransition = true;
+  }));
+  return didTransition;
 }
 // Admin manually approves & sends a pending cash-out via MarzPay. This is the
 // gate the owner wants: no withdrawal reaches the gateway until an admin
@@ -2670,10 +2715,19 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
     } catch (twErr) {
       console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent -- user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
     }
-    try {
-      const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
-      if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: sandbox ? 'success' : 'processing' });
-    } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+    // ChatGPT review, round 2, confirmed real: the sandbox branch used to
+    // set the transaction's status straight to 'success' here but never
+    // touched its description, leaving "...processing" in the text even
+    // though the status field said otherwise -- internally inconsistent.
+    // Routed through the same finalize helper as every other real
+    // resolution path so sandbox mode is held to the same standard.
+    if (sandbox) await finalizeWithdrawalTransactionRecord(withdrawalId, 'processed');
+    else {
+      try {
+        const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+        if (!txSnap.empty) await txSnap.docs[0].ref.update({ status: 'processing' });
+      } catch (txErr) { console.warn('Process tx update (non-critical):', txErr.message); }
+    }
     const dest = isBank ? `${wit.bankName} · ${wit.accountName}` : wit.phone;
     return {
       code: 200,
@@ -2766,9 +2820,16 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
 
     const marzStatus = isBank ? await marzGetBankTransferStatus(gatewayRef) : await marzGetSendStatus(gatewayRef);
     if (SUCCESS_STATUSES.has(marzStatus)) {
-      await witSnap.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
-      await finalizeWithdrawalTransactionRecord(witSnap.id, 'processed');
-      return res.json({ status: 'success', state: 'processed' });
+      if (await markWithdrawalProcessed(witSnap.ref, userId)) {
+        await finalizeWithdrawalTransactionRecord(witSnap.id, 'processed');
+        return res.json({ status: 'success', state: 'processed' });
+      }
+      // Didn't actually transition -- another path (webhook/reconciler)
+      // already resolved this withdrawal first, possibly to 'declined'.
+      // Report the REAL current state rather than blindly claiming
+      // 'processed' when this call's own attempt was a no-op.
+      const nowSnap = await witSnap.ref.get();
+      return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
     }
     if (FAILED_STATUSES.has(marzStatus)) {
       // Refund on confirmed failure — same lock key as the debit above.
@@ -2863,8 +2924,7 @@ app.post('/withdraw/callback', async (req, res) => {
         if (liveStatus && !SUCCESS_STATUSES.has(liveStatus)) return; // explicit contradiction from a WORKING check — do not trust the webhook
       }
       if (webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
-      await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
-      await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+      if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
     } else if (isFailed) {
       let uuid = wit.marzTxUuid;
       let tx = null;
@@ -4312,6 +4372,7 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     if (w.status !== 'pending' && w.status !== 'processing')
       return res.status(400).json({ status: 'error', message: `Only a pending or still-processing withdrawal can be declined (this one is '${w.status}')` });
     const wasProcessing = w.status === 'processing';
+    let didTransition = false;
     await withLock('bal:' + w.userId, () => db.runTransaction(async t => {
       const fresh = await t.get(ref);
       if (fresh.data().status !== w.status) return;
@@ -4329,7 +4390,13 @@ app.post('/admin/withdraw/reject', async (req, res) => {
         declinedBy: req.adminUser?.username || 'owner-key', declinedAt: FieldValue.serverTimestamp()
       });
       t.update(uRef, refund);
+      didTransition = true;
     }));
+    // ChatGPT review, round 2, confirmed real: this was a fourth real path
+    // a withdrawal can resolve through -- an owner force-declining it --
+    // that never finalized the matching Records row either, same gap as
+    // the webhook/poll/reconciler paths.
+    if (didTransition) await finalizeWithdrawalTransactionRecord(witId, 'declined');
     logAdminAction(req, 'withdraw_force_declined', { withdrawalId: witId, reason: req.body.reason });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -4843,8 +4910,7 @@ async function reconcilePendingWithdrawals() {
       if (!gatewayRef) continue;
       const marzStatus = isBank ? await marzGetBankTransferStatus(gatewayRef) : await marzGetSendStatus(gatewayRef);
       if (SUCCESS_STATUSES.has(marzStatus)) {
-        await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
-        await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
+        if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
         settled++;
       } else if (FAILED_STATUSES.has(marzStatus)) {
         await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {

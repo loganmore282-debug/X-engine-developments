@@ -1641,6 +1641,20 @@ end — that's already the fastest a webhook ack can be. `SUCCESS_STATUSES`/
 `FAILED_STATUSES` are strict allowlisted `Set`s checked with `.has()`,
 never loose string matching, and an unrecognized status is correctly
 treated as "still unresolved," never silently assumed either way.
+**Precision note (ChatGPT review, round 2):** the "always independently
+re-verifies" claim above is exact for deposits — `/deposit/callback`'s
+success path genuinely returns without crediting if the live check fails
+or disagrees. `/withdraw/callback`'s success path is deliberately
+different: the live re-check is attempted best-effort but a failed/empty
+check does NOT block the webhook from being trusted (see that code's own
+comment — this was a previous fix, after a real production incident where
+a genuinely-completed payout got stuck forever because a working webhook
+kept losing to a flaky check). Both are correct for their own money-safety
+direction — crediting is the risky direction to get wrong for deposits,
+so it's gated strictly; refunding is the risky direction for withdrawals,
+so THAT path (the failure branch) is the one gated strictly, not success —
+but they are not the same guarantee, and this file's earlier wording
+grouped them together loosely enough to misread as identical.
 
 **Records writing: found a real bug, confirmed by reading the code, fixed
 in all three places it existed.** A withdrawal's matching `transactions`
@@ -1687,6 +1701,86 @@ nothing ever revisited it.
   record is correctly finalized every time, not just the `withdrawals`
   collection. Full `test-*.js` suite green, 64/64 (63 existing + the new
   file). Server-only change, no rebuild needed.
+
+## Round 15 of the same day, 2026-08-17 — asked ChatGPT to verify Round 14's withdrawal-records fix; found a genuine unguarded success/failure race plus a missing 4th resolution path, both fixed
+
+Owner: *"now let us also ask chatgpt."* Sent ChatGPT the Round 14 diff and
+asked it to verify `finalizeWithdrawalTransactionRecord` and its call
+sites against the real code. It found five real issues; all verified
+against the code before touching anything, same discipline as every prior
+round. The most significant one (item 3 below) was a genuine, previously
+unnoticed money-safety race, not just a records-writing cosmetic gap.
+
+1. **A fourth real resolution path was missed entirely.** `/admin/withdraw
+   /reject` (the owner manually force-declining a pending or still-
+   processing withdrawal) correctly refunded the wallet but never called
+   `finalizeWithdrawalTransactionRecord` — same gap as the three paths
+   Round 14 already fixed. Added the call, gated on the transaction inside
+   `withLock('bal:'+userId,...)` actually having performed the decline
+   (tracked via a `didTransition` flag), so it's never called on a no-op.
+2. **The sandbox-immediate-success branch in `processWithdrawalCore`
+   updated the transaction's `status` to `'success'` but never touched its
+   `description`**, leaving the literal word "processing" in the text
+   despite the status field disagreeing — internally inconsistent. Routed
+   through the same `finalizeWithdrawalTransactionRecord` helper as every
+   other path instead of its own inline partial update.
+3. **The real bug: every success-branch write was completely unguarded,
+   unlike its failure-branch counterpart.** Every FAILURE/refund path in
+   `server.js` already goes through `withLock('bal:'+userId, ...)` + a
+   `runTransaction` that re-reads status and only writes if it's still
+   `'processing'` (the established STATUS-BEFORE-REFUND pattern) — but the
+   three SUCCESS paths (webhook, client poll, reconciler) each did a bare,
+   unconditional `doc.ref.update({status:'processed'})` with no lock and no
+   re-check at all. Confirmed by reading `db.js`: `runTransaction` here is
+   NOT a real MongoDB transaction — no session, no optimistic concurrency,
+   just sequential `get`/`update` calls inside one function; `withLock` is
+   the ONLY actual serialization this codebase has. Without the success
+   path sharing that same lock key, a real race existed: a failure branch
+   could correctly decline-and-refund a withdrawal, and a success branch
+   resolving via a different, unsynchronized path moments later could
+   silently overwrite that back to `'processed'` with zero re-verification
+   — a withdrawal shown processed while the wallet had already been
+   refunded, or vice versa. Fixed with a new shared `markWithdrawalProcessed
+   (witRef, userId)` helper using the identical `'bal:'+userId` lock key
+   and status-checked-transaction shape the failure paths already use,
+   returning whether THIS call actually performed the transition. All
+   three success call sites now only finalize the Records row when that's
+   confirmed `true` — closing a related gap in the same motion, where a
+   silently-swallowed withdrawal-status write failure used to still
+   finalize the Records row as successful regardless of whether the real
+   write ever landed. The poll endpoint (`/withdraw/marzpay/status`) also
+   no longer blindly reports `state: 'processed'` when its own attempt
+   turns out to be a no-op — it re-reads and reports the real current
+   state instead.
+4. **`finalizeWithdrawalTransactionRecord`'s `.limit(1)` only ever repaired
+   one matching transaction row.** There's exactly one normal creation path
+   (`/withdraw/request`, inside the same atomic write as the withdrawal
+   itself) so duplicates shouldn't occur under current code — but widened
+   to repair every matching row (bounded at 10, not unbounded) rather than
+   assume that can never happen, in case old data or a past bug ever left
+   more than one.
+5. **Documentation precision**: Round 14's summary paragraph, read
+   casually, could be misread as claiming BOTH deposit and withdrawal
+   webhooks always require independent live re-verification before
+   trusting a success claim. That's exactly true for deposits; withdrawal
+   success is deliberately best-effort-checked (a previous, already-fixed
+   incident: a flaky live check used to block a genuinely-completed payout
+   forever). Added a precision note to the Round 14 entry above rather than
+   rewriting history — the underlying code behavior was always correct and
+   already explained in its own comments, only this summary's wording was
+   loose enough to overstate it.
+- **Verification**: `test-withdrawal-record-finalize.js` expanded from 17
+  to 31 checks — added the missing `/admin/withdraw/reject` path, a real
+  sandbox-approval run through `/admin/withdraw/process` (the fetch mock
+  now answers `POST .../send-money` with `{status:'sandbox'}`, driving the
+  actual code path instead of hand-simulating it), a genuine concurrency
+  test firing the poll endpoint and `/admin/withdraw/reject` for the SAME
+  withdrawal via `Promise.all` (not a sequential loop — real interleaving)
+  and confirming the withdrawal, wallet balance, and Records row all agree
+  on exactly one consistent outcome no matter which path wins the lock, and
+  a multi-row repair check (two transaction docs sharing one `withdrawalId`,
+  both correctly updated). Full `test-*.js` suite green, 64/64. Server-only
+  changes, no rebuild needed.
 
 ## Repo / branch / infra
 
