@@ -1206,6 +1206,22 @@ created accounts,and notifications."*
   rebuilt output and the green test suite (`test-payoutbug.js` and the
   broader suite already exercise the withdrawal-account flow this round
   changed).
+- **Same-day follow-up: announcement dialog re-opened from center, not the
+  bottom.** Owner: *"bro the dialog message should be opened from middle
+  not down, we'll framed and architectured."* The first cut above opened as
+  a bottom sheet (`align-items:flex-end`, corners rounded only on top,
+  slide-up translateY animation) — changed to a proper centered modal:
+  `.announce-bg` now uses `align-items:center` with side padding,
+  `.announce-sheet` is a `max-width:360px` floating card with all four
+  corners rounded (`24px`), a real drop shadow + 1px light border for
+  definition, a `.announce-accent` 4px `var(--blue)` stripe across the top
+  for brand framing, and a scale+fade entrance (`scale(.92)→scale(1)`)
+  instead of the slide-up. Title stays centered, body text left-aligned for
+  readability, action row stretches full width. Rebuilt `user/`, bumped
+  `user/sw.js` cache `v238`→`v239`, full `test-*.js` suite still green
+  (62/62, pure CSS/markup change), Playwright re-ran all 6 announcement
+  cases against the rebuilt artifact — same pass/fail results, screenshots
+  confirm the dialog now floats centered over a dimmed backdrop.
 
 ## Repo / branch / infra
 

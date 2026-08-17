@@ -165,16 +165,17 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .success-popup .ico svg{ width:40px; height:40px; stroke:#fff; }
 .success-popup .msg{ font-size:16px; font-weight:700; color:var(--ink); text-align:center; }
 
-.announce-bg{ position:fixed; inset:0; z-index:260; background:rgba(10,18,32,.55); display:none; align-items:flex-end; justify-content:center; opacity:0; transition:opacity .2s ease; }
+.announce-bg{ position:fixed; inset:0; z-index:260; background:rgba(10,18,32,.6); display:none; align-items:center; justify-content:center; opacity:0; transition:opacity .2s ease; padding:26px; }
 .announce-bg.show{ display:flex; opacity:1; }
-.announce-sheet{ position:relative; overflow:hidden; width:100%; max-width:480px; background:#0d1b2a; border-radius:var(--radius-sheet) var(--radius-sheet) 0 0; transform:translateY(28px); transition:transform .26s cubic-bezier(.2,.9,.3,1); }
-.announce-bg.show .announce-sheet{ transform:translateY(0); }
+.announce-sheet{ position:relative; overflow:hidden; width:100%; max-width:360px; background:#0d1b2a; border-radius:24px; box-shadow:0 24px 60px -14px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08); transform:scale(.92) translateY(10px); transition:transform .26s cubic-bezier(.2,.9,.3,1); }
+.announce-bg.show .announce-sheet{ transform:scale(1) translateY(0); }
 .announce-sheet::before{ content:''; position:absolute; inset:-24px; background-image:var(--ann-bg-url, none); background-size:cover; background-position:center; filter:blur(var(--ann-bg-blur, 6px)); transform:scale(1.08); z-index:0; }
 .announce-sheet::after{ content:''; position:absolute; inset:0; background:rgba(10,18,32, var(--ann-bg-tint, .55)); z-index:0; }
-.announce-body{ position:relative; z-index:1; padding:26px 22px calc(22px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:12px; }
+.announce-accent{ position:relative; z-index:1; height:4px; background:var(--blue); }
+.announce-body{ position:relative; z-index:1; padding:26px 24px 24px; display:flex; flex-direction:column; gap:12px; text-align:center; align-items:center; }
 .announce-title{ font-weight:700; font-size:19px; color:#fff; letter-spacing:-.01em; }
-.announce-text{ font-size:14px; color:rgba(255,255,255,.86); line-height:1.55; white-space:pre-wrap; max-height:38vh; overflow-y:auto; }
-.announce-actions{ display:flex; gap:10px; margin-top:6px; }
+.announce-text{ font-size:14px; color:rgba(255,255,255,.86); line-height:1.55; white-space:pre-wrap; max-height:34vh; overflow-y:auto; text-align:left; align-self:stretch; }
+.announce-actions{ display:flex; gap:10px; margin-top:8px; width:100%; }
 .pillbtn{ flex:1; text-align:center; font-weight:700; font-size:13.5px; padding:13px; border-radius:999px; cursor:pointer; border:none; display:flex; align-items:center; justify-content:center; gap:7px; }
 .pillbtn-primary{ background:var(--blue); color:#fff; box-shadow:0 8px 18px -6px var(--blue-glow); }
 .pillbtn-ghost{ background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.32); }
@@ -522,7 +523,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 
 <div class="toast-bg" id="toastBg"><div class="toast" id="toast"></div></div>
 <div class="success-popup-bg" id="successPopupBg"><div class="success-popup"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div><div class="msg" id="successPopupMsg"></div></div></div>
-<div class="announce-bg" id="announceBg"><div class="announce-sheet" id="announceSheet"><div class="announce-body">
+<div class="announce-bg" id="announceBg"><div class="announce-sheet" id="announceSheet"><div class="announce-accent"></div><div class="announce-body">
   <div class="announce-title" id="announceTitle"></div>
   <div class="announce-text" id="announceText"></div>
   <div class="announce-actions">

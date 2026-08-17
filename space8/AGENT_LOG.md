@@ -14,6 +14,29 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Announcement dialog re-opened centered instead of as a bottom sheet
+
+Owner, right after the dialog shipped: *"bro the dialog message should be
+opened from middle not down, we'll framed and architectured."*
+
+- The dialog (see previous entry) originally opened as a bottom sheet:
+  `align-items:flex-end`, corners rounded only on top, slide-up-from-bottom
+  animation. Changed `user-src/index.html` to a true centered modal:
+  `.announce-bg` now uses `align-items:center` with side padding so it sits
+  in the middle of the screen; `.announce-sheet` became a `max-width:360px`
+  floating card with all four corners rounded, a real drop shadow plus a
+  faint 1px light border for definition, a 4px `var(--blue)` accent stripe
+  across the top, and a scale+fade entrance instead of translateY.
+- Title stays centered, body text switched to left-aligned (more readable
+  for multi-line paragraphs than a centered block), action row stretches
+  full width.
+- Rebuilt `user/`, bumped `user/sw.js` cache `v238`→`v239`. Full
+  `test-*.js` suite still green (62/62 — pure CSS/markup change, no
+  server-side impact). Re-ran the same 6 Playwright scenarios against the
+  rebuilt artifact (open, Telegram tap, repeat open + Cancel, disabled
+  state, no-telegram-links, no-background-image) — same results, new
+  screenshots confirm it now floats centered over the dimmed Home page.
+
 ## 2026-08-17 — Claude — 6-item owner batch: Records check, Coming Soon relabel, forced payout-account tap-select, dead Home-banner removal, real announcement dialog built, notification-send admin UI added
 
 Owner's message covered six separate asks in one breath (deposits in
