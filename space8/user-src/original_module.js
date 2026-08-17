@@ -283,12 +283,32 @@ function showAuthErr(id, msg){
   el.style.display = msg ? 'block' : 'none';
 }
 
-// Referral links are shareable as /register/ref=CODE. When the host is
-// configured to serve the app shell for that path, prefill the optional
-// field without trusting it; the server still validates the code on submit.
-var _refPath = location.pathname.match(/^\/register\/ref=([^/]+)$/);
-if (_refPath && $('regReferral')) {
-  try { $('regReferral').value = decodeURIComponent(_refPath[1]).slice(0, 32); } catch (_) {}
+// Referral links are shareable as /?ref=CODE -- the bare root path always
+// resolves with no extra server config (every static host, including the
+// current Render deploy, serves index.html for '/' out of the box), unlike
+// the old /register/ref=CODE PATH form, which depended on the host
+// rewriting every unmatched path to index.html -- a config that turned out
+// to NOT actually be active on the live deploy (confirmed live: sharing
+// that link 404'd with Render's own bare "Not Found" page, not this app's
+// UI, meaning this script never even got a chance to run). Query-string
+// form sidesteps that dependency entirely. The old path form is still
+// parsed too, as a fallback, in case an already-shared /register/ref=CODE
+// link is out there or the host rewrite gets fixed later.
+var _refCode = null;
+try { _refCode = new URLSearchParams(location.search).get('ref') || null; } catch (_) {}
+if (!_refCode) {
+  var _refPath = location.pathname.match(/^\/register\/ref=([^/]+)$/);
+  if (_refPath) { try { _refCode = decodeURIComponent(_refPath[1]); } catch (_) {} }
+}
+if (_refCode && $('regReferral')) {
+  $('regReferral').value = _refCode.slice(0, 32);
+  // Owner: "I expect it to open the site and fill in the code automatically
+  // on registration screen" -- the field was being prefilled, but the
+  // screen underneath it was still whichever one is shown by default
+  // (Login), so a first-time visitor following a referral link never
+  // actually SAW the filled-in code without manually tapping over to
+  // Register first.
+  showRegisterScreen();
 }
 
 // True for the whole span between fbCreateUser() succeeding and /register
@@ -1162,7 +1182,11 @@ function menuRow(icon, label, key){
   return '<div class="menu-row" data-key="' + key + '">' + ico(icon) + '<span>' + esc(label) + '</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>';
 }
 function referralLink(code){
-  return location.origin + '/register/ref=' + encodeURIComponent(String(code || ''));
+  // Query-string form, not a path -- see the _refCode parsing comment near
+  // the top of this file for why: the bare root path always resolves with
+  // no server-side rewrite config, a path like the old /register/ref=CODE
+  // form does not.
+  return location.origin + '/?ref=' + encodeURIComponent(String(code || ''));
 }
 function shareReferral(code){
   var link = referralLink(code);
@@ -1717,7 +1741,14 @@ window.addEventListener('space8-auth', async function(e){
     enterApp();
   } else {
     $('app').style.display = 'none';
-    showLoginScreen();
+    // A pending referral code (from _refCode's top-level parse) means this
+    // load is a fresh visitor following a shared link -- without this
+    // check, showLoginScreen() below would unconditionally win the race
+    // against that earlier showRegisterScreen() call (Firebase's own auth
+    // check is async and always resolves after the synchronous top-level
+    // parse), landing the visitor back on Login with their referral code
+    // silently sitting filled-in on a screen they can't see.
+    if (_refCode) showRegisterScreen(); else showLoginScreen();
     stopLiveRefresh();
     resetUserState();
   }

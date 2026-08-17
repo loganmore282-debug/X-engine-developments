@@ -14,6 +14,54 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Fixed the referral-link "Not Found" in code (query-string link, no Render config dependency) + auto-switch to Register screen
+
+- **What changed**: `user-src/original_module.js` — `referralLink()` now
+  generates `origin + '/?ref=' + code` (was `/register/ref=CODE`, a path);
+  the boot-time ref-code parse now reads `location.search`'s `ref` param
+  first, falling back to the old path-regex for already-shared old-format
+  links; the `space8-auth` listener's signed-out branch now calls
+  `showRegisterScreen()` instead of `showLoginScreen()` when a referral
+  code is pending. Rebuilt `user/index.html`, bumped `sw.js` cache `v245`
+  → `v246`.
+- **Why**: Owner sent screenshots proving the bare root URL loads fine but
+  the shared referral link still 404s, and suggested just changing the
+  link format. That instinct was right, just aimed at the wrong specific
+  format (`/ref=CODE` is still a non-root path, would 404 identically) —
+  the actual fix is root-path + query-string, which needs ZERO
+  server-side rewrite config on any static host (a bare `/` always serves
+  `index.html`), unlike any path-based link. This makes the Render
+  dashboard gap flagged in the last two rounds no longer a blocker for
+  referral links specifically.
+- **A real second bug found in the same flow**: the referral code was
+  already being prefilled into the Register form's field, but nothing
+  ever switched the VISIBLE screen to Register — landed on default Login
+  with the code silently sitting filled-in on the hidden screen
+  underneath. Fixing this took two changes, not one: a naive top-level
+  `showRegisterScreen()` call would have been silently overridden a
+  moment later anyway, because the `space8-auth` listener's signed-out
+  branch unconditionally calls `showLoginScreen()` once Firebase's own
+  (async) auth check resolves, which always runs after the synchronous
+  top-level parse and wins the race. Made that branch referral-code-aware
+  too.
+- **Verification**: standalone Node script exercising the new parsing
+  logic directly (root+query works, old-path fallback still works, a
+  coexisting UTM-style query param doesn't interfere, no-ref case stays
+  null) — all correct. `node build-core.js` round-trip OK. Full
+  `test-*.js` suite green, 66/66 (server.js untouched — this is
+  client-side routing logic with no server test harness coverage).
+- **Left open**: the underlying Render dashboard rewrite-config gap
+  (Rounds 16/19) is no longer a blocker for referral links, but is still
+  worth fixing properly at some point for SPA deep-linking in general —
+  downgraded from "blocking" to "nice to have," not removed from the list.
+- **Owner also asked about a second, separate issue** — "some numbers...
+  sign in very well but their data cannot be loaded at all" — not enough
+  detail in what was shared to diagnose (the attached screenshots showed a
+  normal, working login → home → account flow on a fresh/empty account,
+  not an obviously broken state). Asked the owner for specifics (which
+  phone numbers, or a screenshot of the actual stuck/broken state) rather
+  than guessing at a fix. Not yet resolved.
+
 ## 2026-08-17 — Claude — Added space8-ex.com to the domain lock; re-confirmed referral-link 404 is a Render dashboard gap
 
 - **What changed**: `guard-src.js`'s `hostOk()` allowlist gained

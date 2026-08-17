@@ -2102,6 +2102,56 @@ page, and asked to add `space8-ex.com` to "script guard or arc guard."
   via a standalone Node check of the exact `hostOk()` logic instead, since
   it's plain client-side JS with no existing harness coverage).
 
+## Round 20 of the same day, 2026-08-17 — actually fixed the referral-link "Not Found" in code (query-string link, no Render config needed) + auto-switch to Register screen
+
+Owner sent fresh screenshots proving the bare root URL loads the app fine
+(login, home, account all render normally at `space8-app.onrender.com/`)
+but the shared referral link
+(`https://space8-app.onrender.com/register/ref=87A79Q`) still 404s, and
+asked to just change the link format instead of chasing the Render
+dashboard fix again. That request was the right instinct, applied to the
+right target: **root-path + query-string sidesteps the whole problem
+without needing ANY server-side rewrite config at all** — a bare `/`
+always serves `index.html` on every static host with zero setup (that's
+just how static hosting works), unlike a deeper path like
+`/register/ref=CODE` or the owner's own first suggestion of `/ref=CODE`
+(still a non-root, non-existent path — would 404 for the exact same
+reason).
+
+1. **`referralLink()`** (`user-src/original_module.js`) now generates
+   `origin + '/?ref=' + code` instead of `origin + '/register/ref=' +
+   code`.
+2. **Boot-time ref-code parsing** now reads `location.search`'s `ref`
+   param first (works with zero server config), falling back to the old
+   `/register/ref=CODE` path-regex if present (in case an already-shared
+   old-format link is out there, or the Render rewrite ever does get
+   fixed) — `_refCode` holds whichever one matched.
+3. **Real second bug found and fixed in the same flow**: the code was
+   already prefilling the referral field (`$('regReferral').value =
+   ...`), but nothing ever switched the visible screen to Register — a
+   first-time visitor following a referral link landed on the default
+   Login screen with their code silently sitting filled-in on the HIDDEN
+   Register screen underneath, unless they happened to manually tap over.
+   Worse: even adding a bare `showRegisterScreen()` call at the top-level
+   parse point wouldn't have been enough on its own — the `space8-auth`
+   listener's signed-out branch unconditionally calls `showLoginScreen()`
+   once Firebase's (async) auth check resolves, which always runs AFTER
+   the synchronous top-level parse and would silently win the race,
+   stomping the Register screen back to Login. Fixed by making that
+   branch check `_refCode` and call `showRegisterScreen()` instead when
+   one is pending.
+- **Verification**: standalone Node check of the exact new parsing logic
+  (root+query, old-path fallback, query params coexisting like a UTM tag,
+  no-ref case) — all correct. `node build-core.js` round-trip OK;
+  `user/sw.js` cache bumped `v245` → `v246`. Full `test-*.js` suite green,
+  66/66 (server.js untouched, this is entirely client-side routing logic
+  with no existing harness coverage for it, same as the domain-guard round).
+- **The Render dashboard rewrite gap documented in Rounds 16/19 is now
+  moot for referral links specifically** (they no longer depend on it),
+  but SPA deep-linking in general still would benefit from it being fixed
+  properly at some point — not urgent anymore, downgraded from "blocking"
+  to "nice to have."
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's
