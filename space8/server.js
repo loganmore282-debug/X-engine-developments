@@ -77,6 +77,19 @@ const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeade
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
 app.use('/admin/check-key', adminLoginLimiter);
+// ChatGPT review raised /admin/login having no dedicated rate limiter
+// (only the broad 200/min '/admin/' one) -- tried attaching the same
+// adminLoginLimiter used on check-key, but that limiter has no keyGenerator
+// so it keys by IP alone, and /admin/login (unlike check-key, which is the
+// OWNER's single master key) serves MULTIPLE distinct staff accounts that
+// legitimately share an office/VPN IP. test-security-hardening.js's own
+// "a different, never-attacked username logs in normally at the same time"
+// case proved it: 9 real /admin/login calls across a few different accounts
+// in one test run is completely normal multi-staff usage, and an 8/min
+// per-IP cap blocked the 9th outright. The per-username 5-attempt/15-minute
+// lockout (_loginFails, already in place and covered by that same test) is
+// the correct defense for this route's actual threat model -- reverted the
+// IP-keyed limiter here rather than force a fix that breaks legitimate use.
 app.use('/admin/', adminLimiter);
 // If a Bearer token is a valid admin session, attach req.adminUser so
 // verifyAdmin()/verifyOwner() below can recognise it. A raw master-key
@@ -413,13 +426,35 @@ function randCode(n = 6) {
 // checked against every existing user's referralCode for global uniqueness,
 // then written onto that user's own doc only — one code is permanently
 // bound to exactly one account uid.
+//
+// ChatGPT review, confirmed real, two bugs fixed:
+// 1. The check-then-return here had no lock, so two registrations landing
+//    at the same moment could both see the same candidate code as unused
+//    and both go write it -- classic check-then-act race. Wrapped in the
+//    same withLock() idiom already used for the publicId counter just
+//    below; process-local is the same guarantee this codebase already
+//    accepts there, and this app runs as a single Node process.
+// 2. After 20 collisions the OLD code returned randCode(8) with NO
+//    uniqueness check at all -- an unchecked return, not just a
+//    low-probability one. Now keeps checking with the wider 8-char
+//    alphabet (32^8 ≈ 1.1 trillion combinations) instead of ever handing
+//    back an unverified code.
 async function generateUniqueReferralCode() {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const code = randCode(6);
-    const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
-    if (exists.empty) return code;
-  }
-  return randCode(8);
+  return withLock('referral-code-gen', async () => {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const code = randCode(6);
+      const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+      if (exists.empty) return code;
+    }
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const code = randCode(8);
+      const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+      if (exists.empty) return code;
+    }
+    // Not realistically reachable (40 total collisions across two
+    // alphabets), but never return an unverified code even here.
+    throw new Error('Could not generate a unique referral code');
+  });
 }
 // Every member's permanent, server-issued, globally-unique account number --
 // shown on the Account screen as "ID:000000". SEQUENTIAL now (owner:
@@ -590,6 +625,36 @@ async function verifyAuth(req) {
     return decoded.uid;
   } catch (_) { return null; }
 }
+// ChatGPT review, confirmed real: /account/create-profile and /register
+// both used to trust req.body.phone verbatim for the profile's `phone`
+// field, with nothing tying it back to the Firebase account that actually
+// authenticated the request. Since login/signup email is a synthetic
+// phoneToEmail(phone) (client-side), the local part of the VERIFIED
+// Firebase token's own email IS that account's real phone -- deriving from
+// it instead of trusting the request body means an authenticated caller
+// can no longer label their own profile with an arbitrary phone number
+// that has nothing to do with the account they actually signed up with.
+// This does NOT by itself prove real-world phone ownership (that needs
+// SMS/Phone-Auth OTP verification, a separate, larger feature this app
+// doesn't have) -- it only closes the gap where the verified identity and
+// the stored `phone` field could silently disagree.
+async function verifyAuthWithEmail(req) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return null;
+  try {
+    const decoded = await admin.auth().verifyIdToken(header.slice(7));
+    return { uid: decoded.uid, email: decoded.email || '' };
+  } catch (_) { return null; }
+}
+// Prefers the phone derivable from the caller's OWN verified Firebase email
+// (see verifyAuthWithEmail's comment) over the client-supplied body value;
+// falls back to the body only when that derivation doesn't yield a valid
+// Uganda mobile number (e.g. an old/irregular account), matching the exact
+// fallback shape both call sites already had.
+function phoneFromVerifiedEmail(email, bodyPhone) {
+  const local = String(email || '').split('@')[0];
+  return cleanPhone(local) || cleanPhone(bodyPhone || '') || String(bodyPhone || '').trim();
+}
 function safeEqual(a, b) {
   const bufA = Buffer.from(String(a || ''));
   const bufB = Buffer.from(String(b || ''));
@@ -636,6 +701,11 @@ function scryptVerify(password, stored) {
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
 }
+// Used by /admin/login to run scryptVerify against SOMETHING even when the
+// username doesn't exist, so that path costs the same as a real wrong-
+// password attempt instead of returning near-instantly -- see the comment
+// at that route.
+const DUMMY_PASSWORD_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
 // Per-username lockout — independent of the IP-based rate limiter, so
 // spraying attempts at one username from many different IPs still gets
 // locked out instead of slipping under the per-IP ceiling.
@@ -1602,16 +1672,15 @@ function defaultProfileDoc(phone) {
   };
 }
 app.post('/account/create-profile', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  // Not rejecting here on purpose -- this phone already succeeded as this
-  // user's Firebase login identity client-side before this call ever
-  // happens, so it's not the money-moving path cleanPhone()'s new strict
-  // rejection is meant to guard (payout binding/withdrawal, below). Falls
-  // back to the raw trimmed input rather than storing null so a profile
-  // phone that doesn't reduce to a clean UG mobile number is stored as-is,
-  // exactly like it always was, instead of becoming null.
-  const phone = cleanPhone(req.body.phone || '') || String(req.body.phone || '').trim();
+  const auth = await verifyAuthWithEmail(req);
+  if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = auth.uid;
+  // Derived from the caller's OWN verified Firebase email first (see
+  // phoneFromVerifiedEmail's comment) rather than trusting req.body.phone
+  // outright -- not rejecting an off-shape fallback here on purpose, same
+  // as before, so a profile phone that doesn't reduce to a clean UG mobile
+  // number is stored as-is instead of becoming null.
+  const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
   try {
     const ref = db.collection('users').doc(userId);
     const snap = await ref.get();
@@ -1657,6 +1726,12 @@ async function completeRegistrationCore(userId, referralCode) {
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } };
       if (refSnap.docs[0].id === userId)
         return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'You cannot use your own referral code.' } };
+      // ChatGPT review, confirmed real: a banned account's referral code
+      // still worked here -- team counts would still increment toward a
+      // banned referrer even though commission-crediting elsewhere already
+      // skips banned referrers, leaving referral attribution inconsistent.
+      if (refSnap.docs[0].data().status === 'banned')
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } };
       referrerId = refSnap.docs[0].id;
     }
 
@@ -1701,8 +1776,9 @@ async function completeRegistrationCore(userId, referralCode) {
   });
 }
 app.post('/register', async (req, res) => {
-  const userId = await verifyAuth(req);
-  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const auth = await verifyAuthWithEmail(req);
+  if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = auth.uid;
   try {
     // Self-heal, real bug confirmed live: completeRegistrationCore requires
     // this doc to already exist, and this used to be guaranteed by the
@@ -1717,11 +1793,17 @@ app.post('/register', async (req, res) => {
     const ref = db.collection('users').doc(userId);
     const existing = await ref.get();
     if (!existing.exists) {
-      const phone = cleanPhone(req.body.phone || '') || String(req.body.phone || '').trim();
+      const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
       await ref.set(defaultProfileDoc(phone));
     }
     const result = await completeRegistrationCore(userId, req.body.referralCode);
-    res.status(result.code).json(result.body);
+    // ChatGPT review: referrerId (the referring account's raw Firebase uid)
+    // was leaking straight through to the member-facing response even
+    // though nothing in the client reads it -- it's internal bookkeeping,
+    // also returned to the ADMIN-only reconciliation endpoint below, which
+    // legitimately needs it. Redacted here only.
+    const { referrerId, ...memberBody } = result.body;
+    res.status(result.code).json(memberBody);
   } catch (e) {
     console.error('Register error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not complete your registration right now' });
@@ -1755,9 +1837,25 @@ app.get('/account', async (req, res) => {
     // properly, together with the referral code, at the moment that
     // finishes.
     let publicId = u.publicId || null;
+    // ChatGPT review, confirmed real (low severity): this check-then-assign
+    // wasn't locked, so two concurrent /account reads for the same
+    // not-yet-repaired legacy account could each pass the `!publicId` check,
+    // each successfully mint a DIFFERENT valid id from nextSequentialPublicId()
+    // (that part IS lock-protected, so no two users could ever collide on
+    // the same id), then both write to this same user doc -- the slower
+    // write wins and the other freshly-minted id is simply wasted, never
+    // assigned to anyone. Not a security issue (publicId doesn't gate
+    // access to anything), just wasted counter values; a per-user lock
+    // closes it for free.
     if (!publicId && u.registrationDone) {
-      publicId = await nextSequentialPublicId();
-      await db.collection('users').doc(uid).update({ publicId }).catch(e => console.warn('publicId self-heal:', e.message));
+      publicId = await withLock('publicid-selfheal:' + uid, async () => {
+        const fresh = await db.collection('users').doc(uid).get();
+        const already = fresh.exists && fresh.data().publicId;
+        if (already) return already;
+        const id = await nextSequentialPublicId();
+        await db.collection('users').doc(uid).update({ publicId: id }).catch(e => console.warn('publicId self-heal:', e.message));
+        return id;
+      });
     }
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: u.walletBalance || 0, totalDeposited: u.totalDeposited || 0,
@@ -3101,7 +3199,16 @@ app.post('/admin/login', async (req, res) => {
   if (loginLocked(lockKey)) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
   try {
     const snap = await db.collection('adminUsers').doc(username).get();
-    if (!snap.exists || snap.data().active === false || !scryptVerify(password, snap.data().passwordHash)) {
+    // ChatGPT review, confirmed real: a nonexistent/inactive username used
+    // to short-circuit BEFORE scryptVerify ever ran, while a real username
+    // with a wrong password always paid the full scrypt cost -- a timing
+    // side-channel an attacker could use to enumerate valid admin
+    // usernames by response time alone. Always running scryptVerify against
+    // SOMETHING (the real hash, or this fixed dummy one) equalizes both
+    // paths' cost regardless of which branch is actually taken.
+    const validAccount = snap.exists && snap.data().active !== false;
+    const hashToCheck = validAccount ? snap.data().passwordHash : DUMMY_PASSWORD_HASH;
+    if (!validAccount || !scryptVerify(password, hashToCheck)) {
       recordLoginFail(lockKey);
       return res.status(401).json({ status: 'error', message: 'Invalid username or password' });
     }

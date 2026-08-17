@@ -14,6 +14,58 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Security review of login/registration/PIN/referral codes: 8/10 ChatGPT findings fixed, 2 architectural gaps documented as open (not silently patched)
+
+Owner asked for a from-scratch security review of login, registration,
+phone handling, referral code generation, PIN functions, and passwords —
+scoped with direct pointers to the real functions rather than a vague ask.
+Then: "he said that, also supplement, build, make final check, and ship."
+Every finding verified against the actual code before touching anything.
+
+Fixed:
+1. `/account/create-profile` and `/register` now derive `phone` from the
+   caller's OWN verified Firebase email first (`verifyAuthWithEmail()` +
+   `phoneFromVerifiedEmail()`), not blindly from the request body — an
+   authenticated caller can no longer mislabel their own profile with an
+   unrelated phone number. Does NOT fully close the deeper "account
+   squatting via predictable synthetic email" concern (needs real SMS/
+   Phone-Auth OTP, a bigger feature) — documented as an open limitation.
+2. `/register`'s member response no longer leaks the referring account's
+   raw Firebase uid (redacted response-side only; the admin reconciliation
+   endpoint that legitimately needs it is untouched).
+3. A banned account's referral code is now rejected at registration
+   instead of still linking/incrementing team counts.
+4. Admin login now runs scryptVerify against a fixed dummy hash for a
+   nonexistent/inactive username instead of short-circuiting before it —
+   closes a timing side-channel that could enumerate valid usernames.
+5. `generateUniqueReferralCode()` had a real check-then-write race AND its
+   post-20-collision fallback returned a code with zero uniqueness check.
+   Lock-guarded (same process-local idiom as the publicId counter) and the
+   fallback now keeps verifying uniqueness instead of ever skipping it.
+6. The publicId lazy self-heal in `GET /account` had a real (low-severity)
+   race — two concurrent reads of the same legacy account could waste a
+   counter value. Per-user lock-guarded now.
+7. Tried, found harmful, reverted: attaching the existing admin-login rate
+   limiter to `/admin/login` broke legitimate multi-staff usage sharing one
+   office IP — caught immediately by `test-security-hardening.js`'s own
+   "different username logs in normally" case. The per-username lockout
+   already there is the correct defense for this route; forcing the
+   suggested fix through would have actively made things worse.
+
+Verified already-solid, not re-fixed: PIN system's scrypt hashing, timing-
+safe compare, weak-PIN rejection, persisted lockout; every member route
+scoped by the Firebase-verified uid; publicId being sequential leaks
+approximate registration volume but gates access to nothing.
+
+Documented as open, not silently patched: no real phone-ownership
+verification anywhere in signup (needs SMS/OTP, a product decision); a rare
+registration-crash window that can under-count team stats with no
+reconciler; the PIN auto-setup-on-first-use tradeoff (already a deliberate,
+documented design choice, not a new oversight).
+
+Verification: new `test-security-review.js` (28 checks) covering all of the
+above. Full suite green, 63/63. Server-only changes, no rebuild needed.
+
 ## 2026-08-17 — Claude — Third ChatGPT review pass: 4/4 confirmed real (wrong data source, a stale-response race, a missing admin click-lock, a missing orderBy)
 
 Owner asked for another ChatGPT review, scoped to the 5 newest AGENT_LOG

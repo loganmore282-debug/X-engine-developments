@@ -1386,6 +1386,154 @@ one held up:
   Playwright pass, since the other three fixes already got full live
   coverage this round.
 
+## Round 12 of the same day, 2026-08-17 — security review of login/registration/PIN/referral, 8/10 findings fixed, 2 known-limitation architectural gaps documented (not silently patched)
+
+Owner: *"now let us ask chatgpt to check on login and registration plus all
+its functions connected to it, ie number, codes and code generation, id
+giveaway, independency, encryption, safeguards, strength, referral and
+codes... adding also pin functions, and passwords."* Then, after ChatGPT's
+10-point response: *"he said that, also supplement, build, make final
+check, and ship."* This was a from-scratch audit (not a changelog review),
+scoped with direct pointers to the real functions in `server.js` and
+`user-src/original_module.js` so the review would be concrete rather than
+generic. Every finding was independently verified against the actual code
+before anything was touched, same discipline as every prior ChatGPT round
+this session — one finding's suggested fix was tried, found to actively
+break a legitimate scenario the codebase's own test suite already protects,
+and reverted rather than forced through.
+
+**Fixed:**
+
+1. **Registration trusted `req.body.phone` verbatim, with nothing tying it
+   to the account that actually authenticated the request.** Since member
+   login is Firebase email/password with a synthetic
+   `phoneToEmail(phone)` email (client-side), the local part of the
+   VERIFIED Firebase token's own email IS that account's real phone. Added
+   `verifyAuthWithEmail()` (a sibling of `verifyAuth()`, used only at the
+   two call sites that needed it — not a blanket rewrite of the ~50
+   existing `verifyAuth()` call sites) and `phoneFromVerifiedEmail()`, and
+   switched `/account/create-profile` and `/register` to derive `phone`
+   from the caller's own verified email first, falling back to the body
+   value only when that derivation doesn't yield a valid Uganda number
+   (old/irregular accounts, or — matching every existing test's mock shape
+   — no email on the token at all). **This does NOT fully close ChatGPT's
+   underlying "phone-number account squatting" concern** — an attacker who
+   creates a Firebase account against a victim's predictable synthetic
+   email BEFORE the victim ever registers still locks the victim out of
+   ever using that phone number, because there is no real proof-of-phone-
+   ownership step (SMS/Phone-Auth OTP) anywhere in this app. That's a
+   genuinely larger feature (a real SMS/OTP provider, cost, a changed
+   onboarding flow) requiring the owner's own decision, not something to
+   silently build into a review-response patch — **documented here as an
+   open architectural limitation**, not fixed. What WAS fixed closes the
+   narrower, cheaply-fixable gap: an already-authenticated caller can no
+   longer mislabel their OWN profile with a phone number unrelated to the
+   account they actually hold.
+2. **`/register`'s member-facing response leaked the referring account's
+   raw Firebase uid** (`referrerId`) — nothing in the client ever read it;
+   it's internal bookkeeping the ADMIN reconciliation endpoint
+   (`/admin/user/complete-registration`) legitimately still needs. Redacted
+   via response-shape destructuring in `/register` only; `referrerId`
+   still flows to the admin route and its audit log exactly as before.
+3. **A banned account's referral code still worked at registration** —
+   team counts incremented toward a banned referrer even though commission
+   crediting elsewhere already skips banned referrers, leaving referral
+   attribution inconsistent. `completeRegistrationCore` now rejects a
+   referral code belonging to a banned account with the same `BAD_REFERRAL`
+   shape as a nonexistent/self-referral code.
+4. **Admin login had a timing side-channel**: a nonexistent or deactivated
+   username short-circuited BEFORE `scryptVerify` ever ran, while a real
+   username with a wrong password always paid the full scrypt cost —
+   different response times could let an attacker enumerate valid admin
+   usernames. Added a fixed `DUMMY_PASSWORD_HASH` (computed once at boot)
+   that a nonexistent/inactive username's attempt is verified against
+   instead, equalizing the cost of both paths.
+5. **`generateUniqueReferralCode()` had a real check-then-write race**
+   (two simultaneous registrations could both see the same 6-char candidate
+   as unused and both write it) **and its post-20-collision fallback
+   returned an 8-char code with ZERO uniqueness check at all** — not just
+   low-probability, genuinely unchecked. Wrapped the whole function in
+   `withLock('referral-code-gen', ...)` (same process-local-lock idiom
+   already used for the publicId counter — this app runs as a single Node
+   process, so that's the same guarantee already accepted there), and
+   changed the fallback to keep verifying uniqueness with the wider 8-char
+   alphabet instead of ever returning unverified.
+6. **The publicId lazy self-heal in `GET /account` had a real (low-severity)
+   race**: two concurrent reads of the same not-yet-repaired legacy account
+   could each mint a DIFFERENT valid sequential id (the counter itself is
+   already lock-protected, so no two users could ever collide on the SAME
+   id) and then both write to the same user doc — the slower write wins,
+   the other freshly-minted id is simply wasted. Not a security issue
+   (publicId doesn't gate access to anything — confirmed, see below), just
+   wasted counter values. Wrapped the check-then-assign in a per-user
+   `withLock('publicid-selfheal:'+uid, ...)`.
+7. **Tried, found harmful, reverted**: ChatGPT's suggestion to attach the
+   existing 8/min `adminLoginLimiter` to `/admin/login` (previously only on
+   `/admin/check-key`, the owner's single master-key login) was implemented
+   first — then `test-security-hardening.js` immediately caught that this
+   IP-keyed limiter (no `keyGenerator`, defaults to per-IP) breaks
+   legitimate multi-staff usage: its own "a different, never-attacked
+   username logs in normally at the same time" case makes 9 real
+   `/admin/login` calls across a few different accounts in one run, which
+   is completely normal multi-staff behavior sharing one office/VPN IP, and
+   an 8/min per-IP cap blocked the 9th outright. `/admin/login` (unlike
+   check-key) legitimately serves MULTIPLE distinct staff accounts, so
+   IP-keying is the wrong scope for it — the existing per-username
+   5-attempt/15-minute lockout (`_loginFails`, independent of IP, already
+   covered by that same test) is the correct defense for this route's
+   actual threat model. Reverted rather than force a suggested fix that
+   actively conflicts with the codebase's own deliberate, already-tested
+   design. (ChatGPT's underlying root concern — that in-memory lockout
+   state resets on a server restart/redeploy — isn't actually solved by an
+   equally in-memory rate limiter either way; a real fix would need
+   persistent storage for login-failure state, a bigger change than this
+   pass, and is **documented as open, not fixed**.)
+
+**Verified but NOT independently exploitable / already solid, per the
+review itself** — publicId being sequential rather than random is
+enumerable (leaks approximate registration volume) but gates access to
+nothing found anywhere in the codebase; member data routes are all scoped
+by the Firebase-verified uid from `verifyAuth()`; the PIN system's scrypt
+hashing, timing-safe compare, weak-PIN rejection, and persisted 5-attempt/
+15-minute lockout were all confirmed correctly implemented as-is.
+
+**Documented as open architectural limitations, not silently patched in
+this pass** (both require a real product/infra decision from the owner,
+not a quiet code change):
+- No real phone-ownership verification (SMS/Phone-Auth OTP) anywhere in
+  the signup flow — see finding 1 above. The synthetic-email identity model
+  cannot fully close phone-squatting without this.
+- A registration process crash in the narrow window between
+  `completeRegistrationCore` marking `registrationDone:true` (with the
+  wallet already credited) and the subsequent team-count/welcome-
+  transaction-row writes can leave those under-counted with no reconciler
+  able to detect/repair it (the existing `already_done` guard means a
+  retry is a safe no-op, but also means it can never re-run the missing
+  side effects). Rare — needs a real process crash in a specific few-
+  millisecond window — but a full fix (durable side-effect ledger /
+  reconciler) is a bigger lift than this pass; not attempted.
+- The PIN auto-setup-on-first-use path (`allowAutoSetup:true` on
+  `/bank/save` and `/withdraw/request`) is a deliberate, already-documented
+  design tradeoff (see the existing comment above `_payoutPinCheck`), not
+  a newly-discovered oversight — a session hijacked in the narrow window
+  before a member's PIN is set (normally set inline during registration
+  itself) could set its own PIN. Requiring fresh Firebase reauthentication
+  before first PIN enrollment would close this further but is a bigger UX
+  change than this pass; not attempted.
+
+- **Verification**: new `test-security-review.js` (28 checks) proves the
+  email-derived-phone override (and its no-email fallback matching every
+  other test file's mock shape), the `referrerId` redaction alongside the
+  referral link still functioning underneath, banned-referrer rejection,
+  the admin-login timing-fix's correctness (same generic error shape for
+  both paths), a batch of 8 referral-code generations all coming back
+  unique and correctly-shaped under the new lock, and the publicId
+  self-heal race fix returning the same id on a second read rather than
+  minting a new one. Full `test-*.js` suite green, 63/63 (62 existing +
+  the new file) — including catching, and enabling the revert of, the
+  rate-limiter regression described above. Server-only changes; no
+  rebuild needed (nothing in `user-src/` or `admin-src/` touched).
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's
