@@ -1871,7 +1871,20 @@ app.get('/account', async (req, res) => {
   try {
     await settleAllForUser(uid);
     const snap = await db.collection('users').doc(uid).get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    // Real bug, confirmed live (owner report): a Firebase account whose
+    // /register call never actually landed (dropped connection, app closed
+    // right after account creation) has no doc here AT ALL -- not merely
+    // registrationDone:false. The client's own self-heal only ever checked
+    // for the latter (a `status:'success'` response with registrationDone
+    // false), so it never fired for this "genuinely missing doc" case,
+    // permanently stranding the account: Firebase login succeeds (that's a
+    // wholly separate system from this one), but every real endpoint 404s
+    // "User not found" forever, with no automatic recovery. `code:
+    // 'NOT_FOUND'` here (same pattern as the existing `code: 'BANNED'`) lets
+    // the client's self-heal reliably tell this case apart from a genuine
+    // network failure and retry /register, which already self-heals a
+    // missing doc on its own.
+    if (!snap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
     const u = snap.data();
     // SECURITY (real bug, confirmed live): every WRITE endpoint (checkin,
     // invest, deposit, withdraw, bank/save, redeem) already refused a banned

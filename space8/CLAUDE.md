@@ -2152,6 +2152,60 @@ reason).
   properly at some point — not urgent anymore, downgraded from "blocking"
   to "nice to have."
 
+## Round 21 of the same day, 2026-08-17 — fixed a real "ghost account" bug: signs in fine, but zero profile ever existed, self-heal never caught it
+
+Owner sent 4 screenshots of one specific number (0791201913): logs in
+successfully, but Home shows UGX 0 everywhere, Account shows a blank
+referral code and blank ID, and tapping Check In returns a big red "User
+not found" error toast. Traced this to its actual root cause by reading
+the real code, not guessing from symptoms.
+
+**Root cause**: the Register button's own client flow (confirmed via
+`test-register-self-heal.js`'s existing findings) calls `fbCreateUser()`
+then goes straight to `POST /register` — it never calls `/account/create-
+profile` first. `/register`'s own route already self-heals a missing user
+doc (creates it via `defaultProfileDoc()` before calling
+`completeRegistrationCore`), so a normal registration is safe. But if that
+`/register` call itself never lands — a dropped connection, or the
+person closing the app/tab the instant after Firebase account creation —
+the Firebase auth account now exists (so a LATER login with that
+phone+password succeeds; Firebase auth is a wholly separate system from
+this app's own `users` collection) while NO Space8 profile document was
+ever created for them. Every real endpoint (`/account`, `/checkin`, etc.)
+correctly 404s "User not found" against that missing doc forever, with
+this exact bug's symptom being different from previous self-heal work.
+
+The `space8-auth` listener's existing self-heal (added in an earlier
+round, see the 2026-08-16 registration/login security audit above) only
+ever retried `/register` when `GET /account` responded `status:'success'`
+with `registrationDone: false` — i.e. a PARTIALLY finished registration.
+A genuinely MISSING doc instead makes `/account` return a plain 404
+`status:'error'`, which that condition never matched, so the account was
+stranded with zero automatic recovery, permanently.
+
+1. **`server.js`**: `GET /account`'s 404 for a missing doc now also
+   carries `code: 'NOT_FOUND'` (same pattern as the existing `code:
+   'BANNED'`), giving the client a stable signal to retry `/register`
+   against, distinct from a genuine network failure or any other error.
+2. **`user-src/original_module.js`**: the `space8-auth` listener's
+   self-heal condition widened to `(status:'success' && registrationDone
+   === false) || (status:'error' && code === 'NOT_FOUND')` — now catches
+   BOTH the partially-registered case (existing) and the genuinely-missing
+   case (new). Deliberately does NOT retry on a plain network failure or
+   on `BANNED` — only on a server-confirmed "no profile exists at all."
+- **Verification**: extended `test-register-self-heal.js` with a new
+  section proving `GET /account` returns `code: 'NOT_FOUND'` (not
+  `BANNED`, not unset) for a genuinely missing doc. Separately verified
+  the widened client-side condition directly with a standalone Node
+  script against every real response shape it needs to distinguish:
+  partially-registered (retry), fully-registered (don't retry, the normal
+  case on every login), the new ghost-account 404 (retry), `BANNED`
+  (must NOT retry), a plain network failure (must NOT retry — would spam
+  `/register` on every connectivity blip otherwise), and a 401 (must NOT
+  retry). Full `test-*.js` suite green, 66/66 (test count unchanged — this
+  extended an existing file rather than adding a new one). `node
+  build-core.js` round-trip OK; `user/sw.js` cache bumped `v246` → `v247`.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

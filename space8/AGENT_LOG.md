@@ -14,6 +14,48 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Fixed a real "ghost account" bug: signs in fine, but a Space8 profile was never actually created, and the existing self-heal never caught it
+
+- **What changed**: `server.js` — `GET /account`'s 404 for a missing user
+  doc now carries `code: 'NOT_FOUND'` (matching the existing `code:
+  'BANNED'` pattern). `user-src/original_module.js` — the `space8-auth`
+  listener's registration self-heal now also retries `/register` when
+  `/account` returns that code, not just when it returns
+  `status:'success'` with `registrationDone:false`. Extended
+  `test-register-self-heal.js`. Rebuilt `user/index.html`, bumped `sw.js`
+  cache `v246` → `v247`.
+- **Why**: Owner sent 4 screenshots of one specific phone number that
+  logs in successfully but shows UGX 0 everywhere, a blank referral code,
+  no ID, and "User not found" on every action (Check In, etc.).
+- **Root cause, traced by reading the actual code**: the Register
+  button's client flow calls `fbCreateUser()` then goes straight to
+  `POST /register` (confirmed by the earlier self-heal work — it never
+  calls `/account/create-profile` first). `/register` itself already
+  self-heals a missing doc, so a normal registration is safe — but if
+  that VERY FIRST `/register` call never lands (dropped connection, app
+  closed right after signup), the Firebase auth account exists (a
+  separate system from this app's own `users` collection, so a later
+  login with that phone+password succeeds fine) while no Space8 profile
+  was ever created. Every real endpoint then correctly 404s "User not
+  found" forever. The existing client self-heal (from the earlier
+  registration/login security audit) only ever matched a PARTIALLY
+  registered account (`status:'success'`, `registrationDone:false`) — a
+  fully MISSING doc instead returns a plain 404 `status:'error'`, which
+  that check never matched, permanently stranding the account with zero
+  automatic recovery.
+- **Verification**: new section in `test-register-self-heal.js` proving
+  `/account`'s 404 carries the new `NOT_FOUND` code, distinct from
+  `BANNED`. Standalone Node script directly exercising the widened
+  client-side condition against every real response shape (partially-
+  registered, fully-registered/the normal case, the new ghost-account
+  404, `BANNED`, a plain network failure, a 401) — confirmed it retries
+  in exactly the 2 cases it should and never spuriously retries on a
+  network blip or a banned account. Full `test-*.js` suite green, 66/66.
+- **Left open**: the owner's earlier "some numbers... data cannot be
+  loaded" report is now explained and fixed for this exact failure mode.
+  If a DIFFERENT account still shows a similar symptom after this ships,
+  it's a genuinely new case, not the same bug recurring.
+
 ## 2026-08-17 — Claude — Fixed the referral-link "Not Found" in code (query-string link, no Render config dependency) + auto-switch to Register screen
 
 - **What changed**: `user-src/original_module.js` — `referralLink()` now

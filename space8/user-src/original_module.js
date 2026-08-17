@@ -1732,11 +1732,24 @@ window.addEventListener('space8-auth', async function(e){
     // and guarantees the account eventually gets a real profile, welcome
     // bonus and referral code of its own instead of staying permanently
     // half-registered just because the original code was wrong once.
+    //
+    // Real bug, confirmed live (owner report, phone signed in fine but
+    // balance/referral code/ID all blank and every action said "User not
+    // found"): this used to only catch registrationDone:false -- a
+    // PARTIALLY finished registration. It never caught the doc being
+    // MISSING ENTIRELY (Firebase account created, but the very first
+    // /register call after that never landed at all -- a dropped
+    // connection, the app closed right after signup), because /account
+    // returns a 404 status:'error' for that case, not status:'success', so
+    // the old condition never matched and the account was permanently
+    // stranded with no automatic recovery. /register self-heals a missing
+    // doc on its own (see the comment in server.js's /register route), so
+    // the only gap was ever telling the client TO call it here.
     try {
       var accR = await api('/account');
-      if (accR.status === 'success' && accR.account && accR.account.registrationDone === false) {
-        await api('/register', {}, 'POST', true);
-      }
+      var needsRegister = (accR.status === 'success' && accR.account && accR.account.registrationDone === false) ||
+        (accR.status === 'error' && accR.code === 'NOT_FOUND');
+      if (needsRegister) await api('/register', {}, 'POST', true);
     } catch (_) {}
     enterApp();
   } else {

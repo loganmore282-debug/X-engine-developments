@@ -130,6 +130,30 @@ const txnsOf = uid => [...collMap('transactions').values()].filter(t => t.userId
   r = await call('GET', '/account', { token: 'uid:' + FRESH });
   check('/account now finds the self-healed user (this used to 404 for anyone caught by the bug)', r.code === 200 && r.body?.status === 'success', r.body);
 
+  console.log('\n== The OTHER half of the same bug: /account\'s 404 now carries a stable code the client can self-heal against ==');
+  // Owner report (2026-08-17): a real member's phone signed in fine (a
+  // Firebase account existed) but the app showed a blank referral code, no
+  // ID, UGX 0 everywhere, and "User not found" on every action -- root
+  // cause was a Firebase account whose very first /register call never
+  // landed (a dropped connection right after signup), leaving NO doc at
+  // all. The client's OWN self-heal (in the 'space8-auth' listener) only
+  // ever retried /register when GET /account came back status:'success'
+  // with registrationDone:false -- a genuinely MISSING doc instead returns
+  // a plain 404 status:'error', which that check never matched, so the
+  // account was permanently stranded with zero automatic recovery. Fixed
+  // by giving this 404 a stable `code: 'NOT_FOUND'` (same pattern as the
+  // existing `code: 'BANNED'`) so the client can tell "genuinely no
+  // profile" apart from an unrelated network failure and retry /register
+  // for it too -- /register already self-heals a missing doc on its own,
+  // confirmed by every check above; the only gap was ever telling the
+  // client TO call it.
+  const GHOST = 'sh-ghost-account';
+  check('sanity: no doc exists for this uid (simulates a /register call that never landed)', !userDoc(GHOST), userDoc(GHOST));
+  r = await call('GET', '/account', { token: 'uid:' + GHOST });
+  check('GET /account 404s for a genuinely missing doc', r.code === 404 && r.body?.status === 'error', r.body);
+  check('...and carries code: NOT_FOUND, the exact signal the client\'s self-heal now checks for', r.body?.code === 'NOT_FOUND', r.body);
+  check('...distinct from the BANNED code used elsewhere, so the client can never confuse the two', r.body?.code !== 'BANNED', r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });
