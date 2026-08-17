@@ -14,6 +14,43 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-16 — Claude — Accent color restored to the original vibrant blue (#2e6bff), ending the color saga
+
+Owner: *"return to blue as it was."*
+
+- **Restored, not reconstructed.** Rather than guessing the original blue from
+  `CLAUDE.md`'s own prose (which summarizes history and can drift), the exact values
+  were pulled straight from git history — `835facb` ("Revert green to vibrant blue,
+  make blue the actual page canvas") for `user-src/index.html`'s token block, and
+  `6acac9b` ("Re-theme admin panel to match user app") for `admin-src/index.html`'s
+  mirrored `--gold`/`--gold-deep` and its 3 literal non-token hex values. This
+  guarantees byte-exact restoration rather than an approximation.
+- **Values restored**: `--blue`/`--page-bg`/`--gold` → `#2e6bff`; `--blue-dim`/
+  `--gold-deep` → `#1c48b3`; `--blue-mute` → `#7fa1f0`; `--blue-glow` →
+  `rgba(46,107,255,.22)`; `--surface-blue` → `#eaf1ff`; admin's brand-mark
+  radial-gradient center → `#12275c`; admin's button gradient highlight → `#8fb4ff`;
+  admin's `theme-color` meta + brand-mark icon stroke → `#f4f2ff`.
+- **`CLAUDE.md`'s Palette section rewritten** to lead with "this is the settled,
+  default state" rather than another "here's what changed and why" entry — the
+  color-change history is condensed to one paragraph pointing at `AGENT_LOG.md`
+  instead of accumulating a 6th rationale block. Explicitly notes that if the accent
+  is ever changed again, the full hex-color audit (`grep -oE "#[0-9a-fA-F]{6}\b"`)
+  must cover BOTH `*-src/index.html` files, not just the token block — this saga's
+  own history shows literal non-token hex values (gradient centers, button
+  highlights, theme-color meta) are easy to miss and were caught exactly that way
+  every single time.
+- **Verification:** full hex-color audit of both `*-src/index.html` files confirms
+  an EXACT match to the git-history-sourced original (diffed the audit output
+  against the `835facb`/`6acac9b` audit, not just eyeballed); rebuilt both
+  `user/index.html` and `admin/index.html`; `user/sw.js` bumped to
+  `space8-shell-v229`; full `test-*.js` backend suite green; Playwright screenshots
+  of Home/Account (user) and the login screen (admin) confirm the restored blue
+  renders identically to the pre-saga screenshots.
+- Nothing left open from this round. Color palette treated as settled unless the
+  owner raises it again.
+
+---
+
 ## 2026-08-16 — Claude — Accent color: violet → dark navy (#1B263B/#0D1B2A)
 
 Owner sent a "New Platform In Development" teaser graphic from ChocoMCC's own

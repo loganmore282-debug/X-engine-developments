@@ -91,48 +91,33 @@ The owner was explicit and this must not be re-litigated without them saying so:
 Static mockup, still in the repo: **`space8/design/visual-system-mockup.html`**. The real
 app in `user-src/` was built directly against this.
 
-- **Palette — a single accent color is the actual page CANVAS, white cards float on top.**
-  **Currently DARK NAVY as of 2026-08-16 — `--blue: #1B263B`, value-only
-  swap, token name unchanged.** The structural decision described in this
-  whole section — `--page-bg` is the SAME accent color as `--blue`, ~80%
-  coverage, white cards ~10% — is unchanged; only the hue/lightness moved.
-  **This is NOT a return to device-driven dark mode.** The owner's earlier,
-  still-standing instruction ("I don't need dark mode, I need light white
-  mode," see the Light theme bullet below) is about `prefers-color-scheme`
-  theming and swapping surface/card colors by device setting — neither
-  happens here. Cards are still solid white (`--surface:#fff`), body text is
-  still dark-on-white (`--ink`), there is still no `[data-theme="dark"]` or
-  `prefers-color-scheme` block anywhere in the file. All that changed is
-  which single accent hue fills the page canvas behind those white cards —
-  it happens to now be a dark color instead of a bright one, which is a
-  color choice, not a theme-forcing mechanism.
-  **History, briefly** (full detail in `AGENT_LOG.md` if ever needed — don't
-  restate it here again): blue → sapphire → green (3 rejected attempts on
-  brightness) → violet (an explicit "you decide" delegation, chosen for
-  being unambiguous, proven at this job, and on-theme for a space brand) →
-  **dark navy** (owner supplied an exact hex range, `#0D1B2A` to `#1B263B`,
-  referencing a ChocoMCC "New Platform" teaser graphic's background, and
-  said "remove your violets balance everything").
-  **Values**: `--blue: #1B263B` (lighter end of the given range — used as
-  page canvas, primary button fill, and icon-stroke-on-white); `--blue-dim:
-  #0D1B2A` (the darkest end — used for text/borders that need to read on
-  white, e.g. `.section-title`); `--blue-mute: #4a5b78` (a lighter slate-navy
-  tint for low-weight elements like the menu-row chevron — the given hex
-  range has no light end, so this was picked off the same hue rather than
-  from the literal range, same as `--blue-glow` always has been). One thing
-  worth watching, not a bug: `--blue-dim` (`#0D1B2A`) now sits very close to
-  `--ink` (`#0a1220`, this file's ordinary body-text color) — harmless here
-  since neither is a semantic status color (unlike the earlier green-accent-
-  vs-`--ok` conflict below), but if a future session ever needs a THIRD
-  distinct dark tone on the same white surface, check this collision first.
-  If asked to adjust the navy, move within the owner's own given range
-  first (`#0D1B2A` darker ↔ `#1B263B` lighter) before reaching for an
-  unrelated hue — keeping `--blue-dim` at or below the range's dark end and
-  `--blue-mute` as a lighter tint of the same hue. Don't revert to violet or
-  any brighter color without being asked again. Treat whatever `--blue` is
-  actually SET to right now (check the file; don't trust this paragraph's
-  hex codes if they've gone stale) as the source of truth, and update this
-  note in place when it changes rather than layering on more history.
+- **Palette — vibrant blue is the actual page CANVAS, white cards float on top.**
+  **Restored to the ORIGINAL vibrant blue as of 2026-08-16 — `--blue: #2e6bff`,
+  `--page-bg` the SAME blue.** The owner's own words: "return to blue as it
+  was." This is the stable, settled state — treat it as the default unless
+  explicitly told otherwise again.
+  **Color history, for context only, condensed** (full blow-by-blow in
+  `AGENT_LOG.md` if ever genuinely needed — do not restate it here again):
+  this project cycled blue → sapphire → green (3 rejected attempts, too
+  bright each time) → violet (an explicit owner delegation, "you decide") →
+  dark navy (`#0D1B2A`–`#1B263B`, from a ChocoMCC reference graphic) → and
+  now **back to this original blue**, confirmed via git history
+  (`835facb`/`6acac9b`) rather than reconstructed from memory, so the exact
+  values below are byte-for-byte what shipped before the saga started.
+  **Exact values**: `--blue: #2e6bff` · `--blue-dim: #1c48b3` · `--blue-mute:
+  #7fa1f0` · `--blue-glow: rgba(46,107,255,.22)` · `--page-bg: #2e6bff` ·
+  `--surface-blue: #eaf1ff` (unused, kept consistent regardless).
+  **If asked to change the accent again**: use the same value-only-swap
+  approach (token names stay `--blue*`, only hex values move — see the
+  dedicated note on this a few lines down) and do the FULL hex-color audit
+  (`grep -oE "#[0-9a-fA-F]{6}\b" *.html`) on both `user-src/index.html` and
+  `admin-src/index.html` every time, not just the token block — this file's
+  own history has literal, non-token hex values (brand-mark gradient center,
+  button gradient highlight, `theme-color` meta + icon stroke, in admin) that
+  must be updated in lockstep or they silently keep the old color. If ever
+  asked to "go back" again, prefer restoring the confirmed original above
+  over reconstructing values from this file's prose, which summarizes rather
+  than guarantees byte-exact accuracy — git history is the source of truth.
   The rest of this section (originally written for blue, 2026-08-16 earlier
   that day) still describes the correct STRUCTURE, just mentally substitute
   the current accent for "blue" while reading it: `body`/`main`/every `.page` render
@@ -184,11 +169,11 @@ app in `user-src/` was built directly against this.
   add another settings field the admin renders back into HTML, check whether it
   needs the same clamp-and-validate treatment rather than assuming free text is
   safe just because the endpoint is owner-gated.
-  `--blue-dim: #0D1B2A` / `--blue-mute: #4a5b78` / `--blue-glow: rgba(27,38,59,.22)` are
-  all derived from the same hue (values current as of the 2026-08-16 dark-navy swap
-  noted at the top of this Palette section — check the file if this has moved on again).
+  `--blue-dim: #1c48b3` / `--blue-mute: #7fa1f0` / `--blue-glow: rgba(46,107,255,.22)` are
+  all derived from the same hue (the confirmed original values — see the top of this
+  Palette section — check the file if this has moved on again).
   **The CSS custom properties kept their `--blue*` names through every color change this
-  project has had** (blue → sapphire → green → blue → green → violet → dark navy) rather than being
+  project has had** (blue → sapphire → green → blue → green → violet → dark navy → blue) rather than being
   renamed each time — a full rename across every `var(--blue...)` reference in this
   ~600KB file was judged higher-risk (easy to miss an occurrence) than swapping 5-6 token
   values at the source. If the accent color changes again, prefer that same
@@ -202,19 +187,18 @@ app in `user-src/` was built directly against this.
   background was chosen over literally replicating the mobile blue-canvas treatment;
   revisit if the owner asks for closer matching), `--card:#ffffff`, `--ink:#0a1220`,
   `--sub:#5b6b84`, `--line:#d7dfec` — all copied from the user app's `--void`/`--surface`/
-  `--ink`/`--ink-dim`/`--line` values. `--gold:#1B263B` / `--gold-deep:#0D1B2A` /
+  `--ink`/`--ink-dim`/`--line` values. `--gold:#2e6bff` / `--gold-deep:#1c48b3` /
   `--gold-ink:#fff` (variable names kept, same convention as `--blue*` above; values
-  current as of the 2026-08-16 dark-navy swap, always match `--blue`/`--blue-dim` in
+  the confirmed original, always match `--blue`/`--blue-dim` in
   `user-src/index.html`) drive tabs, primary buttons, and the brand mark.
   `--ok`/`--danger`/`--warn`/`--sky` were re-picked as legible light-mode status colors
   (green/red/amber/teal) since the originals were tuned for dark chips (pale text on a
   near-black pill) and would be illegible inverted onto white. (A green accent briefly
-  put `--ok` (success, `#0f9d58`) into hue conflict with `--gold`; the move off green
-  resolved that — worth re-checking if the accent ever goes green-adjacent again.)
+  put `--ok` (success, `#0f9d58`) into hue conflict with `--gold`; back on blue, no conflict.)
   Literal (non-token) hex values that don't reference these variables get fixed on every
-  accent change too — currently: the brand-mark radial-gradient center (`#0D1B2A`), the
-  primary button's gradient highlight (`#4a5b78`), and the `theme-color` meta tag +
-  brand-mark SVG icon stroke (`#e8ecf2`). The modal backdrop tint (`rgba(10,18,32,.45)`)
+  accent change too — currently (the confirmed original): the brand-mark radial-gradient
+  center (`#12275c`), the primary button's gradient highlight (`#8fb4ff`), and the
+  `theme-color` meta tag + brand-mark SVG icon stroke (`#f4f2ff`). The modal backdrop tint (`rgba(10,18,32,.45)`)
   is a neutral dark scrim, not accent-hued — deliberately left alone across every color
   change so far. Same self-hosted Inter `@font-face` as the
   user app was added (duplicated, not shared — admin is a separate build/HTML file).
