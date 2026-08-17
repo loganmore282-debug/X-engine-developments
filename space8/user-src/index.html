@@ -128,6 +128,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .btn[disabled]{ opacity:.5; pointer-events:none; }
 .btn.loading{ pointer-events:none; }
 .btn .spin{ width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; animation:spin .7s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
 .btn-secondary .spin{ border-color:var(--line); border-top-color:var(--ink-dim); }
 
 .field{ display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:13px 14px; }

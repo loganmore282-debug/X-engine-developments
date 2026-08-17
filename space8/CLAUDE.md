@@ -1020,6 +1020,40 @@ reported 2 more issues live in the app. All 5 real, all fixed.
   (admin untouched). Bumped `user/sw.js` cache `v235` → `v236`. Playwright
   confirmed all 5 fixes end-to-end as described above.
 
+## Round 7 of the same day, 2026-08-17 — the actual reason every spinner "looked stuck": missing @keyframes
+
+Owner, all caps and clearly fed up: *"why is the spin loader always
+stuck bro?????????????, please make it spin and move freely."* Round 5 had
+already fixed a real-but-different bug (buttons staying disabled forever on
+a hung `fetch()`, via an `AbortController` timeout) — that fix was correct
+but didn't touch what the owner was actually seeing here, which turned out
+to be much simpler and had nothing to do with network timing at all.
+
+- **Root cause: `.btn .spin{ animation:spin .7s linear infinite; }` — no
+  `@keyframes spin` rule existed anywhere in `user-src/index.html`.** Every
+  other animation in the file (`orbitRevolution`, `loaderPulse`, `fadein`,
+  `sk`, `tickerScroll`, `typingDot`) has its keyframes defined; `spin` was
+  the one exception — referenced, never defined. A CSS `animation` property
+  pointing at a nonexistent keyframes name isn't an error, it's silently a
+  no-op: the browser just renders the element in its static base state
+  forever. That's exactly "stuck" — the ring was always there, correctly
+  shown/hidden by `setBtnLoading()`'s existing (already-correct) JS, it
+  just never actually rotated, on every button, every time, since this
+  class was first written. Fixed with a one-line addition:
+  `@keyframes spin{ to{ transform:rotate(360deg); } }`, matching the same
+  shape as the loading screen's own `orbitRevolution`.
+- **Admin panel was NOT affected** — its spinners (`cmSpinRotate`,
+  `cmSpinDash`, `verifySpin`) each have their own properly-defined
+  keyframes already; this bug was isolated to the one `.btn .spin` class in
+  the user app.
+- **Verification**: full `test-*.js` suite green (pure CSS change, no
+  server/logic impact). Rebuilt `user/`. Bumped `user/sw.js` cache `v236` →
+  `v237`. Playwright: confirmed `@keyframes spin` is now present in
+  `document.styleSheets`, and sampled a real `.spin` element's computed
+  `transform` matrix at two points in time while `setBtnLoading` had it
+  showing — the matrices differ, confirming genuine rotation (not just a
+  static ring anymore).
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

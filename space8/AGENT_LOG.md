@@ -14,6 +14,34 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Found the REAL reason spinners looked frozen: no @keyframes spin rule existed
+
+Owner: *"why is the spin loader always stuck bro?????????????, please make
+it spin and move freely."*
+
+- **Root cause, one line, embarrassingly simple**: `.btn .spin{
+  animation:spin .7s linear infinite; }` in `user-src/index.html` pointed at
+  a keyframes name, `spin`, that was never actually defined anywhere in the
+  file. Every other animation used in this file has its own `@keyframes`
+  block; this one didn't. An `animation` referencing a missing keyframes
+  name isn't an error — it's a silent no-op, so the spinner ring just sat
+  there in its static base frame forever, on every button, every time,
+  since this class was first written. This was NOT the same bug as the
+  earlier "stuck loader" fix this session (which fixed buttons staying
+  disabled forever on a hung fetch via a client-side timeout) — that fix
+  was real and correct, it just wasn't the thing the owner kept seeing here.
+  Fixed with one added rule: `@keyframes spin{ to{ transform:rotate(360deg); } }`.
+- Admin panel unaffected — its own spinners already have real keyframes
+  defined (`cmSpinRotate`/`cmSpinDash`/`verifySpin`).
+- **Verification**: full test suite green (pure CSS, zero logic changed).
+  Rebuilt `user/`. Bumped `user/sw.js` cache `v236` → `v237`. Playwright:
+  confirmed the keyframes rule is now present in `document.styleSheets`,
+  and sampled a live `.spin` element's `transform` matrix twice ~300ms
+  apart — they differ, confirming it now genuinely rotates.
+- Nothing left open.
+
+---
+
 ## 2026-08-17 — Claude — Second ChatGPT pass (on Round 5's own fixes) + duplicate accounts + PIN save-prompt fixed
 
 Owner ran ChatGPT again against the PREVIOUS fix commit itself, and
