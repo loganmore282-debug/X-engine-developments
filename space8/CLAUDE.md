@@ -1964,6 +1964,98 @@ actual code before touching anything, same discipline as every prior round.
   `space8-shell-v244` since `user-src/original_module.js` changed. Admin
   panel needed no rebuild — server-only logic change.
 
+## Round 18 of the same day, 2026-08-17 — full audit of investment timing, server-side monitoring, referral chain/commission accuracy, and Task Center safeguards
+
+Owner: *"check through investment, daily profit timing, accuracy... high
+monitoring of products and ongoing products by server... check also
+referrals and referral codes, rewards and commission, proper counting...
+every referral code, id is globally unique and regulated by server...
+users or referral connection should be perfectly connected... even
+strength task center, there should be proper counting, encryption and
+safeguard."* No ChatGPT this round — direct code audit, same discipline as
+Round 14. Read every function in the money-crediting and referral-chain
+path before concluding anything.
+
+**Confirmed already solid (no change needed) — listed so a future session
+doesn't re-audit from scratch:**
+- `dailyPayout = Math.round(expectedReturn / cycle)` timer math: per-day
+  rounding never drifts the total, since the FINAL day's credit is computed
+  as the exact remainder (`expectedReturn - paidOut`), not `dailyPayout *
+  count` — the cycle always pays out exactly `expectedReturn` in total.
+  `cycleDays`(210) and `returnMultiple`(42) are chosen so `price*42/210 =
+  price/5` divides evenly for every tier, so this never even needs the
+  remainder correction in practice.
+- `settleInvestmentIfDue()`: idempotent, RECORD-BEFORE-CREDIT ordering
+  (advance `payoutsMade` before crediting the wallet, roll back on a failed
+  credit), lock-protected per investment (`payout:<id>`) — already
+  extensively hardened in earlier rounds.
+- Referral code generation (`generateUniqueReferralCode`): CSPRNG
+  (`crypto.randomInt`, not a biased byte-mod), globally serialized via a
+  single `withLock('referral-code-gen',...)` so check-and-claim is one
+  atomic step — genuinely globally unique, "regulated by server" exactly
+  as asked. `nextSequentialPublicId()` (each member's public ID) uses the
+  same atomic-counter-under-lock pattern.
+- Referral chain wiring (`completeRegistrationCore`, `/admin/user/attach-
+  referrer`): self-referral blocked, banned-referrer's code rejected,
+  admin tool has a defensive cycle-guard walk (can't attach a referrer
+  that's already downstream). Team-count increments run AFTER
+  `registrationDone` is set so a crash-retry can only under-count, never
+  double-count.
+- `creditReferralCommission()`: idempotent per (investmentId, level) via
+  `commissionPaidLevels`, claim-before-credit, checks BOTH the buyer's and
+  the referrer's banned status before paying, fires instantly (immediately
+  after the purchase transaction commits, not waiting for any later read).
+- Task Center milestone claim (`/team/milestone/claim`): progress
+  (`activeL1Count`/`wholeTeamDeposits`) is always LIVE-computed from the
+  real `referredBy` graph and each user's actual `totalInvested`/
+  `totalDeposited` -- never cached/stale -- so "proper counting" holds;
+  claim itself is lock + transaction + claim-flag guarded, credits both
+  `walletBalance` and `totalEarned` (per Round 16).
+- `/team/members`: no `.limit()` at all -- returns every real member at
+  every level, so the referral chain a member sees is always complete, not
+  silently truncated.
+
+**2 real gaps found and fixed — both in the background "server monitoring"
+sweeps, not the request-time crediting logic itself:**
+1. `reconcileCashback()` (1s tick, checks every `active` investment
+   platform-wide) was capped at `.limit(500)`. Unlike pendingDeposits/
+   withdrawals (naturally small, self-draining within minutes), an
+   investment stays `active` for its whole cycle (up to 210 days) and only
+   accumulates as the platform grows -- past 500 concurrently-active
+   investments, this sweep silently truncated to whichever 500 the DB
+   happened to return first. Nothing was ever LOST (`settleAllForUser()`,
+   an unbounded per-user query, still catches it up the moment that
+   specific member's own `/account` or `/investments` is read), but
+   crediting stopped being proactive/instant for accounts past the cap.
+   Bumped to `CASHBACK_SWEEP_LIMIT = 5000` -- pure DB read+write per
+   candidate, no external call, so this costs nothing extra on the
+   overwhelming majority of ticks where little or nothing is actually due.
+2. `reconcileCommissions()` (30s tick, retries commission-crediting for
+   any investment from the last 10 minutes) was capped at `.limit(50)`,
+   same platform-wide-not-per-user shape. `creditReferralCommission()`
+   itself is a no-op once a level is already paid, so this only does real
+   work when the ORIGINAL fire-and-forget call in `/invest/create` failed
+   -- rare -- but a high-volume 10-minute window could still exceed 50
+   real investments and leave whichever land past the cap un-retried.
+   Bumped to `COMMISSION_RECONCILE_LIMIT = 500`.
+- **Verification**: new `test-reconciler-caps.js` — seeds 520 due
+  investments across 8 users (strictly more than the old 500 cap) and
+  confirms ALL are credited by a single 1s-tick sweep; separately seeds 60
+  fresh first-investments under one referrer (strictly more than the old
+  50 cap) and confirms ALL get their L1 commission retried and paid by a
+  single 30s-tick sweep, checked both via `commissionPaidLevels` and the
+  referrer's actual wallet delta. This also surfaced (and fixed) a real
+  gap in the SHARED `test-mockdb.js` test harness: it only ever supported
+  `==`/`in` query operators, so `reconcileCommissions()`'s own `.where(
+  'createdAt', '>', cutoff)` had literally never been exercised by any
+  test in this suite before now (`db.js` itself already supports `>` fine
+  against real MongoDB — this was purely a test-mock gap). Added `>`, `>=`,
+  `<`, `<=` support to `test-mockdb.js`'s `where()`, comparing Dates by
+  epoch-ms the same way real Mongo compares BSON dates — purely additive,
+  every existing test using only `==`/`in` is unaffected. Full `test-*.js`
+  suite green, 66/66 (65 existing + this new file). Server-only change
+  (`server.js` + `test-mockdb.js`), no `user-src/`/`admin-src/` rebuild needed.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

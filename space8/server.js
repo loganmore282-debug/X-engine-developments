@@ -5020,10 +5020,24 @@ async function reconcilePendingWithdrawals() {
 // restart: if the server died between the purchase committing and the
 // commission finishing, this picks up exactly where it left off within one
 // reconciler tick instead of leaving the referrer permanently unpaid.
+// Owner audit, 2026-08-17: same class of gap as CASHBACK_SWEEP_LIMIT above
+// -- 50 was an arbitrary cap on how many investments from the last 10
+// minutes this retry pass can see, across the WHOLE platform, every 30s.
+// creditReferralCommission() itself is a no-op the moment a level is
+// already claimed, so this only ever does real work for a purchase whose
+// original fire-and-forget call in /invest/create genuinely failed --
+// rare -- but a high-volume 10-minute window (a promo, a payday spike)
+// could still exceed 50 real investments and silently leave whichever ones
+// land past the cap un-retried until they age out of the window entirely.
+// Bumped to 500 for the same reason as the cashback sweep: pure DB read
+// (no external call) per candidate, so a wider net costs nothing extra on
+// the overwhelming majority of ticks where nothing here actually needed
+// retrying in the first place.
+const COMMISSION_RECONCILE_LIMIT = 500;
 async function reconcileCommissions() {
   try {
     const cutoff = new Date(Date.now() - 10 * 60000);
-    const snap = await db.collection('investments').where('createdAt', '>', cutoff).limit(50).get();
+    const snap = await db.collection('investments').where('createdAt', '>', cutoff).limit(COMMISSION_RECONCILE_LIMIT).get();
     for (const doc of snap.docs) {
       const inv = doc.data();
       await creditReferralCommission(doc.id, inv.userId, inv.amount).catch(e => console.error('Reconcile commission error:', e.message));
@@ -5047,12 +5061,31 @@ async function reconcileCommissions() {
 // asked for on that side. _sweepingCashback guards against a tick
 // overlapping a still-running previous one if the investments collection
 // ever grows large enough for the query itself to take over a second.
+// Owner audit, 2026-08-17: 500 was an arbitrary cap on how many 'active'
+// investments this sweep can see PER TICK, across every user on the whole
+// platform combined -- unlike pendingDeposits/withdrawals (naturally small
+// and self-draining, an item leaves 'pending'/'processing' within minutes),
+// an investment stays 'active' for its ENTIRE cycle (up to 210 days) and
+// accumulates from every user simultaneously, so the live count only ever
+// grows as the platform grows. Past 500 concurrently-active investments,
+// this sweep would silently truncate to whichever 500 the DB happens to
+// return first, and anything beyond that never gets its daily payout
+// credited by this proactive sweep at all -- settleAllForUser() (an
+// unbounded, per-user query) still catches it up correctly the moment that
+// specific member's own /account or /investments is read, so no payout is
+// ever LOST, but it stops being "instant" and starts silently depending on
+// the member happening to open the app. Bumped to 5000 -- pure DB read+
+// write, no external call, so this costs nothing extra per tick even when
+// most ticks find little or nothing due -- to keep this proactive for any
+// realistic scale this app reaches, with the per-user read still standing
+// as the real correctness guarantee if it's ever exceeded regardless.
+const CASHBACK_SWEEP_LIMIT = 5000;
 let _sweepingCashback = false;
 async function reconcileCashback() {
   if (_sweepingCashback) return;
   _sweepingCashback = true;
   try {
-    const snap = await db.collection('investments').where('status', '==', 'active').limit(500).get();
+    const snap = await db.collection('investments').where('status', '==', 'active').limit(CASHBACK_SWEEP_LIMIT).get();
     for (const doc of snap.docs) {
       await settleInvestmentIfDue(doc).catch(e => console.error('Reconcile cashback error:', e.message));
     }

@@ -104,7 +104,7 @@ function snap(cname, id, raw) {
 function query(cname, filters = [], order = null, lim = 0) {
   return {
     where(f, op, v) {
-      if (op !== '==' && op !== 'in') throw new Error('mockdb: only == and in supported');
+      if (['==', 'in', '>', '>=', '<', '<='].indexOf(op) === -1) throw new Error('mockdb: unsupported operator ' + op);
       return query(cname, [...filters, [f, op, v]], order, lim);
     },
     orderBy(f, dir) { return query(cname, filters, [f, dir || 'asc'], lim); },
@@ -114,10 +114,18 @@ function query(cname, filters = [], order = null, lim = 0) {
       // '_id' isn't a field inside the stored data object here (the Map key IS
       // the id) — real Mongo docs DO carry a genuine _id field (see db.js's
       // set()), so this matches against the entry key to stay faithful to that.
+      // Comparable value for the range operators below: Dates compare by
+      // epoch ms (matches real Mongo comparing BSON dates), everything else
+      // compares as-is (numbers, or a numeric coercion of anything else).
+      const cmp = x => x instanceof Date ? x.getTime() : (typeof x === 'number' ? x : Number(x));
       let rows = [...coll(cname).entries()]
         .filter(([id, d]) => filters.every(([f, op, v]) => {
           const actual = f === '_id' ? id : d[f];
           if (op === 'in') return Array.isArray(v) && v.some(x => actual === x || String(actual) === String(x));
+          if (op === '>')  return cmp(actual) >  cmp(v);
+          if (op === '>=') return cmp(actual) >= cmp(v);
+          if (op === '<')  return cmp(actual) <  cmp(v);
+          if (op === '<=') return cmp(actual) <= cmp(v);
           return actual === v || String(actual) === String(v);
         }));
       if (order) {

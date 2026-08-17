@@ -14,6 +14,59 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Full audit of investment timing, server-side monitoring, referral chain/commission accuracy, Task Center safeguards
+
+- **What changed**:
+  - `server.js`: `reconcileCashback()`'s sweep cap raised `500` →
+    `CASHBACK_SWEEP_LIMIT = 5000`; `reconcileCommissions()`'s cap raised
+    `50` → `COMMISSION_RECONCILE_LIMIT = 500`.
+  - `test-mockdb.js`: `where()` now also supports `>`/`>=`/`<`/`<=` (was
+    `==`/`in` only), comparing Dates by epoch-ms.
+  - New `test-reconciler-caps.js`.
+- **Why**: Owner asked for a full audit — investment/daily-profit timing
+  accuracy, server-side monitoring of ongoing products, referral code
+  global uniqueness, referral chain connection accuracy, commission/reward
+  counting, and Task Center safeguards. No ChatGPT this round — direct
+  read-every-function audit, same as the deposits/withdrawals round.
+  Found the request-time crediting logic (payout math, commission
+  idempotency, milestone claim locking, referral chain wiring) was already
+  solid from earlier rounds' hardening — the 2 real gaps were both in the
+  BACKGROUND monitoring sweeps: `reconcileCashback()` (checks every
+  `active` investment platform-wide, every 1s) was capped at 500, and
+  `reconcileCommissions()` (retries commission-crediting for anything from
+  the last 10 minutes, every 30s) was capped at 50 — both arbitrary,
+  platform-wide-not-per-user ceilings that a growing platform could
+  realistically exceed (unlike pendingDeposits/withdrawals, which are
+  naturally small and self-draining within minutes, an investment stays
+  `active` for up to 210 days and only accumulates). Past either cap, the
+  sweep silently truncated to whichever items the DB returned first.
+  Nothing was ever actually LOST — `settleAllForUser()` (an unbounded,
+  per-user query) still catches an investment up correctly the moment its
+  owner's own `/account` or `/investments` is read — but crediting stopped
+  being proactive/"instant" for accounts past the cap, which is exactly
+  the accuracy/monitoring gap the owner was asking about.
+- **A real gap in shared test infrastructure, found and fixed along the
+  way**: writing the verification test for the commission-cap fix hit
+  `mockdb: only == and in supported` — `test-mockdb.js`'s `where()` had
+  never supported the `>` operator `reconcileCommissions()`'s own
+  `.where('createdAt', '>', cutoff)` query needs, meaning that whole
+  reconciler function had literally never been exercised by any test in
+  this suite before now. `db.js` itself already supports `>` correctly
+  against real MongoDB (confirmed by reading it), so this was purely a
+  test-mock gap, not a production bug — added the missing operators to the
+  shared mock rather than working around it, since every other test that
+  ever needs a range query benefits too.
+- **Verification**: `test-reconciler-caps.js` — seeds 520 due investments
+  across 8 users (>500, the old cap) and confirms a single 1s-tick sweep
+  credits all of them; separately seeds 60 fresh first-investments under
+  one referrer (>50, the old cap) and confirms a single 30s-tick sweep
+  retries and pays commission on all of them, checked via both
+  `commissionPaidLevels` and the referrer's actual wallet balance delta.
+  Full `test-*.js` suite green, 66/66. Server-only change, no rebuild
+  needed.
+- **Left open**: none new this round — this was a read-and-verify audit
+  plus the 2 fixes above, not a partial implementation.
+
 ## 2026-08-17 — Claude — ChatGPT verified the Round 16 fixes; found a real cross-user data leak on shared devices plus a real Infinity gap in the total-poisoning fix
 
 - **What changed**:
