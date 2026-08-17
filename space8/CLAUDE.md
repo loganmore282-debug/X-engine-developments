@@ -925,6 +925,101 @@ pre-existing data issue correctly triaged as "not a code bug."
   untouched — nothing in this round touched `admin-src/`). Bumped
   `user/sw.js` cache `v234` → `v235`.
 
+## Round 6 of the same day, 2026-08-17 — second ChatGPT pass on Round 5's own fixes + 2 more owner reports
+
+Owner ran ChatGPT again, this time against Round 5's fix commit itself
+(good practice — review the fix, not just the original bug), and separately
+reported 2 more issues live in the app. All 5 real, all fixed.
+
+- **Countdown refresh could clobber a DIFFERENT sheet the member had since
+  opened** (ChatGPT catch on Round 5's own fix). `refreshPlanDetailAfterMaturity`'s
+  guard was "is the generic sheet open," not "is it still THIS plan's
+  detail" — if the member closed the plan detail during the 1.5s wait and
+  opened Records/Password Management/anything else in the same shared
+  `#genericSheet` container, the delayed refresh would silently overwrite
+  whatever they'd navigated to. Fixed by tagging `planDetailHtml()`'s root
+  with `data-plan-detail="<id>"` and a new `isPlanDetailShowing(id)` helper
+  that checks both the sheet's visibility AND that exact tag before ever
+  touching the DOM — checked before AND after the `/investments` fetch, in
+  case the member navigated away mid-request. Verified with Playwright: hid
+  the plan-detail sheet and opened Records right as the delayed refresh was
+  in flight — the sheet correctly kept showing Records, untouched.
+- **A failed `/investments` fetch during the countdown refresh could spiral
+  into a retry storm** (ChatGPT catch). The old code called
+  `renderPlanDetail(invId)` unconditionally after the fetch, success or not
+  — on failure this re-rendered with the SAME stale, already-expired
+  countdown target, whose first synchronous tick immediately re-triggered
+  another refresh, turning one slow/failed request into a near-hot-loop.
+  Fixed: `renderPlanDetail()` (which restarts the countdown) is now only
+  called on a successful fetch; on failure, `refreshPlanDetailAfterMaturity`
+  just calls itself again — same clean ~1.5s cadence, no stale re-render, no
+  loop. Verified with Playwright: forced `/investments` to always fail for
+  7s straight — 4 fetches total, each gap ~1500ms, never a burst.
+- **Team page silently relabeled a failed level-fetch as "No referrals"**
+  (ChatGPT catch). A failed `/team/members?level=N` request got coerced to
+  an empty array with no distinction from a genuinely empty level — worse,
+  that empty array then got written into `STATE.teamMembers[l]`, which is
+  truthy, so the level was permanently treated as "confirmed empty" for the
+  rest of the session (never retried on a later visit). Fixed: each level
+  now resolves to `{ members, failed }`; only a successful fetch populates
+  the cache; a failed level renders "Could not load this level — reopen the
+  Team tab to retry" instead of the misleading empty-state message.
+  Verified with Playwright: level 2 forced to fail while 1 and 3 succeed —
+  level 2 shows the correct failure message, level 1 still shows its real
+  member.
+- **Chrome's "Save password?" prompt fired on PIN fields** — owner: "why
+  saving and deleting number trigger Google password manager, also even
+  saving or changing pin triggers it." `autocomplete="off"` (Round 5's own
+  fix) does not reliably suppress this specific Chrome heuristic — browsers
+  have deliberately ignored bare `off` for password-manager purposes for
+  years, since sites abused it to defeat password managers entirely. The
+  correct signal for a genuinely one-time/transactional numeric code (which
+  a 4-digit PIN is, semantically — not a persistent account credential) is
+  `autocomplete="one-time-code"`. Switched all 5 PIN fields:
+  `payPin`/`oldPin`/`newPin` in `original_module.js`, `regPin`/`regPin2` in
+  `index.html`. The real Password Management fields
+  (`curPassword`/`newPassword`/`newPassword2`) were deliberately left as
+  `current-password`/`new-password` — Chrome offering to save THOSE is
+  correct, wanted behavior (they're a genuine account password), unlike the
+  PIN fields.
+- **Withdrawal accounts could be duplicated with zero detection** — owner
+  screenshots showed adding an account with the same holder/network/phone
+  as an existing one created a literal second identical row; owner: "even
+  the server can't detect that numbers or names are the same, it just
+  saves." `/bank/save` in `server.js` never checked for an existing account
+  before `.add()`-ing a new one. Added a duplicate check on `phone` alone
+  (the real money destination — a mobile-money number can't genuinely
+  belong to two networks at once, so a same-phone-different-network
+  resubmission is still rejected as a duplicate, not treated as distinct).
+  Placed AFTER the PIN-verification gate, not before — this matters
+  functionally, not just stylistically: `_payoutPinCheck` also tracks
+  failed-attempt lockout state, and several existing tests
+  (`test-payout-pin.js`) intentionally resubmit the SAME phone number
+  multiple times with wrong PINs to exercise that lockout. Putting the
+  duplicate check first would have silently short-circuited every one of
+  those attempts before the PIN gate ever ran, breaking lockout tracking
+  entirely — confirmed by an actual regression when the check was first
+  written before the PIN gate; moving it after fixed it. One genuine
+  test-data collision remained even after reordering (a lockout-reset test
+  reused an already-bound phone purely as a vehicle to test "does the PIN
+  work again"), fixed by pointing that one assertion at a fresh phone
+  number instead of weakening the new duplicate check. New tests added to
+  `test-bank-delete.js`: exact duplicate rejected, same phone under a
+  different network still rejected, a genuinely different number still
+  saves fine.
+- **Also found and fixed while in this code** (not reported, same class of
+  defensive gap): `renderPayoutSheet()` and `openWithdrawSheet()` both did
+  `r.status === 'success' ? r.accounts : []` — if a success response ever
+  arrived without an `accounts` array, this crashed with `Cannot read
+  properties of undefined (reading 'length')` instead of treating it as
+  empty. Both now do `r.status === 'success' ? (r.accounts || []) : []`,
+  matching the defensive pattern already used elsewhere in this file (e.g.
+  `r.members || []`).
+- **Verification**: full `test-*.js` suite green (including the new
+  duplicate-detection tests and the updated lockout test). Rebuilt `user/`
+  (admin untouched). Bumped `user/sw.js` cache `v235` → `v236`. Playwright
+  confirmed all 5 fixes end-to-end as described above.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

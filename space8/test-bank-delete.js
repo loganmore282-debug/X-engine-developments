@@ -97,6 +97,22 @@ async function setupUser(uid, phone) {
   const noAuth = await call('POST', '/bank/delete', { body: { id: bobAccountId } });
   check('no auth token rejected with 401', noAuth.code === 401, noAuth.body);
 
+  console.log('\n-- Saving the same number twice is rejected, not silently duplicated --');
+  const D = 'dora-uid';
+  await setupUser(D, '0771000003');
+  const first = await call('POST', '/bank/save', { token: 'uid:' + D, body: { holder: 'Dora One', network: 'MTN Mobile Money', phone: '0771700001', pin: '1234' } });
+  check('first save succeeds', first.body?.status === 'success', first.body);
+  const dupe = await call('POST', '/bank/save', { token: 'uid:' + D, body: { holder: 'Dora One', network: 'MTN Mobile Money', phone: '0771700001', pin: '1234' } });
+  check('exact duplicate rejected with 400', dupe.code === 400 && dupe.body?.status === 'error', dupe.body);
+  const dupeDifferentNetwork = await call('POST', '/bank/save', { token: 'uid:' + D, body: { holder: 'Dora One', network: 'Airtel Money', phone: '0771700001', pin: '1234' } });
+  check('same phone under a different network is still rejected (phone is the real destination)', dupeDifferentNetwork.code === 400 && dupeDifferentNetwork.body?.status === 'error', dupeDifferentNetwork.body);
+  const doraList = await call('GET', '/bank/list', { token: 'uid:' + D });
+  check('only one account was ever actually saved', doraList.body?.accounts?.length === 1, doraList.body);
+  const differentNumber = await call('POST', '/bank/save', { token: 'uid:' + D, body: { holder: 'Dora Two', network: 'Airtel Money', phone: '0771700002', pin: '1234' } });
+  check('a genuinely different number still saves fine', differentNumber.body?.status === 'success', differentNumber.body);
+  const doraListAfter = await call('GET', '/bank/list', { token: 'uid:' + D });
+  check('now has exactly two accounts', doraListAfter.body?.accounts?.length === 2, doraListAfter.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });

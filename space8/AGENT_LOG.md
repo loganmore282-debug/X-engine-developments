@@ -14,6 +14,62 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Second ChatGPT pass (on Round 5's own fixes) + duplicate accounts + PIN save-prompt fixed
+
+Owner ran ChatGPT again against the PREVIOUS fix commit itself, and
+separately reported: withdrawal accounts getting duplicated when saved, and
+Chrome's "Save password?" prompt firing on PIN fields (add/delete account,
+change Security PIN) — *"even the server can't detect that numbers or names
+are the same, it just saves."*
+
+- **Countdown refresh could overwrite a DIFFERENT sheet** (ChatGPT catch,
+  on last round's own fix) — the guard only checked "is some generic sheet
+  open," not "is it still this plan." Tagged the detail view's root with
+  `data-plan-detail="<id>"`; new `isPlanDetailShowing(id)` checks that exact
+  tag, not just visibility, before ever overwriting. Verified: swapped to
+  Records mid-refresh, it stayed on Records.
+- **Failed `/investments` fetch during refresh could retry-storm** (ChatGPT
+  catch) — re-rendering with stale data on failure restarted an
+  already-expired countdown, whose first tick instantly re-triggered
+  another refresh. Now only re-renders/restarts on success; failure just
+  retries itself on the same ~1.5s cadence. Verified: forced failure for 7s
+  straight, got exactly 4 fetches ~1500ms apart, never a burst.
+- **Team page mislabeled failed level-fetches as "No referrals"** (ChatGPT
+  catch) — worse, the empty result got cached as confirmed-empty forever.
+  Each level now resolves `{ members, failed }`; only success populates the
+  cache; failure shows its own message. Verified: level 2 forced to fail
+  while 1 and 3 succeed — correct per-level behavior.
+- **Chrome save-password prompt on PIN fields, fixed properly this time** —
+  last round's `autocomplete="off"` doesn't actually suppress this specific
+  Chrome heuristic (browsers ignore bare `off` for password-manager
+  purposes by design). Switched all 5 PIN fields
+  (`payPin`/`oldPin`/`newPin`/`regPin`/`regPin2`) to
+  `autocomplete="one-time-code"` — the correct signal for a one-time
+  transactional code vs. a persistent password. Left the real Password
+  Management fields alone (Chrome offering to save an actual account
+  password there is correct, wanted behavior).
+- **Withdrawal accounts had zero duplicate protection** — `/bank/save`
+  always `.add()`-ed a new row with no existence check. Added a dedup check
+  on `phone`, placed AFTER the PIN-verification gate (not before — the PIN
+  gate also tracks lockout state, and moving dedup earlier broke existing
+  lockout tests that intentionally resubmit the same phone with wrong PINs;
+  confirmed by an actual regression, then fixed by reordering + pointing
+  one test assertion at a fresh phone instead of weakening the new check).
+  New tests in `test-bank-delete.js`: exact duplicate rejected, same
+  phone/different network still rejected, genuinely different number still
+  saves fine.
+- **Bonus fix, same area, not reported**: `renderPayoutSheet()` and
+  `openWithdrawSheet()` both crashed (`Cannot read properties of undefined
+  (reading 'length')`) if `/bank/list` ever returned success without an
+  `accounts` array — found while testing the above, fixed defensively
+  (`r.accounts || []`), matching the pattern already used elsewhere.
+- **Verification**: full test suite green (new dedup tests + one updated
+  lockout test). Rebuilt `user/` only. Bumped `user/sw.js` cache `v235` →
+  `v236`. Playwright confirmed all 5 fixes end-to-end.
+- Nothing left open.
+
+---
+
 ## 2026-08-17 — Claude — ChatGPT review + owner bug reports: countdown freeze, Team flicker, autofill leak fixed
 
 Owner ran a ChatGPT review over the last 3 commits and separately reported 3

@@ -518,6 +518,7 @@ function detailField(lab, val){
 function planDetailHtml(inv){
   var nextMs = nextCashbackMs(inv);
   var html =
+    '<div data-plan-detail="' + esc(inv.id) + '">' +
     '<div class="sheet-title">' + esc(inv.tierLabel) + '</div>' +
     '<div class="card" style="margin-bottom:14px">' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
@@ -532,6 +533,7 @@ function planDetailHtml(inv){
     '<div class="card" style="text-align:center">' +
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);margin-bottom:6px">' + (nextMs ? 'Next Cashback In' : 'Status') + '</div>' +
       '<div id="planCountdownVal" class="mono" style="font-size:26px;font-weight:700;color:var(--blue)">' + (nextMs ? fmtCountdown(nextMs - Date.now()) : 'Matured') + '</div>' +
+    '</div>' +
     '</div>';
   return { html: html, nextMs: nextMs };
 }
@@ -541,6 +543,17 @@ function openPlanDetailSheet(id){
   var d = planDetailHtml(inv);
   openSheet('generic', d.html);
   if (d.nextMs) startPlanCountdown(d.nextMs, id);
+}
+// True only if the generic sheet is open AND still showing THIS plan's
+// detail view -- the member may have closed it and opened something else
+// entirely (Records, Password Management, another plan) while a delayed
+// refresh below was in flight; a bare "is some sheet open" check isn't
+// enough to tell those apart, since every generic-sheet feature shares the
+// same #genericSheet container.
+function isPlanDetailShowing(id){
+  if (!$('genericSheetBg').classList.contains('show')) return false;
+  var wrap = qs('[data-plan-detail]', $('genericSheet'));
+  return !!wrap && wrap.dataset.planDetail === id;
 }
 // Re-renders the SAME already-open detail sheet in place (no openSheet(), no
 // new history entry) -- used by startPlanCountdown() once a plan's countdown
@@ -560,11 +573,21 @@ function renderPlanDetail(id){
 // read the pre-credit state and show the same "00:00:00" over again.
 async function refreshPlanDetailAfterMaturity(invId){
   await new Promise(function(r){ setTimeout(r, 1500); });
-  if (!$('genericSheetBg').classList.contains('show')) return;
+  if (!isPlanDetailShowing(invId)) return;
   var r = await api('/investments', null, 'GET');
-  if (r.status === 'success' && r.investments) STATE.investments = r.investments;
-  if (!$('genericSheetBg').classList.contains('show')) return;
-  renderPlanDetail(invId);
+  if (!isPlanDetailShowing(invId)) return;
+  if (r.status === 'success' && r.investments) {
+    STATE.investments = r.investments;
+    renderPlanDetail(invId);
+  } else {
+    // Fetch failed -- retry on the same ~1.5s cadence instead of calling
+    // renderPlanDetail() with stale data: that would restart the countdown
+    // on the SAME already-expired target, whose first synchronous tick
+    // immediately re-triggers this function again, turning one slow
+    // request into a hot loop. Leaves "00:00:00" showing until this
+    // eventually succeeds.
+    refreshPlanDetailAfterMaturity(invId);
+  }
 }
 function startPlanCountdown(targetMs, invId){
   if (_planCountdownTimer) clearInterval(_planCountdownTimer);
@@ -852,12 +875,20 @@ function listEndFooter(){
 async function renderTeam(){
   var el = $('page-team');
   if (!STATE.loaded.team) el.innerHTML = '<div class="sk sk-card" style="height:110px;margin:16px 0"></div>' + skRows(3);
+  // Each level resolves to { members, failed } rather than a bare array, so
+  // a fetch error can be told apart from a genuinely empty level both when
+  // rendering (a failed fetch must not read as "No referrals yet") and when
+  // caching (only a SUCCESSFUL result is written to STATE.teamMembers[l] --
+  // caching [] on failure would otherwise silently treat that level as
+  // confirmed-empty forever, since a cached [] is still truthy and skips
+  // re-fetching on every later visit).
   var memberFetches = [1,2,3].map(function(l){
-    if (STATE.teamMembers[l]) return Promise.resolve(STATE.teamMembers[l]);
+    if (STATE.teamMembers[l]) return Promise.resolve({ members: STATE.teamMembers[l], failed: false });
     return api('/team/members?level=' + l, null, 'GET').then(function(r){
-      var members = r.status === 'success' ? (r.members || []) : [];
+      if (r.status !== 'success') return { members: [], failed: true };
+      var members = r.members || [];
       STATE.teamMembers[l] = members;
-      return members;
+      return { members: members, failed: false };
     });
   });
   var results = await Promise.all([api('/team/stats')].concat(memberFetches));
@@ -873,10 +904,11 @@ async function renderTeam(){
     '<div class="card"><div class="lab">Total Commission</div><div class="val mono">' + ugx(s.commission) + '</div></div>' +
   '</div>';
   [1,2,3].forEach(function(l){
-    var members = results[l] || [];
+    var lvl = results[l] || { members: [], failed: true };
     html += '<div class="section-title">Level ' + l + ' <span class="see-all">' + LEVEL_PCT[l] + '%</span></div>';
-    html += members.length ?
-      '<div class="card">' + members.map(function(m){
+    html += lvl.failed ? emptyState('cluster','Could not load this level — reopen the Team tab to retry.') :
+      lvl.members.length ?
+      '<div class="card">' + lvl.members.map(function(m){
         return '<div class="member-row"><div class="av">' + esc(String(m.phone||'?').slice(-2)) + '</div>' +
           '<div class="info"><div class="phone">' + esc(m.phone) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + (m.hasInvested?' · Active':'') + '</div></div></div>';
       }).join('') + '</div>' + listEndFooter() :
@@ -1069,7 +1101,7 @@ async function openPayoutSheet(pickCallback){
 }
 async function renderPayoutSheet(){
   var r = await api('/bank/list', null, 'GET');
-  var accounts = r.status === 'success' ? r.accounts : [];
+  var accounts = r.status === 'success' ? (r.accounts || []) : [];
   STATE.bankAccounts = accounts;
   var picking = !!_payoutPickCallback;
   var listHtml = accounts.length ? accounts.map(function(a){
@@ -1108,7 +1140,7 @@ async function renderPayoutSheet(){
           '<option value="Airtel Money">Airtel Money</option>' +
         '</select>' +
         '<div class="field">' + ico('phone') + '<input id="payPhone" placeholder="07XXXXXXXX"></div>' +
-        '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN" autocomplete="off"></div>' +
+        '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN" autocomplete="one-time-code"></div>' +
         '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
       '</div>' +
       '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Withdrawal Account</button>');
@@ -1170,8 +1202,8 @@ async function openPinSheet(){
     '<div class="sheet-sub">' + (has ? 'Change your 4-digit withdrawal PIN.' : 'No withdrawal PIN on this account yet — it should have been set at registration. Contact support if this looks wrong.') + '</div>' +
     (has ?
       '<div class="auth-form">' +
-        '<div class="field">' + ico('shield') + '<input id="oldPin" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN" autocomplete="off"></div>' +
-        '<div class="field">' + ico('shield') + '<input id="newPin" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" autocomplete="off"></div>' +
+        '<div class="field">' + ico('shield') + '<input id="oldPin" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN" autocomplete="one-time-code"></div>' +
+        '<div class="field">' + ico('shield') + '<input id="newPin" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" autocomplete="one-time-code"></div>' +
       '</div><button class="btn btn-primary" id="changePinBtn" style="margin-top:14px">Change PIN</button>' : '')
   );
   var btn = $('changePinBtn');
@@ -1292,7 +1324,7 @@ function pollDepositStatus(id){
 async function openWithdrawSheet(){
   openSheet('withdraw', '<div class="sk sk-line"></div>');
   var r = await api('/bank/list', null, 'GET');
-  var accounts = r.status === 'success' ? r.accounts : [];
+  var accounts = r.status === 'success' ? (r.accounts || []) : [];
   if (!accounts.length) {
     $('withdrawSheet').innerHTML =
       '<div class="sheet-title">Withdraw</div>' +

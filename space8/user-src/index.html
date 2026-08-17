@@ -443,13 +443,13 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
         </div>
         <div><label class="auth-label" for="regPin">Withdrawal PIN (4 digits)</label>
           <div class="auth-pwrow">
-            <input class="auth-input" id="regPin" type="password" inputmode="numeric" maxlength="4" placeholder="Choose a 4-digit PIN" autocomplete="off">
+            <input class="auth-input" id="regPin" type="password" inputmode="numeric" maxlength="4" placeholder="Choose a 4-digit PIN" autocomplete="one-time-code">
             <span class="auth-pw-toggle" data-target="regPin">Show</span>
           </div>
         </div>
         <div><label class="auth-label" for="regPin2">Confirm Withdrawal PIN</label>
           <div class="auth-pwrow">
-            <input class="auth-input" id="regPin2" type="password" inputmode="numeric" maxlength="4" placeholder="Re-enter PIN" autocomplete="off">
+            <input class="auth-input" id="regPin2" type="password" inputmode="numeric" maxlength="4" placeholder="Re-enter PIN" autocomplete="one-time-code">
             <span class="auth-pw-toggle" data-target="regPin2">Show</span>
           </div>
         </div>

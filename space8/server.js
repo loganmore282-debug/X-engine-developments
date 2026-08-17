@@ -2857,6 +2857,18 @@ app.post('/bank/save', async (req, res) => {
     // same way a bank rebind would be, right before it's ever saved.
     const pinCheck = await _payoutPinCheck(userId, req.body.pin, true);
     if (!pinCheck.ok) return res.status(400).json({ status: 'error', code: pinCheck.code, message: pinCheck.message });
+    // Nothing used to stop the same number being bound twice -- the UI's
+    // own "Add Withdrawal Account" form has no client-side dedup either, so
+    // a member re-submitting the same details (or just not noticing an
+    // account is already there) got a second, identical row every time,
+    // silently. Checked AFTER the PIN gate above (not before) so it never
+    // short-circuits PIN verification/lockout tracking for a resubmitted
+    // phone -- a wrong-PIN attempt against an already-bound number must
+    // still count as a wrong-PIN attempt, not silently get reclassified as
+    // "duplicate" before the PIN is even checked.
+    const dupSnap = await db.collection('bankAccounts')
+      .where('userId', '==', userId).where('phone', '==', phone).limit(1).get();
+    if (!dupSnap.empty) return res.status(400).json({ status: 'error', message: 'This number is already saved as a withdrawal account.' });
     await db.collection('bankAccounts').add({ userId, holder, network, phone, createdAt: FieldValue.serverTimestamp() });
     res.json({ status: 'success', pinJustSet: !!pinCheck.justSet });
   } catch (e) {

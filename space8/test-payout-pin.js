@@ -229,7 +229,12 @@ async function freshFundedUser(uid, phone) {
   r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '1359' } });
   check('sanity: account is locked even with the correct pin', r2.code === 400 && r2.body?.code === 'LOCKED', r2.body);
   await adminCall('/admin/user/reset-payout-pin', { userId: G });
-  r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900701', pin: '2593' } });
+  // A different phone number than the rest of this block -- 0771900701 is
+  // already bound (from the very first save above), and /bank/save now
+  // rejects re-binding an already-saved number as a duplicate (see the
+  // dedicated duplicate-detection tests in test-bank-delete.js). This call
+  // only cares whether the PIN itself works again after the reset.
+  r2 = await call('POST', '/bank/save', { token: 'uid:' + G, body: { holder: 'G', network: 'MTN Mobile Money', phone: '0771900799', pin: '2593' } });
   check('reset clears the lockout too -- a fresh pin works immediately', r2.body?.status === 'success' && r2.body?.pinJustSet === true, r2.body);
 
   console.log('\n== POST /account/payout-pin/set (registration-time PIN setup) ==');
