@@ -204,6 +204,7 @@ function hideSheet(name){
   var i = _sheetStack.lastIndexOf(name);
   if (i !== -1) _sheetStack.splice(i, 1);
   if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
+  if (_planCountdownTimer) { clearInterval(_planCountdownTimer); _planCountdownTimer = null; }
 }
 function closeSheet(name){
   if (history.state && history.state.overlay === name) history.back();
@@ -461,7 +462,7 @@ async function renderHome(){
 
   if (active.length) {
     html += '<div class="section-title">Active Plans</div>';
-    active.forEach(function(inv){ html += planCardHtml(inv); });
+    html += '<div class="menu-list" style="margin-bottom:14px">' + active.map(planRowHtml).join('') + '</div>';
   }
 
   html += '<div class="section-title">Products <span class="see-all" id="homeSeeAllProds">See all</span></div>';
@@ -474,25 +475,82 @@ async function renderHome(){
   }
   wireHomeActions();
   renderTicker(feed);
+  qsa('.plan-row', el).forEach(function(row){
+    row.onclick = function(){ openPlanDetailSheet(row.dataset.id); };
+  });
 }
 function isToday(dateStr){
   var d = new Date();
   var mm = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
   return dateStr === (mm + '/' + dd + '/' + d.getFullYear());
 }
-function planCardHtml(inv){
-  var pct = Math.min(100, Math.round(((inv.payoutsMade||0) / (inv.payoutsTotal||1)) * 100));
-  var r = 24, c = 2*Math.PI*r;
-  var off = c - (pct/100)*c;
-  return '<div class="plan-card">' +
-    '<div class="plan-ring"><svg viewBox="0 0 56 56">' +
-      '<circle cx="28" cy="28" r="'+r+'" fill="none" stroke="var(--surface-2)" stroke-width="5"/>' +
-      '<circle cx="28" cy="28" r="'+r+'" fill="none" stroke="var(--blue)" stroke-width="5" stroke-linecap="round" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 28 28)"/>' +
-    '</svg><div class="pct">' + pct + '%</div></div>' +
-    '<div class="plan-info"><div class="name">' + esc(inv.tierLabel) + '</div>' +
-    '<div class="meta">Day ' + (inv.payoutsMade||0) + ' of ' + (inv.payoutsTotal||0) + '</div>' +
-    '<div class="earn mono">+' + ugx(inv.paidOut) + ' earned</div></div>' +
+// Simple list row (icon, name + "Day X of Y", chevron) -- owner explicit:
+// "I don't want active plans to be like that [the rounded ring card], I
+// want them to be where on my products it shows arrow" -- i.e. the same
+// menuRow()-style chevron list already used for About/Rules/Support.
+function planRowHtml(inv){
+  var made = inv.payoutsMade||0, total = inv.payoutsTotal||0;
+  return '<div class="menu-row plan-row" data-id="' + esc(inv.id) + '">' + ico('satellite') +
+    '<div class="info"><div class="name">' + esc(inv.tierLabel) + '</div>' +
+    '<div class="sub">Day ' + made + ' of ' + total + ' · +' + ugx(inv.paidOut) + ' earned</div></div>' +
+    ico('chev').replace('<svg ', '<svg class="chev" ') +
   '</div>';
+}
+var _planCountdownTimer = null;
+// Elapsed-full-days boundary this plan's cashback is credited on --
+// mirrors settleInvestmentIfDue()'s own elapsedDays math in server.js
+// exactly (Math.floor((now-createdMs)/86400000)), so the countdown shown
+// here always agrees with when the server's 1s reconciler actually pays.
+function nextCashbackMs(inv){
+  var createdMs = inv.createdAt ? new Date(inv.createdAt).getTime() : NaN;
+  var made = inv.payoutsMade || 0, total = inv.payoutsTotal || 0;
+  if (!createdMs || isNaN(createdMs) || made >= total) return null;
+  return createdMs + (made + 1) * 86400000;
+}
+function fmtCountdown(ms){
+  var s = Math.max(0, Math.floor(ms/1000));
+  var hh = String(Math.floor(s/3600)).padStart(2,'0');
+  var mm = String(Math.floor((s%3600)/60)).padStart(2,'0');
+  var ss = String(s%60).padStart(2,'0');
+  return hh + ':' + mm + ':' + ss;
+}
+function detailField(lab, val){
+  return '<div><div style="font-size:10px;color:var(--ink-dim);text-transform:uppercase">' + esc(lab) + '</div><div style="font-weight:700" class="mono">' + val + '</div></div>';
+}
+function openPlanDetailSheet(id){
+  var inv = (STATE.investments||[]).find(function(i){ return i.id === id; });
+  if (!inv) return;
+  var nextMs = nextCashbackMs(inv);
+  openSheet('generic',
+    '<div class="sheet-title">' + esc(inv.tierLabel) + '</div>' +
+    '<div class="card" style="margin-bottom:14px">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
+        detailField('Purchase Date', esc(inv.date||'-')) +
+        detailField('Purchase Time', esc(inv.time||'-')) +
+        detailField('Price', ugx(inv.amount)) +
+        detailField('Daily Return', ugx(inv.dailyPayout)) +
+        detailField('Total Return', ugx(inv.expectedReturn)) +
+        detailField('Earned So Far', ugx(inv.paidOut)) +
+      '</div>' +
+    '</div>' +
+    '<div class="card" style="text-align:center">' +
+      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);margin-bottom:6px">' + (nextMs ? 'Next Cashback In' : 'Status') + '</div>' +
+      '<div id="planCountdownVal" class="mono" style="font-size:26px;font-weight:700;color:var(--blue)">' + (nextMs ? fmtCountdown(nextMs - Date.now()) : 'Matured') + '</div>' +
+    '</div>'
+  );
+  if (nextMs) startPlanCountdown(nextMs);
+}
+function startPlanCountdown(targetMs){
+  if (_planCountdownTimer) clearInterval(_planCountdownTimer);
+  var tick = function(){
+    var el = $('planCountdownVal');
+    if (!el) { clearInterval(_planCountdownTimer); _planCountdownTimer = null; return; }
+    var remaining = targetMs - Date.now();
+    if (remaining <= 0) { el.textContent = '00:00:00'; clearInterval(_planCountdownTimer); _planCountdownTimer = null; return; }
+    el.textContent = fmtCountdown(remaining);
+  };
+  tick();
+  _planCountdownTimer = setInterval(tick, 1000);
 }
 function renderTicker(feed){
   var track = $('tickerItems');
@@ -646,15 +704,11 @@ function prodCardHtml(p){
   var daily = Math.round((p.expectedReturn||0)/(p.cycle||1));
   var disabled = p.active === false || p.comingSoon;
   return '<div class="prod-card ' + (disabled?'soon':'') + '" data-key="' + esc(p.key) + '">' +
-    '<div class="top">' +
-      '<div class="sat">' + (p.image ? '<img src="'+esc(p.image)+'">' : ico('satellite')) + '</div>' +
-      '<div style="flex:1"><div class="name">' + esc(p.name) + (p.comingSoon?'<span class="pill pill-active badge-soon">Upcoming</span>':'') + '</div>' +
-      '<div class="price mono">' + ugx(p.price) + '</div></div>' +
-    '</div>' +
-    '<div class="grid">' +
-      '<div><div class="lab">Cycle</div><div class="val">' + (p.cycle||'-') + 'd</div></div>' +
-      '<div><div class="lab">Daily</div><div class="val mono">' + ugx(daily) + '</div></div>' +
-      '<div><div class="lab">Total</div><div class="val mono">' + ugx(p.expectedReturn) + '</div></div>' +
+    '<div class="sat">' + (p.image ? '<img src="'+esc(p.image)+'">' : ico('satellite')) + '</div>' +
+    '<div class="info">' +
+      '<div class="name">' + esc(p.name) + (p.comingSoon?'<span class="pill pill-active badge-soon">Upcoming</span>':'') + '</div>' +
+      '<div class="price mono">' + ugx(p.price) + '</div>' +
+      '<div class="stats mono">' + (p.cycle||'-') + 'd · ' + ugx(daily) + '/day · ' + ugx(p.expectedReturn) + ' total</div>' +
     '</div>' +
     '<button class="btn btn-primary invest-btn" ' + (disabled?'disabled':'') + '>Purchase</button>' +
   '</div>';
@@ -1335,9 +1389,41 @@ async function boot(){
   var cardOpacityPct = (STATE.settings||{}).cardOpacityPct;
   document.documentElement.style.setProperty('--card-blur', (cardBlurPx != null ? cardBlurPx : 0) + 'px');
   document.documentElement.style.setProperty('--card-alpha', (cardOpacityPct != null ? cardOpacityPct : 100) / 100);
+  var authCardBlurPx = (STATE.settings||{}).authCardBlurPx;
+  var authCardOpacityPct = (STATE.settings||{}).authCardOpacityPct;
+  document.documentElement.style.setProperty('--auth-card-blur', (authCardBlurPx != null ? authCardBlurPx : 0) + 'px');
+  document.documentElement.style.setProperty('--auth-card-alpha', (authCardOpacityPct != null ? authCardOpacityPct : 100) / 100);
+  // Fetched here (not left to renderHome/renderProducts' own first call) so
+  // the images below are already warm in the browser's cache by the time
+  // either page actually renders -- renderHome/renderProducts both already
+  // skip re-fetching when STATE.products is already set.
+  var prodR = await api('/public/products');
+  if (prodR.status === 'success') STATE.products = prodR.products;
+  await preloadImages();
+}
+function preloadImages(){
+  var urls = [];
+  Object.keys(STATE.banners||{}).forEach(function(k){ if (STATE.banners[k]) urls.push(STATE.banners[k]); });
+  (STATE.products||[]).forEach(function(p){ if (p.image) urls.push(p.image); });
+  var loadOne = function(src){
+    return new Promise(function(resolve){
+      var img = new Image();
+      img.onload = img.onerror = function(){ resolve(); };
+      img.src = src;
+    });
+  };
+  // Capped so one slow/broken image URL can't leave the loading screen up
+  // indefinitely -- same reasoning as the api() fetch timeout above.
+  var timeout = new Promise(function(resolve){ setTimeout(resolve, 6000); });
+  return Promise.race([Promise.all(urls.map(loadOne)), timeout]);
 }
 window.addEventListener('space8-auth', async function(e){
   var user = e.detail;
+  // Wait for boot() (settings/banners/products fetch + image preload) so the
+  // loading screen stays up until images are already cached, instead of
+  // handing off to Home/Products/the auth screens and having their images
+  // visibly pop in a beat later.
+  await _bootPromise;
   $('loadingScreen').style.display = 'none';
   if (user) {
     // A registration attempt currently in flight (its own handler above
@@ -1403,4 +1489,4 @@ document.addEventListener('visibilitychange', function(){ if (!document.hidden &
     });
   }, { passive: true });
 })();
-boot();
+var _bootPromise = boot();

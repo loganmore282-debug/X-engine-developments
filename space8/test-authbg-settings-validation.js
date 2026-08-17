@@ -117,6 +117,18 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { cardOpacityPct: -1 } } });
   check('card negative opacity rejected', r.code === 400 && r.body.status === 'error', r.body);
 
+  // authCardBlurPx/authCardOpacityPct (the Login/Register card's own glass
+  // sliders, independent from the general card sliders above) — same check.
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authCardBlurPx: 8, authCardOpacityPct: 65 } } });
+  check('authCard valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved authCard blur', r.body.settings.authCardBlurPx === 8, r.body.settings);
+  check('public settings reflects saved authCard opacity', r.body.settings.authCardOpacityPct === 65, r.body.settings);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authCardBlurPx: 999 } } });
+  check('authCard blur above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authCardOpacityPct: -1 } } });
+  check('authCard negative opacity rejected', r.code === 400 && r.body.status === 'error', r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

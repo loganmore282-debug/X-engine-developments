@@ -1246,6 +1246,8 @@ async function renderBanners(){
   const appTintPct = clampNum(sett.appBgTintPct, 78, 0, 100);
   const cardBlurPx = clampNum(sett.cardBlurPx, 0, 0, 24);
   const cardOpacityPct = clampNum(sett.cardOpacityPct, 100, 0, 100);
+  const authCardBlurPx = clampNum(sett.authCardBlurPx, 0, 0, 24);
+  const authCardOpacityPct = clampNum(sett.authCardOpacityPct, 100, 0, 100);
   $('content').innerHTML = `
     <h2 class="sec">App banners</h2>
     <div class="panel-card">
@@ -1281,6 +1283,14 @@ async function renderBanners(){
           <input id="authTintRange" type="range" min="0" max="100" step="1" value="${tintPct}" style="width:100%">
           <p class="muted" style="font-size:12px;margin:6px 0 0">Higher blur hides more image detail; higher overlay opacity fades the image more so the form stays readable. 0% opacity shows the image at full clarity behind the blur.</p>
           <button class="btn block" id="saveAuthBgBtn" style="margin-top:10px">Save blur &amp; opacity</button>
+        </div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+          <label>Login/Register card blur (px) — <span id="authCardBlurVal">${authCardBlurPx}</span></label>
+          <input id="authCardBlurRange" type="range" min="0" max="24" step="1" value="${authCardBlurPx}" style="width:100%">
+          <label style="margin-top:10px;display:block">Login/Register card opacity (%) — <span id="authCardOpacityVal">${authCardOpacityPct}</span></label>
+          <input id="authCardOpacityRange" type="range" min="0" max="100" step="1" value="${authCardOpacityPct}" style="width:100%">
+          <p class="muted" style="font-size:12px;margin:6px 0 0">Makes the white Login/Register card itself translucent so this same background image shows through it too — separate from the background's own blur above.</p>
+          <button class="btn block" id="saveAuthCardBgBtn" style="margin-top:10px">Save card blur &amp; opacity</button>
         </div>` : ''}
         ${key==='appbg' ? `
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
@@ -1320,6 +1330,19 @@ async function renderBanners(){
         const d = await api('/admin/settings/update', { settings: {
           authBgBlurPx: parseInt($('authBlurRange').value,10),
           authBgTintPct: parseInt($('authTintRange').value,10)
+        } });
+        toast(d.status==='success'?'Saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      })());
+    });
+  }
+  if ($('authCardBlurRange')) {
+    $('authCardBlurRange').addEventListener('input', ()=>{ $('authCardBlurVal').textContent = $('authCardBlurRange').value; });
+    $('authCardOpacityRange').addEventListener('input', ()=>{ $('authCardOpacityVal').textContent = $('authCardOpacityRange').value; });
+    $('saveAuthCardBgBtn').addEventListener('click', async()=>{
+      await withTabBusy((async()=>{
+        const d = await api('/admin/settings/update', { settings: {
+          authCardBlurPx: parseInt($('authCardBlurRange').value,10),
+          authCardOpacityPct: parseInt($('authCardOpacityRange').value,10)
         } });
         toast(d.status==='success'?'Saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
       })());

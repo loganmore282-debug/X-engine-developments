@@ -653,9 +653,11 @@ this reload gate, not just the former.
   blur** — owner: "let those cards be inclusive... so let it not be white... their
   blur will also be different so also SETTABLE." New tokens `--card-alpha` (default
   `1`) and `--card-blur` (default `0px`) on `:root`; the app's actual content-card
-  family — `.card`, `.auth-card`, `.prod-card`, `.plan-card`, `.mystats .card`,
+  family — `.card`, `.auth-card`, `.prod-card`, `.mystats .card`,
   `.mtile`, `.menu-list`, `.shortcut`, `.milestone-card` (the same set CLAUDE.md
-  already enumerated as "every content card" — see Design system above) — now render
+  already enumerated as "every content card" — see Design system above; `.plan-card`
+  was removed 2026-08-17, see the Active Plans redesign note below, so it's dropped
+  from this list too) — now render
   `background:rgba(255,255,255,var(--card-alpha,1))` plus
   `backdrop-filter:blur(var(--card-blur,0px))` instead of flat `background:var(--surface)`.
   Deliberately NOT applied to `.iconbtn`, `.field`, `.btn-secondary`, `.sheet`,
@@ -673,6 +675,89 @@ this reload gate, not just the former.
   everywhere) with its own blur/opacity sliders, wired the same way as the
   `authbg`/`appbg` slider blocks. Covered by the same
   `test-authbg-settings-validation.js` (extended again, not a new file).
+
+## Round 3 of the same day, 2026-08-17 — auth card glass, image preload, product/plan card redesigns
+
+Owner (again, one message, several asks): auth card needs its own settable
+blur/opacity; product images pop in late after the loading screen; product cards
+too big, image should be on the left; Active Plans shouldn't use the rounded
+ring card, should look like the chevron list rows and open full purchase detail
+plus a live "next cashback" countdown; withdrawal accounts screen has no
+add/delete.
+
+- **`.auth-card` (the Login/Register white card) now has its OWN independent
+  blur/opacity**, separate from the general `--card-alpha`/`--card-blur` used
+  everywhere else — `--auth-card-alpha`/`--auth-card-blur` tokens, new
+  `authCardBlurPx`/`authCardOpacityPct` settings (same validation/defaults
+  pattern as every other pair this project has added). A 3rd slider block was
+  added inside the existing "Login / Register background" admin card (not a new
+  banner slot — it reuses the SAME `authbg` photo, just lets the card itself go
+  translucent so more of that photo shows through it too, which is what "these
+  cards also have background banners... settable" meant in practice).
+- **Images now preload during the loading screen instead of popping in after
+  it.** Root cause: `boot()` (settings/banners fetch) and the Firebase
+  `space8-auth` listener (which hides `#loadingScreen` and shows the next
+  screen) were two independent async flows with no ordering between them —
+  whichever finished first won, so the loading screen could vanish well before
+  images were ready. Also, product images were never fetched until
+  `renderHome()`/`renderProducts()` ran, i.e. AFTER the loading screen was
+  already gone. Fixed by: (1) `boot()` now also fetches `/public/products` and
+  stores `STATE.products` (both render functions already skip re-fetching when
+  it's set); (2) a new `preloadImages()` warms every banner + product image URL
+  via `new Image()` before `boot()`'s promise resolves, capped at 6s
+  (`Promise.race` against a timeout) so one slow/broken image URL can't hang
+  the loading screen forever — same reasoning as the `api()` fetch timeout
+  added earlier the same day; (3) the `space8-auth` listener now does
+  `await _bootPromise` before hiding `#loadingScreen`, so the loading screen
+  genuinely stays up until everything is cached. Tradeoff, deliberate and
+  owner-requested: first load can now take a little longer (up to the API
+  round-trips plus up to 6s of image warming) in exchange for images never
+  visibly popping in afterward.
+- **Product cards redesigned: one compact row instead of a 3-section stacked
+  card.** Was `.top` (image+name+price) → `.grid` (3-column Cycle/Daily/Total
+  boxes) → full-width Purchase button, stacked vertically (~140px tall). Now a
+  single flex row: image (48×48, left) → name/price/compact stats column → a
+  small Purchase button on the right (~70px tall, roughly half the height).
+  `prodCardHtml()` and the `.prod-card`/`.sat`/`.info`/`.stats`/`.invest-btn`
+  CSS rewritten together; `.prod-card .grid`/`.top` rules removed (dead).
+- **Active Plans redesigned from a rounded ring-progress card to a plain
+  chevron list row** — owner: "I don't want active plans to be like that... I
+  want them to be where on my products it shows arrow... not use that
+  rounding." `planCardHtml()` (a `.plan-card` with an SVG progress ring, `Day X
+  of Y`, `+earned`) replaced by `planRowHtml()`, which renders a `.menu-row
+  .plan-row` — the exact same chevron list style as About/Rules/Support —
+  wrapped in a `.menu-list` container. `.plan-card`/`.plan-ring`/`.plan-info`
+  CSS removed entirely (dead, nothing else used them); `.menu-row .info`/`.sub`
+  added so a menu-row can carry a two-line label (name + "Day X of Y ·
+  +earned") instead of the single-line `<span>` the other menu rows use.
+  Tapping a row opens a new `openPlanDetailSheet(id)` sheet: purchase date,
+  purchase time, price, daily return, total return, and earned-so-far in a
+  2-column grid, plus a **live-ticking "Next Cashback In HH:MM:SS" countdown**
+  (`startPlanCountdown()`, a 1s `setInterval`, cleared in `hideSheet()` so it
+  never keeps running after the sheet closes). The countdown target
+  (`nextCashbackMs()`) deliberately mirrors `settleInvestmentIfDue()`'s own
+  `Math.floor((now-createdMs)/86400000)` elapsed-days math in `server.js`
+  exactly, so the number shown always agrees with when the server's cashback
+  reconciler (see the Auto-update section above — it already ticks every 1s,
+  no backend change was needed for the "cron every 1 second" part of this ask)
+  actually pays. A fully-matured plan shows "Matured" instead of a countdown.
+- **Withdrawal accounts "no delete and addition" — investigated, not a bug.**
+  The screenshot the owner sent was the account **picker** (`openPayoutSheet`'s
+  `picking` mode, used mid-withdrawal to choose which bound account to send
+  to) — add/delete controls are deliberately hidden there by design
+  (`renderPayoutSheet()`: `picking ? '' : ...add form...`, same for delete
+  buttons). Managing accounts (add/delete) lives on the normal, non-picker
+  screen: Account → Withdrawal Account. Confirmed via code read, not changed;
+  flagged back to the owner in chat rather than "fixed" — if they actually want
+  add/delete available FROM the picker too, that's a real, separate feature
+  request to confirm before building.
+- **Verification**: full `test-*.js` suite green (100+ files). Rebuilt both
+  `user/` and `admin/`. Bumped `user/sw.js` cache `v232` → `v233`. Playwright:
+  confirmed the product card is a single ~71px-tall row with the image left of
+  the info column; confirmed the Active Plans row is a real `.menu-row` with a
+  `.chev` and that no `.plan-ring` element exists anywhere; confirmed the
+  countdown value visibly ticks down between two screenshots ~2s apart;
+  confirmed the detail sheet shows all six requested fields.
 
 ## Repo / branch / infra
 

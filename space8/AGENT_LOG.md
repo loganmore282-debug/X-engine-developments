@@ -14,6 +14,69 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Auth-card glass, image preload, product/plan card redesigns
+
+Owner: *"let those cards or tabs of login and register also have background
+banners and also SETTABLE... blur and opacity... images take long to load up
+after the loader... load all data images all during its loading... products
+cards abit big... images should be at the left... don't want active plans like
+that, want them where on my products it shows arrow, not use that rounding...
+put products details ie purchase date, time, price, total, dailyReturn, and
+live timer showing next cashback in 23:35:26 as it moves... withdrawal accounts
+no delete and addition."*
+
+- **`.auth-card` gets its own independent blur/opacity**, separate from the
+  general card slider shipped earlier the same day — `--auth-card-alpha`/
+  `--auth-card-blur`, new `authCardBlurPx`/`authCardOpacityPct` settings
+  (0–24/0–100, same validation pattern). Reuses the SAME `authbg` photo — no
+  new image slot — a 3rd slider block added inside the existing "Login /
+  Register background" admin card.
+- **Images preload during the loading screen — root-caused and fixed.**
+  `boot()` and the Firebase auth listener were two unordered async flows, so
+  the loading screen could (and did) disappear before images were ready;
+  product images specifically were never even fetched until `renderHome()`
+  ran, which only happens after the loading screen is gone. Fixed: `boot()`
+  now also fetches `/public/products`, then `preloadImages()` warms every
+  banner + product image via `new Image()`, capped at 6s so a broken URL can't
+  hang forever (same idea as the `api()` timeout added earlier). The
+  `space8-auth` listener now `await`s `boot()`'s promise before hiding
+  `#loadingScreen`. Deliberate tradeoff: first load can take a bit longer in
+  exchange for images never popping in after the fact.
+- **Product cards redesigned**: 3-stacked-section card (~140px tall) → single
+  compact row (~71px), image on the left, name/price/stats in the middle, a
+  small Purchase button on the right. `.prod-card .grid`/`.top` CSS removed.
+- **Active Plans redesigned**: rounded ring-progress `.plan-card` → plain
+  chevron list row (`.menu-row.plan-row`, the exact same style as
+  About/Rules/Support), wrapped in a `.menu-list`. `.plan-card`/`.plan-ring`/
+  `.plan-info` CSS removed entirely (dead). Tapping a row opens a new detail
+  sheet (`openPlanDetailSheet`) with purchase date, purchase time, price,
+  daily return, total return, earned-so-far, and a **live "Next Cashback In
+  HH:MM:SS" countdown** ticking every second (`startPlanCountdown`, cleared on
+  sheet close via `hideSheet()`). The countdown math mirrors
+  `settleInvestmentIfDue()`'s elapsed-days calculation in `server.js` exactly,
+  so it always agrees with when the existing 1s cashback reconciler actually
+  pays — no backend change was needed there, `reconcileCashback()` already
+  ticks every 1 second (`server.js`, added a prior session).
+- **Withdrawal accounts "no delete/addition" — investigated, confirmed NOT a
+  bug.** The owner's screenshot was the account picker (mid-withdrawal
+  "choose an account" screen), which deliberately hides add/delete by design —
+  that management lives on Account → Withdrawal Account instead. No code
+  changed; flagged back to the owner rather than guessing at a fix.
+- **Tests**: full suite green (100+ files, no new test file needed — nothing
+  here touched server-validated settings beyond the already-covered
+  `authCardBlurPx`/`authCardOpacityPct` pair, added to
+  `test-authbg-settings-validation.js`).
+- **Verification**: rebuilt `user/` and `admin/`. Bumped `user/sw.js` cache
+  `v232` → `v233`. Playwright confirmed: product card ~71px tall with image
+  left of the info column; Active Plans row is a real `.menu-row` with a
+  `.chev`, no `.plan-ring` anywhere; countdown value visibly decrements
+  between two screenshots ~2s apart; detail sheet shows all six requested
+  fields.
+- Nothing left open except the withdrawal-accounts point above, which is a
+  question back to the owner, not a pending fix.
+
+---
+
 ## 2026-08-17 — Claude — Frosted-glass cards + notif skeleton + fetch timeout + scroll-hide wordmark + Rules/Terms merge
 
 Owner (one message, five asks): *"let those cards be inclusive, however I can set
