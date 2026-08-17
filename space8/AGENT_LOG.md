@@ -14,6 +14,43 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Direct review (no ChatGPT) of deposits/withdrawals/callbacks/records/status validation: found and fixed a real "stuck at processing forever" bug in 3 places
+
+Owner: "bro now check on deposits, withdrawals, callbacks speed, records
+writing, and status validation." Read the actual code directly this round.
+
+Deposits, callback speed, and status validation: all already solid, no
+changes needed. Deposit crediting is claim-before-credit (prevents double
+credit on any retry path) and never trusts a webhook's bare status --
+always independently re-verified against MarzPay's own API, with a
+webhook-supplied uuid only trusted once its own live reference is
+confirmed to match. Both callback endpoints ack 200 as their literal first
+statement before any processing. Status values are strict allowlisted
+Sets, never loose string matching.
+
+Records writing: found a real bug. A withdrawal's `transactions` row
+(what the combined Records view renders) is written at request time and
+updated once to 'processing' at admin-approval -- but nothing ever
+updated it again once the withdrawal reached its real final outcome. That
+resolution happens in three different places (the MarzPay webhook, the
+member's own status poll, and the background reconciler / "Sync MarzPay"
+button) and NONE of the three ever touched the transactions collection.
+The withdrawals collection itself (and the dedicated History screen that
+reads it) always showed correct live status; a member's Records entry for
+the same withdrawal would read "...processing" forever, even for a payout
+that completed or failed days earlier, because that word was baked into
+the description string at request time.
+
+Fixed with one shared, idempotent helper
+(finalizeWithdrawalTransactionRecord) called from all three resolution
+paths' success AND failure branches (six call sites total) instead of six
+near-identical inline copies.
+
+Verification: new test-withdrawal-record-finalize.js (17 checks) resolves
+a fabricated processing withdrawal through all three paths for both
+outcomes and confirms the transaction record is correctly finalized every
+time. Full suite green, 64/64. Server-only change, no rebuild needed.
+
 ## 2026-08-17 — Claude — Asked ChatGPT to verify its own Round 12 security fixes; found 3 real problems, including a fix that was a complete no-op
 
 Owner: "now let us ask chatgpt where that patch is now green." Sent

@@ -2540,6 +2540,39 @@ app.post('/withdraw/request', async (req, res) => {
   } finally { _witRequestInFlight.delete(userId); }
 });
 
+// Real bug, confirmed while checking "records writing and status
+// validation": processWithdrawalCore (below) is the ONLY place that ever
+// updates the withdrawal's matching `transactions` row -- it sets it to
+// 'processing' the moment an admin approves and sends the payout. But once
+// the payout reaches its REAL final outcome (confirmed 'processed' or
+// 'declined'), that can happen in up to four different places --
+// /withdraw/callback's success branch, its failure branch, and
+// /withdraw/marzpay/status's success and failure branches (the client's own
+// poll) -- and NONE of them ever touched the transactions row again. The
+// `withdrawals` collection itself (and the dedicated Deposit/Withdrawal
+// History screen, which reads it directly) always showed the correct live
+// status; the combined Records view (which reads `/transactions` and
+// renders each row's `description` field verbatim) did not -- a member's
+// Records entry for a withdrawal that finished HOURS ago would still
+// literally read "...net X after Y% fee, processing" forever, because that
+// word was baked into the description string at request time and never
+// revisited. Shared here so all four resolution points call the same
+// logic instead of four near-identical inline copies; best-effort/
+// non-critical by design (matching processWithdrawalCore's own existing tx
+// update below) -- a failure here never blocks or reverts the real money
+// movement, which has already happened by the time this runs.
+async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome) {
+  try {
+    const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(1).get();
+    if (txSnap.empty) return;
+    const txDoc = txSnap.docs[0];
+    const oldDesc = txDoc.data().description || '';
+    const newDesc = outcome === 'processed'
+      ? oldDesc.replace(/, processing$/, '')
+      : oldDesc.replace(/, processing$/, ' — failed, refunded to wallet');
+    await txDoc.ref.update({ status: outcome === 'processed' ? 'success' : 'failed', description: newDesc });
+  } catch (e) { console.warn('finalizeWithdrawalTransactionRecord (non-critical):', e.message); }
+}
 // Admin manually approves & sends a pending cash-out via MarzPay. This is the
 // gate the owner wants: no withdrawal reaches the gateway until an admin
 // acts here. On success the record moves to 'processing' (or straight to
@@ -2734,6 +2767,7 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
     const marzStatus = isBank ? await marzGetBankTransferStatus(gatewayRef) : await marzGetSendStatus(gatewayRef);
     if (SUCCESS_STATUSES.has(marzStatus)) {
       await witSnap.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
+      await finalizeWithdrawalTransactionRecord(witSnap.id, 'processed');
       return res.json({ status: 'success', state: 'processed' });
     }
     if (FAILED_STATUSES.has(marzStatus)) {
@@ -2752,6 +2786,7 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
         t.update(witSnap.ref, { status: 'declined', failureReason: isBank ? 'Bank transfer failed at the provider' : 'Payout failed at the mobile-money provider' });
         t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
       }));
+      await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined');
       return res.json({ status: 'success', state: 'declined' });
     }
     res.json({ status: 'success', state: 'processing' });
@@ -2829,6 +2864,7 @@ app.post('/withdraw/callback', async (req, res) => {
       }
       if (webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
       await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
+      await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
     } else if (isFailed) {
       let uuid = wit.marzTxUuid;
       let tx = null;
@@ -2857,6 +2893,7 @@ app.post('/withdraw/callback', async (req, res) => {
         t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
         t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
       }));
+      await finalizeWithdrawalTransactionRecord(doc.id, 'declined');
     }
   } catch (e) {
     console.error('Withdraw callback error:', e.message);
@@ -4807,6 +4844,7 @@ async function reconcilePendingWithdrawals() {
       const marzStatus = isBank ? await marzGetBankTransferStatus(gatewayRef) : await marzGetSendStatus(gatewayRef);
       if (SUCCESS_STATUSES.has(marzStatus)) {
         await doc.ref.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() }).catch(() => {});
+        await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
         settled++;
       } else if (FAILED_STATUSES.has(marzStatus)) {
         await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {
@@ -4823,6 +4861,7 @@ async function reconcilePendingWithdrawals() {
           t.update(doc.ref, { status: 'declined', failureReason: isBank ? 'Bank transfer failed at the provider' : 'Payout failed at the mobile-money provider' });
           t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
         }));
+        await finalizeWithdrawalTransactionRecord(doc.id, 'declined');
         settled++;
       } else {
         // Was silently swallowed with zero trace of WHY -- a withdrawal

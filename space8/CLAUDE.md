@@ -1614,6 +1614,80 @@ with the first pass — all verified, all fixed:
   and the admin attach-referrer banned-check). Full `test-*.js` suite
   green, 63/63. Server-only changes, no rebuild needed.
 
+## Round 14 of the same day, 2026-08-17 — direct review of deposits/withdrawals/callbacks/records/status validation (no ChatGPT this round); found and fixed a real "stuck at processing forever" records-writing bug in 3 separate places
+
+Owner: *"bro now check on deposits, withdrawals, callbacks speed, records
+writing, and status validation."* Read the actual deposit and withdrawal
+code directly (no ChatGPT this round — self-review) across
+`/deposit/marzpay`, `creditDeposit`, `/deposit/marzpay/status`,
+`/deposit/callback`, `/withdraw/request`, `processWithdrawalCore`,
+`/withdraw/marzpay/status`, `/withdraw/callback`, and the background
+reconciler (`reconcilePendingDeposits`/`reconcilePendingWithdrawals`).
+
+**Deposits, callback speed, and status validation: all already solid, no
+changes needed.** Deposit crediting is claim-before-credit (flips to
+'matched' before crediting the wallet, so every retry path — webhook,
+client poll, reconciler — becomes a clean no-op instead of a double
+credit) and never trusts a webhook's bare claimed status: it always
+independently re-verifies against MarzPay's own API, and a uuid the
+webhook itself supplies (rather than one this server captured on its own
+outbound call) is only ever trusted once that uuid's OWN live-reported
+`reference` is confirmed to match this exact deposit — closing two
+previously-fixed real exploits (see the extensive comment history at
+`/deposit/callback`). Both `/deposit/callback` and `/withdraw/callback`
+respond `200` as their literal first statement, before any processing, so
+MarzPay's own webhook retry logic is never triggered by slow work on this
+end — that's already the fastest a webhook ack can be. `SUCCESS_STATUSES`/
+`FAILED_STATUSES` are strict allowlisted `Set`s checked with `.has()`,
+never loose string matching, and an unrecognized status is correctly
+treated as "still unresolved," never silently assumed either way.
+
+**Records writing: found a real bug, confirmed by reading the code, fixed
+in all three places it existed.** A withdrawal's matching `transactions`
+row (what the combined Records view actually renders — `description`
+field shown verbatim) is written once at request time
+(`/withdraw/request`, status `'pending'`, description ending "...net X
+after Y% fee, processing") and updated once more to `'processing'` when
+an admin approves and sends it (`processWithdrawalCore`) — but nothing
+EVER updated it again once the withdrawal reached its real final outcome.
+That resolution can happen in three completely different places — the
+MarzPay webhook (`/withdraw/callback`), the member's own client-side poll
+(`/withdraw/marzpay/status`), or the background reconciler
+(`reconcilePendingWithdrawals`, also reachable on-demand via the admin
+panel's "Sync MarzPay" button, `GET /admin/payments/sync`) — and grepping
+every `where('withdrawalId', '==', ...)` call site in the file confirmed
+NONE of the three ever touched the `transactions` collection. The
+`withdrawals` collection itself (and the dedicated Deposit/Withdrawal
+History screen, which reads it directly via `openHistorySheet()`) always
+showed the correct live status; a member's Records entry for the SAME
+withdrawal would keep reading "...processing" verbatim forever — even for
+a payout that actually completed or failed days earlier — because that
+literal word was baked into the description string at request time and
+nothing ever revisited it.
+- Fixed with one new shared, idempotent helper,
+  `finalizeWithdrawalTransactionRecord(withdrawalId, outcome)`, called from
+  all three resolution paths (both the success and failure branch of each)
+  instead of six near-identical inline copies. It looks up the
+  transaction by `withdrawalId`, sets `status` to `'success'`/`'failed'`,
+  and rewrites `description` (dropping the trailing ", processing" on
+  success; replacing it with " — failed, refunded to wallet" on failure).
+  Best-effort/non-critical by design, matching the existing pattern
+  `processWithdrawalCore` already used for its own transactions-row
+  update — a failure here is logged and swallowed, never blocks or
+  reverts the real money movement, which has already happened by the time
+  this runs. Idempotent by construction (a second call's regex simply
+  doesn't match an already-updated description, so it's a safe no-op),
+  which matters since more than one of the three resolution paths can
+  plausibly fire for the same withdrawal in quick succession.
+- **Verification**: new `test-withdrawal-record-finalize.js` (17 checks) —
+  fabricates a withdrawal already at `'processing'` with its matching
+  transaction row (exactly as the real request+approve flow would leave
+  it), then separately resolves it through each of the three paths for
+  BOTH outcomes (processed and declined) and confirms the transaction
+  record is correctly finalized every time, not just the `withdrawals`
+  collection. Full `test-*.js` suite green, 64/64 (63 existing + the new
+  file). Server-only change, no rebuild needed.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's
