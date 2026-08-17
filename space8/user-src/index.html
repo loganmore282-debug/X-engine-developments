@@ -79,6 +79,17 @@ svg{display:block;}
 .auth-label{ display:block; font-size:11.5px; font-weight:700; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px 2px; }
 .auth-input{ width:100%; background:var(--void); border:1px solid var(--line); border-radius:10px; padding:13px 14px; font-size:14.5px; color:var(--ink); outline:none; }
 .auth-input:focus{ border-color:var(--blue); }
+/* Chrome/WebView autofill-detection trick (owner: "detect auto input by
+   Google password and it automatically starts logging in") -- an
+   autofilled input matches :-webkit-autofill, which this attaches a
+   (visually invisible, near-zero-duration) animation to; JS below listens
+   for the resulting 'animationstart' event to tell a genuine browser
+   autofill apart from the user typing character by character, which no
+   plain 'input'/'change' listener can distinguish on its own. */
+@keyframes onAutoFillStart{ from{} to{} }
+@keyframes onAutoFillCancel{ from{} to{} }
+.auth-input:-webkit-autofill{ animation-name:onAutoFillStart; animation-duration:.001s; }
+.auth-input:not(:-webkit-autofill){ animation-name:onAutoFillCancel; animation-duration:.001s; }
 .auth-input::placeholder{ color:var(--ink-dim); }
 .auth-pwrow{ position:relative; }
 .auth-pwrow .auth-input{ padding-right:56px; }

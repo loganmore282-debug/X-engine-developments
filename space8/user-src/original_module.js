@@ -173,7 +173,9 @@ var ICONS = {
   telegram: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 4-9.4 16-2.6-7-7-2.6Z"/><path d="M21 4 8.9 12.9"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>',
-  key: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.6 12.4 8.4-8.4M15 8l3 3M18 5l3 3"/></svg>'
+  key: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.6 12.4 8.4-8.4M15 8l3 3M18 5l3 3"/></svg>',
+  whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.6-4.8A8.5 8.5 0 1 1 8.4 19.6Z"/><path d="M8.5 9.3c0 3.5 2.7 6.2 6.2 6.2.6 0 1-.5.9-1.1l-.3-1.1a.9.9 0 0 0-1-.6l-1.2.2a5 5 0 0 1-2.9-2.9l.2-1.2a.9.9 0 0 0-.6-1L8.7 7.5a.9.9 0 0 0-1.1.9c0 .3 0 .6.1.9Z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>'
 };
 function ico(name){ return ICONS[name] || ''; }
 
@@ -400,6 +402,39 @@ $('loginBtn').onclick = async function(){
   setBtnLoading($('loginBtn'), false);
   showSuccessPopup('Login successful');
 };
+
+// Owner: "detect auto input by Google password and it automatically starts
+// logging in automatically" -- when Chrome's own saved-password sheet (the
+// one it shows on tapping the field, not this app's UI) fills BOTH fields
+// at once, auto-submit instead of making the member tap Login themselves.
+// Relies on the :-webkit-autofill CSS trick above (index.html) since a
+// plain 'input' listener can't tell "browser filled this in one shot" apart
+// from "user is still typing it out character by character" -- typing the
+// phone number alone, for instance, must never trigger this.
+(function(){
+  var filled = { phone: false, password: false };
+  var tried = false;
+  function maybeAutoLogin(){
+    if (tried) return;
+    if (!filled.phone || !filled.password) return;
+    if ($('screenLogin').style.display === 'none') return; // not on the login screen right now
+    if (!$('loginPhone').value || !$('loginPassword').value) return;
+    tried = true;
+    $('loginBtn').click();
+  }
+  function watch(input, key){
+    input.addEventListener('animationstart', function(e){
+      if (e.animationName === 'onAutoFillStart') { filled[key] = true; maybeAutoLogin(); }
+      else if (e.animationName === 'onAutoFillCancel') { filled[key] = false; }
+    });
+  }
+  watch($('loginPhone'), 'phone');
+  watch($('loginPassword'), 'password');
+  // A fresh visit to the login screen (or a failed attempt) should allow
+  // another auto-login try -- e.g. Chrome offering a DIFFERENT saved
+  // credential after the first guess was wrong.
+  $('goLogin').addEventListener('click', function(){ tried = false; });
+})();
 
 $('registerBtn').onclick = async function(){
   showAuthErr('registerErr', '');
@@ -1321,7 +1356,7 @@ async function renderAccount(){
   if ($('telegramGroupBtn')) $('telegramGroupBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramGroup); if (u) window.open(u, '_blank'); };
   if ($('telegramChannelBtn')) $('telegramChannelBtn').onclick = function(){ var u = safeExternalUrl(sett.telegramChannel); if (u) window.open(u, '_blank'); };
   qsa('.menu-row[data-key]').forEach(function(row){
-    row.onclick = function(){ openInfoSheet(row.dataset.key); };
+    row.onclick = function(){ row.dataset.key === 'support' ? openSupportSheet() : openInfoSheet(row.dataset.key); };
   });
 }
 async function promptInstallApp(){
@@ -1391,11 +1426,49 @@ async function openInfoSheet(key){
   var s = STATE.settings || (await api('/public/settings')).settings || {};
   var map = {
     about: ['About Space8', s.aboutText ? escNl(s.aboutText) : 'Space8 lets you invest in satellite-themed plans and earn daily returns.'],
-    rules: ['Rules', s.rulesText ? escNl(s.rulesText) : 'Standard platform rules apply.'],
-    support: ['Support', 'Telegram: ' + esc(s.supportTelegram||'—') + '<br>WhatsApp: ' + esc(s.whatsappContact||'—') + '<br>Hours: ' + esc(s.supportHours||'—')]
+    rules: ['Rules', s.rulesText ? escNl(s.rulesText) : 'Standard platform rules apply.']
   };
   var m = map[key] || ['Info',''];
   openSheet('generic', '<div class="sheet-title">' + m[0] + '</div><div style="font-size:13.5px;line-height:1.6;color:var(--ink-dim)">' + m[1] + '</div>');
+}
+// Owner: rebuild Support as its own screen (photo header, tappable contact
+// rows, a highlighted hours card) instead of the old flat text dump that
+// only ever showed 3 of the 6 fields admin actually configures --
+// telegramGroup/telegramChannel/whatsappGroup were set in the admin panel
+// but had no render path anywhere ("support items are not fetching and
+// showing up... yet they were set" -- they were saved fine, this screen
+// just never displayed them). Every row below is real, admin-configured
+// data or it doesn't render at all -- no placeholder "—" rows.
+async function openSupportSheet(){
+  var s = STATE.settings || (await api('/public/settings')).settings || {};
+  var rows = [];
+  if (s.supportTelegram) rows.push(['telegram', 'Telegram Support', s.supportTelegram]);
+  if (s.telegramGroup) rows.push(['telegram', 'Official Telegram Group', s.telegramGroup]);
+  if (s.telegramChannel) rows.push(['telegram', 'Telegram Channel', s.telegramChannel]);
+  if (s.whatsappGroup) rows.push(['whatsapp', 'WhatsApp Group', s.whatsappGroup]);
+  if (s.whatsappContact) rows.push(['whatsapp', 'WhatsApp Contact', s.whatsappContact]);
+  var html = '<div class="sheet-title">Support</div>' + bannerHtml('supportbg', 'support');
+  html += rows.length ?
+    '<div class="menu-list" style="margin-top:14px">' + rows.map(function(r, i){
+      return '<div class="menu-row" data-support-link="' + i + '">' + ico(r[0]) + '<span>' + esc(r[1]) + '</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>';
+    }).join('') + '</div>' :
+    '<div style="margin-top:14px">' + emptyState('support', 'Support contact details have not been set up yet — reach out from the Account tab another way for now.') + '</div>';
+  if (s.supportHours) {
+    html += '<div class="card" style="text-align:center;margin-top:14px">' +
+      '<div style="display:flex;justify-content:center;margin-bottom:6px;color:var(--blue)">' + ico('clock') + '</div>' +
+      '<div style="font-size:20px;font-weight:700">' + esc(s.supportHours) + '</div>' +
+      '<div style="font-size:12px;color:var(--ink-dim);margin-top:4px">Customer service hours</div>' +
+    '</div>';
+  }
+  html += '<div class="card" style="margin-top:14px;font-size:13px;line-height:1.6;color:var(--ink-dim)">' +
+    '<div>1. Have a question? Reach out through any of the channels above — we\'re happy to help.</div>' +
+    '<div style="margin-top:8px">2. Keep your password and withdrawal PIN safe. Official Space8 staff will never ask you for either, on any channel.</div>' +
+  '</div>';
+  openSheet('generic', html);
+  rows.forEach(function(r, i){
+    var el = qs('[data-support-link="' + i + '"]', $('genericSheet'));
+    if (el) el.onclick = function(){ var u = safeExternalUrl(r[2]); if (u) window.open(u, '_blank'); };
+  });
 }
 
 // ── PAYOUT ACCOUNT / PIN ─────────────────────────────────────────────
@@ -1789,7 +1862,7 @@ function openAssistant(){
     // the same history slot mechanism; closing this one first keeps
     // exactly one overlay "current" at a time instead of a sheet opening
     // stacked behind the still-open assistant panel.
-    $('assistCareBtn').onclick = function(){ hideAssistant(); openInfoSheet('support'); };
+    $('assistCareBtn').onclick = function(){ hideAssistant(); openSupportSheet(); };
     $('assistQuick').innerHTML = ASSIST_QUICK.map(function(q){ return '<div class="qchip">' + esc(q) + '</div>'; }).join('');
     qsa('.qchip').forEach(function(c){ c.onclick = function(){ assistSend(c.textContent); }; });
   }
@@ -1846,9 +1919,15 @@ $('notifBtn').onclick = openNotificationsSheet;
 
 // ── BOOT ──────────────────────────────────────────────────────────────
 async function boot(){
-  var setR = await api('/public/settings');
+  // Real bug (2026-08-17, owner: "loader takes long to load"): these three
+  // GET calls don't depend on each other at all, but used to run one after
+  // another (await, await, await) -- on Render's free-tier cold start
+  // (mentioned throughout this codebase), each one pays real round-trip
+  // latency back-to-back instead of overlapping. Promise.all lets them
+  // share the same cold-start wait instead of tripling it.
+  var bootR = await Promise.all([api('/public/settings'), api('/public/banners'), api('/public/products')]);
+  var setR = bootR[0], bannerR = bootR[1], prodR = bootR[2];
   if (setR.status === 'success') STATE.settings = setR.settings;
-  var bannerR = await api('/public/banners');
   if (bannerR.status === 'success') STATE.banners = bannerR.banners || {};
   if (STATE.banners.authbg) {
     document.documentElement.style.setProperty('--auth-bg-url', 'url("' + STATE.banners.authbg + '")');
@@ -1879,11 +1958,10 @@ async function boot(){
   var annTintPct = (STATE.settings||{}).annBgTintPct;
   document.documentElement.style.setProperty('--ann-bg-blur', (annBlurPx != null ? annBlurPx : 6) + 'px');
   document.documentElement.style.setProperty('--ann-bg-tint', (annTintPct != null ? annTintPct : 55) / 100);
-  // Fetched here (not left to renderHome/renderProducts' own first call) so
+  // Fetched above (not left to renderHome/renderProducts' own first call) so
   // the images below are already warm in the browser's cache by the time
   // either page actually renders -- renderHome/renderProducts both already
   // skip re-fetching when STATE.products is already set.
-  var prodR = await api('/public/products');
   if (prodR.status === 'success') STATE.products = prodR.products;
   await preloadImages();
 }

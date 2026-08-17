@@ -14,6 +14,62 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Auto-login on Chrome autofill, Support screen rebuilt as its own page + settable banner, boot() parallelized, missing support fields fixed
+
+- **What changed**:
+  - **Auto-login on browser autofill** (`user-src/index.html` + `original_module.js`):
+    owner wants the app to detect Chrome's own saved-password autofill and log in
+    automatically instead of requiring a manual tap. Added the standard
+    `:-webkit-autofill` + `animationstart` CSS/JS detection trick (a plain
+    `input`/`change` listener can't reliably tell "browser filled this in one
+    shot" apart from the member typing it out character by character) to
+    `#loginPhone`/`#loginPassword` — once BOTH are marked genuinely autofilled,
+    auto-clicks the existing Login button. Resets on returning to the login
+    screen so a second saved-credential pick can also auto-submit.
+  - **Support screen rebuilt as its own page** (`openSupportSheet()`, new
+    function): was a flat `openInfoSheet('support')` text dump showing only 3
+    of the 6 fields the admin panel actually lets you configure
+    (`supportTelegram`, `whatsappContact`, `supportHours`) — `telegramGroup`,
+    `telegramChannel`, `whatsappGroup` were saved correctly server-side but had
+    NO render path anywhere in the client, which is the actual cause of "support
+    items are not fetching and showing up... yet they were set" (they were never
+    lost or unfetched — the old screen just never displayed them). New screen:
+    header photo (`bannerHtml('supportbg', ...)`), a tappable row for every
+    configured contact channel (Telegram Support/Group/Channel, WhatsApp
+    Group/Contact — each only rendered if actually set, no "—" placeholders), a
+    highlighted Support Hours card, and two short safety-tip lines. Support row
+    on Account and the assistant's "Customer Care" button both now open this
+    instead of the old `openInfoSheet('support')` path (that function's map lost
+    its `support` entry — nothing else referenced it).
+  - **Settable Support banner** (`server.js`, `admin-src/index.html`): added
+    `supportbg` to `BANNER_KEYS` and to the admin panel's generic `BANNER_LABELS`
+    banner-upload loop — no other server wiring needed since `/admin/banners*`
+    and `/public/banners` already iterate `BANNER_KEYS` generically.
+  - **`boot()` parallelized** (owner: "loader takes long to load"): the
+    `/public/settings`, `/public/banners`, `/public/products` fetches ran one
+    after another (`await`, `await`, `await`) despite not depending on each
+    other at all — on Render's free-tier cold start (a real, repeatedly-noted
+    factor throughout this codebase), each pays its own round-trip back-to-back
+    instead of overlapping. Now `Promise.all([...])`.
+- **Why**: all from one owner message bundling a feature request, a UX request,
+  and two bug reports ("loader takes long", "support items are not fetching and
+  showing up... yet they were set") together with a JETBAY screenshot as the
+  target look for Support (photo header, tappable contact rows, a highlighted
+  hours card, numbered tips underneath).
+- **Verification**: `node --check` on `server.js` and `original_module.js`.
+  `build-core.js` and `build-admin.js` both round-trip OK. Full suite: 68/68
+  (server.js's only change here — adding one key to `BANNER_KEYS` — is already
+  covered by `test-banners-security.js`'s generic whitelist-mechanism checks,
+  so no new test file needed for that half; the rest is client-only UI/UX work
+  this test harness has no way to drive, same as every other client-only change
+  this session). `user/sw.js` cache bumped `v249` → `v250`.
+- **Left open**: real-device verification of the autofill auto-login (Chrome's
+  autofill behavior/timing can vary by Android WebView version — this needs a
+  real phone test, not just code review) and of the new Support screen's visual
+  layout. The owner still needs to actually upload a `supportbg` image and fill
+  in `telegramGroup`/`telegramChannel`/`whatsappGroup` from the admin panel for
+  the new rows to show anything beyond whichever fields were already set.
+
 ## 2026-08-17 — Claude — Codex re-verification of the audit-fix commit: 6 real gaps found and fixed, 1 architectural limit found and documented instead of faked
 
 - **What changed**: Asked Codex to re-check its own 27 findings against commit
