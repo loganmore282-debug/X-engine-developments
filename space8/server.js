@@ -412,6 +412,17 @@ const BANNER_MAX_LEN = 2_800_000;
 // outright. 999,999,999 (9 digits) is comfortably above any real UGX
 // mobile-money transaction MarzPay would ever actually process.
 const MAX_MONEY_AMOUNT = 999_999_999;
+// ChatGPT-verified gap (2026-08-17): `Number(x) || 0` -- the pattern used
+// everywhere the admin aggregation loops guard against a string-poisoned
+// field -- still lets Infinity/-Infinity through, since Infinity is
+// truthy (`Infinity || 0` is Infinity). A stored value of "Infinity",
+// "1e309", or a genuine double overflow would poison a running total the
+// same way an unguarded string does. Number.isFinite() closes that gap
+// for every one of those aggregation sites in one shared helper.
+function finiteMoney(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 ambiguity
 // Draws n characters from an arbitrary alphabet using crypto.randomInt --
 // Node's own implementation, not a hand-rolled byte%length -- which
@@ -618,7 +629,7 @@ async function wholeTeamDeposits(userId) {
     snap.forEach(d => {
       const v = d.data();
       nextIds.push(d.id);
-      if (v.status !== 'banned') total += Number(v.totalDeposited || 0);
+      if (v.status !== 'banned') total += finiteMoney(v.totalDeposited);
     });
     parentIds = nextIds;
   }
@@ -3700,13 +3711,13 @@ app.get('/admin/users/recount', async (req, res) => {
       const t = d.data();
       if (!t.userId) return;
       const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
-      if (t.type === 'deposit') row.deposited += Number(t.amount) || 0;
+      if (t.type === 'deposit') row.deposited += finiteMoney(t.amount);
       // "Cumulative Earnings" (totalEarned) is credited live from 5 sources:
       // maturity/daily payout (cashback), referral commission, task-center
       // reward, gift-code redemption, and check-in bonus -- this recount has
       // to sum the exact same 5 transaction types or "Recalculate totals"
       // would silently erase whichever of them it left out for every user.
-      else if (t.type === 'cashback' || t.type === 'commission' || t.type === 'team_reward' || t.type === 'promocode' || t.type === 'checkin') row.earned += Number(t.amount) || 0;
+      else if (t.type === 'cashback' || t.type === 'commission' || t.type === 'team_reward' || t.type === 'promocode' || t.type === 'checkin') row.earned += finiteMoney(t.amount);
       if (t.type === 'checkin') (checkinDays[t.userId] || (checkinDays[t.userId] = new Set())).add(eatDayKey(t.createdAt));
     });
     // totalInvested is a plain cumulative counter (never derived server-side
@@ -3727,7 +3738,7 @@ app.get('/admin/users/recount', async (req, res) => {
     invSnap.forEach(d => {
       const inv = d.data();
       if (!inv.userId) return;
-      investedByUser[inv.userId] = (investedByUser[inv.userId] || 0) + (Number(inv.amount) || 0);
+      investedByUser[inv.userId] = (investedByUser[inv.userId] || 0) + finiteMoney(inv.amount);
     });
     const usersSnap = await db.collection('users').limit(10000).get();
     const referredByMap = {}; // userId -> their own referredBy
@@ -3770,7 +3781,7 @@ app.get('/admin/users/recount', async (req, res) => {
       // -- see the corruption explanation above. Never touches walletBalance
       // or any investment/payout record, purely a display/analytics counter.
       const realInvested = investedByUser[d.id] || 0;
-      if (realInvested !== (Number(u.totalInvested) || 0)) {
+      if (realInvested !== finiteMoney(u.totalInvested)) {
         fields.totalInvested = realInvested;
         investedFixed++;
       }
@@ -3804,6 +3815,13 @@ app.get('/admin/integrity', async (req, res) => {
     txSnap.forEach(d => {
       const t = d.data();
       if (!t.userId) return;
+      // Deliberately NOT finiteMoney() here, unlike the dashboard aggregators
+      // above -- this endpoint's whole job is to SURFACE a corrupted value
+      // (via the mismatch alerts below), not launder it back to 0 before an
+      // admin ever sees it. ledgerByUser/investedByUser/bal/storedInvested
+      // are all per-user (never summed across different users), so there's
+      // no cross-user contamination risk from leaving a raw Infinity/NaN
+      // value in play the way there was in /admin/stats and /admin/analytics.
       ledgerByUser[t.userId] = (ledgerByUser[t.userId] || 0) + (Number(t.amount) || 0);
       if (t.ref && (t.type === 'deposit' || t.type === 'promocode')) {
         const key = t.userId + '::' + t.ref;
@@ -4296,7 +4314,7 @@ app.post('/admin/deposits/list', async (req, res) => {
       if (r.status === 'matched') {
         const { day } = eatParts(r.createdAt);
         const row = dayMap[day] || (dayMap[day] = { day, count: 0, amount: 0 });
-        row.count++; row.amount += Number(r.amount) || 0;
+        row.count++; row.amount += finiteMoney(r.amount);
       }
     });
     const processedByDay = Object.values(dayMap).sort((a, b) => a.day < b.day ? -1 : 1);
@@ -4375,7 +4393,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
       if (w.status === 'processed') {
         const { day } = eatParts(w.createdAt);
         const row = dayMap[day] || (dayMap[day] = { day, count: 0, amount: 0 });
-        row.count++; row.amount += Number(w.net) || 0;
+        row.count++; row.amount += finiteMoney(w.net);
       }
     });
     const processedByDay = Object.values(dayMap).sort((a, b) => a.day < b.day ? -1 : 1);
@@ -4602,22 +4620,26 @@ app.get('/admin/stats', async (req, res) => {
       // value is in. Doesn't repair the corrupted source field itself --
       // that still needs Admin -> Users -> "Recalculate totals" -- but
       // stops one bad account from poisoning this entire dashboard figure.
-      totalWallet      += Number(u.walletBalance)  || 0;
-      totalDeposited   += Number(u.totalDeposited) || 0;
-      totalWithdrawn   += Number(u.totalWithdrawn) || 0;
-      totalInvested    += Number(u.totalInvested)  || 0;
-      totalEarned      += Number(u.totalEarned)    || 0;
-      totalCommissions += Number(u.teamCommission) || 0;
+      totalWallet      += finiteMoney(u.walletBalance);
+      totalDeposited   += finiteMoney(u.totalDeposited);
+      totalWithdrawn   += finiteMoney(u.totalWithdrawn);
+      totalInvested    += finiteMoney(u.totalInvested);
+      totalEarned      += finiteMoney(u.totalEarned);
+      totalCommissions += finiteMoney(u.teamCommission);
       if (u.referredBy) referredUsers++;
       if (u.status === 'banned') bannedUsers++;
     });
     let outstandingPayout = 0;
     activeInvSnap.forEach(d => {
       const inv = d.data();
-      outstandingPayout += Math.max(0, (inv.expectedReturn || 0) - (inv.paidOut || 0));
+      outstandingPayout += Math.max(0, finiteMoney(inv.expectedReturn) - finiteMoney(inv.paidOut));
     });
+    // Same finiteMoney() treatment -- withdrawals.net/amount are stored
+    // fields subject to the identical historical corruption risk as any
+    // other money field, and the old `net || amount || 0` fallback would
+    // have let a poisoned string or Infinity straight into the += below.
     let pendingPayouts = 0;
-    pendingWitSnap.forEach(d => pendingPayouts += (d.data().net || d.data().amount || 0));
+    pendingWitSnap.forEach(d => pendingPayouts += finiteMoney(d.data().net) || finiteMoney(d.data().amount));
     const liabilities = totalWallet + pendingPayouts + outstandingPayout;
     const healthBalance = totalDeposited - totalWithdrawn - liabilities;
     res.json({
@@ -4673,7 +4695,7 @@ app.post('/admin/analytics', async (req, res) => {
       if (dep.status !== 'matched') return;
       const ms = tsMillis(dep.createdAt);
       if (ms < sinceMs) return;
-      const a = dep.amount || 0;
+      const a = finiteMoney(dep.amount);
       depAmount += a; depCount++;
       const { hour, day } = eatParts(dep.createdAt);
       byHour[hour].depAmt += a; byHour[hour].depCnt++;
@@ -4687,9 +4709,9 @@ app.post('/admin/analytics', async (req, res) => {
       const w = d.data();
       if (w.status !== 'processed') return;
       const ms = tsMillis(w.createdAt);
-      bigWits.push({ phone: w.phone || '', amount: w.amount || 0, when: ms });
+      bigWits.push({ phone: w.phone || '', amount: finiteMoney(w.amount), when: ms });
       if (ms < sinceMs) return;
-      const a = w.amount || 0;
+      const a = finiteMoney(w.amount);
       witAmount += a; witCount++;
       const { hour, day } = eatParts(w.createdAt);
       byHour[hour].witAmt += a; byHour[hour].witCnt++;
@@ -4722,20 +4744,20 @@ app.post('/admin/analytics', async (req, res) => {
         const ms = tsMillis(w.processedAt || w.createdAt);
         if (ms >= sinceMs) {
           const s = touchStaff(w.processedBy);
-          s.approvals++; s.amountApproved += w.amount || 0;
+          s.approvals++; s.amountApproved += finiteMoney(w.amount);
           s.firstAt = s.firstAt === null ? ms : Math.min(s.firstAt, ms);
           s.lastAt = s.lastAt === null ? ms : Math.max(s.lastAt, ms);
-          staffTimeline.push({ actor: w.processedBy, action: 'approved', phone: w.phone || w.accountName || '', amount: w.amount || 0, at: ms });
+          staffTimeline.push({ actor: w.processedBy, action: 'approved', phone: w.phone || w.accountName || '', amount: finiteMoney(w.amount), at: ms });
         }
       }
       if (w.declinedBy) {
         const ms = tsMillis(w.declinedAt || w.createdAt);
         if (ms >= sinceMs) {
           const s = touchStaff(w.declinedBy);
-          s.declines++; s.amountDeclined += w.amount || 0;
+          s.declines++; s.amountDeclined += finiteMoney(w.amount);
           s.firstAt = s.firstAt === null ? ms : Math.min(s.firstAt, ms);
           s.lastAt = s.lastAt === null ? ms : Math.max(s.lastAt, ms);
-          staffTimeline.push({ actor: w.declinedBy, action: 'declined', phone: w.phone || w.accountName || '', amount: w.amount || 0, at: ms });
+          staffTimeline.push({ actor: w.declinedBy, action: 'declined', phone: w.phone || w.accountName || '', amount: finiteMoney(w.amount), at: ms });
         }
       }
     });
@@ -4754,12 +4776,14 @@ app.post('/admin/analytics', async (req, res) => {
       const ms = tsMillis(u.createdAt);
       if (ms >= sinceMs) { newUsers++; const { day } = eatParts(u.createdAt); ensureDay(day).users++; }
       if ((u.totalInvested || 0) > 0) activeInvestors++;
-      // Same string-poisoning fix as the dashboard stats above.
-      investedAmount += Number(u.totalInvested) || 0;
-      commissionsPaid += Number(u.teamCommission) || 0;
+      // Same string-poisoning fix as the dashboard stats above, upgraded to
+      // finiteMoney() so a stored Infinity/-Infinity can't slip through
+      // Number(x) || 0 either (Infinity is truthy).
+      investedAmount += finiteMoney(u.totalInvested);
+      commissionsPaid += finiteMoney(u.teamCommission);
       if ((u.teamL1Count || 0) > 0 || (u.teamCommission || 0) > 0)
-        referrers.push({ phone: u.phone || '', team: u.teamL1Count || 0, earned: u.teamCommission || 0 });
-      if ((u.totalDeposited || 0) > 0) depositors.push({ phone: u.phone || '', amount: u.totalDeposited || 0 });
+        referrers.push({ phone: u.phone || '', team: u.teamL1Count || 0, earned: finiteMoney(u.teamCommission) });
+      if ((u.totalDeposited || 0) > 0) depositors.push({ phone: u.phone || '', amount: finiteMoney(u.totalDeposited) });
     });
     // Task Center rewards paid so far (both milestone ladders), summed
     // straight off each user's own claim flags rather than a separate ledger.
@@ -4791,7 +4815,7 @@ app.post('/admin/analytics', async (req, res) => {
     let maturingCount = 0, maturingPayout = 0;
     activeInvSnap.forEach(d => {
       const inv = d.data();
-      const paidOut = Number(inv.paidOut) || 0, dailyPayout = Number(inv.dailyPayout) || 0, expected = Number(inv.expectedReturn) || 0;
+      const paidOut = finiteMoney(inv.paidOut), dailyPayout = finiteMoney(inv.dailyPayout), expected = finiteMoney(inv.expectedReturn);
       if (expected > 0 && paidOut + dailyPayout >= expected) { maturingCount++; maturingPayout += Math.max(0, expected - paidOut); }
     });
     const REINVEST_RATE_PCT = 35;

@@ -9,6 +9,30 @@ var STATE = {
   hasPayoutPin: false, banners: {}, currentPage: 'home',
   loaded: { home:false, products:false, team:false, account:false }
 };
+// ChatGPT-verified bug (2026-08-17): on a shared device, a real sign-out
+// only ever cleared STATE.account/STATE.loaded -- STATE.teamMembers/
+// teamExpanded/teamStats, STATE.investments, and STATE.bankAccounts all
+// stayed cached, so the NEXT person to log in on the same browser/tab
+// could still see the PREVIOUS member's referral phone numbers, Active/
+// Pending statuses, active plans, and saved withdrawal accounts (all
+// treated as valid cache by their respective render functions, which skip
+// re-fetching whenever a value is already present). products/settings/
+// banners are deliberately left alone -- those are shared catalog data,
+// not per-user, so keeping them cached across a login switch is correct
+// and desirable. Called from both doLogout() and the 'space8-auth'
+// listener's signed-out branch (the actual authoritative place a sign-out
+// is detected, whether triggered by a logout tap or a Firebase session
+// simply expiring) so neither path can drift out of sync with the other.
+function resetUserState(){
+  STATE.account = null;
+  STATE.investments = null;
+  STATE.teamStats = null;
+  STATE.teamMembers = {1:null,2:null,3:null};
+  STATE.teamExpanded = {1:false,2:false,3:false};
+  STATE.bankAccounts = null;
+  STATE.hasPayoutPin = false;
+  Object.keys(STATE.loaded).forEach(function(k){ STATE.loaded[k] = false; });
+}
 
 // ── UTILS ──────────────────────────────────────────────────────────────
 function ugx(n){ return 'UGX ' + Math.round(Number(n||0)).toLocaleString('en-UG'); }
@@ -359,8 +383,7 @@ $('registerBtn').onclick = async function(){
 };
 
 function doLogout(){
-  STATE.account = null;
-  Object.keys(STATE.loaded).forEach(function(k){ STATE.loaded[k] = false; });
+  resetUserState();
   window.fbSignOut();
 }
 
@@ -1696,8 +1719,7 @@ window.addEventListener('space8-auth', async function(e){
     $('app').style.display = 'none';
     showLoginScreen();
     stopLiveRefresh();
-    STATE.account = null;
-    Object.keys(STATE.loaded).forEach(function(k){ STATE.loaded[k] = false; });
+    resetUserState();
   }
 });
 

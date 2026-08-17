@@ -119,6 +119,30 @@ async function setupUser(uid, phone) {
     typeof r.body?.totalInvested === 'number' && r.body.totalInvested >= 800000 && r.body.totalInvested < 10_000_000,
     r.body?.totalInvested);
 
+  console.log('\n== ChatGPT-verified follow-up: Number(x) || 0 lets Infinity through (Infinity is truthy) — admin totals must stay finite ==');
+  const inf1 = 'r16-inf-1', inf2 = 'r16-inf-2';
+  await setupUser(inf1, '0771600009');
+  await setupUser(inf2, '0771600010');
+  users().get(inf1).walletBalance = Infinity;
+  users().get(inf1).totalDeposited = Infinity;
+  users().get(inf1).totalWithdrawn = Infinity;
+  users().get(inf1).totalInvested = Infinity;
+  users().get(inf1).totalEarned = Infinity;
+  users().get(inf1).teamCommission = Infinity;
+  users().get(inf2).walletBalance = 250000;
+  users().get(inf2).totalInvested = 250000;
+  r = await call('GET', '/admin/stats', { admin: true });
+  ['totalWallet', 'totalDeposited', 'totalWithdrawn', 'totalInvested', 'totalEarned', 'totalCommissions'].forEach(field => {
+    check('admin/stats.' + field + ' stays finite even with an Infinity-valued user field', Number.isFinite(r.body?.[field]), r.body?.[field]);
+  });
+  r = await call('POST', '/admin/analytics', { admin: true, body: { days: 30 } });
+  check('admin/analytics.kpis.investedAmount stays finite', Number.isFinite(r.body?.kpis?.investedAmount), r.body?.kpis?.investedAmount);
+  check('admin/analytics.kpis.commissionsPaid stays finite', Number.isFinite(r.body?.kpis?.commissionsPaid), r.body?.kpis?.commissionsPaid);
+  r = await call('GET', '/admin/integrity', { admin: true });
+  check('admin/integrity responds success even with an Infinity-valued balance', r.body?.status === 'success', r.body);
+  const infAlert = (r.body?.alerts || []).find(a => a.userId === inf1);
+  check('admin/integrity flags the Infinity balance as a negative/mismatch alert, not a crash', !!infAlert, r.body?.alerts);
+
   console.log('\n== Cumulative Earnings (totalEarned) now includes check-in, referral commission, gift code ==');
   const referrer = 'r16-referrer', buyer = 'r16-buyer';
   await setupUser(referrer, '0771600005');

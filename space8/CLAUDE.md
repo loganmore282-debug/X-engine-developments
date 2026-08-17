@@ -1895,6 +1895,75 @@ ChatGPT this round — investigated and fixed directly, same as Round 14.
   needed no changes or rebuild — it only displays the numbers `/admin
   /stats` sends, it doesn't aggregate them itself.
 
+## Round 17 of the same day, 2026-08-17 — asked ChatGPT to verify Round 16; found a real cross-user data leak on shared devices plus a real Infinity gap in the total-poisoning fix
+
+Owner: *"let us ask chatgpt to verify too."* Sent a scoped prompt covering all
+6 code changes from Round 16 (amount caps, client input limits, admin total
+coercion, `totalEarned` completeness, the recount fix, Team paging). It found
+two real issues; everything else checked out clean, verified against the
+actual code before touching anything, same discipline as every prior round.
+
+1. **Real bug: Team data (and more) leaks across users on a shared device.**
+   ChatGPT's own framing named only `STATE.teamMembers`/`teamExpanded`, but
+   tracing the actual sign-out flow surfaced the true scope was wider: a real
+   sign-out only ever cleared `STATE.account` and `STATE.loaded` — in BOTH
+   `doLogout()` AND, more importantly, the `space8-auth` listener's signed-
+   out branch (`user-src/original_module.js`), which is the actual
+   authoritative place a sign-out is detected (fires on a manual logout tap
+   OR a Firebase session simply expiring — `doLogout()`'s own reset is
+   mostly redundant with it, since `doLogout()` just triggers the same
+   listener a moment later via `fbSignOut()`). Neither ever cleared
+   `STATE.teamStats`/`teamMembers`/`teamExpanded`, `STATE.investments`, or
+   `STATE.bankAccounts` — all treated as valid cache by their render
+   functions, which skip re-fetching whenever a value is already present.
+   On a shared device: User A opens Team (and/or Products, and/or binds a
+   withdrawal account), logs out, User B logs in — User B could still see
+   A's referral phone numbers, Active/Pending statuses, active investment
+   plans, and saved withdrawal account details. Fixed with a single shared
+   `resetUserState()` helper (clears every per-user field but deliberately
+   leaves `products`/`settings`/`banners` alone — those are shared catalog
+   data, correct to keep cached across a login switch), called from both
+   `doLogout()` and the listener's signed-out branch so neither path can
+   drift out of sync with the other again.
+2. **Real gap: `Number(x) || 0` still lets `Infinity` through.** Every
+   Round-16 total-poisoning fix used this pattern — but `Infinity` is
+   truthy, so `Infinity || 0` stays `Infinity`. A stored `"Infinity"`,
+   `"1e309"`, or a genuine double overflow would poison a running total the
+   exact same way an unguarded string used to. Added a shared
+   `finiteMoney(v)` helper (`Number.isFinite(Number(v)) ? Number(v) : 0`)
+   and swept every unguarded or `Number()||0`-guarded money accumulator
+   found across the file — not just the ones ChatGPT named — in
+   `/admin/stats` (all 6 totals + `pendingPayouts`), `/admin/analytics`
+   (`depAmount`/`witAmount` and their per-hour/per-band/per-day breakdowns,
+   staff `amountApproved`/`amountDeclined`, `investedAmount`/
+   `commissionsPaid`, `maturingPayout`), `/admin/deposits/list` and
+   `/admin/withdrawals/list`'s per-day breakdowns, `wholeTeamDeposits()`
+   (the Task Center whole-team-deposit milestone check — user-facing, not
+   just an admin display), and `/admin/users/recount` (the repair tool
+   itself must never WRITE an Infinity-corrupted value back into a user's
+   document while "fixing" it).
+   - **Deliberately did NOT apply `finiteMoney()` inside `/admin/integrity`**
+     (`ledgerByUser`, `investedByUser`, `bal`, `storedInvested`) after first
+     doing so and then catching the mistake: that endpoint's entire job is
+     to DETECT and FLAG a corrupted value via its mismatch alerts, not
+     silently launder it back to a clean 0 before an admin ever sees it —
+     doing so would have made a genuinely-corrupted account (e.g. a real
+     Infinity-valued `walletBalance`) invisible to the one tool that exists
+     to catch it. Every field there is per-user-keyed (never summed across
+     different users), so there's no cross-user contamination risk the way
+     there was in the dashboard aggregators — reverted those 4 spots back
+     to the plain `Number(x) || 0` they already had, which correctly lets
+     `Infinity` propagate into the diff/mismatch check and trip the alert.
+- **Verification**: `test-round16-limits-and-earnings.js` expanded with 10
+  new checks — seeds a user with `Infinity` on all 6 money fields and
+  confirms `/admin/stats`'s totals, `/admin/analytics`'s KPIs stay finite,
+  AND separately confirms `/admin/integrity` still correctly flags that same
+  Infinity-valued account with a mismatch alert instead of silently passing
+  it. Full `test-*.js` suite green, 65/65. Rebuilt `user/index.html` via
+  `node build-core.js` (round-trip OK) and bumped `user/sw.js`'s cache to
+  `space8-shell-v244` since `user-src/original_module.js` changed. Admin
+  panel needed no rebuild — server-only logic change.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

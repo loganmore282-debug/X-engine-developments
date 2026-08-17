@@ -14,6 +14,67 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — ChatGPT verified the Round 16 fixes; found a real cross-user data leak on shared devices plus a real Infinity gap in the total-poisoning fix
+
+- **What changed**:
+  - `user-src/original_module.js`: added a shared `resetUserState()` helper
+    that clears `STATE.account`, `investments`, `teamStats`, `teamMembers`,
+    `teamExpanded`, `bankAccounts`, `hasPayoutPin`, and every `loaded` flag
+    (deliberately leaves `products`/`settings`/`banners` alone — shared
+    catalog data, not per-user). Called from both `doLogout()` and the
+    `space8-auth` listener's signed-out branch (the actual authoritative
+    sign-out handler, fires on manual logout OR Firebase session expiry).
+  - `server.js`: added a shared `finiteMoney(v)` helper
+    (`Number.isFinite(Number(v)) ? Number(v) : 0`) and applied it to every
+    money accumulator across `/admin/stats`, `/admin/analytics`,
+    `/admin/deposits/list`, `/admin/withdrawals/list`, `wholeTeamDeposits()`,
+    and `/admin/users/recount`. Explicitly did NOT apply it inside
+    `/admin/integrity` — reverted 4 spots there back to plain
+    `Number(x) || 0` after initially over-applying the fix (see below).
+  - `test-round16-limits-and-earnings.js`: +10 checks for the Infinity case.
+  - `user/sw.js` cache bumped `v243` → `v244`; `node build-core.js` rerun.
+- **Why**: Owner asked ChatGPT to verify the Round 16 diff. It found two
+  real issues (and confirmed everything else checked out):
+  1. Its own framing named only `STATE.teamMembers`/`teamExpanded`
+     (referral phone numbers/statuses leaking to the next person on a
+     shared device), but tracing the real sign-out flow showed the actual
+     gap was wider — `STATE.investments` and `STATE.bankAccounts` (saved
+     withdrawal account phone/holder) were leaking the same way, and the
+     TRUE fix point wasn't `doLogout()` at all but the `space8-auth`
+     listener's signed-out branch, which is what actually runs regardless
+     of whether a manual logout or a session expiry triggered it.
+  2. `Number(x) || 0` — the exact pattern Round 16 used everywhere to guard
+     against string-poisoned money fields — still lets `Infinity` through,
+     since `Infinity` is truthy. A stored `"Infinity"`/`"1e309"`/a genuine
+     double overflow would poison a dashboard total the same way an
+     unguarded string used to.
+- **A mistake caught and corrected mid-round**: the first pass applied
+  `finiteMoney()` inside `/admin/integrity` too, but that endpoint's whole
+  purpose is to DETECT and FLAG a corrupted value via its mismatch alerts —
+  silently zeroing a corrupted `walletBalance`/`totalInvested` before the
+  diff-against-ledger check would have made a genuinely-corrupted account
+  invisible to the one tool built to catch it. Every field there is
+  per-user-keyed (never summed across different users), so — unlike the
+  dashboard aggregators — there's no cross-user contamination risk from
+  leaving the raw value in play; reverted those 4 spots back to
+  `Number(x) || 0`, which correctly lets `Infinity` propagate into the diff
+  and trip the alert instead of hiding it. Caught this myself by reasoning
+  through what "correct" means for a detector versus an aggregator, not
+  something the ChatGPT prompt raised — worth remembering for future
+  string/Infinity-poisoning fixes: aggregators should sanitize, detectors
+  should not.
+- **Verification**: `test-round16-limits-and-earnings.js` expanded with 10
+  new checks — seeds a user with `Infinity` on all 6 money fields, confirms
+  `/admin/stats`/`/admin/analytics` stay finite, and separately confirms
+  `/admin/integrity` still correctly flags that same account with a
+  mismatch alert rather than silently passing it. Full `test-*.js` suite
+  green, 65/65. `node build-core.js` round-trip OK; `user/sw.js` cache
+  bumped to `v244`.
+- **Left open**: same as Round 16 — the referral-link 404 still needs the
+  owner to check Render's dashboard, and the admin total fix doesn't
+  retroactively repair whatever account is already corrupted (still needs
+  "Recalculate totals"). Nothing new deferred this round.
+
 ## 2026-08-17 — Claude — Owner's 8-screenshot bug report: input caps, abnormal admin total, referral-link 404, label renames, Team paging/status, cumulative-earnings gap
 
 - **What changed**: 11-item fix round from a single owner message + 8
