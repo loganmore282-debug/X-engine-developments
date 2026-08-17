@@ -60,6 +60,32 @@ entry per fix/change, newest at the top. Read this in full before starting new w
   other client-only change this session — the sandbox can't reach a live
   browser).
 
+## 2026-08-17 — Claude — SIM-card icon enlarged (owner: "very tinny")
+
+- **What changed**: the SIM-card raster icon shipped in the entry above
+  read too small next to the app's other icons. Fixed two ways:
+  - `user/simcard-icon.png` itself was tightly re-cropped (removed most
+    of the transparent margin around the card graphic, from a
+    240×237 canvas with ~90% content fill down to a 228×225 crop with
+    near-zero padding) and its outline strokes were thickened by ~1px
+    (alpha-channel `MaxFilter` dilation) — the source line art was
+    noticeably thinner-stroked than the bold padlock SVG it replaced, so
+    it read as visually lighter/smaller even at an identical pixel box.
+  - `ICONS.lock` (`user-src/original_module.js`) now tags its `<img>`
+    with a new `ico-lg` class; `.shortcut img.ico-lg` /
+    `.mtile img.ico-lg` (`user-src/index.html`) size it to 28px instead
+    of the general 22px `img`/`svg` rule shared by every other icon in
+    those containers — scoped narrowly to just this one icon (Telegram's
+    `<img>` and every `<svg>` sibling are unaffected) since it's the only
+    one that needed the bump.
+- **Why**: owner, verbatim: *"simcard svg is very tinny l need size as
+  others"*.
+- **Verification**: `node build-core.js` round-trip OK. Full `test-*.js`
+  suite green, 68/68 (pure asset/CSS change, no server logic touched).
+  Bumped `user/sw.js` cache `v253` → `v254`.
+- **Left open**: real-device visual check, same standing caveat as every
+  client-only change this session.
+
 ## 2026-08-17 — Claude — About page rebuilt as a long, photo-illustrated company story
 
 - **What changed**: `openAboutSheet()` (new function) replaces the old flat,
