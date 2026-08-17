@@ -219,6 +219,14 @@ window.addEventListener('popstate', function(){
 qsa('.sheet-back').forEach(function(btn){
   btn.addEventListener('click', function(){ closeSheet(btn.dataset.close); });
 });
+// Records shortcut in the Deposit/Withdraw sheet headers -- owner wanted a
+// quick way to jump to transaction history from those two screens without
+// backing out first. openRecordsSheet() stacks the Records sheet ('generic')
+// on top via the existing _sheetStack mechanism, so the phone Back button
+// (or the sheet's own back arrow) returns to Deposit/Withdraw underneath,
+// same as the withdrawal-account picker already stacks on top of Withdraw.
+$('depositRecordsBtn').onclick = openRecordsSheet;
+$('withdrawRecordsBtn').onclick = openRecordsSheet;
 
 // ── AUTH ──────────────────────────────────────────────────────────────
 function showLoginScreen(){ $('screenRegister').style.display = 'none'; $('screenLogin').style.display = 'flex'; }
@@ -380,9 +388,22 @@ function maybeShowAnnouncement(){
   } else {
     tgBtn.style.display = 'none';
   }
+  // Lock body scroll while the dialog is up -- real sheets already do this
+  // via openSheet()/hideSheet(), but this dialog isn't part of that stack
+  // (it's a dismissible notice, not a page). Without it, once the inner
+  // .announce-text scroll hits its end, the scroll silently chains through
+  // to the Home page scrolling underneath -- owner: "when you reach at end
+  // of text in announcement dialog, it again scrolls the contents in
+  // dashboard, that is very bad." overscroll-behavior:contain on
+  // .announce-text (index.html) stops the chaining at the text box itself;
+  // this stops the dashboard from being scrollable at all while shown.
+  document.body.style.overflow = 'hidden';
   $('announceBg').classList.add('show');
 }
-function hideAnnouncement(){ $('announceBg').classList.remove('show'); }
+function hideAnnouncement(){
+  $('announceBg').classList.remove('show');
+  if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
+}
 $('announceCancelBtn').onclick = hideAnnouncement;
 $('announceBg').addEventListener('click', function(e){ if (e.target.id === 'announceBg') hideAnnouncement(); });
 qsa('.navitem').forEach(function(n){ n.addEventListener('click', function(){

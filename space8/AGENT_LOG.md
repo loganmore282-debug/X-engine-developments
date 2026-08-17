@@ -14,6 +14,41 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Announcement dialog taller + fixed scroll-chaining into dashboard, Records shortcut added to Deposit/Withdraw headers
+
+Owner, with two screenshots circling the empty top-right corner on Deposit
+and Withdraw: wanted the announcement dialog taller, a records shortcut icon
+where the red circles were, and reported "when you reach at end of text in
+announcement dialog, it again scrolls the contents in dashboard."
+
+- **Taller dialog**: `.announce-text` `max-height` `34vh`→`52vh` in
+  `user-src/index.html`. No content/behavior change, just more visible
+  before its own internal scroll kicks in.
+- **Real bug fixed — scroll chaining into the dashboard**: the announcement
+  dialog was never wired into the `openSheet()`/`hideSheet()` system (by
+  design — it's a notice, not a stacked page), so it never locked
+  `document.body.style.overflow` the way every real sheet does. Once the
+  inner `.announce-text` box hit its scroll end, the browser handed the
+  rest of the gesture to the page underneath, which visibly scrolled while
+  the dialog was still open on top. Fixed with `overscroll-behavior:
+  contain` on `.announce-text` plus `document.body.style.overflow`
+  lock/restore in `maybeShowAnnouncement()`/`hideAnnouncement()`
+  (`original_module.js`), guarded the same way `hideSheet()` already
+  guards it.
+- **Records shortcut icon added** to both Deposit and Withdraw sheet
+  headers (top right, exactly where the owner circled) — reuses the same
+  `doc` SVG as the home activity-ticker icon, wired to the existing
+  `openRecordsSheet()`, which already knows how to stack onto the
+  `'generic'` sheet slot on top of whatever's open underneath (same
+  mechanism the withdrawal-account picker uses), so Back correctly returns
+  to Deposit/Withdraw instead of exiting the app.
+- **Verification**: full suite green (62/62). Rebuilt `user/`, bumped
+  `sw.js` cache `v239`→`v240`. Playwright confirmed the new max-height,
+  confirmed body scroll locks/unlocks correctly around the dialog,
+  confirmed over-scrolling past the end of the text no longer moves
+  `window.scrollY`, and confirmed the Records shortcut opens stacked
+  correctly from both Deposit and Withdraw with working Back navigation.
+
 ## 2026-08-17 — Claude — Announcement dialog re-opened centered instead of as a bottom sheet
 
 Owner, right after the dialog shipped: *"bro the dialog message should be

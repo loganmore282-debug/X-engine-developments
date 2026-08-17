@@ -1223,6 +1223,69 @@ created accounts,and notifications."*
   cases against the rebuilt artifact — same pass/fail results, screenshots
   confirm the dialog now floats centered over a dimmed backdrop.
 
+## Round 9 of the same day, 2026-08-17 — announcement dialog taller + scroll-chain bug fixed, Records shortcut added to Deposit/Withdraw
+
+Owner, with screenshots: *"let us increase the height of announcement
+dialog abit,without removing or tempering with its contents or
+functions.also let us put deposits records shortcut svg on top right,think
+you see on the red marks on deposits and withdrawals screens, that is
+where short cuts will be,so there will be svg like for records📄 on
+activity checker,also bro when you reach at end of text in announcement
+dialog, it again scrolls the contents in dashboard, that is very bad 👎,
+fix it as soon as possible."* Also asked earlier in the same exchange for
+copy-paste-ready dialog/notification text (delivered in chat, not a code
+change — see the announcement/notification content the owner pasted into
+admin's Title/Body fields directly).
+
+- **Announcement dialog made taller.** `.announce-text`'s `max-height` in
+  `user-src/index.html` went from `34vh` to `52vh` — nothing about the
+  content, buttons, or open/close behavior changed, just more of the
+  message is visible before the inner box needs to scroll at all (the
+  owner's own longer platform-rules message now fits with zero scrolling
+  at a typical phone height).
+- **Real bug fixed: reaching the end of the announcement text scrolled the
+  Home page underneath.** Root cause: the announcement dialog was never
+  part of the `openSheet()`/`closeSheet()` system (it's a dismissible
+  notice, not a stacked page — see the previous round's reasoning), so
+  unlike every real sheet it never set `document.body.style.overflow =
+  'hidden'` while shown. Once a touch/wheel scroll hit the bottom of the
+  inner `.announce-text` box, the browser's default scroll-chaining handed
+  the rest of the gesture to the page underneath — the dashboard — which
+  visibly scrolled *while the dialog was still open on top of it*. Two-part
+  fix: `overscroll-behavior: contain` added to `.announce-text` (stops the
+  chain at the box's own boundary) plus `maybeShowAnnouncement()` /
+  `hideAnnouncement()` (`user-src/original_module.js`) now lock/restore
+  `document.body.style.overflow` exactly like `openSheet()`/`hideSheet()`
+  already do for real sheets (guarded by the same `qsa('.sheet-bg.show')`
+  check, so it plays correctly with any sheet that happens to be open too).
+- **Records shortcut added to the Deposit and Withdraw sheet headers.**
+  Owner pointed at the empty top-right corner of both screens in two
+  screenshots (red circles) and asked for a document/records icon shortcut
+  there, matching the one already used for the home activity-ticker.
+  `.sheet-head` (`user-src/index.html`) gained `justify-content:
+  space-between` (harmless no-op for the other sheet-heads, which still
+  only have one child) and both `depositSheetBg`/`withdrawSheetBg` got a
+  second `.iconbtn` in their header using the same `doc` SVG as elsewhere,
+  wired in `original_module.js` to the existing `openRecordsSheet()` —
+  which already stacks onto the `'generic'` sheet slot via the
+  `_sheetStack` mechanism from the withdrawal-account-picker round, so it
+  opens Records *on top of* Deposit/Withdraw and the phone Back button (or
+  the Records sheet's own back arrow) returns to whichever of the two was
+  underneath, without needing any new plumbing.
+- **Verification**: full `test-*.js` suite green (62/62 — pure
+  markup/CSS/client-JS, no server change). Rebuilt `user/`, bumped
+  `user/sw.js` cache `v239`→`v240`. Playwright: confirmed
+  `.announce-text`'s computed `max-height` is now ~52% of viewport height;
+  confirmed `document.body.style.overflow` is `'hidden'` while the dialog
+  is shown and restored to `''` after Cancel; scrolled the inner text to
+  its end and kept scrolling — `window.scrollY` stayed at 0 (no more
+  chain-through); opened Records from both the Deposit and Withdraw sheet's
+  new shortcut icon and confirmed it stacks correctly (`generic` sheet
+  shows `true`, the sheet underneath stays `true` too) and that a phone-back
+  pops only Records, leaving Deposit/Withdraw still open underneath.
+  Screenshots confirm the icon sits exactly where the owner circled it and
+  the full rules message now fits without scrolling.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

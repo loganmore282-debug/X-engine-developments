@@ -174,7 +174,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .announce-accent{ position:relative; z-index:1; height:4px; background:var(--blue); }
 .announce-body{ position:relative; z-index:1; padding:26px 24px 24px; display:flex; flex-direction:column; gap:12px; text-align:center; align-items:center; }
 .announce-title{ font-weight:700; font-size:19px; color:#fff; letter-spacing:-.01em; }
-.announce-text{ font-size:14px; color:rgba(255,255,255,.86); line-height:1.55; white-space:pre-wrap; max-height:34vh; overflow-y:auto; text-align:left; align-self:stretch; }
+.announce-text{ font-size:14px; color:rgba(255,255,255,.86); line-height:1.55; white-space:pre-wrap; max-height:52vh; overflow-y:auto; overscroll-behavior:contain; text-align:left; align-self:stretch; }
 .announce-actions{ display:flex; gap:10px; margin-top:8px; width:100%; }
 .pillbtn{ flex:1; text-align:center; font-weight:700; font-size:13.5px; padding:13px; border-radius:999px; cursor:pointer; border:none; display:flex; align-items:center; justify-content:center; gap:7px; }
 .pillbtn-primary{ background:var(--blue); color:#fff; box-shadow:0 8px 18px -6px var(--blue-glow); }
@@ -218,7 +218,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
    a popup floating over the current screen. */
 .sheet-bg{ position:fixed; inset:0; background:var(--page-bg); z-index:100; display:none; flex-direction:column; }
 .sheet-bg.show{ display:flex; }
-.sheet-head{ display:flex; align-items:center; padding:max(10px, env(safe-area-inset-top)) 16px 8px; flex-shrink:0; }
+.sheet-head{ display:flex; align-items:center; justify-content:space-between; padding:max(10px, env(safe-area-inset-top)) 16px 8px; flex-shrink:0; }
 .sheet{ background:var(--surface); flex:1; overflow-y:auto; border-radius:var(--radius-sheet) var(--radius-sheet) 0 0; padding:18px 22px calc(24px + env(safe-area-inset-bottom)); }
 .sheet-title{ font-weight:700; font-size:15px; margin:0 0 4px; }
 .sheet-sub{ color:var(--ink-dim); font-size:13px; margin:0 0 18px; }
@@ -515,8 +515,8 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
   </div>
 </div>
 
-<div class="sheet-bg" id="depositSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="deposit"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="depositSheet"></div></div>
-<div class="sheet-bg" id="withdrawSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="withdraw"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="withdrawSheet"></div></div>
+<div class="sheet-bg" id="depositSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="deposit"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div><div class="iconbtn" id="depositRecordsBtn" title="Records"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg></div></div><div class="sheet" id="depositSheet"></div></div>
+<div class="sheet-bg" id="withdrawSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="withdraw"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div><div class="iconbtn" id="withdrawRecordsBtn" title="Records"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg></div></div><div class="sheet" id="withdrawSheet"></div></div>
 <div class="sheet-bg" id="investSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="invest"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="investSheet"></div></div>
 <div class="sheet-bg" id="payoutSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="payout"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="payoutSheet"></div></div>
 <div class="sheet-bg" id="genericSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="generic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="genericSheet"></div></div>
