@@ -111,7 +111,8 @@ var ICONS = {
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
   telegram: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 4-9.4 16-2.6-7-7-2.6Z"/><path d="M21 4 8.9 12.9"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
-  download: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>'
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>',
+  key: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.6 12.4 8.4-8.4M15 8l3 3M18 5l3 3"/></svg>'
 };
 function ico(name){ return ICONS[name] || ''; }
 
@@ -350,6 +351,9 @@ function showPage(name){
   STATE.currentPage = name;
   qsa('.page').forEach(function(p){ p.classList.toggle('active', p.id === 'page-' + name); });
   qsa('.navitem').forEach(function(n){ n.classList.toggle('active', n.dataset.page === name); });
+  // Assistant bubble is Account-only -- owner: "ai assistant bubble should
+  // be in account, so remove it from home, team, products."
+  $('assistFab').style.display = name === 'account' ? 'flex' : 'none';
   window.scrollTo(0,0);
   loadPage(name);
 }
@@ -418,7 +422,6 @@ async function renderHome(){
   STATE.loaded.home = true;
 
   var acc = STATE.account || {};
-  var active = (STATE.investments||[]).filter(function(i){ return i.status === 'active'; });
   var products = (STATE.products||[]).filter(function(p){ return p.active !== false; });
   var checkedIn = acc.lastCheckin && isToday(acc.lastCheckin);
 
@@ -459,11 +462,6 @@ async function renderHome(){
     '<div class="ticker-track"><div class="ticker-items" id="tickerItems"></div></div>' +
     '<div class="ticker-icon" id="tickerRecordsBtn">' + ico('doc') + '</div>' +
   '</div>';
-
-  if (active.length) {
-    html += '<div class="section-title">Active Plans</div>';
-    html += '<div class="menu-list" style="margin-bottom:14px">' + active.map(planRowHtml).join('') + '</div>';
-  }
 
   html += '<div class="section-title">Products <span class="see-all" id="homeSeeAllProds">See all</span></div>';
   products.slice(0,10).forEach(function(p){ html += prodCardHtml(p); });
@@ -685,7 +683,8 @@ async function renderProducts(){
     '<div class="shortcut" id="shWithdrawals">' + ico('wallet') + '<span>Withdrawals</span></div>' +
   '</div>';
   html += '<div class="mystats">' +
-    '<div class="card"><div class="lab">My Products</div><div class="val">' + myCount + '</div></div>' +
+    '<div class="card mystats-link" id="myProductsCard"><div class="lab">My Products</div>' +
+      '<div class="mystats-row"><div class="val">' + myCount + '</div>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div></div>' +
     '<div class="card"><div class="lab">Cumulative Earnings</div><div class="val mono">' + ugx(earned) + '</div></div>' +
   '</div>';
   html += '<div class="section-title">All Products</div>';
@@ -696,19 +695,41 @@ async function renderProducts(){
     var invBtn = qs('.invest-btn', c);
     if (invBtn) invBtn.onclick = function(e){ e.stopPropagation(); openInvestSheet(c.dataset.key); };
   });
-  $('shBind').onclick = openPayoutSheet;
+  $('shBind').onclick = function(){ openPayoutSheet(); };
   $('shDeposits').onclick = function(){ openHistorySheet('deposit'); };
   $('shWithdrawals').onclick = function(){ openHistorySheet('withdrawal'); };
+  $('myProductsCard').onclick = function(){ openMyProductsSheet(); };
+}
+// Purchased-plans list, moved here from a dedicated Home section 2026-08-17
+// (owner: "I don't want that function or that of active plans, remove it...
+// products will be in the area where you see my products so that... card
+// will be having arrow") -- reuses the same planRowHtml()/openPlanDetailSheet()
+// pair the Home section used, just entered from the "My Products" stat tile
+// instead of always showing on Home.
+function openMyProductsSheet(){
+  var active = (STATE.investments||[]).filter(function(i){ return i.status === 'active'; });
+  var html = '<div class="sheet-title">My Products</div>';
+  html += active.length ?
+    '<div class="menu-list">' + active.map(planRowHtml).join('') + '</div>' :
+    emptyState('satellite', 'No active plans yet — purchase one from All Products.');
+  openSheet('generic', html);
+  qsa('.plan-row', $('genericSheet')).forEach(function(row){
+    row.onclick = function(){ openPlanDetailSheet(row.dataset.id); };
+  });
 }
 function prodCardHtml(p){
   var daily = Math.round((p.expectedReturn||0)/(p.cycle||1));
   var disabled = p.active === false || p.comingSoon;
   return '<div class="prod-card ' + (disabled?'soon':'') + '" data-key="' + esc(p.key) + '">' +
-    '<div class="sat">' + (p.image ? '<img src="'+esc(p.image)+'">' : ico('satellite')) + '</div>' +
-    '<div class="info">' +
+    '<div class="top">' +
+      '<div class="sat">' + (p.image ? '<img src="'+esc(p.image)+'">' : ico('satellite')) + '</div>' +
       '<div class="name">' + esc(p.name) + (p.comingSoon?'<span class="pill pill-active badge-soon">Upcoming</span>':'') + '</div>' +
-      '<div class="price mono">' + ugx(p.price) + '</div>' +
-      '<div class="stats mono">' + (p.cycle||'-') + 'd · ' + ugx(daily) + '/day · ' + ugx(p.expectedReturn) + ' total</div>' +
+    '</div>' +
+    '<div class="grid">' +
+      '<div><div class="lab">Price</div><div class="val mono">' + ugx(p.price) + '</div></div>' +
+      '<div><div class="lab">Daily Cashback</div><div class="val mono">' + ugx(daily) + '</div></div>' +
+      '<div><div class="lab">Amount</div><div class="val mono">' + ugx(p.expectedReturn) + '</div></div>' +
+      '<div><div class="lab">Duration</div><div class="val">' + (p.cycle||'-') + ' days</div></div>' +
     '</div>' +
     '<button class="btn btn-primary invest-btn" ' + (disabled?'disabled':'') + '>Purchase</button>' +
   '</div>';
@@ -901,6 +922,7 @@ async function renderAccount(){
   '</div>';
 
   html += '<div class="menu-list">' +
+    '<div class="menu-row" id="passwordRow">' + ico('key') + '<span>Password Management</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>' +
     menuRow('info','About Space8','about') +
     menuRow('doc','Rules','rules') +
     menuRow('support','Support','support') +
@@ -911,10 +933,11 @@ async function renderAccount(){
   '</div>';
 
   el.innerHTML = html;
-  $('mBind').onclick = openPayoutSheet;
+  $('mBind').onclick = function(){ openPayoutSheet(); };
   $('mDeposits').onclick = function(){ openHistorySheet('deposit'); };
   $('mWithdrawals').onclick = function(){ openHistorySheet('withdrawal'); };
   $('mPin').onclick = openPinSheet;
+  $('passwordRow').onclick = openPasswordSheet;
   $('shareRefBtn').onclick = function(){ shareReferral(acc.referralCode); };
   $('copyRefCodeBtn').onclick = function(){ copyText(acc.referralCode, 'Referral code'); };
   qsa('.mini-copy', el).forEach(function(btn){ btn.onclick = function(){ copyText(btn.dataset.copy, btn.dataset.copyLabel); }; });
@@ -1123,6 +1146,48 @@ async function openPinSheet(){
     setBtnLoading(btn, false);
     if (r.status === 'success') { toast('PIN changed'); closeSheet('generic'); } else toast(r.message, true);
   };
+}
+
+// ── PASSWORD MANAGEMENT ──────────────────────────────────────────────
+// Pure client-side Firebase, same as login/register/logout -- no server
+// endpoint involved, matching how this app already handles auth. Firebase
+// requires a recent sign-in before allowing a sensitive change like this,
+// hence re-authenticating with the CURRENT password first (fbChangePassword
+// in index.html's plain <script>) rather than calling updatePassword directly.
+function openPasswordSheet(){
+  openSheet('generic',
+    '<div class="sheet-title">Password Management</div>' +
+    '<div class="sheet-sub">Change the password you use to log in.</div>' +
+    '<div class="auth-form">' +
+      '<div class="field">' + ico('key') + '<input id="curPassword" type="password" placeholder="Current password"></div>' +
+      '<div class="field">' + ico('key') + '<input id="newPassword" type="password" placeholder="New password (min 6 characters)"></div>' +
+      '<div class="field">' + ico('key') + '<input id="newPassword2" type="password" placeholder="Confirm new password"></div>' +
+    '</div>' +
+    '<button class="btn btn-primary" id="changePasswordBtn" style="margin-top:14px">Change Password</button>'
+  );
+  $('changePasswordBtn').onclick = changePassword;
+}
+async function changePassword(){
+  var btn = $('changePasswordBtn');
+  var cur = $('curPassword').value, next = $('newPassword').value, next2 = $('newPassword2').value;
+  if (!cur) return toast('Enter your current password', true);
+  if (next.length < 6) return toast('New password must be at least 6 characters', true);
+  if (next !== next2) return toast('New passwords do not match', true);
+  setBtnLoading(btn, true, 'Updating…');
+  try {
+    await window.fbChangePassword(cur, next);
+    setBtnLoading(btn, false);
+    toast('Password changed');
+    closeSheet('generic');
+  } catch (e) {
+    setBtnLoading(btn, false);
+    var msg = 'Could not change your password.';
+    var code = String(e.code || '');
+    if (code.indexOf('wrong-password') !== -1 || code.indexOf('invalid-credential') !== -1) msg = 'Current password is incorrect.';
+    else if (code.indexOf('weak-password') !== -1) msg = 'Choose a stronger password (min 6 characters).';
+    else if (code.indexOf('too-many-requests') !== -1) msg = 'Too many attempts. Try again later.';
+    toast(msg, true);
+  }
 }
 
 // ── DEPOSIT ───────────────────────────────────────────────────────────

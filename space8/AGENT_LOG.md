@@ -14,6 +14,59 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Real withdrawal-accounts bug fixed, Active Plans relocated, password management added
+
+Owner: *"let us make those card increased in size... details well organised...
+I don't want that function of active plans, remove it... products will be
+where you see my products, that card will be having arrow... another thing
+to proclaim to you AGAIN withdrawal accounts cannot be deleted or added...
+ai assistant bubble should be in account, remove it from home, team,
+products... nav icons should be bright glassy white when tapped... add
+password management just above about space8."*
+
+- **Withdrawal accounts add/delete — found the REAL bug this time.** The
+  previous entry in this log dismissed the owner's report as "that's just the
+  picker screen, not a bug." That was wrong. `$('mBind').onclick =
+  openPayoutSheet;` / `$('shBind').onclick = openPayoutSheet;` (Account and
+  Products page tiles) hand the click `Event` object to `openPayoutSheet(
+  pickCallback)` as its first argument — a plain function reference assigned
+  to `.onclick` always receives the event. Since an `Event` object is truthy,
+  `picking = !!_payoutPickCallback` evaluated `true` on EVERY real visit from
+  either tile, hiding add/delete every single time, not just in genuine
+  picker mode. Fixed both call sites by wrapping in
+  `function(){ openPayoutSheet(); }`. Verified with Playwright: tapping the
+  Account tile now shows the Add button and delete controls. Lesson recorded
+  in CLAUDE.md: any `.onclick = bareFunctionName` where that function's first
+  param is meaningful (not just an ignored event) is a latent version of this
+  exact bug — checked every other bare-reference `.onclick` in the file,
+  `openPayoutSheet` was the only offender.
+- **Active Plans removed from Home, relocated behind the "My Products" tile**
+  on the Products page (now clickable with a chevron, `openMyProductsSheet()`)
+  — same `planRowHtml()` list and `openPlanDetailSheet()` live-countdown
+  detail sheet from the previous round, just entered from a different place.
+- **Product cards enlarged again with clearly labeled fields** — Price /
+  Daily Cashback / Amount / Duration in a 2×2 grid, full-width Purchase
+  button restored, ~284px tall (between the original design and last round's
+  too-compact ~71px single row).
+- **Assistant bubble restricted to the Account page** — one line in
+  `showPage()`, since every page transition already routes through it.
+- **Nav active state restyled**: light-blue tint chip → bright glassy white
+  pill (`rgba(255,255,255,.92)` + `backdrop-filter:blur(6px)` + a soft
+  blue-tinted shadow so it pops against the already-white nav bar).
+- **New: Password Management**, first row above About Space8 in the Account
+  menu. Pure client-side Firebase (same pattern as login/register/logout, no
+  new server endpoint): `window.fbChangePassword` re-authenticates with the
+  current password then calls `updatePassword`; new sheet with
+  current/new/confirm fields and readable Firebase error mapping.
+- **Verification**: full test suite green. Rebuilt `user/` only (admin
+  untouched this round). Bumped `user/sw.js` cache `v233` → `v234`.
+  Playwright confirmed every item above end-to-end, including the withdrawal-
+  accounts fix, the wrong/correct password toasts, and the live countdown
+  still working from its new entry point.
+- Nothing left open.
+
+---
+
 ## 2026-08-17 — Claude — Auth-card glass, image preload, product/plan card redesigns
 
 Owner: *"let those cards or tabs of login and register also have background

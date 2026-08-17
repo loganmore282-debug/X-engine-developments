@@ -114,7 +114,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .navitem{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:62px; font-size:9.5px; color:var(--blue-mute); text-transform:uppercase; letter-spacing:.03em; padding:6px 12px; border:1px solid transparent; border-radius:15px; cursor:pointer; transition:transform .18s ease,background .22s ease,color .22s ease; -webkit-tap-highlight-color:transparent; }
 .navitem svg{ width:25px; height:25px; stroke:var(--blue-mute); transition:stroke .22s ease; }
 .navitem svg.svg-cart, .navitem svg.svg-team{ stroke:none; fill:var(--blue-mute); transition:fill .22s ease; }
-.navitem.active,.navitem.tap-glow{ color:var(--blue); background:var(--blue-glow); }
+.navitem.active,.navitem.tap-glow{ color:var(--blue); background:rgba(255,255,255,.92); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); box-shadow:0 6px 16px -6px rgba(46,107,255,.45), inset 0 1px 0 rgba(255,255,255,.9); border-color:rgba(255,255,255,.9); }
 .navitem.active svg,.navitem.tap-glow svg{ stroke:var(--blue); }
 .navitem.active svg.svg-cart,.navitem.active svg.svg-team,.navitem.tap-glow svg.svg-cart,.navitem.tap-glow svg.svg-team{ stroke:none; fill:var(--blue); }
 .navitem:active{ transform:scale(.93); background:var(--surface-2); }
@@ -250,15 +250,19 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 .mystats .card{ flex:1; padding:14px; }
 .mystats .lab{ font-size:9.5px; text-transform:uppercase; color:var(--blue-dim); letter-spacing:.05em; }
 .mystats .val{ font-weight:700; font-size:16px; margin-top:5px; }
+.mystats-link{ cursor:pointer; }
+.mystats-row{ display:flex; align-items:center; justify-content:space-between; }
+.mystats-row .chev{ width:15px; height:15px; stroke:var(--blue-mute); flex-shrink:0; }
 
-.prod-card{ display:flex; align-items:center; gap:11px; border-radius:16px; background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); padding:11px 12px; margin-bottom:9px; }
-.prod-card .sat{ width:48px; height:48px; border-radius:12px; background:var(--surface-2); flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+.prod-card{ border-radius:18px; background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); padding:13px 14px; margin-bottom:10px; }
+.prod-card .top{ display:flex; align-items:center; gap:11px; }
+.prod-card .sat{ width:44px; height:44px; border-radius:12px; background:var(--surface-2); flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
 .prod-card .sat img{ width:100%; height:100%; object-fit:cover; }
-.prod-card .info{ flex:1; min-width:0; }
-.prod-card .name{ font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.prod-card .price{ font-size:12px; color:var(--ink-dim); margin-top:1px; }
-.prod-card .stats{ font-size:10.5px; color:var(--blue-mute); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.prod-card .invest-btn{ width:auto; flex-shrink:0; padding:10px 15px; font-size:12.5px; }
+.prod-card .name{ font-weight:700; font-size:14.5px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.prod-card .grid{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:11px 0; }
+.prod-card .grid div{ background:var(--surface-2); border-radius:10px; padding:7px 8px; }
+.prod-card .grid .lab{ font-size:9px; text-transform:uppercase; color:var(--ink-dim); letter-spacing:.03em; }
+.prod-card .grid .val{ font-weight:700; font-size:12.5px; margin-top:2px; }
 .prod-card.soon{ opacity:.6; }
 .prod-card .badge-soon{ margin-left:6px; }
 
@@ -507,7 +511,7 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
 <script type="module">
   import { initializeApp, getApps }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut }
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, EmailAuthProvider, reauthenticateWithCredential, updatePassword }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const firebaseConfig = {
@@ -526,6 +530,17 @@ main{ flex:1; padding:0 16px calc(96px + env(safe-area-inset-bottom)); }
   window.fbSignIn     = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
   window.fbSignOut    = () => signOut(auth);
   window.fbAuth       = auth;
+  // Re-authenticates with the CURRENT password (Firebase requires a recent
+  // sign-in before allowing a sensitive change like this) then sets the new
+  // one. Throws on wrong current password / weak new password -- caller
+  // (changePassword() in original_module.js) maps the Firebase error code to
+  // a readable message, same pattern as fbCreateUser's callers already use.
+  window.fbChangePassword = async (currentPass, newPass) => {
+    const user = auth.currentUser;
+    if (!user || !user.email) throw new Error('Not signed in');
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPass));
+    await updatePassword(user, newPass);
+  };
   onAuthStateChanged(auth, (user) => { window.dispatchEvent(new CustomEvent('space8-auth', { detail: user })); });
 </script>
 <script data-nx-assets></script>

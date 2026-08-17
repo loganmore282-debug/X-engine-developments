@@ -759,6 +759,94 @@ add/delete.
   countdown value visibly ticks down between two screenshots ~2s apart;
   confirmed the detail sheet shows all six requested fields.
 
+## Round 4 of the same day, 2026-08-17 — real withdrawal-accounts bug found, Active Plans relocated, password management added
+
+Owner, after seeing Round 3 live: cards too small now, want them bigger again
+(labeled Price/Daily Cashback/Amount/Duration); remove the whole Active Plans
+concept from Home, put it behind an arrow on "My Products" instead; insisted
+**again** that withdrawal accounts can't be added/deleted (previous round
+wrongly dismissed this as "just the picker" — see below, it was a real bug);
+assistant bubble should only show on Account; nav active state should be
+"bright glassy white"; add Password Management above About Space8.
+
+- **Withdrawal accounts add/delete — REAL BUG FOUND, not user confusion.**
+  `$('mBind').onclick = openPayoutSheet;` and `$('shBind').onclick =
+  openPayoutSheet;` (the Account and Products page "Withdrawal Account" tiles)
+  passed the DOM click `Event` object as `openPayoutSheet(pickCallback)`'s
+  first argument, since assigning a bare function reference to `.onclick`
+  always hands it the event. A truthy `Event` object satisfies `picking =
+  !!_payoutPickCallback`, so the screen rendered in **picker mode — hiding
+  add/delete — on every single real visit** from either entry point, not just
+  when genuinely used as a picker mid-withdrawal. This is the actual root
+  cause of the owner's repeated complaint; the previous round's "that's just
+  the picker, not a bug" answer was wrong — confirmed by code, not just this
+  round's report. Fixed by wrapping both in `function(){ openPayoutSheet(); }`
+  so no argument reaches it. **Lesson for future review of this file**: any
+  `.onclick = bareFunctionName` where that function's first parameter is
+  used for anything other than an ignored event object is a latent bug —
+  `openPinSheet`, `doLogout`, `promptInstallApp`, `redeemGiftCode` etc. are
+  fine (no meaningful first param), `openPayoutSheet(pickCallback)` was the
+  only one that wasn't. Verified via Playwright: tapping the Account tile now
+  shows both `#savePayoutBtn` and `.acct-del` buttons (previously absent).
+- **Active Plans removed from Home entirely, relocated behind "My Products."**
+  Owner: "I don't want that function... remove it... all products will be in
+  the area where you see my products so that tab or card will be having
+  arrow." The `.menu-list` of `planRowHtml()` rows that Round 3 put on Home
+  is gone from `renderHome()` (along with the now-unused `active` variable
+  there). The "My Products" stat tile in `renderProducts()`'s `.mystats` row
+  is now clickable (`.mystats-link`, new `.mystats-row`/`.chev` CSS) and opens
+  a new `openMyProductsSheet()` — the exact same `planRowHtml()` list, just
+  entered from there instead of always showing on Home. Tapping a row still
+  opens the same `openPlanDetailSheet()` with the live countdown from Round 3
+  — unchanged, only its entry point moved. Known minor nav nuance, not a bug:
+  since the list and its detail view share the same `'generic'` sheet
+  container, the phone Back button from the detail view closes the whole
+  overlay in one press rather than returning to the list first (the sheet
+  stack pushes 'generic' twice but both entries hide the same shared
+  container) — acceptable given `'generic'` is a shared multi-purpose sheet
+  used by several features, not something worth a dedicated container for.
+- **Product cards enlarged again, with clearly labeled fields** (Price / Daily
+  Cashback / Amount / Duration in a 2×2 grid) — owner: "increased in size, as
+  it was but abit minimized... well organised." Round 3's single truncated
+  row (`210d · UGX 3,000/day · UGX 63...`, ~71px tall) is gone; now a `.top`
+  row (image + name) followed by the labeled grid, then a full-width Purchase
+  button again (the Round 3 `.invest-btn{width:auto}` override was removed) —
+  ~284px tall, between the original stacked design and Round 3's compact one.
+- **Assistant bubble is Account-only.** `showPage(name)` now does
+  `$('assistFab').style.display = name === 'account' ? 'flex' : 'none'` —
+  one line, since every page transition already goes through `showPage()`
+  (including the very first `showPage('home')` from `enterApp()`), so no
+  separate initialization was needed.
+- **Nav active state restyled "bright glassy white."** `.navitem.active,
+  .navitem.tap-glow` was `background:var(--blue-glow)` (a light blue tint,
+  the value-only-swap leftover from the "remove background blue" round); now
+  `rgba(255,255,255,.92)` + `backdrop-filter:blur(6px)` + a soft blue-tinted
+  `box-shadow` so the pill visibly "pops" even though `.navbar` itself is
+  already white — icon/text stay `var(--blue)` for contrast.
+- **New: Password Management**, first row in the Account menu list (above
+  About Space8) — owner: "add password management just above about space8."
+  Pure client-side Firebase, same pattern as login/register/logout — no new
+  server endpoint. `index.html`'s Firebase module script gained
+  `EmailAuthProvider`/`reauthenticateWithCredential`/`updatePassword` imports
+  and `window.fbChangePassword(currentPass, newPass)`, which re-authenticates
+  with the CURRENT password first (Firebase requires a recent sign-in before
+  a sensitive change like this) then calls `updatePassword`. New `openPasswordSheet()`/
+  `changePassword()` in `original_module.js` (current/new/confirm fields,
+  min 6 chars, maps `wrong-password`/`invalid-credential`/`weak-password`/
+  `too-many-requests` Firebase error codes to readable messages, same style
+  as the existing register-screen error mapping). New `key` icon added to
+  `ICONS`.
+- **Verification**: full `test-*.js` suite green. Rebuilt `user/` (admin
+  untouched this round — nothing here touched `admin-src/`). Bumped
+  `user/sw.js` cache `v233` → `v234`. Playwright confirmed all of the above:
+  Home has no `.plan-row`/Active Plans title and the assist bubble hidden;
+  product card is ~284px tall with all 4 labeled fields; My Products tile
+  opens the list which opens the same live-countdown detail sheet; Account
+  page has the assist bubble visible, `backdrop-filter:blur(6px)` on the
+  active nav item, and "Password Management" as the first menu row; wrong
+  current password shows an error toast, correct current password shows
+  "Password changed."
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's
