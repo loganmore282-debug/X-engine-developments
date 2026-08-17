@@ -14,6 +14,47 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Asked ChatGPT to verify its own Round 12 security fixes; found 3 real problems, including a fix that was a complete no-op
+
+Owner: "now let us ask chatgpt where that patch is now green." Sent
+ChatGPT the Round 12 diff and asked it to verify each finding against the
+current code rather than trust the changelog. It found three genuine bugs
+in the first pass, all fixed:
+
+1. The admin-login timing fix was a no-op: `if (!validAccount ||
+   !scryptVerify(...))` still short-circuits past scryptVerify for a
+   nonexistent username due to `||` evaluation order, even though
+   `hashToCheck` was computed correctly. Fixed by computing `passwordOk`
+   unconditionally on its own line first. This time verified by
+   instrumenting `crypto.scryptSync` directly (call-counted in the test)
+   and asserting it actually runs for a nonexistent username — a check
+   that would have failed against the broken version even though the HTTP
+   response looked identical either way.
+2. `generateUniqueReferralCode()`'s lock only covered the uniqueness
+   check, not the write -- released before `completeRegistrationCore`
+   ever persisted the code, leaving a real race window. Fixed by
+   reserving the code (writing it onto the user's own doc) while still
+   holding the lock. Verified with genuine `Promise.all` concurrency this
+   time -- the original test used a sequential loop that never actually
+   raced anything, a gap in the test itself, not just the code.
+3. `phoneFromVerifiedEmail()` still fell back to trusting `req.body.phone`
+   when the verified email existed but wasn't phone-shaped (an attacker
+   hitting the API directly with an arbitrary email, bypassing this app's
+   phoneToEmail() convention entirely). Fixed to return null in that case
+   instead of ever trusting an unrelated body value.
+
+Also fixed: the separate admin attach-referrer route was missing the same
+banned-referrer check added to completeRegistrationCore in Round 12; the
+publicId self-heal now returns null instead of an unpersisted id when the
+write actually fails. Considered and declined a username-keyed rate
+limiter for /admin/login -- the existing per-username lockout already caps
+guesses regardless of timing, and doing the rate limiter correctly would
+need reordering body-parsing middleware, a bigger change for marginal gain.
+
+Verification: test-security-review.js expanded with real concurrency (was
+sequential before -- a gap in the test, not just the code), scryptSync
+instrumentation, and the new edge cases. Full suite green, 63/63.
+
 ## 2026-08-17 — Claude — Security review of login/registration/PIN/referral codes: 8/10 ChatGPT findings fixed, 2 architectural gaps documented as open (not silently patched)
 
 Owner asked for a from-scratch security review of login, registration,

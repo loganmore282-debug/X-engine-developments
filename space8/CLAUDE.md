@@ -1534,6 +1534,86 @@ not a quiet code change):
   rate-limiter regression described above. Server-only changes; no
   rebuild needed (nothing in `user-src/` or `admin-src/` touched).
 
+## Round 13 of the same day, 2026-08-17 — asked ChatGPT to verify its own Round 12 fixes; found 3 real problems with the first cut, including one that made a "fix" a total no-op
+
+Owner: *"now let us ask chatgpt where that patch is now green ✅️✅️✅️✅️✅️."*
+Sent ChatGPT the diff/AGENT_LOG entry from Round 12 and asked it to verify
+each of its own 10 original findings against the actual current code,
+not just trust the changelog's claims. It found three genuine problems
+with the first pass — all verified, all fixed:
+
+1. **The admin-login timing fix was a complete no-op.** Round 12 added
+   `DUMMY_PASSWORD_HASH` and computed `hashToCheck` correctly, but then
+   still wrote `if (!validAccount || !scryptVerify(password, hashToCheck))`
+   — `||` never evaluates its right side once the left side is already
+   `true`, so for a nonexistent/inactive username `scryptVerify` (and the
+   whole point of the dummy hash) was STILL never reached. The timing gap
+   Round 12 claimed to close was still wide open. Fixed by computing
+   `passwordOk = scryptVerify(...)` unconditionally, on its own line,
+   before the branch — exactly ChatGPT's own suggested fix. **This time
+   verified by actually instrumenting `crypto.scryptSync`** (wrapped and
+   call-counted in `test-security-review.js`, before `server.js` loads) and
+   asserting the count increases for a nonexistent username's login
+   attempt — a check that would have failed (0 new calls) against the
+   broken version even though the HTTP response looked identical either
+   way. Response-shape checks alone cannot catch this class of bug; this
+   is now the pattern for any future timing-sensitive fix in this repo.
+2. **`generateUniqueReferralCode()`'s lock didn't cover the write.** Round
+   12 wrapped the uniqueness CHECK in `withLock('referral-code-gen', ...)`
+   but returned the code and released the lock immediately — the actual
+   write happened later in `completeRegistrationCore`, unprotected. A
+   second concurrent registration's own check could run (and pass) before
+   the first registration's code was ever actually persisted. Fixed by
+   giving `generateUniqueReferralCode(userId)` the registering user's own
+   id and having it RESERVE the code (write it onto that user's own doc)
+   while STILL holding the lock — check-and-claim is now one atomic step.
+   **Verified with genuine concurrency this time**: the original
+   `test-security-review.js` batch test used a sequential `for` loop with
+   `await` between each call, which never actually raced anything at all
+   (a real gap in the FIRST test, not just the code) — rewritten to fire
+   10 registrations via `Promise.all`, letting Node genuinely interleave
+   their async DB operations, and confirms all 10 codes come back unique
+   with each one actually persisted on its own user doc.
+3. **`phoneFromVerifiedEmail()` still trusted `req.body.phone` when the
+   verified email was present but not phone-shaped** — e.g. an attacker
+   hitting the API directly with an arbitrary email like
+   `attacker@example.com` (bypassing this app's own `phoneToEmail()`
+   convention, which only the real client ever uses) could still label
+   their profile with a stolen phone number, since the derivation fell
+   through to the body on any non-phone-shaped email. Fixed to return
+   `null` in that case (profile stores an empty phone) instead of ever
+   falling back to an unrelated caller-supplied value. The "no email on
+   the token at all" fallback (every existing test file's mock shape,
+   also the only realistic account of a Firebase auth method this app's
+   client never actually uses) is unchanged and still falls back to body.
+- **Also fixed on the same pass, both flagged by ChatGPT as consistency
+  gaps rather than new categories of bug**: the separate OWNER-only
+  `/admin/user/attach-referrer` reconciliation route gained the same
+  banned-referrer rejection `completeRegistrationCore` already had (was
+  missed in Round 12, same `BAD_REFERRAL` shape); the publicId self-heal
+  in `GET /account` no longer returns a freshly-minted id when the
+  persisting write actually fails (was silently swallowing the error and
+  returning the unpersisted id anyway, so that one response would show an
+  ID that later turned out to be a lie, and the next read would mint a
+  completely different one) — now returns `null` on a failed write instead.
+- **Considered and explicitly declined**: a username-keyed rate limiter on
+  `/admin/login` (ChatGPT's suggestion to improve on Round 12's revert).
+  Implementing it correctly would require moving `express.json()` body
+  parsing earlier in the middleware chain (a `keyGenerator` reading
+  `req.body.username` needs the body already parsed, and rate limiters are
+  currently registered before that parser) — a broader, riskier change for
+  marginal benefit, since the existing per-username 5-attempt/15-minute
+  lockout already caps an attacker to 5 guesses per username regardless of
+  request timing/rate, which is a stronger constraint than a requests/min
+  limiter would add on top. Not implemented; noted here as a deliberate
+  choice, not an oversight.
+- **Verification**: `test-security-review.js` expanded from 28 to 27
+  checks (net change from restructuring the referral-code batch test into
+  fewer, stronger assertions, while adding: the arbitrary-email-phone gap,
+  the scryptSync instrumentation, the genuine-concurrency referral race,
+  and the admin attach-referrer banned-check). Full `test-*.js` suite
+  green, 63/63. Server-only changes, no rebuild needed.
+
 ## Repo / branch / infra
 
 - Repo: `loganmore282-debug/x-engine-developments` — a multi-project repo; this project's

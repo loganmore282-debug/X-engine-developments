@@ -439,17 +439,31 @@ function randCode(n = 6) {
 //    low-probability one. Now keeps checking with the wider 8-char
 //    alphabet (32^8 ≈ 1.1 trillion combinations) instead of ever handing
 //    back an unverified code.
-async function generateUniqueReferralCode() {
+// Takes the registering user's own id so the winning code can be RESERVED
+// (written onto that user's own doc) while still holding the lock.
+// ChatGPT review, confirmed real (round 2): the first version of this lock
+// only covered the uniqueness CHECK -- it returned the code and released
+// the lock immediately, with the actual write happening later in
+// completeRegistrationCore, unprotected. A second concurrent caller could
+// pass the same "is this unused" check before the first caller's code was
+// ever actually persisted. Reserving it here, before the lock releases,
+// makes check-and-claim one atomic step: by the time any other caller's
+// own check can run, a just-claimed code is already visible in the DB.
+async function generateUniqueReferralCode(userId) {
   return withLock('referral-code-gen', async () => {
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const code = randCode(6);
+    const tryClaim = async (code) => {
       const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
-      if (exists.empty) return code;
+      if (!exists.empty) return null;
+      await db.collection('users').doc(userId).update({ referralCode: code });
+      return code;
+    };
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const claimed = await tryClaim(randCode(6));
+      if (claimed) return claimed;
     }
     for (let attempt = 0; attempt < 20; attempt++) {
-      const code = randCode(8);
-      const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
-      if (exists.empty) return code;
+      const claimed = await tryClaim(randCode(8));
+      if (claimed) return claimed;
     }
     // Not realistically reachable (40 total collisions across two
     // alphabets), but never return an unverified code even here.
@@ -652,8 +666,25 @@ async function verifyAuthWithEmail(req) {
 // Uganda mobile number (e.g. an old/irregular account), matching the exact
 // fallback shape both call sites already had.
 function phoneFromVerifiedEmail(email, bodyPhone) {
-  const local = String(email || '').split('@')[0];
-  return cleanPhone(local) || cleanPhone(bodyPhone || '') || String(bodyPhone || '').trim();
+  if (!email) {
+    // No email on the verified token at all -- the only way this happens
+    // in practice is a Firebase auth method this app's client never uses
+    // (it only ever does email/password). Falls back to the body exactly
+    // like every call site did before this whole hardening pass.
+    return cleanPhone(bodyPhone || '') || String(bodyPhone || '').trim();
+  }
+  const derived = cleanPhone(String(email).split('@')[0]);
+  if (derived) return derived;
+  // ChatGPT review, confirmed real gap in round 1 of this fix: an email
+  // that doesn't reduce to a valid Uganda number (e.g. an attacker signing
+  // up directly against Firebase's own API with an arbitrary email like
+  // attacker@example.com, bypassing this app's phoneToEmail() convention
+  // entirely) used to fall through to trusting req.body.phone anyway --
+  // letting that attacker label their own profile with someone else's real
+  // phone number. An email IS present here, it just isn't phone-shaped, so
+  // there's no legitimate reason left to trust an unrelated client-supplied
+  // value -- returns null (profile stores an empty phone) instead.
+  return null;
 }
 function safeEqual(a, b) {
   const bufA = Buffer.from(String(a || ''));
@@ -1735,7 +1766,7 @@ async function completeRegistrationCore(userId, referralCode) {
       referrerId = refSnap.docs[0].id;
     }
 
-    const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(), nextSequentialPublicId()]);
+    const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(userId), nextSequentialPublicId()]);
     const sett = await getSettings();
     const WELCOME = Number(sett.welcomeBonus) || 0;
     const update = { registrationDone: true, referralCode: myRefCode, publicId: myPublicId, walletBalance: FieldValue.increment(WELCOME) };
@@ -1853,7 +1884,20 @@ app.get('/account', async (req, res) => {
         const already = fresh.exists && fresh.data().publicId;
         if (already) return already;
         const id = await nextSequentialPublicId();
-        await db.collection('users').doc(uid).update({ publicId: id }).catch(e => console.warn('publicId self-heal:', e.message));
+        // ChatGPT review, confirmed real: the write failure was caught and
+        // swallowed, but `id` was still returned -- so this ONE response
+        // would show a publicId that was never actually persisted, and the
+        // NEXT /account read would mint a completely different id (this
+        // one's counter value simply wasted, same as the concurrent-read
+        // race above). Returning null on a failed write instead means this
+        // response just doesn't show an id yet, matching reality, rather
+        // than showing one that later turns out to have been a lie.
+        try {
+          await db.collection('users').doc(uid).update({ publicId: id });
+        } catch (e) {
+          console.warn('publicId self-heal:', e.message);
+          return null;
+        }
         return id;
       });
     }
@@ -3199,16 +3243,22 @@ app.post('/admin/login', async (req, res) => {
   if (loginLocked(lockKey)) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
   try {
     const snap = await db.collection('adminUsers').doc(username).get();
-    // ChatGPT review, confirmed real: a nonexistent/inactive username used
-    // to short-circuit BEFORE scryptVerify ever ran, while a real username
-    // with a wrong password always paid the full scrypt cost -- a timing
-    // side-channel an attacker could use to enumerate valid admin
-    // usernames by response time alone. Always running scryptVerify against
-    // SOMETHING (the real hash, or this fixed dummy one) equalizes both
-    // paths' cost regardless of which branch is actually taken.
+    // ChatGPT review, confirmed real (twice): a nonexistent/inactive
+    // username used to short-circuit BEFORE scryptVerify ever ran, while a
+    // real username with a wrong password always paid the full scrypt cost
+    // -- a timing side-channel an attacker could use to enumerate valid
+    // admin usernames by response time alone. The FIRST attempt at this fix
+    // computed hashToCheck correctly but still wrote
+    // `if (!validAccount || !scryptVerify(...))`, which STILL short-circuits
+    // past scryptVerify whenever validAccount is false -- `||` never
+    // evaluates its right side once the left side is already true, so
+    // scryptVerify silently never ran for a nonexistent account either way,
+    // and the whole fix was a no-op. Fixed for real this time by computing
+    // passwordOk on its own line, unconditionally, BEFORE the branch.
     const validAccount = snap.exists && snap.data().active !== false;
     const hashToCheck = validAccount ? snap.data().passwordHash : DUMMY_PASSWORD_HASH;
-    if (!validAccount || !scryptVerify(password, hashToCheck)) {
+    const passwordOk = scryptVerify(password, hashToCheck);
+    if (!validAccount || !passwordOk) {
       recordLoginFail(lockKey);
       return res.status(401).json({ status: 'error', message: 'Invalid username or password' });
     }
@@ -3976,6 +4026,13 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
       if (refSnap.empty) return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code does not exist.' } };
       const referrerId = refSnap.docs[0].id;
       if (referrerId === userId) return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'A member cannot be their own referrer.' } };
+      // ChatGPT review: completeRegistrationCore already rejects a banned
+      // referrer's code -- this admin reconciliation tool hadn't, same
+      // inconsistent-attribution risk (team counts increment toward a
+      // banned account even though commission-crediting elsewhere skips
+      // banned referrers).
+      if (refSnap.docs[0].data().status === 'banned')
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } };
       // Defensive cycle guard: the normal client flow can never produce a
       // loop (a brand new signup has no downline yet), but this admin tool
       // can attach a referrer to an account that's been active -- possibly
