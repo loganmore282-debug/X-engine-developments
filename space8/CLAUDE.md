@@ -2477,6 +2477,20 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    bigger lift than this pass. `test-codex-round3-fixes.js` 28/28; full
    suite 69/69. Read the 2026-08-17 AGENT_LOG.md entry ("Codex fresh
    full-codebase review (round 3)") before re-auditing from scratch.
+0c. **Personal Claude code review (not Codex) — DONE as of 2026-08-17.** Owner
+   asked Claude to personally read through the scripts after two rounds of
+   external Codex review. Read server.js, assistant-engine.js,
+   admin-src/index.html, build-core.js, build-admin.js fresh, in full. Found
+   one real bug: Deposits/Withdrawals admin tabs' referral-code column and
+   "search by code" only worked once the Users tab had been opened first (a
+   client-side `_users` array only that tab populated). Fixed by having
+   `/admin/deposits/list`/`/admin/withdrawals/list` send `referralCode` on
+   each row directly, same as they already do for `accountPhone`. Full suite
+   71/71 (30/30 in test-codex-round3-fixes.js, 2 new assertions added there).
+   Read the 2026-08-17 AGENT_LOG.md entry ("Personal code review") for detail
+   — it also lists what's been read fresh vs. not yet in this pass
+   (user-src/original_module.js not yet re-read fresh, though it's been
+   covered piecemeal across ~22 prior rounds).
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

@@ -14,6 +14,62 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Personal code review (owner asked Claude directly, not Codex): referral-code display/search bug in Deposits/Withdrawals tabs
+
+Owner: "now check personally all scripts as you claude code to check for
+bugs" -- read through server.js (full), assistant-engine.js (full),
+admin-src/index.html (full), build-core.js, build-admin.js in a fresh,
+direct read (not delegated) after two rounds of external Codex review had
+already turned up nothing further. Found one genuine, previously-unnoticed
+bug.
+
+**Found and fixed:**
+
+1. **Deposits/Withdrawals admin tabs' referral-code column and "search by
+   code" silently depended on the Users tab having been opened first.**
+   `admin-src/index.html`'s `drawDeps()`/`drawWits()` looked up each row's
+   referral code via `_users.find(x=>x.id===...)` against a client-side
+   `_users` array that only `renderUsers()`/`quietRefreshUsers()` (the Users
+   tab) ever populate -- it starts as `let _users=[]`. An admin landing on
+   Deposits or Withdrawals first (a very plausible first stop -- that's the
+   approval queue) saw a blank code column and "search phone or referral
+   code" silently matching zero rows on the code half, with no error and no
+   indication anything was missing. Fixed server-side instead of adding a
+   client-side fetch-on-demand: `/admin/deposits/list` and
+   `/admin/withdrawals/list` already fetch every user to build an
+   `accountPhone` map — now they build a `referralCode` map from the same
+   pass and attach it to each row directly, same pattern as the phone field.
+   The client now reads `d.referralCode`/`w.referralCode` straight off the
+   row; the `_users`-dependent lookup is gone from both functions, and
+   `_users` is now used only by the Users tab itself (confirmed by grep —
+   no remaining `_users.find` outside `renderUsers`/`drawUsers`).
+
+**Files touched:** `server.js` (`/admin/deposits/list`,
+`/admin/withdrawals/list`), `admin-src/index.html` (`drawDeps`, `drawWits`),
+`admin/index.html` (rebuilt), `test-codex-round3-fixes.js` (2 new
+assertions added to its existing deposits/withdrawals-list sections,
+verifying the row's `referralCode` matches the real user's).
+
+**Verification:** full test suite re-run, 71/71 passing (69 pre-existing +
+2 new assertions in test-codex-round3-fixes.js, now 30/30 in that file).
+`node build-admin.js` rebuilt cleanly with a syntax-checked round-trip.
+server.js needs no rebuild (Railway runs it directly) but the owner must
+still redeploy it there for this to take effect in production, same as
+always.
+
+**Scope of this pass:** server.js and assistant-engine.js were read in full
+and turned up nothing new — both have had ~20+ prior audit rounds and are
+extremely hardened already. admin-src/index.html had comparatively less
+dedicated scrutiny this session (mostly the `_tabBusy` counter and
+`/admin/admins/*` 404 fixes from the round-3 Codex pass) and is where this
+finding came from. Not yet re-read fresh in this pass:
+user-src/original_module.js (very substantially covered piecemeal across
+~22 prior rounds already) and guard-src.js (its domain-lock logic was
+specifically re-verified two sessions ago). Nothing else found; no
+deliberate architectural tradeoffs were touched or reconsidered.
+
+---
+
 ## 2026-08-17 — Claude — Codex fresh full-codebase review (round 3): 2 genuine money-safety races, several admin display-truncation/correctness bugs, all fixed
 
 Owner asked Codex for a fresh full-codebase review, not a diff re-check

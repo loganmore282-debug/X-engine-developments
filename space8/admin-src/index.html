@@ -986,14 +986,13 @@ function drawDeps(){
   let list = _depFilter==='all' ? _deps : _deps.filter(d=>(DEP_GROUPS[_depFilter]||[]).includes(d.status));
   const raw = ($('depSearch')?.value||'').trim();
   const q = raw.toLowerCase(), qCore = phoneCore(raw);
-  const u = id => _users.find(x=>x.id===id) || {};
   if(q) list = list.filter(d =>
-    (u(d.userId).referralCode||'').toLowerCase().includes(q) ||
+    (d.referralCode||'').toLowerCase().includes(q) ||
     (qCore && phoneCore(d.accountPhone||d.phone).includes(qCore))
   );
   $('depRows').innerHTML = list.length?list.map(d=>{
     const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed';
-    const code = u(d.userId).referralCode;
+    const code = d.referralCode;
     // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
     // that was never actually verified by MarzPay's own webhook is a real
     // money-safety decision, not a routine action) -- the button matches
@@ -1071,13 +1070,12 @@ function drawWits(){
   let list = _witFilter==='all' ? _wits : _wits.filter(w=>w.status===_witFilter);
   const raw = ($('witSearch')?.value||'').trim();
   const q = raw.toLowerCase(), qCore = phoneCore(raw);
-  const u = id => _users.find(x=>x.id===id) || {};
   if(q) list = list.filter(w =>
-    (u(w.userId).referralCode||'').toLowerCase().includes(q) ||
+    (w.referralCode||'').toLowerCase().includes(q) ||
     (qCore && phoneCore(w.phone).includes(qCore))
   );
   $('witRows').innerHTML = list.length?list.map(w=>{
-    const code = u(w.userId).referralCode;
+    const code = w.referralCode;
     const who = esc(w.holder||'');
     const dest = `${esc(w.network||'Not set')}<br><span class="muted" style="font-size:11px">${esc(w.phone||'')}</span>`;
     return `<tr class="clickable" data-uid="${esc(w.userId)}"><td>${fdate(w.createdAt)}</td><td>${who}${code?`<br><span class="muted">${esc(code)}</span>`:''}</td>

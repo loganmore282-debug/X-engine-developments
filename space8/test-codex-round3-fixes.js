@@ -257,6 +257,19 @@ async function setupUser(uid, phone) {
   check('the ancient still-pending deposit is present despite 5000 newer rows existing', foundOldDep);
   const dupCount = (r.body?.deposits || []).filter(d => d.id === oldDepId).length;
   check('it appears exactly once (no duplicate from the merge)', dupCount === 1, dupCount);
+  // Codex/self-review-verified real bug: referral code display + "search by
+  // code" on the Deposits/Withdrawals admin tabs used to depend entirely on
+  // the client having a shared _users array populated -- which only ever
+  // happens by visiting the Users tab first. Landing on Deposits/Withdrawals
+  // first (the approval queue -- a very plausible first stop) meant the code
+  // column silently rendered blank and code search silently matched nothing.
+  // Fixed by having the server send referralCode directly on every row, same
+  // as it already does for accountPhone.
+  const depRow = (r.body?.deposits || []).find(d => d.id === oldDepId);
+  const oldDepUser = users().get(OLDDEP_USER);
+  check('deposit row carries the user\'s real referralCode directly from the server',
+    !!depRow?.referralCode && depRow.referralCode === oldDepUser?.referralCode,
+    { rowCode: depRow?.referralCode, userCode: oldDepUser?.referralCode });
 
   console.log('\n== 5. Same rescue for /admin/withdrawals/list ==');
   const OLDWIT_USER = 'r3-oldwit-user';
@@ -276,6 +289,11 @@ async function setupUser(uid, phone) {
   check('withdrawals list request succeeded', r.body?.status === 'success', r.code);
   const foundOldWit = (r.body?.withdrawals || []).some(w => w.id === oldWitId);
   check('the ancient still-pending withdrawal is present despite 5000 newer rows existing', foundOldWit);
+  const witRow = (r.body?.withdrawals || []).find(w => w.id === oldWitId);
+  const oldWitUser = users().get(OLDWIT_USER);
+  check('withdrawal row carries the user\'s real referralCode directly from the server',
+    !!witRow?.referralCode && witRow.referralCode === oldWitUser?.referralCode,
+    { rowCode: witRow?.referralCode, userCode: oldWitUser?.referralCode });
 
   console.log('\n== 6. /admin/promocodes/list surfaces a genuinely old ACTIVE code even past the newest-300 display cap ==');
   const oldCodeId = nextId('oldcode');

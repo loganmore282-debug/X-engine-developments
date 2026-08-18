@@ -4801,7 +4801,8 @@ app.post('/admin/deposits/list', async (req, res) => {
       db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).limit(5000).get(),
       db.collection('users').get(),
     ]);
-    const phones = {}; usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
+    const phones = {}; const refCodes = {};
+    usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; refCodes[u.id] = u.data().referralCode || ''; });
     const counts = {};
     const byId = new Map();
     snap.docs.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
@@ -4810,6 +4811,13 @@ app.post('/admin/deposits/list', async (req, res) => {
     const dayMap = {};
     rows.forEach(r => {
       r.accountPhone = phones[r.userId] || '';
+      // Client-side referral-code display/search used to depend entirely on
+      // the Users tab having been visited first (it read a shared _users
+      // array that only that tab's render populates) -- an admin landing on
+      // Deposits/Withdrawals first (very plausible, that's the approval
+      // queue) saw blank codes and "search by code" silently matched
+      // nothing. Sending it directly removes that ordering dependency.
+      r.referralCode = refCodes[r.userId] || '';
       counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1;
       if (r.status === 'matched') {
         const { day } = eatParts(r.createdAt);
@@ -4887,7 +4895,8 @@ app.post('/admin/withdrawals/list', async (req, res) => {
       db.collection('withdrawals').where('status', 'in', ['pending', 'sending', 'processing']).limit(5000).get(),
       db.collection('users').get(),
     ]);
-    const phones = {}; usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
+    const phones = {}; const refCodes = {};
+    usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; refCodes[u.id] = u.data().referralCode || ''; });
     const counts = {};
     const byId = new Map();
     snap.docs.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
@@ -4896,6 +4905,9 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     const dayMap = {};
     rows.forEach(w => {
       w.accountPhone = phones[w.userId] || '';
+      // See /admin/deposits/list's matching comment -- referral code used to
+      // come only from the client's Users-tab-populated _users array.
+      w.referralCode = refCodes[w.userId] || '';
       counts[w.status] = (counts[w.status] || 0) + 1;
       if (w.status === 'processed') {
         const { day } = eatParts(w.createdAt);
