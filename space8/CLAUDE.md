@@ -2712,10 +2712,18 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    `user/sw.js` `CACHE` bumped to `v266`, then `v267` after a follow-up fix — it
    shipped with `font-weight:800` on `.checkmark`, which rendered the "Light"
    check mark just as thick/bold as the old icon (owner: "still the same as
-   usual" after seeing it live); dropped to normal weight, confirmed visibly
-   thinner via a side-by-side Chromium render. See the 2026-08-18 AGENT_LOG.md
-   entries ("Checkmark unified to the literal ✓ (U+2713) everywhere..." and
-   "Fixed the checkmark fix: it shipped bold, defeating 'Light Check Mark'").
+   usual" after seeing it live); dropped to normal weight — but that STILL
+   looked heavy on the phone. Codex found why: Android renders the literal ✓
+   (U+2713) from a fallback SYMBOL font that ignores CSS `font-weight` entirely,
+   so no weight value ever thinned it on-device (it only looked thinner in
+   desktop-Chromium test renders, a different fallback). **Final fix (v268):
+   abandoned the Unicode character, back to an inline SVG (`.s8-check`,
+   `ICONS.check`) whose `stroke-width` we control — 1.75/1.9/2 per size, all
+   lighter than the old 2.4 — which IS honored on every browser.** Lesson for
+   future icon work: never rely on CSS to restyle a bare Unicode symbol glyph;
+   use an SVG. See the 2026-08-18 AGENT_LOG.md entries ("Checkmark unified to
+   the literal ✓...", "Fixed the checkmark fix: it shipped bold...", and
+   "Checkmark, take three: SVG stroke, not Unicode char").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

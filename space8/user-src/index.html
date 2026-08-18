@@ -157,7 +157,7 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .pill{ display:inline-flex; align-items:center; gap:5px; font-size:10px; letter-spacing:.03em; padding:4px 9px; border-radius:999px; text-transform:uppercase; white-space:nowrap; }
 .pill-active{ background:var(--blue-glow); color:var(--blue-dim); }
 .pill-done{ background:var(--surface-2); color:var(--ink-dim); }
-.pill-done .checkmark{ font-size:11px; }
+.pill-done .s8-check{ width:12px; height:12px; stroke-width:2; }
 .pill-fail{ background:var(--danger-bg); color:var(--danger); }
 .pill-pending{ background:var(--surface-2); color:var(--ink-dim); }
 .member-row .pill{ flex-shrink:0; }
@@ -184,19 +184,20 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .success-popup{ background:var(--surface); border-radius:20px; padding:36px 32px; display:flex; flex-direction:column; align-items:center; gap:14px; max-width:78vw; box-shadow:0 20px 50px -12px rgba(0,0,0,.35); }
 .success-popup .ico{ width:72px; height:72px; border-radius:50%; background:var(--blue); display:flex; align-items:center; justify-content:center; }
 .success-popup .msg{ font-size:16px; font-weight:700; color:var(--ink); text-align:center; }
-/* Owner: "your tick is very different from that, so replace very well" --
-   wants the literal ✓ (U+2713) character everywhere a claimed/done state
-   is shown, not the stroked-path checkmark icon this used to be. One
-   class, sized per context below (success popup, checkin "✓ Claimed"
-   button, Task Center claimed pill all share it).
-   font-weight was originally 800 here -- WRONG: U+2713 is the "Light
-   Check Mark" specifically as opposed to U+2714 "Heavy Check Mark", and
-   bolding it that hard renders it just as thick as the old SVG icon it
-   was meant to replace, which is exactly why it looked "still the same
-   as usual". Normal weight is what actually makes it read as a distinct,
-   lighter mark. */
-.checkmark{ font-weight:400; line-height:1; display:inline-block; }
-.success-popup .ico .checkmark{ font-size:38px; color:#fff; }
+/* Owner: "your tick is very different from that... it should be this ✓ –
+   Light Check Mark". Codex-diagnosed (2026-08-18) why two prior attempts
+   failed on the real phone: the literal ✓ (U+2713) character falls back to
+   an Android system SYMBOL font that ignores CSS font-weight entirely --
+   so neither weight:800 nor weight:400 changed its thickness on-device
+   (it only looked lighter in a desktop Chromium render, which uses a
+   different fallback). The reliable fix is an inline SVG whose stroke-
+   width WE control, set lighter than the old heavy icon (which was 2.4).
+   One shared shape (.s8-check), stroke-width tuned per size below --
+   thinner on the big tick, a touch heavier on the tiny ones so they stay
+   legible. stroke:currentColor so each context's own text/icon color
+   flows through unless overridden. */
+.s8-check{ display:block; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.9; }
+.success-popup .ico .s8-check{ width:34px; height:34px; stroke:#fff; stroke-width:1.75; }
 
 .announce-bg{ position:fixed; inset:0; z-index:260; background:rgba(10,18,32,.6); display:none; align-items:center; justify-content:center; opacity:0; transition:opacity .2s ease; padding:26px; }
 .announce-bg.show{ display:flex; opacity:1; }
@@ -275,10 +276,9 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .action-btn{ flex:1; background:var(--surface); border-radius:16px; padding:14px 8px; display:flex; flex-direction:column; align-items:center; gap:7px; }
 .action-btn .ico{ width:44px; height:44px; border-radius:50%; background:var(--blue-glow); display:flex; align-items:center; justify-content:center; }
 .action-btn .ico svg{ width:21px; height:21px; stroke:var(--blue); }
-.action-btn .ico .checkmark{ font-size:22px; color:var(--blue); }
+.action-btn .ico .s8-check{ width:22px; height:22px; stroke-width:1.9; }
 .action-btn.done .ico{ background:var(--surface-2); }
 .action-btn.done .ico svg{ stroke:var(--ink-dim); }
-.action-btn.done .ico .checkmark{ color:var(--ink-dim); }
 .action-btn span{ font-size:11.5px; font-weight:700; }
 
 .ticker-bar{ display:flex; align-items:center; gap:10px; margin-top:22px; background:var(--surface); border-radius:16px; padding:8px 10px; }
@@ -578,7 +578,7 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 <div class="sheet-bg" id="planDetailSheetBg"><div class="sheet-head"><div class="iconbtn sheet-back" data-close="planDetail"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div></div><div class="sheet" id="planDetailSheet"></div></div>
 
 <div class="toast-bg" id="toastBg"><div class="toast" id="toast"></div></div>
-<div class="success-popup-bg" id="successPopupBg"><div class="success-popup"><div class="ico"><span class="checkmark">✓</span></div><div class="msg" id="successPopupMsg"></div></div></div>
+<div class="success-popup-bg" id="successPopupBg"><div class="success-popup"><div class="ico"><svg class="s8-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><div class="msg" id="successPopupMsg"></div></div></div>
 <div class="announce-bg" id="announceBg"><div class="announce-sheet" id="announceSheet"><div class="announce-body">
   <div class="announce-title" id="announceTitle"></div>
   <div class="announce-text" id="announceText"></div>

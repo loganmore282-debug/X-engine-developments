@@ -704,7 +704,13 @@
 // wrong, that renders the "Light" check mark just as thick as the old
 // heavy SVG icon it replaced (owner: "still the same as usual"). Dropped
 // to normal weight so it actually reads as visibly lighter/thinner.
-const CACHE = 'space8-shell-v267';
+// v268: v267 STILL looked heavy on the real phone -- Codex diagnosed the
+// real cause: Android renders the literal ✓ (U+2713) from a fallback
+// symbol font that ignores font-weight entirely, so no CSS weight ever
+// thinned it on-device. Abandoned the Unicode char; back to an inline SVG
+// (.s8-check) whose stroke-width WE control (1.75/1.9/2 per size, all
+// lighter than the old 2.4) -- reliably honored on every browser.
+const CACHE = 'space8-shell-v268';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 

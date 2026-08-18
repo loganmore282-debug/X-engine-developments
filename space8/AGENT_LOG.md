@@ -14,6 +14,42 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Checkmark, take three: SVG stroke, not Unicode char (Codex-diagnosed the real cause)
+
+Owner, after the v267 deploy: "the same" — the tick STILL looked heavy on the real phone.
+Asked Codex how to actually do it; Codex found the real cause the two prior attempts missed.
+
+- **Root cause (Codex)**: the literal ✓ (U+2713) character has no glyph in the app's UI
+  font, so Android Chrome substitutes it from a fallback SYMBOL font (Noto Sans Symbols or
+  similar) that ships a single fixed weight and ignores CSS `font-weight` completely. That's
+  why neither `font-weight:800` (v266) nor `font-weight:400` (v267) changed its thickness
+  on-device — and why it only *looked* thinner in my desktop-Chromium test renders, which
+  fall back to a different font. The character was never controllable this way.
+- **Fix**: dropped the Unicode character entirely, back to an inline SVG whose `stroke-width`
+  IS reliably honored everywhere. `ICONS.check` (`user-src/original_module.js`) is now
+  `<svg class="s8-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>`; the success
+  popup's inline markup (`index.html`) uses the same. New `.s8-check` CSS
+  (`fill:none; stroke:currentColor; stroke-linecap/linejoin:round`) with `stroke-width` tuned
+  per size — 1.75 on the big success tick, 1.9 on the checkin button, 2 on the tiny pill
+  (thinner on the large one, slightly heavier on small ones so they stay legible) — all
+  lighter than the old heavy 2.4. Also dropped the now-redundant inline "✓" from the checkin
+  button's "✓ Claimed" TEXT label (now just "Claimed") since the light SVG tick sits right
+  above it — that inline text glyph would have had the same un-thinnable-on-Android problem.
+- **Verification**: Rendered a Chromium comparison putting the OLD stroke-width 2.4 tick
+  directly beside the NEW 1.75 one at the same size — the new one is visibly lighter/cleaner.
+  More importantly this is now an SVG stroke, the one thing that renders consistently across
+  desktop AND Android (the whole point of the change), rather than a Unicode glyph whose
+  weight the desktop honored but the phone didn't. `node build-core.js` → round-trip OK.
+  `user/sw.js` `CACHE` bumped to `v268`.
+- **Note**: the small inline ✓ still present inside toast/popup MESSAGE text (e.g. "Login
+  successful ✓") is unchanged — it's minor sentence punctuation, not the prominent icon the
+  owner flagged, and `toast()`/`showSuccessPopup()` use `.textContent` so an SVG can't go
+  there without opening an XSS surface on `toast()` (called with server `r.message` strings).
+  If it ever bothers the owner, the cleaner move is to drop the character, not to try to
+  style it.
+
+---
+
 ## 2026-08-18 — Claude — Fixed the checkmark fix: it shipped bold, defeating "Light Check Mark"
 
 Owner sent screenshots of the live site after the previous round's deploy: "Still the same

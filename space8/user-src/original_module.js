@@ -150,11 +150,14 @@ var ICONS = {
   deposit: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v6.5"/><path d="M8.5 5 12 8.5 15.5 5"/><circle cx="12" cy="16" r="6.5"/><text x="12" y="19" text-anchor="middle" font-size="8" font-weight="700" font-family="inherit" stroke="none" fill="currentColor">$</text></svg>',
   withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M7 9.5h5"/><path d="M21.5 10.5h-4a2.5 2.5 0 0 0 0 5h4"/><circle cx="17.3" cy="13" r="0.9" fill="currentColor" stroke="none"/></svg>',
   checkin: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>',
-  // Owner: "your tick is very different from that" -- wants the literal
-  // ✓ (U+2713) character, not a stroked-path icon, everywhere a
-  // claimed/done state shows a tick (checkin button, Task Center claimed
-  // pill). .checkmark (index.html) sizes/colors it per context.
-  check: '<span class="checkmark">✓</span>',
+  // Owner wants a light/thin tick, not the old heavy one. The literal ✓
+  // (U+2713) character was tried first but Android renders it from a
+  // fallback symbol font that ignores font-weight (Codex-diagnosed), so it
+  // stayed thick on-device. Back to an inline SVG -- but stroke-width is
+  // set by .s8-check in index.html (lighter than the old 2.4), which IS
+  // reliably honored on every browser. Same shape everywhere ico('check')
+  // is used (checkin button, Task Center claimed pill).
+  check: '<svg class="s8-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   wallet: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>',
@@ -757,7 +760,7 @@ async function renderHome(){
   html += '<div class="action-row">' +
     '<div class="action-btn" id="homeDepositBtn"><div class="ico">' + ico('deposit') + '</div><span>Deposit</span></div>' +
     '<div class="action-btn" id="homeWithdrawBtn"><div class="ico">' + ico('withdraw') + '</div><span>Withdraw</span></div>' +
-    '<div class="action-btn ' + (checkedIn?'done':'') + '" id="homeCheckinBtn"><div class="ico">' + ico(checkedIn?'check':'checkin') + '</div><span>' + (checkedIn?'✓ Claimed':'Check In') + '</span></div>' +
+    '<div class="action-btn ' + (checkedIn?'done':'') + '" id="homeCheckinBtn"><div class="ico">' + ico(checkedIn?'check':'checkin') + '</div><span>' + (checkedIn?'Claimed':'Check In') + '</span></div>' +
   '</div>';
 
   html += '<div class="ticker-bar">' +
