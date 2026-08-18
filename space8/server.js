@@ -208,6 +208,16 @@ const DEFAULT_SETTINGS = {
   dailyCheckin: 300, welcomeBonus: 5000, commL1: 28, commL2: 2, commL3: 1,
   returnMultiple: 42, cycleDays: 210, maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
+  // Owner (2026-08-18): "let us control withdrawal requests time... EAT
+  // time, settable in admin settings, so this can regulate someone not to
+  // request a withdrawal in a wrong time." Off by default (an owner who
+  // never touches this sees zero change) -- a real daytime window (8am-
+  // 10pm EAT) is the default the moment it's turned on so enabling it
+  // does something sensible without the admin having to first figure out
+  // hour numbers. Enforced server-side in /withdraw/request (see
+  // isWithinWithdrawHours() and its own comment) -- this is the actual
+  // security boundary; the client only ever shows an informational note.
+  withdrawHoursEnabled: false, withdrawHoursStart: 8, withdrawHoursEnd: 22,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   annBgBlurPx: 6, annBgTintPct: 55,
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
@@ -346,6 +356,33 @@ function nowStr() {
     date: pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()) + '/' + d.getUTCFullYear(),
     time: pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds())
   };
+}
+// Owner-settable withdrawal request hours, EAT (owner: "control withdrawal
+// requests time... this can regulate someone not to request a withdrawal
+// in a wrong time... server side, encrypted, safeguarded, and secure").
+// "Encrypted" doesn't apply literally to an hour-of-day setting -- the real
+// security properties this actually needs, all present: enforced
+// SERVER-SIDE only (a client bypass changes nothing, unlike a client-side-
+// only hour check would), the admin-only write path is already owner-
+// gated + range-validated (SETTINGS_CRITICAL_RANGES below) same as every
+// other settings field, and the check itself runs off the SERVER's own
+// clock (eatNow(), the same helper every other EAT-day calculation in
+// this file already uses) -- never trusts a client-supplied timestamp.
+// hour ∈ [start, end) when start < end; wraps past midnight when
+// start > end (e.g. 22 -> 6 means "10pm through 6am"). start === end (the
+// only genuinely ambiguous configuration -- could mean "always open" or
+// "always closed" with no way to tell which the admin meant) fails OPEN
+// deliberately: a business-hours restriction misconfigured to that state
+// should never silently lock every member out of withdrawing their own
+// money platform-wide.
+function isWithinWithdrawHours(sett) {
+  if (!sett.withdrawHoursEnabled) return true;
+  const start = Math.round(Number(sett.withdrawHoursStart));
+  const end = Math.round(Number(sett.withdrawHoursEnd));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start > 23 || end < 0 || end > 23 || start === end)
+    return true;
+  const hour = eatNow().getUTCHours();
+  return start < end ? (hour >= start && hour < end) : (hour >= start || hour < end);
 }
 function tsMillis(v) {
   if (!v) return 0;
@@ -1712,6 +1749,7 @@ app.get('/public/settings', async (_req, res) => {
       returnMultiple: s.returnMultiple, cycleDays: s.cycleDays, maxWithdrawalsPerDay: s.maxWithdrawalsPerDay,
       maintenanceMode: !!s.maintenanceMode, maintenanceMsg: s.maintenanceMsg || '',
       requireInvestToWithdraw: s.requireInvestToWithdraw !== false,
+      withdrawHoursEnabled: !!s.withdrawHoursEnabled, withdrawHoursStart: s.withdrawHoursStart, withdrawHoursEnd: s.withdrawHoursEnd,
       annEnabled: !!s.annEnabled, annTitle: s.annTitle || '', annBody: s.annBody || '',
       annCtaLabel: s.annCtaLabel || '', annCtaUrl: s.annCtaUrl || '', announcementBg: s.announcementBg || '',
       annBgBlurPx: s.annBgBlurPx, annBgTintPct: s.annBgTintPct,
@@ -2777,6 +2815,16 @@ app.post('/withdraw/request', async (req, res) => {
   let pinJustSet = false;
   try {
     const sett = await getSettings();
+    // Checked before anything else settings-driven, same as the min-amount
+    // check right below -- a request outside the allowed hours should
+    // never even reach the PIN/bind checks, let alone reserve any balance.
+    if (!isWithinWithdrawHours(sett)) {
+      const h12 = h => { const ap = h < 12 ? 'AM' : 'PM'; let hh = h % 12; if (hh === 0) hh = 12; return hh + ':00 ' + ap; };
+      return res.status(400).json({
+        status: 'error', code: 'OUTSIDE_WITHDRAW_HOURS',
+        message: `Withdrawals can only be requested between ${h12(sett.withdrawHoursStart)} and ${h12(sett.withdrawHoursEnd)} (East Africa Time). Try again during that window.`
+      });
+    }
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
     // PIN gate applies to EVERY withdrawal, mobile money included. A stolen
     // login password (phished via a fake "customer service" DM, the exact
@@ -3869,8 +3917,9 @@ const SETTINGS_CRITICAL_RANGES = {
   dailyCheckin: [0, MAX_MONEY_AMOUNT], welcomeBonus: [0, MAX_MONEY_AMOUNT],
   commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
+  withdrawHoursStart: [0, 23], withdrawHoursEnd: [0, 23],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'annEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'annEnabled', 'withdrawHoursEnabled'];
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

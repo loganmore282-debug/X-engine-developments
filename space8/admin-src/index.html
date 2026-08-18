@@ -257,6 +257,19 @@ function btnBusyHtml(text){ return '<span class="verify-spin" style="margin-righ
 function ugx(n){ return 'UGX ' + Number(n||0).toLocaleString('en-UG'); }
 function tsMs(v){ if(!v) return 0; if(v.seconds!=null) return v.seconds*1000; const t=new Date(v).getTime(); return isNaN(t)?0:t; }
 function fdate(v){ const m=tsMs(v); return m?new Date(m).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+// 0-23 <option> list with a friendly 12-hour label, for the withdrawal-
+// hours settings picker below -- the actual stored/sent value is always
+// the plain 0-23 hour number, matching what isWithinWithdrawHours() in
+// server.js compares against.
+function HOUR_OPTIONS(selected){
+  const sel = Number(selected);
+  let out = '';
+  for (let h = 0; h < 24; h++) {
+    const ap = h < 12 ? 'AM' : 'PM'; let h12 = h % 12; if (h12 === 0) h12 = 12;
+    out += `<option value="${h}" ${h===sel?'selected':''}>${h12}:00 ${ap}</option>`;
+  }
+  return out;
+}
 const TX_LABELS = {
   deposit: 'Deposit', withdraw: 'Cash out', commission: 'Commission', team_reward: 'Task Center reward',
   checkin: 'Daily reward', cashback: 'Plan cashback', investment: 'Plan purchase',
@@ -1677,6 +1690,13 @@ async function renderSettings(){
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock — back shortly.">
+      <div class="switch-row" style="margin-top:8px"><span><b>Restrict withdrawal request hours</b> <span class="muted">(East Africa Time — blocks new requests outside the window, server-enforced)</span></span>
+        <label style="width:auto;margin:0"><input type="checkbox" id="sWitHoursOn" ${s.withdrawHoursEnabled?'checked':''} style="width:auto"></label></div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Opens at</label><select id="sWitHoursStart">${HOUR_OPTIONS(v('withdrawHoursStart',8))}</select></div>
+        <div><label>Closes at</label><select id="sWitHoursEnd">${HOUR_OPTIONS(v('withdrawHoursEnd',22))}</select></div>
+      </div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">While off, members can request a withdrawal any time, same as today. Closes-at can be earlier than opens-at to span midnight (e.g. 10pm–6am).</p>
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Mobile-money recharges run on MarzPay automatically; cash-outs wait as Pending until an admin sends them from the Withdrawals tab.</p>
       <button class="btn block" id="saveRates">Save rates</button>
@@ -1752,7 +1772,9 @@ async function renderSettings(){
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
-      maintenanceMsg:$('sMaintMsg').value.trim()
+      maintenanceMsg:$('sMaintMsg').value.trim(),
+      withdrawHoursEnabled:$('sWitHoursOn').checked,
+      withdrawHoursStart:+$('sWitHoursStart').value, withdrawHoursEnd:+$('sWitHoursEnd').value
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });

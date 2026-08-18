@@ -1919,6 +1919,18 @@ function openWithdrawSheet(){
 // from the picker) -- re-pushing on every account change would mean the
 // phone Back button has to be pressed once per account switch before it
 // actually leaves the sheet.
+// Owner: "control withdrawal requests time... EAT time, settable in
+// admin settings." The actual enforcement is entirely server-side
+// (/withdraw/request rejects a request outside the window regardless of
+// what this note says, since a client's clock can be wrong or spoofed) --
+// this is purely an informational heads-up so a member sees the window
+// up front instead of only discovering it from a rejected request.
+function h12Label(h){ var ap = h < 12 ? 'AM' : 'PM'; var hh = h % 12; if (hh === 0) hh = 12; return hh + ':00 ' + ap; }
+function withdrawHoursNoteHtml(){
+  var s = STATE.settings || {};
+  if (!s.withdrawHoursEnabled) return '';
+  return '<li>Withdrawals can only be requested between ' + h12Label(s.withdrawHoursStart) + ' and ' + h12Label(s.withdrawHoursEnd) + ' (East Africa Time).</li>';
+}
 function renderWithdrawSheet(acct, min, feePct, isFirstRender){
   var html = bannerHtml('marscrate','withdraw') +
     '<div class="sheet-title">Withdraw Funds</div>' +
@@ -1939,6 +1951,7 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
       '<li>Enter your 4-digit security PIN to confirm.</li>' +
       '<li>The withdrawal fee (' + feePct + '%) is deducted automatically — the fee preview above shows what you\'ll actually receive.</li>' +
       '<li>Tap Request Withdrawal. Each request is reviewed before money is sent.</li>' +
+      withdrawHoursNoteHtml() +
     '</ol></div>';
 
   if (isFirstRender) openSheet('withdraw', html);

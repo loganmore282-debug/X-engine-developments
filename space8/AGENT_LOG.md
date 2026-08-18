@@ -14,6 +14,76 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — New feature: admin-settable withdrawal request hours (EAT), server-enforced
+
+Owner: "let us control withdrawal requests time, so this will be EAT
+time, so SETTABLE IN admin settings, so this can regulate someone not to
+request a withdrawal in a wrong time, so it will be server side,
+encrypted, and safeguarded, and secure."
+
+Two new settings, off by default (an owner who never touches this sees
+zero change): `withdrawHoursEnabled` (bool), `withdrawHoursStart`/
+`withdrawHoursEnd` (0-23, East Africa Time, default 8/22 the moment it's
+turned on). New `isWithinWithdrawHours(sett)` helper (`server.js`, next
+to `eatNow()`): `hour ∈ [start, end)` when `start < end`; wraps past
+midnight when `start > end` (e.g. 22→6 means "10pm through 6am"). A
+misconfigured window (`start === end`, genuinely ambiguous — could mean
+"always open" or "always closed") fails OPEN deliberately, since a
+business-hours restriction should never accidentally lock every member
+out of withdrawing their own money platform-wide.
+
+- **Enforced in `/withdraw/request`**, checked immediately after
+  `getSettings()` loads, BEFORE the min-amount/PIN/bind-account checks —
+  a request outside the window is rejected (`code: 'OUTSIDE_WITHDRAW_HOURS'`)
+  before it ever touches the destination account. Runs entirely off the
+  server's own `eatNow()` clock; the endpoint has no client-suppliable
+  time parameter at all, so a wrong or spoofed device clock changes
+  nothing.
+- **Admin UI**: new toggle + two 12-hour-labeled `<select>`s ("Opens at"/
+  "Closes at") in Settings → Rates & limits, right below Maintenance mode.
+  `HOUR_OPTIONS()` helper generates the 0-23 option list with friendly
+  AM/PM labels; the underlying value sent/stored is always the plain hour
+  number.
+- **Validation**: both hour fields added to `SETTINGS_CRITICAL_RANGES`
+  (0-23, same range-check machinery as every other settings field —
+  rejects 24, -1, non-numeric, etc.), `withdrawHoursEnabled` added to
+  `SETTINGS_BOOLEAN_FIELDS`. Owner-only, same as every settings write.
+- **Client**: `/public/settings` now echoes the window; the withdraw
+  sheet shows a purely informational note ("Withdrawals can only be
+  requested between X and Y, East Africa Time") when enabled, appended to
+  the existing numbered instructions. This is NOT the enforcement layer —
+  the server rejects regardless of what the note says or whether the
+  client even loaded current settings; it's just a heads-up so a member
+  sees the window before submitting instead of only discovering it from a
+  rejected request.
+
+**Files touched:** `server.js` (`DEFAULT_SETTINGS`, `isWithinWithdrawHours()`,
+`/withdraw/request`, `/public/settings`, `SETTINGS_CRITICAL_RANGES`/
+`SETTINGS_BOOLEAN_FIELDS`), `admin-src/index.html` (`HOUR_OPTIONS()`,
+Settings tab UI + save handler), `admin/` (rebuilt), `user-src/original_module.js`
+(`h12Label()`/`withdrawHoursNoteHtml()`, wired into `renderWithdrawSheet()`),
+`user/` (rebuilt), `user/sw.js` (cache bumped v262→v263),
+`test-withdraw-hours.js` (new, 25/25).
+
+**Verification:** the new test computes every "inside/outside the window"
+scenario relative to the REAL current EAT hour at test time (not a
+hardcoded hour), so it can never flake depending on when it happens to
+run — covers off-by-default, inside/outside a normal window, four
+distinct wrapping-past-midnight windows (checked against a locally-
+computed expected predicate, not forced pass/fail), the fail-open
+degenerate case, re-disabling, range/type validation, and owner-only
+write access. One real bug caught IN THE TEST ITSELF while writing it
+(not in the feature): the first draft of `attemptWithdraw()` never sent
+`holder`, so every request failed at the earlier "bind a mobile-money
+account first" check before ever reaching the hours logic, making the
+early assertions pass for the wrong reason — fixed by sending a holder
+name, which is what actually surfaced the real, correctly-working
+enforcement. Full suite green across all 75 test files. `node
+build-core.js`/`node build-admin.js` both rebuilt cleanly. `server.js`
+needs a Railway redeploy for this to take effect.
+
+---
+
 ## 2026-08-18 — Claude — Codex review of the day's work: 1 High, 3 Medium, 2 Low — 5 fixed, 1 flagged as pre-existing
 
 Owner asked Codex to review everything since its last pass (commit

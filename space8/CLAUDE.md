@@ -2610,6 +2610,23 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    Railway redeploy — this one touches auth on every endpoint, more
    consequential than a typical un-deployed-fix gap. Read the 2026-08-18
    AGENT_LOG.md entry ("Codex review of the day's work") for full detail.
+0e. **Admin-settable withdrawal request hours (EAT) — DONE.** Owner: "control
+   withdrawal requests time... EAT time, settable in admin settings... server
+   side... secure." Two new settings (`withdrawHoursEnabled`,
+   `withdrawHoursStart`/`End`, 0-23, off by default), enforced in
+   `/withdraw/request` via `isWithinWithdrawHours()` (`server.js`, next to
+   `eatNow()`) — checked before min-amount/PIN/bind-account, off the
+   server's own clock only (no client time parameter exists on this
+   endpoint). Handles wraparound past midnight (start>end) and fails OPEN
+   on a degenerate start===end config rather than ever locking out every
+   withdrawal platform-wide. Admin UI: toggle + two hour `<select>`s in
+   Settings → Rates & limits. Client shows a purely informational note in
+   the withdraw sheet (server enforces regardless). `test-withdraw-hours.js`
+   (25/25) computes every scenario relative to the REAL current EAT hour at
+   test time, so it never flakes by time of day. See the 2026-08-18
+   AGENT_LOG.md entry ("New feature: admin-settable withdrawal request
+   hours") for detail, including a real bug caught in the TEST itself
+   (not the feature) while writing it.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live
