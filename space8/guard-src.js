@@ -15,8 +15,8 @@
       var ALLOW = [
         "space8.com",
         "www.space8.com",
-        "space8-ex.com",
-        "www.space8-ex.com",
+        "space8-platform.com",
+        "www.space8-platform.com",
         "localhost",
         "127.0.0.1"
       ];

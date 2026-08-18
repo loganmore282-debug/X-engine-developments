@@ -25,5 +25,6 @@ out. An unlogged fix is, for coordination purposes, a fix that didn't happen.
 Repo: `loganmore282-debug/x-engine-developments` (GitHub). This is the **same repo** as
 Voltra, ChocoMCC, and the other apps under this account — Space8 lives at `space8/` in
 it, same as `voltra/` and `choco-mcc/` are siblings. Current work is on branch
-`claude/new-session-9z5u7r`. Do not touch `choco-mcc/` or `voltra/` from a Space8 task
-unless explicitly asked to.
+`claude/space8-rename-frontend-rebuild-juurd7` (check `CLAUDE.md`'s own "Repo / branch /
+infra" section if this has moved on again — that file is kept current, this note can
+drift). Do not touch `choco-mcc/` or `voltra/` from a Space8 task unless explicitly asked to.

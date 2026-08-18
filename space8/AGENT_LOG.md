@@ -86,6 +86,33 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 - **Left open**: real-device visual check, same standing caveat as every
   client-only change this session.
 
+## 2026-08-17 — Claude — space8-ex.com replaced with space8-platform.com in the domain lock (owner is buying the latter, not the former)
+
+- **What changed**: `guard-src.js`'s `hostOk()` allowlist swapped
+  `space8-ex.com`/`www.space8-ex.com` (added in an earlier round when that
+  was the candidate custom domain) for `space8-platform.com`/
+  `www.space8-platform.com`. `space8.com`/`www.space8.com` (the original
+  canonical domain, also the bounce target on a blocked host),
+  `localhost`/`127.0.0.1`, and the `*.onrender.com` wildcard are unchanged.
+- **Why**: owner, verbatim: *"l will buy space8-platform.com not
+  space8-ex.com so remove it from src guards"*.
+- **Verification**: standalone Node check of the exact updated `hostOk()`
+  logic (same method as every prior domain-guard change this project has
+  made) — every intended host still resolves `true`; `space8-ex.com`/
+  `www.space8-ex.com` now correctly resolve `false` (no longer allowed);
+  lookalikes (`space8-platform.com.evil.com`, `evilspace8-platform.com`)
+  still correctly resolve `false` — exact hostname match, not a
+  substring/prefix check, so adding the new domain can't accidentally open
+  a bypass for attacker-controlled subdomains of it. `node build-core.js`
+  round-trip OK (guard-src.js feeds into the build). Full `test-*.js` suite
+  green, 68/68 (no server.js logic touched — same as every prior
+  domain-guard round, this is plain client-side JS with no existing
+  harness coverage). Bumped `user/sw.js` cache `v255` → `v256`.
+- **Left open**: `space8-platform.com` isn't purchased/pointed at the app
+  yet per the owner's own message — this only pre-registers it in the
+  guard's allowlist so the app won't wipe itself once the domain is live;
+  no DNS/hosting action is needed from this session.
+
 ## 2026-08-17 — Claude — SIM-card icon actually enlarged (previous fix was insufficient, owner: "still very small")
 
 - **What changed**: the previous round's fix (tighter crop + 1px stroke
