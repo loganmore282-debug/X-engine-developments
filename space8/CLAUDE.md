@@ -2697,6 +2697,21 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    with a Chromium render of the isolated dialog markup, scrolled, screenshotted. `user/sw.js`
    `CACHE` bumped to `v265`. See the 2026-08-18 AGENT_LOG.md entry ("Announcement dialog:
    removed top accent bar, scroll edges now fade instead of clipping").
+0k. **Checkmark unified to literal ✓ (U+2713) — DONE.** Owner: "your tick is very
+   different from that, so replace very well." The `check` entry in `ICONS`
+   (`user-src/original_module.js`) was an SVG stroked-path icon — now
+   `<span class="checkmark">✓</span>`, matching the exact character already used in
+   the "✓ Claimed" checkin button text (verified by codepoint). Covers both places
+   it renders: the checkin button's icon and the Task Center claimed-mission pill.
+   The success popup (login/registration) had its own separate copy of the same old
+   SVG in `index.html` markup — replaced the same way. New `.checkmark` CSS sizes/
+   colors it per context. Also reworded 4 success messages to the owner's exact
+   phrasing: "Login successful ✓", "Registration successful ✓", checkin toast now
+   leads with "Claimed successfully ✓" (kept the amount/streak — streak has no
+   other display anywhere), gift-code toast now "+X redeemed successfully ✓".
+   `user/sw.js` `CACHE` bumped to `v266`. See the 2026-08-18 AGENT_LOG.md entry
+   ("Checkmark unified to the literal ✓ (U+2713) everywhere; success messages
+   reworded").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

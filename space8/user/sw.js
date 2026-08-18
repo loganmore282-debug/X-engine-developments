@@ -695,7 +695,12 @@
 // dialog's top blue accent bar removed and its scrollable text now fades
 // out at the top/bottom edges instead of cutting off mid-line -- both are
 // baked into the cached index.html, so bumped to push the new markup/CSS.
-const CACHE = 'space8-shell-v265';
+// v266: checkmark icon replaced with the literal ✓ (U+2713) character
+// everywhere (success popup, checkin "Claimed" button, Task Center
+// claimed pill); login/registration/checkin/gift-code success messages
+// reworded to end with "successfully ✓" / "successful ✓" -- all baked
+// into cached index.html, bumped to push the new markup/CSS/text.
+const CACHE = 'space8-shell-v266';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 

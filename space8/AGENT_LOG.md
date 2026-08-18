@@ -14,6 +14,39 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Checkmark unified to the literal ✓ (U+2713) everywhere; success messages reworded
+
+Owner: "your tick is very different from that, so replace very well, even on claimed tab
+after claiming of checkin it shows different tick, it should be this ✓ – Light Check Mark"
+— plus explicit wording for 4 success messages (claimed/redeemed/login/registration).
+
+- **What changed**: The `check` entry in the shared `ICONS` map (`user-src/
+  original_module.js`) was a stroked-path SVG (`<path d="M20 6 9 17l-5-5"/>`) — now
+  `<span class="checkmark">✓</span>`, the literal U+2713 character (verified against the
+  codepoint of the existing "✓ Claimed" button text, which was already this exact
+  character — confirms it's the right glyph to standardize on). This single change point
+  covers both places `ico('check')` is used: the Home checkin button's icon once claimed,
+  and the Task Center claimed-mission pill. The success popup's icon (login/registration)
+  had its own separate copy of the same old SVG path directly in `index.html` markup —
+  replaced the same way. New `.checkmark` CSS class (`index.html`) sized/colored per
+  context (38px white in the popup circle, 22px blue/ink-dim in the checkin button, 11px
+  inheriting the pill's color) since a text character needs different sizing rules than an
+  SVG did.
+  Reworded 4 success messages to the owner's exact phrasing: `showSuccessPopup('Login
+  successful')` → `'Login successful ✓'`; `'Registration successful'` → `'Registration
+  successful ✓'`; the checkin toast (`'+X added — day N streak'`) → `'Claimed successfully
+  ✓ — +X, day N streak'` (kept the amount/streak — streak has no other display anywhere in
+  the app, dropping it would have been a silent regression); the gift-code toast (`'+X
+  credited!'`) → `'+X redeemed successfully ✓'`.
+- **Verification**: `node build-core.js` → round-trip OK. Isolated the popup, checkin
+  button, claimed pill, and both toasts into a standalone HTML file with the exact CSS/
+  markup and rendered it with Chromium (Playwright) — confirmed visually all four now show
+  the same clean ✓ glyph and the requested wording. No `server.js` change, no test suite
+  run (purely client-side). `user/sw.js` `CACHE` bumped to `v266`.
+- **Deferred**: none.
+
+---
+
 ## 2026-08-18 — Claude — Announcement dialog: removed top accent bar, scroll edges now fade instead of clipping
 
 Owner, from a screenshot of the live Announcement bottom sheet: "when one scrolls the words
