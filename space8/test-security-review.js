@@ -224,7 +224,10 @@ const userDoc = id => collMap('users').get(id);
   check('all ' + N + ' concurrent registrations succeeded', batchResults.every(r => r.body?.status === 'success'), batchResults.map(r => r.body));
   const raceCodes = batchResults.map(r => r.body.referralCode);
   check('all ' + N + ' generated referral codes are unique (no collision under real concurrency)', new Set(raceCodes).size === N, raceCodes);
-  check('every code matches the expected 6-char alphabet shape', raceCodes.every(c => /^[A-HJ-NP-Z2-9]{6}$/.test(c || '')), raceCodes);
+  // Mixed-case since 2026-08-18 (owner: not all-capitals, 6 characters,
+  // never the same shape as a 5-character gift code) -- same unambiguous
+  // alphabet as CODE_CHARS/GIFTCODE_CHARS in server.js (no I/l/O/0/1).
+  check('every code matches the expected 6-char mixed-case alphabet shape', raceCodes.every(c => /^[A-HJ-NP-Za-hj-np-z2-9]{6}$/.test(c || '')), raceCodes);
   check('every code was actually persisted onto its OWN user doc (reservation-write really happened)', batchUids.every((uid, i) => userDoc(uid)?.referralCode === raceCodes[i]), batchUids.map(uid => userDoc(uid)?.referralCode));
 
   console.log('\n== publicId lazy self-heal (now per-user lock-guarded) still assigns a valid id to a legacy-shaped account ==');

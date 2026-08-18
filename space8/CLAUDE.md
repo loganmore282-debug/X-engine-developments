@@ -601,18 +601,84 @@ reassign).
 
 `genGiftCode()`/`generateUniqueGiftCode()` in `server.js` — 5 characters from a
 54-character mixed-case unambiguous alphabet (`GIFTCODE_CHARS`, no I/l/O/0/1), e.g.
-`fsT63`, replacing the old 11-character `XXX-XXXX-XXXX` shape. **Redemption
-(`POST /redeem`) is deliberately case-insensitive** even though generation is
-mixed-case — a customer typing a short code by hand shouldn't fail over case, for zero
-real security benefit on a DB-checked promo code. Every code doc now stores a
-`codeLower` field alongside the display-cased `code`; `/redeem` tries an exact `code`
-match first (what keeps any still-active OLD-format code, which is already
-all-uppercase with no `codeLower` field, redeeming exactly as before), then falls back
-to a `codeLower` match for the new format. All random generation in this file
+`fsT63`, replacing the old 11-character `XXX-XXXX-XXXX` shape. **STALE NOTE, CORRECTED
+2026-08-18: redemption (`POST /redeem`) is STRICTLY CASE-SENSITIVE** — the owner
+reversed an earlier case-insensitive design the same day gift codes went mixed-case
+(2026-08-16); this section previously described the reversed, no-longer-true earlier
+behavior and was corrected while touching this same area for the referral-code work
+below. `/redeem` matches the caller's raw input against the stored `code` field with NO
+case transformation at all — "gf64h" only ever matches "gf64h", never "GF64H". A
+`codeLower` field still exists on every code doc, but ONLY for the uniqueness check at
+GENERATION time (`generateUniqueGiftCode()`), so the system never hands out two codes
+that would be confusing/ambiguous to read back over SMS or phone (e.g. "AbC12" and
+"abc12") — it is never consulted at redemption time. All random generation in this file
 (referral codes, gift codes) now goes through `randFromAlphabet()`, which uses
 `crypto.randomInt` per character instead of `byte % alphabet.length` — the latter is
 measurably biased whenever 256 isn't a clean multiple of the alphabet size (it wasn't,
 for the new 54-char gift-code alphabet).
+
+## Referral codes: 6-character mixed-case, added 2026-08-18 (was 6-char all-caps)
+
+Owner: not all-capitals, mixed case, 6 characters specifically so a referral code can
+never be the same shape as a 5-character gift code ("there might be a same similarity,
+one can put a referral code as gift code, so let it be referral code of 6 characters to
+avoid such") — plus "globally recognized by server, unique globally, accurate,
+encrypted, safeguarded, and secured." `CODE_CHARS` in `server.js` is now literally the
+same 54-character unambiguous mixed-case alphabet as `GIFTCODE_CHARS` (no I/l/O/0/1) —
+`GIFTCODE_CHARS` now just aliases `CODE_CHARS` rather than duplicating the literal.
+Length (6 vs. 5) is the only thing that structurally tells the two systems apart; they
+also live in entirely separate collections (`users.referralCode` vs.
+`promoCodes.code`), so a raw-string collision between the two is impossible by
+construction, not just improbable.
+
+- **Generation** (`generateUniqueReferralCode()`): unchanged mechanism, still
+  `crypto.randomInt`-backed (unpredictable — as close to "encrypted" as a code that must
+  stay human-typeable can meaningfully be), still lock-guarded check-and-claim-as-one-
+  atomic-step (see the function's own comment for the two prior races this already
+  closed). What's new: a `referralCodeLower` field is now written alongside
+  `referralCode` on claim, and the uniqueness check queries BOTH the exact `referralCode`
+  (catches every code ever issued, including pre-2026-08-18 all-caps ones, which
+  predate `referralCodeLower` and would be invisible to a lower-only check) AND
+  `referralCodeLower` (catches the NEW ambiguity mixed-case introduces: two different-
+  case codes that would look/sound identical read aloud, e.g. "AbC123" vs "abc123") —
+  both must come back empty before a candidate is claimable. Indexed
+  (`['users', {referralCodeLower:1}]`, `db.js`).
+- **Redemption/matching is CASE-SENSITIVE** — same established philosophy as gift codes
+  (see that section just above). `completeRegistrationCore()` (shared by `/register` and
+  `/admin/user/complete-registration`) and `/admin/user/attach-referrer` both used to
+  `.toUpperCase()` the caller's input before matching — harmless when every real code
+  was all-caps, but that call was REMOVED as part of this change: uppercasing a mixed-
+  case candidate before comparing against a mixed-case stored value would silently break
+  matching for any code containing a lowercase letter. Neither call site transforms case
+  at all now — an exact match against the stored `referralCode` field, full stop.
+- **Old, already-issued all-caps codes keep working exactly as before** — no migration,
+  no backfill, by design (same "claim flags keyed by target number" philosophy this
+  codebase already uses elsewhere for a ladder change). An old code is still matched by
+  the same exact-match query; it just never had `referralCodeLower` set, which is fine
+  since the generation-time check above covers it through the EXACT-match half.
+- **Real client-side bug caught and fixed in the same pass**: the registration screen's
+  referral-code input (`#regReferral`, `user-src/index.html`) had
+  `autocapitalize="characters"` — same mistake the gift-code input had before an earlier
+  round fixed it there. On a mobile keyboard this force-uppercases every letter as it's
+  typed, which combined with the new case-sensitive matching would have made it
+  functionally impossible to manually type a code containing a lowercase letter
+  correctly. Changed to `autocapitalize="off"`. (Codes shared via the `/?ref=CODE` link,
+  the much more common path, were never affected — the code round-trips through
+  `encodeURIComponent`/`decodeURIComponent` exactly, no keyboard involved.)
+- **Also fixed while in this area**: this same "Gift codes" section above was
+  documenting the REVERSED, no-longer-true earlier case-INsensitive redemption design —
+  corrected in place (see that section's note).
+- **Also found and fixed, adjacent gap**: `generateUniqueGiftCode()` has queried
+  `codeLower` for its own uniqueness check since gift codes went mixed-case
+  (2026-08-16), but no index ever backed it. Added (`['promoCodes', {codeLower:1}]`,
+  `db.js`) alongside the new referral index while touching this area.
+- `test-referral-code-format.js` (new, 19/19) proves: correct shape/length, genuine
+  mixed-case across a real generation batch, no case-insensitive collisions across that
+  batch, case-sensitive redemption (exact code works, a case-flipped variant is
+  rejected), and a seeded LEGACY all-caps code still works exactly as before (plus its
+  own case-flipped variant is still correctly rejected). `test-security-review.js`'s
+  referral-code-shape assertion updated to match the new alphabet (was asserting the old
+  all-caps-only shape, which real mixed-case codes correctly no longer match).
 
 ## Activity feed: 60 rows / ~4s cadence (was 18 rows / ~25s)
 

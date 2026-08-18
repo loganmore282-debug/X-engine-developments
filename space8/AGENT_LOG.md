@@ -14,6 +14,82 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Referral codes: mixed-case, 6 characters, case-sensitive matching (real bugs caught and fixed along the way)
+
+Owner: "let the referral code be not capital letters, it should be
+mixed, plus also should be 5 characters, also it should be globally
+recognized by server, unique globally, accurate, encrypted, safeguarded,
+and secured... there might be a same similarity, one can put a referral
+code as gift code, so let it be referral code of 6 characters to avoid
+such, check and recheck." Final spec (owner's own correction mid-message):
+6 characters, mixed case, never the same shape as a 5-character gift code.
+
+**Core change**: `CODE_CHARS` (`server.js`) is now the same 54-char
+unambiguous mixed-case alphabet gift codes already used (`GIFTCODE_CHARS`
+now just aliases it — no duplicated literal). Length alone (6 vs 5) now
+structurally separates the two systems, on top of them already living in
+separate collections.
+
+**Two real bugs found and fixed while implementing this** (not just the
+requested format change):
+
+1. **Referral-code matching would have silently broken for any code
+   containing a lowercase letter.** `completeRegistrationCore()` (shared
+   by `/register` and `/admin/user/complete-registration`) and
+   `/admin/user/attach-referrer` both `.toUpperCase()`'d the caller's
+   input before comparing against the stored `referralCode` field —
+   harmless while every real code was all-caps, but with mixed-case codes
+   this would have rejected a perfectly correct code the instant it
+   contained a lowercase letter. Removed both `.toUpperCase()` calls;
+   matching is now exact/case-sensitive, mirroring the established gift-
+   code philosophy (see #2's correction below) rather than introducing an
+   inconsistent third behavior.
+2. **The registration screen's referral-code input had
+   `autocapitalize="characters"`** (`user-src/index.html`, `#regReferral`)
+   — the exact same mistake an earlier round already fixed on the gift-
+   code input. On mobile this force-uppercases every typed letter, which
+   combined with fix #1's new case-sensitivity would have made it
+   impossible to correctly type a code containing a lowercase letter by
+   hand. Changed to `autocapitalize="off"`. (The far more common path —
+   sharing the `/?ref=CODE` link — was never affected, since the code
+   round-trips through URL encoding exactly, no keyboard involved.)
+
+**Collision-avoidance mechanism** (the owner's actual worry):
+`generateUniqueReferralCode()` now writes a `referralCodeLower` field
+alongside `referralCode` on claim, and checks uniqueness against BOTH the
+exact `referralCode` (catches every code ever issued, pre-2026-08-18
+all-caps ones included, since those predate `referralCodeLower`) AND
+`referralCodeLower` (catches two mixed-case codes that would look/sound
+identical read aloud, e.g. "AbC123" vs "abc123") — both must be empty
+before a code is claimable. Old, already-shared all-caps codes need no
+migration and keep working exactly as before, covered by the exact-match
+half of the check.
+
+**Also found and fixed, adjacent gap**: this same investigation surfaced
+that `CLAUDE.md`'s "Gift codes" section had been describing a REVERSED,
+no-longer-true earlier design (case-INsensitive redemption) — the owner
+actually flipped that to case-sensitive back on 2026-08-16, but the doc
+was never updated. Corrected in place. Also found
+`generateUniqueGiftCode()` has queried `codeLower` for its own uniqueness
+check since gift codes went mixed-case, with no index ever backing it —
+added alongside the new `referralCodeLower` index.
+
+**Files touched:** `server.js` (`CODE_CHARS`/`GIFTCODE_CHARS`,
+`generateUniqueReferralCode()`, `completeRegistrationCore()`,
+`/admin/user/attach-referrer`), `db.js` (two new indexes:
+`users.referralCodeLower`, `promoCodes.codeLower`), `user-src/index.html`
+(`#regReferral` autocapitalize), `user/` (rebuilt), `user/sw.js` (cache
+bumped v260→v261), `test-security-review.js` (updated the referral-code-
+shape assertion to the new alphabet), `test-referral-code-format.js`
+(new, 19/19), `CLAUDE.md` (new section + stale gift-code section
+corrected).
+
+**Verification:** full suite green across all 71 test files.
+`node build-core.js` rebuilt cleanly, syntax-checked round-trip OK.
+`server.js` needs a Railway redeploy to take effect.
+
+---
+
 ## 2026-08-18 — Claude — Task Center ladders: final tier added, 11 each ("the last")
 
 Owner: "let us also add the last, 5000 referrals, and on team deposits,

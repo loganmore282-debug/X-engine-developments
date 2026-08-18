@@ -46,6 +46,13 @@ async function ensureIndexes() {
   const specs = [
     ['users',           { referredBy: 1 }],
     ['users',           { referralCode: 1 }],
+    // Referral codes are now mixed-case (2026-08-18) -- generation-time
+    // uniqueness checks a case-insensitive mirror field (referralCodeLower)
+    // so the system never hands out two codes that differ only by case
+    // (e.g. "AbC123" and "abc123"), same pattern promoCodes' codeLower
+    // already established. Own index so that check stays a real lookup,
+    // not a collection scan, as the user base grows.
+    ['users',           { referralCodeLower: 1 }],
     ['users',           { usernameLower: 1 }],
     ['investments',     { userId: 1 }],
     ['investments',     { status: 1 }],
@@ -63,6 +70,12 @@ async function ensureIndexes() {
     ['pendingDeposits', { status: 1 }],
     ['pendingDeposits', { ref: 1 }],
     ['promoCodes',      { code: 1 }],
+    // Real gap found 2026-08-18 while adding the matching index for
+    // referralCodeLower above: generateUniqueGiftCode() has queried
+    // codeLower for its own case-insensitive uniqueness check since gift
+    // codes went mixed-case, but no index ever backed it -- an unindexed
+    // scan on every single code-generation attempt.
+    ['promoCodes',      { codeLower: 1 }],
     ['products',        { key: 1 }],
     ['bankAccounts',    { userId: 1 }],
     ['adminSessions',   { username: 1 }],

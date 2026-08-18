@@ -451,7 +451,20 @@ function finiteMoney(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 ambiguity
+// Owner (2026-08-18): referral codes must be mixed-case, not all-capitals,
+// 6 characters, and never overlap in shape with a gift code (which is 5
+// characters, see GIFTCODE_CHARS below) -- so someone can't type a
+// referral code into the gift-code box (or vice versa) and have it be
+// even superficially plausible, let alone actually collide. Same
+// unambiguous-character philosophy this file already used for the old
+// all-caps codes (no I/l/O/0/1 -- easy to misread over SMS/phone), now
+// extended to both cases; shared with GIFTCODE_CHARS below so the two
+// systems draw from literally the same alphabet and can only ever be
+// told apart by length. crypto.randomInt-backed generation (see
+// randFromAlphabet) means every character is drawn from Node's own CSPRNG,
+// not Math.random() -- unpredictable/unguessable, which is as close to
+// "encrypted" as a code that must stay human-typeable can meaningfully be.
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 // Draws n characters from an arbitrary alphabet using crypto.randomInt --
 // Node's own implementation, not a hand-rolled byte%length -- which
 // rejection-samples internally so every character is exactly equally
@@ -501,9 +514,21 @@ function randCode(n = 6) {
 async function generateUniqueReferralCode(userId) {
   return withLock('referral-code-gen', async () => {
     const tryClaim = async (code) => {
-      const exists = await db.collection('users').where('referralCode', '==', code).limit(1).get();
-      if (!exists.empty) return null;
-      await db.collection('users').doc(userId).update({ referralCode: code });
+      // Two separate checks, not one: an EXACT match catches every code
+      // ever issued, old all-caps ones included (those predate
+      // referralCodeLower and don't have it set, so they'd be invisible to
+      // a codeLower-only check) -- a LOWERCASED match on top of that
+      // catches the case this codebase didn't have before mixed-case codes
+      // existed: two different-case codes that would look/sound identical
+      // read aloud (e.g. "AbC123" vs "abc123"). Both must come back empty
+      // before a code is actually claimable.
+      const codeLower = code.toLowerCase();
+      const [exact, byLower] = await Promise.all([
+        db.collection('users').where('referralCode', '==', code).limit(1).get(),
+        db.collection('users').where('referralCodeLower', '==', codeLower).limit(1).get(),
+      ]);
+      if (!exact.empty || !byLower.empty) return null;
+      await db.collection('users').doc(userId).update({ referralCode: code, referralCodeLower: codeLower });
       return code;
     };
     for (let attempt = 0; attempt < 20; attempt++) {
@@ -1898,7 +1923,12 @@ async function completeRegistrationCore(userId, referralCode) {
     if (userSnap.data().registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userSnap.data().referralCode || null } };
 
-    const code = String(referralCode || '').trim().toUpperCase();
+    // NOT .toUpperCase()'d -- referral codes are mixed-case now (2026-08-18)
+    // and matched exactly as issued, same case-sensitive philosophy this
+    // file already uses for gift codes (see GIFTCODE_CHARS's comment).
+    // Uppercasing here would silently break every code containing a
+    // lowercase letter, since the stored value is never uppercased either.
+    const code = String(referralCode || '').trim();
     let referrerId = null;
     if (code) {
       const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
@@ -4564,7 +4594,8 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
-  const code = String(req.body.referralCode || '').trim().toUpperCase();
+  // NOT .toUpperCase()'d -- see completeRegistrationCore's matching comment.
+  const code = String(req.body.referralCode || '').trim();
   if (!code) return res.status(400).json({ status: 'error', message: 'Enter the referrer\'s referral code' });
   try {
     // ChatGPT-verified real bug (2026-08-17): the per-user 'reg:'+userId
@@ -5127,7 +5158,7 @@ app.get('/admin/referrals/list', async (req, res) => {
 // codes that differ only by case (e.g. "AbC12" and "abc12"), which would
 // be confusing/ambiguous to read back over SMS or phone regardless of
 // whether redemption itself is case-sensitive.
-const GIFTCODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+const GIFTCODE_CHARS = CODE_CHARS; // literally the same alphabet as referral codes -- only the length (5 vs 6) tells the two systems apart, see CODE_CHARS's own comment
 function genGiftCode() {
   return randFromAlphabet(GIFTCODE_CHARS, 5);
 }
