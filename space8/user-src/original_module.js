@@ -1482,11 +1482,39 @@ function referralLink(code){
   // form does not.
   return location.origin + '/?ref=' + encodeURIComponent(String(code || ''));
 }
-function shareReferral(code){
+// Owner: wants the shared referral message to be a full launch-announcement
+// post (rocket emoji header, deposit/withdrawal terms, the 3-level bonus
+// structure, link repeated twice) instead of one plain sentence. The
+// numbers in it are pulled from the SAME live settings every other screen
+// reads (STATE.settings, falling back to a fresh /public/settings fetch --
+// the exact pattern openGiftCodeSheet/openSupportSheet already use just
+// above) rather than hardcoded, so this can never go stale/wrong the next
+// time the owner changes minDeposit/minWithdraw/withdrawFeePct/commL1-3 in
+// the admin panel. The link is baked directly into the text at both spots
+// and `url` is deliberately left out of the navigator.share() call -- most
+// share targets (WhatsApp, Telegram, SMS) append `url` a second time after
+// `text` when both are given, which would tack on a stray THIRD copy of
+// the link at the very end.
+async function shareReferral(code){
   var link = referralLink(code);
-  var text = 'Join Space8 and start earning with my referral link.';
-  if (navigator.share) navigator.share({ title: 'Join Space8', text: text, url: link }).catch(function(){});
-  else copyText(link, 'Referral link');
+  var s = STATE.settings || (await api('/public/settings')).settings || {};
+  var text =
+    '🚀 SPACE8 — NEW! NEW! NEW! OFFICIAL LAUNCH 🚀\n\n' +
+    'Get ready for the exciting launch of SPACE8! 🌟\n\n' +
+    '💰 Minimum Deposit: ' + ugx(s.minDeposit) + '\n' +
+    '💸 Minimum Withdrawal: ' + ugx(s.minWithdraw) + '\n' +
+    '⚡ Withdrawals: Available daily with fast processing\n' +
+    '📌 Withdrawal Charge: ' + (Number(s.withdrawFeePct) || 0) + '%\n' +
+    link + '\n\n' +
+    '🎁 Referral Bonus Structure:\n' +
+    '🔥 Level 1: ' + (Number(s.commL1) || 0) + '%\n' +
+    '✨ Level 2: ' + (Number(s.commL2) || 0) + '%\n' +
+    '💎 Level 3: ' + (Number(s.commL3) || 0) + '%\n\n' +
+    'Join SPACE8 and explore the new platform from launch day!\n' +
+    link + '\n' +
+    '🚀 SPACE8 — NEW LAUNCH, NEW OPPORTUNITIES!';
+  if (navigator.share) navigator.share({ title: 'Join Space8', text: text }).catch(function(){});
+  else copyText(text, 'Referral message');
 }
 async function redeemGiftCode(){
   var input = $('giftCodeInput');

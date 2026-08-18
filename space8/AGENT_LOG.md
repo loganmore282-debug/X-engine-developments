@@ -14,6 +14,36 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Referral share text rebuilt into a full launch-announcement post
+
+Owner pasted a target format: a rocket-emoji launch announcement with deposit/withdrawal
+terms, the 3-level referral bonus structure, and the link repeated twice — instead of the
+old one-line "Join Space8 and start earning with my referral link."
+
+- **What changed**: `shareReferral()` (`user-src/original_module.js`) now builds that full
+  message. All the numbers in it (minimum deposit, minimum withdrawal, withdrawal charge %,
+  and the 3 commission levels) are pulled from live settings (`STATE.settings`, falling back
+  to a fresh `/public/settings` fetch — the exact pattern `openGiftCodeSheet`/
+  `openSupportSheet` already use just above it in the file) rather than hardcoded. The
+  owner's example text used 15,000/3,000 for the deposit/withdrawal minimums, but the real
+  live settings are 20,000/5,000 (`DEFAULT_SETTINGS` in `server.js`) — used the real live
+  values instead of the example's numbers so the shared message can never advertise terms
+  that don't match what the app actually enforces, and stays correct automatically if the
+  owner changes any of these in the admin panel later. The referral link is baked directly
+  into the text at both positions the owner's template had it, and `url` is deliberately
+  left OUT of the `navigator.share()` call — most share targets (WhatsApp, Telegram, SMS)
+  append `url` a second time after `text` when both are passed, which would have tacked a
+  stray third copy of the link onto the end. Desktop/no-Web-Share-API fallback now copies
+  the full message text, not just the bare link, so it stays consistent across the two paths.
+- **Verification**: `node build-core.js` → round-trip OK. Rendered the exact output with the
+  real default settings values in an isolated Node snippet to confirm formatting (line
+  breaks, emoji, `ugx()` comma-grouping, both link placements) matches the requested
+  template exactly. No test file covers this (client-side only, not exercised by the
+  server test suite) — confirmed no existing test asserts on the old one-line text either.
+- **Deferred**: none — single, self-contained change.
+
+---
+
 ## 2026-08-18 — Claude — New app icon: satellite-in-orbit mark, designed by Codex
 
 Owner: "let ask codex to make new app icon." No direct Codex integration in this session, so

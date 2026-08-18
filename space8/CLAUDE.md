@@ -2675,6 +2675,20 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    browser-tab asset, not the home-screen icon. No `server.js` change, no
    Railway redeploy needed — Render auto-deploys `user/`/`admin/` on push. See the
    2026-08-18 AGENT_LOG.md entry ("New app icon: satellite-in-orbit mark").
+0i. **Referral share text — full launch-announcement post — DONE.** Owner pasted a
+   target format (rocket-emoji header, deposit/withdrawal terms, 3-level bonus
+   structure, link repeated twice) to replace the old one-line "Join Space8 and
+   start earning with my referral link." `shareReferral()` (`user-src/
+   original_module.js`) now builds it with every number pulled from live
+   settings (`STATE.settings`, same fallback pattern as `openGiftCodeSheet`/
+   `openSupportSheet`) — NOT the numbers in the owner's example text, which used
+   15,000/3,000 for the deposit/withdrawal minimums while the real live settings
+   are 20,000/5,000 (`DEFAULT_SETTINGS` in `server.js`); used the real values so
+   the shared message can't advertise wrong terms and stays correct if the owner
+   changes them later. `url` deliberately left out of `navigator.share()` — most
+   share targets append it a second time after `text`, which would add a stray
+   third copy of the link. See the 2026-08-18 AGENT_LOG.md entry ("Referral share
+   text rebuilt into a full launch-announcement post").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live
