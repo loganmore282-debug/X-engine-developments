@@ -296,17 +296,37 @@ async function getBannerOverrides() {
   _bannersCacheTs = Date.now();
   return _bannersCache;
 }
-// Home-screen auto-cycling banner slides -- own doc, own cache, see
-// MAX_HOME_SLIDES's comment for why this is kept separate from the single-
-// image banners/main doc above. Each slide is { id, image }; id is what the
-// admin panel's remove button targets, never exposed as anything a member
-// needs (the public endpoint sends just the image strings, in order).
+// Home-screen auto-cycling banner slides -- own COLLECTION, one document
+// PER SLIDE (own id, own doc), own cache. See MAX_HOME_SLIDES's comment
+// for why this is kept separate from the single-image banners/main doc
+// above. Each slide is { id, image }; id is what the admin panel's remove
+// button targets, never exposed as anything a member needs (the public
+// endpoint sends just the image strings, in upload order).
+//
+// Codex-verified real bugs (2026-08-18), both fixed by this one-doc-per-
+// slide redesign (this used to be a single doc holding a `slides` array):
+// 1. A single doc's field can't safely hold many near-max-size images --
+//    BANNER_MAX_LEN allows ~2.8MB per image, so even 6 max-size slides in
+//    one doc (~16.8MB) already exceeds MongoDB's 16MB per-document limit;
+//    the 8-slide cap this file advertises couldn't actually be reached.
+//    One document per slide means each document only ever holds ONE
+//    image, nowhere near that limit, regardless of how many slides exist.
+// 2. The old add/remove endpoints read the whole array, modified it, then
+//    wrote the WHOLE array back with no lock -- two concurrent adds (or a
+//    remove racing an add) could both read the same starting array and
+//    have the second write silently clobber the first, discarding a slide
+//    that had already been reported as saved. With one document per slide,
+//    "add" is a plain insert and "remove" is a delete by id -- neither
+//    touches any other slide's document, so there is nothing left to race
+//    on for two DIFFERENT slides. The cap check (see /add below) is still
+//    lock-guarded since that one check-then-write DOES need to stay
+//    atomic across concurrent adds landing right at the boundary.
 let _homeSlidesCache = null, _homeSlidesCacheTs = 0;
 async function getHomeSlides() {
   if (Date.now() - _homeSlidesCacheTs < 60 * 1000 && _homeSlidesCache) return _homeSlidesCache;
   try {
-    const snap = await db.collection('banners').doc('homeSlides').get();
-    _homeSlidesCache = (snap.exists && Array.isArray(snap.data().slides)) ? snap.data().slides : [];
+    const snap = await db.collection('homeBannerSlides').orderBy('createdAt', 'asc').limit(50).get();
+    _homeSlidesCache = snap.docs.map(d => ({ id: d.id, image: d.data().image }));
   } catch (_) { _homeSlidesCache = _homeSlidesCache || []; }
   _homeSlidesCacheTs = Date.now();
   return _homeSlidesCache;
@@ -544,6 +564,40 @@ async function generateUniqueReferralCode(userId) {
     throw new Error('Could not generate a unique referral code');
   });
 }
+// Codex-verified real gap (2026-08-18) in the dual-check above: a LEGACY
+// user (registered before referralCodeLower existed) has referralCode but
+// no referralCodeLower field at all. A Mongo equality query against a
+// field that's simply absent on a document never matches that document --
+// so a brand-new candidate that's a pure-case variant of an existing
+// LEGACY code (e.g. existing "ABC234", new candidate "aBc234") sails
+// through BOTH checks above: the exact check doesn't match (different
+// case), and the byLower check finds nothing because the legacy doc has
+// no referralCodeLower to compare against. The two codes would then
+// resolve deterministically to two different accounts (matching stays
+// case-sensitive, so there's no ambiguity in actual behavior) but would
+// look/sound identical read aloud -- exactly the confusion the dual-check
+// exists to prevent. Run once at boot (see connectMongo().then(...) below)
+// to backfill referralCodeLower onto every legacy doc that's missing it;
+// once done, the exact-match half above stays as defense-in-depth (e.g.
+// for the brief window before this has run, or if it fails partway) while
+// this closes the actual gap. Bounded at 10,000 (same scale limitation
+// already accepted elsewhere in this file, e.g. /admin/users/recount) --
+// a user base past that would need real pagination here too, not a
+// bigger hardcoded number.
+async function backfillReferralCodeLower() {
+  try {
+    const snap = await db.collection('users').limit(10000).get();
+    let fixed = 0;
+    for (const doc of snap.docs) {
+      const d = doc.data();
+      if (d.referralCode && !d.referralCodeLower) {
+        await doc.ref.update({ referralCodeLower: String(d.referralCode).toLowerCase() });
+        fixed++;
+      }
+    }
+    if (fixed) console.log(`referralCodeLower backfill: fixed ${fixed} legacy user(s)`);
+  } catch (e) { console.warn('referralCodeLower backfill warning:', e.message); }
+}
 // Every member's permanent, server-issued, globally-unique account number --
 // shown on the Account screen as "ID:000000". SEQUENTIAL now (owner:
 // "new accounts only: sequential IDs 000001, 000002, etc. Existing account
@@ -726,11 +780,23 @@ function withLock(key, fn) {
 // already used everywhere else in this file for this exact class of race.
 const _userBeingDeleted = new Set();
 
+// Codex-verified real bug (2026-08-18): verifyIdToken() with no second
+// argument only checks the token's SIGNATURE/expiry -- it's a stateless
+// JWT check that never contacts Firebase to confirm the account still
+// exists. A token issued minutes before an admin deletes the account
+// (admin.auth().deleteUser(), see /admin/user/delete) stays cryptographically
+// valid for up to an hour afterward, and /register's own missing-doc
+// self-heal would recreate a fresh Mongo profile -- including a brand new
+// welcome bonus -- the moment that still-valid token hit /register again,
+// silently undoing the deletion. checkRevoked:true forces an extra
+// Firebase Admin lookup per call that fails outright once the user no
+// longer exists (or has had refreshTokens explicitly revoked), closing
+// this for every authenticated endpoint at once, not just /register.
 async function verifyAuth(req) {
   const header = req.headers.authorization || '';
   if (!header.startsWith('Bearer ')) return null;
   try {
-    const decoded = await admin.auth().verifyIdToken(header.slice(7));
+    const decoded = await admin.auth().verifyIdToken(header.slice(7), true);
     return decoded.uid;
   } catch (_) { return null; }
 }
@@ -751,7 +817,8 @@ async function verifyAuthWithEmail(req) {
   const header = req.headers.authorization || '';
   if (!header.startsWith('Bearer ')) return null;
   try {
-    const decoded = await admin.auth().verifyIdToken(header.slice(7));
+    // checkRevoked:true -- see verifyAuth's comment just above.
+    const decoded = await admin.auth().verifyIdToken(header.slice(7), true);
     return { uid: decoded.uid, email: decoded.email || '' };
   } catch (_) { return null; }
 }
@@ -3891,14 +3958,23 @@ app.post('/admin/banners/home-slides/add', async (req, res) => {
   if (image.length > BANNER_MAX_LEN)
     return res.status(400).json({ status: 'error', message: 'Image is too large, please use a smaller file (~2MB max)' });
   try {
-    const current = await getHomeSlides();
-    if (current.length >= MAX_HOME_SLIDES)
-      return res.status(400).json({ status: 'error', message: `Maximum ${MAX_HOME_SLIDES} slides reached — remove one first` });
-    const slide = { id: crypto.randomUUID(), image };
-    await db.collection('banners').doc('homeSlides').set({ slides: [...current, slide] }, { merge: true });
+    // The cap check + insert together are the one thing here that still
+    // needs to be atomic -- two adds landing at the exact 8th slide could
+    // otherwise both pass the count check before either write lands. The
+    // insert itself needs no lock beyond that (see the comment above
+    // getHomeSlides() for why one-doc-per-slide has nothing else to race on).
+    let newId = null, atCap = false;
+    await withLock('home-slides-add', async () => {
+      const countSnap = await db.collection('homeBannerSlides').limit(MAX_HOME_SLIDES).get();
+      if (countSnap.size >= MAX_HOME_SLIDES) { atCap = true; return; }
+      const ref = db.collection('homeBannerSlides').doc();
+      await ref.set({ image, createdAt: FieldValue.serverTimestamp() });
+      newId = ref.id;
+    });
+    if (atCap) return res.status(400).json({ status: 'error', message: `Maximum ${MAX_HOME_SLIDES} slides reached — remove one first` });
     _homeSlidesCacheTs = 0;
-    logAdminAction(req, 'home_banner_slide_added', { id: slide.id, count: current.length + 1 });
-    res.json({ status: 'success', id: slide.id });
+    logAdminAction(req, 'home_banner_slide_added', { id: newId });
+    res.json({ status: 'success', id: newId });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save this slide' });
   }
@@ -3908,12 +3984,12 @@ app.post('/admin/banners/home-slides/remove', async (req, res) => {
   const id = String(req.body.id || '');
   if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
   try {
-    const current = await getHomeSlides();
-    const next = current.filter(s => s.id !== id);
-    if (next.length === current.length) return res.status(404).json({ status: 'error', message: 'Slide not found' });
-    await db.collection('banners').doc('homeSlides').set({ slides: next }, { merge: true });
+    const ref = db.collection('homeBannerSlides').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Slide not found' });
+    await ref.delete();
     _homeSlidesCacheTs = 0;
-    logAdminAction(req, 'home_banner_slide_removed', { id, count: next.length });
+    logAdminAction(req, 'home_banner_slide_removed', { id });
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not remove this slide' });
@@ -5851,5 +5927,6 @@ connectMongo(MONGODB_URI)
     setInterval(reconcileCashback, 1000);
     setTimeout(reconcileCashback, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
+    backfillReferralCodeLower(); // one-time, fire-and-forget, see its own comment
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

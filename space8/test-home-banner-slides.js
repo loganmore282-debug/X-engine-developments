@@ -147,6 +147,46 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1
   r = await call('GET', '/public/banners');
   check('back to empty after cleanup', Array.isArray(r.body?.homeSlides) && r.body.homeSlides.length === 0, r.body?.homeSlides);
 
+  console.log('\n-- Codex-verified real bug, fixed: concurrent adds no longer lose each other (lost-update race) --');
+  // The OLD single-doc-with-an-array shape let two concurrent adds both
+  // read the same starting array, both append their own slide, and both
+  // .set() the WHOLE array back -- the second write silently discarded
+  // whatever the first one added, even though both requests reported
+  // success. Fired via Promise.all over real fetch() calls (not a
+  // sequential loop, which would never actually race) -- this file's own
+  // established way to get genuine interleaving through the mock.
+  const CONC = 5;
+  const concResults = await Promise.all(
+    Array.from({ length: CONC }, () => call('POST', '/admin/banners/home-slides/add', { adminKey: 'test-admin-key', body: { image: TINY_PNG } }))
+  );
+  check(`all ${CONC} concurrent adds reported success`, concResults.every(x => x.body?.status === 'success'), concResults.map(x => x.body));
+  const concIds = concResults.map(x => x.body?.id);
+  check('all returned ids are distinct', new Set(concIds).size === CONC, concIds);
+  r = await call('GET', '/admin/banners/home-slides', { adminKey: 'test-admin-key' });
+  const storedIds = (r.body?.slides || []).map(s => s.id);
+  check('EVERY slide that reported success is actually persisted -- none lost to a clobbered write', concIds.every(id => storedIds.includes(id)), { concIds, storedIds });
+  check('storage holds exactly as many slides as were added, no more no less', storedIds.length === CONC, storedIds.length);
+  for (const id of concIds) await call('POST', '/admin/banners/home-slides/remove', { adminKey: 'test-admin-key', body: { id } });
+
+  console.log('\n-- The cap is still airtight under genuine concurrency, not just sequential calls --');
+  // Fill to one below the cap, then fire enough concurrent adds to blow
+  // past it if the lock-guarded check-then-write around the cap were ever
+  // removed -- exactly the same race class as above, applied to the one
+  // check that DOES still need to stay atomic even with one-doc-per-slide.
+  const fillIds = [];
+  for (let i = 0; i < 7; i++) {
+    const fr = await call('POST', '/admin/banners/home-slides/add', { adminKey: 'test-admin-key', body: { image: TINY_PNG } });
+    fillIds.push(fr.body.id);
+  }
+  const raceResults = await Promise.all(
+    Array.from({ length: 5 }, () => call('POST', '/admin/banners/home-slides/add', { adminKey: 'test-admin-key', body: { image: TINY_PNG } }))
+  );
+  const raceSucceeded = raceResults.filter(x => x.body?.status === 'success').length;
+  check('exactly ONE of the 5 concurrent adds at the boundary succeeded (7 existing + 1 = the 8-slide cap)', raceSucceeded === 1, raceResults.map(x => x.body));
+  r = await call('GET', '/admin/banners/home-slides', { adminKey: 'test-admin-key' });
+  check('storage never exceeded the cap even under concurrency', (r.body?.slides || []).length === 8, r.body?.slides?.length);
+  for (const s of (r.body?.slides || [])) await call('POST', '/admin/banners/home-slides/remove', { adminKey: 'test-admin-key', body: { id: s.id } });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });

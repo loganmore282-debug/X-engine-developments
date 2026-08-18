@@ -77,6 +77,11 @@ async function ensureIndexes() {
     // scan on every single code-generation attempt.
     ['promoCodes',      { codeLower: 1 }],
     ['products',        { key: 1 }],
+    // Home-screen sliding-banner redesign (2026-08-18, fixing a Codex-
+    // verified doc-size risk + a lost-update race in the earlier single-
+    // doc-with-an-array shape) — one document per slide now; getHomeSlides()
+    // orders them by createdAt to preserve upload order.
+    ['homeBannerSlides', { createdAt: 1 }],
     ['bankAccounts',    { userId: 1 }],
     ['adminSessions',   { username: 1 }],
     ['adminAuditLog',   { createdAt: -1 }],

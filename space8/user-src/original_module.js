@@ -623,10 +623,23 @@ function bannerHtml(key, fallbackIcon){
 // One slide is just shown static -- no point animating a cycle of one.
 // Two or more: every <img> shares ONE CSS keyframe animation (defined once
 // below) that's visible for exactly its own 1/n slice of the full cycle,
-// each phase-shifted by a NEGATIVE animation-delay of (index * holdSec) --
+// each phase-shifted by a POSITIVE animation-delay of (index * holdSec) --
 // the classic pure-CSS carousel trick, since it needs only one @keyframes
 // block regardless of how many slides the admin adds, with no JS interval
 // to leak or double up across renderHome()'s own periodic 12s refresh.
+// Codex-verified real bug (2026-08-18): this used a NEGATIVE delay here,
+// which is the more commonly-quoted version of this trick but is wrong
+// for 3+ slides specifically -- working the modular arithmetic through, a
+// negative delay of -(i*holdSec) makes slide i visible during real-time
+// window [(n-i)*holdSec mod totalSec, ...), which plays back in REVERSE
+// order after the first slide (0, n-1, n-2, ..., 1) instead of upload
+// order. A POSITIVE delay of (i*holdSec) instead makes the animation not
+// start until real time i*holdSec, at which point its own local clock
+// begins from frame zero -- exactly the window [i*holdSec,(i+1)*holdSec)
+// this needs, with no reverse-order surprise. Before its delay elapses an
+// image simply shows this rule's own base `opacity:0` (CSS's normal
+// default-fill-mode behaviour during an unstarted delay), so no extra
+// fill-mode is needed for the "not this slide's turn yet" state either.
 // `.banner img{position:absolute;inset:0;...}` (index.html's CSS) already
 // stacks every slide exactly on top of each other, so this only ever needs
 // to control opacity, not layout/positioning.
@@ -639,7 +652,7 @@ function homeBannerHtml(){
   var css = '<style>#homeBannerCarousel img{opacity:0;animation:cs-cycle ' + totalSec + 's steps(1) infinite;}' +
     '@keyframes cs-cycle{0%{opacity:1}' + visiblePct + '%{opacity:0}100%{opacity:0}}</style>';
   var imgs = slides.map(function(src, i){
-    return '<img src="' + esc(src) + '" alt="" style="animation-delay:-' + (i * holdSec) + 's">';
+    return '<img src="' + esc(src) + '" alt="" style="animation-delay:' + (i * holdSec) + 's">';
   }).join('');
   return '<div class="banner" id="homeBannerCarousel">' + css + imgs + '</div>';
 }

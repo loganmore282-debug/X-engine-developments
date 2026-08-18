@@ -14,6 +14,130 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Codex review of the day's work: 1 High, 3 Medium, 2 Low — 5 fixed, 1 flagged as pre-existing
+
+Owner asked Codex to review everything since its last pass (commit
+`d645b5b`) — referral code mixed-case/case-sensitivity, the new sliding
+Home banner feature, and the Task Center ladder additions. Every finding
+independently re-verified against the real code (and in three cases,
+empirically — see below) before anything was touched, same discipline as
+every prior round.
+
+**High, fixed — deleted user's still-valid token could resurrect the
+account.** `verifyIdToken()` was called with no second argument, which
+only checks a token's signature/expiry (stateless JWT check) — it never
+asks Firebase whether the account still exists. A token issued minutes
+before an admin deletes the account (`admin.auth().deleteUser()`, see
+`/admin/user/delete`) stays cryptographically valid for up to an hour
+afterward, and `/register`'s own missing-doc self-heal would recreate a
+fresh profile — including a brand-new welcome bonus — the instant that
+stale token hit `/register` again. **Verified by actually reverting the
+fix and re-running the new test**: without `checkRevoked:true`, the
+deleted account came back with `walletBalance:5000` and a fresh
+`referralCode`/`publicId`, exactly as predicted; `/deposit/marzpay` also
+processed a real deposit attempt against the "deleted" account. Fixed by
+adding `checkRevoked:true` to both `verifyAuth()`/`verifyAuthWithEmail()`
+— this closes it for every authenticated endpoint at once, not just
+`/register`. `test-deleted-user-token-revocation.js` (new, 11/11) — its
+own Firebase mock actually models revocation (every other test file's
+mock doesn't), so this is a genuine regression guard, not a coincidental
+pass.
+
+**Medium, fixed — home-slide storage could exceed MongoDB's 16MB
+document limit, AND had an unlocked lost-update race.** Both stemmed from
+the original design (one doc holding a `slides` array): 6 near-max-size
+images (~2.8MB each, the existing `BANNER_MAX_LEN`) already total
+~16.8MB, over the real per-document limit, so the advertised 8-slide cap
+couldn't actually be reached — and separately, the add/remove endpoints
+read-modified-wrote that whole array with no lock, so two concurrent adds
+(or an add racing a remove) could have the second write silently discard
+the first slide even though both requests reported success. Fixed by a
+storage redesign: one document PER slide, own collection
+(`homeBannerSlides`), each holding exactly one image — eliminates the
+doc-size risk entirely (no document ever holds more than one image) and
+the race (insert/delete by id touches nothing else, nothing left to
+clobber). The cap check is still lock-guarded (`withLock('home-slides-
+add', ...)`) since that one check-then-write genuinely needs to stay
+atomic. New index `homeBannerSlides.createdAt` (`db.js`) so
+`getHomeSlides()`'s `orderBy` preserves upload order without a scan.
+`test-home-banner-slides.js` extended (26/26 total) with real
+`Promise.all`-fired concurrency proofs for both the lost-update race and
+the cap-under-concurrency case.
+
+**Medium, fixed — legacy referral codes weren't covered by the
+case-collision check.** A user who registered before 2026-08-18 has
+`referralCode` but no `referralCodeLower` field. A Mongo equality query
+against a field that's simply absent never matches — so a brand-new
+candidate that's a pure-case variant of an existing LEGACY code (e.g.
+existing "ABC234", new candidate "aBc234") would sail through both
+uniqueness checks undetected. Matching itself stays deterministic/correct
+(case-sensitive, so no ambiguity in actual lookup behavior), but the two
+codes would look/sound identical read aloud — exactly the confusion the
+dual-check exists to prevent. Fixed with a one-time boot backfill
+(`backfillReferralCodeLower()`, fired alongside `app.listen`) that sets
+`referralCodeLower` on every legacy doc missing it, bounded at 10,000
+(same accepted scale limit as `/admin/users/recount` elsewhere in this
+file). **Verified by actually disabling the backfill call and
+re-running the new test**: the seeded legacy user's `referralCodeLower`
+came back `undefined` without it, confirming the test genuinely exercises
+the fix. `test-referral-code-backfill.js` (new, 3/3) — seeds its legacy
+user BEFORE `require('./server.js')` specifically, since the backfill is
+a one-shot boot-time pass and a seed made afterward would never be swept.
+
+**Low, fixed — carousel played back in REVERSE order after the first
+slide (3+ slides).** `homeBannerHtml()`'s per-image `animation-delay` used
+a NEGATIVE offset (`-(i*holdSec)`) — the more commonly-quoted form of this
+CSS trick, but wrong here: working the `steps(1)` timing through by hand,
+a negative delay makes slide `i` visible during `[(n-i)*holdSec mod
+totalSec, ...)`, which is REVERSE order (0, n-1, n-2, ..., 1) for n≥3, not
+upload order. A POSITIVE delay (`+(i*holdSec)`) instead means the
+animation simply doesn't START until real time `i*holdSec`, giving exactly
+the upload-order window `[i*holdSec, (i+1)*holdSec)` — no reverse-order
+surprise, and no extra fill-mode needed since the "not started yet" state
+already shows the rule's own base `opacity:0`. Fixed by dropping the minus
+sign. `test-home-banner-carousel-order.js` (new, 9/9) — extracts the
+actual generated delay values out of the real shipped function (via a
+sandboxed `vm` eval, not a reimplementation that could drift) and runs
+them through a from-scratch simulation of `steps(1)` timing; also
+reproduces the original reverse-order bug for negative delays side by
+side, so the contrast is explicit.
+
+**Low, flagged but NOT changed — banner changes aren't pushed to an
+already-open member session.** `STATE.homeSlides` (and every OTHER
+admin-settable banner — `barstack`, `authbg`, `appbg`, etc.) is fetched
+only in `boot()`; the 12s live-refresh timer only re-fetches account/
+investments, not banners. Real, but this is NOT something the new
+sliding-banner feature introduced — every existing single-image banner
+slot has always worked this way, including the "saved — live for every
+user" toast wording, which predates this session entirely. Making banner
+changes actually push to open sessions would be a genuinely new feature
+(polling `/public/banners` on the 12s tick, or a websocket/SSE push),
+not a bug fix — left for the owner to decide whether it's wanted, rather
+than unilaterally rewriting shared toast copy across the whole banner
+subsystem or building live-push without being asked.
+
+**Files touched:** `server.js` (`verifyAuth`/`verifyAuthWithEmail`,
+`getHomeSlides()` + both home-slide endpoints redesigned around
+`homeBannerSlides`, new `backfillReferralCodeLower()` wired into startup),
+`db.js` (new `homeBannerSlides.createdAt` index),
+`user-src/original_module.js` (carousel delay sign), `user/` (rebuilt),
+`user/sw.js` (cache bumped v261→v262), 3 new test files
+(`test-deleted-user-token-revocation.js` 11/11,
+`test-home-banner-carousel-order.js` 9/9,
+`test-referral-code-backfill.js` 3/3), `test-home-banner-slides.js`
+extended to 26/26.
+
+**Verification:** full suite green across all 74 test files. Three of the
+fixes (token revocation, the storage race, the backfill) were verified
+empirically by temporarily reverting each one and confirming its own new
+test actually catches the regression, not just inspected by reading code.
+`node build-core.js` rebuilt cleanly, syntax-checked round-trip OK.
+`server.js` needs a Railway redeploy — this round touches auth on every
+single endpoint (`checkRevoked:true`), so this redeploy matters more than
+usual; don't let it sit un-deployed.
+
+---
+
 ## 2026-08-18 — Claude — Referral codes: mixed-case, 6 characters, case-sensitive matching (real bugs caught and fixed along the way)
 
 Owner: "let the referral code be not capital letters, it should be

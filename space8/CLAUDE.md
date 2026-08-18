@@ -2591,6 +2591,25 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    — it also lists what's been read fresh vs. not yet in this pass
    (user-src/original_module.js not yet re-read fresh, though it's been
    covered piecemeal across ~22 prior rounds).
+0d. **Codex review of 2026-08-18's referral-code/banner/ladder work — DONE.**
+   1 High (a deleted user's still-valid Firebase token could resurrect the
+   account via `/register`'s self-heal, including a fresh welcome bonus —
+   fixed with `checkRevoked:true` on both `verifyAuth`/`verifyAuthWithEmail`,
+   closing it for every authenticated endpoint at once), 3 Medium (home-slide
+   storage could exceed MongoDB's 16MB doc limit AND had an unlocked
+   lost-update race — both fixed by a one-doc-per-slide storage redesign;
+   legacy referral codes weren't covered by the case-collision check — fixed
+   with a one-time boot backfill), 2 Low (the carousel played back in
+   REVERSE order for 3+ slides due to a sign error in the animation-delay
+   math — fixed; banner changes don't push to an already-open member
+   session — flagged as real but PRE-EXISTING across every banner type, not
+   something this round introduced, left for the owner to decide on rather
+   than unilaterally building live-push). Three of the five fixes were
+   verified empirically (revert the fix, confirm its own new test actually
+   catches the regression) not just read-and-trust. `server.js` needs a
+   Railway redeploy — this one touches auth on every endpoint, more
+   consequential than a typical un-deployed-fix gap. Read the 2026-08-18
+   AGENT_LOG.md entry ("Codex review of the day's work") for full detail.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live
