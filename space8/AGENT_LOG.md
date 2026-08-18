@@ -14,6 +14,64 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — ChatGPT review of the notifications/gift-code-expiry commit: 2 Low findings, both real, both fixed
+
+Owner: "let us ask chatgpt to review those last 2 commits" (the withdrawal-hours commit
+and the notification-management/gift-code-expiry commit above). ChatGPT found 2 Low-severity
+issues plus a non-bug pagination note; both Lows checked out as real on inspection and were
+fixed.
+
+**1. `/admin/notifications/delete` had no lock on its check-then-delete.** Two concurrent
+delete requests for the same id could both pass the `snap.exists` check before either ran
+`.delete()` — `db.js`'s `delete()` discards `deleteOne()`'s matched-count, so the second
+request still logged its own `notification_deleted` audit entry and reported `success` for
+what was actually a no-op (already gone). End state for members was identical either way
+(notification gone from every account regardless), but the response/audit log shouldn't lie
+about what that specific request did. Fixed by wrapping the check-then-delete in
+`withLock('notif-delete:' + id, ...)`, the same per-key mutex idiom this file already uses
+everywhere else this race class shows up.
+
+**2. `/admin/promocodes/generate`'s new `durationMinutes` used `parseFloat`, not `Number`.**
+`parseFloat` stops at the first non-numeric character instead of rejecting the whole string,
+so `"30minutes"` silently parsed as `30` — looser than every other numeric admin input in
+this file. Fixed to strict `Number()`, matching `SETTINGS_CRITICAL_RANGES`'s own validation
+loop convention (rejects `"30minutes"` and `"Infinity"` outright; still accepts
+whitespace-padded values like `"  15  "`, same as every other settings field).
+
+**Verification — the interesting part.** Proving finding #1 with the established
+revert-and-rerun discipline initially failed to reproduce the race at all, even after adding
+an artificial delay to the mock DB's `.get()`: Node drains a timer callback's *entire*
+microtask chain to completion before servicing the next pending timer, so a single delay
+point before the critical section let one request's whole check-then-delete finish
+(including the delete itself) before the next request's timer was even serviced — no real
+interleaving, no matter how long the delay was. Fixed by adding the same delay hook to the
+mock's `.delete()` too (`test-mockdb.js`), giving the critical section a *second* macrotask
+boundary to land in between — that's what actually lets two requests both pass the
+existence check before either has removed the document. With that in place: reverting the
+`withLock` fix reliably produces all 3 concurrent deletes reporting `success` (test fails,
+as expected); restoring the fix brings it back to exactly 1 success + 2 clean 404s (test
+passes). Finding #2's fix was proven forward only (new malformed-string test cases in
+`test-giftcode-expiry.js`, not revert-tested), since the `Number()` change was never reverted
+during this round.
+
+**Files touched:** `server.js` (`/admin/notifications/delete` lock,
+`/admin/promocodes/generate` duration parsing — the latter was already committed from the
+prior round, unaffected here), `test-mockdb.js` (new `global.__mockDbDelayMs` hook on both
+`.get()` and `.delete()`, for genuine race reproduction in-process),
+`test-notifications-management.js` (new 3-way concurrent-delete race test),
+`test-giftcode-expiry.js` (3 new validation cases: malformed string, `"Infinity"`,
+whitespace-padded value).
+
+**Not changed:** the pagination note on `/admin/notifications/list`'s 200-item cap — flagged
+by ChatGPT as "worth a decision," not a bug. Unlike deposits/gift-codes, notifications have
+no "must eventually be actioned" state that would be dangerous to silently truncate past 200,
+so this was left as-is rather than building pagination nobody asked for.
+
+**Full suite result: all test files clean, 0 failures** (every `test-*.js` in the directory
+run individually). `server.js` needs a Railway redeploy for the lock fix to take effect.
+
+---
+
 ## 2026-08-18 — Claude — New features: notification management (view/delete) + gift-code expiry in minutes
 
 Owner: "make sure l can see sent notification, delete them and gets

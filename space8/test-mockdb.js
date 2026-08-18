@@ -59,6 +59,16 @@ global.__mockDbFailOnce = new Set();
 // credit-before-guard ordering unsafe — db.js's runTransaction is not atomic
 // on M0, so a write failing mid-sequence leaves the earlier writes committed.
 global.__mockDbFailUpdateOnce = new Set();
+// Same idea again, for genuine RACE reproduction: map a collection name to
+// a millisecond delay to insert before every .get() resolves for that
+// collection, until cleared. Without a real network round-trip, a
+// check-then-write critical section with no lock can resolve so fast that
+// "concurrent" Promise.all-fired requests never actually interleave inside
+// it in this mock — a widened window here is what makes the race genuinely
+// reproducible, matching this repo's own established technique (see
+// test-codex-round3-fixes.js's mocked deleteUser() delay) for exactly this
+// class of test.
+global.__mockDbDelayMs = new Map();
 
 function docRef(cname, id) {
   const ref = {
@@ -67,6 +77,9 @@ function docRef(cname, id) {
       if (global.__mockDbFailOnce.has(cname)) {
         global.__mockDbFailOnce.delete(cname);
         throw new Error('Simulated transient DB error');
+      }
+      if (global.__mockDbDelayMs.has(cname)) {
+        await new Promise(r => setTimeout(r, global.__mockDbDelayMs.get(cname)));
       }
       const raw = coll(cname).get(id);
       return snap(cname, id, raw);
@@ -87,7 +100,22 @@ function docRef(cname, id) {
       if (!existing) throw new Error(`No document to update: ${cname}/${id}`);
       applyPatch(existing, data);
     },
-    async delete() { coll(cname).delete(id); },
+    async delete() {
+      // Same delay hook as .get() above, and for the same reason: Node
+      // drains a timer callback's whole microtask chain to completion
+      // before moving to the next pending timer, so a delay ONLY in
+      // .get() still lets one request's entire check-then-delete finish
+      // before the next request's .get() timer is even serviced -- no
+      // real interleaving, no matter how long the delay is. Delaying
+      // .delete() too gives a check-then-act race a SECOND macrotask
+      // boundary to land in between, which is what actually lets two
+      // requests both pass the "does it still exist" check before either
+      // one has removed it.
+      if (global.__mockDbDelayMs.has(cname)) {
+        await new Promise(r => setTimeout(r, global.__mockDbDelayMs.get(cname)));
+      }
+      coll(cname).delete(id);
+    },
   };
   return ref;
 }

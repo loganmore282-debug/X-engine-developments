@@ -139,6 +139,37 @@ async function setupUser(uid, phone) {
   r = await ownerCall('/admin/notifications/delete', { id: 'totally-made-up-id' });
   check('deleting a never-existed id also returns 404', r.code === 404, r.body);
 
+  console.log('\n== ChatGPT-verified real gap, fixed: two concurrent deletes of the SAME notification never both report success ==');
+  // Fired via Promise.all over real fetch() calls (not a sequential loop,
+  // which would never actually race) -- this file's own established way
+  // to get genuine interleaving through the mock. The original check-
+  // then-delete had no lock, so two requests landing at the same moment
+  // could both pass the existence check before either deleted -- the
+  // second one still logged its own audit entry and reported success for
+  // what was actually a no-op.
+  r = await ownerCall('/admin/notifications/create', { title: 'Race target', body: 'Only one delete of this should ever report success.' });
+  const raceId = (await ownerGet('/admin/notifications/list')).body.notifications.find(n => n.title === 'Race target').id;
+  // Widens the window so the 3 concurrent requests below genuinely
+  // interleave inside the check-then-delete critical section instead of
+  // each one racing to completion before the next even starts -- see
+  // test-mockdb.js's own comments on __mockDbDelayMs (both the .get() AND
+  // .delete() hooks are needed: a delay only in .get() still lets Node
+  // finish one request's entire microtask chain, including its delete,
+  // before the next request's timer is even serviced -- proven by first
+  // trying exactly that and watching the race stubbornly refuse to
+  // reproduce). Cleared immediately after so it doesn't leak into any
+  // later request in this file.
+  global.__mockDbDelayMs.set('notifications', 20);
+  const raceResults = await Promise.all([
+    ownerCall('/admin/notifications/delete', { id: raceId }),
+    ownerCall('/admin/notifications/delete', { id: raceId }),
+    ownerCall('/admin/notifications/delete', { id: raceId }),
+  ]);
+  global.__mockDbDelayMs.delete('notifications');
+  const raceSucceeded = raceResults.filter(x => x.body?.status === 'success').length;
+  check('exactly ONE of 3 concurrent deletes of the same id reported success', raceSucceeded === 1, raceResults.map(x => ({ code: x.code, body: x.body })));
+  check('the other 2 correctly reported 404, not a false success', raceResults.filter(x => x.code === 404).length === 2, raceResults.map(x => x.code));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });

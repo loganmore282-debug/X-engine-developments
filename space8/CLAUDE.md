@@ -2642,6 +2642,24 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    `test-giftcode-expiry.js` (17/17). See the 2026-08-18 AGENT_LOG.md entry
    ("New features: notification management... + gift-code expiry in
    minutes") for detail.
+0g. **ChatGPT review of the notifications/gift-code-expiry commit — DONE.**
+   2 Low findings, both real, both fixed: `/admin/notifications/delete` had
+   no lock on its check-then-delete (two concurrent deletes of the same id
+   could both report `success`, one falsely) — fixed with the same
+   `withLock('notif-delete:'+id, ...)` idiom used everywhere else this race
+   shows up; `durationMinutes` used `parseFloat` (silently accepted
+   `"30minutes"` as `30`) — fixed to strict `Number()`, matching
+   `SETTINGS_CRITICAL_RANGES`'s convention. Proving the lock fix needed a
+   new `global.__mockDbDelayMs` hook on BOTH `.get()` and `.delete()` in
+   `test-mockdb.js` — a delay on `.get()` alone never produced a real race
+   (Node finishes a timer callback's whole microtask chain, delete
+   included, before servicing the next pending timer). Pagination on
+   `/admin/notifications/list`'s 200-item cap was flagged as "worth a
+   decision," not a bug — deliberately left as-is (notifications have no
+   "must eventually be actioned" state, unlike deposits/gift-codes). See
+   the 2026-08-18 AGENT_LOG.md entry ("ChatGPT review of the notifications/
+   gift-code-expiry commit") for detail. `server.js` needs a Railway
+   redeploy for the lock fix to take effect.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

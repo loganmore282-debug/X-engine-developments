@@ -145,6 +145,18 @@ const users = () => collMap('users');
   check('an absurdly large durationMinutes (past the sanity cap) rejected', r.code === 400, r.body);
   r = await ownerCall('/admin/promocodes/generate', { minAmount: 1000, maxAmount: 1000, count: 1, durationMinutes: 1 });
   check('durationMinutes=1 (the smallest valid value) is accepted', r.body?.status === 'success', r.body);
+  // ChatGPT-verified real gap (2026-08-18): parseFloat() (the original
+  // implementation) stops at the first non-numeric character instead of
+  // rejecting the whole string, so "30minutes" silently became 30 --
+  // looser than every other numeric admin input in this file. Fixed to
+  // use strict Number(), matching SETTINGS_CRITICAL_RANGES's own
+  // validation loop.
+  r = await ownerCall('/admin/promocodes/generate', { minAmount: 1000, maxAmount: 1000, count: 1, durationMinutes: '30minutes' });
+  check('a malformed numeric string ("30minutes") is rejected outright, not silently parsed as 30', r.code === 400, r.body);
+  r = await ownerCall('/admin/promocodes/generate', { minAmount: 1000, maxAmount: 1000, count: 1, durationMinutes: 'Infinity' });
+  check('the literal string "Infinity" is rejected', r.code === 400, r.body);
+  r = await ownerCall('/admin/promocodes/generate', { minAmount: 1000, maxAmount: 1000, count: 1, durationMinutes: '  15  ' });
+  check('a genuinely numeric value with surrounding whitespace is still accepted (Number() tolerates that, same as every other settings field)', r.body?.status === 'success', r.body);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

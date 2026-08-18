@@ -1991,11 +1991,26 @@ app.post('/admin/notifications/delete', async (req, res) => {
   const id = String(req.body.id || '');
   if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
   try {
-    const ref = db.collection('notifications').doc(id);
-    const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Notification not found' });
-    await ref.delete();
-    logAdminAction(req, 'notification_deleted', { id, title: snap.data().title });
+    // ChatGPT-verified real gap (2026-08-18): a check-then-delete with no
+    // lock let two concurrent delete requests for the SAME id both pass
+    // the existence check before either ran .delete() -- db.js's delete()
+    // discards deleteOne()'s matched-count, so the second call still logs
+    // its own 'notification_deleted' entry and reports success even
+    // though it deleted nothing (already gone). Harmless to member data
+    // either way (the end state -- notification gone -- is identical),
+    // but the response/audit-log shouldn't lie about what that specific
+    // request actually did. Locked per-id, same idiom this file already
+    // uses everywhere else this exact race class shows up.
+    let title = null;
+    await withLock('notif-delete:' + id, async () => {
+      const ref = db.collection('notifications').doc(id);
+      const snap = await ref.get();
+      if (!snap.exists) return;
+      title = snap.data().title;
+      await ref.delete();
+    });
+    if (title === null) return res.status(404).json({ status: 'error', message: 'Notification not found' });
+    logAdminAction(req, 'notification_deleted', { id, title });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -5359,7 +5374,15 @@ app.post('/admin/promocodes/generate', async (req, res) => {
   const n = Math.min(Math.max(parseInt(count) || 1, 1), 50);
   let durationMs = 0;
   if (durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '') {
-    const mins = Math.round(parseFloat(durationMinutes));
+    // ChatGPT-verified real gap (2026-08-18): parseFloat() stops at the
+    // first non-numeric character instead of rejecting the whole string,
+    // so a malformed value like "30minutes" silently became 30 instead of
+    // being refused -- looser than every other numeric admin input in
+    // this file (see SETTINGS_CRITICAL_RANGES's validation loop), which
+    // all use strict Number() specifically so trailing garbage doesn't
+    // silently parse into a plausible-looking number. Number() rejects
+    // that whole string as NaN instead.
+    const mins = Math.round(Number(durationMinutes));
     if (!Number.isFinite(mins) || mins <= 0 || mins > MAX_GIFTCODE_DURATION_MINUTES)
       return res.status(400).json({ status: 'error', message: `Duration must be a number of minutes between 1 and ${MAX_GIFTCODE_DURATION_MINUTES} (leave blank for no expiry)` });
     durationMs = mins * 60000;
