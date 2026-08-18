@@ -14,6 +14,83 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Task Center ladders extended to 8 tiers; new admin-customisable Home-screen sliding banner
+
+Two owner requests in one turn.
+
+**1. Task Center: 8th tier added to both milestone ladders.** Owner: "add
+500 active referrals... also on team deposits, add 100 million, calculate
+then put, so they will be 8,8." Both ladders (`TEAM_MILESTONES`/
+`TEAM_DEPOSIT_MILESTONES`, `server.js`) already pay a FLAT rate per tier
+(UGX 1,500/active-L1-referral; 2.5% of the deposit target) — computed the
+new tiers at that same rate rather than inventing new numbers: 500 →
+750,000; 100,000,000 → 2,500,000. No client change needed —
+`user-src/original_module.js`'s Task Center screen renders whatever
+`/team/stats` sends, it holds no hardcoded tier list or count. Verified:
+`test-referral-milestones.js` (29/29, unaffected) confirms the ladders
+still behave correctly with the new tiers present.
+
+**2. New feature: admin-customisable, auto-cycling Home-screen banner
+("sliding banners").** Owner: "home screen banner, l want the floating
+screen banner, so they will be floating again and again, SETTABLE or
+customisable in admin panel" — clarified via follow-up ("like you see
+there is a banner, but l want them to be sliding, so l will add other
+banners that will slide one after the other") as: keep the existing
+Home banner slot, but let the admin add MULTIPLE images that auto-cycle
+through in a loop, instead of one static image.
+- Deliberately built as its OWN doc (`banners` collection, doc id
+  `homeSlides`, `{slides:[{id,image}]}`), not a 9th `BANNER_KEYS` entry in
+  the already-crowded `banners/main` doc (~18 single-image slots already
+  share it) — avoids pushing that doc toward MongoDB's 16MB limit as more
+  slides get added. Capped at `MAX_HOME_SLIDES`=8.
+- New endpoints: `GET /admin/banners/home-slides`, `POST .../add`
+  (owner-only, same image-type/size validation as the existing
+  `/admin/banners/set`), `POST .../remove` (by id, 404 if already gone,
+  never a silent no-op). `/public/banners` now also returns a sibling
+  `homeSlides: [...]` array (images only, in order — ids are an admin-
+  management detail, never sent to members).
+- Admin UI: new "Home screen sliding banners" panel in the Banners tab
+  (thumbnail grid + per-slide remove button + upload, disabled past the
+  cap with a clear message), right above the existing static `barstack`
+  slot's own card.
+- Client (`user-src/original_module.js`): new `homeBannerHtml()` — 0 or 1
+  slides falls straight back to the existing static-banner behaviour
+  (an owner who never touches this sees zero change), 2+ auto-cycles via
+  ONE shared CSS `@keyframes` animation with each `<img>` phase-shifted by
+  a negative `animation-delay` (the standard pure-CSS carousel trick — one
+  keyframe block regardless of slide count, no JS `setInterval` to leak or
+  double up). `renderHome()` now DOM-preserves the carousel node across its
+  own silent 12s live-refresh, the exact same technique already used for
+  the activity ticker (`preservedTicker`) — without it, the background
+  refresh would snap the animation back to slide 1 every 12s instead of
+  actually cycling continuously.
+- **Real bug caught while testing this, fixed before shipping**: the new
+  `/admin/banners/home-slides/add` route was left off `IMAGE_BODY_ROUTES`
+  (the whitelist that routes a request to the 4mb `bigJsonParser` instead
+  of the default 64kb `smallJsonParser`) — every genuine slide upload past
+  64kb (i.e. basically every real photo, even compressed) would have
+  failed with "Request is too large" the first time an admin actually
+  tried it. Caught by the new test file's oversized-payload check
+  returning the wrong status code, not by inspection — a reminder that any
+  new image-upload route needs this same registration, not just the size/
+  type validation inside the handler itself.
+
+**Files touched:** `server.js` (milestone tables, `MAX_HOME_SLIDES`,
+`getHomeSlides()`, `/public/banners`, 3 new `/admin/banners/home-slides/*`
+routes, `IMAGE_BODY_ROUTES`), `user-src/original_module.js` (`STATE.homeSlides`,
+`boot()`, `preloadImages()`, `homeBannerHtml()`, `renderHome()`'s carousel
+DOM-preservation), `admin-src/index.html` (`renderBanners()`'s new slides
+panel + add/remove handlers, `AUDIT_LABELS`), `user/` + `admin/` (rebuilt),
+`user/sw.js` (cache bumped v257→v258), `test-home-banner-slides.js` (new,
+20/20), `CLAUDE.md`.
+
+**Verification:** full suite green across all 70 test files (69 pre-existing + the new one).
+`node build-core.js`/`node build-admin.js` both rebuilt cleanly with their
+own syntax-checked round-trips. `server.js` needs a Railway redeploy for
+either change to take effect in production.
+
+---
+
 ## 2026-08-17 — Claude — Personal code review (owner asked Claude directly, not Codex): referral-code display/search bug in Deposits/Withdrawals tabs
 
 Owner: "now check personally all scripts as you claude code to check for

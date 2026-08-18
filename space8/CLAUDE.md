@@ -78,6 +78,35 @@ The owner was explicit and this must not be re-litigated without them saying so:
    mechanism as `authbg` (blurred image + tint overlay, admin-tunable blur/opacity),
    but applied to the main app shell (Home/Products/Team/Account) instead of just
    the auth screens. See "Design system" below for how it renders.
+   **Home-screen auto-cycling banner "slides", added 2026-08-18** (owner: "l want them
+   to be floating again and again... l will add other banners that will slide one
+   after the other") — deliberately NOT a 9th `BANNER_KEYS` slot: it's a variable-
+   length LIST of images (0–`MAX_HOME_SLIDES`=8, `server.js`), stored in its own doc
+   (`banners` collection, doc id `homeSlides`, field `slides:[{id,image}]`) so it can
+   never crowd the single `banners/main` doc that already holds ~18 single-image slots
+   toward MongoDB's 16MB per-doc limit. Admin endpoints: `GET /admin/banners/home-
+   slides` (list), `POST .../add` (owner-only, same image-type/size validation as
+   `/admin/banners/set`, rejects past the cap), `POST .../remove` (by id, 404 if
+   already gone) — admin UI lives in `admin-src/index.html`'s Banners tab, right above
+   the `barstack` slot's own card. `/public/banners` sends the images (in order, no
+   ids — those are an admin-management detail only) as a sibling `homeSlides` array,
+   not nested inside `banners`. Client (`user-src/original_module.js`): `homeBannerHtml()`
+   falls back to the existing static `barstack` banner (or the default fallback icon)
+   whenever 0 or 1 slides are configured — 2+ auto-cycles via ONE shared CSS
+   `@keyframes` animation with each `<img>` phase-shifted by a negative
+   `animation-delay` (the standard pure-CSS carousel trick — no JS interval to leak or
+   double up), 4s per slide. `renderHome()` DOM-preserves the carousel node across its
+   own 12s live-refresh the same way it already does for the activity ticker
+   (`preservedTicker`/`preservedCarousel`, both in `renderHome()`) — without that, the
+   silent background refresh would snap the animation back to slide 1 every 12s
+   instead of actually cycling. **Real bug caught while testing, fixed before ship**:
+   the new `/admin/banners/home-slides/add` route was left off `IMAGE_BODY_ROUTES`
+   (`server.js`), so it inherited the 64kb `smallJsonParser` instead of the 4mb
+   `bigJsonParser` every other image-upload route uses — every real upload past 64kb
+   (i.e. basically all of them) would have failed with "Request is too large" the
+   moment an admin actually tried it. `test-home-banner-slides.js` (20/20) covers
+   auth, image-type/size validation, ordering, id-targeted removal, the cap, and the
+   body-size route registration itself.
 3. **User-facing app (`user-src/index.html` + `user-src/original_module.js`, and its built
    artifact `user/`) — REBUILT FROM SCRATCH, this is done as of the most recent session.**
    Zero lines of ChocoMCC's original frontend structure remain — the owner rejected an

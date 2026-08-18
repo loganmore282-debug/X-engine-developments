@@ -6,7 +6,7 @@ var SERVER = 'https://mycallbackurl.onrender.com';
 var STATE = {
   account: null, products: null, investments: null, settings: null,
   teamStats: null, teamMembers: {1:null,2:null,3:null}, teamExpanded: {1:false,2:false,3:false}, bankAccounts: null,
-  hasPayoutPin: false, banners: {}, currentPage: 'home',
+  hasPayoutPin: false, banners: {}, homeSlides: [], currentPage: 'home',
   loaded: { home:false, products:false, team:false, account:false },
   // Codex-verified real bug (2026-08-17): bumped every time the
   // 'space8-auth' listener fires (sign-in OR sign-out) -- an async render
@@ -614,6 +614,35 @@ function bannerHtml(key, fallbackIcon){
   if (src) return '<div class="banner"><img src="' + esc(src) + '" alt=""></div>';
   return '<div class="banner"><div class="fallback-ico">' + ico(fallbackIcon||'satellite') + '</div></div>';
 }
+// Owner: "l want them to be floating again and again... l will add other
+// banners that will slide one after the other" -- the Home-screen banner,
+// but auto-cycling through admin-uploaded slides instead of one static
+// image. Falls straight back to the existing single-image 'barstack' slot
+// (or the default fallback icon) whenever no slides are configured, so an
+// owner who never touches this stays on exactly the old behaviour.
+// One slide is just shown static -- no point animating a cycle of one.
+// Two or more: every <img> shares ONE CSS keyframe animation (defined once
+// below) that's visible for exactly its own 1/n slice of the full cycle,
+// each phase-shifted by a NEGATIVE animation-delay of (index * holdSec) --
+// the classic pure-CSS carousel trick, since it needs only one @keyframes
+// block regardless of how many slides the admin adds, with no JS interval
+// to leak or double up across renderHome()'s own periodic 12s refresh.
+// `.banner img{position:absolute;inset:0;...}` (index.html's CSS) already
+// stacks every slide exactly on top of each other, so this only ever needs
+// to control opacity, not layout/positioning.
+function homeBannerHtml(){
+  var slides = (STATE.homeSlides||[]).filter(Boolean);
+  if (!slides.length) return bannerHtml('barstack', 'satellite');
+  if (slides.length === 1) return '<div class="banner"><img src="' + esc(slides[0]) + '" alt=""></div>';
+  var n = slides.length, holdSec = 4, totalSec = holdSec * n;
+  var visiblePct = (100 / n).toFixed(4);
+  var css = '<style>#homeBannerCarousel img{opacity:0;animation:cs-cycle ' + totalSec + 's steps(1) infinite;}' +
+    '@keyframes cs-cycle{0%{opacity:1}' + visiblePct + '%{opacity:0}100%{opacity:0}}</style>';
+  var imgs = slides.map(function(src, i){
+    return '<img src="' + esc(src) + '" alt="" style="animation-delay:-' + (i * holdSec) + 's">';
+  }).join('');
+  return '<div class="banner" id="homeBannerCarousel">' + css + imgs + '</div>';
+}
 // Account screen only: the same admin-customizable 'rocherstack' banner
 // slot, but with the member's own identity spread across it instead of a
 // plain image/fallback-icon — the Space8 mark on one half, phone + the
@@ -687,7 +716,18 @@ async function renderHome(){
   var preservedTicker = (existingTicker && feedJson === STATE.lastFeedJson) ? existingTicker : null;
   if (preservedTicker) preservedTicker.remove();
 
-  var html = bannerHtml('barstack', 'satellite');
+  // Same reasoning, same trick, for the Home banner carousel (2+ slides):
+  // its CSS animation lives on the img elements themselves, so rebuilding
+  // it fresh on every 12s refresh would otherwise snap it back to slide 1
+  // constantly instead of actually cycling. Only rebuilt when the admin's
+  // slide set has genuinely changed since the last render.
+  var slidesJson = JSON.stringify(STATE.homeSlides||[]);
+  var existingCarousel = $('homeBannerCarousel');
+  var preservedCarousel = (existingCarousel && slidesJson === STATE.lastHomeSlidesJson) ? existingCarousel : null;
+  if (preservedCarousel) preservedCarousel.remove();
+  STATE.lastHomeSlidesJson = slidesJson;
+
+  var html = homeBannerHtml();
   html += '<div class="balance-card">' +
     '<div class="lab">Account Balance</div>' +
     '<div class="amt mono">' + ugx(acc.walletBalance) + '</div>' +
@@ -716,6 +756,10 @@ async function renderHome(){
   if (preservedTicker) {
     var freshTicker = $('tickerItems');
     if (freshTicker) freshTicker.replaceWith(preservedTicker);
+  }
+  if (preservedCarousel) {
+    var freshCarousel = $('homeBannerCarousel');
+    if (freshCarousel) freshCarousel.replaceWith(preservedCarousel);
   }
   wireHomeActions();
   renderTicker(feed);
@@ -2035,7 +2079,7 @@ async function boot(){
   var bootR = await Promise.all([api('/public/settings'), api('/public/banners'), api('/public/products')]);
   var setR = bootR[0], bannerR = bootR[1], prodR = bootR[2];
   if (setR.status === 'success') STATE.settings = setR.settings;
-  if (bannerR.status === 'success') STATE.banners = bannerR.banners || {};
+  if (bannerR.status === 'success') { STATE.banners = bannerR.banners || {}; STATE.homeSlides = bannerR.homeSlides || []; }
   if (STATE.banners.authbg) {
     document.documentElement.style.setProperty('--auth-bg-url', 'url("' + STATE.banners.authbg + '")');
   }
@@ -2075,6 +2119,7 @@ async function boot(){
 function preloadImages(){
   var urls = [];
   Object.keys(STATE.banners||{}).forEach(function(k){ if (STATE.banners[k]) urls.push(STATE.banners[k]); });
+  (STATE.homeSlides||[]).forEach(function(src){ if (src) urls.push(src); });
   (STATE.products||[]).forEach(function(p){ if (p.image) urls.push(p.image); });
   var loadOne = function(src){
     return new Promise(function(resolve){

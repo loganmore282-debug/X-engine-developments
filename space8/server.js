@@ -129,7 +129,7 @@ app.use('/admin/', async (req, _res, next) => {
 // request-size limit.
 const smallJsonParser  = express.json({ limit: '64kb' });
 const bigJsonParser    = express.json({ limit: '4mb' });
-const IMAGE_BODY_ROUTES = new Set(['/admin/banners/set', '/admin/products/save', '/admin/settings/update']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/banners/set', '/admin/products/save', '/admin/settings/update', '/admin/banners/home-slides/add']);
 app.use((req, res, next) => (IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 app.use(cors({ origin: '*' }));
@@ -296,6 +296,21 @@ async function getBannerOverrides() {
   _bannersCacheTs = Date.now();
   return _bannersCache;
 }
+// Home-screen auto-cycling banner slides -- own doc, own cache, see
+// MAX_HOME_SLIDES's comment for why this is kept separate from the single-
+// image banners/main doc above. Each slide is { id, image }; id is what the
+// admin panel's remove button targets, never exposed as anything a member
+// needs (the public endpoint sends just the image strings, in order).
+let _homeSlidesCache = null, _homeSlidesCacheTs = 0;
+async function getHomeSlides() {
+  if (Date.now() - _homeSlidesCacheTs < 60 * 1000 && _homeSlidesCache) return _homeSlidesCache;
+  try {
+    const snap = await db.collection('banners').doc('homeSlides').get();
+    _homeSlidesCache = (snap.exists && Array.isArray(snap.data().slides)) ? snap.data().slides : [];
+  } catch (_) { _homeSlidesCache = _homeSlidesCache || []; }
+  _homeSlidesCacheTs = Date.now();
+  return _homeSlidesCache;
+}
 
 // ── HELPERS ──
 function fmtUGX(n) { return 'UGX ' + Number(n || 0).toLocaleString('en-UG'); }
@@ -404,6 +419,18 @@ const BANNER_KEYS = new Set([
 // slowing down every client's /public/banners fetch. ~2MB of actual image
 // bytes, accounting for base64's ~37% overhead.
 const BANNER_MAX_LEN = 2_800_000;
+// Owner: "l want them to be floating again and again... l will add other
+// banners that will slide one after the other" -- a separate, VARIABLE-
+// length list of Home-screen banner images that auto-cycle client-side
+// (see homeBannerHtml() in original_module.js), distinct from the single-
+// image BANNER_KEYS slots above. Stored in its OWN doc (banners/homeSlides,
+// not banners/main) specifically so this can never crowd out the ~18
+// existing single-image slots that already share one doc -- each slide can
+// be as large as a single banner upload, and letting them accumulate
+// unbounded in the SAME doc as everything else would risk that doc
+// eventually outgrowing MongoDB's 16MB per-document limit. Capped at 8
+// slides — plenty for a cycling home banner, not an unbounded gallery.
+const MAX_HOME_SLIDES = 8;
 // Owner: "amounts of deposits should be limited to 9-digits, even on
 // withdrawals limited to 9-digits" -- confirmed real: neither /deposit/
 // marzpay nor /withdraw/request had ANY upper bound on the client-supplied
@@ -1607,13 +1634,15 @@ app.get('/public/products', async (_req, res) => {
   catch (e) { res.status(500).json({ status: 'error', message: 'Could not load products' }); }
 });
 app.get('/public/banners', async (_req, res) => {
-  const overrides = await getBannerOverrides();
+  const [overrides, slides] = await Promise.all([getBannerOverrides(), getHomeSlides()]);
   // Only ever return keys the owner actually set — anything absent/null
   // means the client keeps its own shipped default, so this endpoint being
   // empty (the common case, nothing uploaded yet) changes nothing at all.
   const banners = {};
   for (const k of BANNER_KEYS) if (overrides[k]) banners[k] = overrides[k];
-  res.json({ status: 'success', banners });
+  // Slide ids are an admin-management detail (what the remove button
+  // targets) — members never see or need them, just the images in order.
+  res.json({ status: 'success', banners, homeSlides: slides.map(s => s.image) });
 });
 // Real bank picker for the Bank Transfer withdrawal screen -- pulled from
 // MarzPay's own supported-bank list (cached, see getMarzBanks) rather than
@@ -3806,6 +3835,52 @@ app.post('/admin/banners/clear', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not revert this banner' });
+  }
+});
+// Home-screen auto-cycling banner slides — see MAX_HOME_SLIDES's comment
+// for why these live in their own doc instead of the BANNER_KEYS routes
+// above. Add/remove only (no reorder endpoint) — the admin can already get
+// any order they want by removing and re-adding, and every add/remove is
+// owner-only + audit-logged like every other banner mutation.
+app.get('/admin/banners/home-slides', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', slides: await getHomeSlides() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/banners/home-slides/add', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const image = String(req.body.image || '');
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(image))
+    return res.status(400).json({ status: 'error', message: 'Upload a PNG, JPEG, WEBP or GIF image' });
+  if (image.length > BANNER_MAX_LEN)
+    return res.status(400).json({ status: 'error', message: 'Image is too large, please use a smaller file (~2MB max)' });
+  try {
+    const current = await getHomeSlides();
+    if (current.length >= MAX_HOME_SLIDES)
+      return res.status(400).json({ status: 'error', message: `Maximum ${MAX_HOME_SLIDES} slides reached — remove one first` });
+    const slide = { id: crypto.randomUUID(), image };
+    await db.collection('banners').doc('homeSlides').set({ slides: [...current, slide] }, { merge: true });
+    _homeSlidesCacheTs = 0;
+    logAdminAction(req, 'home_banner_slide_added', { id: slide.id, count: current.length + 1 });
+    res.json({ status: 'success', id: slide.id });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not save this slide' });
+  }
+});
+app.post('/admin/banners/home-slides/remove', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const id = String(req.body.id || '');
+  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+  try {
+    const current = await getHomeSlides();
+    const next = current.filter(s => s.id !== id);
+    if (next.length === current.length) return res.status(404).json({ status: 'error', message: 'Slide not found' });
+    await db.collection('banners').doc('homeSlides').set({ slides: next }, { merge: true });
+    _homeSlidesCacheTs = 0;
+    logAdminAction(req, 'home_banner_slide_removed', { id, count: next.length });
+    res.json({ status: 'success' });
+  } catch (e) {
+    res.status(500).json({ status: 'error', message: 'Could not remove this slide' });
   }
 });
 app.get('/admin/products', async (req, res) => {

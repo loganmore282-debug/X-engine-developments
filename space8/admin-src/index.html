@@ -1239,10 +1239,12 @@ const BANNER_LABELS = {
   appbg:         ['Website background', 'Blurred background image behind the app (Home, Products, Team, Account)']
 };
 async function renderBanners(){
-  const [r, setR] = await Promise.all([api('/admin/banners'), api('/admin/settings')]);
+  const [r, setR, slidesR] = await Promise.all([api('/admin/banners'), api('/admin/settings'), api('/admin/banners/home-slides')]);
   if(staleTab('banners')) return;
   const s = r.banners||{};
   const sett = setR.settings||{};
+  const slides = slidesR.slides||[];
+  const MAX_SLIDES = 8;
   // Clamp+coerce defensively even though the server now validates on save --
   // this only guards against a value stored before that validation existed;
   // esc() below is the actual XSS defense since these render into an HTML
@@ -1270,6 +1272,20 @@ async function renderBanners(){
       <input id="cardOpacityRange" type="range" min="0" max="100" step="1" value="${cardOpacityPct}" style="width:100%">
       <p class="muted" style="font-size:12px;margin:6px 0 0">Lower opacity lets more of the background show through the card; very low values can hurt readability of text on the card.</p>
       <button class="btn block" id="saveCardBgBtn" style="margin-top:10px">Save card blur &amp; opacity</button>
+    </div>
+    <div class="panel-card">
+      <label style="font-weight:700">Home screen sliding banners</label>
+      <p class="muted" style="margin:2px 0 10px;font-size:12px">Add 2 or more images here and the Home screen banner auto-cycles through them (holds each for a few seconds, then slides to the next, looping forever) instead of showing one static image. Add just one and it's shown static, same as before. Leave empty and the plain "Home screen" banner slot below is used instead. Up to ${MAX_SLIDES}.</p>
+      <div id="slideThumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        ${slides.length ? slides.map(sl=>`
+          <div style="position:relative;width:84px;height:84px">
+            <img src="${esc(sl.image)}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;border:1px solid var(--line)">
+            <button class="btn danger sm" data-rmslide="${esc(sl.id)}" style="position:absolute;top:-6px;right:-6px;padding:2px 7px;font-size:11px;line-height:1.4;border-radius:999px">&times;</button>
+          </div>`).join('') : '<span class="muted" style="font-size:12px">No slides yet — the plain Home screen banner is showing.</span>'}
+      </div>
+      ${slides.length < MAX_SLIDES
+        ? `<label class="btn sm file-btn">Add a slide<input type="file" id="slideFile" accept="image/*" hidden></label>`
+        : `<p class="muted" style="font-size:12px;margin:0">Maximum ${MAX_SLIDES} reached — remove one to add another.</p>`}
     </div>
     ${Object.keys(BANNER_LABELS).map(key=>{
       const [label,hint] = BANNER_LABELS[key];
@@ -1330,6 +1346,26 @@ async function renderBanners(){
       } catch(err){ toast(err.message||'Could not read image','err'); }
     })());
   }));
+  document.querySelectorAll('[data-rmslide]').forEach(b=>b.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/banners/home-slides/remove', { id: b.dataset.rmslide });
+      toast(d.status==='success'?'Slide removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderBanners();
+    })());
+  }));
+  const slideFile = $('slideFile');
+  if (slideFile) slideFile.addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const image = await fileToDataUrl(f,1280,0.82);
+        const d = await api('/admin/banners/home-slides/add', { image });
+        toast(d.status==='success'?'Slide added — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderBanners();
+      } catch(err){ toast(err.message||'Could not read image','err'); }
+    })());
+  });
   if ($('authBlurRange')) {
     $('authBlurRange').addEventListener('input', ()=>{ $('authBlurVal').textContent = $('authBlurRange').value; });
     $('authTintRange').addEventListener('input', ()=>{ $('authTintVal').textContent = $('authTintRange').value; });
@@ -1498,7 +1534,9 @@ const AUDIT_LABELS = {
   withdraw_force_declined:'Withdrawal declined', withdrawal_processed:'Withdrawal sent via MarzPay',
   manual_credit:'Manual credit', manual_debit:'Manual debit', user_banned:'User banned', user_unbanned:'User unbanned',
   user_password_reset:'User password reset', user_deleted:'User account deleted', settings_updated:'Settings updated',
-  banner_set:'Banner changed', banner_cleared:'Banner reverted', products_saved:'Products saved',
+  banner_set:'Banner changed', banner_cleared:'Banner reverted',
+  home_banner_slide_added:'Home slide added', home_banner_slide_removed:'Home slide removed',
+  products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared',
   deposit_force_credited:'Deposit force-credited', promocodes_generated:'Gift codes generated', promocode_deactivated:'Gift code deactivated',
 };
