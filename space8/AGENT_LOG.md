@@ -14,6 +14,45 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Shrunk the bottom navigation bar
+
+Owner: "can you contract or minimize the width of the navigation bar, it
+is very big... minimise it to shrink down, it is taking a little bit more
+space" (screenshot showed the bottom Home/Products/Team/Account bar).
+Read as height, not width — the bar already spans full width by design
+(`justify-content:space-around`), and the visible complaint in the
+screenshot is vertical footprint.
+
+`user-src/index.html`'s `.navbar`/`.navitem` CSS: trimmed padding and icon
+size so the bar's total height drops from ~71px to ~55px (a ~16px cut) —
+`.navbar` padding 9px→6px top/bottom, `.navitem` padding 6px→4px,
+icon 25px→21px, icon-to-label gap 4px→2px. Font size and touch-target
+width (`min-width:62px`) left untouched so labels stay legible and tap
+targets stay reasonable.
+
+That 16px isn't just cosmetic on the bar itself — several fixed-position
+elements hardcode a `bottom` offset sized to clear the OLD bar height, so
+they all got the matching 16px trim to stay flush against the new,
+shorter bar instead of floating with a now-oversized gap: `main`'s
+bottom padding (96px→80px, this is what stops page content from
+scrolling under the bar), `.toast-bg` (84px→68px), `.assist-fab` (the
+floating chat button, 94px→78px), `.gift-fab` (the floating gift-code
+button, 166px→150px, stacked above assist-fab — the 72px gap between the
+two is preserved). Missing any one of these would have left a visible gap
+or, worse, content peeking out from under the bar.
+
+**Files touched:** `user-src/index.html`, `user/` (rebuilt), `user/sw.js`
+(cache bumped v258→v259).
+
+**Verification:** `node build-core.js` rebuilt cleanly with its own
+syntax-checked round-trip. Full backend test suite still green (CSS-only
+change, no server.js/original_module.js logic touched). **Not verified in
+a real browser** — no visual/device check was possible in this session;
+the owner should confirm the new proportions look right before treating
+this as final.
+
+---
+
 ## 2026-08-18 — Claude — Task Center ladders extended to 8 tiers; new admin-customisable Home-screen sliding banner
 
 Two owner requests in one turn.
