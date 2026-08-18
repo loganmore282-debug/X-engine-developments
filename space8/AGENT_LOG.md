@@ -14,6 +14,31 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Announcement dialog: removed top accent bar, scroll edges now fade instead of clipping
+
+Owner, from a screenshot of the live Announcement bottom sheet: "when one scrolls the words
+in ends goes out blurry not making steep titles where words disappear directly, also bro
+remove that blue mark on top of dialog box."
+
+- **What changed** (`user-src/index.html`): Deleted `.announce-accent` (a solid 4px `var(--blue)`
+  bar sitting right above the dialog title — visible as the thin blue line across the top
+  rounded corner in the screenshot) and its `<div class="announce-accent">` markup entirely.
+  `.announce-text` (the scrollable body — deposits/products/withdrawals/fees/referrals
+  copy) now carries a `mask-image`/`-webkit-mask-image` linear-gradient that fades its top
+  and bottom ~22px to transparent, so a line scrolling past either edge softens out instead
+  of being hard-clipped mid-line by the box's `overflow-y:auto` boundary (which is exactly
+  what the screenshot showed happening to the REFERRALS section at the bottom).
+- **Verification**: `node build-core.js` → round-trip OK. Isolated the exact `.announce-*`
+  CSS + markup into a standalone HTML file seeded with the owner's own screenshot copy,
+  scrolled it programmatically, and rendered it with Chromium (Playwright) — confirmed
+  visually: no blue bar above "Announcement," and the top-scrolled "DEPOSITS" heading now
+  fades to transparent rather than cutting off flush with the box edge. Bumped `user/sw.js`
+  `CACHE` to `v265` (this is baked into cached `index.html`, needs the bump to actually reach
+  installed PWAs).
+- **Deferred**: none.
+
+---
+
 ## 2026-08-18 — Claude — Referral share text rebuilt into a full launch-announcement post
 
 Owner pasted a target format: a rocket-emoji launch announcement with deposit/withdrawal

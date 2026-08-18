@@ -2689,6 +2689,14 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    share targets append it a second time after `text`, which would add a stray
    third copy of the link. See the 2026-08-18 AGENT_LOG.md entry ("Referral share
    text rebuilt into a full launch-announcement post").
+0j. **Announcement dialog polish — DONE.** Owner, from a screenshot: remove the thin blue
+   accent bar above the "Announcement" title (`.announce-accent`, deleted along with its
+   markup), and stop the scrollable body (deposits/withdrawals/fees/referrals copy) from
+   clipping text mid-line at the scroll edges — `.announce-text` now carries a
+   `mask-image` gradient that fades its top/bottom ~22px to transparent instead. Verified
+   with a Chromium render of the isolated dialog markup, scrolled, screenshotted. `user/sw.js`
+   `CACHE` bumped to `v265`. See the 2026-08-18 AGENT_LOG.md entry ("Announcement dialog:
+   removed top accent bar, scroll edges now fade instead of clipping").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

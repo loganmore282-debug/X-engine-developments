@@ -691,7 +691,11 @@
 // v264: new app icon (satellite-in-orbit mark, Codex-designed) — same
 // filenames (icon-192/512.png etc.) so bumped to force phones to actually
 // re-fetch the new bytes instead of serving the old cached figure-eight.
-const CACHE = 'space8-shell-v264';
+// v265: referral share text rebuilt into a full launch post; announcement
+// dialog's top blue accent bar removed and its scrollable text now fades
+// out at the top/bottom edges instead of cutting off mid-line -- both are
+// baked into the cached index.html, so bumped to push the new markup/CSS.
+const CACHE = 'space8-shell-v265';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 
