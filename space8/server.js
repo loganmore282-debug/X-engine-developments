@@ -615,6 +615,7 @@ const TEAM_MILESTONES = [
   { target: 500, reward: 750000 },
   { target: 1000, reward: 1500000 },
   { target: 2000, reward: 3000000 },
+  { target: 5000, reward: 7500000 },
 ];
 // Second Task Center ladder, replaced 2026-08-16 alongside the one above.
 // Reward rate is a flat 2.5% of the deposit target at every tier. Progress
@@ -632,6 +633,7 @@ const TEAM_DEPOSIT_MILESTONES = [
   { target: 100000000, reward: 2500000 },
   { target: 200000000, reward: 5000000 },
   { target: 500000000, reward: 12500000 },
+  { target: 1000000000, reward: 25000000 },
 ];
 // Recomputed live on every /team/stats read and every claim — never stored,
 // never trusted from the client, so a milestone can never be forged. Both

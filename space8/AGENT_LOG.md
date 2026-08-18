@@ -14,6 +14,21 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Task Center ladders: final tier added, 11 each ("the last")
+
+Owner: "let us also add the last, 5000 referrals, and on team deposits,
+1,000,000,000." Same flat-rate computation as every prior addition today:
+5,000 → 7,500,000 (referral ladder, 1,500/referral); 1,000,000,000 →
+25,000,000 (deposit ladder, 2.5%). Both ladders now 11 tiers.
+
+**Files touched:** `server.js` (both milestone tables), `CLAUDE.md`.
+
+**Verification:** full suite green across all 70 test files
+(`test-referral-milestones.js` 29/29, unaffected). `server.js` needs a
+Railway redeploy to take effect.
+
+---
+
 ## 2026-08-18 — Claude — Task Center ladders extended again: 10 tiers each
 
 Owner: "on referrals tasks let us add 1000, and 2000, then on team
