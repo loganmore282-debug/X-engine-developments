@@ -1966,6 +1966,39 @@ app.post('/admin/notifications/create', async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Could not create notification' });
   }
 });
+// Owner: "make sure l can see sent notification, delete them and gets
+// deleted from all accounts." A broadcast (audience:'all') is already a
+// SINGLE shared document -- GET /notifications above queries it fresh on
+// every read, per account, with no per-user copy ever made. That means
+// deleting this one document is not just sufficient but the ONLY thing
+// that needs to happen: the next time any member's bell fetches
+// /notifications, this row is simply gone from the query result, for
+// every account, automatically -- there is no per-user cleanup to do.
+app.get('/admin/notifications/list', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('notifications').where('audience', '==', 'all').orderBy('createdAt', 'desc').limit(200).get();
+    const rows = snap.docs.map(d => {
+      const n = d.data();
+      return { id: d.id, title: n.title || '', body: n.body || '', createdBy: n.createdBy || 'owner',
+        createdAt: n.createdAt || null, readCount: (n.readBy || []).length };
+    });
+    res.json({ status: 'success', notifications: rows });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/notifications/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const id = String(req.body.id || '');
+  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+  try {
+    const ref = db.collection('notifications').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Notification not found' });
+    await ref.delete();
+    logAdminAction(req, 'notification_deleted', { id, title: snap.data().title });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 
 // ═══════════════════════════════════════════
 // ACCOUNT / REGISTER / CHECK-IN
@@ -3583,6 +3616,14 @@ app.post('/redeem', async (req, res) => {
       // actually issued, not however they happened to type it).
       const code = cd.code;
       if (cd.active === false) return res.status(400).json({ status: 'error', message: 'This code is no longer active' });
+      // Owner (2026-08-18): minute-granularity expiry on generation, see
+      // /admin/promocodes/generate. A code with no expiresAt field never
+      // expires (every code issued before this feature existed, and any
+      // new code the admin leaves the duration blank on) -- checked
+      // lazily here, same pattern this file already uses for admin
+      // session TTLs, rather than a background sweep flipping `active`.
+      if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now())
+        return res.status(400).json({ status: 'error', message: 'This code has expired' });
       const usedBy = cd.usedBy || [];
       if (usedBy.indexOf(userId) !== -1) return res.status(400).json({ status: 'error', message: "You've already used this code" });
       if (cd.maxUses && usedBy.length >= cd.maxUses) return res.status(400).json({ status: 'error', message: 'This code has reached its usage limit' });
@@ -5295,14 +5336,34 @@ async function generateUniqueGiftCode() {
   }
   throw new Error('Could not generate a unique code right now, please try again');
 }
+// Owner (2026-08-18): "l want to assign the duration of giftCodes to
+// minutes not days" -- gift codes never expired at all before this (no
+// expiresAt concept existed), so this is a genuinely new optional field,
+// not a days->minutes unit conversion of something that already existed.
+// Minute-level granularity specifically so a short flash-promo code (e.g.
+// "expires in 30 minutes") is actually expressible -- a days-only field
+// couldn't represent that at all. Capped at 10 years in minutes purely to
+// keep a fat-fingered input from silently becoming "never expires but
+// looks like it has some huge number" -- leaving durationMinutes empty/0
+// is the real "never expires" case and is left alone (no expiresAt field
+// written at all), matching every already-issued code's shape exactly, no
+// migration needed.
+const MAX_GIFTCODE_DURATION_MINUTES = 10 * 365 * 24 * 60;
 app.post('/admin/promocodes/generate', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  const { count = 1, minAmount, maxAmount, maxUses } = req.body;
+  const { count = 1, minAmount, maxAmount, maxUses, durationMinutes } = req.body;
   const min = Math.max(0, Math.round(parseFloat(minAmount) || 0));
   const max = Math.max(0, Math.round(parseFloat(maxAmount) || 0));
   if (!min || !max) return res.status(400).json({ status: 'error', message: 'minAmount and maxAmount required' });
   if (min > max) return res.status(400).json({ status: 'error', message: 'minAmount cannot exceed maxAmount' });
   const n = Math.min(Math.max(parseInt(count) || 1, 1), 50);
+  let durationMs = 0;
+  if (durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '') {
+    const mins = Math.round(parseFloat(durationMinutes));
+    if (!Number.isFinite(mins) || mins <= 0 || mins > MAX_GIFTCODE_DURATION_MINUTES)
+      return res.status(400).json({ status: 'error', message: `Duration must be a number of minutes between 1 and ${MAX_GIFTCODE_DURATION_MINUTES} (leave blank for no expiry)` });
+    durationMs = mins * 60000;
+  }
   try {
     // Whole batch runs under one lock — check-then-add isn't atomic on M0
     // (no real transactions), so without this two admins generating at the
@@ -5313,11 +5374,13 @@ app.post('/admin/promocodes/generate', async (req, res) => {
       for (let i = 0; i < n; i++) {
         const code = await generateUniqueGiftCode();
         const reward = Math.round(min + Math.random() * (max - min));
-        await db.collection('promoCodes').add({
+        const doc = {
           code, codeLower: code.toLowerCase(), reward, active: true, usedBy: [],
           maxUses: maxUses ? Math.max(1, parseInt(maxUses)) : 1,
           createdAt: FieldValue.serverTimestamp(), createdBy: req.adminUser?.username || 'owner-key'
-        });
+        };
+        if (durationMs) doc.expiresAt = new Date(Date.now() + durationMs);
+        await db.collection('promoCodes').add(doc);
         made.push({ code, reward });
       }
       logAdminAction(req, 'promocodes_generated', { count: made.length, minAmount: min, maxAmount: max });

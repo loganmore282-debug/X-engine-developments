@@ -2627,6 +2627,21 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    AGENT_LOG.md entry ("New feature: admin-settable withdrawal request
    hours") for detail, including a real bug caught in the TEST itself
    (not the feature) while writing it.
+0f. **Notification management (view/delete) + gift-code expiry in minutes —
+   DONE.** Owner: "make sure l can see sent notification, delete them and
+   gets deleted from all accounts, also... assign the duration of giftCodes
+   to minutes not days." Broadcasts are a single shared doc (no per-user
+   copy), so `POST /admin/notifications/delete` deleting one document is
+   sufficient for it to vanish from every account's bell at once — new
+   `GET /admin/notifications/list` shows what's been sent, who sent it, and
+   read counts; admin UI is a new "Sent notifications" table in Settings.
+   Gift codes never had an expiry concept at all before this —
+   `/admin/promocodes/generate` now takes an optional `durationMinutes`
+   (blank = never expires, unchanged default), checked lazily at
+   `/redeem` time. `test-notifications-management.js` (19/19) and
+   `test-giftcode-expiry.js` (17/17). See the 2026-08-18 AGENT_LOG.md entry
+   ("New features: notification management... + gift-code expiry in
+   minutes") for detail.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

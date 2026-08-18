@@ -1447,30 +1447,39 @@ async function renderPromoCodes(){
         <div><label>How many</label><input id="cCount" type="number" value="1" min="1" max="50"></div>
         <div><label>Max users per code (optional)</label><input id="cMax" type="number" placeholder="1"></div>
       </div>
-      <div class="muted" style="margin:4px 0 10px">Each code is generated with its own random reward in this range — not the same for every code.</div>
+      <div class="row" style="margin-top:6px">
+        <div><label>Expires after (minutes, optional)</label><input id="cDuration" type="number" min="1" placeholder="e.g. 30 for a flash code"></div>
+      </div>
+      <div class="muted" style="margin:4px 0 10px">Each code is generated with its own random reward in this range — not the same for every code. Leave expiry blank for a code that never expires.</div>
       <button class="btn block" id="genBtn">Generate codes</button>
       <div id="genOut"></div>
     </div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward</th><th>Used</th><th>Status</th><th>Created</th><th></th></tr></thead>
-    <tbody>${list.length?list.map(c=>`
-      <tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${ugx(c.reward)}</td><td>${c.usedCount||0} / ${c.maxUses||1}</td>
-      <td><span class="pill-tag ${c.active!==false?'t-ok':'t-mut'}">${c.active!==false?'Active':'Off'}</span></td>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Code</th><th>Reward</th><th>Used</th><th>Status</th><th>Expires</th><th>Created</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(c=>{
+      const expiredNow = c.expiresAt && tsMs(c.expiresAt) < Date.now();
+      const statusLabel = expiredNow ? 'Expired' : (c.active!==false?'Active':'Off');
+      const statusClass = expiredNow ? 't-bad' : (c.active!==false?'t-ok':'t-mut');
+      return `<tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${ugx(c.reward)}</td><td>${c.usedCount||0} / ${c.maxUses||1}</td>
+      <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
+      <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>
       <td>${fdate(c.createdAt)}</td>
-      <td>${c.active!==false?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No codes yet</td></tr>'}
+      <td>${(c.active!==false&&!expiredNow)?`<button class="btn danger sm" data-off="${esc(c.id)}">Deactivate</button>`:''}</td></tr>`;
+    }).join(''):'<tr><td colspan="7" class="empty">No codes yet</td></tr>'}
     </tbody></table></div>`;
   $('genBtn').addEventListener('click', async()=>{
     const minAmount=parseFloat($('cMin').value||0), maxAmount=parseFloat($('cMax2').value||0);
     if(!minAmount||!maxAmount)return toast('Enter a min and max reward','err');
     if(minAmount>maxAmount)return toast('Min cannot exceed max','err');
     const count=parseInt($('cCount').value||1), maxUses=parseInt($('cMax').value)||1;
+    const durationMinutes=$('cDuration').value?parseInt($('cDuration').value,10):undefined;
     const b=$('genBtn'); b.disabled=true;b.textContent='Generating…';
-    const d=await api('/admin/promocodes/generate',{ minAmount, maxAmount, count, maxUses });
+    const d=await api('/admin/promocodes/generate',{ minAmount, maxAmount, count, maxUses, durationMinutes });
     b.disabled=false;b.textContent='Generate codes';
     if(d.status==='success'){
       const codes=(d.codes||[]).map(c=>c.code);
       $('genOut').innerHTML=`<div class="codebox">${codes.map(code=>`<span class="code-chip"><b class="mono">${esc(code)}</b><button class="btn sm ghost" data-copy="${esc(code)}" title="Copy code">Copy</button></span>`).join('')}</div>
         <button class="btn sm ghost" id="copyAllBtn" data-copyall="${esc(codes.join('\\n'))}" style="margin-top:6px">Copy all</button>
-        <div class="muted" style="margin-top:6px">${d.codes.length} code(s) generated, each paying ${ugx(minAmount)} – ${ugx(maxAmount)} at random</div>`;
+        <div class="muted" style="margin-top:6px">${d.codes.length} code(s) generated, each paying ${ugx(minAmount)} – ${ugx(maxAmount)} at random${durationMinutes?`, expiring in ${durationMinutes} minute${durationMinutes===1?'':'s'}`:''}</div>`;
       wireCopyButtons();
       setTimeout(renderPromoCodes,1200);
     }
@@ -1552,6 +1561,7 @@ const AUDIT_LABELS = {
   products_saved:'Products saved',
   product_deleted:'Product deleted', products_cleared:'All products cleared',
   deposit_force_credited:'Deposit force-credited', promocodes_generated:'Gift codes generated', promocode_deactivated:'Gift code deactivated',
+  notification_deleted:'Notification deleted',
 };
 async function renderAuditLog(){
   const r = await api('/admin/audit-log');
@@ -1658,9 +1668,10 @@ async function quietRefreshReferrals(){
 
 // ── SETTINGS ──
 async function renderSettings(){
-  const r = await api('/admin/settings');
+  const [r, notifR] = await Promise.all([api('/admin/settings'), api('/admin/notifications/list')]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
+  const sentNotifs = notifR.notifications||[];
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   const clampNum = (val, def, min, max) => { const n = Number(val); return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : def; };
   const annBlurPx = clampNum(s.annBgBlurPx, 6, 0, 40);
@@ -1708,6 +1719,18 @@ async function renderSettings(){
       <label>Title</label><input id="nTitle" placeholder="e.g. Scheduled maintenance">
       <label>Message</label><textarea id="nBody" rows="5" placeholder="Write what you want every member to see…"></textarea>
       <button class="btn block" id="sendNotifBtn">Send to all members</button>
+    </div>
+
+    <h2 class="sec">Sent notifications</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Every broadcast currently sitting in every member's bell. Deleting one removes it for every account immediately — there's no per-account copy to clean up separately.</p>
+      <div class="table-scroll"><table><thead><tr><th>When</th><th>Title</th><th>Message</th><th>Read by</th><th></th></tr></thead>
+      <tbody>${sentNotifs.length?sentNotifs.map(n=>`
+        <tr><td style="white-space:nowrap">${fdate(n.createdAt)}</td><td><b>${esc(n.title)}</b></td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.body)}</td>
+        <td>${n.readCount||0}</td>
+        <td><button class="btn danger sm" data-delnotif="${esc(n.id)}">Delete</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">Nothing sent yet</td></tr>'}
+      </tbody></table></div>
     </div>
 
     <h2 class="sec">Announcement dialog</h2>
@@ -1794,10 +1817,17 @@ async function renderSettings(){
     await withTabBusy((async()=>{
       const d = await api('/admin/notifications/create', { title, body });
       toast(d.status==='success'?'Sent to every member':(d.message||'Failed'), d.status==='success'?'ok':'err');
-      if (d.status==='success') { $('nTitle').value = ''; $('nBody').value = ''; }
+      if (d.status==='success') { $('nTitle').value = ''; $('nBody').value = ''; renderSettings(); }
     })());
     btn.disabled = false; btn.textContent = restore;
   });
+  document.querySelectorAll('[data-delnotif]').forEach(b=>b.addEventListener('click', async()=>{
+    if(!confirm('Delete this notification for every member? It disappears from every account\'s bell immediately.'))return;
+    b.disabled=true; b.textContent='…';
+    const d=await api('/admin/notifications/delete', { id: b.dataset.delnotif });
+    toast(d.status==='success'?'Deleted for every account':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    if(d.status==='success') renderSettings(); else { b.disabled=false; b.textContent='Delete'; }
+  }));
   $('saveAnn').addEventListener('click', async()=>{
     const upd = { annEnabled:$('aEnabled').checked, annTitle:$('aTitle').value.trim(), annBody:$('aBody').value };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');

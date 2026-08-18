@@ -82,6 +82,11 @@ async function ensureIndexes() {
     // doc-with-an-array shape) — one document per slide now; getHomeSlides()
     // orders them by createdAt to preserve upload order.
     ['homeBannerSlides', { createdAt: 1 }],
+    // Real gap found 2026-08-18 while adding /admin/notifications/list
+    // (same query shape as the member-facing GET /notifications, which
+    // has run this exact where()+orderBy() unindexed since it was built):
+    // an equality-plus-sort query with no matching compound index.
+    ['notifications',   { audience: 1, createdAt: -1 }],
     ['bankAccounts',    { userId: 1 }],
     ['adminSessions',   { username: 1 }],
     ['adminAuditLog',   { createdAt: -1 }],

@@ -14,6 +14,67 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — New features: notification management (view/delete) + gift-code expiry in minutes
+
+Owner: "make sure l can see sent notification, delete them and gets
+deleted from all accounts, also l want to assign the duration of
+giftCodes to minutes not days."
+
+**1. Notification management.** A broadcast (`audience:'all'`) has always
+been a SINGLE shared document — every member's `GET /notifications`
+queries it fresh, with no per-user copy ever made. That turned "delete
+from all accounts" into something simpler than it sounds: deleting the
+one document is both necessary and sufficient, nothing per-account to
+clean up. New endpoints: `GET /admin/notifications/list` (title, body,
+who sent it, when, how many members have read it) and
+`POST /admin/notifications/delete` (owner-only, 404 on an already-gone
+id, never a silent no-op). Admin UI: new "Sent notifications" table in
+Settings, right below "Send notification", each row with a Delete
+button; sending a new notification now refreshes the list instead of
+just clearing the form. New index (`notifications.audience+createdAt`,
+`db.js`) — while adding this, found the SAME query shape on the existing
+member-facing `GET /notifications` has run unindexed since it was built;
+fixed both with one index.
+
+**2. Gift-code expiry, in minutes.** Gift codes never expired at all
+before this — no `expiresAt` concept existed anywhere — so this is a new
+optional field, not a days→minutes conversion of something that already
+existed. Minute granularity specifically so a genuine flash-promo code
+("expires in 30 minutes") is actually expressible, which a days-only
+field never could be. `/admin/promocodes/generate` takes an optional
+`durationMinutes` (1 to ~10 years in minutes, sanity-capped; blank/omitted
+= never expires, the exact existing default behavior, fully backward
+compatible with every already-issued code). `/redeem` rejects an expired
+code with a clear message, checked lazily at redemption time (same
+pattern this file already uses for admin session TTLs) rather than a
+background sweep flipping `active` — an expired-but-technically-`active`
+code simply can never be successfully redeemed again. Admin UI: new
+"Expires after (minutes, optional)" field on the generate form; the
+codes table gained an Expires column and an "Expired" status pill
+(distinct from Active/Off) for a code past its own expiry.
+
+**Files touched:** `server.js` (`/admin/notifications/list`,
+`/admin/notifications/delete`, `/admin/promocodes/generate`'s new
+`durationMinutes` handling, `/redeem`'s expiry check), `db.js` (new
+`notifications` index), `admin-src/index.html` (Sent-notifications panel
++ handlers, gift-code duration field + Expires column, `AUDIT_LABELS`),
+`admin/` (rebuilt), 2 new test files
+(`test-notifications-management.js` 19/19, `test-giftcode-expiry.js`
+17/17).
+
+**Verification:** full suite green across all 77 test files. The
+notifications test proves deletion against TWO separate member accounts
+(not just one) to actually demonstrate "all accounts," and proves an
+unrelated second broadcast is left untouched. The gift-code test proves
+an expired-attempt credits nothing and doesn't mark the code used, that
+a genuinely legacy code (no `expiresAt` field at all, seeded exactly like
+a real pre-existing code) keeps working, and covers input validation
+(0, negative, non-numeric, past the sanity cap). `node build-admin.js`
+rebuilt cleanly. `server.js` needs a Railway redeploy to take effect (no
+user-app rebuild needed — nothing in `user-src/` changed this round).
+
+---
+
 ## 2026-08-18 — Claude — New feature: admin-settable withdrawal request hours (EAT), server-enforced
 
 Owner: "let us control withdrawal requests time, so this will be EAT
