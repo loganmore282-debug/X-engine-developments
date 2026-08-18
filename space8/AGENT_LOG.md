@@ -86,6 +86,40 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 - **Left open**: real-device visual check, same standing caveat as every
   client-only change this session.
 
+## 2026-08-17 — Claude — SIM-card icon actually enlarged (previous fix was insufficient, owner: "still very small")
+
+- **What changed**: the previous round's fix (tighter crop + 1px stroke
+  dilation + 28px box) still wasn't enough — the owner's screenshot showed
+  it clearly reading as a much thinner, smaller mark than the bold Deposits/
+  Withdrawals/Security-PIN icons beside it in the Account matrix. Redid the
+  processing from the original supplied source image (not the
+  already-processed file — re-dilating an already-dilated raster loses
+  crispness) this time:
+  - Isolated the real icon strokes with a darkness threshold (`gray < 110`)
+    instead of a naive white-background removal — the source file carried a
+    faint repeating stock-photo watermark pattern in its "white" background
+    that a simple threshold would otherwise have picked up as noise.
+  - Recolored directly to the app's blue (`#2e6bff`) and dilated the stroke
+    mask by 5px (`MaxFilter(5)`, up from the prior round's 3px) — a
+    genuinely bold, filled-feeling outline now, matching the stroke weight
+    of the sibling SVG icons instead of a thin line.
+  - Cropped tight to content (near-zero padding) and rendered at a clean
+    400px working width so it downsamples crisply at any on-screen size.
+  - `.shortcut img.ico-lg` / `.mtile img.ico-lg` (`user-src/index.html`)
+    changed from a forced 28×28px square (which squashed the icon's
+    landscape aspect ratio) to `width:34px; height:auto` — lets the card
+    render at its natural ~1.56:1 landscape proportions instead of being
+    squeezed into a square box, while still reading distinctly larger than
+    the shared 22px icon size.
+- **Why**: owner, verbatim: *"it is still very small,l want it to be big"*,
+  with a screenshot of the live Account page showing the icon still tiny
+  next to its siblings.
+- **Verification**: `node build-core.js` round-trip OK. Full `test-*.js`
+  suite green, 68/68 (pure asset/CSS change). Bumped `user/sw.js` cache
+  `v254` → `v255`.
+- **Left open**: real-device visual check, same standing caveat as every
+  client-only change this session.
+
 ## 2026-08-17 — Claude — About page rebuilt as a long, photo-illustrated company story
 
 - **What changed**: `openAboutSheet()` (new function) replaces the old flat,
