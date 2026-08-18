@@ -547,12 +547,14 @@ Mission & Reward Structure" schedule (relayed by Codex, applied by Claude same d
 see `AGENT_LOG.md`). Don't assume the old ChocoMCC-era numbers below are still live if
 you see them referenced anywhere (old test fixtures, stale comments):
 - **Active Level-1 referral ladder** (flat UGX 1,500/referral): 2→3,000; 5→7,500;
-  10→15,000; 25→37,500; 50→75,000; 100→150,000; 200→300,000; 500→750,000 (8th tier
-  added 2026-08-18, owner request — same flat rate, no other tier touched).
+  10→15,000; 25→37,500; 50→75,000; 100→150,000; 200→300,000; 500→750,000;
+  1,000→1,500,000; 2,000→3,000,000 (tiers 8-10 all added 2026-08-18, owner
+  requests — same flat rate throughout, no other tier ever touched).
 - **Whole-team deposit ladder** (flat 2.5%): 100,000→2,500; 500,000→12,500;
   1,000,000→25,000; 5,000,000→125,000; 10,000,000→250,000; 25,000,000→625,000;
-  50,000,000→1,250,000; 100,000,000→2,500,000 (8th tier added 2026-08-18, same
-  flat rate).
+  50,000,000→1,250,000; 100,000,000→2,500,000; 200,000,000→5,000,000;
+  500,000,000→12,500,000 (tiers 8-10 all added 2026-08-18, same flat rate
+  throughout).
 - **Deposit progress is the WHOLE L1+L2+L3 team**, not direct-L1-only — `server.js`'s
   `wholeTeamDeposits(userId)` walks the referral tree 3 levels deep
   (`where('referredBy','in',parentIds)`, same pattern `/team/members` uses), summing

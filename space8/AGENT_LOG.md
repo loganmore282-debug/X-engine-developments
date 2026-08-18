@@ -14,6 +14,27 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Task Center ladders extended again: 10 tiers each
+
+Owner: "on referrals tasks let us add 1000, and 2000, then on team
+deposits add 200,000,000 and 500,000,000." Same treatment as the 8th-tier
+addition earlier today — both ladders (`TEAM_MILESTONES`/
+`TEAM_DEPOSIT_MILESTONES`, `server.js`) still pay a flat rate per tier
+(UGX 1,500/active-L1-referral; 2.5% of the deposit target), so the new
+tiers are computed at that same rate: 1,000 → 1,500,000; 2,000 →
+3,000,000; 200,000,000 → 5,000,000; 500,000,000 → 12,500,000. Both
+ladders are now 10 tiers. No client change needed (same reason as before
+— `/team/stats` drives the Task Center screen entirely, no hardcoded tier
+list on that side).
+
+**Files touched:** `server.js` (both milestone tables), `CLAUDE.md`.
+
+**Verification:** `test-referral-milestones.js` (29/29, unaffected), full
+suite green across all 70 test files. `server.js` needs a Railway
+redeploy to take effect.
+
+---
+
 ## 2026-08-18 — Claude — Notification bell now hides on scroll, same as the wordmark
 
 Owner: "l also want notification bell to disappear when one scroll down,
