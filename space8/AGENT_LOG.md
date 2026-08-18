@@ -14,6 +14,32 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Notification bell now hides on scroll, same as the wordmark
+
+Owner: "l also want notification bell to disappear when one scroll down,
+just like you did on the space8 word." The wordmark-hide-on-scroll
+behaviour already existed (`.topbar.scrolled .wordmark`, an IIFE in
+`original_module.js` toggling `.scrolled` on `#topbar` past 12px of
+scroll) — the bell (`#notifBtn`) is the topbar's only other child and
+only other `.iconbtn`, so this was a small, contained extension rather
+than new logic: the existing CSS rule now also targets `.iconbtn`
+(`.topbar.scrolled .wordmark, .topbar.scrolled .iconbtn{...}`), and
+`.iconbtn` itself picked up the same `transition:opacity .18s ease,
+transform .18s ease` the wordmark already had, so it fades out/back in
+instead of snapping. No JS logic changed — the same scroll listener
+already drives both.
+
+**Files touched:** `user-src/index.html` (CSS), `user-src/original_module.js`
+(comment only, to document the extension), `user/` (rebuilt), `user/sw.js`
+(cache bumped v259→v260).
+
+**Verification:** `node build-core.js` rebuilt cleanly, syntax-checked
+round-trip OK. Backend test suite unaffected, still green (CSS/comment-
+only change). **Not verified in a real browser** — no visual/device check
+was possible in this session.
+
+---
+
 ## 2026-08-18 — Claude — Shrunk the bottom navigation bar
 
 Owner: "can you contract or minimize the width of the navigation bar, it

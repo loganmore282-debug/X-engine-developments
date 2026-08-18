@@ -107,8 +107,8 @@ svg{display:block;}
 }
 .wordmark{ font-weight:700; font-size:18px; letter-spacing:-.01em; display:flex; align-items:center; gap:2px; transition:opacity .18s ease, transform .18s ease; }
 .wordmark .dot{ color:var(--blue); }
-.topbar.scrolled .wordmark{ opacity:0; transform:translateY(-6px); pointer-events:none; }
-.iconbtn{ width:40px; height:40px; border-radius:11px; background:var(--surface); display:flex; align-items:center; justify-content:center; }
+.topbar.scrolled .wordmark, .topbar.scrolled .iconbtn{ opacity:0; transform:translateY(-6px); pointer-events:none; }
+.iconbtn{ width:40px; height:40px; border-radius:11px; background:var(--surface); display:flex; align-items:center; justify-content:center; transition:opacity .18s ease, transform .18s ease; }
 .iconbtn svg{ width:20px; height:20px; stroke:var(--blue); }
 
 main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }

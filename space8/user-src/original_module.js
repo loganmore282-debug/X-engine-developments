@@ -2239,10 +2239,15 @@ function startLiveRefresh(){
 function stopLiveRefresh(){ if (_liveRefreshTimer) { clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; } }
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE.account) { STATE.loaded.home = false; if (STATE.currentPage === 'home') renderHome(); } });
 
-// Hide the "Space8" wordmark once the page scrolls -- the topbar has no
-// opaque background of its own (it sits on the app wallpaper, see
-// #app::before/::after above), so on scroll the wordmark used to overlap
-// scrolled-past content instead of a solid bar. Fades back in near the top.
+// Hide the "Space8" wordmark AND the notification bell once the page
+// scrolls -- the topbar has no opaque background of its own (it sits on
+// the app wallpaper, see #app::before/::after above), so on scroll they
+// used to overlap scrolled-past content instead of a solid bar. Both fade
+// back in near the top (CSS: .topbar.scrolled .wordmark, .topbar.scrolled
+// .iconbtn). Owner: "l also want notification bell to disappear when one
+// scroll down, just like you did on the space8 word" -- same toggle
+// already does both, since the bell (#notifBtn) is the topbar's only
+// .iconbtn.
 (function(){
   var topbar = $('topbar');
   if (!topbar) return;
