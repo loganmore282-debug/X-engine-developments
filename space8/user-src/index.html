@@ -188,8 +188,14 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
    wants the literal ✓ (U+2713) character everywhere a claimed/done state
    is shown, not the stroked-path checkmark icon this used to be. One
    class, sized per context below (success popup, checkin "✓ Claimed"
-   button, Task Center claimed pill all share it). */
-.checkmark{ font-weight:800; line-height:1; display:inline-block; }
+   button, Task Center claimed pill all share it).
+   font-weight was originally 800 here -- WRONG: U+2713 is the "Light
+   Check Mark" specifically as opposed to U+2714 "Heavy Check Mark", and
+   bolding it that hard renders it just as thick as the old SVG icon it
+   was meant to replace, which is exactly why it looked "still the same
+   as usual". Normal weight is what actually makes it read as a distinct,
+   lighter mark. */
+.checkmark{ font-weight:400; line-height:1; display:inline-block; }
 .success-popup .ico .checkmark{ font-size:38px; color:#fff; }
 
 .announce-bg{ position:fixed; inset:0; z-index:260; background:rgba(10,18,32,.6); display:none; align-items:center; justify-content:center; opacity:0; transition:opacity .2s ease; padding:26px; }

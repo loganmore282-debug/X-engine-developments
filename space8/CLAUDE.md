@@ -2709,9 +2709,13 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    phrasing: "Login successful ✓", "Registration successful ✓", checkin toast now
    leads with "Claimed successfully ✓" (kept the amount/streak — streak has no
    other display anywhere), gift-code toast now "+X redeemed successfully ✓".
-   `user/sw.js` `CACHE` bumped to `v266`. See the 2026-08-18 AGENT_LOG.md entry
-   ("Checkmark unified to the literal ✓ (U+2713) everywhere; success messages
-   reworded").
+   `user/sw.js` `CACHE` bumped to `v266`, then `v267` after a follow-up fix — it
+   shipped with `font-weight:800` on `.checkmark`, which rendered the "Light"
+   check mark just as thick/bold as the old icon (owner: "still the same as
+   usual" after seeing it live); dropped to normal weight, confirmed visibly
+   thinner via a side-by-side Chromium render. See the 2026-08-18 AGENT_LOG.md
+   entries ("Checkmark unified to the literal ✓ (U+2713) everywhere..." and
+   "Fixed the checkmark fix: it shipped bold, defeating 'Light Check Mark'").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

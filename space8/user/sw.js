@@ -700,7 +700,11 @@
 // claimed pill); login/registration/checkin/gift-code success messages
 // reworded to end with "successfully ✓" / "successful ✓" -- all baked
 // into cached index.html, bumped to push the new markup/CSS/text.
-const CACHE = 'space8-shell-v266';
+// v267: the v266 tick fix shipped with font-weight:800 on .checkmark --
+// wrong, that renders the "Light" check mark just as thick as the old
+// heavy SVG icon it replaced (owner: "still the same as usual"). Dropped
+// to normal weight so it actually reads as visibly lighter/thinner.
+const CACHE = 'space8-shell-v267';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 

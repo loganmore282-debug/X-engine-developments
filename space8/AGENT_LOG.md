@@ -14,6 +14,36 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Fixed the checkmark fix: it shipped bold, defeating "Light Check Mark"
+
+Owner sent screenshots of the live site after the previous round's deploy: "Still the same
+as usual, please check through again."
+
+- **Root cause**: the previous round's `.checkmark` CSS (`user-src/index.html`) set
+  `font-weight:800`. U+2713 is specifically the "Light Check Mark" — as opposed to U+2714
+  "Heavy Check Mark" — and forcing it to render at extra-bold weight made it just as thick
+  as the old stroke-width-2.4 SVG icon it was meant to replace. That's exactly why the
+  owner's screenshots (success popup, "✓ Claimed" tile) still looked like the old icon —
+  the character was right, the weight wasn't.
+- **What changed**: `.checkmark{ font-weight:800 → 400 }`. One-line fix, same selector
+  used everywhere (success popup icon, checkin button icon, Task Center claimed pill).
+- **Verification**: Rendered both weights side by side with Chromium (Playwright) at the
+  same size/color/position and cropped a zoomed comparison — confirmed the normal-weight
+  version is visibly thinner/lighter than the bold one, not just theoretically different.
+  `node build-core.js` → round-trip OK. `user/sw.js` `CACHE` bumped to `v267` (the v266
+  bump alone wasn't enough since this is a follow-up fix to content already baked into that
+  same cached `index.html` build).
+- **Deferred**: the ✓ characters embedded directly inside toast/success-popup MESSAGE TEXT
+  (e.g. "Login successful ✓") still inherit that text's own bold weight, since `toast()`/
+  `showSuccessPopup()` use `.textContent` (not `.innerHTML`) — deliberately not changed to
+  `.innerHTML` to avoid opening an XSS surface on `toast()`, which is called from ~dozens of
+  places across the file including with server-supplied `r.message` strings. The standalone
+  circular icon badges (the dominant, most visually prominent tick in both of the owner's
+  screenshots) are what actually got fixed; the small inline sentence-punctuation ✓ was left
+  alone as a reasonable, deliberately scoped tradeoff.
+
+---
+
 ## 2026-08-18 — Claude — Checkmark unified to the literal ✓ (U+2713) everywhere; success messages reworded
 
 Owner: "your tick is very different from that, so replace very well, even on claimed tab
