@@ -79,7 +79,23 @@ async function ensureIndexes() {
     ['withdrawals',     { userId: 1, createdAt: -1 }],
     ['withdrawals',     { status: 1, createdAt: 1 }],
     ['investments',     { status: 1, createdAt: 1 }],
+    // Codex-verified real gap (2026-08-17): reconcileCommissions() queries
+    // where('commissionPending','==',true).orderBy('createdAt','asc') --
+    // the single-field { commissionPending: 1 } index below can serve the
+    // equality half but not the sort, so Mongo would have to sort matches
+    // in memory once the pending set is large. The compound index lets it
+    // use the index for both halves at once.
+    ['investments',     { commissionPending: 1, createdAt: 1 }],
     ['investments',     { commissionPending: 1 }],
+    // Codex-verified real bug (2026-08-17): /admin/user/detail and
+    // /admin/transactions/list's userId branch both added an orderBy() to
+    // an existing where('userId',...).limit() query without the matching
+    // compound index -- same unindexed-sort risk as the block above.
+    ['investments',     { userId: 1, createdAt: -1 }],
+    // Codex-verified real bug (2026-08-17): /admin/promocodes/list now also
+    // queries where('active','==',true) to keep an old-but-active code from
+    // aging out of the admin panel's newest-300 view.
+    ['promoCodes',      { active: 1 }],
   ];
   // ONE AT A TIME — M0's free tier has very little real concurrency headroom.
   // Firing all of these at once (Promise.all/allSettled) queued many simultaneous

@@ -14,6 +14,189 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-17 — Claude — Codex fresh full-codebase review (round 3): 2 genuine money-safety races, several admin display-truncation/correctness bugs, all fixed
+
+Owner asked Codex for a fresh full-codebase review, not a diff re-check
+against a prior fix commit -- explicitly told to read `CLAUDE.md` +
+`AGENT_LOG.md` first so it wouldn't re-flag the ~20 prior rounds' worth of
+already-triaged findings, and to focus on code added since the last full
+audit plus anything genuinely under-reviewed (`admin-src/index.html`,
+`db.js`, test coverage gaps). Every finding verified against the real code
+before anything was touched, same discipline as every prior round.
+
+**High-severity, fixed:**
+
+1. **Real race: deleting a member could still let a concurrent deposit/
+   withdrawal for that same account vanish without a trace.** The existing
+   "unsettled activity" check in `/admin/user/delete` only ever ran ONCE, at
+   the very top of the route -- a deposit created by that account a moment
+   later (still valid at that exact instant) could be wiped by the delete
+   route's own cleanup before MarzPay's async collection call or webhook
+   ever resolved, with no local record left for anything to reconcile
+   against. Fixed with a new `_userBeingDeleted` Set (server.js, same
+   in-process-Set-as-lock idiom already used everywhere else in this file
+   for this exact class of problem) -- set for the ENTIRE span of a
+   deletion, checked near the top of `/deposit/marzpay` and
+   `/withdraw/request`, which now refuse to create a new money-moving
+   record for an account currently being deleted.
+2. **Real race: deleting a member who was, at that exact moment, being
+   claimed as someone else's referrer could leave a permanently orphaned
+   `referredBy`.** `completeRegistrationCore`'s referrer lookup and its
+   later write of `referredBy` are separated by several `await`s (code
+   generation, settings read) that all yield -- an admin deletion of that
+   referrer landing in that window used to complete untouched by any lock
+   the registration held, since deletion shared no lock with registration
+   at all. The deleted account's downline-reparent query only sees whoever
+   already had `referredBy` pointing at it AT THAT MOMENT, so a
+   registration whose write lands afterward would permanently point at a
+   ghost document -- `creditReferralCommission()` silently abandons
+   commission for a missing referrer forever, and no reconciler repairs a
+   dangling `referredBy`. Fixed with a new `referrer-guard:<id>` lock
+   (keyed by the account being claimed/deleted, not the registrant) shared
+   by `completeRegistrationCore`, `/admin/user/attach-referrer`, and
+   `/admin/user/delete`'s downline-reparent-and-delete section --
+   whichever side acquires it first fully completes before the other can
+   even start. Both registration paths also RE-VERIFY the referrer still
+   exists (and isn't banned) once the lock is actually held, since time has
+   passed since the original lookup; falling back to "no referrer" instead
+   of a dangling reference is the correct failure direction, same as an
+   outright bad/missing code is already handled.
+3. **`/admin/users/recount` ("Recalculate totals") could silently corrupt
+   real money-history fields once the platform's data volume exceeds its
+   internal scan caps** (200,000 transactions/investments, 10,000 users).
+   Past any of those caps, the totals/team-counts get built from a
+   TRUNCATED ledger and this route then WRITES those wrong numbers over
+   every user's real history -- e.g. a user whose actual deposits fall
+   outside the fetched window gets `totalDeposited` zeroed out, not just
+   left stale. Fixed by refusing to write anything at all if any scan hit
+   its cap, returning an error explaining the tool can't handle the current
+   volume instead. Not currently reachable in this test suite (see
+   "Not covered" below).
+4. **`/admin/deposits/list` and `/admin/withdrawals/list`'s newest-5000
+   display window could hide a genuinely still-unresolved row** (a pending
+   deposit/withdrawal an admin still needs to force-credit, investigate, or
+   approve/reject) once total historical volume passed that cap -- with no
+   way left in the admin panel to ever find and act on it. Both routes now
+   also fetch every row still in an unresolved status (bounded generously,
+   never realistically near that bound for a status that should self-drain
+   within minutes) and merge it into the display list, deduped by id.
+
+**Medium-severity, fixed:**
+
+5. **`/admin/user/detail` and `/admin/transactions/list`'s userId branch
+   both did `.limit(N)` with no `.orderBy()` first** -- for a member with
+   more investments/transactions than the cap, the newest one wasn't
+   guaranteed to be among the ones Mongo's natural order actually returned.
+   Added `.orderBy('createdAt', 'desc')` before the limit in both places
+   (the exact same limit-before-sort bug class this project has fixed
+   several times before), plus the matching compound indexes in `db.js`
+   (`investments: {userId:1, createdAt:-1}` -- `transactions` already had
+   one from an earlier round).
+6. **The new gift-code quick-access input silently blocked valid codes.**
+   `maxlength="5"` rejected the still-supported legacy `XXX-XXXX-XXXX`
+   format (server-side max is 32, and `test-giftcode-format-security.js`
+   explicitly requires old-format codes to keep redeeming), and
+   `autocapitalize="characters"` uppercased manually-typed input on mobile
+   even though redemption is deliberately case-sensitive and generated
+   codes contain lowercase letters -- a real code like `fsT63` typed by
+   hand would arrive as `FST63` and be rejected. Fixed: `maxlength="32"`,
+   `autocapitalize="off"`.
+7. **`/admin/promocodes/list`'s newest-300 window could hide an older but
+   still-ACTIVE (redeemable) gift code** with no way left to find and
+   deactivate it -- a real money-control gap, not just a display one. Same
+   merge-in-unresolved-rows treatment as deposits/withdrawals above,
+   scoped to `active === true`, plus a new `promoCodes: {active:1}` index.
+8. **`/admin/admins/deactivate|reactivate|reset-password` silently
+   "succeeded" against a username that doesn't exist.** `db.js`'s
+   `DocumentReference.update()` doesn't check MongoDB's `matchedCount`,
+   unlike real Firestore (which rejects an update on a missing document) --
+   two admins acting on the same staff account (one deletes it, the
+   other's stale request lands after) used to report success and write an
+   audit-log entry for a change that never actually happened. Fixed with a
+   targeted existence check in these three routes rather than changing
+   `db.js`'s global `update()` semantics (several other routes in this
+   codebase deliberately rely on a lenient best-effort update against a
+   record that might already be gone -- e.g.
+   `finalizeWithdrawalTransactionRecord` -- so a blanket semantic change
+   there was judged higher-risk than fixing it at the three call sites that
+   actually need 404-on-missing).
+
+**Low-severity, fixed:**
+
+9. **The Security PIN sheet's status check had no `authEpoch` guard** --
+   on a shared device, a delayed `/account/payout-pin/status` response
+   could open the PIN sheet over the NEXT signed-in user's session if the
+   first user signed out while it was in flight, same class of bug this
+   project's `authEpoch` mechanism already closes everywhere else. Added
+   the same epoch-capture-and-recheck pattern `renderHome()` and several
+   other functions already use.
+10. **The announcement dialog wasn't part of `closeAllSheets()`** (it
+    isn't a real stacked sheet -- see its own comment -- so it was never
+    included when that function was written). On a shared device it could
+    survive a sign-out untouched, staying visible over the login screen
+    with body scroll still locked for the next person. Added it.
+11. **A failed auto-login (via Chrome autofill) never let a SECOND
+    autofilled credential retry automatically** -- `tried` only reset when
+    switching screens (`goLogin` click), not on a failed login attempt, so
+    Chrome offering a different saved password after a wrong guess needed
+    a manual tap instead of auto-submitting, contradicting the feature's
+    own point. Now also resets on a failed login.
+12. **Admin panel's `_tabBusy` was a single shared Boolean**, so one
+    operation finishing could silently un-suppress live refresh while a
+    DIFFERENT overlapping operation (an upload and a settings save fired
+    close together) was still mid-flight -- the next tick could rebuild
+    the tab out from under the still-pending second operation. Switched to
+    a real counter (`_tabBusyCount`), including the separate SW-reload
+    script at the bottom of the file, which read the old flag directly.
+13. **`/admin/payments/sync` (the manual "Sync MarzPay" button) was the
+    one state-changing admin action with no audit-log entry** -- an
+    incident review couldn't tell which staff member manually triggered a
+    settlement sweep. Added `logAdminAction`.
+
+**Worth a second look, fixed:** `reconcileCommissions()` queries
+`where('commissionPending','==',true).orderBy('createdAt','asc')`, but the
+matching index only ever covered the equality half (`{commissionPending:
+1}`) -- Mongo would have to sort matches in memory once the pending set is
+large, which on Atlas M0 can hit the 32MB in-memory sort limit and throw
+outright, not just run slow. Added the compound index
+(`{commissionPending: 1, createdAt: 1}`).
+
+**Not fixed this round, documented as a genuine architectural gap** (same
+treatment this project already gives `reconcileCashback()`'s poll-
+everything-active shape): several OTHER admin dashboards --
+`/admin/users`, `/admin/stats`, `/admin/integrity`, `/admin/analytics`,
+and `recomputeTeamCounts()` (which runs automatically after every account
+deletion) -- are ALSO capped at 10,000 users / 200,000 ledger rows and
+would silently under-report/under-repair past that volume, the same class
+of issue fixed for `/admin/users/recount` above (item 3). A real fix needs
+genuine pagination/aggregation across all of them, not a bigger number --
+a broader rewrite than this pass, flagged here for a dedicated future
+round rather than rushed through as a side effect of this one.
+
+- **Verification**: new `test-codex-round3-fixes.js` (28/28) --
+  proves items 1 and 2 with genuine concurrency (`Promise.all` over real
+  `fetch()` calls, this test suite's own established technique, plus a
+  small real delay on the Firebase-mock's `deleteUser()` step so the race
+  reliably lands both ways instead of one side structurally always
+  winning in the mock's synchronous-microtask world); proves items 4, 5,
+  and 7 at real scale (seeds past the actual 5000/300/50/100-row caps,
+  not just the logic in isolation); proves items 8 and 13 directly over
+  HTTP. Items 3's truncation-refusal guard is a single boundary
+  comparison verified by reading the code -- reproducing the literal
+  200,000/10,000-row caps in a unit test was judged prohibitively
+  expensive to seed for what the check itself is, same reasoning already
+  applied to `test-reconciler-caps.js`'s own scale limits. Items 6, 9-12
+  are client-only (`user-src/original_module.js`, `admin-src/index.html`)
+  with no HTTP-only test-harness coverage, verified by direct code-reading
+  against the exact bug scenario, same documented practice as every other
+  client-only fix this project has made. Full `test-*.js` suite green,
+  69/69 (68 existing + the new file). Rebuilt both `user/` and `admin/`
+  (`node build-core.js` / `node build-admin.js`, both round-trip OK).
+  Bumped `user/sw.js` cache `v256` → `v257`.
+- **Left open**: the broader admin-dashboard pagination gap documented
+  above; real end-to-end device/browser check (standing gap, unchanged
+  this round).
+
 ## 2026-08-17 — Claude — Real Telegram logo + SIM-card icon replace inline SVGs (announcement dialog, Support screen, Withdrawal Account)
 
 - **What changed**: `ICONS.telegram` and `ICONS.lock`

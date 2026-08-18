@@ -309,6 +309,12 @@ function closeSheet(name){
 function closeAllSheets(){
   while (_sheetStack.length) hideSheet(_sheetStack[_sheetStack.length - 1]);
   if ($('assistPanel').classList.contains('show')) hideAssistant();
+  // Codex-verified real bug: the announcement dialog isn't part of
+  // _sheetStack (it's a dismissible notice, not a page -- see
+  // maybeShowAnnouncement()'s own comment), so it survived a sign-out
+  // untouched, leaving it visible over the login screen and body scroll
+  // still locked for the next person on a shared device.
+  if ($('announceBg').classList.contains('show')) hideAnnouncement();
 }
 window.addEventListener('popstate', function(){
   var top = _sheetStack[_sheetStack.length - 1];
@@ -413,6 +419,11 @@ $('loginBtn').onclick = async function(){
     await window.fbSignIn(phoneToEmail(phone), pass);
   } catch (e) {
     setBtnLoading($('loginBtn'), false);
+    // Codex-verified real bug: a failed auto-login (triggered by autofill,
+    // see the IIFE below) never let a SECOND autofilled credential retry
+    // automatically -- Chrome offering another saved password after a wrong
+    // guess would silently need a manual tap instead.
+    if (window._resetAutoLoginTried) window._resetAutoLoginTried();
     return showAuthErr('loginErr', 'Incorrect phone number or password.');
   }
   setBtnLoading($('loginBtn'), false);
@@ -450,6 +461,7 @@ $('loginBtn').onclick = async function(){
   // another auto-login try -- e.g. Chrome offering a DIFFERENT saved
   // credential after the first guess was wrong.
   $('goLogin').addEventListener('click', function(){ tried = false; });
+  window._resetAutoLoginTried = function(){ tried = false; };
 })();
 
 $('registerBtn').onclick = async function(){
@@ -1459,7 +1471,7 @@ async function openGiftCodeSheet(){
   var sett = STATE.settings || (await api('/public/settings')).settings || {};
   var html = '<div class="sheet-title">Gift Code</div>' +
     '<div class="card giftcode-card">' +
-      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" maxlength="5" placeholder="Enter gift code" autocapitalize="characters" autocomplete="off"></div>' +
+      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" maxlength="32" placeholder="Enter gift code" autocapitalize="off" autocomplete="off"></div>' +
       '<button class="btn btn-primary" id="giftCodeBtn" style="width:100%;margin-top:12px">Redeem</button>' +
     '</div>' +
     '<div style="text-align:center;font-size:12.5px;color:var(--ink-dim);margin-top:16px;padding:0 8px">' +
@@ -1691,7 +1703,13 @@ async function renderPayoutSheet(){
   });
 }
 async function openPinSheet(){
+  // Codex-verified real bug: on a shared device, a delayed status response
+  // could open this sheet over the NEXT signed-in user's session if the
+  // FIRST user signed out while it was in flight. See renderHome()'s
+  // authEpoch comment.
+  var epoch = STATE.authEpoch;
   var status = await api('/account/payout-pin/status', null, 'GET');
+  if (epoch !== STATE.authEpoch) return;
   var has = status.status === 'success' && status.hasPayoutPin;
   openSheet('generic',
     '<div class="sheet-title">Security PIN</div>' +

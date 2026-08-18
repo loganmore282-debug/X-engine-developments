@@ -2458,6 +2458,25 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    BOTH 2026-08-17 AGENT_LOG.md entries ("Codex full-codebase audit" and "Codex
    re-verification of the audit-fix commit") before re-auditing this codebase from
    scratch — most of what a fresh audit would find has already been triaged.
+0b. **Codex fresh full-codebase review, round 3 — DONE as of 2026-08-17.** Two
+   genuine money-safety races fixed (deletion racing a concurrent deposit/
+   withdrawal for the same account; deletion racing a registration claiming
+   that same account as a referrer, into a permanently orphaned `referredBy`
+   — both closed with new in-process locks, `_userBeingDeleted` and
+   `referrer-guard:<id>`), plus several admin-panel display-truncation bugs
+   (deposits/withdrawals/promo-codes lists could hide a genuinely unresolved/
+   active row past their display cap; `/admin/user/detail` and
+   `/admin/transactions/list` sorted after truncating instead of before) and
+   a real data-corruption risk in "Recalculate totals" (now refuses to write
+   partial totals if its scan is truncated, instead of silently zeroing real
+   history). Also flagged, NOT fixed — a genuine architectural gap, not a
+   containable bug: `/admin/users`, `/admin/stats`, `/admin/integrity`,
+   `/admin/analytics`, and `recomputeTeamCounts()` are ALSO capped at
+   10,000 users / 200,000 ledger rows and would silently under-report/
+   under-repair past that volume — needs real pagination/aggregation, a
+   bigger lift than this pass. `test-codex-round3-fixes.js` 28/28; full
+   suite 69/69. Read the 2026-08-17 AGENT_LOG.md entry ("Codex fresh
+   full-codebase review (round 3)") before re-auditing from scratch.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

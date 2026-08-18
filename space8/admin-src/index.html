@@ -462,15 +462,24 @@ let _live=true, _liveTimer=null;
 // explicit flag lets an upload (or any other operation vulnerable the
 // same way) suppress the tick directly, rather than relying on focus/
 // visibility heuristics that don't hold up across an OS-level app switch.
-let _tabBusy = false;
+// Codex-verified real bug (2026-08-17): a single shared Boolean let one
+// operation finishing silently un-suppress live refresh while a DIFFERENT
+// overlapping operation (e.g. an upload and a settings save fired close
+// together) was still mid-flight -- the next tick could then rebuild the
+// tab out from under that still-pending second operation. A counter tracks
+// every concurrently in-flight withTabBusy() call instead, so live refresh
+// stays suppressed until ALL of them have settled, not just the first one.
+let _tabBusyCount = 0;
 function withTabBusy(promise) {
-  _tabBusy = true;
+  _tabBusyCount++;
+  let done = false;
+  const finish = () => { if (done) return; done = true; _tabBusyCount = Math.max(0, _tabBusyCount - 1); };
   // Safety valve: .finally() only fires once the promise actually settles,
   // so a genuinely hung request (no response, connection never drops) would
-  // otherwise leave _tabBusy true -- and live refresh suppressed -- forever,
+  // otherwise leave this operation's count contribution stuck forever,
   // until the admin reloads the page. This bounds the worst case instead.
-  const safety = setTimeout(() => { _tabBusy = false; }, 45000);
-  return Promise.resolve(promise).finally(() => { clearTimeout(safety); _tabBusy = false; });
+  const safety = setTimeout(finish, 45000);
+  return Promise.resolve(promise).finally(() => { clearTimeout(safety); finish(); });
 }
 const LIVE_TABS=new Set(['dashboard','analytics','users','deposits','withdrawals','products','banners','promocodes','transactions','referrals','settings','admins','auditlog']);
 // The list-style tabs (Users, Deposits, Withdrawals, Transactions,
@@ -495,7 +504,7 @@ function contentHasFocus(){
 function liveTick(){
   if(document.hidden) return;
   refreshBadges().catch(()=>{});
-  if(!_live || modalOpen() || contentHasFocus() || _tabBusy || !LIVE_TABS.has(_tab)) return;
+  if(!_live || modalOpen() || contentHasFocus() || _tabBusyCount > 0 || !LIVE_TABS.has(_tab)) return;
   const tab = _tab;
   const scrollY = window.scrollY;
   Promise.resolve((RENDERERS[tab]||(()=>{}))()).then(()=>{
@@ -1808,7 +1817,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if (_swReloading) return;
     (function tryReload(){
-      if (typeof _tabBusy !== 'undefined' && _tabBusy) { setTimeout(tryReload, 500); return; }
+      if (typeof _tabBusyCount !== 'undefined' && _tabBusyCount > 0) { setTimeout(tryReload, 500); return; }
       _swReloading = true;
       location.reload();
     })();

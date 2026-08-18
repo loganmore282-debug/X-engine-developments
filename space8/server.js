@@ -653,6 +653,19 @@ function withLock(key, fn) {
   return run;
 }
 
+// Codex-verified real race (2026-08-17): /admin/user/delete only checked for
+// unsettled deposits/withdrawals ONCE, at the very top of the route -- a
+// deposit created by that same (still valid at that moment) account a
+// moment later could still be wiped by the delete route's own cleanup
+// before MarzPay's async collection call or webhook ever resolves, with no
+// local record left for anything to reconcile against. Set for the entire
+// span of an account deletion; /deposit/marzpay and /withdraw/request both
+// check it near the top of their own handlers and refuse to create new
+// money-moving records for an account currently being deleted, closing the
+// window down to the same "in-process Set as a single-writer lock" idiom
+// already used everywhere else in this file for this exact class of race.
+const _userBeingDeleted = new Set();
+
 async function verifyAuth(req) {
   const header = req.headers.authorization || '';
   if (!header.startsWith('Bearer ')) return null;
@@ -1868,33 +1881,59 @@ async function completeRegistrationCore(userId, referralCode) {
     const [myRefCode, myPublicId] = await Promise.all([generateUniqueReferralCode(userId), nextSequentialPublicId()]);
     const sett = await getSettings();
     const WELCOME = Number(sett.welcomeBonus) || 0;
-    const update = { registrationDone: true, referralCode: myRefCode, publicId: myPublicId, walletBalance: FieldValue.increment(WELCOME) };
-    if (referrerId) update.referredBy = referrerId;
-    // The user's own doc (registrationDone + the actual wallet credit) is
-    // written FIRST, in one atomic single-document update. If the process
-    // dies right after this, the user is already fully and correctly paid
-    // and marked done — a retried call hits the registrationDone guard above
-    // and stops immediately rather than re-running anything below. This is
-    // also why the referrer/L2/L3 team-count increments moved to AFTER this
-    // line (they used to run before it): those are separate per-document
-    // writes with no cross-document transaction on M0, so if they ran first
-    // and the process crashed before registrationDone got set, a retry would
-    // re-run and increment every one of them a second time -- inflating team
-    // size on every crash-retry. Running them after means a crash here can
-    // only under-count (registrationDone already true, so a retry is a safe
-    // no-op that never re-runs this block at all), never over-count.
-    await userRef.update(update);
-    if (referrerId) {
-      await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
-      const l1Snap = await db.collection('users').doc(referrerId).get();
-      const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
-      if (l2Id && l2Id !== referrerId) {
-        await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
-        const l2Snap = await db.collection('users').doc(l2Id).get();
-        const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
-        if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+    const commit = async () => {
+      // Codex-verified real race: time has passed since the referrer lookup
+      // above (the two awaits just above this both yield) -- re-verify the
+      // referrer is still real and not banned now that the guard lock below
+      // is held, in case an admin deletion completed in the interim.
+      // Falling back to "no referrer" here is the correct failure direction
+      // (matches how a bad/missing code is already handled above) -- this
+      // must never let a new member end up pointing at a ghost account.
+      if (referrerId) {
+        const refCheck = await db.collection('users').doc(referrerId).get();
+        if (!refCheck.exists || refCheck.data().status === 'banned') referrerId = null;
       }
-    }
+      const update = { registrationDone: true, referralCode: myRefCode, publicId: myPublicId, walletBalance: FieldValue.increment(WELCOME) };
+      if (referrerId) update.referredBy = referrerId;
+      // The user's own doc (registrationDone + the actual wallet credit) is
+      // written FIRST, in one atomic single-document update. If the process
+      // dies right after this, the user is already fully and correctly paid
+      // and marked done — a retried call hits the registrationDone guard above
+      // and stops immediately rather than re-running anything below. This is
+      // also why the referrer/L2/L3 team-count increments moved to AFTER this
+      // line (they used to run before it): those are separate per-document
+      // writes with no cross-document transaction on M0, so if they ran first
+      // and the process crashed before registrationDone got set, a retry would
+      // re-run and increment every one of them a second time -- inflating team
+      // size on every crash-retry. Running them after means a crash here can
+      // only under-count (registrationDone already true, so a retry is a safe
+      // no-op that never re-runs this block at all), never over-count.
+      await userRef.update(update);
+      if (referrerId) {
+        await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+        const l1Snap = await db.collection('users').doc(referrerId).get();
+        const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
+        if (l2Id && l2Id !== referrerId) {
+          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+          const l2Snap = await db.collection('users').doc(l2Id).get();
+          const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
+          if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+        }
+      }
+    };
+    // Codex-verified real race (2026-08-17): writing referredBy here shared
+    // no lock with /admin/user/delete's own downline-reparent-and-delete
+    // flow -- an admin could delete the chosen referrer in the gap between
+    // this function validating the referral code above and actually
+    // writing referredBy below, leaving a permanently orphaned reference
+    // (creditReferralCommission silently abandons commission for a missing
+    // referrer forever, and no reconciler repairs a dangling referredBy).
+    // Keyed by the REFERRER's id (not the registrant's) so it lines up with
+    // the SAME lock /admin/user/delete now holds while deleting that
+    // account -- whichever side gets the lock first fully completes before
+    // the other can even start.
+    if (referrerId) await withLock('referrer-guard:' + referrerId, commit);
+    else await commit();
     if (WELCOME > 0) {
       const { date, time } = nowStr();
       await db.collection('transactions').add({
@@ -2275,6 +2314,9 @@ app.post('/deposit/marzpay', async (req, res) => {
     const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    // See _userBeingDeleted's own comment -- an admin deletion in progress
+    // for this exact account must not gain a new, un-trackable deposit.
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
 
     // Every request reaching here counts as a deposit attempt, INCLUDING
     // ones about to be soft-rate-limited by the debounce right below --
@@ -2573,6 +2615,10 @@ app.post('/withdraw/request', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
   if (_witRequestInFlight.has(userId))
     return res.status(429).json({ status: 'error', message: 'A withdrawal is already being processed. Please wait a moment.' });
+  // See _userBeingDeleted's own comment -- an admin deletion in progress
+  // for this exact account must not gain a new, un-trackable withdrawal.
+  if (_userBeingDeleted.has(userId))
+    return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
   _witRequestInFlight.add(userId);
   try {
   const amt = parseInt(req.body.amount, 10);
@@ -3572,10 +3618,19 @@ app.post('/admin/admins/create', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Codex-verified real gap (2026-08-17): db.js's update() doesn't check
+// Mongo's matchedCount, so it silently "succeeds" against a username that
+// doesn't (or no longer) exists -- unlike real Firestore, which rejects an
+// update on a missing document. Two admins acting on the same staff account
+// (one deletes it, the other's stale request lands after) used to report
+// success and log an audit event for a change that never actually happened.
+// Each of these three routes now checks existence itself first.
 app.post('/admin/admins/deactivate', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const username = String(req.body.username || '').trim().toLowerCase();
   try {
+    const existing = await db.collection('adminUsers').doc(username).get();
+    if (!existing.exists) return res.status(404).json({ status: 'error', message: 'No admin account with that username' });
     await db.collection('adminUsers').doc(username).update({ active: false });
     await invalidateSessionsFor(username);
     logAdminAction(req, 'admin_deactivated', { username });
@@ -3586,6 +3641,8 @@ app.post('/admin/admins/reactivate', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const username = String(req.body.username || '').trim().toLowerCase();
   try {
+    const existing = await db.collection('adminUsers').doc(username).get();
+    if (!existing.exists) return res.status(404).json({ status: 'error', message: 'No admin account with that username' });
     await db.collection('adminUsers').doc(username).update({ active: true });
     logAdminAction(req, 'admin_reactivated', { username });
     res.json({ status: 'success' });
@@ -3597,6 +3654,8 @@ app.post('/admin/admins/reset-password', async (req, res) => {
   const password = String(req.body.password || '');
   if (password.length < 8) return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters' });
   try {
+    const existing = await db.collection('adminUsers').doc(username).get();
+    if (!existing.exists) return res.status(404).json({ status: 'error', message: 'No admin account with that username' });
     await db.collection('adminUsers').doc(username).update({ passwordHash: scryptHash(password) });
     await invalidateSessionsFor(username);
     logAdminAction(req, 'admin_password_reset', { username });
@@ -3972,6 +4031,18 @@ app.get('/admin/users/recount', async (req, res) => {
       investedByUser[inv.userId] = (investedByUser[inv.userId] || 0) + finiteMoney(inv.amount);
     });
     const usersSnap = await db.collection('users').limit(10000).get();
+    // Codex-verified real bug (2026-08-17): every scan above is bounded --
+    // if the platform ever grows past any of these caps, the totals/team
+    // counts below are silently built from a TRUNCATED ledger, and this
+    // route then WRITES those wrong numbers over every user's real history
+    // (e.g. a user whose actual deposits fall outside the fetched window
+    // gets totalDeposited zeroed out, not just left stale). Refuse to write
+    // anything at all if any scan hit its cap -- telling the admin this
+    // tool can't handle the current data volume is a far safer failure than
+    // silently corrupting real money-history fields.
+    if (txSnap.size >= 200000 || invSnap.size >= 200000 || usersSnap.size >= 10000) {
+      return res.status(400).json({ status: 'error', message: 'This tool cannot scan the full dataset safely at the current volume (hit its internal limit) -- refusing to write partial totals. Contact a developer to raise the limit or add pagination before running this again.' });
+    }
     const referredByMap = {}; // userId -> their own referredBy
     usersSnap.forEach(d => { referredByMap[d.id] = d.data().referredBy || null; });
     const teamCounts = {}; // userId -> { l1, l2, l3 }
@@ -4156,15 +4227,21 @@ app.post('/admin/user/detail', async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
+    // Codex-verified real bug (2026-08-17): limit()-before-sort means Mongo's
+    // natural (insertion) order decides which 50 rows are even fetched --
+    // for a member with 51+ investments or transactions, the newest one
+    // isn't guaranteed to be among them, so this could show a stale list
+    // missing their most recent deposit/purchase/refund. orderBy() first
+    // makes Mongo do the sort BEFORE truncating to the limit.
     const [snap, invSnap, txSnap, bankSnap] = await Promise.all([
       db.collection('users').doc(userId).get(),
-      db.collection('investments').where('userId', '==', userId).limit(50).get(),
-      db.collection('transactions').where('userId', '==', userId).limit(50).get(),
+      db.collection('investments').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(50).get(),
+      db.collection('transactions').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(50).get(),
       db.collection('bankAccounts').where('userId', '==', userId).get(),
     ]);
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    const investments = invSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
-    const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
+    const investments = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const bankAccounts = bankSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     // The PIN is a one-way scrypt hash of a 4-digit value on purpose -- it
     // can't be "shown" to admin, only reset (see /admin/user/reset-payout-pin
@@ -4460,16 +4537,30 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
         hops++;
       }
 
-      await userRef.update({ referredBy: referrerId });
-      await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
-      const l1Snap = await db.collection('users').doc(referrerId).get();
-      const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
-      if (l2Id && l2Id !== referrerId) {
-        await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
-        const l2Snap = await db.collection('users').doc(l2Id).get();
-        const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
-        if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
-      }
+      // Codex-verified real race (2026-08-17): same class as
+      // completeRegistrationCore's own referrer-guard fix -- writing
+      // referredBy here shared no lock with /admin/user/delete's downline-
+      // reparent-and-delete flow, so a deletion of `referrerId` could land
+      // in the gap between the checks above and this write, leaving a
+      // permanently orphaned reference. Keyed by the referrer's id so it
+      // lines up with the same lock deletion holds.
+      const referrerStillValid = await withLock('referrer-guard:' + referrerId, async () => {
+        const refCheck = await db.collection('users').doc(referrerId).get();
+        if (!refCheck.exists || refCheck.data().status === 'banned') return false;
+        await userRef.update({ referredBy: referrerId });
+        await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+        const l1Snap = await db.collection('users').doc(referrerId).get();
+        const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
+        if (l2Id && l2Id !== referrerId) {
+          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+          const l2Snap = await db.collection('users').doc(l2Id).get();
+          const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
+          if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+        }
+        return true;
+      });
+      if (!referrerStillValid)
+        return { code: 400, body: { status: 'error', code: 'BAD_REFERRAL', message: 'That referral code is no longer active.' } };
 
       let commissionTriggered = false;
       const firstInvSnap = await db.collection('investments').where('userId', '==', userId).where('isFirstInvestment', '==', true).limit(1).get();
@@ -4564,103 +4655,129 @@ app.post('/admin/user/delete', async (req, res) => {
     const uSnap = await db.collection('users').doc(userId).get();
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = uSnap.data();
-    // Codex-verified real bug (2026-08-17): deleting a member with a
-    // deposit still in flight at the payment gateway (status 'pending'/
-    // 'initiating') or a withdrawal not yet resolved ('pending'/'sending'/
-    // 'processing') used to just wipe those records outright -- if MarzPay
-    // settles that payment AFTER the local record is gone, there's no
-    // trace of it anywhere, and for a withdrawal specifically the wallet
-    // debit already happened at request time with nothing left to show
-    // for it. Block deletion until an admin resolves those first (declines
-    // the withdrawal, or lets the deposit finish/fail) -- the same
-    // "unsettled activity" gate other risky admin actions in this codebase
-    // already apply.
-    const [pendingDepSnap, pendingWitSnap] = await Promise.all([
-      db.collection('pendingDeposits').where('userId', '==', userId).where('status', 'in', ['pending', 'initiating']).limit(1).get(),
-      db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['pending', 'sending', 'processing']).limit(1).get(),
-    ]);
-    if (!pendingDepSnap.empty || !pendingWitSnap.empty)
-      return res.status(400).json({ status: 'error', message: 'This member has a deposit or withdrawal still in progress. Resolve it first, then delete the account.' });
-    // Codex-verified real bug: Firebase auth deletion failure was silently
-    // swallowed (console.warn only) AFTER the Mongo profile was already
-    // gone -- a surviving Firebase account then logging in again would hit
-    // the ghost-account self-heal (see /register's missing-doc self-heal)
-    // and silently CREATE A BRAND NEW profile, effectively un-deleting the
-    // account without the admin ever knowing. Firebase deletion now runs
-    // FIRST: if it genuinely fails (not just "already didn't exist" --
-    // auth/user-not-found is treated as success, since that just means a
-    // previous attempt already got this far), nothing in Mongo is touched
-    // at all, so a failure here always leaves a fully consistent state
-    // instead of an orphaned Firebase account.
+    // See _userBeingDeleted's own comment (near withLock) -- set for the
+    // ENTIRE span of this deletion, before the unsettled-activity check
+    // even runs, so a deposit/withdrawal request that arrives partway
+    // through can never create a new record this deletion won't see.
+    _userBeingDeleted.add(userId);
     try {
-      await admin.auth().deleteUser(userId);
-    } catch (fbErr) {
-      if (fbErr.code !== 'auth/user-not-found')
-        return res.status(500).json({ status: 'error', message: 'Could not delete the Firebase login for this account -- nothing was deleted. ' + fbErr.message });
-    }
-    // Codex-verified real bug: the deleted member's own DOWNLINE (anyone
-    // whose referredBy pointed at them) was left pointing at a now-deleted
-    // document -- every future chain walk for those members (commission
-    // crediting, team counts) would just find "referrer doesn't exist" and
-    // silently stop, permanently losing L2/L3 attribution up through the
-    // deleted account for everyone below them. Splice them onto the
-    // deleted member's OWN referrer instead, preserving the rest of the
-    // tree's shape.
-    let treeRepairFailed = false;
-    try {
-      const downlineSnap = await db.collection('users').where('referredBy', '==', userId).get();
-      for (const d of downlineSnap.docs) {
-        await d.ref.update({ referredBy: u.referredBy || null });
+      // Codex-verified real bug (2026-08-17): deleting a member with a
+      // deposit still in flight at the payment gateway (status 'pending'/
+      // 'initiating') or a withdrawal not yet resolved ('pending'/'sending'/
+      // 'processing') used to just wipe those records outright -- if MarzPay
+      // settles that payment AFTER the local record is gone, there's no
+      // trace of it anywhere, and for a withdrawal specifically the wallet
+      // debit already happened at request time with nothing left to show
+      // for it. Block deletion until an admin resolves those first (declines
+      // the withdrawal, or lets the deposit finish/fail) -- the same
+      // "unsettled activity" gate other risky admin actions in this codebase
+      // already apply.
+      const [pendingDepSnap, pendingWitSnap] = await Promise.all([
+        db.collection('pendingDeposits').where('userId', '==', userId).where('status', 'in', ['pending', 'initiating']).limit(1).get(),
+        db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['pending', 'sending', 'processing']).limit(1).get(),
+      ]);
+      if (!pendingDepSnap.empty || !pendingWitSnap.empty)
+        return res.status(400).json({ status: 'error', message: 'This member has a deposit or withdrawal still in progress. Resolve it first, then delete the account.' });
+      // Codex-verified real bug: Firebase auth deletion failure was silently
+      // swallowed (console.warn only) AFTER the Mongo profile was already
+      // gone -- a surviving Firebase account then logging in again would hit
+      // the ghost-account self-heal (see /register's missing-doc self-heal)
+      // and silently CREATE A BRAND NEW profile, effectively un-deleting the
+      // account without the admin ever knowing. Firebase deletion now runs
+      // FIRST: if it genuinely fails (not just "already didn't exist" --
+      // auth/user-not-found is treated as success, since that just means a
+      // previous attempt already got this far), nothing in Mongo is touched
+      // at all, so a failure here always leaves a fully consistent state
+      // instead of an orphaned Firebase account.
+      try {
+        await admin.auth().deleteUser(userId);
+      } catch (fbErr) {
+        if (fbErr.code !== 'auth/user-not-found')
+          return res.status(500).json({ status: 'error', message: 'Could not delete the Firebase login for this account -- nothing was deleted. ' + fbErr.message });
       }
-    } catch (chainErr) {
-      console.error('delete: downline reparent:', chainErr.message);
-      treeRepairFailed = true;
+      let treeRepairFailed = false;
+      const removed = { transactions: 0, investments: 0, withdrawals: 0, deposits: 0, bankAccounts: 0 };
+      // Codex-verified real bug (2026-08-17): the downline reparent below
+      // (and the delete itself) shared NO lock with completeRegistrationCore
+      // / /admin/user/attach-referrer, both of which can be mid-flight,
+      // ALREADY past the point where they looked this account up as a valid
+      // referrer, but not yet past the point where they actually write
+      // referredBy onto the new member's own doc -- a registration landing
+      // in that exact window would permanently point at a now-deleted
+      // account, with commission for that member's first purchase silently
+      // abandoned forever (creditReferralCommission skips a missing
+      // referrer and clears commissionPending regardless). Both
+      // registration paths now hold this SAME 'referrer-guard:'+id lock
+      // (keyed by the account being claimed AS a referrer) while writing
+      // referredBy, so a deletion in progress here and a registration
+      // claiming this same account as referrer can never interleave --
+      // whichever gets the lock first fully completes before the other one
+      // can even start.
+      await withLock('referrer-guard:' + userId, async () => {
+        // Codex-verified real bug: the deleted member's own DOWNLINE (anyone
+        // whose referredBy pointed at them) was left pointing at a now-deleted
+        // document -- every future chain walk for those members (commission
+        // crediting, team counts) would just find "referrer doesn't exist" and
+        // silently stop, permanently losing L2/L3 attribution up through the
+        // deleted account for everyone below them. Splice them onto the
+        // deleted member's OWN referrer instead, preserving the rest of the
+        // tree's shape.
+        try {
+          const downlineSnap = await db.collection('users').where('referredBy', '==', userId).get();
+          for (const d of downlineSnap.docs) {
+            await d.ref.update({ referredBy: u.referredBy || null });
+          }
+        } catch (chainErr) {
+          console.error('delete: downline reparent:', chainErr.message);
+          treeRepairFailed = true;
+        }
+        const wipe = async (coll, field = 'userId') => {
+          const snap = await db.collection(coll).where(field, '==', userId).get();
+          let n = 0;
+          for (const d of snap.docs) { try { await d.ref.delete(); n++; } catch (_) {} }
+          return n;
+        };
+        removed.transactions  = await wipe('transactions');
+        removed.investments   = await wipe('investments');
+        removed.withdrawals   = await wipe('withdrawals');
+        removed.deposits      = await wipe('pendingDeposits');
+        removed.bankAccounts  = await wipe('bankAccounts');
+        await db.collection('users').doc(userId).delete();
+      });
+      // Codex-verified real bug (2026-08-17): the old fix here only ever
+      // decremented the deleted member's OWN referrer's teamL1Count by 1, as
+      // if the whole subtree had simply vanished -- it never accounted for
+      // the reparented downline now sitting ONE LEVEL CLOSER to every
+      // ancestor above the deleted member (an old L2 becomes a new L1, an
+      // old L3 becomes a new L2, etc.). Concretely, for A -> B -> C -> D with
+      // B deleted: the old code left A at L1=0/L2=1/L3=1 when the true
+      // post-delete state (A -> C -> D) is L1=1/L2=1/L3=0. No incremental
+      // math can safely track an arbitrary-depth/width subtree shifting up a
+      // level, so this recomputes every user's counts from the actual
+      // (already-repaired) referredBy chain instead of trying to patch
+      // deltas. Deliberately run AFTER the deleted user's own doc is gone
+      // (test-verified real ordering bug caught while adding coverage for
+      // this fix, 2026-08-17): running it earlier, while B's own doc still
+      // existed with referredBy still pointing at A, double-counted A's L1 --
+      // once for B (about to be deleted) and once for C (freshly reparented
+      // onto A) -- overcounting by exactly the width of the deleted member's
+      // own immediate downline.
+      try {
+        await recomputeTeamCounts();
+      } catch (chainErr) {
+        console.error('delete: team-count recompute:', chainErr.message);
+        treeRepairFailed = true;
+      }
+      logAdminAction(req, 'user_deleted', { userId, removed, treeRepairFailed });
+      res.json({
+        status: 'success', removed, treeRepairFailed,
+        message: treeRepairFailed
+          ? 'Account and all its data deleted, but the referral-tree/team-count repair failed partway through -- run "Recalculate totals" from Users to fix any affected counts.'
+          : 'Account and all its data deleted',
+      });
+    } finally {
+      _userBeingDeleted.delete(userId);
     }
-    const wipe = async (coll, field = 'userId') => {
-      const snap = await db.collection(coll).where(field, '==', userId).get();
-      let n = 0;
-      for (const d of snap.docs) { try { await d.ref.delete(); n++; } catch (_) {} }
-      return n;
-    };
-    const removed = {
-      transactions:  await wipe('transactions'),
-      investments:   await wipe('investments'),
-      withdrawals:   await wipe('withdrawals'),
-      deposits:      await wipe('pendingDeposits'),
-      bankAccounts:  await wipe('bankAccounts'),
-    };
-    await db.collection('users').doc(userId).delete();
-    // Codex-verified real bug (2026-08-17): the old fix here only ever
-    // decremented the deleted member's OWN referrer's teamL1Count by 1, as
-    // if the whole subtree had simply vanished -- it never accounted for
-    // the reparented downline now sitting ONE LEVEL CLOSER to every
-    // ancestor above the deleted member (an old L2 becomes a new L1, an
-    // old L3 becomes a new L2, etc.). Concretely, for A -> B -> C -> D with
-    // B deleted: the old code left A at L1=0/L2=1/L3=1 when the true
-    // post-delete state (A -> C -> D) is L1=1/L2=1/L3=0. No incremental
-    // math can safely track an arbitrary-depth/width subtree shifting up a
-    // level, so this recomputes every user's counts from the actual
-    // (already-repaired) referredBy chain instead of trying to patch
-    // deltas. Deliberately run AFTER the deleted user's own doc is gone
-    // (test-verified real ordering bug caught while adding coverage for
-    // this fix, 2026-08-17): running it earlier, while B's own doc still
-    // existed with referredBy still pointing at A, double-counted A's L1 --
-    // once for B (about to be deleted) and once for C (freshly reparented
-    // onto A) -- overcounting by exactly the width of the deleted member's
-    // own immediate downline.
-    try {
-      await recomputeTeamCounts();
-    } catch (chainErr) {
-      console.error('delete: team-count recompute:', chainErr.message);
-      treeRepairFailed = true;
-    }
-    logAdminAction(req, 'user_deleted', { userId, removed, treeRepairFailed });
-    res.json({
-      status: 'success', removed, treeRepairFailed,
-      message: treeRepairFailed
-        ? 'Account and all its data deleted, but the referral-tree/team-count repair failed partway through -- run "Recalculate totals" from Users to fix any affected counts.'
-        : 'Account and all its data deleted',
-    });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -4672,13 +4789,24 @@ app.post('/admin/user/delete', async (req, res) => {
 app.post('/admin/deposits/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [snap, usersSnap] = await Promise.all([
+    const [snap, unresolvedSnap, usersSnap] = await Promise.all([
       db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(5000).get(),
+      // Codex-verified real bug (2026-08-17): the newest-5000 window above
+      // can silently hide an older deposit that's still genuinely
+      // unresolved once total volume passes it -- there would be no way
+      // left for an admin to ever find and force-credit/investigate it.
+      // Fetched separately (bounded generously, never realistically near
+      // this cap for a status that should self-drain within minutes) and
+      // merged in below so an unresolved row can never age out of view.
+      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).limit(5000).get(),
       db.collection('users').get(),
     ]);
     const phones = {}; usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
     const counts = {};
-    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const byId = new Map();
+    snap.docs.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
+    unresolvedSnap.docs.forEach(d => { if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() }); });
+    const rows = Array.from(byId.values());
     const dayMap = {};
     rows.forEach(r => {
       r.accountPhone = phones[r.userId] || '';
@@ -4751,13 +4879,20 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
 app.post('/admin/withdrawals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [snap, usersSnap] = await Promise.all([
+    const [snap, unresolvedSnap, usersSnap] = await Promise.all([
       db.collection('withdrawals').orderBy('createdAt', 'desc').limit(5000).get(),
+      // See /admin/deposits/list's matching comment -- an old, still-
+      // unresolved withdrawal is exactly the kind of row an admin needs to
+      // find and approve/reject; it must never age out of this list.
+      db.collection('withdrawals').where('status', 'in', ['pending', 'sending', 'processing']).limit(5000).get(),
       db.collection('users').get(),
     ]);
     const phones = {}; usersSnap.forEach(u => { phones[u.id] = u.data().phone || ''; });
     const counts = {};
-    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const byId = new Map();
+    snap.docs.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
+    unresolvedSnap.docs.forEach(d => { if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() }); });
+    const rows = Array.from(byId.values());
     const dayMap = {};
     rows.forEach(w => {
       w.accountPhone = phones[w.userId] || '';
@@ -4841,9 +4976,11 @@ app.post('/admin/transactions/list', async (req, res) => {
       return res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
     }
     if (userId) {
-      const snap = await db.collection('transactions').where('userId', '==', userId).limit(100).get();
-      const txs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tsMillis(b.createdAt) - tsMillis(a.createdAt));
-      return res.json({ status: 'success', transactions: txs });
+      // Codex-verified real bug (2026-08-17): same limit-before-sort gap as
+      // /admin/user/detail -- for a member with 101+ transactions, the
+      // newest one wasn't guaranteed to be among the fetched 100.
+      const snap = await db.collection('transactions').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get();
+      return res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
     }
     const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(Number(lim) || 300).get();
     res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
@@ -4940,8 +5077,20 @@ app.post('/admin/promocodes/generate', async (req, res) => {
 app.get('/admin/promocodes/list', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('promoCodes').orderBy('createdAt', 'desc').limit(300).get();
-    res.json({ status: 'success', codes: snap.docs.map(d => ({ id: d.id, ...d.data(), usedCount: (d.data().usedBy || []).length })) });
+    const [snap, activeSnap] = await Promise.all([
+      db.collection('promoCodes').orderBy('createdAt', 'desc').limit(300).get(),
+      // Codex-verified real bug (2026-08-17): an older code that's still
+      // ACTIVE (and therefore still redeemable) could age out of the
+      // newest-300 window with no way left to find and deactivate it from
+      // the admin panel -- a real money-control gap, not just a display
+      // one. Merged in below so a still-active code can never disappear.
+      db.collection('promoCodes').where('active', '==', true).limit(5000).get(),
+    ]);
+    const toRow = d => ({ id: d.id, ...d.data(), usedCount: (d.data().usedBy || []).length });
+    const byId = new Map();
+    snap.docs.forEach(d => byId.set(d.id, toRow(d)));
+    activeSnap.docs.forEach(d => { if (!byId.has(d.id)) byId.set(d.id, toRow(d)); });
+    res.json({ status: 'success', codes: Array.from(byId.values()) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/promocodes/deactivate', async (req, res) => {
@@ -5506,6 +5655,11 @@ app.get('/admin/payments/sync', async (req, res) => {
   try {
     const depositsSettled = await reconcilePendingDeposits();
     const withdrawalsSettled = await reconcilePendingWithdrawals();
+    // Codex-verified real gap: this can settle deposits/withdrawals just
+    // like the automatic background sweep, but unlike every other
+    // state-mutating admin action had no audit trail -- an incident review
+    // couldn't tell which staff member manually triggered a sync.
+    logAdminAction(req, 'payments_synced', { depositsSettled: depositsSettled || 0, withdrawalsSettled: withdrawalsSettled || 0 });
     res.json({ status: 'success', settled: (depositsSettled || 0) + (withdrawalsSettled || 0),
       depositsSettled: depositsSettled || 0, withdrawalsSettled: withdrawalsSettled || 0 });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
