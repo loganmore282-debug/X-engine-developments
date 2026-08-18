@@ -688,7 +688,10 @@
 //   3. The navigation fetch itself didn't bypass the HTTP cache. It does now.
 // Also: the Add Funds quick-amount chips now include 350,000 / 500,000 /
 // 800,000, wrapping onto a second row.
-const CACHE = 'space8-shell-v263';
+// v264: new app icon (satellite-in-orbit mark, Codex-designed) — same
+// filenames (icon-192/512.png etc.) so bumped to force phones to actually
+// re-fetch the new bytes instead of serving the old cached figure-eight.
+const CACHE = 'space8-shell-v264';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 

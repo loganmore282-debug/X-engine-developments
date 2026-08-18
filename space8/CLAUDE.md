@@ -2660,6 +2660,21 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    the 2026-08-18 AGENT_LOG.md entry ("ChatGPT review of the notifications/
    gift-code-expiry commit") for detail. `server.js` needs a Railway
    redeploy for the lock fix to take effect.
+0h. **New app icon: satellite-in-orbit mark — DONE.** Owner: "let ask codex to make
+   new app icon." Replaced the old blue figure-eight/infinity loop with a
+   satellite-on-a-tilted-orbit-ring mark, single color `#2e6bff`, no gradients —
+   designed by Codex via an external prompt (same pattern as the ChatGPT review
+   rounds: drafted the prompt, owner ran it, pasted back SVG). Regenerated
+   `icon-192/512.png`, `icon-maskable-192/512.png`, `favicon.png` in both `user/`
+   and `admin/` (always shipped identical); SVG source at `design/app-icon.svg`.
+   `user/sw.js` `CACHE` bumped to `v264` since the filenames didn't change — without
+   the bump, installed PWAs would keep the old cached icon under the same name
+   indefinitely. Verified the mark clears Android's maskable safe-zone crop with
+   real margin (~171px farthest point vs. a 205px safe radius at 512×512); it does
+   blur into a blob at 32px favicon size, left as-is since that's a minor
+   browser-tab asset, not the home-screen icon. No `server.js` change, no
+   Railway redeploy needed — Render auto-deploys `user/`/`admin/` on push. See the
+   2026-08-18 AGENT_LOG.md entry ("New app icon: satellite-in-orbit mark").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

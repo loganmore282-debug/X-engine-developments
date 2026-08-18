@@ -14,6 +14,42 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — New app icon: satellite-in-orbit mark, designed by Codex
+
+Owner: "let ask codex to make new app icon." No direct Codex integration in this session, so
+followed the same pattern used for the recent ChatGPT reviews: drafted a precise prompt
+(brand color `#2e6bff`, single-color monochrome mark, SVG source, legible down to favicon
+size, safe-zone padding for Android's maskable-icon crop) for the owner to paste into Codex
+themselves, then took the SVG they pasted back and turned it into the shipped asset.
+
+- **What changed**: Replaced the old icon (a plain blue figure-eight/infinity loop) with a
+  satellite-in-orbit mark — a tilted ring with a satellite body + two solar panels + antenna
+  sitting on it, all `#2e6bff`, single color, no gradients. Regenerated the full icon set
+  from the SVG at every size the manifests reference: `icon-192.png`, `icon-512.png`,
+  `icon-maskable-192.png`, `icon-maskable-512.png`, `favicon.png` — in BOTH `user/` and
+  `admin/` (they've always shipped identical icon art, kept that). SVG source saved to
+  `design/app-icon.svg` for future edits. Bumped `user/sw.js`'s `CACHE` to `v264` — the
+  filenames didn't change, so without a cache bump installed PWAs would keep serving the old
+  cached bytes under the same names indefinitely. Ran `build-core.js`/`build-admin.js`
+  afterward (round-trip OK on both) even though neither `user-src/index.html` nor
+  `admin-src/index.html` changed — icons are static files copied as-is, not part of the
+  obfuscated bundle, so this was just the standard "safe to run regardless" step; it does
+  reproduce a harmless single-line diff each run since the obfuscator re-seeds its variable
+  names every invocation, unrelated to this change.
+- **Verification**: Rendered the SVG at 512px (clean, reads clearly as an orbiting satellite),
+  at 32px favicon size (degrades to a blurred ring — acceptable, since favicons are a minor
+  browser-tab asset, not the home-screen icon that actually matters), and simulated the
+  maskable safe-zone circular crop numerically (farthest point of the stroked ring from
+  center is ~171px vs. a 205px safe-zone radius at 512×512 — clears with real margin, nothing
+  gets clipped when Android masks it into a circle/squircle/whatever shape). No test suite
+  run — this is a static-asset change only, no `server.js`/logic touched.
+- **Deferred**: the 32px favicon reads a bit blob-like since the ring + panels are fine
+  detail at that size; a separate bolder favicon-only variant (thicker stroke, bigger body)
+  would fix it if the owner ever cares, not built since it wasn't asked for and the favicon
+  is cosmetically minor.
+
+---
+
 ## 2026-08-18 — Claude — ChatGPT review of the notifications/gift-code-expiry commit: 2 Low findings, both real, both fixed
 
 Owner: "let us ask chatgpt to review those last 2 commits" (the withdrawal-hours commit
