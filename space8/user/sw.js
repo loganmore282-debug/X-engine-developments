@@ -777,7 +777,9 @@
 // v286: Live-refresh loop sped up from every 12s to every 2s and now also
 // covers Team (referrals/rewards), not just Home/Products -- balance,
 // investments, and team stats all update without a page reload.
-const CACHE = 'space8-shell-v286';
+// v287: Withdrawal History now shows "Received: UGX X" (net, after the fee)
+// right under the gross amount, instead of only the pre-fee amount.
+const CACHE = 'space8-shell-v287';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

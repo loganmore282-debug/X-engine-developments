@@ -14,6 +14,37 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Withdrawal History shows net "Received" amount, not just the gross request
+
+Owner, with a screenshot: "l want you to put amount received, so that was
+before charges,you need to put amount received after charges,so put
+'Received:.........,just after the amount withdrawn" — example given:
+"UGX 30000 / Received:UGX25500".
+
+- `openHistorySheet('withdrawal')` (`user-src/original_module.js`,
+  ~line 1349): each row now adds a `Received: <ugx(x.net)>` line right under
+  the gross `ugx(x.amount)` line, withdrawal rows only (deposit history is
+  unaffected -- there's no fee to net out on a deposit). `net` is already
+  stored on every withdrawal record at request time in `server.js`
+  (`const net = amt - fee;`, `/withdraw/request`), so this reflects the fee
+  % that was ACTUALLY charged on that specific withdrawal, not today's live
+  `withdrawFeePct` -- same "sum/read the real historical value, never
+  recompute from current settings" principle already applied to
+  teamRewards/teamRewardsPaid earlier this session. Falls back to showing
+  nothing extra if `net` is ever missing on an old/corrupt record, rather
+  than printing "Received: undefined".
+- **Verification**: `node build-core.js` → round-trip OK. Extracted the
+  real row-building logic + the real CSS from `user-src/index.html` and
+  rendered it in actual Chromium against the owner's own example numbers
+  (UGX 30,000 → Received: UGX 25,500, i.e. the live 15% fee) plus two more
+  cases -- screenshot confirms the two-line stack reads cleanly against the
+  blue card background, doesn't crowd the status pill. Full `test-*.js`
+  suite green (client-only change, server.js untouched -- `net` was already
+  being stored and returned by `/withdrawals`, just never shown). Bumped
+  `user/sw.js` `CACHE` to `space8-shell-v287`. No `server.js` changes, no
+  Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Live-refresh loop sped up 6x and extended to Team
 
 Owner: "l also upgrade realtime update of all website loaded data,it should

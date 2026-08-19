@@ -2983,6 +2983,16 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    through every money-crediting path in `server.js` plus a reconnect story
    around hourly Firebase ID-token expiry; a real next step if the owner
    wants it, not attempted this round.
+0x. **Withdrawal History shows net "Received" amount — DONE.** Each
+   withdrawal row (`user-src/original_module.js`, `openHistorySheet`) now
+   shows `Received: UGX <net>` right under the gross requested amount --
+   `net` was already stored per-record at request time in `server.js`
+   (`amount - fee`), just never surfaced on this screen. Deposit History is
+   unaffected (no fee to net out there). Reads the record's own stored
+   `net`, never recomputes from today's `withdrawFeePct`, so a historical
+   withdrawal made under a different fee % still shows what it actually
+   paid out. `user/sw.js` `CACHE` bumped to `v287`. No `server.js` changes,
+   no Railway redeploy needed.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

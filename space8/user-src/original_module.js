@@ -1349,7 +1349,17 @@ function openHistorySheet(kind){
     body.innerHTML = items.map(function(x){
       var s = String(x.status || '').toLowerCase();
       var pillClass = STATUS_DONE.indexOf(s) !== -1 ? 'pill-done' : STATUS_FAIL.indexOf(s) !== -1 ? 'pill-fail' : 'pill-active';
+      // Owner: the amount shown was the gross request, before the withdrawal
+      // fee -- add what actually lands with the member right underneath it.
+      // `net` (= amount - fee) is stored on the withdrawal record itself at
+      // request time (see server.js's /withdraw/request), so this always
+      // reflects the fee % that was ACTUALLY charged on that withdrawal, not
+      // today's live rate -- same "sum the ledger, not a recomputed rate"
+      // principle as teamRewards/teamRewardsPaid.
+      var receivedLine = (kind === 'withdrawal' && x.net != null)
+        ? '<div class="date mono">Received: ' + ugx(x.net) + '</div>' : '';
       return '<div class="member-row record-row"><div class="info"><div class="phone mono">' + ugx(x.amount) + '</div>' +
+      receivedLine +
       '<div class="date">' + esc(x.date) + ' ' + esc(x.time) + (x.ref ? '<br>Ref: ' + esc(x.ref) : '') + '</div></div>' +
       '<span class="pill ' + pillClass + '">' + friendlyStatus(x.status) + '</span></div>';
     }).join('') + listEndFooter();
