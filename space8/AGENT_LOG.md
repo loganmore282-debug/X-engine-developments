@@ -14,6 +14,42 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Glow-sweep on purchase buttons + gift box; fixed slow Security-PIN tap
+
+Owner: "add a thin glow sweep on purchase buttons, thin and runs a bit fast, just like on
+chocomcc... when one taps on security pin it takes long to respond, why... add that glow
+sweep on the gift box just minimal amounts."
+
+- **Glow sweep on purchase buttons** (`user-src/index.html` CSS + `original_module.js`):
+  new `.btn-sweep` class — a thin (~12% wide) diagonal white light band that sweeps across
+  the button (~1s) then rests (~1.4s) and repeats, via a `::after` gradient + `@keyframes
+  btnSweep` translateX. Opt-in, applied only to the two purchase buttons (`.invest-btn` on
+  product cards and `#confirmInvestBtn` in the invest sheet) — deposit/withdraw/etc. stay
+  plain. Suppressed on disabled / "Coming Soon" buttons (`.btn-sweep[disabled]::after{
+  display:none }`) since a shine on a greyed button looks broken.
+- **Glow sweep on the gift box** (`.gift-fab`): same idea but deliberately minimal — fainter
+  (opacity .32 vs the button's .55), thinner band, and much less frequent (5s cycle with a
+  long rest). `mix-blend-mode:screen` keeps the shine on the box's lit pixels and nearly
+  invisible over its transparent corners. Moved the drop-shadow from the `<img>` to the
+  `.gift-fab` container so `overflow:hidden` can clip the sweep to the box without also
+  clipping the shadow.
+- **Slow Security-PIN tap** (`openPinSheet`): root cause — it `await`ed the
+  `/account/payout-pin/status` call BEFORE opening the sheet, so on a cold Render backend
+  (with api()'s own cold-start retries on top) tapping "Security PIN" did nothing visible
+  for several seconds. Fixed: open the sheet IMMEDIATELY with a small "Checking…" spinner,
+  then fetch the status and swap in the real body (or the "no PIN" message) once it resolves.
+  Kept the existing authEpoch guard and added a guard so a late response doesn't overwrite a
+  sheet the user already closed or navigated away from. Same instant-open pattern the rest of
+  the app already uses for its skeleton loaders.
+- **Verification**: `node build-core.js` → round-trip OK. Rendered the button sweep (rest /
+  mid-sweep / exiting frames) and the gift-box sweep with Chromium against the real
+  giftbox.png — confirmed the button shine is a clean thin diagonal and the gift shine is
+  faint/minimal with negligible corner leakage. `user/sw.js` `CACHE` bumped to `v269`. No
+  `server.js` change.
+- **Deferred**: none.
+
+---
+
 ## 2026-08-18 — Claude — Checkmark, take three: SVG stroke, not Unicode char (Codex-diagnosed the real cause)
 
 Owner, after the v267 deploy: "the same" — the tick STILL looked heavy on the real phone.

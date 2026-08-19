@@ -710,7 +710,11 @@
 // thinned it on-device. Abandoned the Unicode char; back to an inline SVG
 // (.s8-check) whose stroke-width WE control (1.75/1.9/2 per size, all
 // lighter than the old 2.4) -- reliably honored on every browser.
-const CACHE = 'space8-shell-v268';
+// v269: thin fast glow-sweep (.btn-sweep) on the Purchase / Confirm &
+// Purchase buttons; a fainter, less-frequent sweep on the floating gift
+// box; and the Security PIN sheet now opens instantly (loading state)
+// instead of blocking on its status fetch first.
+const CACHE = 'space8-shell-v269';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 

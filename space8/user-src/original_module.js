@@ -1154,7 +1154,7 @@ function prodCardHtml(p){
       '<div><div class="lab">Amount</div><div class="val mono">' + ugx(p.expectedReturn) + '</div></div>' +
       '<div><div class="lab">Duration</div><div class="val">' + (p.cycle||'-') + ' days</div></div>' +
     '</div>' +
-    '<button class="btn btn-primary invest-btn" ' + (disabled?'disabled':'') + '>' + (p.comingSoon?'Coming Soon':'Purchase') + '</button>' +
+    '<button class="btn btn-primary invest-btn btn-sweep" ' + (disabled?'disabled':'') + '>' + (p.comingSoon?'Coming Soon':'Purchase') + '</button>' +
   '</div>';
 }
 
@@ -1176,7 +1176,7 @@ async function openInvestSheet(key){
       '</div>' +
     '</div>' +
     (!can ? '<div class="auth-err" style="display:block;margin-bottom:14px">Insufficient balance. You have ' + ugx(bal) + '.</div>' : '') +
-    '<button class="btn btn-primary" id="confirmInvestBtn" ' + (!can?'disabled':'') + '>Confirm & Purchase</button>' +
+    '<button class="btn btn-primary btn-sweep" id="confirmInvestBtn" ' + (!can?'disabled':'') + '>Confirm & Purchase</button>' +
     '<button class="btn btn-secondary" style="margin-top:10px" id="cancelInvestBtn">Cancel</button>'
   );
   $('cancelInvestBtn').onclick = function(){ closeSheet('invest'); };
@@ -1799,23 +1799,35 @@ async function renderPayoutSheet(){
   });
 }
 async function openPinSheet(){
-  // Codex-verified real bug: on a shared device, a delayed status response
-  // could open this sheet over the NEXT signed-in user's session if the
-  // FIRST user signed out while it was in flight. See renderHome()'s
-  // authEpoch comment.
+  // Owner: "when one taps on security pin, it takes long to respond, why".
+  // Cause: this used to `await` the payout-pin status call BEFORE opening
+  // the sheet, so on a cold Render backend (where api() also runs its own
+  // cold-start retries) the tap did nothing visible for several seconds.
+  // Fix: open the sheet IMMEDIATELY with a tiny loading line, then fetch the
+  // status and swap in the real body once it resolves -- the tap now feels
+  // instant.
   var epoch = STATE.authEpoch;
-  var status = await api('/account/payout-pin/status', null, 'GET');
-  if (epoch !== STATE.authEpoch) return;
-  var has = status.status === 'success' && status.hasPayoutPin;
   openSheet('generic',
+    '<div class="sheet-title">Security PIN</div>' +
+    '<div class="sheet-sub"><span class="spin" style="display:inline-block;width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--ink-dim);border-radius:50%;vertical-align:-3px;margin-right:7px;animation:spin .7s linear infinite"></span>Checking…</div>'
+  );
+  var status = await api('/account/payout-pin/status', null, 'GET');
+  // Codex-verified real bug: on a shared device, a delayed status response
+  // could populate this sheet over the NEXT signed-in user's session if the
+  // FIRST user signed out while it was in flight. See renderHome()'s
+  // authEpoch comment. Also bail if the user already closed the sheet, or
+  // navigated to a different generic sheet, while the status was in flight.
+  if (epoch !== STATE.authEpoch) return;
+  if (_sheetStack[_sheetStack.length - 1] !== 'generic') return;
+  var has = status.status === 'success' && status.hasPayoutPin;
+  $('genericSheet').innerHTML =
     '<div class="sheet-title">Security PIN</div>' +
     '<div class="sheet-sub">' + (has ? 'Change your 4-digit withdrawal PIN.' : 'No withdrawal PIN on this account yet — it should have been set at registration. Contact support if this looks wrong.') + '</div>' +
     (has ?
       '<div class="auth-form">' +
         '<div class="field">' + ico('shield') + '<input id="oldPin" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN" autocomplete="one-time-code"></div>' +
         '<div class="field">' + ico('shield') + '<input id="newPin" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" autocomplete="one-time-code"></div>' +
-      '</div><button class="btn btn-primary" id="changePinBtn" style="margin-top:14px">Change PIN</button>' : '')
-  );
+      '</div><button class="btn btn-primary" id="changePinBtn" style="margin-top:14px">Change PIN</button>' : '');
   var btn = $('changePinBtn');
   if (btn) btn.onclick = async function(){
     var oldPin = $('oldPin').value, newPin = $('newPin').value;
