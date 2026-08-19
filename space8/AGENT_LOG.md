@@ -14,6 +14,48 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — CORS tightened from open '*' to a real allowlist (continuing the "cement this" pass)
+
+Owner said "continue" after the audit-only pass above. Followed through on
+the one item flagged there as optional/deferred instead of leaving it
+hanging, plus swept the two other loose threads (admin-src relative
+asset paths, admin-src XSS-escaping spot check).
+
+- **CORS** (`server.js`, ~line 135): `cors({ origin: '*' })` replaced with
+  an allowlist mirroring `guard-src.js`'s own client-side `hostOk()` domain
+  lock (`space8.com`/`www`, `space8-platform.com`/`www`, any
+  `*.onrender.com` subdomain, `localhost`/`127.0.0.1`) plus a pass-through
+  for requests with no `Origin` header at all (webhooks, curl, native
+  callers — CORS is a browser-only mechanism, it was never a defense
+  against those regardless of this change). Before touching this, asked
+  the owner directly what domain the admin panel actually runs on rather
+  than guessing — a wrong allowlist here would have silently locked out
+  the ONE panel that approves withdrawals and credits deposits, too costly
+  a mistake to guess at. Owner confirmed an `.onrender.com` subdomain,
+  already covered by the wildcard. Tested the origin-check logic standalone
+  against 10 cases including two adversarial ones (a lookalike subdomain
+  `space8-platform.com.evil.com`, and a suffix-trick domain
+  `evilonrender.com` that must NOT match `.onrender.com` via a naive
+  substring check) — all passed. **This file/route stays coupled to
+  `guard-src.js`'s allowlist going forward** — adding a real new domain
+  means updating both, same as guard-src.js's own comment already says
+  about itself.
+- **admin-src relative asset paths**: swept `admin-src/index.html` for the
+  exact same relative-`src`/`fetch()`/CSS-`url()` bug class just fixed in
+  `user-src/` — zero matches, already clean.
+- **admin-src XSS-escaping spot check**: grepped for unescaped
+  `${...phone}`/`${...message}` style interpolations reaching the DOM —
+  found 4 candidates, all confirmed false positives on inspection (every
+  one is inside a native `confirm()`/`prompt()`/`alert()` dialog, not
+  `innerHTML` — native dialogs render plain text with no script execution
+  path, so escaping there would be wrong, not missing).
+- **Verification**: `node --check server.js` OK. Full `test-*.js` suite
+  green, 79/79 (no test asserts on CORS specifically, but nothing broke).
+  **This is a `server.js`-only change — needs the usual Railway/Render
+  backend redeploy to take effect, same as any other `server.js` edit.**
+  No `user-src`/`admin-src` build changes, no cache bump needed.
+- **Deferred / open**: none new.
+
 ## 2026-08-19 — Claude — Full-codebase security verification pass ("cement this" — no code changes, zero new gaps found)
 
 Owner: "we need to cement this,no faking deposits, no double claiming,

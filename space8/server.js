@@ -132,7 +132,37 @@ const bigJsonParser    = express.json({ limit: '4mb' });
 const IMAGE_BODY_ROUTES = new Set(['/admin/banners/set', '/admin/products/save', '/admin/settings/update', '/admin/banners/home-slides/add']);
 app.use((req, res, next) => (IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
-app.use(cors({ origin: '*' }));
+// Owner: "cement this... every logic should be encrypted, secured and
+// safeguarded to prevent hackers." Auth here is a Bearer token the browser
+// never attaches automatically (no cookie), so this was never a classic
+// CSRF vector -- but a wide-open '*' still lets ANY origin get CORS
+// headers back, which is unnecessary exposure once a real allowlist is
+// this cheap to maintain. Mirrors guard-src.js's own hostOk() allowlist
+// (the client-side domain lock) so the two stay in lockstep -- adding a
+// new real domain means updating BOTH files, the same coupling already
+// called out in guard-src.js's own comment. *.onrender.com is allowed
+// (matches guard-src.js's own fallback) to cover the API's own default
+// domain plus both static sites' default Render domains regardless of
+// custom-domain setup -- confirmed against the admin panel's actual live
+// origin (an onrender.com subdomain) before shipping this, not guessed.
+// Requests with no Origin header (webhooks, curl, native apps -- CORS is a
+// browser-only mechanism, never a defense against those) are allowed
+// through unconditionally; auth, not CORS, is what protects those routes.
+const CORS_ALLOWED_ORIGINS = new Set([
+  'https://space8.com', 'https://www.space8.com',
+  'https://space8-platform.com', 'https://www.space8-platform.com',
+]);
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (CORS_ALLOWED_ORIGINS.has(origin)) return cb(null, true);
+    try {
+      const h = new URL(origin).hostname.toLowerCase();
+      if (h.endsWith('.onrender.com') || h === 'localhost' || h === '127.0.0.1') return cb(null, true);
+    } catch (_) {}
+    cb(null, false);
+  }
+}));
 
 app.use((_req, res, next) => {
   res.set({
