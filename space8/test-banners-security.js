@@ -84,7 +84,14 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1
   console.log('\n-- Only whitelisted slots can be set --');
   r = await call('POST', '/admin/banners/set', { adminKey: 'test-admin-key', body: { key: 'not_a_real_slot', image: TINY_PNG } });
   check('unknown banner key rejected (400)', r.code === 400, r.body);
-  check('nothing written to the banners doc for a forged key', !banners().get('main') || !('not_a_real_slot' in (banners().get('main') || {})), banners().get('main'));
+  // Codex-verified real bug (2026-08-18): banners/main was redesigned into
+  // one document PER SLOT (see server.js's own comment on why -- the same
+  // 16MB-doc-limit fix already applied to home slides), so this check
+  // used to poke a doc ('main') nothing is EVER written to anymore under
+  // any code path -- it "passed" whether or not the block actually
+  // worked. Check the real new location instead: no per-slot doc should
+  // exist for a key that was never a valid slot.
+  check('nothing written to the banners collection for a forged key', !banners().has('not_a_real_slot'), banners().get('not_a_real_slot'));
 
   console.log('\n-- Only genuine image data-URIs are accepted --');
   r = await call('POST', '/admin/banners/set', { adminKey: 'test-admin-key', body: { key: 'barstack', image: 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==' } });
@@ -94,11 +101,31 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1
   r = await call('POST', '/admin/banners/set', { adminKey: 'test-admin-key', body: { key: 'barstack', image: 'javascript:alert(1)' } });
   check('javascript: URI payload rejected', r.code === 400, r.body);
 
+  console.log('\n-- Codex-verified real gap, fixed: a real prefix + injected CSS suffix is rejected, not just the prefix --');
+  // The OLD check only matched "^data:image/png;base64," with no `$`
+  // anchor, so a genuine-looking value could carry arbitrary text after
+  // the real base64 payload. bcardBg()/identityBannerHtml()
+  // (user-src/original_module.js) interpolate a banner value into an
+  // inline style="...url('ESCAPED')" attribute inside an HTML string
+  // later assigned via .innerHTML -- and esc() escaping the quote to
+  // &#39; is NOT a defense there, because .innerHTML's own parser decodes
+  // that entity back into a literal ' as it builds the attribute's final
+  // value, and THAT decoded value is what the browser's CSS engine then
+  // parses. Confirmed live with a Playwright render: this exact payload
+  // shape closed the url('...') early and landed background:red as a
+  // real second CSS declaration on the element.
+  r = await call('POST', '/admin/banners/set', { adminKey: 'test-admin-key', body: { key: 'barstack', image: "data:image/png;base64,AAAA');background:red;/*" } });
+  check('a real base64 prefix followed by injected CSS is rejected, not just prefix-matched', r.code === 400, r.body);
+  r = await call('POST', '/admin/banners/set', { adminKey: 'test-admin-key', body: { key: 'barstack', image: 'data:image/png;base64,AAAA<script>alert(1)</script>' } });
+  check('a real base64 prefix followed by a script tag is also rejected', r.code === 400, r.body);
+  check('neither injection attempt actually wrote anything to storage', !banners().has('barstack'), banners().get('barstack'));
+
   console.log('\n-- Oversized uploads are rejected before reaching storage --');
   const hugePayload = 'data:image/png;base64,' + 'A'.repeat(3_000_000);
   r = await call('POST', '/admin/banners/set', { adminKey: 'test-admin-key', body: { key: 'barstack', image: hugePayload } });
   check('oversized image rejected (400)', r.code === 400, r.body);
-  check('no data written for the rejected oversized upload', !banners().get('main') || !banners().get('main').barstack, banners().get('main'));
+  // Same fix as above -- check the real per-slot doc location.
+  check('no data written for the rejected oversized upload', !banners().has('barstack'), banners().get('barstack'));
 
   console.log('\n-- A legitimate upload succeeds, previews correctly, and is revertible --');
   r = await call('POST', '/admin/banners/set', { adminKey: 'test-admin-key', body: { key: 'barstack', image: TINY_PNG } });

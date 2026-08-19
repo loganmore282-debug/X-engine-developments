@@ -14,6 +14,103 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Codex review of the sweep/banner-card/check-in round: 3 Medium + 1 Low, all real, all fixed
+
+Owner: "let us ask codex to review our [recent] commits" (the glow-sweep, admin-adjustable
+sweep settings, split balance cards, gift/check-in banners, and check-in-as-a-screen work).
+Codex found 4 issues, all verified real against the actual code (one via a live Chromium
+render, two via a real-script Playwright harness with full revert-and-restore proof) before
+fixing.
+
+**1. Medium — stored CSS injection via banner data (server.js, but the vulnerable
+interpolation is client-side).** `/admin/banners/set`'s format check only matched the
+PREFIX (`^data:image/png;base64,...`) with no `$` anchor, so anything could follow the real
+base64 payload. `bcardBg()`/`identityBannerHtml()` (`user-src/original_module.js`)
+interpolate a banner value into an inline `style="...url('ESCAPED')"` attribute inside an
+HTML string later assigned via `.innerHTML` — and `esc()` escaping the quote to `&#39;` is
+NOT a defense there: `.innerHTML`'s own parser decodes that entity back into a literal `'`
+as it builds the attribute's final value, and THAT decoded value is what the browser's CSS
+engine then parses. **Confirmed live** with a Playwright render: a payload like
+`data:image/png;base64,AAAA');background:red;/*` closed the `url('...')` early and landed
+`background:red` as a real second CSS declaration (`computed background-color: rgb(255,0,0)`).
+Fixed at the one entry point rather than auditing every render site: new `DATA_IMAGE_RE`
+requires the ENTIRE string after the prefix to be valid base64 (`[A-Za-z0-9+/]+={0,2}$`),
+applied to both `/admin/banners/set` and `/admin/banners/home-slides/add`. Checked
+`announcementBg` (also admin-image data) for the same class of bug — its render path uses
+`style.setProperty()` + a CSS custom property (`var(--ann-bg-url)`), which is NOT
+exploitable this way (confirmed empirically: `var()` substitution can only ever supply a
+property VALUE, it can't inject sibling declarations) — left unchanged. Product images only
+ever render via `<img src="...">`, also not exploitable this way — left unchanged.
+
+**2. Medium — Security-PIN late-response guard didn't identify the specific sheet
+instance.** The previous round's fix (opening the PIN sheet instantly, filling in the real
+body once `/account/payout-pin/status` resolves) guarded against a stale response with
+`_sheetStack[last] !== 'generic'` — but Gift Code, Records, Check-in, and others ALL share
+that same `'generic'` slot/stack-name. Reproduction: tap Security PIN on a slow connection,
+back out, open Gift Code (or any other generic sheet) before the PIN status returns — that
+old guard still passes (top of stack is still, correctly, `'generic'`) and the late PIN
+response overwrites whatever's now on screen with the PIN form. Fixed the same way this
+codebase's own `openPlanDetailSheet`/`isPlanDetailShowing()` already solves the identical
+class of problem for its own sheet: mark this specific open with a `data-generic-sheet="pin"`
+attribute and confirm it's STILL present before writing, not just that some sheet named
+`'generic'` is open.
+
+**3. Medium — check-in's reworked claim callback had no session guard.** Moving the claim
+off the Home button into its own sheet (previous round) dropped the `authEpoch`
+capture-then-check every other STATE-mutating `await` in this file carries (see
+`renderHome()`'s own comment on why). Reproduction: member A taps Check in, signs out before
+the response returns, member B signs in on the same device — A's now-late response would
+still credit A's bonus onto B's in-memory `STATE.account`, flip B's checkin button to
+"Claimed", and toast B with A's streak. `doCheckin` now captures `epoch = STATE.authEpoch`
+before the request and bails before touching STATE/DOM/toast if it changed — the same
+idiom used in ~10 other places in this file. The server's own `withLock('checkin:'+uid)`
+already prevented an actual double *credit*; this closes the separate client-side
+*display/leak* race Codex found.
+
+**4. Low — the banners/main document could exceed MongoDB's 16MB limit.** Same failure
+shape already fixed once for Home slides, now reachable again: adding the split-balance-
+card/gift-code/check-in slots brought the total to 24 single-image slots, each up to
+~2.8MB — just 6 near-max uploads (well within 24 available slots) already exceeds 16MB, at
+which point EVERY future banner upload fails (the whole document write fails, not just the
+new field). Redesigned the same way as Home slides: one document PER SLOT (collection
+`banners`, doc id = the slot key) instead of one document with every slot as a field.
+`getBannerOverrides()`/`/admin/banners/set`/`/admin/banners/clear` all read/write by slot
+key now, keeping the exact same external `{key: dataUri}` shape every caller already
+expects — nothing downstream changed. New `backfillBannerDocs()`, mirroring
+`backfillReferralCodeLower()`'s exact one-time-boot idiom, additively migrates any
+pre-existing `banners/main` data into the new shape (never deletes the old doc, so there's
+no window where an already-configured banner could appear to vanish).
+
+**Verification:**
+- Finding 1: `test-banners-security.js` extended with 2 new checks (a real-prefix-plus-
+  injected-CSS payload and a real-prefix-plus-script-tag payload, both now rejected, and
+  neither writes anything to storage) — reverted `DATA_IMAGE_RE` to the old lenient regex,
+  confirmed both new checks correctly FAIL, restored the fix, confirmed 30/30 green.
+- Finding 2: no HTTP test possible (pure client JS) — built a real-script Playwright
+  harness (loads the actual unobfuscated `original_module.js` via `<script src>`, not a
+  reimplementation) reproducing the exact race: open PIN sheet, back out, open Gift Code,
+  resolve the delayed PIN status. With the fix: Gift Code survives (`sheetTitle: 'Gift
+  Code'`, `pinFormLeakedIn: false`). Reverted to the old stack-name-only guard: confirmed
+  the SAME harness now shows the PIN form clobbering Gift Code (`sheetTitle: 'Security
+  PIN'`, `pinFormLeakedIn: true`). Restored the fix, confirmed clean again.
+- Finding 3: same real-script Playwright approach — member B's `STATE.account` (wallet
+  50, earned 20) stays untouched when member A's delayed +500 bonus response resolves
+  after an epoch change, with the fix. Reverted the epoch guard: confirmed the SAME test
+  now shows A's bonus landing on B's account (`walletBalance: 550`, `totalEarned: 520`,
+  `lastCheckin` set) — a genuine, empirically-reproduced account-data leak. Restored the
+  fix, confirmed clean again.
+- Finding 4: new `test-banner-doc-backfill.js` (8/8) — seeds an old-format `banners/main`
+  doc BEFORE `require('./server.js')` (same idiom as `test-referral-code-backfill.js`),
+  proves both slots get migrated into their own docs, are visible through the real
+  `/public/banners` and `/admin/banners` endpoints, a never-configured slot isn't invented,
+  and the old doc is left untouched (additive, not destructive).
+- Full `test-*.js` suite green (including the 2 new/extended files). `node build-core.js` +
+  `node build-admin.js` → both round-trip OK. `user/sw.js` `CACHE` bumped to `v273`.
+- **server.js changed (DATA_IMAGE_RE, banner storage redesign, backfillBannerDocs) →
+  Railway needs a redeploy.**
+
+---
+
 ## 2026-08-18 — Claude — Check-in is now its own screen (banner + reward + button + rules)
 
 Owner picked "Make it a screen" for the check-in flow (follow-up to the banner round above).

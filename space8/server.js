@@ -302,15 +302,58 @@ async function getProductByKey(key) {
 // slots the owner has actually replaced are ever returned to clients — an
 // unset slot means "keep showing the app's own baked-in default image",
 // never an empty/broken src.
+//
+// Codex-verified real bug (2026-08-18): this used to be ONE document
+// (banners/main) with every slot as a field on it, near-identical to the
+// exact shape already fixed for Home slides (see that redesign's own
+// comment below) for the exact same reason -- BANNER_MAX_LEN allows
+// ~2.8MB per image, and adding the split-balance-card/gift-code/check-in
+// slots brought the slot count to 24, so just 6 near-max uploads across
+// those 24 slots (~16.8MB) already exceeds MongoDB's 16MB per-document
+// limit, at which point EVERY future upload fails with a generic "Could
+// not save this banner" (the whole doc write fails, not just the new
+// field). Redesigned the same way: one document PER SLOT (collection
+// 'banners', doc id = the slot key), so each document only ever holds ONE
+// image, nowhere near that limit regardless of how many slots exist.
+// getBannerOverrides()/set/clear below all read/write by slot key now,
+// keeping the exact same external shape ({key: dataUri}) every caller
+// already expects, so nothing downstream had to change. backfillBannerDocs()
+// (below) migrates any pre-existing banners/main data into this new shape
+// on boot, additively -- it never deletes the old doc, so there's no
+// window where an already-configured banner could appear to vanish.
 let _bannersCache = null, _bannersCacheTs = 0;
 async function getBannerOverrides() {
   if (Date.now() - _bannersCacheTs < 60 * 1000 && _bannersCache) return _bannersCache;
   try {
-    const snap = await db.collection('banners').doc('main').get();
-    _bannersCache = snap.exists ? snap.data() : {};
+    const keys = [...BANNER_KEYS];
+    const snaps = await Promise.all(keys.map(k => db.collection('banners').doc(k).get()));
+    const out = {};
+    keys.forEach((k, i) => { if (snaps[i].exists && snaps[i].data().image) out[k] = snaps[i].data().image; });
+    _bannersCache = out;
   } catch (_) { _bannersCache = _bannersCache || {}; }
   _bannersCacheTs = Date.now();
   return _bannersCache;
+}
+// One-time boot migration, additive only (never deletes/touches the old
+// doc) -- see getBannerOverrides()'s own comment for why this exists.
+// Mirrors backfillReferralCodeLower()'s exact idiom (fire-and-forget at
+// boot, logs only if it actually did something). Skips any slot that
+// already has a new-format doc, so it's also safe to run more than once.
+async function backfillBannerDocs() {
+  try {
+    const snap = await db.collection('banners').doc('main').get();
+    if (!snap.exists) return;
+    const old = snap.data() || {};
+    let migrated = 0;
+    for (const key of BANNER_KEYS) {
+      if (!old[key]) continue;
+      const existing = await db.collection('banners').doc(key).get();
+      if (existing.exists) continue;
+      await db.collection('banners').doc(key).set({ image: old[key] });
+      migrated++;
+    }
+    if (migrated) console.log(`banner doc backfill: migrated ${migrated} legacy banner(s) to one-doc-per-slot`);
+  } catch (e) { console.warn('banner doc backfill warning:', e.message); }
 }
 // Home-screen auto-cycling banner slides -- own COLLECTION, one document
 // PER SLIDE (own id, own doc), own cache. See MAX_HOME_SLIDES's comment
@@ -485,6 +528,26 @@ const BANNER_KEYS = new Set([
 // slowing down every client's /public/banners fetch. ~2MB of actual image
 // bytes, accounting for base64's ~37% overhead.
 const BANNER_MAX_LEN = 2_800_000;
+// Codex-verified real bug (2026-08-18): the old check only matched the
+// PREFIX ("^data:image/png;base64,...") with no `$` anchor, so anything
+// could follow the real base64 payload and still pass. Concretely, a value
+// like "data:image/png;base64,AAAA');background:red;/*" satisfied that
+// check. bcardBg()/identityBannerHtml() (original_module.js) interpolate
+// a banner value into an inline style="...url('ESCAPED')" attribute inside
+// an HTML string that's later assigned via .innerHTML — and while esc()
+// does turn a literal ' into the entity &#39;, THAT'S NOT A DEFENSE HERE:
+// .innerHTML's own HTML parser decodes entities back into literal
+// characters as it builds the final attribute VALUE, and that decoded
+// value is what the browser's CSS engine then parses. So the escaped
+// quote decodes right back to a real ' before CSS ever sees it, closing
+// the url('...') early and letting whatever follows (here: background:red)
+// land as a second, real CSS declaration on that element — confirmed live
+// with a Playwright render (computed background-color came back red).
+// Anchoring this regex so ONLY the base64 alphabet (plus optional trailing
+// = padding) can follow the prefix closes this at its one entry point,
+// for every current and future consumer of a banner value, without
+// needing to audit/fix each render site individually.
+const DATA_IMAGE_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
 // Owner: "l want them to be floating again and again... l will add other
 // banners that will slide one after the other" -- a separate, VARIABLE-
 // length list of Home-screen banner images that auto-cycle client-side
@@ -4030,12 +4093,12 @@ app.post('/admin/banners/set', async (req, res) => {
   const key = String(req.body.key || '');
   const image = String(req.body.image || '');
   if (!BANNER_KEYS.has(key)) return res.status(400).json({ status: 'error', message: 'Unknown banner slot' });
-  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(image))
+  if (!DATA_IMAGE_RE.test(image))
     return res.status(400).json({ status: 'error', message: 'Upload a PNG, JPEG, WEBP or GIF image' });
   if (image.length > BANNER_MAX_LEN)
     return res.status(400).json({ status: 'error', message: 'Image is too large, please use a smaller file (~2MB max)' });
   try {
-    await db.collection('banners').doc('main').set({ [key]: image }, { merge: true });
+    await db.collection('banners').doc(key).set({ image }, { merge: true });
     _bannersCacheTs = 0;
     logAdminAction(req, 'banner_set', { key });
     res.json({ status: 'success' });
@@ -4048,7 +4111,10 @@ app.post('/admin/banners/clear', async (req, res) => {
   const key = String(req.body.key || '');
   if (!BANNER_KEYS.has(key)) return res.status(400).json({ status: 'error', message: 'Unknown banner slot' });
   try {
-    await db.collection('banners').doc('main').update({ [key]: FieldValue.delete() });
+    // .delete() (not .update()) -- doesn't throw if this slot's doc was
+    // never created (nothing to revert), unlike .update() against a
+    // possibly-nonexistent doc under the new one-doc-per-slot storage.
+    await db.collection('banners').doc(key).delete();
     _bannersCacheTs = 0;
     logAdminAction(req, 'banner_cleared', { key });
     res.json({ status: 'success' });
@@ -4069,7 +4135,7 @@ app.get('/admin/banners/home-slides', async (req, res) => {
 app.post('/admin/banners/home-slides/add', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const image = String(req.body.image || '');
-  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(image))
+  if (!DATA_IMAGE_RE.test(image))
     return res.status(400).json({ status: 'error', message: 'Upload a PNG, JPEG, WEBP or GIF image' });
   if (image.length > BANNER_MAX_LEN)
     return res.status(400).json({ status: 'error', message: 'Image is too large, please use a smaller file (~2MB max)' });
@@ -6074,5 +6140,6 @@ connectMongo(MONGODB_URI)
     setTimeout(reconcileCashback, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     backfillReferralCodeLower(); // one-time, fire-and-forget, see its own comment
+    backfillBannerDocs(); // one-time, fire-and-forget, see its own comment
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

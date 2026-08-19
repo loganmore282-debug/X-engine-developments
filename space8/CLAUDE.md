@@ -2724,6 +2724,35 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    use an SVG. See the 2026-08-18 AGENT_LOG.md entries ("Checkmark unified to
    the literal ✓...", "Fixed the checkmark fix: it shipped bold...", and
    "Checkmark, take three: SVG stroke, not Unicode char").
+0l. **Codex review of the sweep/banner-card/check-in-screen round — DONE.** 3
+   Medium + 1 Low, all confirmed real, all fixed. **Medium: stored CSS
+   injection via banner data** — `/admin/banners/set`'s format check only
+   matched the prefix (no `$` anchor); `bcardBg()`/`identityBannerHtml()`
+   interpolate a banner value into an inline `style="url('...')"` inside HTML
+   later assigned via `.innerHTML`, and `esc()`'s quote-escaping is NOT a
+   defense there since `.innerHTML` decodes entities back to literal
+   characters before the CSS engine parses the result — confirmed live with a
+   Playwright render (a crafted payload landed a real second CSS declaration).
+   Fixed with `DATA_IMAGE_RE`, requiring the WHOLE string after the prefix to
+   be valid base64, anchored. **Medium: Security-PIN late-response guard**
+   only checked the sheet STACK NAME (`'generic'`), which Gift Code/Check-in/
+   Records all share — a slow PIN status fetch could overwrite whichever of
+   those the member opened next. Fixed the same way `isPlanDetailShowing()`
+   already solves this for its own sheet: a `data-generic-sheet="pin"` marker,
+   checked before writing. **Medium: check-in's reworked claim callback had no
+   `authEpoch` guard** — the one thing every other STATE-mutating `await` in
+   this file carries — so a delayed response after a sign-out/sign-in on a
+   shared device could credit one member's bonus onto another's live screen.
+   Both client fixes verified with a REAL-script Playwright harness (loads
+   the actual `original_module.js`, not a reimplementation) proving revert →
+   fails, restore → passes. **Low: `banners/main` could exceed MongoDB's
+   16MB limit** — 24 slots now exist; redesigned to one document per slot
+   (same fix already applied to Home slides), with `backfillBannerDocs()`
+   migrating old data additively (never deletes the legacy doc). New
+   `test-banner-doc-backfill.js` (8/8), extended `test-banners-security.js`.
+   `user/sw.js` `CACHE` bumped to `v273`. **`server.js` changed → Railway
+   needs a redeploy.** See the 2026-08-18 AGENT_LOG.md entry ("Codex review of
+   the sweep/banner-card/check-in round").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

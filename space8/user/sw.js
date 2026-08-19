@@ -725,7 +725,13 @@
 // v272: Check-in is now its own screen (banner + daily reward + Check-in
 // button + rules) opened from the Home Check-in tile, instead of a one-tap
 // Home button; uses the checkinbg banner slot.
-const CACHE = 'space8-shell-v272';
+// v273: Codex review of the sweep/banner-card/check-in-screen round found
+// and fixed 3 real bugs -- a stored CSS-injection path via banner data
+// (server-side fix, but the interpolation site is client code baked in
+// here), a Security-PIN late-response race that could overwrite an
+// unrelated open sheet, and a check-in claim race that could leak one
+// member's bonus onto another's screen on a shared device.
+const CACHE = 'space8-shell-v273';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 

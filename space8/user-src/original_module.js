@@ -1109,8 +1109,22 @@ async function openCheckinSheet(){
 async function doCheckin(btnEl){
   var btn = btnEl || $('checkinBtn');
   if (!btn || btn.disabled) return;
+  // Codex-verified real bug (2026-08-18): this rework moved the claim off
+  // the Home button into its own sheet, but dropped the authEpoch guard
+  // every other STATE-mutating await in this file carries (see
+  // renderHome()'s own comment on why). Concretely: member A taps Check
+  // in, then signs out before the response returns; member B signs in on
+  // the SAME device while it's still in flight. Without this guard, A's
+  // now-late response would still credit A's bonus onto B's in-memory
+  // STATE.account, flip B's (unrelated) checkin button to "Claimed", and
+  // toast B with A's streak -- a real account-data leak on a shared
+  // device, not just a cosmetic glitch. Captured before the request,
+  // checked after: if it changed, this response is for a session that's
+  // no longer current and must not touch STATE, the DOM, or show a toast.
+  var epoch = STATE.authEpoch;
   setBtnLoading(btn, true);
   var r = await api('/checkin', {});
+  if (epoch !== STATE.authEpoch) return;
   setBtnLoading(btn, false);
   if (r.status === 'success') {
     // Owner: "l wanted it to be claimed successfully ✓" -- keeps the
@@ -1862,18 +1876,30 @@ async function openPinSheet(){
   // status and swap in the real body once it resolves -- the tap now feels
   // instant.
   var epoch = STATE.authEpoch;
+  // Codex-verified real bug (2026-08-18): checking only
+  // _sheetStack[last] === 'generic' isn't enough -- Gift Code, Check-in,
+  // Records and others ALL share this same slot/stack-name. If the status
+  // fetch below is slow and the member backs out and opens a DIFFERENT
+  // generic sheet before it resolves, that check still passes (top of
+  // stack is still, correctly, 'generic') and this would overwrite
+  // whatever THAT sheet is now showing with the PIN form. Fixed the same
+  // way openPlanDetailSheet's isPlanDetailShowing() already does it for
+  // its own sheet: mark this specific open with a data attribute and
+  // confirm it's STILL the thing on screen before writing, not just that
+  // some sheet named 'generic' is open.
   openSheet('generic',
+    '<div data-generic-sheet="pin">' +
     '<div class="sheet-title">Security PIN</div>' +
-    '<div class="sheet-sub"><span class="spin" style="display:inline-block;width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--ink-dim);border-radius:50%;vertical-align:-3px;margin-right:7px;animation:spin .7s linear infinite"></span>Checking…</div>'
+    '<div class="sheet-sub"><span class="spin" style="display:inline-block;width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--ink-dim);border-radius:50%;vertical-align:-3px;margin-right:7px;animation:spin .7s linear infinite"></span>Checking…</div>' +
+    '</div>'
   );
   var status = await api('/account/payout-pin/status', null, 'GET');
   // Codex-verified real bug: on a shared device, a delayed status response
   // could populate this sheet over the NEXT signed-in user's session if the
   // FIRST user signed out while it was in flight. See renderHome()'s
-  // authEpoch comment. Also bail if the user already closed the sheet, or
-  // navigated to a different generic sheet, while the status was in flight.
+  // authEpoch comment.
   if (epoch !== STATE.authEpoch) return;
-  if (_sheetStack[_sheetStack.length - 1] !== 'generic') return;
+  if (!qs('[data-generic-sheet="pin"]', $('genericSheet'))) return;
   var has = status.status === 'success' && status.hasPayoutPin;
   $('genericSheet').innerHTML =
     '<div class="sheet-title">Security PIN</div>' +
