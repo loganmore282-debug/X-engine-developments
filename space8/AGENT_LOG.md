@@ -14,6 +14,43 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Corrected two misreads: count-up removed (not live-refresh), Gift Code Telegram is now a real tab
+
+Owner, angry at being misunderstood twice in a row: "it seems that you
+misunderstood me,l said remove that counter on money balances which runs
+like start from zero to current price,return it back as it was,all those 3
+cards,also l wanted a telegram tab not word 'telegram group' l said a
+tab,dont you see that tab on pico,I SAID THAT TAB,WHY TO BRING ME HEADACHE".
+
+- **What "remove that live counter" actually meant**: the count-up
+  animation on Home's 3 balance cards (Account Balance/Cumulative
+  Earnings/Total Invested), not the 2s background live-refresh polling.
+  `startLiveRefresh()` restored to its working 2s-interval implementation
+  (the previous round's no-op was wrong); the `animateCountUp(...)` calls
+  for `bamtBalance`/`bamtEarned`/`bamtInvested` in `renderHome()` are
+  removed entirely -- those 3 cards render as a plain static number again,
+  exactly as before either animation round. Team's referral code/link and
+  Account's phone/ID reveal animations are UNCHANGED (owner said "all those
+  3 cards" specifically, meaning Home's money balances -- not asked to
+  remove elsewhere).
+- **Gift Code's Telegram bit**: was still a plain sentence with "Telegram
+  group" as an inline hyperlinked word -- the owner's actual, repeatedly-
+  stated ask (referencing Pico's screenshot directly) was a real tappable
+  TAB: icon + "Official Telegram Group" label + chevron, in its own
+  bordered row. Rebuilt using the exact same `.menu-row`/`.menu-list`
+  component Account already uses for Password Management/About/Rules/
+  Support, so it looks and behaves consistently with the rest of the app.
+  Still positioned above the input (unchanged from the prior round); the
+  line-style input (no box, no icon) and the Redeem button/banner are
+  untouched.
+- **Verification**: `node build-core.js` → round-trip OK. Rendered the
+  real `openGiftCodeSheet()` output against the real CSS/icons in
+  Chromium -- banner, then the tappable Telegram tab (icon, bold label,
+  chevron, bordered row), then the plain-line input, then Redeem, in that
+  order. Full `test-*.js` suite green. Bumped `user/sw.js` `CACHE` to
+  `space8-shell-v291`. No `server.js` changes, no Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Live-refresh removed
 
 Owner: "let us remove that live counter on money,remove now,immediately,

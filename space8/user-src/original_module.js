@@ -903,15 +903,6 @@ async function renderHome(animate){
     '<div class="action-btn ' + (checkedIn?'done':'') + '" id="homeCheckinBtn"><div class="ico">' + ico(checkedIn?'check':'checkin') + '</div><span>' + (checkedIn?'Claimed':'Check In') + '</span></div>' +
   '</div>';
   $('homeBalanceActionSlot').innerHTML = balHtml;
-  // Owner: "those balances [should] start from zero then to current so it
-  // loads like that" -- replayed only when this render was flagged as a
-  // fresh arrival (a tab switch, or returning from a closed sheet -- see
-  // loadPage()/hideSheet()), never on the silent 2s live-refresh tick.
-  if (animate) {
-    animateCountUp($('bamtBalance'), acc.walletBalance);
-    animateCountUp($('bamtEarned'), acc.totalEarned);
-    animateCountUp($('bamtInvested'), acc.totalInvested);
-  }
 
   var prodHtml = '';
   products.slice(0,10).forEach(function(p){ prodHtml += prodCardHtml(p); });
@@ -1798,20 +1789,17 @@ async function redeemGiftCode(){
 // now, this sheet is its only home.
 async function openGiftCodeSheet(){
   var sett = STATE.settings || (await api('/public/settings')).settings || {};
-  // Owner: "a line not a box, remove your svg even, plus the Telegram
-  // group tab up, leave others ie redeem, and banner, don't touch" -- the
-  // Telegram line moves ABOVE the input (banner, then the Telegram note,
-  // then the code field, matching the order the owner pointed to), the
-  // input itself drops its boxed .field pill + gift icon for a plain
-  // underlined line, and the Redeem button/banner are byte-identical to
-  // before.
+  // Owner: "l wanted a telegram tab not word 'telegram group', l said a
+  // tab, dont you see that tab on pico, I SAID THAT TAB" -- a real
+  // tappable row (icon + label + chevron), same .menu-row/.menu-list
+  // component already used for Password Management/About/Rules/Support on
+  // Account, not a word inside a sentence. Positioned above the input
+  // (still a plain line, no icon -- unchanged); Redeem/banner untouched.
   var html = '<div class="sheet-title">Gift Code</div>' +
     optBannerHtml('giftcodebg') +
-    '<div style="text-align:center;font-size:12.5px;color:var(--ink-dim);margin:16px 0;padding:0 8px">' +
-      (sett.telegramGroup ?
-        'You can get gift codes from our <span id="giftTgLink" style="color:var(--blue);font-weight:700;cursor:pointer">Telegram group</span>.' :
-        'You can get gift codes from our Telegram group.') +
-    '</div>' +
+    (sett.telegramGroup ?
+      '<div class="menu-list" style="margin:16px 0"><div class="menu-row" id="giftTgTab">' + ico('telegram') + '<span>Official Telegram Group</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div></div>' :
+      '') +
     '<div class="card giftcode-card">' +
       '<input id="giftCodeInput" class="giftcode-line-input" type="text" maxlength="32" placeholder="Enter gift code" autocapitalize="off" autocomplete="off">' +
       '<button class="btn btn-primary" id="giftCodeBtn" style="width:100%;margin-top:12px">Redeem</button>' +
@@ -1819,7 +1807,7 @@ async function openGiftCodeSheet(){
   openSheet('generic', html);
   $('giftCodeBtn').onclick = redeemGiftCode;
   $('giftCodeInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('giftCodeBtn').click(); });
-  if ($('giftTgLink')) $('giftTgLink').onclick = function(){ var u = safeExternalUrl(sett.telegramGroup); if (u) window.open(u, '_blank'); };
+  if ($('giftTgTab')) $('giftTgTab').onclick = function(){ var u = safeExternalUrl(sett.telegramGroup); if (u) window.open(u, '_blank'); };
 }
 async function openInfoSheet(key){
   var s = STATE.settings || (await api('/public/settings')).settings || {};
@@ -2605,7 +2593,28 @@ window.addEventListener('space8-auth', async function(e){
 // server-side cashback/maturity credits, an admin approving a deposit or
 // withdrawal, a downline referral joining/investing, a milestone reward.
 var _liveRefreshTimer = null;
-function startLiveRefresh(){}
+function startLiveRefresh(){
+  if (_liveRefreshTimer) return;
+  _liveRefreshTimer = setInterval(async function(){
+    if (document.hidden || !STATE.account || !window.fbAuth || !window.fbAuth.currentUser) return;
+    // Codex-verified real bug (2026-08-17): stopLiveRefresh() (called on
+    // sign-out) only clears the interval so no FUTURE tick fires -- it
+    // can't cancel a tick whose fetch was already in flight. That response
+    // used to write straight into STATE.account/STATE.investments with no
+    // check at all, so it could land after a sign-out + a DIFFERENT
+    // member's sign-in on the same device and silently overwrite their
+    // just-loaded session with the previous member's data. Same authEpoch
+    // guard every other async render already uses.
+    var epoch = STATE.authEpoch;
+    var results = await Promise.all([api('/account', null, 'GET', false), api('/investments', null, 'GET', false)]);
+    if (epoch !== STATE.authEpoch) return;
+    if (results[0].status === 'success') STATE.account = results[0].account;
+    if (results[1].status === 'success') STATE.investments = results[1].investments || [];
+    if (STATE.currentPage === 'home') renderHome();
+    else if (STATE.currentPage === 'products') renderProducts();
+    else if (STATE.currentPage === 'team') renderTeam();
+  }, 2000);
+}
 function stopLiveRefresh(){ if (_liveRefreshTimer) { clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; } }
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE.account) { STATE.loaded.home = false; if (STATE.currentPage === 'home') renderHome(); } });
 

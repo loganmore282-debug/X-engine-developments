@@ -790,7 +790,13 @@
 // closed sheet or switch tabs, instead of appearing as a static instant
 // swap. Never plays on the silent 2s background live-refresh.
 // v290: Live-refresh removed.
-const CACHE = 'space8-shell-v290';
+// v291: Corrected misread of the previous two rounds -- v290's "remove the
+// live counter" actually meant the count-up animation on Home's 3 balance
+// cards (now removed, back to a plain static number), NOT the 2s
+// background live-refresh (restored). Gift Code's Telegram bit is now a
+// real tappable tab (icon+label+chevron, same .menu-row component used
+// elsewhere), not a word inside a sentence.
+const CACHE = 'space8-shell-v291';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
