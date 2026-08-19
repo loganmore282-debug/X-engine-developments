@@ -233,12 +233,6 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .announce-sheet::before{ content:''; position:absolute; inset:-24px; background-image:var(--ann-bg-url, none); background-size:cover; background-position:center; filter:blur(var(--ann-bg-blur, 6px)); transform:scale(1.08); z-index:0; }
 .announce-sheet::after{ content:''; position:absolute; inset:0; background:rgba(10,18,32, var(--ann-bg-tint, .55)); z-index:0; }
 .announce-body{ position:relative; z-index:1; padding:26px 24px 24px; display:flex; flex-direction:column; gap:12px; text-align:center; align-items:center; }
-/* Owner reference (picovver.com "NOTIFY" dialog): a circular icon badge
-   sits above the title, and the two actions stack vertically (light/primary
-   dismiss button on top, accent Telegram button below) instead of the old
-   side-by-side Cancel+Telegram row. */
-.announce-icon{ width:64px; height:64px; border-radius:50%; background:var(--blue); display:flex; align-items:center; justify-content:center; box-shadow:0 10px 26px -8px var(--blue-glow); margin-bottom:2px; }
-.announce-icon svg{ width:30px; height:30px; stroke:#fff; fill:none; }
 /* Owner: "you see friends text font in dialog, l want you to use that in our
    dialog" -- the picovver.com reference's bold all-caps display headline
    ("NOTIFY"). Self-hosted as a base64 @font-face (matching this file's own
@@ -254,10 +248,9 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
    fades the top/bottom ~22px of the scrollable box to transparent instead,
    so text scrolling past either edge softens out rather than being cut off. */
 .announce-text{ font-size:14px; color:rgba(255,255,255,.86); line-height:1.55; white-space:pre-wrap; max-height:52vh; overflow-y:auto; overscroll-behavior:contain; text-align:left; align-self:stretch; mask-image:linear-gradient(to bottom, transparent, #000 22px, #000 calc(100% - 22px), transparent); -webkit-mask-image:linear-gradient(to bottom, transparent, #000 22px, #000 calc(100% - 22px), transparent); }
-.announce-actions{ display:flex; flex-direction:column; gap:10px; margin-top:8px; width:100%; }
-.pillbtn{ width:100%; text-align:center; font-weight:700; font-size:13.5px; padding:14px; border-radius:999px; cursor:pointer; border:none; display:flex; align-items:center; justify-content:center; gap:7px; }
+.announce-actions{ display:flex; gap:10px; margin-top:8px; width:100%; }
+.pillbtn{ flex:1; text-align:center; font-weight:700; font-size:13.5px; padding:13px; border-radius:999px; cursor:pointer; border:none; display:flex; align-items:center; justify-content:center; gap:7px; }
 .pillbtn-primary{ background:var(--blue); color:#fff; box-shadow:0 8px 18px -6px var(--blue-glow); }
-.pillbtn-light{ background:#fff; color:#0d1b2a; }
 .pillbtn-ghost{ background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.32); }
 .pillbtn svg{ width:16px; height:16px; stroke:currentColor; }
 .pillbtn img{ width:16px; height:16px; }
@@ -648,11 +641,10 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 <div class="toast-bg" id="toastBg"><div class="toast" id="toast"></div></div>
 <div class="success-popup-bg" id="successPopupBg"><div class="success-popup"><div class="ico"><svg class="s8-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><div class="msg" id="successPopupMsg"></div></div></div>
 <div class="announce-bg" id="announceBg"><div class="announce-sheet" id="announceSheet"><div class="announce-body">
-  <div class="announce-icon"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
   <div class="announce-title" id="announceTitle"></div>
   <div class="announce-text" id="announceText"></div>
   <div class="announce-actions">
-    <button class="pillbtn pillbtn-light" id="announceCancelBtn">OK</button>
+    <button class="pillbtn pillbtn-ghost" id="announceCancelBtn">Cancel</button>
     <button class="pillbtn pillbtn-primary" id="announceTgBtn"></button>
   </div>
 </div></div></div>

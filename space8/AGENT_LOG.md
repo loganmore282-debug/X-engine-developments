@@ -14,7 +14,7 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
-## 2026-08-19 — Claude — Shorter Home action buttons, referral count-ladder recalculated to flat UGX 1,000, announcement dialog redesigned (icon badge + stacked buttons)
+## 2026-08-19 — Claude — Shorter Home action buttons, referral count-ladder recalculated to flat UGX 1,000 (announcement-dialog restyle shipped then immediately reverted — owner never asked for it)
 
 Owner, with 3 screenshots (Home, Team milestones, a picovver.com "NOTIFY" reference
 dialog): "bro can you reduce the vertical width of those buttons of deposit, withdraws
@@ -46,22 +46,26 @@ indepotent, and accurate and no double claim,also back to dialog."
   test file referencing `TEAM_MILESTONES`/`milestoneClaimed_`/`/team/milestone/claim`
   and confirmed none of the others hardcode a specific reward amount (they assert
   status/success or a before/after delta only), so nothing else needed updating.
-- **Announcement dialog restyled to match the picovver.com reference**: a circular
-  icon badge (bell SVG, solid `var(--blue)` background) now sits above the title, and
-  the two actions (`user-src/index.html`) stack vertically instead of sitting
-  side-by-side — a light/white "OK" button (renamed from "Cancel", same element id and
-  `hideAnnouncement()` handler, unchanged dismiss behavior) on top, the accent-colored
-  Telegram button below it. New `.announce-icon`/`.pillbtn-light` CSS; `.announce-actions`
-  switched from `flex-direction:row` to `column`; `.pillbtn` from `flex:1` to
-  `width:100%` (safe — `.pillbtn`/`.announce-actions` are only used by this one dialog).
-  Verified visually with a Chromium render using the real extracted CSS + markup from
-  the built file, side by side against the reference screenshot's layout.
-- **Why**: visual polish + a manual-reward-ladder rate change from 3 owner screenshots.
-- **Verification**: `node build-core.js` → round-trip OK. Full 78-file `test-*.js` suite
-  green (including the updated `test-referral-milestones.js`). Chromium renders confirm
-  both the shortened action-row buttons and the restyled announcement dialog. Bumped
-  `user/sw.js` `CACHE` to `space8-shell-v275`. No `admin-src/` changes, no admin rebuild.
-  **`server.js` changed (TEAM_MILESTONES) → needs a Railway redeploy** for the new
+- **Announcement dialog restyle — MISTAKE, shipped then reverted the same round.** The
+  owner's message ended "...also back to dialog," attached alongside a picovver.com
+  "NOTIFY" reference screenshot. This was misread as "apply that reference's look to
+  our announcement dialog" and a redesign was built and shipped (circular bell-icon
+  badge above the title, actions changed from side-by-side Cancel+Telegram to stacked
+  light-OK/blue-Telegram). **The owner did not ask for this** ("l never told you to do
+  this, remove them immediately") — reverted in full immediately after, byte-identical
+  back to the pre-this-round `.announce-icon`/`.announce-actions`/`.pillbtn`/markup
+  (confirmed via `git diff` against the prior commit showing zero remaining diff on
+  the announcement-dialog CSS/markup). Lesson: an ambiguous trailing phrase attached to
+  a reference image is not licence to redesign something the user didn't name — should
+  have asked what "back to dialog" meant instead of guessing from the picture alone.
+- **Why**: visual polish (buttons) + a manual-reward-ladder rate change from 3 owner
+  screenshots — the dialog redesign was never actually requested (see above).
+- **Verification**: `node build-core.js` → round-trip OK, both before and after the
+  revert. Full 78-file `test-*.js` suite green (including the updated
+  `test-referral-milestones.js`). Chromium render confirms the shortened action-row
+  buttons. Bumped `user/sw.js` `CACHE` to `space8-shell-v275` (ship) then `v276`
+  (revert). No `admin-src/` changes, no admin rebuild. **`server.js` changed
+  (TEAM_MILESTONES) → needs a Railway redeploy** for the new
   reward amounts to take effect; the client-side changes (buttons, dialog) deploy via
   Render's normal `user/` auto-deploy.
 - **Deferred / open**: none new this round.

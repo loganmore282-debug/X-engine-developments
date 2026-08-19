@@ -738,9 +738,12 @@
 // (Web Share API files capability), plans-table.jpg precached above.
 // v275: Home action buttons (Deposit/Withdraw/Check-in) made shorter/more
 // compact; referral count-ladder rewards recalculated to a flat UGX 1,000
-// per active referral (was 1,500); announcement dialog restyled with a
-// circular icon badge above the title and stacked OK/Telegram buttons.
-const CACHE = 'space8-shell-v275';
+// per active referral (was 1,500).
+// v276: owner never asked for the announcement-dialog restyle shipped in
+// v275 (icon badge + stacked OK/Telegram buttons) -- reverted back to the
+// original side-by-side Cancel+Telegram row, no icon badge. Nothing else
+// from v275 touched.
+const CACHE = 'space8-shell-v276';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

@@ -2769,24 +2769,31 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    no Railway redeploy needed. See the 2026-08-18 AGENT_LOG.md entry ("Deposit/withdraw
    icons replaced, Archivo Black display font on the announcement title, referral share
    now attaches the plans-table image").
-0n. **Shorter Home action buttons, referral ladder recalculated to flat UGX 1,000,
-   announcement dialog restyled — DONE.** `.action-btn` (Deposit/Withdraw/Check-in on
-   Home) padding/icon size reduced for a shorter, less bulky look. `TEAM_MILESTONES`
-   in `server.js` recalculated to a flat UGX 1,000/active-referral (was 1,500) — see
-   the "Active Level-1 referral ladder" entry above for the new numbers; only reward
-   VALUES changed, target numbers untouched, so the existing claim-flag-by-target
-   mechanism needed no migration. The claim endpoint's encryption/server-side/
-   idempotency/no-double-claim properties the owner asked for were already true of
+0n. **Shorter Home action buttons + referral ladder recalculated to flat UGX 1,000 —
+   DONE. Announcement dialog restyle — MISTAKE, reverted, do not redo without being
+   asked.** `.action-btn` (Deposit/Withdraw/Check-in on Home) padding/icon size
+   reduced for a shorter, less bulky look. `TEAM_MILESTONES` in `server.js`
+   recalculated to a flat UGX 1,000/active-referral (was 1,500) — see the "Active
+   Level-1 referral ladder" entry above for the new numbers; only reward VALUES
+   changed, target numbers untouched, so the existing claim-flag-by-target mechanism
+   needed no migration. The claim endpoint's encryption/server-side/idempotency/
+   no-double-claim properties the owner asked for were already true of
    `/team/milestone/claim`'s existing lock+transaction+live-recompute implementation —
-   nothing new was needed there beyond the table values. Announcement dialog
-   (`user-src/index.html`) restyled to match a picovver.com reference screenshot: a
-   circular bell-icon badge above the title, and the Cancel/Telegram button row
-   changed from side-by-side to stacked (light "OK" on top, accent Telegram below),
-   same element ids/handlers, just relabeled and restyled. `user/sw.js` `CACHE`
-   bumped to `v275`. **`server.js` changed (TEAM_MILESTONES) → needs a Railway
-   redeploy** for the new reward amounts to take effect. See the 2026-08-19
-   AGENT_LOG.md entry ("Shorter Home action buttons, referral count-ladder
-   recalculated to flat UGX 1,000, announcement dialog redesigned").
+   nothing new was needed there beyond the table values.
+   **The announcement dialog is UNCHANGED from before this round** — a redesign
+   (circular bell-icon badge above the title, stacked OK/Telegram buttons instead of
+   the original side-by-side Cancel+Telegram row) was built and shipped off a
+   misread of the owner's trailing "...also back to dialog" next to a reference
+   screenshot, and the owner explicitly said they never asked for it. Reverted in
+   full the same round — `.announce-icon`/`.announce-actions`/`.pillbtn`/the dialog
+   markup are byte-identical to before this round. **Do not restyle the announcement
+   dialog again unless the owner explicitly asks for a specific change** — an
+   attached reference image is not itself a request. `user/sw.js` `CACHE` bumped to
+   `v275` (ship) then `v276` (revert). **`server.js` changed (TEAM_MILESTONES) →
+   needs a Railway redeploy** for the new reward amounts to take effect. See the
+   2026-08-19 AGENT_LOG.md entry ("Shorter Home action buttons, referral count-ladder
+   recalculated to flat UGX 1,000 (announcement-dialog restyle shipped then
+   immediately reverted — owner never asked for it)").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live
