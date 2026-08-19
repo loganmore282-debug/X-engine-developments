@@ -2936,6 +2936,27 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    ("Announcement dialog: Cancel button replaced with a top-left (X); Telegram
    button centered at its original size" and "Announcement dialog follow-up: (X)
    moved to top-right, action button now reads 'Confirm'").
+0u. **Referral share text rewritten to owner's new launch template — DONE.**
+   `shareReferral()` (`user-src/original_module.js`) now builds the shared
+   text/image message to match the owner's new copy: launch banner, min
+   deposit/withdrawal + withdrawal-charge lines, referral bonus structure,
+   the link, a new "Some of the VIP products" section listing VIP 1-3 daily
+   cashback + "up to VIP N", the link again, then the closing line. As with
+   every prior share-text/copy round (see entry 0i), the money figures are
+   pulled live — `ugx(s.minDeposit)`/`s.minWithdraw`/`s.withdrawFeePct`/
+   `s.commL1-3` from `STATE.settings`, and the three VIP daily-cashback
+   lines + the "up to VIP N" count from `STATE.products` (sorted by price,
+   `Math.round(expectedReturn/cycle)`) — NOT the owner's example numbers
+   (their pasted template said "Minimum Deposit: UGX 15,000" / "Minimum
+   Withdrawal: UGX 3,000", which don't match live settings of 20,000/5,000;
+   the VIP daily figures and referral percentages/withdrawal fee in their
+   example did happen to match live data exactly). Falls back to
+   `/public/products` if `STATE.products` isn't populated yet. Verified by
+   extracting the real function from `original_module.js` and running it
+   under Node with live-shaped settings/products stubs — printed output
+   matches the template's structure exactly. `user/sw.js` `CACHE` bumped to
+   `v284`. Full `test-*.js` suite green (client-only change, server.js
+   untouched, no Railway redeploy needed).
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

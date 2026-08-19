@@ -14,6 +14,40 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Referral share text rewritten to owner's new launch template
+
+Owner: "Replace referral link text share with this" followed by a full new
+template (launch banner, min deposit/withdrawal, withdrawal charge, referral
+bonus structure, link, a new "Some of the VIP products" section with VIP 1-3
+daily cashback + "up to VIP 15", link again, closing line).
+
+- `shareReferral(code)` (`user-src/original_module.js`): rebuilt the `text`
+  string to match the new template's structure/wording/emoji/line-breaks.
+  Per the established "0i" precedent (never hardcode the owner's example
+  numbers — always pull live values), cross-checked the template's 6 numeric
+  claims against live `server.js` `DEFAULT_SETTINGS`/`DEFAULT_PRODUCTS`
+  before writing any code: withdrawal charge (15%) and Level 1/2/3 (28%/2%/
+  1%) match live settings exactly, but "Minimum Deposit: UGX 15,000" and
+  "Minimum Withdrawal: UGX 3,000" do NOT (live values are 20,000/5,000) — so
+  those two stay sourced from `STATE.settings` as before, not the template's
+  literal figures. New "Some of the VIP products" section sources its three
+  daily-cashback lines and the "up to VIP N" count from `STATE.products`
+  (sorted by price ascending, `Math.round(expectedReturn/cycle)` per
+  product, falling back to a `/public/products` fetch if `STATE.products`
+  isn't populated yet) rather than hardcoding 3,000/6,000/10,000/15 — even
+  though those particular numbers currently happen to match live data
+  exactly, a future product-ladder edit would otherwise silently go stale.
+- **Verification**: `node build-core.js` → round-trip OK. Extracted the real
+  `shareReferral` function from `original_module.js` via regex and ran it
+  under plain Node with live-shaped `STATE.settings`/`STATE.products` stubs
+  (15 products, same prices/returns/cycle as `DEFAULT_PRODUCTS`) — printed
+  output matches the new template's structure exactly, with the two
+  corrected money figures (20,000/5,000) instead of the template's stale
+  example numbers. Full `test-*.js` suite green (client-only change,
+  server.js untouched). Bumped `user/sw.js` `CACHE` to `space8-shell-v284`.
+  No `server.js`/`admin-src/` changes, no Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Announcement dialog follow-up: (X) moved to top-right, action button now reads "Confirm"
 
 Owner, immediately after the previous round shipped: "let (✗) that one be on the

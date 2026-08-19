@@ -1632,20 +1632,32 @@ function referralLink(code){
 async function shareReferral(code){
   var link = referralLink(code);
   var s = STATE.settings || (await api('/public/settings')).settings || {};
+  var prods = STATE.products;
+  if (!prods || !prods.length) {
+    try { prods = (await api('/public/products')).products; } catch (_) { prods = []; }
+  }
+  prods = (prods || []).slice().sort(function(a, b){ return (a.price || 0) - (b.price || 0); });
+  var vipLines = prods.slice(0, 3).map(function(p, i){
+    var daily = p.cycle ? Math.round((p.expectedReturn || 0) / p.cycle) : 0;
+    return '⭐ Invest in VIP ' + (i + 1) + ' and earn ' + ugx(daily) + ' daily';
+  }).join('\n');
+  var vipCount = prods.length || 15;
   var text =
     '🚀 SPACE8 — NEW! NEW! NEW! OFFICIAL LAUNCH 🚀\n\n' +
     'Get ready for the exciting launch of SPACE8! 🌟\n\n' +
     '💰 Minimum Deposit: ' + ugx(s.minDeposit) + '\n' +
     '💸 Minimum Withdrawal: ' + ugx(s.minWithdraw) + '\n' +
     '⚡ Withdrawals: Available daily with fast processing\n' +
-    '📌 Withdrawal Charge: ' + (Number(s.withdrawFeePct) || 0) + '%\n' +
-    link + '\n\n' +
+    '📌 Withdrawal Charge: ' + (Number(s.withdrawFeePct) || 0) + '%\n\n' +
     '🎁 Referral Bonus Structure:\n' +
     '🔥 Level 1: ' + (Number(s.commL1) || 0) + '%\n' +
     '✨ Level 2: ' + (Number(s.commL2) || 0) + '%\n' +
     '💎 Level 3: ' + (Number(s.commL3) || 0) + '%\n\n' +
-    'Join SPACE8 and explore the new platform from launch day!\n' +
-    link + '\n' +
+    link + '\n\n' +
+    '💼 Some of the VIP products:\n' +
+    vipLines + ', up to VIP ' + vipCount + '\n\n' +
+    'Join SPACE8 and explore the new platform from launch day! 🚀\n\n' +
+    link + '\n\n' +
     '🚀 SPACE8 — NEW LAUNCH, NEW OPPORTUNITIES!';
   // Owner: "when one clicks share link, it will also embed with that
   // table" -- attach the Space8 Investment Plans graphic alongside the
