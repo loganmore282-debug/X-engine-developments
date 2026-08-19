@@ -1637,7 +1637,7 @@ async function renderAccount(animate){
 
   html += '<div class="menu-list">' +
     '<div class="menu-row" id="passwordRow">' + ico('key') + '<span>Password Management</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>' +
-    menuRow('info','About Space8','about') +
+    menuRow('info','About Us','about') +
     menuRow('doc','Rules','rules') +
     menuRow('support','Support','support') +
     '<div class="menu-row" id="getAppRow">' + ico('download') + '<span>Get App</span></div>' +
@@ -1848,7 +1848,7 @@ async function openInfoSheet(key){
 // Space8's own would misleadingly imply an affiliation that doesn't exist.
 // Only the unbranded, generic photos made it in.
 async function openAboutSheet(){
-  var html = '<div class="sheet-title">About Space8</div>' +
+  var html = '<div class="sheet-title">About Us</div>' +
     '<img class="about-photo" src="/about-2.jpg" alt="Satellite constellation">' +
     '<div class="about-body">' +
       '<p>Space8 was built around one obsession: getting hardware to survive the unforgiving trip from a factory floor to a stable orbit, then keep working long after everyone has stopped watching. What began as a small team chasing that exact problem has grown into a name behind some of the quietest, most dependable satellite work most people never hear about — because a spacecraft that does its job right rarely makes headlines.</p>' +

@@ -810,7 +810,12 @@
 // /auth/register). A relative src/fetch resolves against the CURRENT
 // address-bar path, not where index.html actually lives, so every one of
 // those assets 404'd for anyone arriving via a shared referral link.
-const CACHE = 'space8-shell-v294';
+// v295: "About Space8" renamed to "About Us" (Account menu row + sheet
+// title). Every toast notification (claims, errors, copy confirmations,
+// the banned message -- one shared toast() function covers all of them)
+// now appears centered in the middle of the screen instead of anchored
+// near the bottom nav bar.
+const CACHE = 'space8-shell-v295';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

@@ -14,6 +14,40 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — "About Space8" renamed to "About Us"; toast notifications now appear centered
+
+Owner: "change about space8 to about us,also bro let notifies open from
+middle or appear from middle not down,check every notify in userpanel".
+
+- **About Us**: both places "About Space8" appeared (`user-src/original_
+  module.js`) -- the Account menu row label and the sheet's own title --
+  changed to "About Us". Grepped for any other occurrence anywhere in
+  `user-src/` and the assistant files, none found.
+- **Notifications repositioned**: audited every fixed-position overlay in
+  `user-src/index.html` to find every "notify"-style popup, not just the
+  one the owner happened to see. `.success-popup-bg` (register/login
+  success) and `.announce-bg` (the admin announcement dialog) already
+  centered via `align-items:center`/`justify-content:center` -- only
+  `.toast-bg` was anchored near the bottom nav
+  (`bottom:calc(68px + safe-area-inset-bottom)`). Confirmed `toast()` is
+  the SINGLE shared function behind every one of these: check-in/redeem/
+  invest confirmations, every error message, copy-to-clipboard
+  confirmations, and the banned-account message (`handleBanned()` calls
+  the same `toast()`) -- one CSS change covers all of them, nothing
+  fires a separate bottom-anchored notification anywhere else in the
+  user app. Changed `.toast-bg` from bottom-anchored to
+  `inset:0; align-items:center; justify-content:center` (same pattern
+  as the other two), so every toast now appears centered in the middle
+  of the screen. `pointer-events:none` on the container (unchanged) still
+  means a showing toast never blocks taps underneath it.
+- **Verification**: `node build-core.js` → round-trip OK. Rendered the
+  real `.toast`/`.toast-bg` markup against the real CSS in Chromium --
+  confirmed centered both horizontally and vertically. Full `test-*.js`
+  suite green, 79/79 (client-only text/CSS change, server.js untouched).
+  Bumped `user/sw.js` `CACHE` to `space8-shell-v295`. No `server.js`
+  changes, no Railway/Render redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Authentication-specific review (no code changes, zero gaps found)
 
 Owner: "let us also review authentication such that everything is fine and
