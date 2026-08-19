@@ -1286,8 +1286,8 @@ async function renderProducts(){
   var html = bannerHtml('darkbar', 'satellite');
   html += '<div class="shortcut-row">' +
     '<div class="shortcut" id="shBind">' + ico('lock') + '<span>Withdrawal Account</span></div>' +
-    '<div class="shortcut" id="shDeposits">' + ico('history') + '<span>Deposits</span></div>' +
-    '<div class="shortcut" id="shWithdrawals">' + ico('wallet') + '<span>Withdrawals</span></div>' +
+    '<div class="shortcut" id="shDeposits">' + ico('history') + '<span>Deposit Records</span></div>' +
+    '<div class="shortcut" id="shWithdrawals">' + ico('wallet') + '<span>Withdrawal Records</span></div>' +
   '</div>';
   html += '<div class="mystats">' +
     '<div class="card mystats-link" id="myProductsCard"><div class="lab">My Products</div>' +
@@ -1630,9 +1630,9 @@ async function renderAccount(animate){
 
   html += '<div class="matrix">' +
     '<div class="mtile" id="mBind">' + ico('lock') + '<span>Withdrawal Account</span></div>' +
-    '<div class="mtile" id="mDeposits">' + ico('history') + '<span>Deposits</span></div>' +
-    '<div class="mtile" id="mWithdrawals">' + ico('wallet') + '<span>Withdrawals</span></div>' +
-    '<div class="mtile" id="mPin">' + ico('shield') + '<span>Security PIN</span></div>' +
+    '<div class="mtile" id="mDeposits">' + ico('history') + '<span>Deposit Records</span></div>' +
+    '<div class="mtile" id="mWithdrawals">' + ico('wallet') + '<span>Withdrawal Records</span></div>' +
+    '<div class="mtile" id="mPin">' + ico('shield') + '<span>Change PIN</span></div>' +
   '</div>';
 
   html += '<div class="menu-list">' +
@@ -2108,7 +2108,7 @@ async function openPinSheet(){
   // some sheet named 'generic' is open.
   openSheet('generic',
     '<div data-generic-sheet="pin">' +
-    '<div class="sheet-title">Security PIN</div>' +
+    '<div class="sheet-title">Change PIN</div>' +
     '<div class="sheet-sub"><span class="spin" style="display:inline-block;width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--ink-dim);border-radius:50%;vertical-align:-3px;margin-right:7px;animation:spin .7s linear infinite"></span>Checking…</div>' +
     '</div>'
   );
@@ -2121,7 +2121,7 @@ async function openPinSheet(){
   if (!qs('[data-generic-sheet="pin"]', $('genericSheet'))) return;
   var has = status.status === 'success' && status.hasPayoutPin;
   $('genericSheet').innerHTML =
-    '<div class="sheet-title">Security PIN</div>' +
+    '<div class="sheet-title">Change PIN</div>' +
     '<div class="sheet-sub">' + (has ? 'Change your 4-digit withdrawal PIN.' : 'No withdrawal PIN on this account yet — it should have been set at registration. Contact support if this looks wrong.') + '</div>' +
     (has ?
       '<div class="auth-form">' +

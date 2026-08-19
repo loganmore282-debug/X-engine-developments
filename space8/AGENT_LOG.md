@@ -14,6 +14,30 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — "Security PIN"→"Change PIN", "Deposits"/"Withdrawals"→"Deposit Records"/"Withdrawal Records"
+
+Owner: "change security pin to 'Change PIN',also change deposits to
+'deposit records' ,and withdrawals to 'withdrawal records'".
+
+- **Change PIN**: Account matrix tile (`mPin`) and both sheet-title
+  occurrences (the "Checking…" loading state and the final rendered form)
+  in `user-src/original_module.js` all changed from "Security PIN" to
+  "Change PIN" — the sheet already had a "Change PIN" button inside it,
+  so the title now matches.
+- **Deposit Records / Withdrawal Records**: both places these labels
+  appear — the Account matrix tiles (`mDeposits`/`mWithdrawals`) AND the
+  Home ticker's own shortcut row (`shDeposits`/`shWithdrawals`, same
+  wording, separate location) — renamed. The sheet they open
+  (`openHistorySheet`) still titles itself "Deposit History"/"Withdrawal
+  History" internally, unchanged — the owner's request was about the
+  button/tile labels, not that sheet's own title.
+- **Verification**: `node build-core.js` → round-trip OK. Grepped the
+  rebuilt source to confirm all 3 renames landed in exactly the 7 expected
+  spots and nothing else changed. Full `test-*.js` suite green, 79/79.
+  Bumped `user/sw.js` `CACHE` to `space8-shell-v298`. No `server.js`
+  changes, no Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — "Password Management" renamed to "Change Password"
 
 Owner: "change password management to 'Change Password'". Both places it

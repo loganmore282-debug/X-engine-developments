@@ -821,7 +821,10 @@
 // pulled live, never the template's example numbers.
 // v297: "Password Management" renamed to "Change Password" (Account menu
 // row + sheet title).
-const CACHE = 'space8-shell-v297';
+// v298: "Security PIN" renamed to "Change PIN" (Account matrix tile +
+// sheet title). "Deposits"/"Withdrawals" renamed to "Deposit Records"/
+// "Withdrawal Records" (Account matrix tiles + Home ticker shortcuts).
+const CACHE = 'space8-shell-v298';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
