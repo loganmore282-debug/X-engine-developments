@@ -799,7 +799,11 @@
 // v292: Referral link changed to the canonical
 // https://space8-platform.com/auth/register?refCode=CODE form (was the
 // bare-origin /?ref=CODE) -- also what shareReferral()'s share text uses.
-const CACHE = 'space8-shell-v292';
+// v293: Team's referral member phone numbers are now masked
+// (+2567****0389 style). Gift Code's descriptive sentence ("You can get
+// gift codes in the telegram group") restored above the Telegram tab --
+// the tab had replaced it instead of sitting alongside it.
+const CACHE = 'space8-shell-v293';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

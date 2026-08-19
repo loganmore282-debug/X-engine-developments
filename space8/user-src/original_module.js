@@ -108,6 +108,17 @@ function $(id){ return document.getElementById(id); }
 function qs(sel, root){ return (root||document).querySelector(sel); }
 function qsa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Owner: "hide those numbers in all levels ie +2567****8387" -- Team's
+// referral member rows showed a downline member's real phone number in
+// full. server.js's cleanPhone() only ever stores the canonical
+// '+256' + 9-digit form (see its own comment), so that's the only shape
+// this needs to match; anything else (shouldn't happen) is left unmasked
+// rather than mangled.
+function maskPhone(phone){
+  var s = String(phone || '');
+  var m = s.match(/^(\+256)(\d)\d{4}(\d{4})$/);
+  return m ? (m[1] + m[2] + '****' + m[3]) : s;
+}
 // Codex-verified real stored-XSS bug (2026-08-17): openInfoSheet() used to
 // insert admin-set aboutText/rulesText straight into innerHTML with NO
 // esc() call, unlike the 'support' entry right next to it in the same
@@ -1527,7 +1538,7 @@ async function renderTeam(animate){
       lvl.members.length ?
       '<div class="card">' + visible.map(function(m){
         return '<div class="member-row"><div class="av">' + ico('space8logo') + '</div>' +
-          '<div class="info"><div class="phone">' + esc(m.phone) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + '</div></div>' +
+          '<div class="info"><div class="phone">' + esc(maskPhone(m.phone)) + '</div><div class="date">Joined ' + timeAgo(m.joinedAt) + '</div></div>' +
           '<span class="pill ' + (m.hasInvested?'pill-active':'pill-pending') + '">' + (m.hasInvested?'Active':'Pending') + '</span></div>';
       }).join('') + '</div>' +
       (lvl.members.length > TEAM_PAGE_SIZE ? '<div class="view-more-row"><button class="view-more-lvl" data-level="' + l + '">' + (expanded ? 'View less' : 'View more (' + (lvl.members.length - TEAM_PAGE_SIZE) + ')') + '</button></div>' : '') +
@@ -1797,10 +1808,15 @@ async function openGiftCodeSheet(){
   // component already used for Password Management/About/Rules/Support on
   // Account, not a word inside a sentence. Positioned above the input
   // (still a plain line, no icon -- unchanged); Redeem/banner untouched.
+  // Follow-up: "you didn't add the other sentence on giftCodes 'You can
+  // get gift codes in the telegram group'" -- Pico's screenshot has BOTH
+  // the descriptive line AND the tab underneath it; the tab replaced the
+  // sentence instead of sitting alongside it. Restored above the tab.
   var html = '<div class="sheet-title">Gift Code</div>' +
     optBannerHtml('giftcodebg') +
     (sett.telegramGroup ?
-      '<div class="menu-list" style="margin:16px 0"><div class="menu-row" id="giftTgTab">' + ico('telegram') + '<span>Official Telegram Group</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div></div>' :
+      '<div style="text-align:center;font-size:12.5px;color:var(--ink-dim);margin:16px 0 10px;padding:0 8px">You can get gift codes in the telegram group</div>' +
+      '<div class="menu-list" style="margin-bottom:16px"><div class="menu-row" id="giftTgTab">' + ico('telegram') + '<span>Official Telegram Group</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div></div>' :
       '') +
     '<div class="card giftcode-card">' +
       '<input id="giftCodeInput" class="giftcode-line-input" type="text" maxlength="32" placeholder="Enter gift code" autocapitalize="off" autocomplete="off">' +

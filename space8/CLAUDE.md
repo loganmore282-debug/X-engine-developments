@@ -3024,7 +3024,11 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    left it as a plain sentence with "Telegram group" as a hyperlinked word,
    which the owner explicitly rejected: "l wanted a telegram tab not word
    'telegram group', l said a tab, dont you see that tab on pico, I SAID
-   THAT TAB". (2) `animateCountUp()`/`animateReveal()` fresh-arrival
+   THAT TAB". That rebuild then dropped the descriptive sentence entirely
+   instead of keeping it ABOVE the tab (Pico's screenshot has both) — owner:
+   "you didn't add the other sentence on giftCodes 'You can get gift codes
+   in the telegram group'" — restored, exact wording, right above the tab.
+   (2) `animateCountUp()`/`animateReveal()` fresh-arrival
    animations were added for Home's 3 balance cards + Team's referral code/
    link + Account's phone/ID, then the owner said "remove that live counter
    on money... remove now, immediately, don't say why" — misread as "kill
@@ -3056,6 +3060,14 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    live custom domain pointed at the Render static site — if it isn't yet,
    every shared link 404s until it is. `user/sw.js` `CACHE` bumped to
    `v292`.
+0z4. **Team's downline phone numbers masked — DONE.** New `maskPhone()`
+   (`user-src/original_module.js`) renders a member's stored `+256` + 9-
+   digit phone as `+256` + first digit + `****` + last 4 (e.g.
+   `+256742730389` → `+2567****0389`, matching the owner's own quoted
+   example format), wired into Team's per-level member rows. Own account's
+   phone (Account's identity banner) is UNCHANGED — only OTHER members'
+   numbers, shown on the Team page, are masked. `user/sw.js` `CACHE`
+   bumped to `v293`.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

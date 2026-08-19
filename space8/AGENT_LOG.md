@@ -14,6 +14,37 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Team phone numbers masked + Gift Code sentence restored
+
+Owner: "hide those numbers in all levels ie +2567****8387" and "you didn't
+add the other sentence on giftCodes 'You can get gift codes in the
+telegram group'".
+
+- New `maskPhone(phone)` (`user-src/original_module.js`): matches
+  `server.js`'s `cleanPhone()` canonical storage form (`'+256' + 9 digits`,
+  the ONLY shape a real stored phone is ever saved in) and renders
+  `+256` + first digit + `****` + last 4 digits — e.g. `+256742730389` →
+  `+2567****0389`, matching the owner's own example format exactly. Falls
+  back to showing the raw string unmasked if it doesn't match that shape
+  (defensive only; shouldn't happen given `cleanPhone()`'s guarantee).
+  Wired into Team's per-level member row (`esc(maskPhone(m.phone))`,
+  was `esc(m.phone)`) -- the only place a downline member's real number was
+  shown in full.
+- Gift Code (`openGiftCodeSheet()`): the previous round's tab (icon +
+  "Official Telegram Group" + chevron) had REPLACED the descriptive
+  sentence instead of sitting alongside it -- Pico's own screenshot has
+  both. Restored "You can get gift codes in the telegram group" right
+  above the tab, exact wording as quoted by the owner.
+- **Verification**: `node build-core.js` → round-trip OK. Extracted the
+  real `maskPhone()` and ran it against both numbers from the owner's own
+  screenshot (`+256742730389` → `+2567****0389`, `+256742730399` →
+  `+2567****0399`) plus a garbage/empty-string fallback check. Rendered the
+  real `openGiftCodeSheet()` against the real CSS in Chromium -- banner,
+  sentence, tab, line input, Redeem, in that order. Full `test-*.js` suite
+  green. Bumped `user/sw.js` `CACHE` to `space8-shell-v293`. No `server.js`
+  changes, no Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Referral link changed to the canonical space8-platform.com URL
 
 Owner: "let the link be this
