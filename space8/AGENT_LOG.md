@@ -14,6 +14,31 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Referral count-ladder recalculated again to flat UGX 500 (was 1,000)
+
+Owner: "also change again, every referral on task center, 500ugx, each active level 1 to
+500ugx, so recalculate and replace." Same rate change mechanism as the earlier same-day
+round (1,500→1,000), one step further down (1,000→500).
+
+- `TEAM_MILESTONES` in `server.js` recalculated to a flat UGX 500/active-referral: 2→1,000;
+  5→2,500; 10→5,000; 25→12,500; 50→25,000; 100→50,000; 200→100,000; 500→250,000;
+  1,000→500,000; 2,000→1,000,000; 5,000→2,500,000. Only reward VALUES moved again; target
+  numbers untouched, so the existing claim-flag-by-target mechanism still needs no
+  migration — a target claimed under either earlier rate (1,500 or 1,000) stays claimed
+  and is never repaid under this new rate.
+- `TEAM_DEPOSIT_MILESTONES` (the separate whole-team-deposit ladder) is untouched — the
+  owner's wording ("each active level 1") scopes this to the count ladder only, same as
+  the previous round.
+- Updated `test-referral-milestones.js`'s hardcoded expectations again (5-referral tier:
+  was 5,000, now 2,500; combined count+deposit total: was +17,500, now +15,000).
+- **Why**: another manual rate-change request from the owner.
+- **Verification**: full 78-file `test-*.js` suite green (server-only change — no
+  `user-src/`/`admin-src/` touched this round, no rebuild, no cache bump needed, since
+  nothing in the client hardcodes reward amounts — every milestone card is rendered from
+  live `/team/stats` data). **`server.js` changed → needs a Railway redeploy** for the new
+  reward amounts to take effect.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Home action buttons (Deposit/Withdraw/Check-in) made shorter again
 
 Owner, with a screenshot: "let us reduce the vertical width of those buttons of deposit,

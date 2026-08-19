@@ -104,21 +104,21 @@ const userDoc = id => users().get(id);
 
   console.log('\n-- Claiming the 5-count milestone pays exactly once --');
   r = await call('POST', '/team/milestone/claim', { token: 'uid:' + REF, body: { target: 5 } });
-  check('claim succeeds, pays UGX 5,000', r.body?.status === 'success' && r.body?.amount === 5000, r.body);
-  check('wallet credited +5,000 over starting balance', userDoc(REF).walletBalance === START_BAL + 5000, userDoc(REF).walletBalance);
+  check('claim succeeds, pays UGX 2,500', r.body?.status === 'success' && r.body?.amount === 2500, r.body);
+  check('wallet credited +2,500 over starting balance', userDoc(REF).walletBalance === START_BAL + 2500, userDoc(REF).walletBalance);
   r = await call('POST', '/team/milestone/claim', { token: 'uid:' + REF, body: { target: 5 } });
   check('re-claim rejected (already claimed)', r.code === 400 && /already/i.test(r.body?.message || ''), r.body);
-  check('wallet unchanged after re-claim attempt', userDoc(REF).walletBalance === START_BAL + 5000, userDoc(REF).walletBalance);
+  check('wallet unchanged after re-claim attempt', userDoc(REF).walletBalance === START_BAL + 2500, userDoc(REF).walletBalance);
 
   console.log('\n-- Claiming an unreached tier is rejected, no partial credit --');
   r = await call('POST', '/team/milestone/claim', { token: 'uid:' + REF, body: { target: 10 } });
   check('claiming 10-count tier rejected (only 5 active)', r.code === 400 && !/already/i.test(r.body?.message || ''), r.body);
-  check('wallet unchanged', userDoc(REF).walletBalance === START_BAL + 5000, userDoc(REF).walletBalance);
+  check('wallet unchanged', userDoc(REF).walletBalance === START_BAL + 2500, userDoc(REF).walletBalance);
 
   console.log('\n-- Deposit ladder is independent of the count ladder --');
   r = await call('POST', '/team/milestone/claim', { token: 'uid:' + REF, body: { target: 500000, type: 'deposit' } });
   check('500,000 deposit-tier claim succeeds (UGX 12,500)', r.body?.status === 'success' && r.body?.amount === 12500, r.body);
-  check('wallet now +5,000+12,500=+17,500 over starting balance', userDoc(REF).walletBalance === START_BAL + 17500, userDoc(REF).walletBalance);
+  check('wallet now +2,500+12,500=+15,000 over starting balance', userDoc(REF).walletBalance === START_BAL + 15000, userDoc(REF).walletBalance);
   r = await call('POST', '/team/milestone/claim', { token: 'uid:' + REF, body: { target: 5000000, type: 'deposit' } });
   check('5,000,000 deposit-tier rejected (only 1.5M so far)', r.code === 400 && !/already/i.test(r.body?.message || ''), r.body);
   r = await call('POST', '/team/milestone/claim', { token: 'uid:' + REF, body: { target: 5 } });
