@@ -2189,7 +2189,7 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
   var html = bannerHtml('marscrate','withdraw') +
     '<div class="sheet-title">Withdraw Funds</div>' +
     '<div class="record-row acct-row selectable" id="wdAcctRow">' +
-      '<div class="info"><div class="phone">' + (acct ? esc(acct.holder) : 'Select payout account') + '</div>' +
+      '<div class="info"><div class="phone">' + (acct ? esc(acct.holder) : 'Select payout account . . . . . . . . . .') + '</div>' +
       (acct ? '<div class="date">' + esc(acct.network) + ' · ' + esc(acct.phone) + '</div>' : '') + '</div>' +
       ico('chev').replace('<svg ', '<svg class="chev" ') +
     '</div>' +

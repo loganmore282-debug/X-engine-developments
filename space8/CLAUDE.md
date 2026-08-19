@@ -2957,6 +2957,14 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    matches the template's structure exactly. `user/sw.js` `CACHE` bumped to
    `v284`. Full `test-*.js` suite green (client-only change, server.js
    untouched, no Railway redeploy needed).
+0v. **Withdraw sheet's "Select payout account" placeholder — dotted filler
+   added — DONE.** Owner, from a screenshot: wanted the unselected-account
+   placeholder row to read "Select payout account . . . . . . . . . ." before
+   the chevron, instead of the text sitting flush against the arrow. Text-only
+   change in the withdraw sheet's `acct === null` branch
+   (`user-src/original_module.js`); once an account is selected the row still
+   shows the account holder name, unaffected. `user/sw.js` `CACHE` bumped to
+   `v285`. No `server.js` changes, no Railway redeploy needed.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

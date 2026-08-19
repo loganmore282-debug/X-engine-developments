@@ -14,6 +14,26 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Withdraw sheet's "Select payout account" placeholder gets a dotted filler
+
+Owner, with a screenshot of the Withdraw Funds sheet: "do you see where they
+are saying that 'select payout account >',let it be 'Select payout account .
+.  .  .  .  .  .  .  .  .>'"
+
+- `renderWithdrawPage()` / withdraw sheet (`user-src/original_module.js`,
+  ~line 2192): the `acct === null` placeholder text changed from `'Select
+  payout account'` to `'Select payout account . . . . . . . . . .'` — the
+  chevron icon after it is unchanged, same row/markup/click behavior, purely
+  a text-content change to add the dotted filler the owner asked for. Only
+  affects the unselected-account state; once a real account is picked the
+  row shows the account holder name instead, as before.
+- **Verification**: `node build-core.js` → round-trip OK. Grepped
+  `test-*.js` for the old placeholder string — nothing asserts it, so no
+  test needed updating. Full suite unaffected (client-only text change).
+  Bumped `user/sw.js` `CACHE` to `space8-shell-v285`. No `server.js`
+  changes, no Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Referral share text rewritten to owner's new launch template
 
 Owner: "Replace referral link text share with this" followed by a full new

@@ -772,11 +772,9 @@
 // round (X) close button top-left of the card is now the explicit dismiss
 // control. The Telegram button (now the row's only button) no longer
 // stretches full width -- same padding/size as before, just centered.
-// v284: Referral share text rewritten to the owner's new launch template
-// (adds a "Some of the VIP products" daily-cashback section, link placed
-// once before and once after the bonus/VIP details). Money figures still
-// come from live settings/products, never the template's literal numbers.
-const CACHE = 'space8-shell-v284';
+// v285: Withdraw sheet's "Select payout account" placeholder row now has a
+// dotted filler before the chevron ("Select payout account . . . . . . . . . .").
+const CACHE = 'space8-shell-v285';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
