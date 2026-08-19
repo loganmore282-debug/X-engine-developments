@@ -3013,6 +3013,23 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    `renderHome()` again: never go back to a single blanket
    `el.innerHTML = wholeHomeHtml` per refresh** — anything with a
    continuous CSS animation must live in its own never-removed slot.
+0z. **Gift Code screen redesign + fresh-arrival reveal/count-up animations —
+   DONE.** Gift Code (`openGiftCodeSheet()`): Telegram note moved above the
+   input (was below Redeem), input restyled from the boxed `.field`+gift-
+   icon to a new scoped `.giftcode-line-input` (plain underlined line, no
+   icon) — Redeem button and banner untouched, per the owner's explicit "a
+   line not a box, remove your svg even... leave others ie redeem, and
+   banner, don't touch". Separately: `animateCountUp()`/`animateReveal()`
+   helpers now replay a genuine 0→value count-up (Home's 3 balance cards)
+   or fade+rise (Team's referral code/link, Account's phone/ID) every time
+   you return from a closed sheet or switch tabs (`loadPage()` passes
+   `animate=true`; `hideSheet()` calls `loadPage(STATE.currentPage)` once
+   every open sheet has closed) — **never** on the silent 2s live-refresh
+   tick (0v above), which still calls the same render functions with no
+   `animate` arg on purpose. `user/sw.js` `CACHE` bumped to `v289`. No
+   `server.js` changes, no Railway redeploy needed. Not extended to Team's
+   stat cards or Products' figures — owner named exactly which fields, and
+   this stayed scoped to those.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

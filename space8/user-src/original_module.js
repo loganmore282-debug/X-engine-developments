@@ -63,6 +63,47 @@ function amtScale(n){
   if (d === 10) return 0.64;
   return 0.56;
 }
+// Owner: "when one leaves a screen ie one has gone to deposit, then he
+// clicks back, l really like those balances to start from zero then to
+// current so it loads like that, even referral link, even number and id" --
+// a genuine count-up animation for money/count figures (not just an instant
+// static number swap) each time a page is freshly returned to. See
+// loadPage()/hideSheet() for exactly when this replays -- NEVER on the
+// silent background live-refresh tick, since animating an already-live
+// balance back down to zero and up again every 2 seconds would be the
+// opposite of what "live" is supposed to feel like.
+function animateCountUp(el, endValue, fmt){
+  if (!el) return;
+  endValue = Number(endValue) || 0;
+  fmt = fmt || ugx;
+  var startTime = null, duration = 700;
+  function tick(ts){
+    if (!startTime) startTime = ts;
+    var p = Math.min((ts - startTime) / duration, 1);
+    var eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
+    el.textContent = fmt(Math.round(endValue * eased));
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+// Same "so it loads like that" ask, for fields that aren't a number
+// (referral link, phone, account ID) where counting up makes no sense -- a
+// quick fade + rise gives the same "just loaded in" read. Double rAF forces
+// the browser to paint the "before" state first so the transition actually
+// animates instead of jumping straight to the end state.
+function animateReveal(el){
+  if (!el) return;
+  el.style.transition = 'none';
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(4px)';
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      el.style.transition = 'opacity .35s ease, transform .35s ease';
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    });
+  });
+}
 function $(id){ return document.getElementById(id); }
 function qs(sel, root){ return (root||document).querySelector(sel); }
 function qsa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
@@ -344,6 +385,15 @@ function hideSheet(name){
   if (i !== -1) _sheetStack.splice(i, 1);
   if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
   if (_planCountdownTimer) { clearInterval(_planCountdownTimer); _planCountdownTimer = null; }
+  // Owner: "when one leaves a screen ie one has gone to deposit, then he
+  // clicks back, l really like those balances to start from zero then to
+  // current so it loads like that, even referral link, even number and
+  // id" -- replay the reveal animation for whichever page is now fully
+  // back in view, but only once every sheet has actually closed (a sheet
+  // stacked on top of another, e.g. the withdrawal-account picker on top
+  // of Withdraw, shouldn't replay it on that intermediate pop -- only the
+  // final one that returns to a bare page).
+  if (!_sheetStack.length) loadPage(STATE.currentPage);
 }
 function closeSheet(name){
   if (history.state && history.state.overlay === name) history.back();
@@ -665,10 +715,10 @@ qsa('.navitem').forEach(function(n){ n.addEventListener('click', function(){
 }); });
 
 function loadPage(name){
-  if (name === 'home') renderHome();
+  if (name === 'home') renderHome(true);
   else if (name === 'products') renderProducts();
-  else if (name === 'team') renderTeam();
-  else if (name === 'account') renderAccount();
+  else if (name === 'team') renderTeam(true);
+  else if (name === 'account') renderAccount(true);
 }
 
 // ── BANNER HELPER ─────────────────────────────────────────────────────
@@ -755,7 +805,7 @@ function identityBannerHtml(acc){
 }
 
 // ── HOME ──────────────────────────────────────────────────────────────
-async function renderHome(){
+async function renderHome(animate){
   // Codex-verified real bug (2026-08-17): captured before the fetch below,
   // checked again right after it resolves -- if a sign-out/sign-in
   // happened while this was in flight (STATE.authEpoch bumped), this
@@ -835,15 +885,15 @@ async function renderHome(){
 
   var balHtml = '<div class="balance-grid">' +
     '<div class="bcard bcard--main"' + bcardBg('balancebg') + '>' +
-      '<div class="bamt mono" style="--amt-scale:' + amtScale(acc.walletBalance) + '">' + ugx(acc.walletBalance) + '</div>' +
+      '<div class="bamt mono" id="bamtBalance" style="--amt-scale:' + amtScale(acc.walletBalance) + '">' + ugx(acc.walletBalance) + '</div>' +
       '<div class="blab">Account Balance</div>' +
     '</div>' +
     '<div class="bcard"' + bcardBg('cumulativebg') + '>' +
-      '<div class="bamt mono" style="--amt-scale:' + amtScale(acc.totalEarned) + '">' + ugx(acc.totalEarned) + '</div>' +
+      '<div class="bamt mono" id="bamtEarned" style="--amt-scale:' + amtScale(acc.totalEarned) + '">' + ugx(acc.totalEarned) + '</div>' +
       '<div class="blab">Cumulative Earnings</div>' +
     '</div>' +
     '<div class="bcard"' + bcardBg('investedbg') + '>' +
-      '<div class="bamt mono" style="--amt-scale:' + amtScale(acc.totalInvested) + '">' + ugx(acc.totalInvested) + '</div>' +
+      '<div class="bamt mono" id="bamtInvested" style="--amt-scale:' + amtScale(acc.totalInvested) + '">' + ugx(acc.totalInvested) + '</div>' +
       '<div class="blab">Total Invested</div>' +
     '</div>' +
   '</div>';
@@ -853,6 +903,15 @@ async function renderHome(){
     '<div class="action-btn ' + (checkedIn?'done':'') + '" id="homeCheckinBtn"><div class="ico">' + ico(checkedIn?'check':'checkin') + '</div><span>' + (checkedIn?'Claimed':'Check In') + '</span></div>' +
   '</div>';
   $('homeBalanceActionSlot').innerHTML = balHtml;
+  // Owner: "those balances [should] start from zero then to current so it
+  // loads like that" -- replayed only when this render was flagged as a
+  // fresh arrival (a tab switch, or returning from a closed sheet -- see
+  // loadPage()/hideSheet()), never on the silent 2s live-refresh tick.
+  if (animate) {
+    animateCountUp($('bamtBalance'), acc.walletBalance);
+    animateCountUp($('bamtEarned'), acc.totalEarned);
+    animateCountUp($('bamtInvested'), acc.totalInvested);
+  }
 
   var prodHtml = '';
   products.slice(0,10).forEach(function(p){ prodHtml += prodCardHtml(p); });
@@ -1379,7 +1438,7 @@ function listEndFooter(){
 // (owner: "when you open team it first opens then shows those bars then
 // back to real breakdown"). `STATE.teamMembers[level]` cache is preserved so
 // a second visit in the same session still skips re-fetching.
-async function renderTeam(){
+async function renderTeam(animate){
   // See renderHome()'s authEpoch comment. Checked in TWO places here: once
   // inside each per-level member fetch's own .then() (that write to
   // STATE.teamMembers[l] is a cache side effect that happens BEFORE the
@@ -1485,6 +1544,14 @@ async function renderTeam(){
   });
   html += '<div class="section-title">Task Center</div><div id="taskList"></div>';
   el.innerHTML = html;
+  // Owner: "even referral link ... like that" -- same fresh-arrival reveal
+  // as Home's balances (see animateReveal()'s own comment); the referral
+  // CODE right above it gets the same treatment so the two don't look out
+  // of sync with each other.
+  if (animate) {
+    animateReveal(qs('.referral-code', el));
+    animateReveal($('referralLink'));
+  }
   $('shareRefBtn').onclick = function(){ shareReferral(acc.referralCode); };
   $('copyRefCodeBtn').onclick = function(){ copyText(acc.referralCode, 'Referral code'); };
   qsa('.view-more-lvl', el).forEach(function(btn){ btn.onclick = function(){
@@ -1534,7 +1601,7 @@ function renderTaskList(milestones){
   }; });
 }
 // ── ACCOUNT ───────────────────────────────────────────────────────────
-async function renderAccount(){
+async function renderAccount(animate){
   // See renderHome()'s authEpoch comment.
   var epoch = STATE.authEpoch;
   var el = $('page-account');
@@ -1577,6 +1644,12 @@ async function renderAccount(){
   '</div>';
 
   el.innerHTML = html;
+  // Owner: "even number and id ... like that" -- same fresh-arrival reveal
+  // as Home's balances/Team's referral link (see animateReveal()'s comment).
+  if (animate) {
+    animateReveal(qs('.identity-phone', el));
+    animateReveal(qs('.identity-id', el));
+  }
   $('mBind').onclick = function(){ openPayoutSheet(); };
   $('mDeposits').onclick = function(){ openHistorySheet('deposit'); };
   $('mWithdrawals').onclick = function(){ openHistorySheet('withdrawal'); };
@@ -1725,16 +1798,23 @@ async function redeemGiftCode(){
 // now, this sheet is its only home.
 async function openGiftCodeSheet(){
   var sett = STATE.settings || (await api('/public/settings')).settings || {};
+  // Owner: "a line not a box, remove your svg even, plus the Telegram
+  // group tab up, leave others ie redeem, and banner, don't touch" -- the
+  // Telegram line moves ABOVE the input (banner, then the Telegram note,
+  // then the code field, matching the order the owner pointed to), the
+  // input itself drops its boxed .field pill + gift icon for a plain
+  // underlined line, and the Redeem button/banner are byte-identical to
+  // before.
   var html = '<div class="sheet-title">Gift Code</div>' +
     optBannerHtml('giftcodebg') +
-    '<div class="card giftcode-card">' +
-      '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" maxlength="32" placeholder="Enter gift code" autocapitalize="off" autocomplete="off"></div>' +
-      '<button class="btn btn-primary" id="giftCodeBtn" style="width:100%;margin-top:12px">Redeem</button>' +
-    '</div>' +
-    '<div style="text-align:center;font-size:12.5px;color:var(--ink-dim);margin-top:16px;padding:0 8px">' +
+    '<div style="text-align:center;font-size:12.5px;color:var(--ink-dim);margin:16px 0;padding:0 8px">' +
       (sett.telegramGroup ?
         'You can get gift codes from our <span id="giftTgLink" style="color:var(--blue);font-weight:700;cursor:pointer">Telegram group</span>.' :
         'You can get gift codes from our Telegram group.') +
+    '</div>' +
+    '<div class="card giftcode-card">' +
+      '<input id="giftCodeInput" class="giftcode-line-input" type="text" maxlength="32" placeholder="Enter gift code" autocapitalize="off" autocomplete="off">' +
+      '<button class="btn btn-primary" id="giftCodeBtn" style="width:100%;margin-top:12px">Redeem</button>' +
     '</div>';
   openSheet('generic', html);
   $('giftCodeBtn').onclick = redeemGiftCode;

@@ -482,6 +482,13 @@ select.field.placeholder{ color:var(--ink-dim); }
 .giftcode-row{ display:flex; align-items:center; gap:10px; }
 .giftcode-row .field{ flex:1; }
 .giftcode-row .btn{ width:auto; flex-shrink:0; padding:13px 20px; }
+/* Owner: "a line not a box" -- the gift code input reads as a plain
+   underlined line (no pill background/border, no icon), not the boxed
+   .field style the rest of the app's inputs use. Scoped to this one input
+   only -- .field itself stays untouched everywhere else. */
+.giftcode-line-input{ display:block; width:100%; border:none; border-bottom:1.5px solid var(--line); border-radius:0; padding:12px 2px; background:none; font-size:14.5px; color:var(--ink); outline:none; }
+.giftcode-line-input:focus{ border-bottom-color:var(--blue); }
+.giftcode-line-input::placeholder{ color:var(--ink-dim); }
 
 .telegram-card{ margin-bottom:20px; }
 .telegram-row{ display:flex; gap:10px; margin-top:9px; }

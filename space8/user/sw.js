@@ -783,7 +783,13 @@
 // on the first slide once refreshes run faster than a slide's hold time --
 // they now live in permanent DOM slots that renderHome() never detaches, so
 // the CSS animation is never interrupted by an unrelated balance refresh.
-const CACHE = 'space8-shell-v288';
+// v289: Gift Code screen -- Telegram note moved above the input, the input
+// itself is now a plain underlined line (no boxed pill, no gift icon).
+// Also: Home balances, Team's referral code/link, and Account's phone/ID
+// now animate in (count-up / fade-reveal) each time you return from a
+// closed sheet or switch tabs, instead of appearing as a static instant
+// swap. Never plays on the silent 2s background live-refresh.
+const CACHE = 'space8-shell-v289';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

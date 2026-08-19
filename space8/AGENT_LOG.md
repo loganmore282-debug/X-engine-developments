@@ -14,6 +14,78 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Gift Code screen redesign + fresh-arrival reveal/count-up animations
+
+Owner: "yo never fulfilled this,l said l want something like that of pico
+a line not a box ,remove your svg even,plus the Telegram group tab up,leave
+others ie redeem, and banner, don't touch" (with two screenshots -- Space8's
+current Gift Code screen, and Pico's own "Redeem Gift" screen for
+reference), then separately in the same message: "also bro there is a thing
+which l want,when one leaves a screen ie one has gone to deposit, then he
+clicks back,l really like those balances to start from zero then to
+current so it loads like that,even referral link,even number and id,like
+that,l think you have understood".
+
+**Gift Code screen** (`openGiftCodeSheet()`, `user-src/original_module.js`):
+- Read against Pico's own reference screenshot (banner → descriptive
+  Telegram line → tappable Telegram row → input → Confirm) to resolve what
+  "a line not a box" meant: NOT copying Pico's own boxed/bordered Telegram
+  row, but restyling Space8's OWN input to be a plain line and moving the
+  existing plain-text Telegram line above it -- matching Pico's ORDER
+  without matching Pico's box styling for that element (the owner was
+  explicit the Telegram bit should read as "a line not a box").
+- The Telegram note ("You can get gift codes from our Telegram group.")
+  moved from below the Redeem button to right after the banner, above the
+  input -- unchanged wording/link behavior, only its position changed.
+- The gift-code input dropped its boxed `.field` pill styling and the
+  `ico('gift')` icon for a new `.giftcode-line-input` class (plain bottom
+  border, transparent background, no icon) -- scoped to this ONE input via
+  a dedicated class so every other `.field` input elsewhere in the app
+  (deposit/withdraw amounts, bank forms, etc.) is untouched.
+- Redeem button and the banner image are byte-identical to before, per the
+  owner's explicit "leave others ie redeem, and banner, don't touch".
+
+**Fresh-arrival reveal animations** (`user-src/original_module.js`):
+- New `animateCountUp(el, endValue)` -- a genuine ease-out count-up from 0
+  to the real value over 700ms (not just an instant number swap), and
+  `animateReveal(el)` -- a fade+rise for non-numeric fields where counting
+  up makes no sense.
+- Wired into `renderHome(animate)` (the 3 balance cards: Account Balance,
+  Cumulative Earnings, Total Invested), `renderTeam(animate)` (the referral
+  code and referral link), and `renderAccount(animate)` (phone number and
+  account ID on the identity banner) -- each takes a new optional `animate`
+  parameter, only used to decide whether to replay the animation, never to
+  change what data is fetched/shown.
+- Trigger points: `loadPage()` (every bottom-nav tab switch) now passes
+  `animate=true`; `hideSheet()` now calls `loadPage(STATE.currentPage)`
+  once `_sheetStack` is fully empty (i.e. the LAST open sheet just closed,
+  covering exactly "gone to deposit, then he clicks back" -- an
+  intermediate pop, like the withdrawal-account picker closing back onto
+  Withdraw underneath, correctly does NOT replay it, only the final pop
+  that returns to a bare page does). Both paths use already-cached
+  `STATE.account`/`STATE.teamStats` data (no extra network calls) --
+  purely a replay of the same fresh-arrival visual treatment.
+- Deliberately NEVER wired into the silent 2s live-refresh timer (which
+  calls these same render functions with no `animate` arg, so it stays
+  falsy/undefined by default) -- animating an already-live balance back
+  down to zero and up again every 2 seconds would undo the whole point of
+  this session's live-refresh speed-up.
+- **Verification**: `node build-core.js` → round-trip OK. Rendered the real
+  `openGiftCodeSheet()` output against the real CSS in Chromium -- banner,
+  then the Telegram line, then the plain-line input (no box, no icon), then
+  the unchanged Redeem button, in that order. Extracted the real
+  `animateCountUp`/`animateReveal` and ran them in Chromium: the counter
+  correctly eases up to and settles exactly on `UGX 128,000`; the reveal
+  correctly starts at opacity 0 and settles at opacity 1. Full `test-*.js`
+  suite green (client-only change, server.js untouched). Bumped
+  `user/sw.js` `CACHE` to `space8-shell-v289`. No `server.js` changes, no
+  Railway redeploy needed.
+- **Deferred / open**: the animation is scoped to exactly the fields the
+  owner named (Home's 3 balances, Team's referral code/link, Account's
+  phone/ID) -- Team's "Total Referrals"/"Total Commission" stat cards and
+  Products' price/cashback figures were NOT included since the owner didn't
+  name them; can extend the same helpers there if wanted.
+
 ## 2026-08-19 — Claude — Fixed the Home banner carousel (and ticker) getting stuck on the first slide
 
 Owner: "why is it that sliding images reach a time and stuck on only the
