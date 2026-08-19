@@ -14,6 +14,48 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Balance-card figures shrink past 7 digits; withdrawal network select no longer defaults
+
+Owner, with 2 screenshots (Home, Withdrawal Accounts add-form): "l also want you to
+regulate the digits size,such that if they exceed 7 figures they reduce in size,so
+make sure the figure sizes will be regulated in accordance to number of figures or
+amount, also dont allow default selection of any network, the box should be not
+filled such that one selects the right network."
+
+- **Graduated figure shrink on Home's 3 balance cards** (`user-src/index.html`/
+  `original_module.js`): new `amtScale(n)` returns `1` for ≤7 digits (untouched),
+  stepping down through `0.86`/`0.74`/`0.64` for 8/9/10 digits, `0.56` for 11+ — a
+  graduated scale, not a single on/off cutoff, per "regulated in accordance to number
+  of figures." Applied as an inline `--amt-scale` custom property on each `.bamt` div;
+  `.bcard .bamt`/`.bcard--main .bamt`'s `font-size` changed from a flat px value to
+  `calc(22px * var(--amt-scale,1))`/`calc(32px * var(--amt-scale,1))` so the same
+  scale variable correctly compounds with either card's own base size. Scoped to the
+  3 Home balance cards specifically (Account Balance / Cumulative Earnings / Total
+  Invested) — the screenshots shown were Home's, not product prices or other money
+  figures elsewhere in the app.
+- **Withdrawal Accounts' network `<select>` no longer defaults to MTN Mobile Money.**
+  `renderPayoutSheet()`'s add-form now starts on a `disabled selected hidden`
+  placeholder option ("Select network") — nothing pre-picked. New CSS
+  `select.field.placeholder{color:var(--ink-dim)}` greys it out like every other
+  empty field until a real option is chosen (toggled via a new `onchange` handler);
+  `savePayoutBtn`'s submit handler now rejects outright with "Select a network" if the
+  select is still on the empty placeholder value, closing the same class of "silently
+  submitted against a default I never actually picked" mistake the owner's earlier
+  "don't auto-select a withdrawal account" instruction (2026-08-17) already fixed for
+  the account-picker itself. Scoped to the Withdrawal Accounts add-form only — the
+  Deposit sheet has its own separate network select (unrelated screenshot context this
+  round, left untouched).
+- **Why**: readability for large balances, and preventing an unnoticed default network
+  from silently going through on a withdrawal-account bind.
+- **Verification**: `node build-core.js` → round-trip OK. Chromium render confirms a
+  9-digit figure (UGX 123,456,789) renders visibly smaller than a normal 5-6 digit
+  figure while a normal figure is completely unchanged; confirmed the placeholder
+  renders in `--ink-dim` grey and switches to normal text color once a real network is
+  selected. Full 79-file `test-*.js` suite green (client-only change, server.js
+  untouched). Bumped `user/sw.js` `CACHE` to `space8-shell-v280`. No `server.js`/
+  `admin-src/` changes, no Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Bank withdrawal accounts reactivated, merged into the existing Withdrawal Accounts flow
 
 Owner, with 2 reference icon screenshots and the MarzPay integration skill docs

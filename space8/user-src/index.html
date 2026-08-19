@@ -176,6 +176,13 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .field input{ border:none; background:none; outline:none; color:var(--ink); font-size:14.5px; width:100%; }
 .field input::placeholder{ color:var(--ink-dim); }
 .field-eye{ cursor:pointer; }
+/* Owner: "dont allow default selection of any network, the box should be
+   not filled such that one selects the right network" -- the network
+   <select> starts on a disabled placeholder option (nothing pre-picked),
+   styled grey like every other field's placeholder text until the member
+   actually chooses one (toggled via the .placeholder class in
+   original_module.js's payNetwork change handler). */
+select.field.placeholder{ color:var(--ink-dim); }
 .field-hint{ font-size:12px; color:var(--ink-dim); margin:-4px 2px 0; }
 
 .card{ background:rgba(255,255,255,var(--card-alpha,1)); backdrop-filter:blur(var(--card-blur,0px)); -webkit-backdrop-filter:blur(var(--card-blur,0px)); border-radius:var(--radius-card); padding:18px; }
@@ -330,8 +337,14 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .bcard--main{ grid-row:span 2; min-height:200px; padding:20px; }
 .bcard::before{ content:''; position:absolute; inset:0; background:linear-gradient(155deg, rgba(6,12,24,.28), rgba(6,12,24,.80)); z-index:0; }
 .bcard > *{ position:relative; z-index:1; }
-.bcard .bamt{ font-weight:800; font-size:22px; letter-spacing:-.01em; line-height:1.1; }
-.bcard--main .bamt{ font-size:32px; }
+/* Owner: "regulate the digits size, such that if they exceed 7 figures
+   they reduce in size... regulated in accordance to number of figures."
+   --amt-scale is set inline per-figure by amtScale() (original_module.js)
+   based on the actual digit count, so a card that overflows into 8+
+   digits shrinks proportionally instead of wrapping/overflowing; a
+   normal figure (<=7 digits) is untouched (scale defaults to 1). */
+.bcard .bamt{ font-weight:800; font-size:calc(22px * var(--amt-scale, 1)); letter-spacing:-.01em; line-height:1.1; }
+.bcard--main .bamt{ font-size:calc(32px * var(--amt-scale, 1)); }
 .bcard .blab{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; opacity:.85; margin-top:5px; }
 .bcard--main .blab{ font-size:11px; }
 

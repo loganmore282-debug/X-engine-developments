@@ -47,6 +47,22 @@ function resetUserState(){
 
 // ── UTILS ──────────────────────────────────────────────────────────────
 function ugx(n){ return 'UGX ' + Math.round(Number(n||0)).toLocaleString('en-UG'); }
+// Owner: "regulate the digits size, such that if they exceed 7 figures
+// they reduce in size, so make sure the figure sizes will be regulated in
+// accordance to number of figures or amount" -- a graduated shrink (not a
+// single on/off cutoff) keyed by the actual digit count of the amount, fed
+// into --amt-scale (index.html's .bamt font-size: calc(base * scale)) so a
+// balance card figure that grows into 8+ digits shrinks proportionally
+// instead of overflowing or wrapping, while a normal-sized figure
+// (<=7 digits, i.e. under 10,000,000) is completely untouched.
+function amtScale(n){
+  var d = String(Math.abs(Math.trunc(Number(n) || 0))).length;
+  if (d <= 7) return 1;
+  if (d === 8) return 0.86;
+  if (d === 9) return 0.74;
+  if (d === 10) return 0.64;
+  return 0.56;
+}
 function $(id){ return document.getElementById(id); }
 function qs(sel, root){ return (root||document).querySelector(sel); }
 function qsa(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
@@ -797,15 +813,15 @@ async function renderHome(){
   var html = homeBannerHtml();
   html += '<div class="balance-grid">' +
     '<div class="bcard bcard--main"' + bcardBg('balancebg') + '>' +
-      '<div class="bamt mono">' + ugx(acc.walletBalance) + '</div>' +
+      '<div class="bamt mono" style="--amt-scale:' + amtScale(acc.walletBalance) + '">' + ugx(acc.walletBalance) + '</div>' +
       '<div class="blab">Account Balance</div>' +
     '</div>' +
     '<div class="bcard"' + bcardBg('cumulativebg') + '>' +
-      '<div class="bamt mono">' + ugx(acc.totalEarned) + '</div>' +
+      '<div class="bamt mono" style="--amt-scale:' + amtScale(acc.totalEarned) + '">' + ugx(acc.totalEarned) + '</div>' +
       '<div class="blab">Cumulative Earnings</div>' +
     '</div>' +
     '<div class="bcard"' + bcardBg('investedbg') + '>' +
-      '<div class="bamt mono">' + ugx(acc.totalInvested) + '</div>' +
+      '<div class="bamt mono" style="--amt-scale:' + amtScale(acc.totalInvested) + '">' + ugx(acc.totalInvested) + '</div>' +
       '<div class="blab">Total Invested</div>' +
     '</div>' +
   '</div>';
@@ -1864,7 +1880,13 @@ async function renderPayoutSheet(){
   // generic account-number field -- no separate bank-vs-mobile-money
   // sub-flow, exactly per "no making another category it has remained
   // the same."
+  // Owner: "dont allow default selection of any network, the box should be
+  // not filled such that one selects the right network" -- a disabled,
+  // hidden placeholder option starts selected instead of defaulting onto
+  // the first real network, so the field genuinely shows nothing chosen
+  // until the member picks one.
   var networkOptionsHtml =
+    '<option value="" disabled selected hidden>Select network</option>' +
     '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
     '<option value="Airtel Money">Airtel Money</option>' +
     (STATE.banks || []).map(function(b){ return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join('');
@@ -1876,7 +1898,7 @@ async function renderPayoutSheet(){
       (picking ? '' : '<div class="plain-note">Withdrawals only ever go to an account bound here, never a number typed at withdrawal time. Add another account below, or remove one you no longer use with your withdrawal PIN.</div>') +
       '<div class="auth-form">' +
         '<div class="field">' + ico('wallet') + '<input id="payHolder" placeholder="Account holder name"></div>' +
-        '<select id="payNetwork" class="field" style="appearance:none">' + networkOptionsHtml + '</select>' +
+        '<select id="payNetwork" class="field placeholder" style="appearance:none">' + networkOptionsHtml + '</select>' +
         '<div class="field">' + ico('bank') + '<input id="payPhone" type="text" inputmode="numeric" maxlength="20" placeholder="Mobile-money or bank account number"></div>' +
         '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN" autocomplete="one-time-code"></div>' +
         '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
@@ -1884,10 +1906,12 @@ async function renderPayoutSheet(){
       '<button class="btn btn-primary" id="savePayoutBtn" style="margin-top:14px">Add Withdrawal Account</button>');
 
   if (showAddForm) {
+    $('payNetwork').onchange = function(){ this.classList.toggle('placeholder', !this.value); };
     $('savePayoutBtn').onclick = async function(){
       var btn = $('savePayoutBtn');
       var holder = $('payHolder').value.trim(), network = $('payNetwork').value;
       var phone = $('payPhone').value, pin = $('payPin').value;
+      if (!network) return toast('Select a network', true);
       var isMM = MM_NETWORKS.indexOf(network) !== -1;
       var acctOk = isMM ? !!cleanPhone(phone) : /^\d{5,20}$/.test(String(phone||'').replace(/\D/g,''));
       if (!holder || !acctOk || !/^\d{4}$/.test(pin)) return toast('Fill in all fields correctly', true);

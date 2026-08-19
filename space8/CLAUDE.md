@@ -2874,6 +2874,23 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    rebuild, no cache bump (nothing in `user-src/` hardcodes reward amounts). See the
    2026-08-19 AGENT_LOG.md entry ("Referral count-ladder recalculated again to flat
    UGX 500 (was 1,000)").
+0q. **Bank withdrawal accounts reactivated — DONE.** See the dedicated "Withdrawal
+   accounts now support banks too" entry a few sections above (in Product ladder) for
+   the full design — bank-transfer withdrawal, merged into the SAME bind-then-pick
+   flow mobile money already uses, not a separate category. `test-bank-withdrawal-
+   accounts.js` (40/40). **`server.js` changed → needs a Railway redeploy.** `user/
+   sw.js` `CACHE` bumped to `v279`. See the 2026-08-19 AGENT_LOG.md entry ("Bank
+   withdrawal accounts reactivated, merged into the existing Withdrawal Accounts
+   flow").
+0r. **Balance-card figures shrink past 7 digits; withdrawal network select no longer
+   defaults — DONE.** Home's 3 balance cards (`.bamt`) now shrink proportionally via
+   a graduated `--amt-scale` (1 at ≤7 digits, stepping down through 8/9/10/11+ digits)
+   instead of overflowing/wrapping once a figure grows large. The Withdrawal Accounts
+   add-form's network `<select>` no longer defaults to MTN Mobile Money — starts on a
+   disabled, greyed "Select network" placeholder; submit is rejected if it's still
+   unselected. `user/sw.js` `CACHE` bumped to `v280`. No `server.js` changes, no
+   Railway redeploy needed. See the 2026-08-19 AGENT_LOG.md entry ("Balance-card
+   figures shrink past 7 digits; withdrawal network select no longer defaults").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

@@ -755,7 +755,12 @@
 // lists every MarzPay-supported bank alongside MTN/Airtel; the old
 // phone-only field is now a generic mobile-money-or-bank account-number
 // field with a new bank-glyph icon replacing the phone icon.
-const CACHE = 'space8-shell-v279';
+// v280: Home balance-card figures now shrink proportionally once they
+// exceed 7 digits (--amt-scale, graduated not a single cutoff), instead of
+// overflowing/wrapping. Withdrawal Accounts' network select no longer
+// defaults to MTN Mobile Money -- starts on a disabled "Select network"
+// placeholder (greyed, like other empty fields) until the member picks one.
+const CACHE = 'space8-shell-v280';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
