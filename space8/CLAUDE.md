@@ -3030,6 +3030,9 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    `server.js` changes, no Railway redeploy needed. Not extended to Team's
    stat cards or Products' figures — owner named exactly which fields, and
    this stayed scoped to those.
+0z2. **Live-refresh removed — DONE.** Owner: "remove that live counter on
+   money, remove now, immediately, don't say why." `startLiveRefresh()` is
+   a no-op. `user/sw.js` `CACHE` bumped to `v290`.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

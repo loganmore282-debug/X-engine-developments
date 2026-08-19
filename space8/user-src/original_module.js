@@ -2605,28 +2605,7 @@ window.addEventListener('space8-auth', async function(e){
 // server-side cashback/maturity credits, an admin approving a deposit or
 // withdrawal, a downline referral joining/investing, a milestone reward.
 var _liveRefreshTimer = null;
-function startLiveRefresh(){
-  if (_liveRefreshTimer) return;
-  _liveRefreshTimer = setInterval(async function(){
-    if (document.hidden || !STATE.account || !window.fbAuth || !window.fbAuth.currentUser) return;
-    // Codex-verified real bug (2026-08-17): stopLiveRefresh() (called on
-    // sign-out) only clears the interval so no FUTURE tick fires -- it
-    // can't cancel a tick whose fetch was already in flight. That response
-    // used to write straight into STATE.account/STATE.investments with no
-    // check at all, so it could land after a sign-out + a DIFFERENT
-    // member's sign-in on the same device and silently overwrite their
-    // just-loaded session with the previous member's data. Same authEpoch
-    // guard every other async render already uses.
-    var epoch = STATE.authEpoch;
-    var results = await Promise.all([api('/account', null, 'GET', false), api('/investments', null, 'GET', false)]);
-    if (epoch !== STATE.authEpoch) return;
-    if (results[0].status === 'success') STATE.account = results[0].account;
-    if (results[1].status === 'success') STATE.investments = results[1].investments || [];
-    if (STATE.currentPage === 'home') renderHome();
-    else if (STATE.currentPage === 'products') renderProducts();
-    else if (STATE.currentPage === 'team') renderTeam();
-  }, 2000);
-}
+function startLiveRefresh(){}
 function stopLiveRefresh(){ if (_liveRefreshTimer) { clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; } }
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE.account) { STATE.loaded.home = false; if (STATE.currentPage === 'home') renderHome(); } });
 

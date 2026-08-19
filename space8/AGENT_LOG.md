@@ -14,6 +14,13 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Live-refresh removed
+
+Owner: "let us remove that live counter on money,remove now,immediately,
+don't say why,l said remove also". `startLiveRefresh()` is now a no-op;
+`stopLiveRefresh()`/`_liveRefreshTimer` left in place (harmless, never
+started). `user/sw.js` `CACHE` bumped to `v290`. Full suite green.
+
 ## 2026-08-19 — Claude — Gift Code screen redesign + fresh-arrival reveal/count-up animations
 
 Owner: "yo never fulfilled this,l said l want something like that of pico
