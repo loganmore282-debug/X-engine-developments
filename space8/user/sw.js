@@ -815,7 +815,11 @@
 // the banned message -- one shared toast() function covers all of them)
 // now appears centered in the middle of the screen instead of anchored
 // near the bottom nav bar.
-const CACHE = 'space8-shell-v295';
+// v296: Referral share text rewritten again to the owner's newest launch
+// template (adds Registration Bonus + Daily Check-in Bonus lines, a
+// separate "up to VIP 15" bullet, a link emoji). Money figures still
+// pulled live, never the template's example numbers.
+const CACHE = 'space8-shell-v296';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

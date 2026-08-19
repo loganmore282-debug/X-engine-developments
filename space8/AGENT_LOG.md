@@ -14,6 +14,35 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Referral share text rewritten to the owner's newest launch template
+
+Owner pasted a new version of the share-text template, adding a
+Registration Bonus line, a Daily Check-in Bonus line, a separate "up to
+VIP 15" bullet (previously appended with a comma to the last VIP line),
+and a 🔗 emoji before each link.
+
+- `shareReferral()` (`user-src/original_module.js`): rebuilt the `text`
+  string to match the new structure exactly. Per the established "0i"
+  precedent (this is the third round of this same template evolving —
+  see the two prior AGENT_LOG entries on it), cross-checked every number
+  in the new template against live `server.js` values before writing
+  anything: withdrawal charge (15%), daily check-in bonus (300), and
+  Level 1/2/3 (28%/2%/1%) all match live settings exactly; min deposit
+  (template says 15,000, live is 20,000), min withdrawal (template says
+  3,000, live is 5,000), and registration/welcome bonus (template says
+  2,500, live is 5,000) do NOT match — those three stay sourced from
+  `STATE.settings` as before, never the template's literal numbers. VIP
+  1-3 daily cashback figures and the "up to VIP 15" count are still
+  computed live from `STATE.products`, unchanged from the prior round.
+- **Verification**: `node build-core.js` → round-trip OK. Extracted the
+  real function and ran it under Node with live-shaped settings/product
+  stubs — printed output matches the new template's structure exactly,
+  with the three corrected money figures instead of the template's stale
+  example numbers. Full `test-*.js` suite green. Bumped `user/sw.js`
+  `CACHE` to `space8-shell-v296`. No `server.js` changes, no Railway
+  redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — "About Space8" renamed to "About Us"; toast notifications now appear centered
 
 Owner: "change about space8 to about us,also bro let notifies open from

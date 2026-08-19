@@ -1733,16 +1733,19 @@ async function shareReferral(code){
     '💰 Minimum Deposit: ' + ugx(s.minDeposit) + '\n' +
     '💸 Minimum Withdrawal: ' + ugx(s.minWithdraw) + '\n' +
     '⚡ Withdrawals: Available daily with fast processing\n' +
-    '📌 Withdrawal Charge: ' + (Number(s.withdrawFeePct) || 0) + '%\n\n' +
+    '📌 Withdrawal Charge: ' + (Number(s.withdrawFeePct) || 0) + '%\n' +
+    '🎁 Registration Bonus: ' + ugx(s.welcomeBonus) + '\n' +
+    '📅 Daily Check-in Bonus: ' + ugx(s.dailyCheckin) + '\n\n' +
     '🎁 Referral Bonus Structure:\n' +
     '🔥 Level 1: ' + (Number(s.commL1) || 0) + '%\n' +
     '✨ Level 2: ' + (Number(s.commL2) || 0) + '%\n' +
     '💎 Level 3: ' + (Number(s.commL3) || 0) + '%\n\n' +
-    link + '\n\n' +
+    '🔗 ' + link + '\n\n' +
     '💼 Some of the VIP products:\n' +
-    vipLines + ', up to VIP ' + vipCount + '\n\n' +
+    vipLines + '\n' +
+    '⭐ And more exciting plans up to VIP ' + vipCount + '\n\n' +
     'Join SPACE8 and explore the new platform from launch day! 🚀\n\n' +
-    link + '\n\n' +
+    '🔗 ' + link + '\n\n' +
     '🚀 SPACE8 — NEW LAUNCH, NEW OPPORTUNITIES!';
   // Owner: "when one clicks share link, it will also embed with that
   // table" -- attach the Space8 Investment Plans graphic alongside the
