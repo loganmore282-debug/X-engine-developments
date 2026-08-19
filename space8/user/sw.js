@@ -819,7 +819,9 @@
 // template (adds Registration Bonus + Daily Check-in Bonus lines, a
 // separate "up to VIP 15" bullet, a link emoji). Money figures still
 // pulled live, never the template's example numbers.
-const CACHE = 'space8-shell-v296';
+// v297: "Password Management" renamed to "Change Password" (Account menu
+// row + sheet title).
+const CACHE = 'space8-shell-v297';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

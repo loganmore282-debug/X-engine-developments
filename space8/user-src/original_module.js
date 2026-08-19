@@ -1636,7 +1636,7 @@ async function renderAccount(animate){
   '</div>';
 
   html += '<div class="menu-list">' +
-    '<div class="menu-row" id="passwordRow">' + ico('key') + '<span>Password Management</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>' +
+    '<div class="menu-row" id="passwordRow">' + ico('key') + '<span>Change Password</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>' +
     menuRow('info','About Us','about') +
     menuRow('doc','Rules','rules') +
     menuRow('support','Support','support') +
@@ -2148,7 +2148,7 @@ async function openPinSheet(){
 // in index.html's plain <script>) rather than calling updatePassword directly.
 function openPasswordSheet(){
   openSheet('generic',
-    '<div class="sheet-title">Password Management</div>' +
+    '<div class="sheet-title">Change Password</div>' +
     '<div class="sheet-sub">Change the password you use to log in.</div>' +
     '<div class="auth-form">' +
       '<div class="field">' + ico('key') + '<input id="curPassword" type="password" autocomplete="current-password" placeholder="Current password"></div>' +

@@ -14,6 +14,14 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — "Password Management" renamed to "Change Password"
+
+Owner: "change password management to 'Change Password'". Both places it
+appeared (`user-src/original_module.js`) -- the Account menu row and the
+sheet's own title -- changed. `node build-core.js` round-trip OK, full
+`test-*.js` suite green, 79/79. Bumped `user/sw.js` `CACHE` to
+`space8-shell-v297`. No `server.js` changes, no Railway redeploy needed.
+
 ## 2026-08-19 — Claude — Referral share text rewritten to the owner's newest launch template
 
 Owner pasted a new version of the share-text template, adding a
