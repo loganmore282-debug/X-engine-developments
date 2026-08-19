@@ -645,7 +645,12 @@ function hideAnnouncement(){
   $('announceBg').classList.remove('show');
   if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
 }
-$('announceCancelBtn').onclick = hideAnnouncement;
+// Owner: "remove cancel button there, it will be on top left of dialog,
+// clear view and we'll defined (X)" -- the bottom Cancel button is gone;
+// a small round (X) top-left of the card is now the dialog's own explicit
+// dismiss control (tapping the dark scrim still closes it too, unchanged).
+$('announceCloseBtn').innerHTML = ico('x');
+$('announceCloseBtn').onclick = hideAnnouncement;
 $('announceBg').addEventListener('click', function(e){ if (e.target.id === 'announceBg') hideAnnouncement(); });
 qsa('.navitem').forEach(function(n){ n.addEventListener('click', function(){
   qsa('.navitem').forEach(function(item){ item.classList.remove('tap-glow'); });

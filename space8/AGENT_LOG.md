@@ -14,6 +14,35 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Announcement dialog: Cancel button replaced with a top-left (X); Telegram button centered at its original size
+
+Owner, with a screenshot: "bro ,remove cancel button there ,it will be on top left
+of dialog,clear view and we'll defined (X) also the Telegram button will be
+established in the middle but it will have that very size as it was,no change only
+putting it in middle."
+
+- `user-src/index.html`: new `.announce-close` — a small round button
+  (`position:absolute; top:14px; left:14px`), `#announceCloseBtn`, replacing
+  `#announceCancelBtn`. `.announce-actions` gained `justify-content:center`;
+  `.pillbtn` lost its `flex:1` (it was stretching to fill the row when paired with
+  Cancel — now it's the row's only child, so `flex:1` alone would stretch it to
+  100% width, which the owner explicitly said not to do — "no change only putting
+  it in middle"). Padding/font-size/border-radius on `.pillbtn` are byte-identical
+  to before. Dead `.pillbtn-ghost` rule removed (was Cancel-only, `.pillbtn` is
+  confirmed used only by this one dialog).
+- `user-src/original_module.js`: `$('announceCloseBtn').innerHTML = ico('x')` (the
+  existing thin-stroke X icon, same one used elsewhere in the app) +
+  `.onclick = hideAnnouncement`, replacing the old `#announceCancelBtn` wiring.
+  Tapping the dark scrim still closes the dialog too, unchanged.
+- **Verification**: `node build-core.js` → round-trip OK. Chromium render (real
+  markup + real `ico()` output, not a reimplementation) confirms the (X) sits
+  cleanly top-left, no Cancel button remains, and the Telegram button is centered
+  at its original pill size rather than stretched full-width. Full 79-file
+  `test-*.js` suite green (client-only change, server.js untouched). Bumped
+  `user/sw.js` `CACHE` to `space8-shell-v282`. No `server.js`/`admin-src/` changes,
+  no Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Codex review of the last 3 commits: 2 Medium + 2 Low, all real, all fixed
 
 Owner: "now let us ask codex on our commits latest 3 commits so it reviews." Scoped
