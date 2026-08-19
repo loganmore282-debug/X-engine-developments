@@ -14,6 +14,58 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Shorter Home action buttons, referral count-ladder recalculated to flat UGX 1,000, announcement dialog redesigned (icon badge + stacked buttons)
+
+Owner, with 3 screenshots (Home, Team milestones, a picovver.com "NOTIFY" reference
+dialog): "bro can you reduce the vertical width of those buttons of deposit, withdraws
+and checkin, also change amounts of referral rewards to 1000ugx per active referral,so
+recalculate and replace,let it be encrypted, server-side,safeguard, and secure and
+indepotent, and accurate and no double claim,also back to dialog."
+
+- **Home action buttons made shorter.** `.action-btn` (`user-src/index.html`) padding
+  went from `14px 8px` to `9px 8px`, gap `7px`→`5px`, icon badge `44px`→`36px`,
+  icon-svg `21px`→`17px`, and `.s8-check` (the Claimed checkmark) scaled down to match.
+  Pure visual sizing, no markup/logic change.
+- **Referral count-ladder recalculated to a flat UGX 1,000/active-referral** (was
+  1,500). `TEAM_MILESTONES` in `server.js`: 2→2,000; 5→5,000; 10→10,000; 25→25,000;
+  50→50,000; 100→100,000; 200→200,000; 500→500,000; 1,000→1,000,000; 2,000→2,000,000;
+  5,000→5,000,000. Only the target NUMBERS stay meaningful for the claim-flag mechanism
+  (`milestoneClaimed_<target>`) — since those are unchanged, no migration/backfill is
+  needed, same "claim flags keyed by target number" precedent already established for
+  the 2026-08-18 ladder tier additions. **Already encrypted/server-side/idempotent/
+  no-double-claim by the existing mechanism** — the owner's list of properties describes
+  `/team/milestone/claim`'s existing implementation exactly: progress is always
+  LIVE-recomputed server-side (never trusted from the client), the claim is wrapped in
+  `withLock('milestoneclaim:'+userId+':'+claimFlag, ...)` + a status-checked transaction
+  that re-verifies live progress immediately before crediting (closing the TOCTOU gap a
+  Codex review found and fixed 2026-08-17), and the claim flag makes a second attempt on
+  an already-claimed tier a guaranteed no-op — none of that needed new code, only the
+  reward table's values changed. Updated `test-referral-milestones.js`'s hardcoded
+  expectations (was asserting the old 7,500/UGX for the 5-referral tier and a combined
+  +20,000 total with the deposit ladder; now 5,000 and +17,500) — grepped every other
+  test file referencing `TEAM_MILESTONES`/`milestoneClaimed_`/`/team/milestone/claim`
+  and confirmed none of the others hardcode a specific reward amount (they assert
+  status/success or a before/after delta only), so nothing else needed updating.
+- **Announcement dialog restyled to match the picovver.com reference**: a circular
+  icon badge (bell SVG, solid `var(--blue)` background) now sits above the title, and
+  the two actions (`user-src/index.html`) stack vertically instead of sitting
+  side-by-side — a light/white "OK" button (renamed from "Cancel", same element id and
+  `hideAnnouncement()` handler, unchanged dismiss behavior) on top, the accent-colored
+  Telegram button below it. New `.announce-icon`/`.pillbtn-light` CSS; `.announce-actions`
+  switched from `flex-direction:row` to `column`; `.pillbtn` from `flex:1` to
+  `width:100%` (safe — `.pillbtn`/`.announce-actions` are only used by this one dialog).
+  Verified visually with a Chromium render using the real extracted CSS + markup from
+  the built file, side by side against the reference screenshot's layout.
+- **Why**: visual polish + a manual-reward-ladder rate change from 3 owner screenshots.
+- **Verification**: `node build-core.js` → round-trip OK. Full 78-file `test-*.js` suite
+  green (including the updated `test-referral-milestones.js`). Chromium renders confirm
+  both the shortened action-row buttons and the restyled announcement dialog. Bumped
+  `user/sw.js` `CACHE` to `space8-shell-v275`. No `admin-src/` changes, no admin rebuild.
+  **`server.js` changed (TEAM_MILESTONES) → needs a Railway redeploy** for the new
+  reward amounts to take effect; the client-side changes (buttons, dialog) deploy via
+  Render's normal `user/` auto-deploy.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-18 — Claude — Deposit/withdraw icons replaced, Archivo Black display font on the announcement title, referral share now attaches the plans-table image
 
 Owner, with 4 reference images: "bro change deposit svg to exactly that first one,withdrawal

@@ -792,18 +792,25 @@ async function uniqueRef(letter) {
 // never paid the new (different) amount for the same number -- exactly the
 // "existing claimed missions stay claimed, not reset or paid again"
 // requirement, with no extra migration code needed.
+// Rewards recalculated 2026-08-19 to a flat UGX 1,000/referral (was 1,500) --
+// owner: "change amounts of referral rewards to 1000ugx per active referral,
+// so recalculate and replace." Only the reward values moved; target numbers
+// are untouched, so the existing claim-flag-by-target mechanism
+// (milestoneClaimed_<target>) needs no migration -- a target already claimed
+// under the old 1,500 rate stays claimed and is never repaid the new rate
+// for that same target, by the same design already documented above.
 const TEAM_MILESTONES = [
-  { target:   2, reward:   3000 },
-  { target:   5, reward:   7500 },
-  { target:  10, reward:  15000 },
-  { target:  25, reward:  37500 },
-  { target:  50, reward:  75000 },
-  { target: 100, reward: 150000 },
-  { target: 200, reward: 300000 },
-  { target: 500, reward: 750000 },
-  { target: 1000, reward: 1500000 },
-  { target: 2000, reward: 3000000 },
-  { target: 5000, reward: 7500000 },
+  { target:   2, reward:   2000 },
+  { target:   5, reward:   5000 },
+  { target:  10, reward:  10000 },
+  { target:  25, reward:  25000 },
+  { target:  50, reward:  50000 },
+  { target: 100, reward: 100000 },
+  { target: 200, reward: 200000 },
+  { target: 500, reward: 500000 },
+  { target: 1000, reward: 1000000 },
+  { target: 2000, reward: 2000000 },
+  { target: 5000, reward: 5000000 },
 ];
 // Second Task Center ladder, replaced 2026-08-16 alongside the one above.
 // Reward rate is a flat 2.5% of the deposit target at every tier. Progress

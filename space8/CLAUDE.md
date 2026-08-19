@@ -546,11 +546,11 @@ re-trigger L1/L2/L3 commission.
 Mission & Reward Structure" schedule (relayed by Codex, applied by Claude same day —
 see `AGENT_LOG.md`). Don't assume the old ChocoMCC-era numbers below are still live if
 you see them referenced anywhere (old test fixtures, stale comments):
-- **Active Level-1 referral ladder** (flat UGX 1,500/referral): 2→3,000; 5→7,500;
-  10→15,000; 25→37,500; 50→75,000; 100→150,000; 200→300,000; 500→750,000;
-  1,000→1,500,000; 2,000→3,000,000; 5,000→7,500,000 (tiers 8-11 all added
-  2026-08-18, owner requests — same flat rate throughout, no other tier ever
-  touched).
+- **Active Level-1 referral ladder** (flat UGX 1,000/referral, changed 2026-08-19 from
+  1,500): 2→2,000; 5→5,000; 10→10,000; 25→25,000; 50→50,000; 100→100,000;
+  200→200,000; 500→500,000; 1,000→1,000,000; 2,000→2,000,000; 5,000→5,000,000
+  (tiers 8-11 added 2026-08-18, owner requests — same flat rate throughout, no
+  other tier ever touched; rate itself changed 2026-08-19, see 0n below).
 - **Whole-team deposit ladder** (flat 2.5%): 100,000→2,500; 500,000→12,500;
   1,000,000→25,000; 5,000,000→125,000; 10,000,000→250,000; 25,000,000→625,000;
   50,000,000→1,250,000; 100,000,000→2,500,000; 200,000,000→5,000,000;
@@ -2769,6 +2769,24 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    no Railway redeploy needed. See the 2026-08-18 AGENT_LOG.md entry ("Deposit/withdraw
    icons replaced, Archivo Black display font on the announcement title, referral share
    now attaches the plans-table image").
+0n. **Shorter Home action buttons, referral ladder recalculated to flat UGX 1,000,
+   announcement dialog restyled — DONE.** `.action-btn` (Deposit/Withdraw/Check-in on
+   Home) padding/icon size reduced for a shorter, less bulky look. `TEAM_MILESTONES`
+   in `server.js` recalculated to a flat UGX 1,000/active-referral (was 1,500) — see
+   the "Active Level-1 referral ladder" entry above for the new numbers; only reward
+   VALUES changed, target numbers untouched, so the existing claim-flag-by-target
+   mechanism needed no migration. The claim endpoint's encryption/server-side/
+   idempotency/no-double-claim properties the owner asked for were already true of
+   `/team/milestone/claim`'s existing lock+transaction+live-recompute implementation —
+   nothing new was needed there beyond the table values. Announcement dialog
+   (`user-src/index.html`) restyled to match a picovver.com reference screenshot: a
+   circular bell-icon badge above the title, and the Cancel/Telegram button row
+   changed from side-by-side to stacked (light "OK" on top, accent Telegram below),
+   same element ids/handlers, just relabeled and restyled. `user/sw.js` `CACHE`
+   bumped to `v275`. **`server.js` changed (TEAM_MILESTONES) → needs a Railway
+   redeploy** for the new reward amounts to take effect. See the 2026-08-19
+   AGENT_LOG.md entry ("Shorter Home action buttons, referral count-ladder
+   recalculated to flat UGX 1,000, announcement dialog redesigned").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

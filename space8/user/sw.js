@@ -736,7 +736,11 @@
 // embedded and applied to the announcement dialog title; referral share
 // now attaches the SPACE8 investment-plans table image alongside the text
 // (Web Share API files capability), plans-table.jpg precached above.
-const CACHE = 'space8-shell-v274';
+// v275: Home action buttons (Deposit/Withdraw/Check-in) made shorter/more
+// compact; referral count-ladder rewards recalculated to a flat UGX 1,000
+// per active referral (was 1,500); announcement dialog restyled with a
+// circular icon badge above the title and stacked OK/Telegram buttons.
+const CACHE = 'space8-shell-v275';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
