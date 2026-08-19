@@ -149,19 +149,18 @@ var ICONS = {
   satellite: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="m4.5 4.5 3 3M19.5 4.5l-3 3M4.5 19.5l3-3M19.5 19.5l-3-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>',
   // Owner: "change deposit svg to exactly that first one, withdrawal svg to
   // that [second one]" -- solid filled style (not the app's usual thin-
-  // stroke outline icons), matching the two reference images: an arrow
-  // dropping into a $ coin for deposit; a card + arrow + $ coin for
-  // withdrawal. The $ is a genuine cutout (an SVG <mask>, not just text
-  // drawn on top) so it reads correctly against ANY badge background this
-  // renders on, matching the reference's white-on-solid-coin look exactly
-  // regardless of context. Mask ids are safe to reuse across the (rare)
-  // case this same icon renders twice on screen at once (e.g. Home's
-  // action-row tile behind an open Deposit/Withdraw sheet) -- confirmed
-  // empirically with Chromium: SVG mask content is evaluated in each
-  // REFERENCING element's own coordinate space, not the defining node's,
-  // so a shared id renders identically at every usage site.
-  deposit: '<svg viewBox="0 0 24 24"><mask id="depDollarMask"><rect width="24" height="24" fill="white"/><text x="15.3" y="18" text-anchor="middle" font-size="10" font-weight="800" font-family="Arial,sans-serif" fill="black">$</text></mask><circle cx="15.3" cy="13.7" r="8.3" fill="currentColor" mask="url(#depDollarMask)"/><path d="M6.3 0.8h2.4a1 1 0 0 1 1 1v5.4h1.9a.7.7 0 0 1 .53 1.16l-3.9 4.5a.7.7 0 0 1-1.06 0l-3.9-4.5A.7.7 0 0 1 3.8 7.2h1.9V1.8a1 1 0 0 1 1-1Z" fill="currentColor"/></svg>',
-  withdraw: '<svg viewBox="0 0 24 24"><mask id="wdDollarMask"><rect width="24" height="24" fill="white"/><text x="19" y="16.2" text-anchor="middle" font-size="8.4" font-weight="800" font-family="Arial,sans-serif" fill="black">$</text></mask><rect x="0.5" y="8" width="9.6" height="8" rx="1.7" fill="currentColor"/><rect x="1.9" y="9.9" width="3.8" height="1.3" rx=".65" fill="#ffffff" opacity=".92"/><circle cx="19" cy="12" r="5.5" fill="currentColor" mask="url(#wdDollarMask)"/><path d="M11 12h3.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M13 9.9 10.6 12l2.4 2.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // stroke outline icons), matching the two reference images: a rounded
+  // arrow dropping into a $ coin for deposit; a card + segmented coin +
+  // arrow for withdrawal.
+  // Codex-designed (2026-08-19), replacing an earlier hand-drawn attempt
+  // that didn't match the owner's reference images closely enough. Both
+  // icons are single-color fill=currentColor with the "cut-out" parts
+  // (the $ glyph, the arrow silhouettes) as genuine transparent SVG <mask>
+  // holes rather than a second overlaid color, so they stay correct
+  // against any badge background. __ID__ is substituted with a fresh
+  // per-call mask id by ico() -- see its own comment above.
+  deposit: '<svg class="money-action-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">\n  <defs>\n    <mask id="__ID__-dep" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">\n      <rect width="24" height="24" fill="#fff"/>\n      <path transform="translate(0 1.2)" fill="#000" d="M15.92 7.35v.95c1.2.13 2.06.62 2.58 1.31l-.94.7c-.4-.5-.99-.8-1.74-.8-.95 0-1.57.39-1.57 1 0 .57.5.83 1.72 1.1 1.45.33 2.45.9 2.45 2.28 0 1.25-.94 2.08-2.5 2.25v.96h-1.08v-.97c-1.23-.13-2.17-.67-2.65-1.39l.91-.67c.43.58 1.14.96 1.95.96 1 0 1.66-.4 1.66-1.06 0-.62-.57-.86-1.82-1.13-1.45-.32-2.35-.89-2.35-2.24 0-1.18.91-2.02 2.3-2.17v-.96Z"/>\n      <path fill="#000" d="M5.12.72h5.14c1.16 0 2.04 1 1.93 2.16l-.48 4.96c-.02.23.12.41.35.41h1.22c1.53 0 2.3 1.85 1.22 2.93L9.24 16.42a2.06 2.06 0 0 1-2.9 0l-5.26-5.24C0 10.1.77 8.25 2.3 8.25h1.01c.23 0 .37-.18.35-.41L3.19 2.88C3.08 1.72 3.96.72 5.12.72Z"/>\n    </mask>\n  </defs>\n  <circle cx="15.45" cy="14.45" r="7.28" mask="url(#__ID__-dep)"/>\n  <path d="M5.55 1.5C4.91 1.5 4.43 2.05 4.49 2.69l.47 5.02c.09.93-.64 1.71-1.57 1.71H2.27c-.64 0-.96.78-.5 1.23l5.07 5.06c.47.47 1.23.47 1.7 0l5.07-5.06c.46-.45.14-1.23-.5-1.23h-1.12c-.93 0-1.66-.78-1.57-1.71l.47-5.02c.06-.64-.42-1.19-1.06-1.19Z"/>\n</svg>',
+  withdraw: '<svg class="money-action-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">\n  <defs>\n    <mask id="__ID__-wd" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">\n      <rect width="24" height="24" fill="#fff"/>\n      <circle cx="5.8" cy="8" r="1.1" fill="#000"/>\n      <circle cx="8.05" cy="8" r="1.1" fill="#000"/>\n      <rect x="3.9" y="13.35" width="4.2" height="1.05" rx=".525" fill="#000"/>\n      <rect x="9.1" y="13.35" width="4.55" height="1.05" rx=".525" fill="#000"/>\n      <path fill="#000" d="M20.2 5.55c.75-.55 1.8-.01 1.8.92v1.72c0 .31-.14.6-.4.79l-4.55 3.48a.69.69 0 0 0 0 1.08l4.55 3.48c.26.19.4.48.4.79v1.72c0 .93-1.05 1.47-1.8.92l-7.95-6.07a1.95 1.95 0 0 1 0-3.12Z"/>\n    </mask>\n  </defs>\n  <g mask="url(#__ID__-wd)">\n    <rect x="1.1" y="4.1" width="20.1" height="13.2" rx="3.25"/>\n    <path d="M15.107 10.016A6.35 6.35 0 0 1 18.393 10.016L17.617 12.914A3.35 3.35 0 0 0 15.883 12.914Z"/>\n    <path d="M15.107 10.016A6.35 6.35 0 0 1 18.393 10.016L17.617 12.914A3.35 3.35 0 0 0 15.883 12.914Z" transform="rotate(45 16.75 16.15)"/>\n    <path d="M15.107 10.016A6.35 6.35 0 0 1 18.393 10.016L17.617 12.914A3.35 3.35 0 0 0 15.883 12.914Z" transform="rotate(90 16.75 16.15)"/>\n    <path d="M15.107 10.016A6.35 6.35 0 0 1 18.393 10.016L17.617 12.914A3.35 3.35 0 0 0 15.883 12.914Z" transform="rotate(135 16.75 16.15)"/>\n    <path d="M15.107 10.016A6.35 6.35 0 0 1 18.393 10.016L17.617 12.914A3.35 3.35 0 0 0 15.883 12.914Z" transform="rotate(180 16.75 16.15)"/>\n    <path d="M15.107 10.016A6.35 6.35 0 0 1 18.393 10.016L17.617 12.914A3.35 3.35 0 0 0 15.883 12.914Z" transform="rotate(225 16.75 16.15)"/>\n    <path d="M15.107 10.016A6.35 6.35 0 0 1 18.393 10.016L17.617 12.914A3.35 3.35 0 0 0 15.883 12.914Z" transform="rotate(270 16.75 16.15)"/>\n    <path d="M15.107 10.016A6.35 6.35 0 0 1 18.393 10.016L17.617 12.914A3.35 3.35 0 0 0 15.883 12.914Z" transform="rotate(315 16.75 16.15)"/>\n  </g>\n</svg>',
   checkin: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>',
   // Owner wants a light/thin tick, not the old heavy one. The literal ✓
   // (U+2713) character was tried first but Android renders it from a
@@ -213,7 +212,18 @@ var ICONS = {
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
   space8logo: '<svg viewBox="0 0 36 28" fill="none"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="currentColor"/></svg>'
 };
-function ico(name){ return ICONS[name] || ''; }
+// Codex-designed (2026-08-19): mask ids in ICONS.deposit/withdraw are
+// __ID__ placeholders, substituted with a fresh id on every ico() call so
+// two simultaneous renders of the same icon (e.g. Home's action-row tile
+// behind an open Deposit/Withdraw sheet) never share an <svg><mask id>,
+// even though the earlier shared-static-id version was already confirmed
+// safe -- this is strictly more defensive. A no-op replace() on any icon
+// without a __ID__ placeholder, so every other ICONS entry is unaffected.
+var ICON_UID = 0;
+function ico(name){
+  var id = 's8icon' + (++ICON_UID);
+  return (ICONS[name] || '').replace(/__ID__/g, id);
+}
 
 // ── API LAYER ─────────────────────────────────────────────────────────
 // Codex-verified real gap (2026-08-17): /team/milestone/claim moves real

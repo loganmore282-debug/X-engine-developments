@@ -743,7 +743,11 @@
 // v275 (icon badge + stacked OK/Telegram buttons) -- reverted back to the
 // original side-by-side Cancel+Telegram row, no icon badge. Nothing else
 // from v275 touched.
-const CACHE = 'space8-shell-v276';
+// v277: Deposit/withdraw icons replaced again with Codex-designed SVGs
+// (mask-cutout $ glyph / segmented-coin + card, rounded-arrow silhouettes)
+// closely matching the owner's reference images; ico() now mints a fresh
+// mask id on every call instead of a shared static one.
+const CACHE = 'space8-shell-v277';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

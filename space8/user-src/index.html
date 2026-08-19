@@ -162,6 +162,17 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .field{ display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:13px 14px; }
 .field.focus{ border-color:var(--blue); }
 .field svg{ width:19px; height:19px; stroke:var(--blue); flex-shrink:0; }
+/* The Codex-designed deposit/withdraw icons (ICONS.deposit/withdraw,
+   original_module.js) are filled (fill=currentColor, stroke=none), unlike
+   every other icon in this file which is colored via `stroke`. `color`
+   drives `currentColor` here, not `stroke`. */
+.action-btn .ico svg.money-action-icon,
+.field svg.money-action-icon{
+  color:var(--blue);
+  fill:currentColor;
+  stroke:none;
+}
+.action-btn.done .ico svg.money-action-icon{ color:var(--ink-dim); }
 .field input{ border:none; background:none; outline:none; color:var(--ink); font-size:14.5px; width:100%; }
 .field input::placeholder{ color:var(--ink-dim); }
 .field-eye{ cursor:pointer; }

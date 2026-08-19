@@ -2794,6 +2794,23 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    2026-08-19 AGENT_LOG.md entry ("Shorter Home action buttons, referral count-ladder
    recalculated to flat UGX 1,000 (announcement-dialog restyle shipped then
    immediately reverted — owner never asked for it)").
+0o. **Deposit/withdraw icons replaced again, Codex-designed — DONE.** The 2026-08-18
+   hand-drawn icons (see 0m above) didn't match the owner's reference images closely
+   enough — the owner had Codex design the actual SVG geometry (repo/AGENT_LOG.md
+   pointer relayed to it, same pattern as the review-prompt workflow) and pasted the
+   result back verbatim. `ICONS.deposit`/`ICONS.withdraw` (`user-src/
+   original_module.js`) replaced with Codex's design: a rounded weighty arrow dropping
+   into a `$` coin (deposit), and a card + eight-segment "spoked coin" + broad
+   left-pointing arrow (withdraw) — both `fill=currentColor`/`stroke=none` with every
+   cut-out (the `$`, the arrow silhouettes) as a real transparent SVG `<mask>` hole.
+   `ico()` now mints a fresh mask id on every call (`ICON_UID` counter +
+   `__ID__`-placeholder substitution) instead of reusing one static id per icon name —
+   more defensive than the previous round's confirmed-safe shared-id approach. New CSS
+   (`.money-action-icon`) needed since these two icons are filled via `color`, unlike
+   every other icon in the file which is colored via `stroke`. `user/sw.js` `CACHE`
+   bumped to `v277`. No `server.js`/`admin-src/` changes — no Railway redeploy needed.
+   See the 2026-08-19 AGENT_LOG.md entry ("Deposit/withdraw icons replaced again,
+   Codex-designed to match the owner's reference images exactly").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

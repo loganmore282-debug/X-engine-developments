@@ -14,6 +14,51 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Deposit/withdraw icons replaced again, Codex-designed to match the owner's reference images exactly
+
+Owner sent the two reference images again and asked to have Codex advise on how to
+build them as SVGs (repo/branch/AGENT_LOG.md pointer relayed via the established
+review-prompt pattern), then pasted Codex's design back verbatim with actual path/mask
+data ("he said that").
+
+- **`ICONS.deposit`/`ICONS.withdraw`** (`user-src/original_module.js`) replaced again —
+  the previous round's hand-drawn attempt (2026-08-18) didn't match the reference images
+  closely enough. Codex's design: both icons are `fill="currentColor" stroke="none"`,
+  with every "cut-out" (the `$` glyph, the arrow silhouettes on both icons) done as a
+  genuine transparent `<mask>` hole rather than a second overlaid color — same technique
+  as before, more detailed geometry. Deposit is a rounded, weighty arrow (built from a
+  single path, not a stroke chevron) dropping into a `$` coin with a real gap around it.
+  Withdraw is a solid rounded card (two dots + two masked-number bars, also mask
+  cut-outs) overlapped by an eight-segment "spoked coin" (8 pie-slice `<path>`s at 45°
+  rotations around one center) with a broad rounded left-pointing arrow mask cutting
+  through both the card and the coin.
+- **`ico()` mask-id strategy changed**: was a shared static id per icon name (confirmed
+  safe under Chromium's per-referencing-element mask evaluation, 2026-08-18) — Codex's
+  version instead mints a fresh `s8iconN` id on every single `ico()` call via a new
+  module-level `ICON_UID` counter, so two simultaneous renders of the same icon can
+  never share a mask id at all, strictly more defensive than relying on the
+  browser-behavior guarantee. Implemented as `.replace(/__ID__/g, id)` against
+  `__ID__` placeholders baked into the icon markup — a no-op on every other `ICONS`
+  entry, so nothing else was affected.
+- **New CSS** (`user-src/index.html`): `.action-btn .ico svg.money-action-icon` /
+  `.field svg.money-action-icon` set `color:var(--blue); fill:currentColor;
+  stroke:none;` — every other icon in this file is colored via `stroke` (matching the
+  old thin-outline style), but these two are filled, so `currentColor` needs to come
+  from `color`, not `stroke`. Width/height still inherited from the existing
+  `.action-btn .ico svg`/`.field svg` base rules (17px/19px respectively), unaffected.
+- **Verification**: `node build-core.js` → round-trip OK. Verified against the REAL
+  `ico()` function (not a hand-written reimplementation) via a Playwright harness
+  loading the actual `original_module.js` — confirmed both icons render cleanly at
+  badge scale AND that `ico('deposit')` rendered three times at once (each call now
+  minting its own mask id) produces three visually identical icons, no cross-instance
+  mask leakage. Separately verified at the actual in-app sizes (17px Home tiles, 19px
+  field icons) — both remain legible, though the withdraw icon's segmented-coin detail
+  is naturally softer at that size (inherent to a more detailed design, not a bug).
+  Full 78-file `test-*.js` suite green (server.js untouched this round). Bumped
+  `user/sw.js` `CACHE` to `space8-shell-v277`. No `server.js`/`admin-src/` changes — no
+  Railway redeploy needed, this ships via Render's normal `user/` auto-deploy.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Shorter Home action buttons, referral count-ladder recalculated to flat UGX 1,000 (announcement-dialog restyle shipped then immediately reverted — owner never asked for it)
 
 Owner, with 3 screenshots (Home, Team milestones, a picovver.com "NOTIFY" reference
