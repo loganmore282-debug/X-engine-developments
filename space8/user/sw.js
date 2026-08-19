@@ -796,7 +796,10 @@
 // background live-refresh (restored). Gift Code's Telegram bit is now a
 // real tappable tab (icon+label+chevron, same .menu-row component used
 // elsewhere), not a word inside a sentence.
-const CACHE = 'space8-shell-v291';
+// v292: Referral link changed to the canonical
+// https://space8-platform.com/auth/register?refCode=CODE form (was the
+// bare-origin /?ref=CODE) -- also what shareReferral()'s share text uses.
+const CACHE = 'space8-shell-v292';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

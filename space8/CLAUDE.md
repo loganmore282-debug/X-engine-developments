@@ -3040,6 +3040,22 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    specifically, not a request to strip the other two). `user/sw.js`
    `CACHE` bumped to `v291`. No `server.js` changes, no Railway redeploy
    needed.
+0z3. **Referral link changed to the canonical space8-platform.com URL —
+   DONE, domain not verified live.** `referralLink()` now returns
+   `https://space8-platform.com/auth/register?refCode=CODE` instead of the
+   old bare-origin `/?ref=CODE` — same function backs both Team's displayed
+   link and `shareReferral()`'s share text, so one change covered both per
+   the owner's "even in share text". `_refCode` parsing (prefills Register)
+   now reads `refCode` first, still falls back to the older `ref` param and
+   `/register/ref=CODE` path for links already shared under an earlier
+   format. A PATH form (not bare root) is safe now because `render.yaml`'s
+   static sites already carry a `routes: [{type: rewrite, source: /*,
+   destination: /index.html}]` block (added after an earlier CONFIRMED
+   LIVE 404 on a path-form referral link — see AGENT_LOG's prior entry on
+   this). **NOT verified**: whether `space8-platform.com` is actually the
+   live custom domain pointed at the Render static site — if it isn't yet,
+   every shared link 404s until it is. `user/sw.js` `CACHE` bumped to
+   `v292`.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

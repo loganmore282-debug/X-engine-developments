@@ -14,6 +14,46 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Referral link changed to the canonical space8-platform.com URL
+
+Owner: "let the link be this
+https://space8-platform.com/auth/register?refCode={your referral code} so
+change existing link to this,even in share text".
+
+- `referralLink(code)` (`user-src/original_module.js`): was
+  `location.origin + '/?ref=' + encodeURIComponent(code)` (bare root,
+  whatever domain the app happened to be running on); now a fixed
+  `'https://space8-platform.com/auth/register?refCode=' +
+  encodeURIComponent(code)`. This is the SAME function `shareReferral()`
+  calls for the share text and Team's displayed link -- one change covers
+  both, no separate edit needed for the share text.
+- `_refCode` parsing (top of file, reads the code out of the URL on load
+  to prefill Register): now checks `refCode` first, still falls back to
+  the older `ref` query param and the even-older `/register/ref=CODE` path
+  form, so any link already shared under an earlier format keeps working.
+- Checked whether a PATH (not the bare root `/`) is actually safe to
+  share now: `render.yaml`'s two static sites (`space8-app`, `space8-admin`)
+  already have `routes: [{ type: rewrite, source: /*, destination:
+  /index.html }]` -- added after an earlier confirmed-live 404 on a path-
+  form referral link (see the old comment this replaced) -- so every path
+  now serves the app, not a bare host 404. The new link's path form is
+  safe under the CURRENT render.yaml.
+- **Not verified**: whether `https://space8-platform.com` is actually the
+  domain currently pointed at this Render static site (DNS/custom-domain
+  setup is outside what this session can see) -- if it isn't yet, every
+  shared referral link will 404 until it is. Flagging this explicitly
+  rather than silently assuming it's already live.
+- **Verification**: `node build-core.js` → round-trip OK. Extracted the
+  real `referralLink()` and confirmed it prints
+  `https://space8-platform.com/auth/register?refCode=ABC123XYZ` for a
+  sample code. Full `test-*.js` suite green (server-side tests only ever
+  send `referralCode` in a request body to `/register`, never touch the
+  client URL format, so nothing there needed changing). Bumped
+  `user/sw.js` `CACHE` to `space8-shell-v292`. No `server.js` changes, no
+  Railway/Render redeploy needed for this specific change.
+- **Deferred / open**: confirm `space8-platform.com` is live-pointed at the
+  Render static site before relying on shared links.
+
 ## 2026-08-19 — Claude — Corrected two misreads: count-up removed (not live-refresh), Gift Code Telegram is now a real tab
 
 Owner, angry at being misunderstood twice in a row: "it seems that you

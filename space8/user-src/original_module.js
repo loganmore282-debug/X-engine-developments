@@ -467,19 +467,20 @@ function showAuthErr(id, msg){
   el.style.display = msg ? 'block' : 'none';
 }
 
-// Referral links are shareable as /?ref=CODE -- the bare root path always
-// resolves with no extra server config (every static host, including the
-// current Render deploy, serves index.html for '/' out of the box), unlike
-// the old /register/ref=CODE PATH form, which depended on the host
-// rewriting every unmatched path to index.html -- a config that turned out
-// to NOT actually be active on the live deploy (confirmed live: sharing
-// that link 404'd with Render's own bare "Not Found" page, not this app's
-// UI, meaning this script never even got a chance to run). Query-string
-// form sidesteps that dependency entirely. The old path form is still
-// parsed too, as a fallback, in case an already-shared /register/ref=CODE
-// link is out there or the host rewrite gets fixed later.
+// Owner: referral links now point at the canonical domain's /auth/register
+// path with a refCode param (see referralLink() below) instead of the bare
+// root '/?ref=CODE' this used before. render.yaml's static-site routes
+// (source:/*, destination:/index.html, added after the /register/ref=CODE
+// path form 404'd live on the bare root config) now rewrite every path to
+// index.html, so a path form is safe again. Both the new refCode param and
+// the two older forms (?ref=CODE, the old /register/ref=CODE path) are
+// still parsed as fallbacks, so a link already shared under an older format
+// keeps working.
 var _refCode = null;
-try { _refCode = new URLSearchParams(location.search).get('ref') || null; } catch (_) {}
+try {
+  var _refParams = new URLSearchParams(location.search);
+  _refCode = _refParams.get('refCode') || _refParams.get('ref') || null;
+} catch (_) {}
 if (!_refCode) {
   var _refPath = location.pathname.match(/^\/register\/ref=([^/]+)$/);
   if (_refPath) { try { _refCode = decodeURIComponent(_refPath[1]); } catch (_) {} }
@@ -1682,11 +1683,12 @@ function menuRow(icon, label, key){
   return '<div class="menu-row" data-key="' + key + '">' + ico(icon) + '<span>' + esc(label) + '</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>';
 }
 function referralLink(code){
-  // Query-string form, not a path -- see the _refCode parsing comment near
-  // the top of this file for why: the bare root path always resolves with
-  // no server-side rewrite config, a path like the old /register/ref=CODE
-  // form does not.
-  return location.origin + '/?ref=' + encodeURIComponent(String(code || ''));
+  // Owner: "let the link be this https://space8-platform.com/auth/register?refCode={your referral code}"
+  // -- a fixed canonical domain/path, not location.origin. See the
+  // _refCode parsing comment near the top of this file for the matching
+  // parse side and why the path form is safe now (render.yaml's static-site
+  // rewrite routes).
+  return 'https://space8-platform.com/auth/register?refCode=' + encodeURIComponent(String(code || ''));
 }
 // Owner: wants the shared referral message to be a full launch-announcement
 // post (rocket emoji header, deposit/withdrawal terms, the 3-level bonus
