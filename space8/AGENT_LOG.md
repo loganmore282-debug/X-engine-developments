@@ -14,6 +14,49 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Real bug: relative asset paths broke on any non-root URL (exposed by the new referral link path)
+
+Owner fixed the Render dashboard rewrite rule (space8-app → Redirects/
+Rewrites → Source `/*` → Destination `/index.html` → action **Rewrite**),
+which resolved the "Not Found" 404. But then, visiting the actual referral
+link (`/auth/register?refCode=...`): "telegram icons doesn't even show,
+giftCode doesn't show via that link,why,even see withdrawal account svg it
+got removed" -- a real, newly-exposed bug, not another dashboard issue.
+
+- **Root cause**: several `<img src="...">` references and one `fetch(...)`
+  call used a RELATIVE path (no leading `/`) -- `telegram-icon.png`
+  (Telegram Group/Channel buttons AND the Gift Code tab's icon),
+  `simcard-icon.png` (the `lock` icon -- used for BOTH Withdrawal Account
+  spots per its own comment, explaining "withdrawal account svg it got
+  removed"), `giftbox.png` (the floating gift-fab button, explaining the
+  broken-image "Gift code" label overlapping other content in the
+  screenshot), `about-1.jpg` through `about-4.jpg` (About Space8 photos),
+  and `plans-table.jpg` (the image `shareReferral()` attaches to a share).
+  A relative path resolves against the CURRENT address-bar path, not
+  wherever `index.html` actually lives -- this was invisible the whole
+  time the app was only ever loaded from the bare root `/`, but the owner's
+  own new referral-link format (previous entry) deliberately loads the app
+  from `/auth/register?refCode=...`, so every one of those assets started
+  404ing for anyone arriving via a shared link. Not caught earlier because
+  nothing in this session's own verification harnesses ever loaded the app
+  from anything but a root-equivalent path.
+- **Fix**: all 8 occurrences (`user-src/original_module.js` x7,
+  `user-src/index.html` x1 -- the gift-fab) changed to an absolute leading
+  `/`. `sw.js`'s own `SHELL` cache list already used absolute paths
+  correctly, so the service worker itself was never part of the bug.
+- **Verification**: `node build-core.js` → round-trip OK. Grepped the
+  rebuilt source for any remaining `src="letter...` / `fetch('letter...`
+  pattern (i.e. any path NOT starting with `/`, `http`, or `data:`) --
+  zero matches, confirmed clean. Full `test-*.js` suite green (client-only
+  asset-path fix, server.js untouched). Bumped `user/sw.js` `CACHE` to
+  `space8-shell-v294`. No `server.js` changes, no Railway/Render redeploy
+  needed beyond the normal git-push autoDeploy.
+- **Deferred / open**: none new this round. `admin-src/`/`admin/` were not
+  audited for the same relative-path pattern -- out of scope for this
+  report (admin isn't reached via referral-style deep links), but worth a
+  quick grep if the admin panel is ever linked to from anywhere other than
+  its own root.
+
 ## 2026-08-19 — Claude — Team phone numbers masked + Gift Code sentence restored
 
 Owner: "hide those numbers in all levels ie +2567****8387" and "you didn't

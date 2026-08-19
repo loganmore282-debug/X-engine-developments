@@ -803,7 +803,14 @@
 // (+2567****0389 style). Gift Code's descriptive sentence ("You can get
 // gift codes in the telegram group") restored above the Telegram tab --
 // the tab had replaced it instead of sitting alongside it.
-const CACHE = 'space8-shell-v293';
+// v294: Fixed every relative image/fetch path (telegram-icon.png,
+// simcard-icon.png, giftbox.png, about-1..4.jpg, plans-table.jpg) to an
+// absolute /path -- broke as soon as the app was ever loaded from a
+// non-root URL (now the normal case: referral links point at
+// /auth/register). A relative src/fetch resolves against the CURRENT
+// address-bar path, not where index.html actually lives, so every one of
+// those assets 404'd for anyone arriving via a shared referral link.
+const CACHE = 'space8-shell-v294';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

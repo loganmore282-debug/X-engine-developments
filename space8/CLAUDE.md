@@ -3068,6 +3068,23 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    phone (Account's identity banner) is UNCHANGED — only OTHER members'
    numbers, shown on the Team page, are masked. `user/sw.js` `CACHE`
    bumped to `v293`.
+0z5. **Relative asset paths broke on any non-root URL — real bug, fixed —
+   DONE.** Once the owner fixed the Render dashboard rewrite (0z3's
+   deferred item), the referral link loaded but Telegram icons, the
+   Withdrawal Account icon, and the gift-fab all showed broken images.
+   Root cause: `<img src="telegram-icon.png">` / `"simcard-icon.png"` /
+   `"giftbox.png"` / `"about-1..4.jpg"` and `fetch('plans-table.jpg')` were
+   all RELATIVE paths (no leading `/`) — invisible while the app only ever
+   loaded from the bare root, but broken as soon as a referral link (now
+   `/auth/register?refCode=...`, see 0z3) loads the app from a non-root
+   path, since a relative path resolves against the CURRENT address-bar
+   path, not wherever `index.html` actually lives. All 8 occurrences
+   (`user-src/original_module.js` x7, `user-src/index.html`'s gift-fab x1)
+   now use an absolute leading `/`. `sw.js`'s own `SHELL` list was already
+   absolute, unaffected. **If adding any new local image/fetch reference
+   anywhere in this app, it MUST start with `/`** — this exact bug class
+   will silently recur on any path that isn't the bare root otherwise.
+   `user/sw.js` `CACHE` bumped to `v294`.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

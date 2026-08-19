@@ -253,7 +253,7 @@ var ICONS = {
   // rotated from the supplied portrait orientation to landscape. Both
   // Withdrawal Account spots (Home shortcut + Account matrix tile) use this
   // single ICONS entry, so updating it here covers both automatically.
-  lock: '<img src="simcard-icon.png" alt="" class="ico-lg">',
+  lock: '<img src="/simcard-icon.png" alt="" class="ico-lg">',
   support: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11a9 9 0 0 1 18 0"/><path d="M21 12v5a2 2 0 0 1-2 2h-1v-7ZM3 12v5a2 2 0 0 0 2 2h1v-7Z"/></svg>',
   logout: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
@@ -272,7 +272,7 @@ var ICONS = {
   // announcement dialog, Account's Join The Community card, the Support
   // screen's contact rows, the assistant's quick-link button) picks this up
   // automatically from this single ICONS entry.
-  telegram: '<img src="telegram-icon.png" alt="Telegram">',
+  telegram: '<img src="/telegram-icon.png" alt="Telegram">',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>',
   key: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.6 12.4 8.4-8.4M15 8l3 3M18 5l3 3"/></svg>',
@@ -1755,7 +1755,7 @@ async function shareReferral(code){
   // share entirely just because the image fetch/attach failed.
   var shareData = { title: 'Join Space8', text: text };
   try {
-    var imgResp = await fetch('plans-table.jpg');
+    var imgResp = await fetch('/plans-table.jpg');
     var imgBlob = await imgResp.blob();
     var imgFile = new File([imgBlob], 'space8-investment-plans.jpg', { type: imgBlob.type || 'image/jpeg' });
     if (navigator.canShare && navigator.canShare({ files: [imgFile] })) shareData.files = [imgFile];
@@ -1849,20 +1849,20 @@ async function openInfoSheet(key){
 // Only the unbranded, generic photos made it in.
 async function openAboutSheet(){
   var html = '<div class="sheet-title">About Space8</div>' +
-    '<img class="about-photo" src="about-2.jpg" alt="Satellite constellation">' +
+    '<img class="about-photo" src="/about-2.jpg" alt="Satellite constellation">' +
     '<div class="about-body">' +
       '<p>Space8 was built around one obsession: getting hardware to survive the unforgiving trip from a factory floor to a stable orbit, then keep working long after everyone has stopped watching. What began as a small team chasing that exact problem has grown into a name behind some of the quietest, most dependable satellite work most people never hear about — because a spacecraft that does its job right rarely makes headlines.</p>' +
 
       '<div class="about-section-title">A Heritage Built in Clean Rooms</div>' +
-      '<img class="about-photo" src="about-1.jpg" alt="Satellite in orbit">' +
+      '<img class="about-photo" src="/about-1.jpg" alt="Satellite in orbit">' +
       '<p>Long before Space8 was a name on a badge, it was a habit: build it right, test it twice, and never ship what you would not personally trust in vacuum. That discipline came from years of hands-on orbital work — antenna arrays tuned by feel, harnesses routed a second time because the first route was merely good enough, thermal blankets stitched and re-stitched until they were right. Every platform that has ever carried the Space8 name inherited that same stubbornness.</p>' +
 
       '<div class="about-section-title">Precision, By Hand</div>' +
-      '<img class="about-photo" src="about-3.jpg" alt="Engineers integrating satellite hardware">' +
+      '<img class="about-photo" src="/about-3.jpg" alt="Engineers integrating satellite hardware">' +
       '<p>Behind every finished spacecraft is a slower, quieter story: engineers in clean-room suits, torque wrenches calibrated that morning, a checklist that gets followed exactly because the alternative is unacceptable. Our integration teams treat every harness, every fastener, and every solder joint as the one thing standing between a mission succeeding and a mission going silent. That patience is not a phase we grow out of — it is the actual product.</p>' +
 
       '<div class="about-section-title">The Space8 Group</div>' +
-      '<img class="about-photo" src="about-4.jpg" alt="Team preparing a satellite for launch">' +
+      '<img class="about-photo" src="/about-4.jpg" alt="Team preparing a satellite for launch">' +
       '<p>Space8 today is less a single workshop and more a small constellation of its own — a group of focused teams, each owning one hard problem end to end:</p>' +
       '<p><b>Space8 Orbital Systems</b> — spacecraft bus design, structural engineering, and full satellite integration.</p>' +
       '<p><b>Space8 Payload Works</b> — sensor packages, imaging instruments, and communications payloads built to spec.</p>' +
