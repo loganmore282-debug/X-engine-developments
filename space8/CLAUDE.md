@@ -2965,6 +2965,24 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    (`user-src/original_module.js`); once an account is selected the row still
    shows the account holder name, unaffected. `user/sw.js` `CACHE` bumped to
    `v285`. No `server.js` changes, no Railway redeploy needed.
+0w. **Live-refresh loop sped up 6x (12s→2s) and extended to Team — DONE.**
+   Owner wanted balance/deposits/withdrawals/referrals/rewards to update
+   "without reloading the page... very very very fast." `_liveRefreshTimer`
+   (`user-src/original_module.js`) now ticks every 2s instead of 12s and
+   adds a Team branch (`renderTeam()`, which already fetches `/team/stats`
+   fresh every call) alongside the existing Home/Products branches — checked
+   against `server.js`'s `globalLimiter` (400/min per user) first, worst
+   case is 90 req/min, nowhere near the cap. A same-user action
+   (checkin/invest/withdraw/redeem) already applied its own optimistic
+   update the instant its own response landed, before this round — this
+   loop is specifically what catches everything that ISN'T the viewer's own
+   tap (server-side cashback/maturity credits, admin-approved deposits/
+   withdrawals, downline referral activity, milestone rewards). `user/sw.js`
+   `CACHE` bumped to `v286`. **Deferred, not started**: true push (SSE/
+   WebSocket) instead of polling — would need an event emitter threaded
+   through every money-crediting path in `server.js` plus a reconnect story
+   around hourly Firebase ID-token expiry; a real next step if the owner
+   wants it, not attempted this round.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

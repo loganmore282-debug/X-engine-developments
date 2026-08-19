@@ -774,7 +774,10 @@
 // stretches full width -- same padding/size as before, just centered.
 // v285: Withdraw sheet's "Select payout account" placeholder row now has a
 // dotted filler before the chevron ("Select payout account . . . . . . . . . .").
-const CACHE = 'space8-shell-v285';
+// v286: Live-refresh loop sped up from every 12s to every 2s and now also
+// covers Team (referrals/rewards), not just Home/Products -- balance,
+// investments, and team stats all update without a page reload.
+const CACHE = 'space8-shell-v286';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

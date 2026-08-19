@@ -2502,8 +2502,20 @@ window.addEventListener('space8-auth', async function(e){
   }
 });
 
-// Lightweight server-confirmed live refresh: current account and plans are
-// refreshed in the background while the app is visible, without a browser reload.
+// Lightweight server-confirmed live refresh: balance, investments (daily
+// cashback/maturity payouts), and -- while Team is the open page -- referral
+// counts/rewards are all refreshed in the background while the app is
+// visible, without a browser reload. Owner: "upgrade realtime update of all
+// website loaded data... deposits, withdrawals, dailyprofit balance should
+// increase immediately, referrals, rewards... it must be very very very
+// fast" -- ticked from every 12s down to every 2s (still far inside
+// globalLimiter's 400 req/min-per-user budget: at most 3 reads/tick = 90/min
+// even on the Team page) and now also covers Team, not just Home/Products.
+// A same-user action (checkin/invest/withdraw/redeem) still applies its own
+// optimistic STATE update the instant the response lands, same as before --
+// this loop is what catches everything that ISN'T the viewer's own tap:
+// server-side cashback/maturity credits, an admin approving a deposit or
+// withdrawal, a downline referral joining/investing, a milestone reward.
 var _liveRefreshTimer = null;
 function startLiveRefresh(){
   if (_liveRefreshTimer) return;
@@ -2524,7 +2536,8 @@ function startLiveRefresh(){
     if (results[1].status === 'success') STATE.investments = results[1].investments || [];
     if (STATE.currentPage === 'home') renderHome();
     else if (STATE.currentPage === 'products') renderProducts();
-  }, 12000);
+    else if (STATE.currentPage === 'team') renderTeam();
+  }, 2000);
 }
 function stopLiveRefresh(){ if (_liveRefreshTimer) { clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; } }
 document.addEventListener('visibilitychange', function(){ if (!document.hidden && STATE.account) { STATE.loaded.home = false; if (STATE.currentPage === 'home') renderHome(); } });

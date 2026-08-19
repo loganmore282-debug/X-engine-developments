@@ -14,6 +14,49 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Live-refresh loop sped up 6x and extended to Team
+
+Owner: "l also upgrade realtime update of all website loaded data,it should
+load new data without reloading the page,ie deposits, withdrawals,
+dailyprofit balance should increase immediately, referrals, rewards,and much
+more,it must be very very very fast"
+
+- Context: a same-user action (checkin/invest/withdraw-request/redeem)
+  already applies its own optimistic `STATE` update the instant its own
+  response lands (see `doCheckin`/`openInvestSheet`'s existing comments) --
+  that part was already fast. What was genuinely slow was everything the
+  CURRENT viewer didn't just tap themselves: server-side daily-cashback/
+  maturity credits, an admin approving a deposit or withdrawal, a downline
+  referral joining/investing, a milestone reward -- these only ever showed
+  up via `_liveRefreshTimer`, and only on Home/Products, every 12 seconds.
+- `_liveRefreshTimer` (`user-src/original_module.js`, ~line 2508): interval
+  cut from `12000` to `2000` (6x). Confirmed against `server.js`'s
+  `globalLimiter` (400 req/min per user, `keyGenerator: rlKeyByUser`) before
+  picking the number -- even the worst case (3 reads/tick on the Team page)
+  is only 90 req/min, nowhere close to the cap; `/account`/`/investments`/
+  `/team/stats` aren't behind the tighter 60/min `apiLimiter` either (that
+  one's scoped to money-mutating routes only: checkin, withdraw/invest
+  create, deposit, redeem, bank ops, register, milestone claim). Added a
+  `else if (STATE.currentPage === 'team') renderTeam();` branch -- Team was
+  previously not covered by the live loop at all, so referral counts/reward
+  totals only ever refreshed on a full page-leave-and-return.
+  `renderTeam()` already re-fetches `/team/stats` fresh on every call (never
+  cached, per its own existing comment) and self-invalidates stale member
+  lists by comparing counts, so calling it repeatedly from the faster loop
+  needed no changes of its own.
+- **Verification**: `node build-core.js` → round-trip OK. Full `test-*.js`
+  suite green (server.js untouched, this is a client-side polling-cadence +
+  coverage change only). Bumped `user/sw.js` `CACHE` to `space8-shell-v286`.
+  No `server.js`/`admin-src/` changes, no Railway redeploy needed.
+- **Deferred / open**: a true push-based (SSE/WebSocket) channel would be
+  faster still and avoid polling entirely, but requires threading an event
+  emitter through every money-crediting code path in `server.js` (deposit
+  credit, withdrawal completion, cashback/maturity payout, commission,
+  milestone reward) plus a reconnect story around Firebase ID tokens
+  expiring hourly -- a much bigger, riskier lift on a live money app than
+  this round's scope. Not started; flagging in case the owner wants it as a
+  deliberate next step, not because it's half-done.
+
 ## 2026-08-19 — Claude — Withdraw sheet's "Select payout account" placeholder gets a dotted filler
 
 Owner, with a screenshot of the Withdraw Funds sheet: "do you see where they
