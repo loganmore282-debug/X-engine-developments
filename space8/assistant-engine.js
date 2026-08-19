@@ -138,7 +138,14 @@ const INTENTS = [
     phrase: [/how soon will i be paid/i, /how many hours for withdrawal/i, /time taken to withdraw/i, /when does withdrawal arrive/i, /how long (does|will|do) (a |the )?withdraw/i, /when (will|do) i (get|receive) (my )?(money|withdraw|cash|payout)/i, /withdrawal.{0,20}(take|time|long)/i, /how long (until|till|before).{0,25}(paid|money|withdraw)/i],
     reply: (ctx) => `⏱️ Withdrawals go out via mobile money or bank transfer once approved — typically within minutes to a few hours, depending on network load. You can always check the status under Account → Withdrawal Records.` },
 
+  // Needs its own phrase patterns, not just keywords: "withdrawal" scores 3
+  // on the `withdraw` intent's own keyword while "fee" only scores 2 here, so
+  // a direct question like "what is the withdrawal fee" used to lose to the
+  // generic withdraw how-to on raw keyword weight even though "fee" is right
+  // there in the sentence. A phrase match's flat bonus fixes that without
+  // having to re-tune every keyword weight in the file against each other.
   { id: 'fees', priority: 1, kw: { fee: 2, fees: 2, charge: 2, charges: 2, cost: 2 },
+    phrase: [/what('?s| is| are)\s+(the\s+)?(withdrawal|deposit|transaction)?\s*(fee|fees|charge|charges|cost)/i, /how much (is|are|does).{0,15}(fee|charge)/i, /(withdrawal|deposit) (fee|charge)/i],
     reply: (ctx) => `💵 Deposits are free — the full amount goes into your wallet. Withdrawals carry a ${ctx.settings.withdrawFeePct}% fee, taken from the amount you withdraw, which covers mobile-money/bank transfer costs. Minimum deposit is ${fmt(ctx.settings.minDeposit)}, minimum withdrawal is ${fmt(ctx.settings.minWithdraw)}.` },
 
   { id: 'why_fee', priority: 3,
@@ -401,7 +408,14 @@ const INTENTS = [
   { id:'joke_smalltalk',priority:1,phrase:[/say something funny/i, /how is your day/i, /tell me a joke/i,/are you (bored|tired|happy)/i,/what.?s up/i],reply:()=> '😄 I keep it to Space8 questions — deposits, withdrawals, plans, referrals, check-ins, your balance. What can I help with?' },
   { id:'repeat_answer',priority:2,phrase:[/^(again|huh|sorry what|come again)[\s?.!]*$/i, /^(what|say that again|repeat|come again|pardon)[\s?.!]*$/i],reply:()=> 'Happy to go again — which part would you like me to repeat? You can also just ask the question a different way.' },
   { id:'nothing_else',priority:1,phrase:[/^(none|no thanks|that is all|thats all)[\s?.!]*$/i, /^(no|nope|nothing|that.?s (all|it)|im good|i.?m good)[\s?.!]*$/i],reply:()=> 'Alright 👍 I am here whenever you need anything about your Space8 account.' },
-  { id:'yes_ack',priority:1,phrase:[/^(yes|yeah|yep|sure|ok(ay)?|alright|fine)[\s?.!]*$/i],reply:()=> 'Great 🙂 What would you like to know?' }
+  // Topic-aware on purpose: a bare "ok"/"sure" right after a real question
+  // used to always reset to a generic "what would you like to know?", which
+  // read as if nothing had just been discussed. lastTopicIntent (defined
+  // below, hoisted) already skips filler turns to find the last REAL topic.
+  { id:'yes_ack',priority:1,phrase:[/^(yes|yeah|yep|sure|ok(ay)?|alright|fine)[\s?.!]*$/i],reply:(ctx)=>{
+    const prev = lastTopicIntent(ctx.history);
+    return prev ? pick([`👍 Sure — ask if you want more on ${prettyTopic(prev.id)}, or anything else.`, `Great 🙂 Anything more on that, or a new question?`]) : 'Great 🙂 What would you like to know?';
+  } }
 ];
 
 const FALLBACKS = [
@@ -426,6 +440,16 @@ const FALLBACKS = [
 const PHRASE_HIT = 6;
 const KW_CAP = 5;
 function scoreText(text, tokens, intent) {
+  // Hyphens only, not full normalize() -- phrase patterns like /what('?s| is)/
+  // and /what are you\??$/ depend on apostrophes and question marks surviving
+  // in the raw text, so we can't test phrases against the fully-stripped
+  // normalized string. But no phrase regex in this file uses a literal
+  // hyphen (verified), so de-hyphenating is a free, safe win: it's the only
+  // reason "check-in" (hyphenated exactly as the app's own UI spells it) and
+  // "top-up"/"sign-up" style phrasing failed to match phrase patterns written
+  // as "check ?in" / "top ?up" -- the raw text still had the hyphen glueing
+  // the two words together with no space for "?" to match.
+  const phraseText = text.indexOf('-') === -1 ? text : text.replace(/-/g, ' ');
   let kwScore = 0;
   if(intent.kw)for(const[w,weight]of Object.entries(intent.kw)){const target=stem(w);if(tokens.includes(target))kwScore+=weight;else if(tokens.some(t=>editDistanceOne(t,target)))kwScore+=Math.max(1,weight-1);}
   let score = Math.min(kwScore, KW_CAP);
@@ -448,7 +472,7 @@ function scoreText(text, tokens, intent) {
   // because that intent lists "deposit" as a keyword and outranks `deposit`.
   // A phrase match means the member's actual sentence matched; a stray
   // keyword means almost nothing, and must not buy specificity credit.
-  if (intent.phrase && intent.phrase.some(re => re.test(text))) {
+  if (intent.phrase && intent.phrase.some(re => re.test(phraseText))) {
     score += PHRASE_HIT + (intent.priority || 1);
   }
   return score;
@@ -524,12 +548,21 @@ const DEEP = {
   referral_levels_explain: (c) => `🤝 In detail: picture a tree with you at the top. People who register using YOUR code sit directly under you — Level 1, paying ${c.settings.commL1}%, the largest share because you brought them in personally. When a Level 1 member refers someone, that new person is Level 2 relative to you, paying ${c.settings.commL2}%. One more layer down is Level 3 at ${c.settings.commL3}%. You earn from all three, on each person's first investment, without doing anything beyond the original referral.`
 };
 
+// Content-free acknowledgments -- these can never BE "the topic" a bare
+// follow-up should resolve against. Real bug this closes: a chain like
+// "how do i deposit" -> "ok" -> "and the min?" used to lose the thread
+// entirely, because "ok" itself scores confidently on yes_ack, so it (not
+// the actual deposit question) became "the last topic" for the next short
+// message. Every intent here is pure conversational filler with no
+// platform content of its own.
+const FILLER_INTENT_IDS = new Set(['yes_ack', 'thanks', 'bye', 'greeting', 'howareyou']);
+
 function lastTopicIntent(history) {
   if (!Array.isArray(history)) return null;
   const priorUsers = history.filter(h => h && h.role === 'user' && typeof h.text === 'string');
   for (let i = priorUsers.length - 1; i >= 0; i--) {
     const s = classify(priorUsers[i].text);
-    if (s[0] && s[0].score >= 2) return s[0].intent;
+    if (s[0] && s[0].score >= 2 && !FILLER_INTENT_IDS.has(s[0].intent.id)) return s[0].intent;
   }
   return null;
 }
@@ -640,15 +673,35 @@ function answerAssistant({ message, history, settings, products, account }) {
     if (priorUsers.length) {
       const curByIntent = new Map(scored.map(s => [s.intent, s.score]));
       const priorScored = priorUsers.map(u => new Map(classify(u.text).map(s => [s.intent, s.score])));
+      // Filler intents (bare "ok"/"thanks"/"sure") are excluded here, not just
+      // from lastTopicIntent -- otherwise a prior "ok" turn drags an
+      // UNRELATED next short message toward yes_ack's own contentless reply
+      // via this exact blend, which is how "what next" after a real deposit
+      // question started answering as "Great, what would you like to know?"
+      // instead of continuing the actual thread.
       const blended = INTENTS
+        .filter(intent => !FILLER_INTENT_IDS.has(intent.id))
         .map(intent => {
           let score = (curByIntent.get(intent) || 0) * 3;
           priorScored.forEach((m, i) => { score += (m.get(intent) || 0) * (i === 0 ? 2 : 1); });
           return { intent, score };
         })
         .sort((a, b) => b.score - a.score);
-      if (blended[0].score > (top ? top.score : 0)) top = blended[0];
+      if (blended[0] && blended[0].score > (top ? top.score : 0)) top = blended[0];
     }
+  }
+
+  // Last resort for a short message that still isn't confident even after
+  // 2-turn blending ("reset" three hops into a PIN conversation, past the
+  // blend's own 2-turn window) -- walk the WHOLE history backward for the
+  // last real (non-filler) topic, same deep lookup the bare-follow-up path
+  // above already trusts. A short message with genuinely no conversational
+  // anchor (fresh chat, "reset" as the very first message) still correctly
+  // falls through to the honest fallback below, since lastTopicIntent
+  // returns null with no history to search.
+  if ((!top || top.score < 2) && isShort) {
+    const prevTopic = lastTopicIntent(history);
+    if (prevTopic) top = { intent: prevTopic, score: 2 };
   }
 
   const tokens = tokensEarly;

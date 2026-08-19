@@ -14,6 +14,84 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — AI assistant conversational-quality fixes ("train it to the highest peak")
+
+Owner showed a screenshot: the assistant correctly answered a forgotten-PIN
+question, then the follow-up "Reset" hit a generic "Not sure I caught that"
+fallback — losing a thread it had just been on. Owner: "the ai is still of
+low grade, you need to train it fully to highest peak." Diagnosed the
+reported bug with reproducible `node -e` scripts against the real exported
+functions (not guessed), then broadened the same empirical testing to hunt
+for related gaps in the same dimension.
+
+- **Root cause of "Reset" losing context**: `assistant-engine.js` has two
+  separate conversational-continuity mechanisms — a deep, unbounded
+  `lastTopicIntent()` search (used by bare "why?"/"explain more" follow-ups)
+  and a shallow 2-turn score blend (used for other short/ambiguous
+  messages). Neither excluded filler/acknowledgment intents (`yes_ack`,
+  `thanks`, `bye`, `greeting`, `howareyou`) from "what was the last topic" —
+  and those intents score confidently on their own trigger words ("ok"
+  scores 7 on `yes_ack`). So a filler turn like "ok" right after a real
+  question became "the last topic" itself, permanently losing the real
+  thread on the next short message ("how do i deposit" → "ok" → "and the
+  min?" used to answer nothing about deposits).
+  - Added `FILLER_INTENT_IDS` and excluded it from both `lastTopicIntent()`
+    and the 2-turn blend.
+  - Added a deep-fallback for the blend path: when a short message still
+    isn't confident after the 2-turn blend, fall back to the same unbounded
+    `lastTopicIntent()` search the bare-follow-up path already trusted —
+    this is what lets "Reset" resolve correctly even several filler-hops
+    into a conversation, past the blend's own 2-turn window.
+  - Made `yes_ack` itself topic-aware: a bare "ok"/"sure" right after a real
+    question now acknowledges there was a topic ("Anything more on that, or
+    a new question?") instead of unconditionally resetting to a
+    context-free "What would you like to know?".
+- **Hyphen tokenization bug** (found while broadening the test battery):
+  `normalize()` strips hyphens to spaces for keyword tokenizing, but phrase
+  regexes were tested against the RAW, un-normalized message text — so
+  "check-in" (hyphenated, exactly how the app's own UI spells "Daily
+  Check-in Bonus") never matched any of the `check ?in`-style phrase
+  patterns, and similarly for "top-up"/"sign-up" style phrasing. Fixed by
+  de-hyphenating only (not full-normalizing, to avoid disturbing
+  apostrophe/question-mark-sensitive patterns elsewhere) the text used for
+  phrase-regex testing in `scoreText()`. Confirmed no existing phrase regex
+  in the file relies on a literal hyphen before making this change.
+- **Fee question losing to the generic withdraw intent**: "what is the
+  withdrawal fee" scored higher on `withdraw`'s own keyword weight
+  ("withdrawal":3) than on the dedicated `fees` intent's keyword ("fee":2),
+  so it answered "how to withdraw" instead of the actual fee. Added direct
+  phrase patterns to the `fees` intent so a real fee question wins on a
+  flat phrase-match bonus instead of losing a raw keyword-weight fight.
+- Added regression tests in `test-assistant-engine.js` locking in all three
+  fixes (multi-hop filler chain to "reset", bare-ack topic-awareness,
+  check-in hyphen, top-up hyphen, withdrawal-fee phrase match).
+
+Deferred, found but not fixed (lower priority, more theoretical than
+reported): a scoring tie between `withdraw_timing` and `invest` on short
+follow-ups like "and how long" (currently resolves to a reasonable answer
+either way, just by array order rather than real signal); "and if i miss a
+day" as a check-in follow-up collides with `deposit_pending`/
+`commission_missing` because "miss"/"missing" is a real keyword on both of
+those intents and scores confidently enough (3) on its own to skip the
+context-carrying blend entirely — a genuine keyword-collision edge case,
+not something introduced or made worse by this round's changes.
+
+- Files: `assistant-engine.js`, `test-assistant-engine.js`.
+- Verification: `node --check assistant-engine.js`; full suite —
+  `test-assistant-corpus.js` (2219/2219 passed), `test-assistant-engine.js`
+  (all assertions incl. 5 new ones, passed), `test-assistant-smoke.js`
+  (10/10 passed). Manually re-ran the exact reported repro plus several
+  longer filler chains ("how do i deposit"→"ok"→"and the min?"→"thanks"→
+  "what about withdrawing"→"ok"→"and the fee"→"got it"→"reset") — all stay
+  on-topic through to the end.
+- This is server-side (`assistant-engine.js` is `require`'d directly by
+  `server.js`) — needs the owner's usual Railway/Render backend redeploy to
+  take effect, no client cache bump involved.
+- Deferred: the two lower-priority edge cases noted above, left for a
+  future round if the owner wants them chased further.
+
+---
+
 ## 2026-08-19 — Claude — AI assistant's replies swept for every stale renamed UI label
 
 Owner: "check ai assistant, it is still saying withdrawal account, check

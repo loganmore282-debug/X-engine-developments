@@ -54,4 +54,38 @@ const contextual = answerAssistant({
 });
 assert(contextual.includes('15%'), 'short follow-up should preserve withdrawal context: ' + contextual);
 
+// Real bug (2026-08-19): a filler turn ("ok") between a real question and its
+// follow-up used to become "the last topic" itself, since yes_ack/thanks/etc
+// score confidently on their own trigger words -- so the thread was lost the
+// moment a member said "ok". Chases the thread through several filler hops.
+const fillerChain = answerAssistant({
+  ...context,
+  message: 'reset',
+  history: [
+    { role: 'user', text: 'i forgot my pin' }, { role: 'assistant', text: 'x' },
+    { role: 'user', text: 'ok' }, { role: 'assistant', text: 'x' },
+    { role: 'user', text: 'thanks' }, { role: 'assistant', text: 'x' }
+  ]
+});
+assert(/pin/i.test(fillerChain), 'filler-chain follow-up should still resolve to the PIN topic, not a generic fallback: ' + fillerChain);
+
+const ackStaysOnTopic = answerAssistant({
+  ...context,
+  message: 'ok',
+  history: [{ role: 'user', text: 'how do i deposit' }, { role: 'assistant', text: 'x' }]
+});
+assert(!/what would you like to know/i.test(ackStaysOnTopic), 'a bare ack right after a real question should acknowledge the topic instead of resetting to a blank "what would you like to know": ' + ackStaysOnTopic);
+
+// Real bug (2026-08-19): normalize() turns "check-in" into "check in", but
+// phrase regexes were tested against the RAW un-normalized text, so the
+// hyphen (exactly how the app's own UI spells "Check-in") broke every
+// checkin phrase pattern written as "check ?in".
+contains('tell me about check-in', ['Check In', 'streak']);
+contains('how do i top-up', ['Deposit']);
+
+// Real bug (2026-08-19): "withdrawal" scores higher on the generic `withdraw`
+// intent's own keyword weight than "fee" scores on the dedicated `fees`
+// intent, so a direct fee question lost to the how-to-withdraw reply.
+contains('what is the withdrawal fee', ['15%', 'free']);
+
 console.log('Assistant engine checks passed');
