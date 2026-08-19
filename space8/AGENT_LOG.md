@@ -14,6 +14,63 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Authentication-specific review (no code changes, zero gaps found)
+
+Owner: "let us also review authentication such that everything is fine and
+encrypted." Went through every real auth surface end to end, with exact
+values checked, not just re-reading comments:
+
+- **Member auth**: entirely Firebase ID tokens, verified server-side via
+  `admin.auth().verifyIdToken(token, true)` — the `true` enables
+  `checkRevoked`, so a token from an account that's since signed out
+  everywhere or been disabled stops working immediately, not just at its
+  natural ~1h expiry. This app never sees or stores a raw password —
+  that's fully delegated to Firebase's own infrastructure, the correct
+  design (this app couldn't leak what it never touches).
+- **Admin auth**: staff passwords are scrypt-hashed (`crypto.scryptSync`,
+  16-byte random salt per password, never plaintext); session tokens are
+  `crypto.randomBytes(32).toString('hex')` — 256 bits of real
+  cryptographic randomness, not `Math.random()` (confirmed every
+  `Math.random()` call site in the file is for non-security cosmetic
+  values only — the synthetic activity-feed ticker, reference-number
+  suffixes already paired with a timestamp, admin-bounded reward
+  randomization — never a token, salt, or anything guessing which would
+  matter). Sessions expire after 12h. Every secret/key comparison
+  (`ADMIN_KEY`, session tokens, PINs) uses `crypto.timingSafeEqual`, and
+  admin login runs a real `scryptVerify` against a dummy hash even for a
+  username that doesn't exist, so response timing can't be used to
+  enumerate valid usernames. Both the owner master key and per-staff
+  logins lock out for 15 minutes after repeated failures.
+- **Withdrawal PIN**: scrypt-hashed like admin passwords, never plaintext.
+  Rejects all-same-digit PINs (1111, 2222, ... 9999 — the weakest values
+  in the 10,000-combination 4-digit space) on every path that sets a NEW
+  one (auto-setup, `/account/payout-pin/set`, `/account/payout-pin/change`)
+  while never blocking verification of an existing PIN even if it predates
+  this check. Locks for 15 minutes after 5 wrong attempts.
+- **Transport**: HSTS is set with a 1-year max-age and `includeSubDomains`
+  (`helmet`'s `hsts` option) — browsers that have visited once stop even
+  trying plain HTTP on this domain or any subdomain for a year, closing
+  the "attacker downgrades the very first request" window HSTS exists for.
+- **The one gate that runs on literally every login**: `/account` (fires
+  on every sign-in and every background poll) checks `status === 'banned'`
+  itself — a fix from an earlier round after finding every WRITE endpoint
+  had this check but the actual entry gate didn't, so a banned account
+  could still sign in and browse normally as long as it avoided hitting a
+  write endpoint.
+- **Firebase client config** (`user-src/index.html`): confirmed only the
+  standard, Firebase-designed-to-be-public fields are present (apiKey,
+  authDomain, projectId, etc. — these identify the project, they don't
+  grant access to anything by themselves; Firebase's own security rules +
+  this app's server-side token verification are the actual boundary).
+  Nothing resembling a service-account private key or admin credential is
+  anywhere in client-shipped code — that lives only in the
+  `FIREBASE_SERVICE_ACCOUNT` Railway/Render env var, server-side only.
+- **Verification**: every value above (session token length, lock
+  durations, fail-count thresholds, HSTS maxAge) was read directly out of
+  the current `server.js`, not recalled from memory or a prior round's
+  notes. No code changed this round — nothing here needed fixing.
+- **Deferred / open**: none new.
+
 ## 2026-08-19 — Claude — CORS tightened from open '*' to a real allowlist (continuing the "cement this" pass)
 
 Owner said "continue" after the audit-only pass above. Followed through on
