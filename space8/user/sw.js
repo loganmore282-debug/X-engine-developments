@@ -731,9 +731,14 @@
 // here), a Security-PIN late-response race that could overwrite an
 // unrelated open sheet, and a check-in claim race that could leak one
 // member's bonus onto another's screen on a shared device.
-const CACHE = 'space8-shell-v273';
+// v274: Deposit/withdraw icons replaced with filled/mask-cutout designs
+// matching owner-provided reference images; Archivo Black display font
+// embedded and applied to the announcement dialog title; referral share
+// now attaches the SPACE8 investment-plans table image alongside the text
+// (Web Share API files capability), plans-table.jpg precached above.
+const CACHE = 'space8-shell-v274';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();

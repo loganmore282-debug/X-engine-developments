@@ -147,8 +147,21 @@ function skRows(n, cls){
 // ── ICONS ──────────────────────────────────────────────────────────────
 var ICONS = {
   satellite: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="m4.5 4.5 3 3M19.5 4.5l-3 3M4.5 19.5l3-3M19.5 19.5l-3-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>',
-  deposit: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v6.5"/><path d="M8.5 5 12 8.5 15.5 5"/><circle cx="12" cy="16" r="6.5"/><text x="12" y="19" text-anchor="middle" font-size="8" font-weight="700" font-family="inherit" stroke="none" fill="currentColor">$</text></svg>',
-  withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M7 9.5h5"/><path d="M21.5 10.5h-4a2.5 2.5 0 0 0 0 5h4"/><circle cx="17.3" cy="13" r="0.9" fill="currentColor" stroke="none"/></svg>',
+  // Owner: "change deposit svg to exactly that first one, withdrawal svg to
+  // that [second one]" -- solid filled style (not the app's usual thin-
+  // stroke outline icons), matching the two reference images: an arrow
+  // dropping into a $ coin for deposit; a card + arrow + $ coin for
+  // withdrawal. The $ is a genuine cutout (an SVG <mask>, not just text
+  // drawn on top) so it reads correctly against ANY badge background this
+  // renders on, matching the reference's white-on-solid-coin look exactly
+  // regardless of context. Mask ids are safe to reuse across the (rare)
+  // case this same icon renders twice on screen at once (e.g. Home's
+  // action-row tile behind an open Deposit/Withdraw sheet) -- confirmed
+  // empirically with Chromium: SVG mask content is evaluated in each
+  // REFERENCING element's own coordinate space, not the defining node's,
+  // so a shared id renders identically at every usage site.
+  deposit: '<svg viewBox="0 0 24 24"><mask id="depDollarMask"><rect width="24" height="24" fill="white"/><text x="15.3" y="18" text-anchor="middle" font-size="10" font-weight="800" font-family="Arial,sans-serif" fill="black">$</text></mask><circle cx="15.3" cy="13.7" r="8.3" fill="currentColor" mask="url(#depDollarMask)"/><path d="M6.3 0.8h2.4a1 1 0 0 1 1 1v5.4h1.9a.7.7 0 0 1 .53 1.16l-3.9 4.5a.7.7 0 0 1-1.06 0l-3.9-4.5A.7.7 0 0 1 3.8 7.2h1.9V1.8a1 1 0 0 1 1-1Z" fill="currentColor"/></svg>',
+  withdraw: '<svg viewBox="0 0 24 24"><mask id="wdDollarMask"><rect width="24" height="24" fill="white"/><text x="19" y="16.2" text-anchor="middle" font-size="8.4" font-weight="800" font-family="Arial,sans-serif" fill="black">$</text></mask><rect x="0.5" y="8" width="9.6" height="8" rx="1.7" fill="currentColor"/><rect x="1.9" y="9.9" width="3.8" height="1.3" rx=".65" fill="#ffffff" opacity=".92"/><circle cx="19" cy="12" r="5.5" fill="currentColor" mask="url(#wdDollarMask)"/><path d="M11 12h3.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M13 9.9 10.6 12l2.4 2.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   checkin: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>',
   // Owner wants a light/thin tick, not the old heavy one. The literal ✓
   // (U+2713) character was tried first but Android renders it from a
@@ -1591,7 +1604,23 @@ async function shareReferral(code){
     'Join SPACE8 and explore the new platform from launch day!\n' +
     link + '\n' +
     '🚀 SPACE8 — NEW LAUNCH, NEW OPPORTUNITIES!';
-  if (navigator.share) navigator.share({ title: 'Join Space8', text: text }).catch(function(){});
+  // Owner: "when one clicks share link, it will also embed with that
+  // table" -- attach the Space8 Investment Plans graphic alongside the
+  // text via the Web Share API's file-sharing capability. Not every
+  // browser/OS that has navigator.share ALSO supports sharing files
+  // (desktop Chrome/Firefox commonly don't) -- canShare({files}) is the
+  // real capability check; a plain `navigator.share` existing is not
+  // enough on its own. Falls back to text-only share (unchanged prior
+  // behavior) wherever the image can't be attached, never blocking the
+  // share entirely just because the image fetch/attach failed.
+  var shareData = { title: 'Join Space8', text: text };
+  try {
+    var imgResp = await fetch('plans-table.jpg');
+    var imgBlob = await imgResp.blob();
+    var imgFile = new File([imgBlob], 'space8-investment-plans.jpg', { type: imgBlob.type || 'image/jpeg' });
+    if (navigator.canShare && navigator.canShare({ files: [imgFile] })) shareData.files = [imgFile];
+  } catch (_) {}
+  if (navigator.share) navigator.share(shareData).catch(function(){});
   else copyText(text, 'Referral message');
 }
 async function redeemGiftCode(){

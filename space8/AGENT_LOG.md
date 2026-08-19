@@ -14,6 +14,47 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Deposit/withdraw icons replaced, Archivo Black display font on the announcement title, referral share now attaches the plans-table image
+
+Owner, with 4 reference images: "bro change deposit svg to exactly that first one,withdrawal
+svg to that" / "bro also you see friends text font in dialog, l want you to use that in our
+dialog" / "also when one clicks share link,it will also embed with that table."
+
+- **Deposit/withdraw icons replaced.** `ICONS.deposit`/`ICONS.withdraw`
+  (`user-src/original_module.js`) went from thin-stroke outline icons to solid-fill designs
+  matching the two reference images: deposit is a down-arrow feeding into a `$` coin;
+  withdraw is a card with an arrow flowing into a `$` coin. The `$` is a genuine SVG `<mask>`
+  cutout (a `<text>` glyph in the mask, not a colored overlay) so it stays legible against any
+  badge background. Iterated several visual drafts (arrow shape, card/coin spacing) before
+  landing on the final version. Verified against the REAL `ico()` function via a Playwright
+  harness loading the actual `original_module.js` (not a hand-written reimplementation) —
+  confirms both render cleanly at badge scale, and specifically confirms the shared SVG
+  mask `id` is safe when `ico('deposit')` is duplicated in the DOM simultaneously (it renders
+  twice at once in the real app: Home's action row + an open Deposit sheet) — each
+  referencing element evaluates the mask in its own coordinate space, so two copies of the
+  same icon HTML render pixel-identical rather than one corrupting the other.
+- **Archivo Black display font added for the announcement dialog title.** New self-hosted
+  `@font-face` (base64 woff2, same embedded-font convention as the existing `Inter`, no CDN
+  dependency) in `user-src/index.html`. `.announce-title` now uses it — bold, all-caps,
+  23px — matching the reference dialog screenshot's display-font treatment. Verified with a
+  Chromium render using the actual extracted `@font-face` CSS from the real built file.
+- **Referral share now attaches the investment-plans table image.** The reference table
+  graphic (cross-checked against `DEFAULT_PRODUCTS` in server.js — all 15 tiers' prices/
+  totals match exactly, so it's an accurate asset) was re-compressed from a 1.57MB PNG to a
+  307KB JPEG (quality 88, visually lossless) and saved as `user/plans-table.jpg`, added to
+  `user/sw.js`'s `SHELL` precache array. `shareReferral()` now fetches it, builds a `File`,
+  and checks `navigator.canShare({files:[...]})` (the real capability check — distinct from
+  `navigator.share` merely existing, since many browsers support text-only share but not
+  file-attachment share) before including it in `navigator.share()`'s `files`; falls back to
+  text-only share exactly as before on any browser/error that doesn't support it.
+- **Why**: purely visual/UX polish requests from the owner, working off 4 pasted reference
+  images (2 icon references, 1 dialog-font screenshot, 1 investment-plans table graphic).
+- **Verification**: `node build-core.js` → round-trip OK. Full `test-*.js` suite run (no
+  server.js changes this round — sanity check only). Bumped `user/sw.js` `CACHE` to
+  `space8-shell-v274`. No `admin-src/` changes, no admin rebuild needed. No `server.js`
+  changes, no Railway redeploy needed — this is a Render auto-deploy of `user/` only.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-18 — Claude — Codex review of the sweep/banner-card/check-in round: 3 Medium + 1 Low, all real, all fixed
 
 Owner: "let us ask codex to review our [recent] commits" (the glow-sweep, admin-adjustable

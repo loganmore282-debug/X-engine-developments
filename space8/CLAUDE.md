@@ -2753,6 +2753,22 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    `user/sw.js` `CACHE` bumped to `v273`. **`server.js` changed → Railway
    needs a redeploy.** See the 2026-08-18 AGENT_LOG.md entry ("Codex review of
    the sweep/banner-card/check-in round").
+0m. **Deposit/withdraw icons, announcement-title font, referral share image — DONE.**
+   Owner supplied 4 reference images. `ICONS.deposit`/`ICONS.withdraw`
+   (`user-src/original_module.js`) replaced with solid-fill designs (arrow-into-coin /
+   card-arrow-coin), each `$` a real SVG `<mask>` cutout — verified against the real
+   `ico()` function via Playwright, including that the shared mask `id` renders correctly
+   when `ico('deposit')` is duplicated in the DOM at once (Home action row + open Deposit
+   sheet). A self-hosted `Archivo Black` `@font-face` was added (`user-src/index.html`,
+   same base64-embed convention as `Inter`) and applied to `.announce-title` (bold,
+   uppercase) to match a reference dialog screenshot. `shareReferral()` now attaches
+   `user/plans-table.jpg` (a re-compressed, data-verified copy of the owner's investment-
+   plans table graphic) via the Web Share API's `files` capability when the target
+   supports it (`navigator.canShare({files:[...]})`), falling back to text-only share
+   otherwise. `user/sw.js` `CACHE` bumped to `v274`. No `server.js`/`admin-src/` changes —
+   no Railway redeploy needed. See the 2026-08-18 AGENT_LOG.md entry ("Deposit/withdraw
+   icons replaced, Archivo Black display font on the announcement title, referral share
+   now attaches the plans-table image").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live
