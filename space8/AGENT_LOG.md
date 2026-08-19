@@ -14,6 +14,80 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Full-codebase security verification pass ("cement this" — no code changes, zero new gaps found)
+
+Owner: "we need to cement this,no faking deposits, no double claiming,
+every endpoint should be safeguarded, secured to prevent fraud and
+providing unknown money,every logic should be encrypted, secured and
+safeguarded to prevent hackers and payloads plus performing attacks and
+cracks." Not a specific bug report — a request to re-verify the whole
+money-safety/security posture. Did a genuine, evidence-based pass against
+each thing named, not a reassurance-without-checking:
+
+- **Fake deposits**: re-read `/deposit/marzpay`, `/deposit/callback`,
+  `creditDeposit()` line by line. Confirmed the webhook NEVER trusts a
+  claimed status by itself — every credit/decline goes through an
+  independent live re-check against MarzPay's own API, and a webhook-
+  supplied (not self-captured) transaction uuid is only accepted once its
+  own live-reported `reference` is proven to match this exact deposit
+  (two previously-closed real exploits, both documented in the code's own
+  comments: trusting an uncaptured webhook outright, and uuid-reuse from
+  an unrelated real transaction).
+- **Double claiming**: confirmed the claim-before-credit pattern
+  (flip status to used/matched FIRST, credit second, so a failed second
+  write is a safe no-op instead of a re-creditable state) is applied
+  consistently across deposits (`creditDeposit`), check-in (per-user lock
+  + reconciled against the real transaction ledger every call, not a
+  cached streak field), and gift-code redemption (per-code lock +
+  atomic `arrayUnion` + re-read to catch a race the in-memory check alone
+  can't see).
+- **Every endpoint safeguarded**: wrote a script that extracts all 94
+  route handlers in `server.js` and checks each for an auth call. 13 had
+  none — individually verified every one: 6 are deliberately public
+  (`/health`, `/public/*`), 2 are the payment-gateway webhooks (auth is
+  the independent live re-check, not a Bearer token — a webhook can't
+  carry one), `/admin/check-key`/`/admin/login` ARE the auth entry points,
+  `/admin/logout` only ever deletes the session matching the caller's own
+  token, and `/admin/withdraw/quick-approve` (reachable from a push
+  notification with no admin session open) uses its own narrower,
+  revocable pushToken+secret credential instead of the admin session --
+  deliberately scoped to only ever reach one function. Zero real gaps.
+- **Encryption/hashing**: admin passwords and the withdrawal PIN are both
+  scrypt-hashed (never plaintext), all secret/PIN/key comparisons use
+  `crypto.timingSafeEqual` (no timing side-channel), admin login runs a
+  scryptVerify against a dummy hash even for a nonexistent username (no
+  timing-based username enumeration), Firebase ID tokens are verified with
+  `checkRevoked:true` (a revoked/signed-out token stops working
+  immediately, not just at its natural expiry).
+- **Injection/attacks**: `stripMongoOperators` is global middleware run on
+  every request body (strips `$`/`.` keys before anything touches a Mongo
+  query); grepped for `eval(`/`new Function(`/`child_process`/`exec(` —
+  zero matches anywhere in `server.js`/`db.js`; `esc()` HTML-escaping
+  already confirmed extensively used client-side across prior rounds;
+  3-tier rate limiting (`ipOnlyLimiter` 900/min, `globalLimiter` 400/min
+  per user, tighter `apiLimiter` 60/min on money-mutating routes) plus a
+  dedicated admin-login lockout.
+- **Verification**: ran the full `test-*.js` suite — 79/79 green,
+  including all 14 security/fraud/concurrency-dedicated files
+  (`test-security-hardening`, `test-security-review`,
+  `test-callback-forgery`, `test-withdrawal-security`,
+  `test-checkin-giftcode-security`, `test-ratelimit-evasion`,
+  `test-deposit-abuse-autoban`, `test-*-concurrency*`, etc.). No code
+  changed this round — the honest finding is that this app has already
+  been through many real hardening passes (see this file's many prior
+  Codex/ChatGPT audit entries) and this fresh pass, checked against the
+  owner's own specific list, didn't turn up anything new to fix.
+- **One optional, NOT urgent item raised, not acted on**: CORS is
+  `origin: '*'` (server.js line ~135). Low real risk given auth is a
+  Bearer token the browser never attaches automatically (not cookie-
+  based, so not a classic CSRF vector), but could be tightened to the
+  known real origins as pure defense-in-depth if the owner wants it —
+  flagged rather than changed unilaterally, since getting the allowed-
+  origin list wrong risks breaking the installed PWA/webview.
+- **Deferred / open**: none new. Admin panel (`admin-src/`) route-auth
+  wasn't re-swept with the same script this round — worth doing if the
+  owner wants the same treatment applied there specifically.
+
 ## 2026-08-19 — Claude — Real bug: relative asset paths broke on any non-root URL (exposed by the new referral link path)
 
 Owner fixed the Render dashboard rewrite rule (space8-app → Redirects/
