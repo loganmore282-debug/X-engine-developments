@@ -14,6 +14,20 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Home action buttons (Deposit/Withdraw/Check-in) made shorter again
+
+Owner, with a screenshot: "let us reduce the vertical width of those buttons of deposit,
+withdraw and checkin abit" — a further trim on top of the earlier same-day reduction.
+
+- `.action-btn` (`user-src/index.html`): padding `9px 8px`→`7px 8px`, gap unchanged
+  structurally but icon badge `36px`→`32px`, icon-svg `17px`→`15px`, `.s8-check`
+  `18px`→`16px`. Pure visual sizing, no markup/logic change.
+- **Verification**: `node build-core.js` → round-trip OK. Chromium render (via the real
+  `ico()` output) confirms the row is visibly shorter and still legible at the smaller
+  icon size. Full 78-file `test-*.js` suite green (server.js untouched). Bumped
+  `user/sw.js` `CACHE` to `space8-shell-v278`. No `server.js`/`admin-src/` changes.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Deposit/withdraw icons replaced again, Codex-designed to match the owner's reference images exactly
 
 Owner sent the two reference images again and asked to have Codex advise on how to

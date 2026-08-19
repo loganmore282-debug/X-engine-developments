@@ -2769,10 +2769,13 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    no Railway redeploy needed. See the 2026-08-18 AGENT_LOG.md entry ("Deposit/withdraw
    icons replaced, Archivo Black display font on the announcement title, referral share
    now attaches the plans-table image").
-0n. **Shorter Home action buttons + referral ladder recalculated to flat UGX 1,000 —
-   DONE. Announcement dialog restyle — MISTAKE, reverted, do not redo without being
-   asked.** `.action-btn` (Deposit/Withdraw/Check-in on Home) padding/icon size
-   reduced for a shorter, less bulky look. `TEAM_MILESTONES` in `server.js`
+0n. **Shorter Home action buttons (trimmed twice, same day) + referral ladder
+   recalculated to flat UGX 1,000 — DONE. Announcement dialog restyle — MISTAKE,
+   reverted, do not redo without being asked.** `.action-btn` (Deposit/Withdraw/Check-in
+   on Home) padding/icon size
+   reduced for a shorter, less bulky look, then trimmed further the same day on a
+   follow-up "reduce it abit" request (padding `9px 8px`→`7px 8px`, icon badge
+   `36px`→`32px`, icon-svg `17px`→`15px`). `TEAM_MILESTONES` in `server.js`
    recalculated to a flat UGX 1,000/active-referral (was 1,500) — see the "Active
    Level-1 referral ladder" entry above for the new numbers; only reward VALUES
    changed, target numbers untouched, so the existing claim-flag-by-target mechanism
@@ -2789,11 +2792,13 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    markup are byte-identical to before this round. **Do not restyle the announcement
    dialog again unless the owner explicitly asks for a specific change** — an
    attached reference image is not itself a request. `user/sw.js` `CACHE` bumped to
-   `v275` (ship) then `v276` (revert). **`server.js` changed (TEAM_MILESTONES) →
+   `v275` (ship) then `v276` (revert) then `v278` (second button trim; `v277` was the
+   Codex icon-redesign round, see 0o below). **`server.js` changed (TEAM_MILESTONES) →
    needs a Railway redeploy** for the new reward amounts to take effect. See the
-   2026-08-19 AGENT_LOG.md entry ("Shorter Home action buttons, referral count-ladder
+   2026-08-19 AGENT_LOG.md entries ("Shorter Home action buttons, referral count-ladder
    recalculated to flat UGX 1,000 (announcement-dialog restyle shipped then
-   immediately reverted — owner never asked for it)").
+   immediately reverted — owner never asked for it)" and "Home action buttons
+   (Deposit/Withdraw/Check-in) made shorter again").
 0o. **Deposit/withdraw icons replaced again, Codex-designed — DONE.** The 2026-08-18
    hand-drawn icons (see 0m above) didn't match the owner's reference images closely
    enough — the owner had Codex design the actual SVG geometry (repo/AGENT_LOG.md

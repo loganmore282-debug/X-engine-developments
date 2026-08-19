@@ -747,7 +747,10 @@
 // (mask-cutout $ glyph / segmented-coin + card, rounded-arrow silhouettes)
 // closely matching the owner's reference images; ico() now mints a fresh
 // mask id on every call instead of a shared static one.
-const CACHE = 'space8-shell-v277';
+// v278: Home action buttons (Deposit/Withdraw/Check-in) made shorter again
+// -- padding 9px 8px -> 7px 8px, icon badge 36px -> 32px, icon-svg 17px ->
+// 15px, .s8-check 18px -> 16px.
+const CACHE = 'space8-shell-v278';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
