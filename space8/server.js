@@ -2926,22 +2926,26 @@ app.post('/withdraw/request', async (req, res) => {
   const amt = parseInt(req.body.amount, 10);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
   if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtUGX(MAX_MONEY_AMOUNT)}).` });
-  // Bank-transfer withdrawal has been removed -- mobile money is the only
-  // withdrawal rail. method is intentionally never read from the client.
-  const method = 'mobile_money';
+  // Owner, 2026-08-19: "we are adding banks... let it remain the same, same
+  // terms" -- bank-transfer withdrawal is back, but merged into the SAME
+  // bind-then-pick flow mobile money already used (not the old, separate
+  // "type bank details fresh every withdrawal, no bind step" design that
+  // was removed earlier). method is derived below from the BOUND account's
+  // own stored `isBank` flag -- never trusted from the client.
   const holder = stripHtml(req.body.holder);
-  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
-  const phone = cleanPhone(req.body.phone || '');
-  if (!holder || !network) return res.status(400).json({ status: 'error', message: 'Bind a mobile-money account first.' });
-  // Was a loose length check that let a garbled number (e.g. a stray
-  // extra "256" mashed onto the front) straight through to MarzPay's
-  // send-money call -- that's exactly how one real payout ended up
-  // permanently stuck "processing" with MarzPay erroring on the bad
-  // number, which then blocked every OTHER withdrawal too (MarzPay only
-  // allows one send-money payout in flight per business account).
-  // cleanPhone() itself is strict now; rejected here BEFORE anything is
-  // reserved, with a message that says exactly what's wrong.
-  if (!phone) return res.status(400).json({ status: 'error', message: 'That mobile-money number is not a valid Uganda number. Use the format 07XXXXXXXX or +2567XXXXXXXX, then bind it again.' });
+  const rawNetwork = String(req.body.network || '').trim();
+  const isMM = NETWORK_NAMES.has(rawNetwork);
+  // Was a loose length check that let a garbled number (e.g. a stray extra
+  // "256" mashed onto the front) straight through to MarzPay's send-money
+  // call -- that's exactly how one real payout ended up permanently stuck
+  // "processing" with MarzPay erroring on the bad number, which then
+  // blocked every OTHER withdrawal too (MarzPay only allows one send-money
+  // payout in flight per business account). cleanPhone() itself is strict
+  // now; rejected here BEFORE anything is reserved, with a message that
+  // says exactly what's wrong. Bank account numbers go through the same
+  // digits-only normalization /bank/save already applies at bind time.
+  const destValue = isMM ? cleanPhone(req.body.phone || '') : String(req.body.phone || '').replace(/\D/g, '').trim();
+  if (!holder || !rawNetwork || !destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
   let pinJustSet = false;
   try {
     const sett = await getSettings();
@@ -2970,22 +2974,35 @@ app.post('/withdraw/request', async (req, res) => {
     if (!pinCheck.ok) return res.status(400).json({ status: 'error', code: pinCheck.code, message: pinCheck.message });
     pinJustSet = !!pinCheck.justSet;
 
-    // A second, independent layer beyond the PIN: the mobile-money
-    // destination has to actually BE one of this member's saved payout
-    // accounts, not just look like valid holder/network/phone fields. The
-    // real app UI only ever sends an already-bound account, but nothing
-    // server-side used to enforce that -- a direct API call (the exact
-    // capability an attacker who already has a stolen password and PIN
-    // would use, bypassing the app's own restriction) could redirect a
-    // cash-out to ANY number, never bound at all. Bank transfer has no
-    // bind step to compare against by design (its PIN gate already covers
-    // it, right above), so this only applies to the mobile-money branch.
-    if (method === 'mobile_money') {
-      const boundSnap = await db.collection('bankAccounts')
-        .where('userId', '==', userId).where('network', '==', network).where('phone', '==', phone).limit(1).get();
-      if (boundSnap.empty)
-        return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: 'That mobile-money account isn\'t saved to your profile. Bind it in Payout Account first, then try again.' });
-    }
+    // A second, independent layer beyond the PIN: the destination has to
+    // actually BE one of this member's saved withdrawal accounts, not just
+    // look like valid holder/network/phone fields. The real app UI only
+    // ever sends an already-bound account, but nothing server-side used to
+    // enforce that -- a direct API call (the exact capability an attacker
+    // who already has a stolen password and PIN would use, bypassing the
+    // app's own restriction) could redirect a cash-out to ANY number, never
+    // bound at all. Now applies to BOTH rails equally -- bank never had
+    // this gate before (it had no bind step to check against at all), so
+    // this is a real security improvement, not a behavior change for an
+    // existing feature.
+    const boundSnap = await db.collection('bankAccounts')
+      .where('userId', '==', userId).where('network', '==', rawNetwork).where('phone', '==', destValue).limit(1).get();
+    if (boundSnap.empty)
+      return res.status(400).json({ status: 'error', code: 'UNBOUND_ACCOUNT', message: 'That withdrawal account isn\'t saved to your profile. Bind it in Withdrawal Accounts first, then try again.' });
+    const boundAcct = boundSnap.docs[0].data();
+    // Defense in depth: a non-mobile-money network is only ever trusted as
+    // a real bank destination when the BOUND doc itself was explicitly
+    // marked isBank:true by /bank/save's own live MarzPay validation at
+    // bind time -- never inferred just because a matching row exists. A
+    // forged/garbage network string could otherwise reach here if some
+    // other bug ever let a bad row into bankAccounts (e.g. stale/manually-
+    // edited data), and silently be treated as a legitimate mobile-money
+    // withdrawal.
+    if (!isMM && boundAcct.isBank !== true)
+      return res.status(400).json({ status: 'error', message: 'Unrecognized withdrawal network.' });
+    const method = isMM ? 'mobile_money' : 'bank';
+    const network = rawNetwork;
+    const phone = destValue;
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;
@@ -3027,6 +3044,10 @@ app.post('/withdraw/request', async (req, res) => {
       t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
       const { date, time } = nowStr();
       const record = { userId, amount: amt, fee, net, method, holder, network, phone, ref, status: 'pending', date, time, createdAt: FieldValue.serverTimestamp() };
+      // processWithdrawalCore's isBank branch (marzBankTransfer) reads these
+      // three fields directly off the withdrawal doc -- populated from the
+      // BOUND account here, not typed fresh per request.
+      if (method === 'bank') { record.bankName = network; record.accountNumber = phone; record.accountName = holder; }
       t.set(witRef, record);
       const destDesc = `${holder} (${network})`;
       t.set(db.collection('transactions').doc(), {
@@ -3582,25 +3603,58 @@ app.post('/account/payout-pin/set', async (req, res) => {
 // ═══════════════════════════════════════════
 // BIND BANK CARD
 // ═══════════════════════════════════════════
+// Owner, 2026-08-19: "we are adding banks... let it remain the same, same
+// terms, only l want when one selects network mtn,airtel,plus all
+// supported banks... no making another category it has remained the
+// same." Withdrawal Accounts stays ONE bind-then-pick flow (same PIN
+// gating, same duplicate check, same UI shape) -- `network` now also
+// accepts any MarzPay-supported bank name (validated live against
+// MarzPay itself before ever saving, never a static list, so a forged/
+// unsupported name can never be saved), and the field that used to be
+// strictly a Uganda mobile-money phone number now also accepts a bank
+// account number -- reusing the SAME `phone` field/column rather than
+// adding a parallel "bank account" concept, exactly per "it has remained
+// the same." isBank is stored so /withdraw/request can tell the two apart
+// without a second live MarzPay call on every withdrawal.
 app.post('/bank/save', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const holder = stripHtml(req.body.holder);
-  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
-  const phone = cleanPhone(req.body.phone || '');
-  if (!holder || !network) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
-  // This is THE bug that put +25625607541000 into a real payout: the old
-  // check here was phone.length < 10, which a garbled 14-digit number
-  // sailed straight past, got saved as a real payout destination, and
-  // later got sent to MarzPay's send-money as-is -- MarzPay choked on it
-  // and left that one withdrawal stuck "processing" forever, which then
-  // blocked every OTHER pending withdrawal too (MarzPay only allows one
-  // send-money payout in flight per business account at a time).
-  // cleanPhone() itself now only accepts a real Uganda mobile number
-  // (256 + exactly 9 digits, starting with 7) and returns null otherwise,
-  // so this is rejected right here, before it's ever saved as a payout
-  // destination.
-  if (!phone) return res.status(400).json({ status: 'error', message: 'That is not a valid Uganda mobile-money number. Use the format 07XXXXXXXX or +2567XXXXXXXX.' });
+  const rawNetwork = String(req.body.network || '').trim();
+  const isMM = NETWORK_NAMES.has(rawNetwork);
+  if (!holder || !rawNetwork) return res.status(400).json({ status: 'error', message: 'Fill in all fields' });
+  let phone, isBank = false;
+  if (isMM) {
+    // This is THE bug that put +25625607541000 into a real payout: the old
+    // check here was phone.length < 10, which a garbled 14-digit number
+    // sailed straight past, got saved as a real payout destination, and
+    // later got sent to MarzPay's send-money as-is -- MarzPay choked on it
+    // and left that one withdrawal stuck "processing" forever, which then
+    // blocked every OTHER pending withdrawal too (MarzPay only allows one
+    // send-money payout in flight per business account at a time).
+    // cleanPhone() itself now only accepts a real Uganda mobile number
+    // (256 + exactly 9 digits, starting with 7) and returns null otherwise,
+    // so this is rejected right here, before it's ever saved as a payout
+    // destination.
+    phone = cleanPhone(req.body.phone || '');
+    if (!phone) return res.status(400).json({ status: 'error', message: 'That is not a valid Uganda mobile-money number. Use the format 07XXXXXXXX or +2567XXXXXXXX.' });
+  } else {
+    // Not a recognized mobile-money network -- treat as a bank name.
+    // Cheap format check first (never calls MarzPay for an obviously
+    // malformed number), then a live (bank, account number) validation
+    // against MarzPay itself before ever saving -- this is both the "is
+    // this a real supported bank" check AND the "is this a real account"
+    // check in one call, so there's no separate static bank whitelist to
+    // keep in sync with MarzPay's own list.
+    const acct = String(req.body.phone || '').replace(/\D/g, '').trim();
+    if (!acct || acct.length < 5 || acct.length > 20) return res.status(400).json({ status: 'error', message: 'Enter a valid bank account number.' });
+    let v;
+    try { v = await marzValidateBankAccount({ bankName: rawNetwork, accountNumber: acct }); }
+    catch (e) { return res.status(502).json({ status: 'error', message: PROVIDER_BUSY_MSG }); }
+    if (v.status !== 'success') return res.status(400).json({ status: 'error', message: marzUserMsg(v, 'Could not verify that bank account. Check the bank and account number and try again.') });
+    phone = acct;
+    isBank = true;
+  }
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
@@ -3625,14 +3679,22 @@ app.post('/bank/save', async (req, res) => {
     // landed, creating two identical rows. Same withLock idiom every other
     // check-then-write in this codebase already uses for exactly this
     // race shape.
+    // Bank accounts are deduped by (network, phone) TOGETHER, not phone
+    // alone -- unlike mobile money's deliberate phone-only scoping (a
+    // mobile-money number can't genuinely belong to two networks at once),
+    // a bank account NUMBER is only unique within its own bank, so the
+    // same raw digit string at two different banks is a real, distinct
+    // account, not a duplicate.
     const dup = await withLock('bank-save:' + userId, async () => {
-      const dupSnap = await db.collection('bankAccounts')
-        .where('userId', '==', userId).where('phone', '==', phone).limit(1).get();
+      let dupQuery = db.collection('bankAccounts').where('userId', '==', userId);
+      dupQuery = isBank ? dupQuery.where('network', '==', rawNetwork).where('phone', '==', phone)
+                         : dupQuery.where('phone', '==', phone);
+      const dupSnap = await dupQuery.limit(1).get();
       if (!dupSnap.empty) return true;
-      await db.collection('bankAccounts').add({ userId, holder, network, phone, createdAt: FieldValue.serverTimestamp() });
+      await db.collection('bankAccounts').add({ userId, holder, network: rawNetwork, phone, isBank, createdAt: FieldValue.serverTimestamp() });
       return false;
     });
-    if (dup) return res.status(400).json({ status: 'error', message: 'This number is already saved as a withdrawal account.' });
+    if (dup) return res.status(400).json({ status: 'error', message: 'This account is already saved as a withdrawal account.' });
     res.json({ status: 'success', pinJustSet: !!pinCheck.justSet });
   } catch (e) {
     res.status(500).json({ status: 'error', message: 'Could not save the bank account' });

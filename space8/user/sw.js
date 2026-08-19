@@ -750,7 +750,12 @@
 // v278: Home action buttons (Deposit/Withdraw/Check-in) made shorter again
 // -- padding 9px 8px -> 7px 8px, icon badge 36px -> 32px, icon-svg 17px ->
 // 15px, .s8-check 18px -> 16px.
-const CACHE = 'space8-shell-v278';
+// v279: Bank withdrawal accounts reactivated, merged into the existing
+// Withdrawal Accounts bind-then-pick flow -- network select now also
+// lists every MarzPay-supported bank alongside MTN/Airtel; the old
+// phone-only field is now a generic mobile-money-or-bank account-number
+// field with a new bank-glyph icon replacing the phone icon.
+const CACHE = 'space8-shell-v279';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

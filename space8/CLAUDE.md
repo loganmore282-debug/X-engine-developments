@@ -36,13 +36,14 @@ The owner was explicit and this must not be re-litigated without them saying so:
    session the owner also said to remove USD/USDT depositing and, after clarifying, bank-
    transfer *withdrawal* too (not `/bank/save`, which despite its name binds a
    MOBILE-MONEY payout account and is required for every withdrawal — that stays).
-   **Both removals are DONE.** USDT deposit was fully deleted (self-contained feature, no
-   shared logic with mobile money). Bank-transfer withdrawal was handled differently:
-   `/withdraw/request` now hard-locks to `method:'mobile_money'` so a new bank-transfer
-   withdrawal can never be created, but the `isBank` branches inside the shared
-   processing/reconciler functions were deliberately left in place (harmless dead code,
-   safer than surgically deleting logic shared with mobile-money withdrawals). See
-   `AGENT_LOG.md` for the full breakdown of what was removed vs. deliberately kept.
+   **Both removals were done at the time**, and USDT deposit stays gone (self-contained
+   feature, no shared logic with mobile money). **Bank-transfer withdrawal was
+   REACTIVATED 2026-08-19** (owner: "we are adding banks... let it remain the same, same
+   terms") — see "Withdrawal accounts now support banks too" below in Product ladder for
+   the full current design; the `isBank` branches in `processWithdrawalCore`/the
+   reconcilers that were deliberately left in place as dead code during the original
+   removal are exactly what made this reactivation cheap. See `AGENT_LOG.md` for the full
+   breakdown of the original removal and the 2026-08-19 reactivation.
    **Visual theme update, 2026-08-16**: the owner later explicitly asked to "change admin
    theme to match like userpanel theme" — this is a narrower, later override of the "keep
    as-is" instruction above, scoped to visuals only (colors + font), not a walk-back of
@@ -484,6 +485,51 @@ an earlier same-day pass wrongly required picking a saved account for deposits t
 the owner corrected this explicitly ("who told you deposits should require picking a
 number... we concentrated on withdrawals"), and it was reverted the same day. Don't
 reintroduce a deposit account-picker without being asked again.
+
+**Withdrawal accounts now support banks too, 2026-08-19** (owner: "we are adding
+banks... let it remain the same, same terms, only l want when one selects network
+mtn,airtel,plus all supported banks, so one can tap network and inputs account
+number... no making another category it has remained the same"). One bind-then-pick
+flow for BOTH mobile money and bank — not a separate screen/category:
+- `payNetwork` (the add-form's network `<select>`, `renderPayoutSheet()`) now lists
+  MTN Mobile Money, Airtel Money, then every bank `GET /public/banks` returns (live
+  from MarzPay's own `/bank-transfer/banks`, cached server-side 60s via
+  `getMarzBanks()`, cached client-side on `STATE.banks` for the session). The old
+  phone-only field (`ico('phone')`, placeholder "07XXXXXXXX", `maxlength="10"`) is now
+  a generic account-number field (`ico('bank')` — a new stroke-outline bank/institution
+  glyph — placeholder "Mobile-money or bank account number", `maxlength="20"`).
+- `/bank/save` (`server.js`): a `network` not in `NETWORK_NAMES` is now treated as a
+  bank name — the account number is validated LIVE against MarzPay
+  (`marzValidateBankAccount`, the same `/bank-transfer/validate` call the
+  now-reactivated bank-transfer rail already used) before ever being saved, closing
+  both "is this a real bank" and "is this a real account" in one call, no static bank
+  whitelist to keep in sync. Stores `isBank:true` on the doc. Duplicate detection for a
+  bank account is scoped by `(network, phone)` TOGETHER (unlike mobile money's
+  deliberate phone-only scoping — see the round-6 duplicate-detection note above) since
+  a bank account number is only unique within its own bank.
+- `/withdraw/request`: the "destination must already be a bound account" check (added
+  2026-08-16 for mobile money only) now applies to BOTH rails equally — bank never had
+  this gate before since it had no bind step at all pre-removal. `method` is derived
+  from the BOUND doc's own `isBank` flag, never trusted from the client, with an
+  explicit defense-in-depth check (`!isMM && boundAcct.isBank !== true` → rejected)
+  so a forged/stale `bankAccounts` row missing that flag can never be treated as a
+  valid bank destination even if its network+phone happen to match. `bankName`/
+  `accountNumber`/`accountName` are populated onto the withdrawal doc from the BOUND
+  account (not typed fresh per request, unlike the old pre-removal bank-transfer
+  design) — this is exactly what `processWithdrawalCore`'s already-existing `isBank`
+  branch (`marzBankTransfer`) reads, so reactivating this needed no changes to the
+  actual sending/reconciling logic, only to how the withdrawal doc gets populated.
+- Assistant replies (`assistant-engine.js`): `withdraw_to_bank`, `payout_account` (both
+  the quick reply and the DEEP explainer) updated — used to say "no bank-transfer
+  option," now correctly describe binding a bank account the same way as mobile money.
+- Covered by new `test-bank-withdrawal-accounts.js` (40/40): live-validate-before-save,
+  malformed-number-rejected-without-a-live-call, bank-scoped duplicate detection,
+  `/public/banks`, bound-account enforcement for bank, the forged-row defense-in-depth
+  check, `/admin/withdraw/process` correctly driving `marzBankTransfer` (not
+  `marzSendMoney`), and a full mobile-money regression pass proving it's unaffected.
+  **`server.js` changed → needs a Railway redeploy.** `user/sw.js` `CACHE` bumped to
+  `v279`. See the 2026-08-19 AGENT_LOG.md entry ("Bank withdrawal accounts reactivated,
+  merged into the existing Withdrawal Accounts flow").
 
 **UI label is "Withdrawal Accounts", not "Payout Accounts"**, changed 2026-08-16 —
 display text only (sheet title, button labels, matrix/shortcut tile, toasts, the

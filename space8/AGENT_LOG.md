@@ -14,6 +14,93 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Bank withdrawal accounts reactivated, merged into the existing Withdrawal Accounts flow
+
+Owner, with 2 reference icon screenshots and the MarzPay integration skill docs
+attached: "remove 07xxxxxx,we are adding banks,no need to make different area,let
+it remain the same,same terms,only l want when one selects network mtn,airtel,plus
+all supported banks,so one can tap network and inputs account number, so remove that
+07xxxxxx plus phone svg ,you will put 🏦 svg ,so one can put mobile account number or
+bank account number, so all supported. no making another category it has remained
+the same!"
+
+Investigated the existing code before writing anything: bank-transfer withdrawal
+infrastructure (`marzValidateBankAccount`, `marzBankTransfer`, `getMarzBanks`,
+`GET /public/banks`, `processWithdrawalCore`'s `isBank` branch, the reconciler's
+`isBank` handling) already fully existed in `server.js` from an earlier feature the
+owner had removed (see the "three-part split" section of CLAUDE.md) — deliberately
+left in place as dead code specifically so a future reactivation like this one would
+be cheap. The OLD (pre-removal) design had bank details typed fresh on every single
+withdrawal, no bind step at all — genuinely a "different category" from mobile
+money's bind-then-pick flow. The owner's "no making another category" instruction
+meant: don't resurrect that old design — merge bank into the SAME bind-then-pick flow
+mobile money already uses.
+
+- **`server.js` — `/bank/save`**: `network` not in `NETWORK_NAMES` is now treated as a
+  bank name. The account number goes through a cheap format check first (5-20 digits,
+  rejects obvious garbage without ever calling MarzPay), then a LIVE validation via
+  `marzValidateBankAccount` (MarzPay's own `/bank-transfer/validate`) before the
+  account is ever saved — this is both "is this a real bank" and "is this a real
+  account" in one call, no static bank whitelist to keep in sync with MarzPay's own
+  list. Stores `isBank:true` on the doc. Duplicate detection for a bank account is
+  scoped by `(network, phone)` together, not phone alone (unlike mobile money's
+  deliberate phone-only scoping from the round-6 duplicate-detection fix) — a bank
+  account number is only unique within its own bank, so the same raw digit string at
+  two different banks is a real, distinct account, not a duplicate.
+- **`server.js` — `/withdraw/request`**: the "destination must already be a bound
+  account" check (added 2026-08-16, mobile-money only at the time) now applies to
+  BOTH rails equally — bank never had this gate before since it had no bind step to
+  check against. `method` is derived from the bound doc's own `isBank` flag, never
+  trusted from the client, plus an explicit defense-in-depth check
+  (`!isMM && boundAcct.isBank !== true` → rejected) so a forged/stale `bankAccounts`
+  row missing that flag can never be treated as a valid bank destination even if its
+  network+phone happen to match a request. `bankName`/`accountNumber`/`accountName`
+  are populated onto the withdrawal doc from the BOUND account, not typed fresh per
+  request — exactly what `processWithdrawalCore`'s existing `isBank` branch already
+  reads, so reactivating the actual send/reconcile logic needed zero changes.
+- **`user-src/original_module.js`**: new `ICONS.bank` (stroke-outline bank/institution
+  glyph, matching the rest of the icon set's style — the filled deposit/withdraw icons
+  are the one exception). `renderPayoutSheet()`'s add-form: `payNetwork` select now
+  lists MTN/Airtel then every bank from a new `STATE.banks` (fetched once from
+  `GET /public/banks`, cached for the session); the old phone-only field
+  (`ico('phone')`, "07XXXXXXXX", `maxlength="10"`) is now a generic account-number
+  field (`ico('bank')`, "Mobile-money or bank account number", `maxlength="20"`).
+  Client-side validation branches on whether the selected network is mobile money
+  (`cleanPhone`) or a bank (`/^\d{5,20}$/`). `MM_NETWORKS` constant added for this
+  check, reused nowhere else. Stale comments referencing "mobile-money accounts"
+  updated to be generic.
+- **`assistant-engine.js`**: `withdraw_to_bank` (used to say "no bank-transfer
+  option, mobile money only") and `payout_account` (both the quick reply and the DEEP
+  explainer) updated to correctly describe binding a bank account the same way as
+  mobile money.
+- **Why**: the owner wants bank withdrawal support back, but unified into the
+  existing account-binding flow rather than a separate typed-fresh-every-time design.
+- **Verification**: new `test-bank-withdrawal-accounts.js` (40/40) — live-validate-
+  before-save (both success and MarzPay-rejects-the-account cases), malformed-number
+  rejected without ever calling MarzPay, bank-scoped duplicate detection (same bank
+  twice = duplicate; same number at a different bank = not a duplicate), `GET
+  /bank/list` and `GET /public/banks`, bound-account enforcement for a bank
+  destination, the UNBOUND_ACCOUNT rejection, the forged-row defense-in-depth check,
+  `/admin/withdraw/process` correctly driving `marzBankTransfer` (not
+  `marzSendMoney`) with `marzBankReference`/`totalWithdrawn`/Records-row-finalization
+  all confirmed, and a full mobile-money regression pass proving it's completely
+  unaffected. Also fixed two real gaps caught while writing this test:
+  `test-withdrawal-security.js`'s "unknown network rejected on bind" case
+  (`network: 'Bitcoin Wallet'`) would otherwise have made a REAL, unmocked outbound
+  call to MarzPay's live API from a test — added a `bank-transfer/validate` mock to
+  that file so it stays fast and deterministic; and `/withdraw/request` initially
+  relied SOLELY on "does a bound row exist" without re-verifying the bound row was
+  genuinely marked `isBank:true`, which would have let a forged/stale `bankAccounts`
+  row (e.g. from some other bug, or manually-edited test/legacy data) be silently
+  trusted as a bank destination — closed with the defense-in-depth check described
+  above, verified by a dedicated test case. Full 79-file `test-*.js` suite green.
+  `node build-core.js` → round-trip OK. Bumped `user/sw.js` `CACHE` to
+  `space8-shell-v279`. **`server.js` changed → needs a Railway redeploy.**
+- **Deferred / open**: none new this round. The admin panel needed NO changes — it
+  already renders `bankAccounts`/`withdrawals` rows' `network`/`phone` fields
+  generically (`admin-src/index.html`), so a bank destination displays correctly
+  there with zero admin-side work.
+
 ## 2026-08-19 — Claude — Referral count-ladder recalculated again to flat UGX 500 (was 1,000)
 
 Owner: "also change again, every referral on task center, 500ugx, each active level 1 to

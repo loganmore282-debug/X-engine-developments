@@ -51,6 +51,13 @@ global.fetch = async (url, opts) => {
     if (marzSendShouldFail) return json({ status: 'error', message: 'Gateway busy' });
     return json({ status: 'success', data: { transaction: { uuid: 'WTX-' + (++marzN), status: 'pending' } } });
   }
+  // /bank/save's bank-name branch calls this live before ever saving --
+  // deliberately always fails here so a garbage "network" string like
+  // 'Bitcoin Wallet' is rejected fast and deterministically, with no real
+  // network call ever made from this test.
+  if (u.includes('wearemarz.com') && u.endsWith('/bank-transfer/validate')) {
+    return json({ status: 'error', message: 'Unknown bank' });
+  }
   return realFetch(url, opts);
 };
 

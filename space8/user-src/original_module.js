@@ -210,6 +210,13 @@ var ICONS = {
   key: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.6 12.4 8.4-8.4M15 8l3 3M18 5l3 3"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.6-4.8A8.5 8.5 0 1 1 8.4 19.6Z"/><path d="M8.5 9.3c0 3.5 2.7 6.2 6.2 6.2.6 0 1-.5.9-1.1l-.3-1.1a.9.9 0 0 0-1-.6l-1.2.2a5 5 0 0 1-2.9-2.9l.2-1.2a.9.9 0 0 0-.6-1L8.7 7.5a.9.9 0 0 0-1.1.9c0 .3 0 .6.1.9Z"/></svg>',
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+  // Owner: "remove that 07xxxxxx plus phone svg, you will put 🏦 svg" -- a
+  // classic bank/institution glyph (pediment roof + columns + base), same
+  // thin-stroke outline style as every other ICONS entry (unlike the
+  // filled deposit/withdraw icons above). Used on the Withdrawal Accounts
+  // add-form's account-number field now that it accepts a mobile-money
+  // number OR a bank account number, not phone numbers exclusively.
+  bank: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-6 9 6"/><path d="M4 10h16v9H4z"/><path d="M9 13v4M15 13v4"/><path d="M3 19h18"/></svg>',
   space8logo: '<svg viewBox="0 0 36 28" fill="none"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="currentColor"/></svg>'
 };
 // Codex-designed (2026-08-19): mask ids in ICONS.deposit/withdraw are
@@ -1776,8 +1783,8 @@ async function openSupportSheet(){
 }
 
 // ── PAYOUT ACCOUNT / PIN ─────────────────────────────────────────────
-// Multiple mobile-money accounts can be bound (server already supports
-// this -- /bank/save always adds a new row, never overwrites) -- shown
+// Multiple mobile-money or bank accounts can be bound (server already
+// supports this -- /bank/save always adds a new row, never overwrites) -- shown
 // here as a list so a member can hold more than one, remove one they no
 // longer use, and (2026-08-16, owner correction) pick between them for a
 // WITHDRAWAL by navigating here as a real page, not an inline picker
@@ -1795,13 +1802,28 @@ async function openPayoutSheet(pickCallback){
   openSheet('payout', '<div class="sk sk-line"></div>');
   await renderPayoutSheet();
 }
+// Owner: "we are adding banks... let it remain the same, same terms, only
+// l want when one selects network mtn,airtel,plus all supported banks."
+// The exact set /bank/save and /withdraw/request already whitelist
+// server-side -- kept here only to tell the client "is this option a
+// mobile-money network" for the account-number field's validation/
+// placeholder, never as a security boundary of its own.
+var MM_NETWORKS = ['MTN Mobile Money', 'Airtel Money'];
 async function renderPayoutSheet(){
   // See renderHome()'s authEpoch comment -- withdrawal-account phone/holder
   // details are exactly the kind of per-user data this guard exists to
   // keep from leaking onto a DIFFERENT member's screen on a shared device.
   var epoch = STATE.authEpoch;
-  var r = await api('/bank/list', null, 'GET');
+  // Bank list rarely changes -- fetched once and cached on STATE, same
+  // spirit as products/settings (server itself also caches it, see
+  // getMarzBanks() in server.js), so re-opening this screen doesn't
+  // re-fetch it every time.
+  var calls = [api('/bank/list', null, 'GET')];
+  if (!STATE.banks) calls.push(api('/public/banks', null, 'GET'));
+  var results = await Promise.all(calls);
   if (epoch !== STATE.authEpoch) return;
+  var r = results[0];
+  if (results[1]) STATE.banks = results[1].status === 'success' ? (results[1].banks || []) : [];
   var accounts = r.status === 'success' ? (r.accounts || []) : [];
   STATE.bankAccounts = accounts;
   var picking = !!_payoutPickCallback;
@@ -1836,19 +1858,26 @@ async function renderPayoutSheet(){
   // (delete-pending toggle, cancel, post-delete, post-add) would mean the
   // phone Back button has to be pressed once per interaction before it
   // actually leaves the page.
+  // Owner: "remove that 07xxxxxx plus phone svg, you will put 🏦 svg, so
+  // one can put mobile account number or bank account number." One
+  // network select (MTN/Airtel + every MarzPay-supported bank) and one
+  // generic account-number field -- no separate bank-vs-mobile-money
+  // sub-flow, exactly per "no making another category it has remained
+  // the same."
+  var networkOptionsHtml =
+    '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
+    '<option value="Airtel Money">Airtel Money</option>' +
+    (STATE.banks || []).map(function(b){ return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join('');
   $('payoutSheet').innerHTML =
     '<div class="sheet-title">' + (picking ? 'Choose Withdrawal Account' : 'Withdrawal Accounts') + '</div>' +
-    '<div class="sheet-sub">' + (picking ? (accounts.length ? 'Tap the account to send this withdrawal to.' : 'Add a withdrawal account below, then tap it to continue.') : 'Mobile-money accounts you can withdraw to.') + '</div>' +
+    '<div class="sheet-sub">' + (picking ? (accounts.length ? 'Tap the account to send this withdrawal to.' : 'Add a withdrawal account below, then tap it to continue.') : 'Mobile-money or bank accounts you can withdraw to.') + '</div>' +
     listHtml +
     (!showAddForm ? '' :
       (picking ? '' : '<div class="plain-note">Withdrawals only ever go to an account bound here, never a number typed at withdrawal time. Add another account below, or remove one you no longer use with your withdrawal PIN.</div>') +
       '<div class="auth-form">' +
         '<div class="field">' + ico('wallet') + '<input id="payHolder" placeholder="Account holder name"></div>' +
-        '<select id="payNetwork" class="field" style="appearance:none">' +
-          '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
-          '<option value="Airtel Money">Airtel Money</option>' +
-        '</select>' +
-        '<div class="field">' + ico('phone') + '<input id="payPhone" type="tel" inputmode="tel" maxlength="10" placeholder="07XXXXXXXX"></div>' +
+        '<select id="payNetwork" class="field" style="appearance:none">' + networkOptionsHtml + '</select>' +
+        '<div class="field">' + ico('bank') + '<input id="payPhone" type="text" inputmode="numeric" maxlength="20" placeholder="Mobile-money or bank account number"></div>' +
         '<div class="field">' + ico('shield') + '<input id="payPin" type="password" inputmode="numeric" maxlength="4" placeholder="Your withdrawal PIN" autocomplete="one-time-code"></div>' +
         '<div class="field-hint">Enter the withdrawal PIN you set when you registered.</div>' +
       '</div>' +
@@ -1859,7 +1888,9 @@ async function renderPayoutSheet(){
       var btn = $('savePayoutBtn');
       var holder = $('payHolder').value.trim(), network = $('payNetwork').value;
       var phone = $('payPhone').value, pin = $('payPin').value;
-      if (!holder || !cleanPhone(phone) || !/^\d{4}$/.test(pin)) return toast('Fill in all fields correctly', true);
+      var isMM = MM_NETWORKS.indexOf(network) !== -1;
+      var acctOk = isMM ? !!cleanPhone(phone) : /^\d{5,20}$/.test(String(phone||'').replace(/\D/g,''));
+      if (!holder || !acctOk || !/^\d{4}$/.test(pin)) return toast('Fill in all fields correctly', true);
       setBtnLoading(btn, true, 'Saving…');
       var r2 = await api('/bank/save', { holder: holder, network: network, phone: phone, pin: pin });
       setBtnLoading(btn, false);
@@ -2146,7 +2177,9 @@ function renderWithdrawSheet(acct, min, feePct, isFirstRender){
     if (!amt || amt < min) return toast('Enter at least ' + ugx(min), true);
     if (!/^\d{4}$/.test(pin)) return toast('Enter your 4-digit PIN', true);
     setBtnLoading(btn, true, 'Processing…');
-    var r = await api('/withdraw/request', { amount: amt, method:'mobile_money', holder: acct.holder, network: acct.network, phone: acct.phone, pin: pin });
+    // method is never read from the client (server.js derives it from the
+    // bound account's own stored isBank flag) -- not sent here at all.
+    var r = await api('/withdraw/request', { amount: amt, holder: acct.holder, network: acct.network, phone: acct.phone, pin: pin });
     setBtnLoading(btn, false);
     if (r.status === 'success') {
       toast('Withdrawal requested');
