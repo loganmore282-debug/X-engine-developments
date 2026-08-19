@@ -14,6 +14,51 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Home balance split into 3 banner-backed cards; Gift Code screen banner; banner-load diagnosis
+
+Owner (referencing a friend's site, picovver.com screenshots): split the single Account
+Balance card into three separate cards (big Balance + Cumulative + Total Invested), each
+with an admin-settable full-background banner; add a banner to the Gift Code screen; "also
+checkin"; and "why banners in admin panel doesn't load". Done systematically, one verified
+stage at a time, as the owner asked.
+
+- **Split balance cards** (`user-src/index.html` CSS + `original_module.js` renderHome): the
+  old single `.balance-card` is now a `.balance-grid` of three `.bcard`s — a big Account
+  Balance card spanning both rows on the left, Cumulative Earnings and Total Invested stacked
+  on the right (matches the reference layout). Each card is backed by its own admin banner as
+  a full-bleed `background-image` with a dark gradient overlay so the white number/label stay
+  readable on any photo; with no banner set it's a plain dark tile (same look as before).
+  New `bcardBg(key)` helper returns the inline `background-image` style or '' when unset.
+- **Gift Code screen banner**: new `optBannerHtml(key)` helper renders a top banner ONLY when
+  that slot has an image (no fallback-icon box when unset), added to `openGiftCodeSheet`.
+  New `.sheet-banner` CSS.
+- **New banner slots** (`server.js` `BANNER_KEYS`, `admin-src` `BANNER_LABELS`): `balancebg`,
+  `cumulativebg`, `investedbg`, `giftcodebg`, and `checkinbg` (reserved for the check-in
+  screen next round). They flow through the existing `/admin/banners/set|clear` +
+  `/public/banners` plumbing unchanged, so no new endpoints — the admin Banners tab now lists
+  them automatically with Upload/Revert like every other slot.
+- **"Banners don't load in admin" — diagnosis**: could NOT reproduce a code fault. Traced the
+  whole path: uploads are downscaled to a 1280px JPEG data-URI (`fileToDataUrl`), validated
+  and stored fine (owner confirms the banners "exist"/work in the app), and the admin
+  thumbnail is a straightforward `<img src="data:...">` — the CSP doesn't restrict `img-src`,
+  and `esc()` doesn't corrupt base64. The most likely cause is environmental (a stale admin
+  view / the admin PWA not having pulled a fresh state), not a rendering bug. Did NOT
+  blind-"fix" the money-adjacent banner code on a guess. Flagged to the owner to hard-reload
+  the admin and report the exact behavior if it persists.
+- **Deferred to next round**: the **Check-in screen**. Space8's check-in is currently a
+  one-tap button on Home, not a screen — turning it into a banner-bearing screen (like the
+  reference) changes the check-in flow (one-tap → open-screen-then-tap), a product decision to
+  confirm with the owner first. The `checkinbg` slot is already in place for it.
+- **Verification**: `node build-core.js` + `node build-admin.js` → both round-trip OK.
+  Rendered the 3-card grid with Chromium in both states (no banners = dark tiles; with banners
+  = background images) — layout matches the reference. Extended `test-banners-security.js` to
+  prove all 5 new slots accept an upload and appear on `/public/banners` (27/27). Full
+  `test-*.js` suite green. `user/sw.js` `CACHE` bumped to `v271`. **server.js changed (new
+  banner slots) → Railway needs a redeploy** before the new slots can be saved from admin.
+- **Deferred**: check-in screen (above).
+
+---
+
 ## 2026-08-18 — Claude — Glow sweep speed + size now admin-adjustable (buttons + gift box, separately)
 
 Owner: "make in the admin panel when I can customise the speed and size of the sweep of

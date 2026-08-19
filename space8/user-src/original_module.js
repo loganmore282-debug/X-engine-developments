@@ -621,6 +621,23 @@ function bannerHtml(key, fallbackIcon){
   if (src) return '<div class="banner"><img src="' + esc(src) + '" alt=""></div>';
   return '<div class="banner"><div class="fallback-ico">' + ico(fallbackIcon||'satellite') + '</div></div>';
 }
+// Returns an inline style backing an element with an admin banner image, or
+// '' (empty) when that slot has no image set -- the element's CSS default
+// (a plain dark tile) then shows through. Used by the split balance cards.
+// The data-URI holds only base64 (no quotes/parens), so wrapping it in
+// url('...') inside a double-quoted style attribute is safe.
+function bcardBg(key){
+  var src = (STATE.banners || {})[key];
+  return src ? ' style="background-image:url(\'' + esc(src) + '\')"' : '';
+}
+// A top banner that renders ONLY when the admin has set an image for this
+// slot -- unlike bannerHtml(), it shows nothing (no fallback-icon box) when
+// unset, so a screen the owner hasn't themed yet just has no banner rather
+// than a placeholder. Used on the Gift Code and Check-in screens.
+function optBannerHtml(key){
+  var src = (STATE.banners || {})[key];
+  return src ? '<div class="banner sheet-banner"><img src="' + esc(src) + '" alt=""></div>' : '';
+}
 // Owner: "l want them to be floating again and again... l will add other
 // banners that will slide one after the other" -- the Home-screen banner,
 // but auto-cycling through admin-uploaded slides instead of one static
@@ -748,12 +765,18 @@ async function renderHome(){
   STATE.lastHomeSlidesJson = slidesJson;
 
   var html = homeBannerHtml();
-  html += '<div class="balance-card">' +
-    '<div class="lab">Account Balance</div>' +
-    '<div class="amt mono">' + ugx(acc.walletBalance) + '</div>' +
-    '<div class="balance-split">' +
-      '<div><div class="lab2">Cumulative Earnings</div><div class="val2 mono">' + ugx(acc.totalEarned) + '</div></div>' +
-      '<div><div class="lab2">Total Invested</div><div class="val2 mono">' + ugx(acc.totalInvested) + '</div></div>' +
+  html += '<div class="balance-grid">' +
+    '<div class="bcard bcard--main"' + bcardBg('balancebg') + '>' +
+      '<div class="bamt mono">' + ugx(acc.walletBalance) + '</div>' +
+      '<div class="blab">Account Balance</div>' +
+    '</div>' +
+    '<div class="bcard"' + bcardBg('cumulativebg') + '>' +
+      '<div class="bamt mono">' + ugx(acc.totalEarned) + '</div>' +
+      '<div class="blab">Cumulative Earnings</div>' +
+    '</div>' +
+    '<div class="bcard"' + bcardBg('investedbg') + '>' +
+      '<div class="bamt mono">' + ugx(acc.totalInvested) + '</div>' +
+      '<div class="blab">Total Invested</div>' +
     '</div>' +
   '</div>';
 
@@ -1566,6 +1589,7 @@ async function redeemGiftCode(){
 async function openGiftCodeSheet(){
   var sett = STATE.settings || (await api('/public/settings')).settings || {};
   var html = '<div class="sheet-title">Gift Code</div>' +
+    optBannerHtml('giftcodebg') +
     '<div class="card giftcode-card">' +
       '<div class="field">' + ico('gift') + '<input id="giftCodeInput" type="text" maxlength="32" placeholder="Enter gift code" autocapitalize="off" autocomplete="off"></div>' +
       '<button class="btn btn-primary" id="giftCodeBtn" style="width:100%;margin-top:12px">Redeem</button>' +

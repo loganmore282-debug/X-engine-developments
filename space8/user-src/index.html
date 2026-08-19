@@ -185,6 +185,9 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .banner img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .banner .fallback-ico{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
 .banner .fallback-ico svg{ width:48px; height:48px; stroke:var(--line); }
+/* Optional admin banner shown inside a sheet (Gift Code, Check-in) -- sits
+   just under the sheet title, a touch shorter than a full page banner. */
+.sheet-banner{ height:120px; margin-top:12px; }
 .about-photo{ width:100%; border-radius:var(--radius-card); display:block; margin:16px 0; }
 .about-section-title{ font-size:15px; font-weight:800; color:var(--ink); margin:22px 0 8px; }
 .about-body{ font-size:13.5px; line-height:1.7; color:var(--ink-dim); }
@@ -287,6 +290,23 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .balance-split div{ flex:1; }
 .balance-split .lab2{ font-size:9.5px; text-transform:uppercase; opacity:.55; letter-spacing:.06em; }
 .balance-split .val2{ font-weight:700; font-size:15px; margin-top:3px; }
+/* Owner: split the single balance card into three separate cards -- a big
+   Account Balance, plus Cumulative Earnings and Total Invested -- each with
+   its own admin-uploaded banner as a full-bleed background and the number/
+   label overlaid on top ("just like you see friends site"). A dark gradient
+   sits over the image so the white text stays readable on any photo; with
+   no banner set the card is a plain dark tile (same look as before). Grid:
+   the big Balance card spans both rows on the left, the two smaller cards
+   stack on the right. */
+.balance-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.bcard{ position:relative; border-radius:var(--radius-card); overflow:hidden; padding:16px; color:#fff; background:#0d1b2a; background-size:cover; background-position:center; background-repeat:no-repeat; min-height:94px; display:flex; flex-direction:column; justify-content:flex-end; }
+.bcard--main{ grid-row:span 2; min-height:200px; padding:20px; }
+.bcard::before{ content:''; position:absolute; inset:0; background:linear-gradient(155deg, rgba(6,12,24,.28), rgba(6,12,24,.80)); z-index:0; }
+.bcard > *{ position:relative; z-index:1; }
+.bcard .bamt{ font-weight:800; font-size:22px; letter-spacing:-.01em; line-height:1.1; }
+.bcard--main .bamt{ font-size:32px; }
+.bcard .blab{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; opacity:.85; margin-top:5px; }
+.bcard--main .blab{ font-size:11px; }
 
 .action-row{ display:flex; gap:10px; margin-top:14px; }
 .action-btn{ flex:1; background:var(--surface); border-radius:16px; padding:14px 8px; display:flex; flex-direction:column; align-items:center; gap:7px; }

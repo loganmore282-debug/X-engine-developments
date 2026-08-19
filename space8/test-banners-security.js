@@ -115,6 +115,15 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1
   r = await call('GET', '/public/banners');
   check('after revert, /public/banners is empty again (client falls back to its own default)', Object.keys(r.body?.banners || {}).length === 0, r.body?.banners);
 
+  console.log('\n-- The new split-balance-card + gift-code banner slots are valid slots --');
+  for (const slot of ['balancebg', 'cumulativebg', 'investedbg', 'giftcodebg', 'checkinbg']) {
+    r = await call('POST', '/admin/banners/set', { adminKey: 'test-admin-key', body: { key: slot, image: TINY_PNG } });
+    check('new slot "' + slot + '" accepts an upload', r.body?.status === 'success', r.body);
+    r = await call('GET', '/public/banners');
+    check('new slot "' + slot + '" is exposed on /public/banners once set', r.body?.banners?.[slot] === TINY_PNG, r.body?.banners?.[slot]);
+    await call('POST', '/admin/banners/clear', { adminKey: 'test-admin-key', body: { key: slot } });
+  }
+
   console.log('\n-- Clearing/setting an unknown key is rejected the same way --');
   r = await call('POST', '/admin/banners/clear', { adminKey: 'test-admin-key', body: { key: 'not_a_real_slot' } });
   check('clearing an unknown slot rejected (400)', r.code === 400, r.body);

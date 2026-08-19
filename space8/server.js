@@ -475,7 +475,10 @@ const BANNER_KEYS = new Set([
   'assortment', 'lavacake', 'barstack', 'giftbox', 'basket', 'marscrate',
   'ganache', 'factory2', 'factory1', 'darkbar', 'rocherstack', 'cookies',
   'bonbon', 'truffle', 'snickersplate', 'snickerscookie', 'authbg', 'appbg',
-  'supportbg' // header photo on the Support screen -- owner-settable
+  'supportbg', // header photo on the Support screen -- owner-settable
+  // Home split-balance cards (each a full-bleed background image) + the
+  // Gift Code and Check-in screen banners -- all owner-settable.
+  'balancebg', 'cumulativebg', 'investedbg', 'giftcodebg', 'checkinbg'
 ]);
 // Hard cap on a single banner's stored size (raw data-URI string length) —
 // keeps one oversized upload from bloating the M0 free-tier database or

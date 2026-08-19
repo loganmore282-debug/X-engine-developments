@@ -717,7 +717,12 @@
 // v270: the glow-sweep speed + size are now admin-adjustable (purchase
 // buttons and gift box, separately) -- the CSS reads them from settings-
 // driven vars, so the new defaults/vars need to reach installed phones.
-const CACHE = 'space8-shell-v270';
+// v271: Home balance is now three separate cards (big Account Balance +
+// Cumulative Earnings + Total Invested), each backed by its own admin-
+// settable banner image; the Gift Code screen gained an optional admin
+// banner. New banner slots: balancebg/cumulativebg/investedbg/giftcodebg
+// (+ checkinbg reserved). All baked into cached index.html.
+const CACHE = 'space8-shell-v271';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 
