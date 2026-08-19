@@ -36,12 +36,12 @@ contains('what are the rules', ['One account per person.']);
 // Codex-verified real bug (2026-08-17): the sign-in screen has no
 // self-service password reset (confirmed against user-src/index.html's
 // #screenLogin markup) -- the assistant used to claim one existed. Now it
-// correctly points to Support instead.
-contains('forgot password', ['Firebase Authentication', 'contact Support']);
+// correctly points to Customer Service instead.
+contains('forgot password', ['Firebase Authentication', 'contact Customer Service']);
 contains('welcome registration bonus', ['UGX 5,000']);
 contains('MTN mobile money number', ['07XXXXXXXX', '+2567XXXXXXXX']);
-contains('my referral code didnt apply', ["can't be added", 'Support']);
-contains('i registered with the wrong phone number', ["isn't self-editable", 'Support']);
+contains('my referral code didnt apply', ["can't be added", 'Customer Service']);
+contains('i registered with the wrong phone number', ["isn't self-editable", 'Customer Service']);
 
 const noRulesText = answerAssistant({ ...context, settings: { ...context.settings, rulesText: '' }, message: 'what are the rules and terms', history: [] });
 assert(!noRulesText.includes('Privacy'), 'rules fallback should not mention the removed Privacy Policy page: ' + noRulesText);

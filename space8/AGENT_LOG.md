@@ -14,6 +14,65 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — AI assistant's replies swept for every stale renamed UI label
+
+Owner: "check ai assistant, it is still saying withdrawal account, check
+all through out." Went beyond the one term named — this session renamed
+FIVE different labels today (Deposits→Deposit Records, Withdrawals→
+Withdrawal Records, Security PIN→Change PIN, Withdrawal Account→Bind Bank
+Account, Support→Customer Service, Log Out→Exit) and `assistant-engine.js`
+(the self-hosted, server-side reply engine behind `/assistant/chat`) still
+referenced every single old label in its canned replies — it was never
+touched by any of today's UI-only rename rounds since it's a completely
+separate file from `user-src/`.
+
+- **Navigation-path references** ("Account → Security PIN", "Account →
+  Withdrawal Account", "Account → Support", "Account → Deposits", "Account
+  → Withdrawals", "above Log Out") — these were factually WRONG after
+  today's renames, not just stale wording: the assistant was telling
+  members to look for buttons that no longer say that. All corrected to
+  the current real label. 9 Security PIN, 7 Withdrawal Account, 7 Support,
+  8 Deposits/Withdrawals nav-path occurrences fixed.
+- **"contact/reach/tell/give Support"** (21+ occurrences across nearly 30
+  distinct reply strings) → "Customer Service" — did this in two passes:
+  common phrase patterns first (`contact Support`, `to Support`, etc.),
+  then a final `\bSupport\b` sweep to catch the stragglers (`Reach
+  Support`, `tell Support`, `the only route is Support`, etc.) — verified
+  the sweep didn't touch anything it shouldn't have (internal identifiers
+  like `s.supportTelegram`/`support_hours_check` use lowercase `support`,
+  untouched; the user-facing PATTERN-MATCHING regexes like
+  `/support (time|hours)/i` that recognize what a MEMBER might type were
+  deliberately left alone — those model incoming user language, not the
+  bot's own output, and a member will still plausibly type "support" or
+  "withdrawal account" regardless of what the UI calls the button today).
+- **Generic noun usage** ("a withdrawal account", "bind a withdrawal
+  account", "the security PIN") — changed to match this session's own
+  already-dominant terminology elsewhere in the same file ("bank account",
+  "withdrawal PIN") for internal consistency, not because the old wording
+  was factually wrong on its own.
+- **`assistant-corpus.js` deliberately left untouched** — that file is
+  training utterances (real member phrasings the engine must correctly
+  route), not bot output; a member typing "how do I add a withdrawal
+  account" is exactly the kind of real phrasing that file exists to keep
+  matching, regardless of the UI's current button text.
+- **Test fix**: `test-assistant-engine.js` had 3 hardcoded assertions
+  expecting the literal string "Support" in a reply (`forgot password`,
+  `my referral code didnt apply`, `i registered with the wrong phone
+  number`) — updated to expect "Customer Service", the correct new
+  behavior these tests are supposed to be locking in.
+- **Verification**: `node --check assistant-engine.js` OK. Grepped the
+  final file for every one of the 6 renamed terms — zero stale matches
+  remain. Full `test-*.js` suite green, 79/79, including
+  `test-assistant-corpus.js` (2219 checks), `test-assistant-engine.js`,
+  and `test-assistant-smoke.js` (real HTTP round-trip through
+  `/assistant/chat`).
+- **This is a `server.js`-side change** (assistant-engine.js is required
+  by server.js, not bundled into the client) — **needs the usual Railway/
+  Render backend redeploy to take effect**, same as any other server.js/
+  assistant-engine.js edit. No `user-src`/`admin-src` build changes, no
+  `sw.js` cache bump needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — "Log Out"→"Exit", "Withdrawal Account"→"Bind Bank Account", "Support"→"Customer Service"
 
 Owner: "now change logout to exit ,change withdrawal account to 'Bind
