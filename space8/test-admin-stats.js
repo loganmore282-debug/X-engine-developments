@@ -110,6 +110,39 @@ function check(name, cond, extra) {
   check('pendingWithdrawals now counts the real pending request, not 0', body.pendingWithdrawals >= 1, body.pendingWithdrawals);
   check('pendingPayouts (amount due) now includes its net amount, not 0', body.pendingPayouts >= collMap('withdrawals').get(witId).net, { pendingPayouts: body.pendingPayouts, net: collMap('withdrawals').get(witId).net });
 
+  console.log('\n-- teamRewardsPaid reflects what was ACTUALLY paid historically, not today\'s ladder rate --');
+  // Codex-verified real gap (2026-08-19): teamRewardsPaid used to sum
+  // claim flags against the CURRENT TEAM_MILESTONES/TEAM_DEPOSIT_MILESTONES
+  // reward values -- correct only as long as the ladder never changes
+  // after launch. Once the owner started editing the count ladder's rate
+  // (1,500 -> 1,000 -> 500, all 2026-08-19), this platform-wide total
+  // silently understated every historical claim made under an older,
+  // higher rate. The real record already exists: /team/milestone/claim
+  // writes an immutable `team_reward` transaction with the exact amount
+  // paid at claim time -- teamRewardsPaid now sums those directly instead.
+  // Two synthetic historical rows here (amounts that don't match ANY
+  // current ladder tier's reward, so the old buggy per-flag recompute
+  // could never have produced these numbers by coincidence).
+  collMap('transactions').set('hist-reward-a', {
+    userId: 'stats-hist-user-a', type: 'team_reward', milestone: 25, amount: 37500,
+    status: 'success', description: 'Task Center: 25 active referrals', date: '2026-08-01', time: '00:00',
+  });
+  collMap('transactions').set('hist-reward-b', {
+    userId: 'stats-hist-user-b', type: 'team_reward', milestone: 10, amount: 15000,
+    status: 'success', description: 'Task Center: 10 active referrals', date: '2026-08-01', time: '00:00',
+  });
+  const realTeamRewardsPaid = [...collMap('transactions').values()]
+    .filter(t => t.type === 'team_reward')
+    .reduce((s, t) => s + t.amount, 0);
+  // teamRewardsPaid actually lives under /admin/analytics's kpis (a POST
+  // endpoint, not /admin/stats).
+  r = await realFetch(BASE + '/admin/analytics', { method: 'POST', headers: { ...adminHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ days: 30 }) });
+  body = await r.json();
+  check(
+    'teamRewardsPaid sums the REAL transaction amounts (37,500 + 15,000 historical claims), not the current ladder rate for those targets',
+    body.kpis?.teamRewardsPaid === realTeamRewardsPaid, { got: body.kpis?.teamRewardsPaid, expected: realTeamRewardsPaid }
+  );
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });

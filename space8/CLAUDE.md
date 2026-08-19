@@ -2891,6 +2891,30 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    unselected. `user/sw.js` `CACHE` bumped to `v280`. No `server.js` changes, no
    Railway redeploy needed. See the 2026-08-19 AGENT_LOG.md entry ("Balance-card
    figures shrink past 7 digits; withdrawal network select no longer defaults").
+0s. **Codex review of the last 3 commits — DONE.** 2 Medium + 2 Low, all real, all
+   fixed. **Medium: withdrawal `holder` came from the request body, not the bound
+   account** — the bound-account lookup only matched `(userId, network, phone)`,
+   never `holder`, so a mismatched holder could reach storage and, for a bank
+   destination, get sent to MarzPay as `accountName`. Fixed: `holder` now always
+   comes from `boundAcct.holder` after the lookup, never `req.body.holder`.
+   **Medium: Task Center reward totals recomputed from TODAY's ladder rate, not
+   what was actually paid** — `/team/stats.teamRewards` and `/admin/analytics`'s
+   `kpis.teamRewardsPaid` both summed the CURRENT `TEAM_MILESTONES`/
+   `TEAM_DEPOSIT_MILESTONES` reward values against old claim flags, silently
+   understating any claim made under an earlier rate once the ladder started
+   changing today. Fixed by summing the real, immutable `team_reward` transactions
+   instead. **Low: a MarzPay bank-list outage could hide banks for the rest of a
+   session** — an empty (but "successful") `/public/banks` response got cached
+   client-side as permanently-fetched; fixed to only cache a non-empty list.
+   **Low: 5 more assistant replies still said mobile-money-only** for withdrawals —
+   reworded. New/extended tests: `test-bank-withdrawal-accounts.js`,
+   `test-referral-milestones.js`, `test-admin-stats.js`,
+   `test-withdrawal-security.js` (also fixed a real test-ordering bug the new test
+   exposed there — a "find the withdrawal for this user" helper matched on userId
+   alone and grabbed the wrong one once a user had more than one withdrawal; fixed
+   to match on `ref`). `user/sw.js` `CACHE` bumped to `v281`. **`server.js`
+   changed → needs a Railway redeploy.** See the 2026-08-19 AGENT_LOG.md entry
+   ("Codex review of the last 3 commits: 2 Medium + 2 Low, all real, all fixed").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

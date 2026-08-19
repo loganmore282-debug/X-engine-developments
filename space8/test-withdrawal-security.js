@@ -7,8 +7,12 @@
    of the day — the cap is genuinely admin-editable and takes effect
    immediately, a banned account is locked out, an invalid/forged `network`
    value can never reach storage, and an object/HTML-injection-style
-   `holder` payload can never store raw markup (defense in depth on top of
-   the render-time escaping already covered elsewhere).
+   `holder` value in a withdraw request is IGNORED entirely -- the stored
+   holder always comes from the bound account's own record (2026-08-19,
+   Codex-verified: the request-body holder used to be trusted directly) --
+   plus /bank/save's own bind-time stripHtml rejects a pure-markup holder
+   outright before it can ever become a bound account's holder in the
+   first place.
 
    Run: node test-withdrawal-security.js   (exits 0 = all green)           */
 
@@ -113,17 +117,26 @@ async function setupFundedUser(uid, phone, balance) {
   check('forged network in withdraw request rejected (never reaches storage)', r.code === 400, r.body);
   check('no withdrawal doc created for the rejected request', [...withdrawals().values()].filter(w => w.userId === A).length === 0, [...withdrawals().values()]);
 
-  console.log('\n-- object/markup payload in holder is neutralized, never stored as raw HTML --');
+  console.log('\n-- Codex-verified real gap (2026-08-19), now closed: the request-body holder is IGNORED entirely --');
+  // /withdraw/request no longer trusts req.body.holder for anything beyond
+  // the initial pre-2026-08-19 code -- the stored withdrawal's holder (and,
+  // for a bank destination, the accountName sent to MarzPay) now always
+  // comes from the BOUND account's own record, resolved fresh from the
+  // (network, phone) match. An object/HTML-injection-style holder in the
+  // request therefore has ZERO effect on what gets stored -- not "rejected
+  // outright", not "sanitized then stored", genuinely never read at all.
   collMap('bankAccounts').set('fx1b', { userId: A, holder: 'Alice', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
   r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: { $ne: null }, network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
-  // Either rejected outright, or (if it somehow proceeds) the stored holder must never contain live HTML tags.
-  const storedAfterObjHolder = [...withdrawals().values()].find(w => w.userId === A);
-  const holderIsSafe = !storedAfterObjHolder || !/<[^>]+>/.test(String(storedAfterObjHolder.holder));
-  check('object-shaped holder payload never results in stored raw HTML', holderIsSafe, storedAfterObjHolder);
-  collMap('bankAccounts').set('fx2', { userId: A, holder: '<img src=x onerror=alert(1)>', network: 'MTN Mobile Money', phone: '+256700111222', createdAt: new Date() });
-  r = await call('POST', '/withdraw/request', { token: 'uid:' + A, body: { amount: 20000, holder: '<img src=x onerror=alert(1)>', network: 'MTN Mobile Money', phone: '700111222', pin: '1234' } });
-  const htmlDoc = [...withdrawals().values()].filter(w => w.userId === A).slice(-1)[0];
-  check('HTML tags in holder are stripped before storage', htmlDoc && !/<[^>]+>/.test(htmlDoc.holder), htmlDoc);
+  check('withdrawal against the bound account succeeds (object-shaped holder does not block it)', r.body?.status === 'success', r.body);
+  const storedAfterObjHolder = [...withdrawals().values()].find(w => w.userId === A && w.amount === 20000);
+  check('stored holder is the BOUND account\'s clean holder ("Alice"), never the object payload', storedAfterObjHolder?.holder === 'Alice', storedAfterObjHolder);
+
+  check('no HTML tags anywhere in the stored holder', storedAfterObjHolder && !/<[^>]+>/.test(storedAfterObjHolder.holder), storedAfterObjHolder);
+
+  console.log('\n-- /bank/save itself (the only place a holder is ever genuinely accepted) strips HTML at bind time --');
+  const bindR = await call('POST', '/bank/save', { token: 'uid:' + A, body: { holder: '<img src=x onerror=alert(1)>', network: 'MTN Mobile Money', phone: '0700111555', pin: '1234' } });
+  check('HTML-only holder strips to empty and is rejected outright at bind time', bindR.code === 400, bindR.body);
+  check('nothing saved for the rejected bind', ![...collMap('bankAccounts').values()].some(a => a.userId === A && a.phone === '+256700111555'), collMap('bankAccounts'));
 
   console.log('\n-- Any amount at or above the minimum is accepted — no "multiple of 5,000" restriction --');
   // Reuses Alice (already set up above) rather than a fresh user, to add

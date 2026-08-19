@@ -760,7 +760,15 @@
 // overflowing/wrapping. Withdrawal Accounts' network select no longer
 // defaults to MTN Mobile Money -- starts on a disabled "Select network"
 // placeholder (greyed, like other empty fields) until the member picks one.
-const CACHE = 'space8-shell-v280';
+// v281: Codex review of the last 3 commits found 4 real issues, all fixed --
+// server-side: withdrawal holder/accountName now always comes from the
+// BOUND account, never the request body (mattered for bank payouts, whose
+// accountName is sent to MarzPay); teamRewards/teamRewardsPaid now sum the
+// real historical team_reward transactions instead of recomputing off
+// today's ladder rate. Client-side: a failed /public/banks fetch (MarzPay
+// outage) no longer caches an empty bank list for the rest of the session;
+// 2 more stale "mobile-money only" assistant replies corrected.
+const CACHE = 'space8-shell-v281';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

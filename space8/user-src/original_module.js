@@ -1833,9 +1833,15 @@ async function renderPayoutSheet(){
   // Bank list rarely changes -- fetched once and cached on STATE, same
   // spirit as products/settings (server itself also caches it, see
   // getMarzBanks() in server.js), so re-opening this screen doesn't
-  // re-fetch it every time.
+  // re-fetch it every time. Codex-verified real gap (2026-08-19): only
+  // caching on a truthy STATE.banks meant a transient MarzPay outage (or
+  // any fetch failure) -- which resolves to a successful-but-empty
+  // {status:'success', banks:[]} response, see getMarzBanks()'s own
+  // catch-and-serve-last-known-good behavior -- got cached as `[]`
+  // (still truthy) and never retried again for the rest of the session,
+  // even after MarzPay recovered. Only treat a NON-EMPTY list as cached.
   var calls = [api('/bank/list', null, 'GET')];
-  if (!STATE.banks) calls.push(api('/public/banks', null, 'GET'));
+  if (!STATE.banks || !STATE.banks.length) calls.push(api('/public/banks', null, 'GET'));
   var results = await Promise.all(calls);
   if (epoch !== STATE.authEpoch) return;
   var r = results[0];

@@ -192,6 +192,17 @@ async function freshFundedUser() {
   check('accountNumber populated from the bound account', witE?.accountNumber === '60001256421', witE);
   check('accountName populated from the bound account holder', witE?.accountName === 'Erin Bank', witE);
 
+  console.log('\n== Codex-verified real gap: request-body holder is IGNORED, bound holder always wins ==');
+  // A direct API call submitting a DIFFERENT holder than the one actually
+  // bound must not be trusted -- the withdrawal record (and what would be
+  // sent to MarzPay as bank_account_name) must always reflect the BOUND
+  // account's real holder, never whatever the request claims.
+  r = await call('POST', '/withdraw/request', { token: 'uid:' + E, body: { amount: 20000, holder: 'Mallory', network: 'Equity Bank', phone: '60001256421', pin: '1234' } });
+  check('withdrawal against the same bound account still succeeds', r.body?.status === 'success', r.body);
+  const witE2 = withdrawalsOf(E).find(w => w.amount === 20000);
+  check('holder on the new withdrawal is the BOUND account holder, not the mismatched request body', witE2?.holder === 'Erin Bank', witE2);
+  check('accountName sent for the bank transfer is also the bound holder, not "Mallory"', witE2?.accountName === 'Erin Bank', witE2);
+
   console.log('\n== /withdraw/request against an UNBOUND bank destination is rejected ==');
   const F = await freshFundedUser();
   const balBeforeF = userDoc(F).walletBalance;
@@ -210,9 +221,13 @@ async function freshFundedUser() {
   console.log('\n== /admin/withdraw/process drives the bank-transfer rail (not send-money) ==');
   nextBankTransferOutcome = { status: 'success', reference: 'BT-E1' };
   const bankTransferCallsBefore = bankTransferCalls;
-  // withE came from a filtered array copy, not the map directly -- resolve its real doc id.
+  // witE came from a filtered array copy, not the map directly -- resolve
+  // its real doc id by matching on `ref` (globally unique), not just
+  // "the last withdrawal belonging to E" -- E now has more than one
+  // withdrawal on their account (see the holder-mismatch test above), so
+  // a bare userId match would silently grab the WRONG one.
   let witEId = null;
-  for (const [id, w] of collMap('withdrawals').entries()) { if (w.userId === E) witEId = id; }
+  for (const [id, w] of collMap('withdrawals').entries()) { if (w.userId === E && w.ref === witE.ref) witEId = id; }
   r = await ownerCall('POST', '/admin/withdraw/process', { withdrawalId: witEId });
   check('process succeeds', r.body?.status === 'success', r.body);
   check('marzBankTransfer (not send-money) was actually called', bankTransferCalls > bankTransferCallsBefore, bankTransferCalls);

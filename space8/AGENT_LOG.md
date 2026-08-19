@@ -14,6 +14,75 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Codex review of the last 3 commits: 2 Medium + 2 Low, all real, all fixed
+
+Owner: "now let us ask codex on our commits latest 3 commits so it reviews." Scoped
+Codex at the exact commit range (referral-ladder recalc, bank-withdrawal reactivation,
+client-only figure-scaling round) with the established repo/branch/AGENT_LOG.md-first
+prompt. Every finding verified against the actual code before touching anything, same
+discipline as every prior review round this session.
+
+**Medium — withdrawal `holder` came from the request body, not the bound account**
+(`server.js` `/withdraw/request`). The bound-account lookup only matched on
+`(userId, network, phone)`, never `holder` — a direct API call could submit a
+`holder` different from what was actually bound, and that mismatched value got
+written to the withdrawal record and (for a bank destination) sent to MarzPay as
+`accountName` (`bank_account_name`). Harmless for mobile money (`marzSendMoney`
+doesn't take a holder-name parameter at all) but a real risk for bank transfers,
+where a name mismatch can cause the bank to reject the payout or at minimum write a
+misleading audit trail. Fixed: `holder` is now read from `boundAcct.holder` (the
+bound record itself) after the lookup succeeds, never from `req.body.holder` — the
+request's own holder field is no longer read at all for this endpoint. New test in
+`test-bank-withdrawal-accounts.js`: bind `Bank X / 123456789 / Alice`, submit a
+withdraw request against that same account with `holder: "Mallory"`, confirm the
+stored `holder`/`accountName` is still `"Alice"`. Rewrote the equivalent (now
+stronger) test in `test-withdrawal-security.js` — an object-shaped or HTML-payload
+holder in the request no longer even needs to be "sanitized" at withdraw time, it's
+simply never read; added a companion test proving `/bank/save` (the only place a
+holder is genuinely ever accepted) still rejects a pure-markup holder outright at
+bind time via its own `stripHtml`.
+
+**Medium — Task Center reward totals recomputed from TODAY's ladder rate, not what
+was actually paid.** `/team/stats`'s `teamRewards` and `/admin/analytics`'s
+`teamRewardsPaid` (kpis) both summed `TEAM_MILESTONES`/`TEAM_DEPOSIT_MILESTONES`'s
+CURRENT reward values for every target a claim flag says was claimed — correct only
+as long as the ladder's rates never change after launch. Once the count ladder's
+rate started moving today (1,500 → 1,000 → 500), a member who claimed an earlier
+tier under an older rate got shown today's (lower) rate instead of what they
+actually received — the claim flag only ever recorded "claimed", never "for how
+much". Fixed by summing the real, immutable `team_reward` transactions
+`/team/milestone/claim` already writes (exact amount paid, per claim) instead of
+recomputing from the live ladder table — simpler than the old per-user double-loop
+too. `/admin/analytics`'s version capped at 200,000 rows, same convention already
+used elsewhere in this file for platform-wide ledger sums (e.g. `/admin/integrity`).
+New tests in `test-referral-milestones.js` (seeds a historical 37,500 claim under a
+target whose CURRENT reward is 12,500, confirms `teamRewards` reflects the real
+37,500) and `test-admin-stats.js` (same idea, platform-wide, two synthetic
+historical transactions).
+
+**Low — a MarzPay bank-list outage could hide banks for the rest of a session.**
+`/public/banks` resolving to a successful-but-empty list (`getMarzBanks()`'s own
+catch-and-serve-last-known-good behavior on a fetch failure) got cached client-side
+as `STATE.banks = []` — still truthy, so `renderPayoutSheet()` never retried the
+fetch again for the rest of the session, even after MarzPay recovered. Fixed: only
+treat a NON-EMPTY list as cached (`!STATE.banks || !STATE.banks.length`).
+
+**Low — 5 more generic assistant replies still said withdrawals are mobile-money
+only.** (The 2 most explicit "no bank option" replies were already caught and fixed
+in the reactivation commit itself.) `withdraw_timing`, `fees`, `about`, and the
+`withdraw`/`howworks` DEEP replies (`assistant-engine.js`) reworded to mention bank
+as an option alongside mobile money.
+
+- **Verification**: `node build-core.js` → round-trip OK (bank-list caching fix
+  touched `user-src/`). Full 79-file `test-*.js` suite green, including the 2
+  extended files and the rewritten `test-withdrawal-security.js` section (which also
+  fixed a real test-ordering bug the new test exposed: the file's own "find the
+  withdrawal for user E" helper matched on `userId` alone and silently grabbed the
+  WRONG withdrawal once E had more than one — fixed to match on `ref`, the globally
+  unique field, instead). Bumped `user/sw.js` `CACHE` to `space8-shell-v281`.
+  **`server.js` changed → needs a Railway redeploy.**
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Balance-card figures shrink past 7 digits; withdrawal network select no longer defaults
 
 Owner, with 2 screenshots (Home, Withdrawal Accounts add-form): "l also want you to

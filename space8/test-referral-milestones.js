@@ -134,6 +134,32 @@ const userDoc = id => users().get(id);
   check('exactly ONE of two concurrent claims on the same tier succeeds', successes === 1, { r1: r1.body, r2: r2.body });
   check('wallet credited exactly once (UGX 2,500)', userDoc(REF).walletBalance === BAL + 2500, userDoc(REF).walletBalance);
 
+  console.log('\n-- Codex-verified real gap: teamRewards reflects what was ACTUALLY paid historically, not today\'s ladder rate --');
+  // Simulate a claim made long ago, back when the count ladder paid a flat
+  // UGX 1,500/referral (target 25 -> 37,500) -- before today's two rate
+  // changes down to 500/referral (target 25 -> 12,500 now). The claim flag
+  // only ever recorded "claimed", never "for how much"; the real amount
+  // paid lives in the immutable team_reward transaction written at claim
+  // time. If /team/stats recomputed teamRewards from the CURRENT
+  // TEAM_MILESTONES table (the bug), this historical claim would be
+  // silently reported as 12,500 instead of the real 37,500 it actually paid.
+  users().set(REF, Object.assign({}, userDoc(REF), { milestoneClaimed_25: true }));
+  if (!mockdb.__store.has('transactions')) mockdb.__store.set('transactions', new Map());
+  mockdb.__store.get('transactions').set('historical-reward-1', {
+    userId: REF, type: 'team_reward', milestone: 25, amount: 37500, status: 'success',
+    description: 'Task Center: 25 active referrals', date: '2026-08-01', time: '00:00',
+  });
+  const realTeamRewardTotal = [...mockdb.__store.get('transactions').values()]
+    .filter(t => t.userId === REF && t.type === 'team_reward')
+    .reduce((s, t) => s + t.amount, 0);
+  r = await call('GET', '/team/stats', { token: 'uid:' + REF });
+  check(
+    'teamRewards sums the REAL transaction amounts (includes the 37,500 historical claim), not the current ladder rate for that target',
+    r.body?.teamRewards === realTeamRewardTotal, { got: r.body?.teamRewards, expected: realTeamRewardTotal }
+  );
+  const m25 = (r.body?.milestones || []).find(m => m.type === 'count' && m.target === 25);
+  check('the milestone list itself still correctly shows target-25 as claimed', m25 && m25.claimed === true, m25);
+
   console.log('\n-- A banned L1 referral no longer pads the referrer\'s Task Center numbers --');
   users().set('l1-5', Object.assign({}, userDoc('l1-5'), { status: 'banned' }));
   r = await call('GET', '/team/stats', { token: 'uid:' + REF });

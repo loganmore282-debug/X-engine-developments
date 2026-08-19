@@ -1738,8 +1738,22 @@ app.get('/team/stats', async (req, res) => {
         claimed: !!u['depositMilestoneClaimed_' + m.target],
       })),
     ];
-    const teamRewards = TEAM_MILESTONES.reduce((s, m) => s + (u['milestoneClaimed_' + m.target] ? m.reward : 0), 0)
-                       + TEAM_DEPOSIT_MILESTONES.reduce((s, m) => s + (u['depositMilestoneClaimed_' + m.target] ? m.reward : 0), 0);
+    // Codex-verified real gap (2026-08-19): this used to sum the CURRENT
+    // TEAM_MILESTONES/TEAM_DEPOSIT_MILESTONES reward values for every
+    // target the claim flags say was claimed -- correct only as long as
+    // the ladder's reward amounts never change after launch. Once the
+    // owner started editing the count ladder's rate (1,500 -> 1,000 -> 500,
+    // all 2026-08-19), a member who claimed an earlier tier under an OLDER
+    // rate got shown today's rate instead of what they actually received
+    // -- the claim flag only ever recorded "claimed", never "for how much".
+    // The real record already exists: /team/milestone/claim writes a
+    // `team_reward` transaction with the exact amount paid at claim time,
+    // per claim, immutable. Sum those instead -- naturally bounded (a
+    // member can claim each of the ~22 milestones at most once, ever).
+    const rewardTxSnap = await db.collection('transactions')
+      .where('userId', '==', userId).where('type', '==', 'team_reward').get();
+    let teamRewards = 0;
+    rewardTxSnap.forEach(d => { teamRewards += finiteMoney(d.data().amount); });
     res.json({
       status: 'success', l1ActiveCount, l1DepositTotal: teamDepositTotal, teamDepositTotal, milestones,
       counts: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
@@ -2932,7 +2946,6 @@ app.post('/withdraw/request', async (req, res) => {
   // "type bank details fresh every withdrawal, no bind step" design that
   // was removed earlier). method is derived below from the BOUND account's
   // own stored `isBank` flag -- never trusted from the client.
-  const holder = stripHtml(req.body.holder);
   const rawNetwork = String(req.body.network || '').trim();
   const isMM = NETWORK_NAMES.has(rawNetwork);
   // Was a loose length check that let a garbled number (e.g. a stray extra
@@ -2945,7 +2958,7 @@ app.post('/withdraw/request', async (req, res) => {
   // says exactly what's wrong. Bank account numbers go through the same
   // digits-only normalization /bank/save already applies at bind time.
   const destValue = isMM ? cleanPhone(req.body.phone || '') : String(req.body.phone || '').replace(/\D/g, '').trim();
-  if (!holder || !rawNetwork || !destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
+  if (!rawNetwork || !destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
   let pinJustSet = false;
   try {
     const sett = await getSettings();
@@ -3003,6 +3016,19 @@ app.post('/withdraw/request', async (req, res) => {
     const method = isMM ? 'mobile_money' : 'bank';
     const network = rawNetwork;
     const phone = destValue;
+    // Codex-verified real gap (2026-08-19): holder used to come straight
+    // from the request body -- matches the bound account in the happy path
+    // (the client always echoes the account it just fetched) but was never
+    // actually verified against it, so a direct API call could submit a
+    // DIFFERENT holder name than what's genuinely bound. Harmless for
+    // mobile money (marzSendMoney doesn't take a holder-name parameter at
+    // all) but a real risk for bank transfers, where accountName IS sent to
+    // MarzPay (bank_account_name) -- a mismatch against the real account
+    // holder can cause the bank to reject the payout, or at minimum write a
+    // misleading audit trail. Trust the BOUND record's own holder now,
+    // never the request body's (which is guaranteed non-empty already,
+    // /bank/save rejects an empty holder at bind time).
+    const holder = boundAcct.holder;
 
     const fee = Math.round(amt * sett.withdrawFeePct / 100);
     const net = amt - fee;
@@ -5790,14 +5816,24 @@ app.post('/admin/analytics', async (req, res) => {
         referrers.push({ phone: u.phone || '', team: u.teamL1Count || 0, earned: finiteMoney(u.teamCommission) });
       if ((u.totalDeposited || 0) > 0) depositors.push({ phone: u.phone || '', amount: finiteMoney(u.totalDeposited) });
     });
-    // Task Center rewards paid so far (both milestone ladders), summed
-    // straight off each user's own claim flags rather than a separate ledger.
+    // Task Center rewards paid so far (both milestone ladders). Codex-
+    // verified real gap (2026-08-19): this used to sum claim flags against
+    // the CURRENT TEAM_MILESTONES/TEAM_DEPOSIT_MILESTONES reward values --
+    // correct only as long as the ladder's rates never change after
+    // launch. Once the owner started editing the count ladder's rate
+    // (1,500 -> 1,000 -> 500, all 2026-08-19), this platform-wide total
+    // silently understated every historical claim made under an older,
+    // higher rate. /team/milestone/claim already writes an immutable
+    // `team_reward` transaction with the exact amount paid at claim time --
+    // summing those directly is both correct AND simpler than the old
+    // per-user double-loop. Same 200,000-row cap convention already used
+    // elsewhere in this file for platform-wide ledger sums (e.g.
+    // /admin/integrity).
     let teamRewardsPaid = 0;
-    usersSnap.forEach(d => {
-      const u = d.data();
-      TEAM_MILESTONES.forEach(m => { if (u['milestoneClaimed_' + m.target]) teamRewardsPaid += m.reward; });
-      TEAM_DEPOSIT_MILESTONES.forEach(m => { if (u['depositMilestoneClaimed_' + m.target]) teamRewardsPaid += m.reward; });
-    });
+    try {
+      const rewardTxSnap = await db.collection('transactions').where('type', '==', 'team_reward').limit(200000).get();
+      rewardTxSnap.forEach(d => { teamRewardsPaid += finiteMoney(d.data().amount); });
+    } catch (e) { console.error('teamRewardsPaid query error:', e.message); }
     referrers.sort((a, b) => (b.team - a.team) || (b.earned - a.earned));
     depositors.sort((a, b) => b.amount - a.amount);
 
