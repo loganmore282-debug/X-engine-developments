@@ -2993,6 +2993,26 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    withdrawal made under a different fee % still shows what it actually
    paid out. `user/sw.js` `CACHE` bumped to `v287`. No `server.js` changes,
    no Railway redeploy needed.
+0y. **Home banner carousel (and ticker) getting stuck on the first slide —
+   fixed, real root cause found via a Chromium repro — DONE.** The old
+   "detach the animating node, rebuild innerHTML, splice the same node back
+   in" trick in `renderHome()` never actually preserved the CSS animation —
+   confirmed empirically that removing an element from the document and
+   reinserting it, even synchronously with the same node object, restarts
+   its animation from frame zero. It only looked fine at the old 12s
+   refresh interval (an exact multiple of the banner's 12s cycle); once
+   refreshes got faster than a slide's 4s hold time (the 0v/live-refresh
+   speed-up above), every slide but the first got reset before its own
+   window ever arrived. Real fix: `#homeBannerSlot`/`#homeTickerSlot` are
+   now permanent DOM slots `renderHome()` builds once and never removes —
+   only their `.innerHTML` is reassigned, and only when their own content
+   (slide set / feed) actually changed. Balance figures/action row/products
+   still rebuild every refresh via their own slots (no animation to
+   protect there). `user/sw.js` `CACHE` bumped to `v288`. No `server.js`
+   changes, no Railway redeploy needed. **If a future round touches
+   `renderHome()` again: never go back to a single blanket
+   `el.innerHTML = wholeHomeHtml` per refresh** — anything with a
+   continuous CSS animation must live in its own never-removed slot.
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

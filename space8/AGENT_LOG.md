@@ -14,6 +14,61 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Fixed the Home banner carousel (and ticker) getting stuck on the first slide
+
+Owner: "why is it that sliding images reach a time and stuck on only the
+default image, others all where do they go??" -- a real regression from
+this session's own live-refresh speed-up, root-caused with a real Chromium
+repro rather than guessed at.
+
+- **Root cause**: `homeBannerHtml()` builds a pure-CSS carousel (each slide
+  an `<img>` with `animation-delay: i*4s` staggering when its own 4s
+  "visible" window starts). `renderHome()` used to detach the still-
+  animating `#homeBannerCarousel`/`#tickerItems` node, rebuild the whole
+  page's `innerHTML`, then splice the SAME node back in where the fresh one
+  had been -- built specifically to survive the periodic background
+  refresh. Built a real Chromium repro (extracted the actual functions from
+  `user-src/original_module.js`, ran them against the real CSS) and proved
+  that trick never actually worked: a CSS animation restarts from frame
+  zero the instant its element is removed from the document, even
+  synchronously, even when the exact same node object is reinserted right
+  after. It only ever LOOKED fine because the old 12s refresh interval was
+  an exact multiple of the banner's 3-slide/12s cycle, so the invisible
+  restart always landed on a cycle boundary and the ticker's 24s marquee
+  restart was infrequent enough to not be obviously "stuck". Once this
+  session's live-refresh speed-up (12s -> 2s, previous log entry) made
+  refreshes faster than a single slide's 4s hold time, every slide except
+  the first (zero animation-delay, so instantly visible on every restart)
+  got reset back into its own "not due yet" delay phase before it could
+  ever reach its visible window -- exactly "stuck on the default image, the
+  others never show".
+- **Real fix** (`renderHome()`, `user-src/original_module.js`): the banner
+  and the ticker-bar now get their own permanent slot elements
+  (`#homeBannerSlot`, `#homeTickerSlot` containing the permanent
+  `#tickerItems`) that this function creates ONCE and never removes from
+  the document again -- only their `.innerHTML` is ever reassigned, and
+  only when their own content has genuinely changed (slide set / feed
+  content respectively). Balance figures, the action row, and the products
+  list (no persistent animation to protect) still rebuild fresh every
+  render via their own `#homeBalanceActionSlot`/`#homeProductsSlot`. The
+  old broken detach-and-splice-back trick is removed entirely -- it's not
+  needed once the node is never touched in the first place.
+- **Verification**: `node build-core.js` → round-trip OK. Built a real
+  Chromium repro of the OLD code first and reproduced the exact bug (all 3
+  images stuck on slide 1 forever under a 2s refresh loop, confirmed this
+  was ALSO already broken at the old 12s interval once sampled mid-cycle
+  rather than only at cycle boundaries). Then extracted the real, fixed
+  `renderHome()` end-to-end (real CSS, real `ico()`/`ICONS` map, stubbed
+  only `api()`/click-handler targets) and drove it with the real 2s
+  live-refresh cadence for 28+ seconds -- opacities now correctly cycle
+  through all 3 slides ([1,0,0]→[0,1,0]→[0,0,1]→repeat) the whole time,
+  balance/products render correctly alongside it, and the DOM structure
+  (5 direct children of `#page-home`, correct order) matches the original
+  layout. Full `test-*.js` suite green (server.js untouched, client-only
+  fix). Bumped `user/sw.js` `CACHE` to `space8-shell-v288`. No `server.js`
+  changes, no Railway redeploy needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Withdrawal History shows net "Received" amount, not just the gross request
 
 Owner, with a screenshot: "l want you to put amount received, so that was

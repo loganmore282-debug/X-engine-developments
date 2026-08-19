@@ -779,7 +779,11 @@
 // investments, and team stats all update without a page reload.
 // v287: Withdrawal History now shows "Received: UGX X" (net, after the fee)
 // right under the gross amount, instead of only the pre-fee amount.
-const CACHE = 'space8-shell-v287';
+// v288: Fixed the Home banner carousel (and ticker marquee) getting stuck
+// on the first slide once refreshes run faster than a slide's hold time --
+// they now live in permanent DOM slots that renderHome() never detaches, so
+// the CSS animation is never interrupted by an unrelated balance refresh.
+const CACHE = 'space8-shell-v288';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

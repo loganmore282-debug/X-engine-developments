@@ -792,36 +792,48 @@ async function renderHome(){
   var acc = STATE.account || {};
   var products = (STATE.products||[]).filter(function(p){ return p.active !== false; });
   var checkedIn = acc.lastCheckin && isToday(acc.lastCheckin);
-
-  // Preserve the ticker's own DOM node across this render when its feed
-  // data hasn't actually changed. `el.innerHTML = html` below rebuilds the
-  // ENTIRE Home page fresh every time it runs -- including on the silent
-  // 12s live-refresh timer -- which recreates #tickerItems as a brand-new
-  // element and restarts its 24s CSS marquee animation from frame zero.
-  // Detaching the still-animating node here and splicing it back in after
-  // the rebuild (in place of the fresh, empty placeholder the new HTML
-  // creates) keeps the SAME element -- and its running animation -- alive
-  // across the refresh; it's only actually replaced when the feed content
-  // genuinely changes.
   var feed = feedR.status === 'success' ? (feedR.feed || feedR.items || []) : [];
-  var feedJson = JSON.stringify(feed);
-  var existingTicker = $('tickerItems');
-  var preservedTicker = (existingTicker && feedJson === STATE.lastFeedJson) ? existingTicker : null;
-  if (preservedTicker) preservedTicker.remove();
 
-  // Same reasoning, same trick, for the Home banner carousel (2+ slides):
-  // its CSS animation lives on the img elements themselves, so rebuilding
-  // it fresh on every 12s refresh would otherwise snap it back to slide 1
-  // constantly instead of actually cycling. Only rebuilt when the admin's
-  // slide set has genuinely changed since the last render.
+  // Owner (2026-08-19): "sliding images reach a time and stuck on only the
+  // default image, others all where do they go??" -- real bug, confirmed
+  // against a real Chromium repro. The OLD approach here detached the
+  // still-animating #homeBannerCarousel/#tickerItems node, rebuilt the
+  // whole page's innerHTML, then spliced the SAME node back in -- but a
+  // CSS animation restarts from frame zero the instant its element is
+  // removed from the document, even synchronously, even when the exact
+  // same node object is reinserted right after. That "detach it, then
+  // splice the same node back in" trick looked reasonable but never
+  // actually preserved anything; it only happened to look fine before
+  // because the old 12s refresh interval was an exact multiple of the
+  // banner's 3-slide, 12s cycle, so the invisible restart always landed on
+  // a cycle boundary. Once refreshes got faster than a single slide's 4s
+  // hold time (this session's live-refresh speed-up), every slide except
+  // the first (zero animation-delay) got reset back into its own "not due
+  // yet" phase before ever reaching its visible window -- exactly "stuck
+  // on the default image, the others never show".
+  // Real fix: give the banner and the ticker their own permanent slot
+  // elements that this function creates ONCE and never removes from the
+  // document again -- only their `.innerHTML` is ever reassigned, and only
+  // when their own content has genuinely changed, so an unrelated balance/
+  // product refresh can never interrupt either animation.
+  if (!$('homeBannerSlot')) {
+    el.innerHTML = '<div id="homeBannerSlot"></div><div id="homeBalanceActionSlot"></div>' +
+      '<div class="ticker-bar" id="homeTickerSlot">' +
+        '<div class="ticker-icon" id="tickerBellBtn">' + ico('bell') + '</div>' +
+        '<div class="ticker-track"><div class="ticker-items" id="tickerItems"></div></div>' +
+        '<div class="ticker-icon" id="tickerRecordsBtn">' + ico('doc') + '</div>' +
+      '</div>' +
+      '<div class="section-title">Products <span class="see-all" id="homeSeeAllProds">See all</span></div>' +
+      '<div id="homeProductsSlot"></div>';
+  }
+
   var slidesJson = JSON.stringify(STATE.homeSlides||[]);
-  var existingCarousel = $('homeBannerCarousel');
-  var preservedCarousel = (existingCarousel && slidesJson === STATE.lastHomeSlidesJson) ? existingCarousel : null;
-  if (preservedCarousel) preservedCarousel.remove();
-  STATE.lastHomeSlidesJson = slidesJson;
+  if (slidesJson !== STATE.lastHomeSlidesJson || !$('homeBannerSlot').firstChild) {
+    STATE.lastHomeSlidesJson = slidesJson;
+    $('homeBannerSlot').innerHTML = homeBannerHtml();
+  }
 
-  var html = homeBannerHtml();
-  html += '<div class="balance-grid">' +
+  var balHtml = '<div class="balance-grid">' +
     '<div class="bcard bcard--main"' + bcardBg('balancebg') + '>' +
       '<div class="bamt mono" style="--amt-scale:' + amtScale(acc.walletBalance) + '">' + ugx(acc.walletBalance) + '</div>' +
       '<div class="blab">Account Balance</div>' +
@@ -835,31 +847,17 @@ async function renderHome(){
       '<div class="blab">Total Invested</div>' +
     '</div>' +
   '</div>';
-
-  html += '<div class="action-row">' +
+  balHtml += '<div class="action-row">' +
     '<div class="action-btn" id="homeDepositBtn"><div class="ico">' + ico('deposit') + '</div><span>Deposit</span></div>' +
     '<div class="action-btn" id="homeWithdrawBtn"><div class="ico">' + ico('withdraw') + '</div><span>Withdraw</span></div>' +
     '<div class="action-btn ' + (checkedIn?'done':'') + '" id="homeCheckinBtn"><div class="ico">' + ico(checkedIn?'check':'checkin') + '</div><span>' + (checkedIn?'Claimed':'Check In') + '</span></div>' +
   '</div>';
+  $('homeBalanceActionSlot').innerHTML = balHtml;
 
-  html += '<div class="ticker-bar">' +
-    '<div class="ticker-icon" id="tickerBellBtn">' + ico('bell') + '</div>' +
-    '<div class="ticker-track"><div class="ticker-items" id="tickerItems"></div></div>' +
-    '<div class="ticker-icon" id="tickerRecordsBtn">' + ico('doc') + '</div>' +
-  '</div>';
+  var prodHtml = '';
+  products.slice(0,10).forEach(function(p){ prodHtml += prodCardHtml(p); });
+  $('homeProductsSlot').innerHTML = prodHtml;
 
-  html += '<div class="section-title">Products <span class="see-all" id="homeSeeAllProds">See all</span></div>';
-  products.slice(0,10).forEach(function(p){ html += prodCardHtml(p); });
-
-  el.innerHTML = html;
-  if (preservedTicker) {
-    var freshTicker = $('tickerItems');
-    if (freshTicker) freshTicker.replaceWith(preservedTicker);
-  }
-  if (preservedCarousel) {
-    var freshCarousel = $('homeBannerCarousel');
-    if (freshCarousel) freshCarousel.replaceWith(preservedCarousel);
-  }
   wireHomeActions();
   renderTicker(feed);
   qsa('.plan-row', el).forEach(function(row){
