@@ -129,6 +129,25 @@ function check(name, cond, extra) {
   r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { authCardOpacityPct: -1 } } });
   check('authCard negative opacity rejected', r.code === 400 && r.body.status === 'error', r.body);
 
+  // Glow-sweep speed/size sliders (purchase buttons + gift box). These feed
+  // straight into rendered admin slider value="..." attributes AND into
+  // client-side CSS vars, so they get the same SETTINGS_NUMERIC_RANGES
+  // treatment as every other slider above -- prove they're actually wired,
+  // range-checked, and echoed back on /public/settings, not just cosmetic.
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { sweepBtnSpeedMs: 1500, sweepBtnWidthPct: 20, sweepGiftSpeedMs: 8000, sweepGiftWidthPct: 4 } } });
+  check('sweep valid values accepted', r.code === 200 && r.body.status === 'success', r.body);
+  r = await call('GET', '/public/settings');
+  check('public settings reflects saved button sweep speed', r.body.settings.sweepBtnSpeedMs === 1500, r.body.settings);
+  check('public settings reflects saved button sweep width', r.body.settings.sweepBtnWidthPct === 20, r.body.settings);
+  check('public settings reflects saved gift sweep speed', r.body.settings.sweepGiftSpeedMs === 8000, r.body.settings);
+  check('public settings reflects saved gift sweep width', r.body.settings.sweepGiftWidthPct === 4, r.body.settings);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { sweepBtnSpeedMs: 99999 } } });
+  check('button sweep speed above max rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { sweepGiftWidthPct: 0 } } });
+  check('gift sweep width below min rejected', r.code === 400 && r.body.status === 'error', r.body);
+  r = await call('POST', '/admin/settings/update', { admin: true, body: { settings: { sweepBtnWidthPct: 'wide' } } });
+  check('non-numeric sweep width rejected', r.code === 400 && r.body.status === 'error', r.body);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

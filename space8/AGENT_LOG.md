@@ -14,6 +14,45 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Glow sweep speed + size now admin-adjustable (buttons + gift box, separately)
+
+Owner: "make in the admin panel when I can customise the speed and size of the sweep of
+purchase buttons and also giftbox." End-to-end through the same settings → server →
+client-CSS-var pipeline the blur/opacity sliders already use.
+
+- **4 new settings** (`server.js` `DEFAULT_SETTINGS`): `sweepBtnSpeedMs` (2400),
+  `sweepBtnWidthPct` (12), `sweepGiftSpeedMs` (5000), `sweepGiftWidthPct` (6). Speed = full
+  cycle in milliseconds (lower = faster/more frequent); width = the light band's thickness
+  as a % of the element. Buttons and gift box are independent.
+- **Server** (`server.js`): added all four to `SETTINGS_NUMERIC_RANGES` (button speed
+  400–12000ms, button width 2–80%, gift speed 400–20000ms, gift width 1–60%) — they feed
+  rendered admin slider `value="..."` attributes AND client CSS vars, exactly the stored-
+  self-XSS surface that list guards, so they get the same strict numeric+range validation
+  and `Math.round` as every other slider. Echoed back on `/public/settings`.
+- **Client CSS** (`user-src/index.html`): `.btn-sweep::after` and `.gift-fab::after` now
+  read `--sweep-btn-speed`/`--sweep-btn-w` and `--sweep-gift-speed`/`--sweep-gift-w`, with
+  the previous hardcoded values kept as `var(…, fallback)` defaults. Band width is derived
+  from a single width var via `calc(50% - var(--…-w)/2)` on each gradient edge, so "size" is
+  one number. `original_module.js` sets those vars on `:root` from settings during boot
+  (speed as `Nms`, width as `N%`), only when a real value is present so the CSS fallback
+  still covers a fresh/unset install.
+- **Admin UI** (`admin-src/index.html`): new "Glow sweep — Purchase buttons & gift box"
+  panel in Settings with four range sliders (live value readouts) + a Save button, wired to
+  `/admin/settings/update` the same way the card-blur sliders are. Labeled plainly ("speed
+  (milliseconds, lower is faster)", "size (band width, %)").
+- **Verification**: `node build-core.js` + `node build-admin.js` → both round-trip OK.
+  Rendered the `calc()`-driven width var with Chromium at 30% / 6% / unset — confirmed thick
+  band / thin band / 12% fallback respectively, proving the size control works and the
+  fallback holds. Extended `test-authbg-settings-validation.js` with 8 new checks (valid
+  save + `/public/settings` echo for all four, above-max / below-min / non-numeric
+  rejection) — 37/37. Full `test-*.js` suite green. `user/sw.js` `CACHE` bumped to `v270`.
+  **server.js changed → Railway needs a redeploy** for the new fields' defaults/validation
+  to take effect (the admin sliders will still save via the existing generic settings merge,
+  but the range-validation and DEFAULT_SETTINGS fallback come from the new server code).
+- **Deferred**: none.
+
+---
+
 ## 2026-08-18 — Claude — Glow-sweep on purchase buttons + gift box; fixed slow Security-PIN tap
 
 Owner: "add a thin glow sweep on purchase buttons, thin and runs a bit fast, just like on

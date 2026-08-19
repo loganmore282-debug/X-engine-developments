@@ -227,7 +227,13 @@ const DEFAULT_SETTINGS = {
   authBgBlurPx: 20, authBgTintPct: 78,
   appBgBlurPx: 20, appBgTintPct: 78,
   cardBlurPx: 0, cardOpacityPct: 100,
-  authCardBlurPx: 0, authCardOpacityPct: 100
+  authCardBlurPx: 0, authCardOpacityPct: 100,
+  // Glow-sweep tuning (owner-adjustable in admin). Speed = full cycle in
+  // milliseconds (lower = faster/more frequent); width = the light band's
+  // thickness as a % of the element. Buttons default to the built-in look;
+  // the gift box is deliberately slower + thinner ("minimal").
+  sweepBtnSpeedMs: 2400, sweepBtnWidthPct: 12,
+  sweepGiftSpeedMs: 5000, sweepGiftWidthPct: 6
 };
 // The real 15-plan catalog from the owner's PDF (Space8_Investment_Plans_
 // and_Variables.pdf) -- x42 total return over a fixed 210-day cycle for
@@ -1761,7 +1767,9 @@ app.get('/public/settings', async (_req, res) => {
       authBgBlurPx: s.authBgBlurPx, authBgTintPct: s.authBgTintPct,
       appBgBlurPx: s.appBgBlurPx, appBgTintPct: s.appBgTintPct,
       cardBlurPx: s.cardBlurPx, cardOpacityPct: s.cardOpacityPct,
-      authCardBlurPx: s.authCardBlurPx, authCardOpacityPct: s.authCardOpacityPct
+      authCardBlurPx: s.authCardBlurPx, authCardOpacityPct: s.authCardOpacityPct,
+      sweepBtnSpeedMs: s.sweepBtnSpeedMs, sweepBtnWidthPct: s.sweepBtnWidthPct,
+      sweepGiftSpeedMs: s.sweepGiftSpeedMs, sweepGiftWidthPct: s.sweepGiftWidthPct
     } });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load settings' }); }
 });
@@ -3953,7 +3961,7 @@ app.get('/admin/settings', async (req, res) => {
 // out-of-range or non-numeric value here isn't just cosmetic, it's a stored
 // self-XSS surface across admin sessions. Validate those specifically rather
 // than trusting the whole request body.
-const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100], appBgBlurPx: [0, 40], appBgTintPct: [0, 100], cardBlurPx: [0, 24], cardOpacityPct: [0, 100], authCardBlurPx: [0, 24], authCardOpacityPct: [0, 100], annBgBlurPx: [0, 40], annBgTintPct: [0, 100] };
+const SETTINGS_NUMERIC_RANGES = { authBgBlurPx: [0, 40], authBgTintPct: [0, 100], appBgBlurPx: [0, 40], appBgTintPct: [0, 100], cardBlurPx: [0, 24], cardOpacityPct: [0, 100], authCardBlurPx: [0, 24], authCardOpacityPct: [0, 100], annBgBlurPx: [0, 40], annBgTintPct: [0, 100], sweepBtnSpeedMs: [400, 12000], sweepBtnWidthPct: [2, 80], sweepGiftSpeedMs: [400, 20000], sweepGiftWidthPct: [1, 60] };
 // Codex-verified real bug (2026-08-17): SETTINGS_NUMERIC_RANGES only ever
 // validated the purely-visual slider fields (blur/tint/opacity) -- every
 // FINANCIAL/behavior-critical setting was stored completely raw, with no

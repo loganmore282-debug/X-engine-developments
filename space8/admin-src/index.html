@@ -1271,6 +1271,10 @@ async function renderBanners(){
   const cardOpacityPct = clampNum(sett.cardOpacityPct, 100, 0, 100);
   const authCardBlurPx = clampNum(sett.authCardBlurPx, 0, 0, 24);
   const authCardOpacityPct = clampNum(sett.authCardOpacityPct, 100, 0, 100);
+  const sweepBtnSpeedMs = clampNum(sett.sweepBtnSpeedMs, 2400, 400, 12000);
+  const sweepBtnWidthPct = clampNum(sett.sweepBtnWidthPct, 12, 2, 80);
+  const sweepGiftSpeedMs = clampNum(sett.sweepGiftSpeedMs, 5000, 400, 20000);
+  const sweepGiftWidthPct = clampNum(sett.sweepGiftWidthPct, 6, 1, 60);
   $('content').innerHTML = `
     <h2 class="sec">App banners</h2>
     <div class="panel-card">
@@ -1285,6 +1289,19 @@ async function renderBanners(){
       <input id="cardOpacityRange" type="range" min="0" max="100" step="1" value="${cardOpacityPct}" style="width:100%">
       <p class="muted" style="font-size:12px;margin:6px 0 0">Lower opacity lets more of the background show through the card; very low values can hurt readability of text on the card.</p>
       <button class="btn block" id="saveCardBgBtn" style="margin-top:10px">Save card blur &amp; opacity</button>
+    </div>
+    <div class="panel-card">
+      <label style="font-weight:700">Glow sweep — Purchase buttons &amp; gift box</label>
+      <p class="muted" style="margin:2px 0 8px;font-size:12px">The moving shine on the Purchase / Confirm &amp; Purchase buttons and on the floating gift box. Speed is the full cycle time — a lower number sweeps faster and more often. Size is how thick the light band is.</p>
+      <label>Purchase button — speed (milliseconds, lower is faster) — <span id="sweepBtnSpeedVal">${sweepBtnSpeedMs}</span></label>
+      <input id="sweepBtnSpeedRange" type="range" min="400" max="12000" step="100" value="${sweepBtnSpeedMs}" style="width:100%">
+      <label style="margin-top:10px;display:block">Purchase button — size (band width, %) — <span id="sweepBtnWidthVal">${sweepBtnWidthPct}</span></label>
+      <input id="sweepBtnWidthRange" type="range" min="2" max="80" step="1" value="${sweepBtnWidthPct}" style="width:100%">
+      <label style="margin-top:14px;display:block">Gift box — speed (milliseconds, lower is faster) — <span id="sweepGiftSpeedVal">${sweepGiftSpeedMs}</span></label>
+      <input id="sweepGiftSpeedRange" type="range" min="400" max="20000" step="100" value="${sweepGiftSpeedMs}" style="width:100%">
+      <label style="margin-top:10px;display:block">Gift box — size (band width, %) — <span id="sweepGiftWidthVal">${sweepGiftWidthPct}</span></label>
+      <input id="sweepGiftWidthRange" type="range" min="1" max="60" step="1" value="${sweepGiftWidthPct}" style="width:100%">
+      <button class="btn block" id="saveSweepBtn" style="margin-top:12px">Save glow sweep</button>
     </div>
     <div class="panel-card">
       <label style="font-weight:700">Home screen sliding banners</label>
@@ -1426,6 +1443,23 @@ async function renderBanners(){
         const d = await api('/admin/settings/update', { settings: {
           cardBlurPx: parseInt($('cardBlurRange').value,10),
           cardOpacityPct: parseInt($('cardOpacityRange').value,10)
+        } });
+        toast(d.status==='success'?'Saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      })());
+    });
+  }
+  if ($('sweepBtnSpeedRange')) {
+    $('sweepBtnSpeedRange').addEventListener('input', ()=>{ $('sweepBtnSpeedVal').textContent = $('sweepBtnSpeedRange').value; });
+    $('sweepBtnWidthRange').addEventListener('input', ()=>{ $('sweepBtnWidthVal').textContent = $('sweepBtnWidthRange').value; });
+    $('sweepGiftSpeedRange').addEventListener('input', ()=>{ $('sweepGiftSpeedVal').textContent = $('sweepGiftSpeedRange').value; });
+    $('sweepGiftWidthRange').addEventListener('input', ()=>{ $('sweepGiftWidthVal').textContent = $('sweepGiftWidthRange').value; });
+    $('saveSweepBtn').addEventListener('click', async()=>{
+      await withTabBusy((async()=>{
+        const d = await api('/admin/settings/update', { settings: {
+          sweepBtnSpeedMs: parseInt($('sweepBtnSpeedRange').value,10),
+          sweepBtnWidthPct: parseInt($('sweepBtnWidthRange').value,10),
+          sweepGiftSpeedMs: parseInt($('sweepGiftSpeedRange').value,10),
+          sweepGiftWidthPct: parseInt($('sweepGiftWidthRange').value,10)
         } });
         toast(d.status==='success'?'Saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
       })());

@@ -148,7 +148,12 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
    greyed-out button reads as broken. The band is thin (~12% of the width)
    and the sweep itself is quick (~1s), with a short rest between passes. */
 .btn-sweep{ position:relative; overflow:hidden; }
-.btn-sweep::after{ content:''; position:absolute; inset:0; background:linear-gradient(115deg, transparent 44%, rgba(255,255,255,.55) 50%, transparent 56%); transform:translateX(-130%) skewX(-16deg); animation:btnSweep 2.4s ease-in-out infinite; pointer-events:none; }
+/* Band width and cycle speed are admin-tunable via --sweep-btn-w /
+   --sweep-btn-speed (set on :root from settings in original_module.js);
+   the values here are the fallback defaults when no setting is present.
+   calc() derives the gradient's two transparent edges from a single width
+   var so "size" is one number. */
+.btn-sweep::after{ content:''; position:absolute; inset:0; background:linear-gradient(115deg, transparent calc(50% - var(--sweep-btn-w, 12%)/2), rgba(255,255,255,.55) 50%, transparent calc(50% + var(--sweep-btn-w, 12%)/2)); transform:translateX(-130%) skewX(-16deg); animation:btnSweep var(--sweep-btn-speed, 2.4s) ease-in-out infinite; pointer-events:none; }
 .btn-sweep[disabled]::after{ display:none; }
 @keyframes btnSweep{ 0%{ transform:translateX(-130%) skewX(-16deg); } 42%,100%{ transform:translateX(240%) skewX(-16deg); } }
 .btn-secondary .spin{ border-color:var(--line); border-top-color:var(--ink-dim); }
@@ -443,7 +448,7 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
    hidden can clip the sweep to the box without also clipping the shadow.
    mix-blend-mode:screen keeps the shine on the box's lit pixels and nearly
    invisible over its transparent corners. */
-.gift-fab::after{ content:''; position:absolute; inset:0; background:linear-gradient(115deg, transparent 47.5%, rgba(255,255,255,.32) 50%, transparent 52.5%); mix-blend-mode:screen; transform:translateX(-140%) skewX(-16deg); animation:giftSweep 5s ease-in-out infinite; pointer-events:none; }
+.gift-fab::after{ content:''; position:absolute; inset:0; background:linear-gradient(115deg, transparent calc(50% - var(--sweep-gift-w, 6%)/2), rgba(255,255,255,.32) 50%, transparent calc(50% + var(--sweep-gift-w, 6%)/2)); mix-blend-mode:screen; transform:translateX(-140%) skewX(-16deg); animation:giftSweep var(--sweep-gift-speed, 5s) ease-in-out infinite; pointer-events:none; }
 @keyframes giftSweep{ 0%,22%{ transform:translateX(-140%) skewX(-16deg); } 40%,100%{ transform:translateX(240%) skewX(-16deg); } }
 .assist-panel{ position:fixed; inset:0; z-index:150; background:var(--void); display:none; flex-direction:column; }
 .assist-panel.show{ display:flex; }

@@ -714,7 +714,10 @@
 // Purchase buttons; a fainter, less-frequent sweep on the floating gift
 // box; and the Security PIN sheet now opens instantly (loading state)
 // instead of blocking on its status fetch first.
-const CACHE = 'space8-shell-v269';
+// v270: the glow-sweep speed + size are now admin-adjustable (purchase
+// buttons and gift box, separately) -- the CSS reads them from settings-
+// driven vars, so the new defaults/vars need to reach installed phones.
+const CACHE = 'space8-shell-v270';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 

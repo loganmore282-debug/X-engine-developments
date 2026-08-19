@@ -2186,6 +2186,14 @@ async function boot(){
   var annTintPct = (STATE.settings||{}).annBgTintPct;
   document.documentElement.style.setProperty('--ann-bg-blur', (annBlurPx != null ? annBlurPx : 6) + 'px');
   document.documentElement.style.setProperty('--ann-bg-tint', (annTintPct != null ? annTintPct : 55) / 100);
+  // Glow-sweep speed/size (owner-adjustable in admin). Speed comes over the
+  // wire as milliseconds; size as a % width. The CSS carries its own
+  // fallback defaults, so only push a var when a real value is present.
+  var st = STATE.settings || {};
+  if (st.sweepBtnSpeedMs != null) document.documentElement.style.setProperty('--sweep-btn-speed', st.sweepBtnSpeedMs + 'ms');
+  if (st.sweepBtnWidthPct != null) document.documentElement.style.setProperty('--sweep-btn-w', st.sweepBtnWidthPct + '%');
+  if (st.sweepGiftSpeedMs != null) document.documentElement.style.setProperty('--sweep-gift-speed', st.sweepGiftSpeedMs + 'ms');
+  if (st.sweepGiftWidthPct != null) document.documentElement.style.setProperty('--sweep-gift-w', st.sweepGiftWidthPct + '%');
   // Fetched above (not left to renderHome/renderProducts' own first call) so
   // the images below are already warm in the browser's cache by the time
   // either page actually renders -- renderHome/renderProducts both already
