@@ -1285,7 +1285,7 @@ async function renderProducts(){
 
   var html = bannerHtml('darkbar', 'satellite');
   html += '<div class="shortcut-row">' +
-    '<div class="shortcut" id="shBind">' + ico('lock') + '<span>Withdrawal Account</span></div>' +
+    '<div class="shortcut" id="shBind">' + ico('lock') + '<span>Bind Bank Account</span></div>' +
     '<div class="shortcut" id="shDeposits">' + ico('history') + '<span>Deposit Records</span></div>' +
     '<div class="shortcut" id="shWithdrawals">' + ico('wallet') + '<span>Withdrawal Records</span></div>' +
   '</div>';
@@ -1629,7 +1629,7 @@ async function renderAccount(animate){
   }
 
   html += '<div class="matrix">' +
-    '<div class="mtile" id="mBind">' + ico('lock') + '<span>Withdrawal Account</span></div>' +
+    '<div class="mtile" id="mBind">' + ico('lock') + '<span>Bind Bank Account</span></div>' +
     '<div class="mtile" id="mDeposits">' + ico('history') + '<span>Deposit Records</span></div>' +
     '<div class="mtile" id="mWithdrawals">' + ico('wallet') + '<span>Withdrawal Records</span></div>' +
     '<div class="mtile" id="mPin">' + ico('shield') + '<span>Change PIN</span></div>' +
@@ -1639,11 +1639,11 @@ async function renderAccount(animate){
     '<div class="menu-row" id="passwordRow">' + ico('key') + '<span>Change Password</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>' +
     menuRow('info','About Us','about') +
     menuRow('doc','Rules','rules') +
-    menuRow('support','Support','support') +
+    menuRow('support','Customer Service','support') +
     '<div class="menu-row" id="getAppRow">' + ico('download') + '<span>Get App</span></div>' +
   '</div>';
   html += '<div class="menu-list" style="margin-top:14px">' +
-    '<div class="menu-row" id="logoutRow">' + ico('logout') + '<span>Log Out</span></div>' +
+    '<div class="menu-row" id="logoutRow">' + ico('logout') + '<span>Exit</span></div>' +
   '</div>';
 
   el.innerHTML = html;
@@ -1893,7 +1893,7 @@ async function openSupportSheet(){
   if (s.telegramChannel) rows.push(['telegram', 'Telegram Channel', s.telegramChannel]);
   if (s.whatsappGroup) rows.push(['whatsapp', 'WhatsApp Group', s.whatsappGroup]);
   if (s.whatsappContact) rows.push(['whatsapp', 'WhatsApp Contact', s.whatsappContact]);
-  var html = '<div class="sheet-title">Support</div>' + bannerHtml('supportbg', 'support');
+  var html = '<div class="sheet-title">Customer Service</div>' + bannerHtml('supportbg', 'support');
   html += rows.length ?
     '<div class="menu-list" style="margin-top:14px">' + rows.map(function(r, i){
       return '<div class="menu-row" data-support-link="' + i + '">' + ico(r[0]) + '<span>' + esc(r[1]) + '</span>' + ico('chev').replace('<svg ', '<svg class="chev" ') + '</div>';

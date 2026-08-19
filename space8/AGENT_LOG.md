@@ -14,6 +14,36 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — "Log Out"→"Exit", "Withdrawal Account"→"Bind Bank Account", "Support"→"Customer Service"
+
+Owner: "now change logout to exit ,change withdrawal account to 'Bind
+bank account ',change support to customer service".
+
+- **Exit**: the Account menu's `logoutRow` label changed from "Log Out"
+  to "Exit". Only one occurrence existed.
+- **Bind Bank Account**: the singular "Withdrawal Account" tile label
+  (Home shortcut `shBind` AND Account matrix tile `mBind` — same wording,
+  two locations) renamed. Deliberately left alone: the PLURAL "Withdrawal
+  Accounts" sheet title, "Choose Withdrawal Account" (picker mode), and
+  the "Add Withdrawal Account" button inside that sheet — none of those
+  are the exact string the owner named, and changing them too would have
+  been scope creep beyond what was asked (same "outer tile label can
+  differ from the sheet's own internal title" pattern already established
+  last round for Deposit/Withdrawal Records → Deposit/Withdrawal History).
+- **Customer Service**: both real occurrences of the word "Support" as a
+  label (the Account menu row via `menuRow('support','Support','support')`
+  and the Support sheet's own title) renamed. Left `openSupportSheet`'s
+  function name, the `'support'` data-key, and the assistant panel's
+  already-different-wording "Customer Care" button untouched — none of
+  those are user-visible text reading "Support", and the assistant
+  button already said something else the owner didn't ask to change.
+- **Verification**: `node build-core.js` → round-trip OK. Grepped the
+  rebuilt source to confirm exactly the 5 intended spots changed and nothing
+  else. Full `test-*.js` suite green, 79/79. Bumped `user/sw.js` `CACHE`
+  to `space8-shell-v299`. No `server.js` changes, no Railway redeploy
+  needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — "Security PIN"→"Change PIN", "Deposits"/"Withdrawals"→"Deposit Records"/"Withdrawal Records"
 
 Owner: "change security pin to 'Change PIN',also change deposits to

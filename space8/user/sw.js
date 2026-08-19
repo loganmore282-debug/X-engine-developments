@@ -824,7 +824,10 @@
 // v298: "Security PIN" renamed to "Change PIN" (Account matrix tile +
 // sheet title). "Deposits"/"Withdrawals" renamed to "Deposit Records"/
 // "Withdrawal Records" (Account matrix tiles + Home ticker shortcuts).
-const CACHE = 'space8-shell-v298';
+// v299: "Log Out"→"Exit", "Withdrawal Account"→"Bind Bank Account" (Home
+// shortcut + Account matrix tile), "Support"→"Customer Service" (Account
+// menu row + sheet title).
+const CACHE = 'space8-shell-v299';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
