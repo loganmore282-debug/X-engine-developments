@@ -1073,17 +1073,45 @@ async function openRecordsSheet(){
 function wireHomeActions(){
   $('homeDepositBtn').onclick = openDepositSheet;
   $('homeWithdrawBtn').onclick = openWithdrawSheet;
-  $('homeCheckinBtn').onclick = doCheckin;
+  $('homeCheckinBtn').onclick = openCheckinSheet;
   var seeAll = $('homeSeeAllProds'); if (seeAll) seeAll.onclick = function(){ showPage('products'); };
   qsa('.prod-card', $('page-home')).forEach(function(c){
     var invBtn = qs('.invest-btn', c);
     if (invBtn) invBtn.onclick = function(e){ e.stopPropagation(); openInvestSheet(c.dataset.key); };
   });
 }
-async function doCheckin(){
-  var btn = $('homeCheckinBtn');
-  if (btn.classList.contains('done')) return;
+// Owner: "one checkin l wanted it to be like that, so l will add banners" --
+// check-in is now its own screen (a banner, the daily reward, the button,
+// and the rules) instead of a one-tap Home button. The Home "Check In"
+// action tile opens this; the actual claim happens on the button inside.
+async function openCheckinSheet(){
+  var sett = STATE.settings || (await api('/public/settings')).settings || {};
+  var acc = STATE.account || {};
+  var reward = Number(sett.dailyCheckin) || 0;
+  var checkedIn = acc.lastCheckin && isToday(acc.lastCheckin);
+  var html = '<div class="sheet-title">Daily Check-in</div>' +
+    optBannerHtml('checkinbg') +
+    '<div class="card checkin-card">' +
+      '<div class="checkin-reward-lab">Daily check-in reward</div>' +
+      '<div class="checkin-reward mono">' + ugx(reward) + '</div>' +
+      '<button class="btn btn-primary" id="checkinBtn" style="width:100%;margin-top:16px"' + (checkedIn ? ' disabled' : '') + '>' +
+        (checkedIn ? 'Claimed today' : 'Check in now') + '</button>' +
+    '</div>' +
+    '<div class="checkin-rules">' +
+      '<div class="checkin-rule">Daily check-in reward: ' + ugx(reward) + '.</div>' +
+      '<div class="checkin-rule">Check in once each day.</div>' +
+      '<div class="checkin-rule">You can check in again after midnight (00:00 EAT) each day.</div>' +
+    '</div>';
+  openSheet('generic', html);
+  var btn = $('checkinBtn');
+  if (btn && !checkedIn) btn.onclick = function(){ doCheckin(btn); };
+}
+async function doCheckin(btnEl){
+  var btn = btnEl || $('checkinBtn');
+  if (!btn || btn.disabled) return;
+  setBtnLoading(btn, true);
   var r = await api('/checkin', {});
+  setBtnLoading(btn, false);
   if (r.status === 'success') {
     // Owner: "l wanted it to be claimed successfully ✓" -- keeps the
     // amount/streak (the only place streak is shown anywhere) but leads
@@ -1097,6 +1125,9 @@ async function doCheckin(){
     STATE.account.walletBalance = (STATE.account.walletBalance||0) + r.bonus;
     STATE.account.totalEarned = (STATE.account.totalEarned||0) + r.bonus;
     STATE.account.lastCheckin = eatDateStr();
+    // Reflect the claimed state on the sheet button, and refresh Home behind
+    // the sheet so its Check-in tile flips to "Claimed" too.
+    if ($('checkinBtn')) { $('checkinBtn').textContent = 'Claimed today'; $('checkinBtn').disabled = true; $('checkinBtn').onclick = null; }
     renderHome();
   } else toast(r.message, true);
 }

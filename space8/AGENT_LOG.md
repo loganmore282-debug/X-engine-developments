@@ -14,6 +14,27 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-18 — Claude — Check-in is now its own screen (banner + reward + button + rules)
+
+Owner picked "Make it a screen" for the check-in flow (follow-up to the banner round above).
+
+- **What changed** (`user-src/original_module.js` + `index.html`): the Home "Check In" action
+  tile no longer claims on tap — it opens a new `openCheckinSheet()` screen showing the
+  `checkinbg` admin banner (via `optBannerHtml`), the daily reward (`settings.dailyCheckin`),
+  a "Check in now" button, and the three rules. The actual claim happens on that button.
+  `doCheckin` was reworked to take the button element (defaults to the sheet button), show a
+  busy state, and on success flip the button to a disabled "Claimed today" while refreshing
+  Home behind the sheet so its tile also reads "Claimed". The Home tile still shows Check In /
+  Claimed at a glance as before. New `.checkin-card`/`.checkin-reward`/`.checkin-rules` CSS.
+- **Verification**: `node build-core.js` → round-trip OK. Rendered the screen with Chromium
+  (banner + reward + button + bulleted rules) — matches the reference. Full `test-*.js` suite
+  green (check-in is exercised server-side via `/checkin`, unchanged). `user/sw.js` `CACHE`
+  bumped to `v272`. No `server.js` change this step (the `checkinbg` slot shipped in the
+  previous commit).
+- **Deferred**: none — this completes the balance-cards + gift + check-in banner request.
+
+---
+
 ## 2026-08-18 — Claude — Home balance split into 3 banner-backed cards; Gift Code screen banner; banner-load diagnosis
 
 Owner (referencing a friend's site, picovver.com screenshots): split the single Account

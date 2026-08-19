@@ -188,6 +188,13 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 /* Optional admin banner shown inside a sheet (Gift Code, Check-in) -- sits
    just under the sheet title, a touch shorter than a full page banner. */
 .sheet-banner{ height:120px; margin-top:12px; }
+/* Daily Check-in screen (owner: "checkin... so l will add banners") */
+.checkin-card{ text-align:center; margin-top:14px; }
+.checkin-reward-lab{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-dim); }
+.checkin-reward{ font-weight:800; font-size:32px; margin-top:6px; color:var(--blue); letter-spacing:-.01em; }
+.checkin-rules{ margin-top:18px; padding:0 4px; }
+.checkin-rule{ font-size:12.5px; color:var(--ink-dim); line-height:1.5; padding-left:18px; position:relative; margin-bottom:7px; }
+.checkin-rule::before{ content:'•'; position:absolute; left:5px; color:var(--blue); font-weight:700; }
 .about-photo{ width:100%; border-radius:var(--radius-card); display:block; margin:16px 0; }
 .about-section-title{ font-size:15px; font-weight:800; color:var(--ink); margin:22px 0 8px; }
 .about-body{ font-size:13.5px; line-height:1.7; color:var(--ink-dim); }

@@ -722,7 +722,10 @@
 // settable banner image; the Gift Code screen gained an optional admin
 // banner. New banner slots: balancebg/cumulativebg/investedbg/giftcodebg
 // (+ checkinbg reserved). All baked into cached index.html.
-const CACHE = 'space8-shell-v271';
+// v272: Check-in is now its own screen (banner + daily reward + Check-in
+// button + rules) opened from the Home Check-in tile, instead of a one-tap
+// Home button; uses the checkinbg banner slot.
+const CACHE = 'space8-shell-v272';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png'];
 
