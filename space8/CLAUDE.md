@@ -2915,19 +2915,27 @@ See `AGENT_LOG.md`'s most recent entry for the full detail. Short version:
    to match on `ref`). `user/sw.js` `CACHE` bumped to `v281`. **`server.js`
    changed → needs a Railway redeploy.** See the 2026-08-19 AGENT_LOG.md entry
    ("Codex review of the last 3 commits: 2 Medium + 2 Low, all real, all fixed").
-0t. **Announcement dialog: Cancel replaced with top-left (X), Telegram centered at
-   original size — DONE.** `#announceCancelBtn` removed; new `.announce-close`
-   (`#announceCloseBtn`, small round button, `position:absolute` top-left of the
-   card) is now the dialog's explicit dismiss control, wired to `hideAnnouncement`
-   via `ico('x')`. `.pillbtn` lost its `flex:1` (was stretching to fill the row
+0t. **Announcement dialog: Cancel replaced with (X) — now top-right — Telegram
+   button centered, relabeled "Confirm" — DONE.** `#announceCancelBtn` removed;
+   new `.announce-close` (`#announceCloseBtn`, small round button,
+   `position:absolute`) is the dialog's explicit dismiss control, wired to
+   `hideAnnouncement` via `ico('x')` — shipped top-left, moved to `right:14px`
+   the same day per a follow-up owner correction ("let (✗) that one be on the
+   right not left"). `.pillbtn` lost its `flex:1` (was stretching to fill the row
    when paired with Cancel; as the row's only remaining button, `flex:1` alone
    would stretch it full-width, which the owner explicitly said not to do) —
    padding/font-size otherwise byte-identical; `.announce-actions` gained
    `justify-content:center` to center it. Dead `.pillbtn-ghost` removed
-   (Cancel-only). `user/sw.js` `CACHE` bumped to `v282`. No `server.js` changes,
-   no Railway redeploy needed. See the 2026-08-19 AGENT_LOG.md entry
+   (Cancel-only). Same-day follow-up: the action button's label+icon changed from
+   `ico('telegram') + 'Telegram'` to plain `'Confirm'` text — owner: "not saying
+   that telegram link should go away... we just changed the cover so it will read
+   confirm" — the `onclick` handler (open `telegramGroup`/`telegramChannel`, then
+   close) is completely unchanged, only the visible face of the button changed.
+   `user/sw.js` `CACHE` bumped to `v282` then `v283`. No `server.js` changes, no
+   Railway redeploy needed either round. See the 2026-08-19 AGENT_LOG.md entries
    ("Announcement dialog: Cancel button replaced with a top-left (X); Telegram
-   button centered at its original size").
+   button centered at its original size" and "Announcement dialog follow-up: (X)
+   moved to top-right, action button now reads 'Confirm'").
 1. **Real end-to-end device/browser check** — register, log in, deposit, invest,
    withdraw, referral, check-in, and now the assistant + registration-time PIN —
    none of this has been verified against the live Firebase project + live

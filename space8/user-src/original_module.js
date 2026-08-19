@@ -624,7 +624,12 @@ function maybeShowAnnouncement(){
   var tgBtn = $('announceTgBtn');
   if (tgUrl) {
     tgBtn.style.display = 'flex';
-    tgBtn.innerHTML = ico('telegram') + '<span>Telegram</span>';
+    // Owner: "instead of telegram button and icon,put the word Confirm...
+    // l am not saying that telegram link should go away... we just
+    // changed the cover so it will read confirm, so when he confirms, he
+    // will be redirected to telegram group." Same tgUrl/onclick behavior,
+    // just the visible label+icon changed from "Telegram" to "Confirm".
+    tgBtn.innerHTML = '<span>Confirm</span>';
     tgBtn.onclick = function(){ var u = safeExternalUrl(tgUrl); if (u) window.open(u, '_blank'); hideAnnouncement(); };
   } else {
     tgBtn.style.display = 'none';

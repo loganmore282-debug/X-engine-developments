@@ -251,11 +251,13 @@ select.field.placeholder{ color:var(--ink-dim); }
 .announce-sheet::before{ content:''; position:absolute; inset:-24px; background-image:var(--ann-bg-url, none); background-size:cover; background-position:center; filter:blur(var(--ann-bg-blur, 6px)); transform:scale(1.08); z-index:0; }
 .announce-sheet::after{ content:''; position:absolute; inset:0; background:rgba(10,18,32, var(--ann-bg-tint, .55)); z-index:0; }
 .announce-body{ position:relative; z-index:1; padding:26px 24px 24px; display:flex; flex-direction:column; gap:12px; text-align:center; align-items:center; }
-/* Owner: "remove cancel button there, it will be on top left of dialog,
-   clear view and we'll defined (X)" -- a small round close button, top-left
-   of the card, replaces the old bottom Cancel button as the dismiss action
-   (tapping the dark scrim still closes it too, unchanged). */
-.announce-close{ position:absolute; top:14px; left:14px; z-index:2; width:30px; height:30px; border-radius:50%; background:rgba(255,255,255,.14); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+/* Owner: "remove cancel button there... clear view and we'll defined (X)"
+   -- a small round close button replaces the old bottom Cancel button as
+   the dismiss action (tapping the dark scrim still closes it too,
+   unchanged). Moved from top-left to top-right the same day per a
+   follow-up owner correction: "let (X) that one be on the right not
+   left." */
+.announce-close{ position:absolute; top:14px; right:14px; z-index:2; width:30px; height:30px; border-radius:50%; background:rgba(255,255,255,.14); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .announce-close svg{ width:15px; height:15px; stroke:#fff; }
 /* Owner: "you see friends text font in dialog, l want you to use that in our
    dialog" -- the picovver.com reference's bold all-caps display headline

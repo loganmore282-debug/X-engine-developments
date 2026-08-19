@@ -772,7 +772,10 @@
 // round (X) close button top-left of the card is now the explicit dismiss
 // control. The Telegram button (now the row's only button) no longer
 // stretches full width -- same padding/size as before, just centered.
-const CACHE = 'space8-shell-v282';
+// v283: Announcement dialog's (X) close button moved from top-left to
+// top-right; its action button relabeled from "Telegram" (icon+text) to
+// plain "Confirm" text, same underlying Telegram-redirect behavior.
+const CACHE = 'space8-shell-v283';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

@@ -14,6 +14,30 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Announcement dialog follow-up: (X) moved to top-right, action button now reads "Confirm"
+
+Owner, immediately after the previous round shipped: "let (✗) that one be on the
+right not left,also instead of telegram button and icon,put the word "Confirm" so
+l am not saying that telegram link should go away,no it should be there inside the
+button but we just changed the curver so it will read confirm, so when he confirm,
+he will be redirected to telegram group."
+
+- `.announce-close` (`user-src/index.html`): `left:14px` → `right:14px` — the only
+  CSS change needed, position is otherwise identical.
+- `maybeShowAnnouncement()` (`user-src/original_module.js`): `tgBtn.innerHTML` was
+  `ico('telegram') + '<span>Telegram</span>'`, now just `'<span>Confirm</span>'` —
+  the icon is gone, the label reads "Confirm". The `onclick` handler is completely
+  unchanged (`safeExternalUrl(tgUrl)` + `window.open(..., '_blank')` +
+  `hideAnnouncement()`) — tapping Confirm still opens the same Telegram group/
+  channel link exactly as before, only the button's visible face changed.
+- **Verification**: `node build-core.js` → round-trip OK. Chromium render (real
+  markup + real script, not a reimplementation) confirms the (X) now sits top-right
+  and the button reads "Confirm" with no icon. Full 79-file `test-*.js` suite green
+  (client-only change, server.js untouched). Bumped `user/sw.js` `CACHE` to
+  `space8-shell-v283`. No `server.js`/`admin-src/` changes, no Railway redeploy
+  needed.
+- **Deferred / open**: none new this round.
+
 ## 2026-08-19 — Claude — Announcement dialog: Cancel button replaced with a top-left (X); Telegram button centered at its original size
 
 Owner, with a screenshot: "bro ,remove cancel button there ,it will be on top left
