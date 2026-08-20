@@ -14,6 +14,45 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-20 — Claude — Real bug fixed: a blank white gap between the loading screen disappearing and Home/the announcement dialog actually showing
+
+Owner: *"bro,it brings a white screen after startup loader finishes then
+shows dialog, remove show of white screen."* Read the actual boot sequence
+rather than guessing at a CSS fix.
+
+**Root cause**: the `space8-auth` listener hides `#loadingScreen`, then —
+for a signed-in user — used to `await api('/account')` (the ghost-account
+self-heal check added in an earlier round) BEFORE calling `enterApp()`,
+which is the function that actually flips `#app` to `display:flex` and
+paints Home. Between those two steps there was nothing on screen but the
+bare `body` background (`var(--page-bg)`, a near-white `#eef1f6`) — no
+topbar, no cards, nothing — for however long that one extra network
+round-trip took (worse on a cold Render instance). That's the "white
+screen" between the loader and the dialog: it wasn't a missing background
+color, it was a genuine blank gap while nothing had been shown yet.
+
+- **Fix**: `enterApp()` is now called immediately after hiding the loading
+  screen, before the self-heal check — `renderHome()` already paints its
+  own skeleton instantly and fetches real account data independently, so
+  there's no blank gap either way. The self-heal `/account` check (and the
+  `/register` retry it can trigger) now runs in the background afterward,
+  same as before, only now intervening — swapping to the register-recovery
+  screen — in the rare case it's actually needed, instead of gating every
+  normal login on it. When the self-heal DOES complete a previously-
+  missing registration, Home (already showing, painted against the old
+  incomplete account) is explicitly refreshed (`STATE.account = null;
+  STATE.loaded.home = false; renderHome()`) so it doesn't keep showing
+  stale/empty data.
+- **Verification**: real Playwright test against the built artifact —
+  delayed EVERY `/account` network response by 2s (both the self-heal
+  check and `renderHome()`'s own fetch) and confirmed at 1.2s in
+  (well before either could have resolved) that `#loadingScreen` was
+  already hidden AND `#app` was already `display:flex` with genuine Home
+  skeleton content rendered (balance cards, action row, ticker skeleton) —
+  not a blank page. Screenshot confirms the same visually. `user/sw.js`
+  `CACHE` bumped `v309` → `v310`. No `server.js` changes, no Railway
+  redeploy needed.
+
 ## 2026-08-20 — Claude — Startup-loader background image now paints instantly on repeat visits (real bug: it was never actually hardcoded, just looked like it should be)
 
 Owner: *"bro,do you know that the image on start up loader takes long to

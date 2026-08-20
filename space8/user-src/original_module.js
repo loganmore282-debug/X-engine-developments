@@ -2589,6 +2589,21 @@ window.addEventListener('space8-auth', async function(e){
     // stranded with no automatic recovery. /register self-heals a missing
     // doc on its own (see the comment in server.js's /register route), so
     // the only gap was ever telling the client TO call it here.
+    // Real bug (owner: "the website can load, and after shows dialog, and
+    // again it loads again... white screen"): enterApp() used to wait on
+    // this self-heal /account check first -- for the overwhelming common
+    // case (an already fully-registered member, i.e. every normal login),
+    // that's a whole extra network round-trip paid AFTER the loading
+    // screen is already gone, with nothing on screen in the meantime
+    // (#app is still display:none until enterApp() runs) -- exactly the
+    // blank/white gap being reported. This self-heal exists for a RARE
+    // path (a ghost/partially-registered account) and gates nothing a
+    // normal member needs. Show the app immediately -- renderHome()
+    // already paints its own skeleton instantly and fetches real account
+    // data itself, so there's no blank gap either way -- and run the
+    // self-heal check in the background, only interrupting with the
+    // register-recovery screen in the rare case it's actually needed.
+    enterApp();
     try {
       var accR = await api('/account');
       var needsRegister = (accR.status === 'success' && accR.account && accR.account.registrationDone === false) ||
@@ -2611,9 +2626,13 @@ window.addEventListener('space8-auth', async function(e){
           showAuthErr('registerErr', (regR.message || 'Could not finish creating your account.') + ' You are signed in — fix the referral code (or clear it) and tap Create Account again.');
           return;
         }
+        // Self-heal just completed the profile -- Home (already showing,
+        // painted by enterApp() above) was rendered against the old
+        // missing/incomplete account, so refresh it with the real data.
+        STATE.account = null; STATE.loaded.home = false;
+        if (STATE.currentPage === 'home') renderHome();
       }
     } catch (_) {}
-    enterApp();
   } else {
     $('app').style.display = 'none';
     // A pending referral code (from _refCode's top-level parse) means this

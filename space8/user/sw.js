@@ -857,7 +857,7 @@
 // instead, which was a real miss of an explicit instruction, not a
 // deliberate design call. Scoped entirely to this one screen via
 // .gopay-* classes; nothing else in the app's blue system changed.
-const CACHE = 'space8-shell-v309';
+const CACHE = 'space8-shell-v310';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
