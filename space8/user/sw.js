@@ -832,7 +832,12 @@
 // staying on the flat --void background. Gift Code FAB moved from
 // Account-only to Home-only (owner: "migrate gift code box to home, so it
 // will suspend there down bottom right").
-const CACHE = 'space8-shell-v300';
+// v301: loading screen's background photo hardcoded (base64, no fetch/
+// boot() dependency) since the authbg-driven version from v300 often never
+// showed -- the loader finished before its async settings/banners fetch
+// resolved. Gift Code FAB lowered from bottom:150px to bottom:96px, closer
+// to the assistant bubble's 78px level but still slightly above it.
+const CACHE = 'space8-shell-v301';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

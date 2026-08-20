@@ -62,6 +62,48 @@ will suspend there down bottom right."
 
 ---
 
+## 2026-08-19 — Claude — Loader background hardcoded (was invisible in practice); Gift Code FAB lowered
+
+Owner, after seeing the previous round's authbg-on-loader change live: "the
+loader finishes minus one even seeing the background, please let it load
+faster or just hardcode it use that ,blurred." Also: "the gift code is
+high bro,make it like the level of ai assistant level but you will rise it
+slightly to quarter."
+
+- **Loader background was real but effectively invisible.** The previous
+  round wired `#loadingScreen` to the same `--auth-bg-url`/`--auth-bg-blur`/
+  `--auth-bg-tint` CSS vars as `.auth-screen`, set inside `boot()` — an
+  async function that fetches `/public/settings` + `/public/banners`. On a
+  normal connection the loading screen (gated on `_bootPromise` resolving,
+  see the 2026-08-17 image-preload round) was often gone again before those
+  vars ever got set, so the photo genuinely never had time to render even
+  though the CSS was correct. Fixed by hardcoding a real satellite/Earth
+  photo (the owner's own reference image) as a base64 data URI directly in
+  `#loadingScreen::before` — present the instant the CSS itself parses, zero
+  fetch, zero dependency on `boot()` timing at all. Same self-hosting
+  convention this file already uses for its Inter/Archivo Black fonts.
+  `.auth-screen` (Login/Register) is UNCHANGED — it keeps the existing
+  admin-configurable `authbg` photo/blur/opacity, since those screens don't
+  have the same disappear-before-you-see-it timing problem the loader did.
+- **Gift Code FAB lowered from `bottom:150px` to `bottom:96px`** — was
+  sitting noticeably higher than the assistant bubble's `bottom:78px` (they
+  used to share the exact same Account-only visibility gate, one stacked
+  above the other, before the previous round moved the gift box to
+  Home-only). Now close to the assistant's level but still a quarter of the
+  old 72px gap above it, matching "like the level of ai assistant level but
+  ... rise it slightly to quarter."
+- Files: `user-src/index.html` (both CSS changes).
+- Verification: `node build-core.js` (round-trip OK). Full `test-*.js`
+  suite green (client-only CSS change). Playwright: loaded the rebuilt
+  `user/index.html` with NO JavaScript executed at all (pure static
+  render, proving zero dependency on `boot()`/any async call) — the
+  satellite photo shows blurred behind the loader, logo/text stay crisp;
+  separately confirmed `#giftFab`'s computed `bottom` is `96px` against
+  `#assistFab`'s `78px`. `user/sw.js` `CACHE` bumped `v300` → `v301`. No
+  `server.js` changes, no Railway/Render backend redeploy needed.
+
+---
+
 ## 2026-08-19 — Claude — AI assistant conversational-quality fixes ("train it to the highest peak")
 
 Owner showed a screenshot: the assistant correctly answered a forgotten-PIN
