@@ -43,13 +43,6 @@ function resetUserState(){
   STATE.bankAccounts = null;
   STATE.hasPayoutPin = false;
   Object.keys(STATE.loaded).forEach(function(k){ STATE.loaded[k] = false; });
-  // A pending deposit's countdown/poll is keyed in localStorage (not
-  // per-user), which is exactly the kind of shared-device leak this
-  // function exists to close elsewhere -- without this, User B logging in
-  // right after User A started a deposit would see A's pending-payment
-  // screen and countdown as their own the next time they opened Deposit.
-  stopDepositTimers();
-  clearPendingDeposit();
 }
 
 // ── UTILS ──────────────────────────────────────────────────────────────
@@ -401,11 +394,8 @@ function hideSheet(name){
   $(name + 'SheetBg').classList.remove('show');
   var i = _sheetStack.lastIndexOf(name);
   if (i !== -1) _sheetStack.splice(i, 1);
-  if (!qsa('.sheet-bg.show, .gopay-page-bg.show').length) document.body.style.overflow = '';
+  if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
   if (_planCountdownTimer) { clearInterval(_planCountdownTimer); _planCountdownTimer = null; }
-  // Safety net: if the member backs out of Deposit mid-Refresh, don't leave
-  // the full-screen gopayLoading spinner stuck covering the app underneath.
-  if (name === 'deposit' || name === 'gopayPending') gopayLoading(false);
   // Owner: "when one leaves a screen ie one has gone to deposit, then he
   // clicks back, l really like those balances to start from zero then to
   // current so it loads like that, even referral link, even number and
@@ -720,7 +710,7 @@ function maybeShowAnnouncement(){
 }
 function hideAnnouncement(){
   $('announceBg').classList.remove('show');
-  if (!qsa('.sheet-bg.show, .gopay-page-bg.show').length) document.body.style.overflow = '';
+  if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
 }
 // Owner: "remove cancel button there, it will be on top left of dialog,
 // clear view and we'll defined (X)" -- the bottom Cancel button is gone;
@@ -2196,214 +2186,60 @@ async function changePassword(){
 // Deposits take a phone/network typed fresh each time, same as always --
 // the owner's "select the account in payout accounts" instruction was
 // specifically about WITHDRAWALS (2026-08-16 correction), not deposits.
-// Owner: "remove number area and network, you will put amount box plus
-// quick selects... after one clicks deposit now, he goes to [a pending-
-// payment] page... this will be automatic system, so omit the hard coded
-// functions and amounts." No phone/network fields anymore -- the server
-// already falls back to the account's own registered phone when none is
-// sent (`/deposit/marzpay`: `cleanPhone(req.body.phone || uSnap.data().phone
-// || '')`), and `network` was only ever cosmetic there (MarzPay detects it
-// from the phone number itself, never trusts this field) -- so there is
-// nothing lost by never collecting either on this screen.
-var DEPOSIT_QUICK_AMOUNTS = [15000, 30000, 50000, 100000, 180000, 250000, 350000, 500000, 850000, 1000000];
-// 5-minute window, persisted to localStorage (not just an in-memory var) so
-// re-opening Deposit -- even after a full page reload -- resumes the SAME
-// countdown from real elapsed time instead of restarting at 5:00. Owner:
-// "the page should not start afresh from loading, so it should run in
-// background."
-var DEPOSIT_TIMEOUT_MS = 5 * 60 * 1000;
-var DEPOSIT_TIMER_KEY = 'space8_pendingDeposit';
-function getPendingDeposit(){
-  try { return JSON.parse(localStorage.getItem(DEPOSIT_TIMER_KEY) || 'null'); } catch(e){ return null; }
-}
-function setPendingDeposit(depositId, amount){
-  var rec = { depositId: depositId, amount: amount, expiresAt: Date.now() + DEPOSIT_TIMEOUT_MS };
-  try { localStorage.setItem(DEPOSIT_TIMER_KEY, JSON.stringify(rec)); } catch(e){}
-  return rec;
-}
-function clearPendingDeposit(){
-  try { localStorage.removeItem(DEPOSIT_TIMER_KEY); } catch(e){}
-}
-var _depositPollTimer = null, _depositCountdownTimer = null;
-function stopDepositTimers(){
-  clearInterval(_depositPollTimer); _depositPollTimer = null;
-  clearInterval(_depositCountdownTimer); _depositCountdownTimer = null;
-}
 function openDepositSheet(){
-  var pending = getPendingDeposit();
-  if (pending && pending.expiresAt > Date.now()) renderDepositPending(pending.depositId, pending.amount, pending.expiresAt, true);
-  else { clearPendingDeposit(); renderDepositForm(true); }
-}
-function renderDepositForm(isFirstRender){
-  stopDepositTimers();
+  var acc = STATE.account || {};
   var min = (STATE.settings||{}).minDeposit || 20000;
-  var chips = DEPOSIT_QUICK_AMOUNTS.map(function(a){
-    return '<div class="amt-chip" data-amt="' + a + '">' + ugx(a) + '</div>';
-  }).join('');
-  var html = bannerHtml('basket','deposit') +
+  openSheet('deposit', bannerHtml('basket','deposit') +
     '<div class="sheet-title">Deposit Funds</div>' +
     '<div class="sheet-sub">Minimum deposit ' + ugx(min) + '.</div>' +
     '<div class="auth-form">' +
       '<div class="field">' + ico('deposit') + '<input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Amount (UGX)"></div>' +
+      '<div class="field">' + ico('phone') + '<input id="depPhone" type="tel" inputmode="tel" maxlength="10" placeholder="07XXXXXXXX" value="' + esc(acc.phone||'') + '"></div>' +
+      '<select id="depNetwork" class="field" style="appearance:none">' +
+        '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
+        '<option value="Airtel Money">Airtel Money</option>' +
+      '</select>' +
     '</div>' +
-    '<div class="amt-chips">' + chips + '</div>' +
     '<button class="btn btn-primary" id="submitDepositBtn" style="margin-top:14px">Deposit Now</button>' +
     '<div class="instruction-card"><b>Deposit instructions</b><ol>' +
-      '<li>Enter the amount you want to deposit, at least ' + ugx(min) + ', or tap a quick amount above.</li>' +
-      '<li>Tap Deposit Now — a payment prompt is sent automatically to your registered mobile-money number.</li>' +
+      '<li>Enter the amount you want to deposit, at least ' + ugx(min) + '.</li>' +
+      '<li>Enter the mobile-money number to pay from, and pick the correct network.</li>' +
+      '<li>Tap Deposit Now — a payment prompt will appear on that phone.</li>' +
       '<li>Approve the prompt using your mobile-money PIN.</li>' +
       '<li>Your wallet balance updates automatically once payment is confirmed.</li>' +
-    '</ol></div>';
-  if (isFirstRender) openSheet('deposit', html); else $('depositSheet').innerHTML = html;
-
-  qsa('.amt-chip').forEach(function(c){
-    c.onclick = function(){
-      $('depAmount').value = c.dataset.amt;
-      qsa('.amt-chip').forEach(function(x){ x.classList.remove('active'); });
-      c.classList.add('active');
-    };
-  });
+    '</ol></div>'
+  );
   $('submitDepositBtn').onclick = async function(){
     var btn = $('submitDepositBtn');
     var amt = parseInt($('depAmount').value, 10);
+    var phone = $('depPhone').value, network = $('depNetwork').value;
     if (!amt || amt < min) return toast('Enter at least ' + ugx(min), true);
+    if (!cleanPhone(phone)) return toast('Enter a valid mobile-money number', true);
     setBtnLoading(btn, true, 'Initiating…');
-    gopayLoading(true);
-    var r = await api('/deposit/marzpay', { amount: amt });
+    var r = await api('/deposit/marzpay', { amount: amt, phone: phone, network: network });
     setBtnLoading(btn, false);
     if (r.status === 'success') {
-      setPendingDeposit(r.depositId, amt);
-      renderDepositPending(r.depositId, amt, Date.now() + DEPOSIT_TIMEOUT_MS, false);
-    } else { gopayLoading(false); toast(r.message, true); }
+      toast('Check your phone to approve the payment');
+      closeSheet('deposit');
+      pollDepositStatus(r.depositId);
+    } else toast(r.message, true);
   };
 }
-function gopayLoading(on){ var el = $('gopayLoading'); if (el) el.classList.toggle('show', !!on); }
-// The pending-payment screen -- owner: "instead of COPY AND PAY, it will be
-// CONFIRM PIN AND PAY... instead of 'copy this mtn account and make
-// payment' it will say confirm this amount plus phone number and approve
-// payment... where there is account number and account name, there will
-// be just payment instructions." There is nothing to copy or type here --
-// MarzPay already pushed a real PIN prompt to the member's own phone the
-// instant the deposit was created; this screen just reflects that and lets
-// them check on it (manual Refresh, or automatic polling every 3s).
-//
-// Structure/CSS below is copied from the owner's reference file (a
-// recreation of the real GoPay SDK checkout page) at the class/value
-// level, per the owner's own explicit, repeated instruction to migrate it
-// literally rather than reinterpret it -- see the CSS comment above
-// .gopay-page-bg in index.html for the exact reasoning and the 2 things
-// deliberately not copied (third-party GoPay/MTN/Airtel logos/brand
-// marks). This screen is its own standalone full-page overlay
-// (#gopayPendingSheetBg/#gopayPendingSheet), NOT the normal
-// .sheet-bg/.sheet-head deposit chrome -- no admin banner photo, no
-// back-chevron, no Records shortcut icon on this one screen, per the
-// owner's own explicit ask. Digit-box countdown and step-icon glyphs
-// (▣ / ⟳ / ♟) are the reference's own literal characters, not icons of
-// ours.
-function digitBoxes(mins, secs){
-  var s = (mins < 10 ? '0' : '') + mins + (secs < 10 ? '0' : '') + secs;
-  return s.split('').map(function(d){ return '<span>' + d + '</span>'; }).join('');
-}
-function renderDepositPending(depositId, amount, expiresAt, isFirstRender){
-  stopDepositTimers();
-  var acc = STATE.account || {};
-  var html =
-    '<div class="gopay-hero">' +
-      '<div class="gopay-expiry"><div class="lbl">Transaction expires in</div>' +
-        '<div class="gopay-timer" id="depCountdown">' + digitBoxes(5, 0) + '</div>' +
-      '</div>' +
-    '</div>' +
-    '<div class="gopay-timeline-card">' +
-      '<div class="gopay-step-line"></div>' +
-      '<div class="gopay-step-icon one">▣</div>' +
-      '<div class="gopay-step-icon two">⟳</div>' +
-      '<div class="gopay-step-icon three">♟</div>' +
-      '<h2 class="gopay-card-title">Confirm PIN and Pay</h2>' +
-      '<div class="gopay-sub">A payment prompt has already been sent to your phone.</div>' +
-      '<div class="gopay-detail-box">' +
-        '<div class="gopay-label">Total Amount:</div>' +
-        '<div class="gopay-total"><small>UGX</small>' + Math.round(amount).toLocaleString('en-UG') + '</div>' +
-        '<div class="gopay-instructions">Confirm the amount and phone number shown on that prompt, then enter your mobile-money PIN there to approve — there is nothing to copy or type here.</div>' +
-      '</div>' +
-      '<div class="gopay-paydone">Payment completed?</div>' +
-      '<div class="gopay-refresh-text">Tap <b>"Refresh"</b> to check if it is successful</div>' +
-      '<div class="gopay-paid-box">' +
-        '<div class="gopay-paid-row">' +
-          '<div><div class="gopay-paid-label">Status:</div><div class="gopay-paid-value" id="depStatus">Waiting for approval</div></div>' +
-          '<button class="gopay-refresh-btn" id="depRefreshBtn">Refresh</button>' +
-        '</div>' +
-        '<div class="gopay-note">The payment is expected to be successful in 2-10 minutes.<br>Tap Refresh to check the result.</div>' +
-      '</div>' +
-      '<div class="gopay-your-account">Your payment account:</div>' +
-      '<div class="gopay-your-number">' + esc(acc.phone || '') + '</div>' +
-    '</div>';
-  if (isFirstRender) openSheet('gopayPending', html); else $('gopayPendingSheet').innerHTML = html;
-  gopayLoading(false);
-
-  function tickCountdown(){
-    var el = $('depCountdown');
-    if (!el) { stopDepositTimers(); return; }
-    var remaining = expiresAt - Date.now();
-    if (remaining <= 0) {
-      stopDepositTimers();
-      clearPendingDeposit();
-      var lbl = el.parentNode.querySelector('.lbl');
-      if (lbl) lbl.textContent = 'Payment window expired';
-      el.innerHTML = digitBoxes(0, 0);
-      var statusEl = $('depStatus');
-      if (statusEl) statusEl.textContent = 'Expired';
-      var refreshBtn = $('depRefreshBtn');
-      // Not closeSheet()+renderDepositForm(true): closeSheet() triggers an
-      // async history.back(), and pushing a NEW history entry (what
-      // renderDepositForm(true) -> openSheet() does) before that back's
-      // popstate fires would make the shared popstate listener hide the
-      // freshly-opened deposit form instead of finishing the gopayPending
-      // close. Swap the current history entry in place instead -- one
-      // overlay directly to another, no stacking/race.
-      if (refreshBtn) { refreshBtn.textContent = 'Start Over'; refreshBtn.onclick = function(){
-        clearPendingDeposit();
-        $('gopayPendingSheetBg').classList.remove('show');
-        var i = _sheetStack.lastIndexOf('gopayPending');
-        if (i !== -1) _sheetStack.splice(i, 1);
-        $('depositSheetBg').classList.add('show');
-        _sheetStack.push('deposit');
-        history.replaceState({ overlay: 'deposit' }, '', '');
-        renderDepositForm(false);
-      }; }
-      return;
-    }
-    var mins = Math.floor(remaining / 60000), secs = Math.floor((remaining % 60000) / 1000);
-    el.innerHTML = digitBoxes(mins, secs);
-  }
-  async function checkStatusOnce(){
-    var r = await api('/deposit/marzpay/status', { depositId: depositId });
+function pollDepositStatus(id){
+  var tries = 0;
+  var iv = setInterval(async function(){
+    tries++;
+    var r = await api('/deposit/marzpay/status', { depositId: id });
     if (r.status === 'success' && r.state && r.state !== 'pending') {
-      stopDepositTimers();
-      clearPendingDeposit();
-      var statusEl = $('depStatus');
+      clearInterval(iv);
       if (r.state === 'matched') {
-        if (statusEl) statusEl.textContent = 'Payment successful ✓';
         toast('Deposit successful');
         STATE.account = null; STATE.loaded.home = false;
         if (STATE.currentPage === 'home') renderHome();
-        setTimeout(function(){ if (_sheetStack.indexOf('gopayPending') !== -1) closeSheet('gopayPending'); }, 1200);
-      } else {
-        if (statusEl) statusEl.textContent = r.message || 'Payment failed';
-        toast(r.message || 'Deposit failed', true);
-      }
+      } else toast(r.message || 'Deposit failed', true);
     }
-  }
-  $('depRefreshBtn').onclick = async function(){
-    var btn = $('depRefreshBtn');
-    btn.disabled = true;
-    gopayLoading(true);
-    await checkStatusOnce();
-    gopayLoading(false);
-    if (btn) btn.disabled = false;
-  };
-  tickCountdown();
-  _depositCountdownTimer = setInterval(tickCountdown, 1000);
-  _depositPollTimer = setInterval(checkStatusOnce, 3000);
+    if (tries > 40) clearInterval(iv);
+  }, 3000);
 }
 
 // ── WITHDRAW ──────────────────────────────────────────────────────────

@@ -14,6 +14,39 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-20 — Claude — GoPay deposit redesign fully reverted; quick-select amounts removed; deposit flow back to phone/network fields
+
+Owner: *"Just remove them, unfortunately they never worked out as l wanted,
+so remove all gopay, return it as it was, also remove quick amounts."* After
+three rounds trying to get the GoPay-styled pending-payment screen right
+(commits `da0c983`, `a2f59a5`, `974e59c`), the owner decided the whole
+direction wasn't working and asked for a full revert, plus removal of the
+quick-select amount chips from the deposit form (not something the earlier
+rounds had ever put on the chopping block before, but explicitly listed
+this time).
+
+- Since nothing had been committed to `user-src/index.html` or
+  `user-src/original_module.js` since the pre-GoPay commit `0242d0e`
+  except the three GoPay commits themselves, both files were restored
+  directly from `0242d0e` (`git checkout 0242d0e -- user-src/index.html
+  user-src/original_module.js`) rather than hand-reverting the diff —
+  cleaner and provably exact. Confirmed zero remaining `gopay`/`amt-chip`/
+  `DEPOSIT_QUICK_AMOUNTS` references in either file afterward.
+- This restores: `openDepositSheet()` as a single function (no separate
+  pending-screen state) with amount/phone/network fields, `pollDepositStatus()`
+  (a plain 3s-interval background poll with a 40-try cap, no persisted
+  countdown/localStorage state), and a toast-based ("Check your phone to
+  approve the payment") flow instead of a dedicated confirm screen. No
+  quick-amount chips — a plain amount field only.
+- Rebuilt (`node build-core.js`, round-trip OK). Bumped `user/sw.js` cache
+  `v304` → `v305` (kept moving forward, not reverted backward, per this
+  project's cache-bump convention).
+- **Anything left open**: none — this is a full, verified revert back to
+  the last known-good deposit flow. The three superseded GoPay-related
+  AGENT_LOG entries above (2026-08-19, 2026-08-20 rebuild) remain in this
+  log as history/context but no longer describe what's actually live —
+  don't resurrect that design without a fresh, explicit request.
+
 ## 2026-08-20 — Claude — Deposit pending-payment screen rebuilt again: literal fidelity to the owner's GoPay reference (banner/chrome removed, standalone page, real glyphs/colors, not a reinterpretation)
 
 Owner, after the 2026-08-19 gold/orange fix still didn't match, pasted the
