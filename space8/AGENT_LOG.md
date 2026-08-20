@@ -14,6 +14,91 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Deposit flow redesigned: quick-select amounts, real pending-payment screen instead of a silent poll
+
+Owner, with a reference mockup HTML (a "GoPay"-style manual-transfer flow) and
+detailed instructions: remove the phone-number and network fields from the
+Deposit screen, replace them with amount quick-selects (15,000 through
+1,000,000); after tapping Deposit Now, take the member to a real
+pending-payment screen instead of just a toast — but this platform's flow
+is fully automatic (MarzPay pushes the PIN prompt straight to the phone), so
+strip out the reference's manual "copy this account number and pay
+yourself" parts and replace them with instructions on how to approve;
+rename the reference's "COPY & PAY" heading to "CONFIRM PIN AND PAY"; give
+the transaction a real 5-minute countdown that "does not start afresh from
+loading" (survives navigating away and back, even a reload); support both a
+manual Refresh and automatic polling.
+
+- **Real gap the redesign closes, confirmed by reading `server.js`
+  first**: `/deposit/marzpay` already falls back to the account's own
+  registered phone when none is sent (`cleanPhone(req.body.phone ||
+  uSnap.data().phone || '')`), and `network` was NEVER trusted for
+  anything beyond display — the code's own comment says MarzPay detects
+  network from the phone number itself. So the phone/network fields the
+  old form asked for were pure friction, not anything the flow actually
+  needed from the member.
+- **`openDepositSheet()`/`renderDepositForm()`** (`user-src/
+  original_module.js`): phone and network fields removed entirely; a new
+  `.amt-chips` row of 10 pills (`DEPOSIT_QUICK_AMOUNTS`: 15,000 / 30,000 /
+  50,000 / 100,000 / 180,000 / 250,000 / 350,000 / 500,000 / 850,000 /
+  1,000,000) fills `#depAmount` on tap, manual typing still works too.
+  `/deposit/marzpay` is now called with just `{amount}`.
+- **New `renderDepositPending()`** — replaces the old fire-and-forget
+  `pollDepositStatus()` toast-only poller with a real screen, re-rendered
+  in place inside the SAME `deposit` sheet (matching the established
+  `renderWithdrawSheet(..., isFirstRender)` convention — only the first
+  render pushes a history entry, so the phone Back button behaves
+  correctly and the flow never double-pushes): "Confirm PIN and Pay"
+  title, the real amount, instructions to check the phone and approve with
+  the PIN (no account number/name to copy — there's nothing manual left
+  in this flow), a Status/Refresh row, and the member's own registered
+  phone at the bottom. Automatic 3s status polling (reusing
+  `/deposit/marzpay/status`, same endpoint the old poller used) runs
+  alongside a manual Refresh button hitting the identical check.
+- **5-minute countdown persisted to `localStorage`** (`DEPOSIT_TIMER_KEY`),
+  not just an in-memory timer — owner: "the page should not start afresh
+  from loading, so it should run in background." `openDepositSheet()`
+  checks for an unexpired pending deposit first and resumes straight into
+  the pending screen (with the real remaining time) instead of always
+  showing the empty form. On expiry: countdown/polling stop, the localStorage
+  entry clears, and the screen offers "Start Over" back to the form.
+  **Also wired into `resetUserState()`** (the existing shared-device
+  logout/login-switch cleanup) — a pending deposit's timer lived in plain
+  localStorage, which is NOT per-user, so without this a second member
+  logging in on the same device right after the first started a deposit
+  would have inherited that stranger's pending-payment screen and
+  countdown as their own.
+- **Owner's reference mockup's own colors/manual-transfer chrome were
+  deliberately NOT copied verbatim** — the "don't change design and
+  color" instruction was read as "keep using Space8's own established
+  blue-accent system" (the reference's orange/gold GoPay palette and its
+  copy-this-account-number mechanics belong to a different, manual
+  transfer flow this platform doesn't use), while faithfully keeping the
+  requested ARCHITECTURE: quick-select → spinner → pending screen →
+  instructions instead of copy/paste → refresh + auto-poll → expiring
+  countdown that survives navigation.
+- Files: `user-src/index.html` (`.amt-chips`/`.amt-chip` CSS),
+  `user-src/original_module.js` (deposit sheet functions + `resetUserState()`).
+- Verification: `node build-core.js` (round-trip OK). Full `test-*.js`
+  suite green (client-only change, server.js untouched — the fallback
+  behavior this redesign now RELIES on, `phone` defaulting to the
+  account's own, was already covered by the existing suite). Directly
+  loaded the real `original_module.js` under Node (not a reimplementation
+  — `Module._compile` with minimal DOM/localStorage stubs, same technique
+  used earlier this session for the assistant-engine work) and called
+  `renderDepositForm()`/`renderDepositPending()` to inspect the ACTUAL
+  produced markup: confirmed zero `depPhone`/`depNetwork` fields, the
+  exact 10 requested chip amounts in order, "Confirm PIN and Pay" title,
+  zero "Account:" label anywhere in the pending view, the real account
+  phone and real amount both present (not hardcoded). Separately rendered
+  that exact captured markup against the real extracted CSS in Chromium
+  and screenshotted both screens — visually clean, on-brand, matches the
+  intended flow. Confirmed the localStorage persistence cycle
+  (set/get/clear) directly. `user/sw.js` `CACHE` bumped `v301` → `v302`.
+  No `server.js` changes, no Railway/Render backend redeploy needed.
+
+---
+
 ## 2026-08-19 — Claude — Loading screen shares the auth background photo; Gift Code FAB moved to Home
 
 Owner, from two screenshots (the "Preparing data" loader and the live

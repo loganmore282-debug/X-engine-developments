@@ -837,7 +837,18 @@
 // showed -- the loader finished before its async settings/banners fetch
 // resolved. Gift Code FAB lowered from bottom:150px to bottom:96px, closer
 // to the assistant bubble's 78px level but still slightly above it.
-const CACHE = 'space8-shell-v301';
+// v302: Deposit screen redesigned -- phone/network fields removed (the
+// server already falls back to the account's own registered phone;
+// network was cosmetic-only, MarzPay detects it from the phone itself),
+// replaced with 10 quick-select amount chips. Deposit Now now leads to a
+// new pending-payment screen ("Confirm PIN and Pay") instead of a toast +
+// silent poll -- live 5-minute countdown persisted to localStorage (so
+// re-opening Deposit, even after a reload, resumes the real remaining
+// time instead of restarting), automatic 3s status polling plus a manual
+// Refresh, and payment instructions instead of a manual account-
+// number/name to copy (there's nothing to copy -- MarzPay already pushed
+// a PIN prompt straight to the member's phone).
+const CACHE = 'space8-shell-v302';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 
