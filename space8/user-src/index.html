@@ -762,8 +762,23 @@ select.field.placeholder{ color:var(--ink-dim); }
       }).catch(()=>{});
     });
     var _swReloading = false;
+    // Real bug (owner: "the website can load, and after shows dialog, and
+    // again it loads again automatically back to our startup loader") --
+    // controllerchange fires whenever the CONTROLLING worker changes, and
+    // that includes the very first time this page ever gets claimed
+    // (clients.claim() in sw.js's own activate handler), not just a genuine
+    // new-version swap. On a fresh visit/cleared cache, that first claim
+    // lands asynchronously AFTER the page has already booted and shown
+    // Home's announcement dialog -- so the reload below used to fire on
+    // every such visit, restarting the whole app (back to #loadingScreen)
+    // for no real reason, since nothing stale was ever actually served.
+    // Only reload when there was ALREADY a controller at page-load time --
+    // that's the only case where a real update swapped out the worker this
+    // page was already running under.
+    var _hadControllerAtLoad = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (_swReloading) return;
+      if (!_hadControllerAtLoad) { _hadControllerAtLoad = true; return; }
       (function tryReload(){
         if ((window._moneyCallsInFlight || 0) > 0) { setTimeout(tryReload, 500); return; }
         _swReloading = true;

@@ -14,6 +14,54 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-20 — Claude — Toast stays up longer, real "double loading" bug fixed (controllerchange fired on first SW claim, not just real updates), admin logo swapped to the real Space8 mark
+
+Owner: *"let this notify not disappear very soon, it should remain up for
+some seconds such that a user reads it, also bro there are some
+circumstances, the website can load, and after shows dialog, and again it
+loads again automatically back to our startup loader then comes to
+normal, what causes that double loading??? also change the space8 admin
+existing logo to our space8 logo."*
+
+- **Toast duration**: `toast()`'s auto-hide (`user-src/original_module.js`)
+  went from 3200ms to 5500ms — enough time to actually read a message like
+  "Check your phone to approve the payment" rather than it vanishing
+  mid-read.
+- **Real bug found and fixed: the "double loading."** Both
+  `user-src/index.html` and `admin-src/index.html`'s service-worker
+  auto-update scripts reload the page on the browser's `controllerchange`
+  event — but that event fires whenever the CONTROLLING worker changes,
+  which includes the very FIRST time a page gets claimed
+  (`clients.claim()` in `sw.js`'s own `activate` handler), not only a
+  genuine new-version swap. On a fresh visit or cleared cache, that first
+  claim resolves asynchronously — after the page has already booted and
+  Home's announcement dialog has already shown — so the reload fired for
+  no real reason (nothing stale was ever served), restarting the whole app
+  back through `#loadingScreen` and landing on Home again a second time.
+  Confirmed by reading the actual event semantics, not guessed from the
+  symptom. Fixed in both apps: a `_hadControllerAtLoad` flag captured from
+  `navigator.serviceWorker.controller` before registration — the reload
+  only fires if there was ALREADY a controller at page-load time (i.e.
+  this really is a worker being swapped out from under an already-running
+  page), and the very first `controllerchange` on a page with no prior
+  controller just flips the flag instead of reloading, so any GENUINE
+  later swap (a real new deploy while the tab stays open) still reloads
+  correctly.
+- **Admin logo replaced with the real Space8 mark.** `admin-src/index.html`'s
+  `.mk` badge (login card + topbar) was a generic 4-box grid icon, never
+  actually the Space8 brand mark. Replaced with the exact same hand-drawn
+  infinity-loop + dot SVG the user app's own topbar wordmark uses
+  (`user-src/index.html`'s `.wordmark` svg, `viewBox="0 0 36 28"`), colored
+  to match admin's existing white-on-blue-circle treatment instead of
+  `currentColor`. App icon PNGs (`icon-192/512.png` etc.) were already the
+  correct satellite-in-orbit mark from an earlier round — this only fixed
+  the separate in-app topbar/login SVG mark, which had never been touched.
+- **Verification**: `node build-core.js`/`node build-admin.js` both
+  round-trip OK, `node --check` clean. Screenshotted the admin login card
+  in headless Chromium — the infinity mark renders correctly inside the
+  circular badge. `user/sw.js` `CACHE` bumped `v307` → `v308`. No
+  `server.js` changes, no Railway redeploy needed.
+
 ## 2026-08-20 — Claude — Deposit form reorganized: quick amounts above the amount field in a balanced grid, network is tappable chips instead of a dropdown
 
 Owner, from an annotated screenshot: *"the amounts are not supposed to be

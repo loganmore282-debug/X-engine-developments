@@ -172,8 +172,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
 <div class="login" id="loginView">
   <div class="login-card">
     <div class="brand">
-      <div class="mk"><svg viewBox="0 0 24 24" fill="none" stroke="#f4f2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/></svg></div>
+      <div class="mk"><svg viewBox="0 0 36 28" width="24" height="19" fill="none" aria-hidden="true"><path d="M18 14C10 4 4 6 4 12c0 6 7 8 14 2 7-6 14-4 14 2 0 6-6 8-14-2Z" stroke="#f4f2ff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="7" r="2.5" fill="#f4f2ff"/></svg></div>
       <b>Space8 Admin</b>
     </div>
     <p class="muted">Owner: leave username blank and enter your admin key. Staff: enter the username and password you were given.</p>
@@ -1943,8 +1942,14 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('focus', checkForUpdate);
   }).catch(function(){});
   var _swReloading = false;
+  // Only reload on a controllerchange that swaps out a worker THIS page was
+  // already running under -- the very first claim (a fresh visit/cleared
+  // cache) also fires this event and would otherwise reload the panel for
+  // no reason, same real bug fixed in the member app's registration script.
+  var _hadControllerAtLoad = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if (_swReloading) return;
+    if (!_hadControllerAtLoad) { _hadControllerAtLoad = true; return; }
     (function tryReload(){
       if (typeof _tabBusyCount !== 'undefined' && _tabBusyCount > 0) { setTimeout(tryReload, 500); return; }
       _swReloading = true;

@@ -171,7 +171,7 @@ function toast(msg, isErr){
   t.textContent = msg;
   t.className = 'toast show' + (isErr ? ' err' : '');
   clearTimeout(toast._tm);
-  toast._tm = setTimeout(function(){ t.className = 'toast'; }, 3200);
+  toast._tm = setTimeout(function(){ t.className = 'toast'; }, 5500);
 }
 
 function showSuccessPopup(msg){
