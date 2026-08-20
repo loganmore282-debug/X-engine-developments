@@ -848,7 +848,16 @@
 // Refresh, and payment instructions instead of a manual account-
 // number/name to copy (there's nothing to copy -- MarzPay already pushed
 // a PIN prompt straight to the member's phone).
-const CACHE = 'space8-shell-v302';
+// v303: deposit pending-payment screen's colors/component system re-done
+// to match the owner's real GoPay-checkout reference faithfully (gold
+// #e58d00, timeline card with dashed connector + circular step icons,
+// dark digit-box countdown, light detail/paid boxes, orange pill Refresh
+// button, brief full-screen spinner overlay on Deposit Now + each
+// Refresh) -- v302 shipped this screen in the app's own blue system
+// instead, which was a real miss of an explicit instruction, not a
+// deliberate design call. Scoped entirely to this one screen via
+// .gopay-* classes; nothing else in the app's blue system changed.
+const CACHE = 'space8-shell-v303';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

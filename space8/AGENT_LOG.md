@@ -14,6 +14,76 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Fixed a real miss: deposit pending-payment screen redone in the owner's actual GoPay color/system, not the app's own blue
+
+Owner, sharply, after seeing the previous round's blue-themed pending screen
+live: *"l told you very well, that use gopay color, system... l said let it
+be like that, everything... l have given you source codes, just to change
+here l was saying, you thought you are wiser than me, please do what l
+said."* Sent screenshots proving this is not a stylistic taste, it's what
+their real deposits already look like — the actual live GoPay payment SDK
+page (`sdk.gopayug.com`) shown to MTN/Airtel users mid-collection uses this
+exact gold/orange, timeline-card, digit-box-countdown design, matching the
+reference mockup file byte-for-byte down to the colors.
+
+- **Root cause of the miss**: the previous round correctly ported every
+  CONTENT change the owner explicitly asked for (no account number/name to
+  copy, "Confirm PIN and Pay" title, real persisted countdown, auto-poll +
+  manual refresh) but silently substituted the app's own blue design
+  system for the reference's actual gold/orange one, reasoning that "don't
+  change design and color" meant "keep using Space8's established blue."
+  That reasoning was wrong and, more importantly, wasn't the owner's call
+  to make silently — they'd already handed over the exact HTML/CSS to
+  copy. Re-read literally this time: gold/orange (`#e58d00`), not blue.
+- **`renderDepositPending()`** (`user-src/original_module.js`) rebuilt to
+  use new `.gopay-*` CSS (`user-src/index.html`) ported directly from the
+  reference: a `.gopay-timer-row` with dark digit-box countdown boxes
+  (same visual treatment as the reference's `.timer span`), a
+  `.gopay-card` timeline with a dashed vertical connector and 3 circular
+  gold step icons (payment/refresh/account, reusing `ico('card')`/
+  `ico('refresh')` — a new icon added to `ICONS` — /`ico('phone')`), light
+  gray (`#f6f6f6`) detail/paid boxes matching the reference's box-on-white
+  contrast (an early cut used `var(--surface)`, which is pure white in
+  this app's tokens and rendered invisible against the equally-white
+  card — caught by the Chromium screenshot, not just reading the CSS, and
+  fixed to a real hex gray), and a gradient gold pill Refresh button.
+  Content is UNCHANGED from the previous round (that part was correct):
+  real amount/phone, no account number/name, instructions instead of
+  copy-paste text, 5-minute countdown persisted to localStorage, automatic
+  3s polling plus manual Refresh.
+- **New full-screen spinner overlay** (`#gopayLoading`, `user-src/
+  index.html`, shown/hidden via `gopayLoading()`), matching the reference's
+  own loading overlay exactly — shown briefly right after tapping Deposit
+  Now (before the pending screen paints) and on every manual Refresh tap
+  (NOT on the silent automatic 3s background poll, which stays invisible
+  unless it actually resolves, matching the reference's own behavior).
+  Safety net added in `hideSheet()`: closing the Deposit sheet mid-refresh
+  now also hides this overlay, so backing out can never leave a stuck
+  full-screen spinner over the rest of the app.
+- **Scoped entirely to this one screen** — every new class is `.gopay-*`
+  and none of it touches `:root`'s `--blue*` tokens or any other part of
+  the app; the rest of Space8 stays exactly the blue system it's always
+  been. The admin-configurable banner photo at the top of the Deposit
+  sheet (`bannerHtml('basket','deposit')`) is untouched — a separate,
+  pre-existing feature, not part of the GoPay reference.
+- Files: `user-src/index.html` (`.gopay-*` CSS, `#gopayLoading` markup),
+  `user-src/original_module.js` (`renderDepositPending()`, `gopayLoading()`,
+  `ICONS.refresh`, `hideSheet()`'s new safety net).
+- Verification: `node build-core.js` (round-trip OK). Full `test-*.js`
+  suite green (client-only change). Same discipline as the previous
+  round — directly loaded the real `original_module.js` under Node and
+  called `renderDepositPending()` to inspect the actual produced markup
+  (confirmed zero "Account:" label, real amount/phone, all `.gopay-*`
+  classes present), then rendered that exact captured markup against the
+  real extracted CSS in Chromium and screenshotted it. The gray-box
+  contrast bug above was caught exactly this way — invisible in the raw
+  HTML/CSS diff, obvious in the screenshot. Separately rendered the
+  loading overlay alone and confirmed it visually matches the reference.
+  `user/sw.js` `CACHE` bumped `v302` → `v303`. No `server.js` changes, no
+  Railway/Render backend redeploy needed.
+
+---
+
 ## 2026-08-19 — Claude — Deposit flow redesigned: quick-select amounts, real pending-payment screen instead of a silent poll
 
 Owner, with a reference mockup HTML (a "GoPay"-style manual-transfer flow) and

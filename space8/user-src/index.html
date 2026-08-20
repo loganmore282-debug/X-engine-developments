@@ -179,6 +179,48 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .amt-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 2px; }
 .amt-chip{ flex:0 0 auto; font-size:13px; font-weight:700; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:9px 15px; color:var(--blue); cursor:pointer; }
 .amt-chip.active{ background:var(--blue); color:#fff; border-color:var(--blue); }
+/* Deposit pending-payment screen -- owner: "use gopay color, system... let
+   it be like that, everything," pointing at a real GoPay checkout page
+   (the actual third-party payment SDK screen MTN/Airtel collections show,
+   sdk.gopayug.com) and a matching mockup. Colors/component shapes below
+   are ported faithfully from that reference (gold/orange, timeline card
+   with dashed connector + circular step icons, dark digit-box countdown,
+   light detail/paid boxes, pill Refresh button) -- scoped entirely under
+   .gopay-* so none of it leaks into the rest of the app's blue system.
+   Content differs from the reference on purpose, per the owner's own
+   explicit asks: no account number/name to copy (nothing to copy in an
+   automatic MarzPay flow), "Confirm PIN and Pay" instead of "Copy & Pay",
+   a real persisted 5-minute countdown, and live auto-poll + manual
+   Refresh both wired to /deposit/marzpay/status. The admin-configurable
+   banner photo at the top of this sheet (bannerHtml('basket','deposit'))
+   is untouched -- that is a separate, already-existing feature, not part
+   of this reference. */
+.gopay-timer-row{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin:0 0 16px; }
+.gopay-timer-label{ font-size:12.5px; color:var(--ink-dim); font-weight:700; }
+.gopay-timer{ font-size:15px; letter-spacing:1px; }
+.gopay-timer span{ display:inline-block; min-width:16px; padding:2px 3px; margin:0 1px; border:1px solid #cfcfcf; border-radius:4px; background:linear-gradient(#4b4b4b,#222); color:#fff; text-align:center; font-weight:700; font-variant-numeric:tabular-nums; }
+.gopay-card{ background:#fff; border:1px solid var(--line); border-radius:20px; padding:22px 18px 22px 56px; position:relative; box-shadow:0 6px 18px rgba(0,0,0,.05); }
+.gopay-line{ position:absolute; left:21px; top:38px; bottom:38px; border-left:2px dashed #d9d9d9; }
+.gopay-step{ position:relative; margin-bottom:24px; }
+.gopay-step:last-child{ margin-bottom:0; }
+.gopay-step-icon{ position:absolute; left:-38px; top:0; width:32px; height:32px; border-radius:50%; background:#fdeecb; display:flex; align-items:center; justify-content:center; }
+.gopay-step-icon svg{ width:16px; height:16px; stroke:#e58d00; }
+.gopay-step-title{ font-size:16px; font-weight:800; margin:0 0 3px; }
+.gopay-step-sub{ font-size:12.5px; color:var(--ink-dim); margin-bottom:12px; line-height:1.4; }
+.gopay-detail-box{ background:#f6f6f6; border-radius:14px; padding:16px; }
+.gopay-total-label{ font-size:10.5px; color:var(--ink-dim); font-weight:700; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+.gopay-total{ font-size:25px; font-weight:800; color:#e58d00; margin-bottom:12px; }
+.gopay-instructions{ font-size:13px; line-height:1.55; }
+.gopay-paid-box{ background:#f6f6f6; border-radius:14px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.gopay-status-label{ font-size:10.5px; color:var(--ink-dim); font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.gopay-status-value{ font-size:14.5px; font-weight:800; }
+.gopay-refresh-btn{ border:0; background:linear-gradient(#f8cf71,#e99b1d); color:#fff; font-weight:700; font-size:13px; border-radius:22px; padding:10px 20px; box-shadow:inset 0 1px rgba(255,255,255,.5); flex-shrink:0; }
+.gopay-refresh-btn:disabled{ opacity:.6; }
+.gopay-account-value{ font-size:16px; font-weight:800; }
+.gopay-loading{ position:fixed; inset:0; z-index:200; display:none; align-items:center; justify-content:center; }
+.gopay-loading.show{ display:flex; }
+.gopay-loading-box{ width:130px; height:130px; border-radius:14px; background:rgba(30,30,30,.82); color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:13px; gap:12px; }
+.gopay-spinner{ width:34px; height:34px; border:4px solid rgba(255,255,255,.25); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; }
 /* The Codex-designed deposit/withdraw icons (ICONS.deposit/withdraw,
    original_module.js) are filled (fill=currentColor, stroke=none), unlike
    every other icon in this file which is colored via `stroke`. `color`
@@ -592,6 +634,16 @@ select.field.placeholder{ color:var(--ink-dim); }
     <g class="orbit-satellite"><g transform="translate(52 13)"><circle r="8"/><path d="M-3-2h6v4h-6zM-11-5h6v10h-6zM5-5h6v10H5z"/></g></g>
   </svg>
   <div class="loader-status">Preparing data</div>
+</div>
+
+<!-- Deposit flow's own brief spinner overlay (owner: "the spin loader first
+     come" -- matches the reference GoPay checkout page's own loading
+     overlay exactly). Shared by both moments that need it: right after
+     tapping Deposit Now, and on each Refresh tap in the pending-payment
+     screen. Independent of #loadingScreen (app boot) and .sheet-bg (page
+     navigation history) -- this is a transient overlay, not a screen. -->
+<div id="gopayLoading" class="gopay-loading" role="status" aria-label="Loading">
+  <div class="gopay-loading-box"><div class="gopay-spinner"></div><div>Loading…</div></div>
 </div>
 
 <div id="screenLogin" class="auth-screen">
