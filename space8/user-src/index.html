@@ -167,6 +167,9 @@ main{ flex:1; padding:0 16px calc(80px + env(safe-area-inset-bottom)); }
 .field{ display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:13px 14px; }
 .field.focus{ border-color:var(--blue); }
 .field svg{ width:19px; height:19px; stroke:var(--blue); flex-shrink:0; }
+.amt-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 2px; }
+.amt-chip{ flex:0 0 auto; font-size:13px; font-weight:700; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:9px 15px; color:var(--blue); cursor:pointer; }
+.amt-chip.active{ background:var(--blue); color:#fff; border-color:var(--blue); }
 /* The Codex-designed deposit/withdraw icons (ICONS.deposit/withdraw,
    original_module.js) are filled (fill=currentColor, stroke=none), unlike
    every other icon in this file which is colored via `stroke`. `color`
@@ -523,7 +526,7 @@ select.field.placeholder{ color:var(--ink-dim); }
    giftCodebox will be on top of where the chat assistant is... balancing
    in air going up and down, just very minimal movements") ---------- */
 @keyframes giftFloat{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-7px); } }
-.gift-fab{ position:fixed; right:10px; bottom:calc(150px + env(safe-area-inset-bottom)); z-index:40; width:66px; height:66px; display:flex; align-items:center; justify-content:center; overflow:hidden; animation:giftFloat 3.2s ease-in-out infinite; filter:drop-shadow(0 10px 14px rgba(10,20,40,.35)); }
+.gift-fab{ position:fixed; right:10px; bottom:calc(96px + env(safe-area-inset-bottom)); z-index:40; width:66px; height:66px; display:flex; align-items:center; justify-content:center; overflow:hidden; animation:giftFloat 3.2s ease-in-out infinite; filter:drop-shadow(0 10px 14px rgba(10,20,40,.35)); }
 .gift-fab img{ width:100%; height:100%; object-fit:contain; pointer-events:none; }
 /* Owner: "add that glow sweep on the gift box just minimal amounts". Same
    idea as the purchase buttons but deliberately fainter (lower opacity, an

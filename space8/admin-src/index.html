@@ -720,8 +720,8 @@ async function renderUsers(){
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="usersCount">Users (${_users.length})</h2>
       ${isOwner?`<button class="btn sm ghost" id="auditBtn" title="Recompute every balance from the transaction ledger and flag mismatches, duplicate credits and stuck withdrawals">Integrity audit</button>
       <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning/invested totals AND check-in streaks from the real ledger">Recalculate totals</button>`:''}</div>
-    <div class="panel-card"><input id="userSearch" placeholder="Search phone or referral code"></div>
-    <div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
+    <div class="panel-card"><input id="userSearch" placeholder="Search phone, referral code, or user ID"></div>
+    <div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>ID</th><th>Referral code</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
   $('userSearch').addEventListener('input', drawUsers);
   if (isOwner) {
     $('recountBtn').addEventListener('click', async()=>{
@@ -784,25 +784,27 @@ function drawUsers(){
   const raw = ($('userSearch')?.value||'').trim();
   const q = raw.toLowerCase();
   const qCore = phoneCore(raw);
+  const qId = q.replace(/^id[:\s]*/,'').trim();
   let list;
   if(q){
     list = _users.filter(u=>
       (u.phone||'').toLowerCase().includes(q) ||
       (u.referralCode||'').toLowerCase().includes(q) ||
       (qCore && phoneCore(u.phone).includes(qCore)) ||
-      (u.id||'').toLowerCase()===q
+      (u.id||'').toLowerCase()===q ||
+      (qId && (u.publicId||'').toLowerCase().includes(qId))
     );
   } else {
     list = _users.slice(0,500);
   }
   const note = (!q && _users.length>500)
-    ? `<tr><td colspan="5" class="empty">Showing first 500 of ${_users.length}. Search by phone or code to find anyone.</td></tr>` : '';
+    ? `<tr><td colspan="6" class="empty">Showing first 500 of ${_users.length}. Search by phone, code, or ID to find anyone.</td></tr>` : '';
   $('userRows').innerHTML = (list.length ? list.map(u=>`
     <tr class="clickable" data-uid="${esc(u.id)}">
-      <td><b>${esc(u.phone||'Not set')}</b></td><td>${esc(u.referralCode||'Not set')}</td>
+      <td><b>${esc(u.phone||'Not set')}</b></td><td>${u.publicId?'ID:'+esc(u.publicId):'—'}</td><td>${esc(u.referralCode||'Not set')}</td>
       <td>${ugx(u.walletBalance)}</td><td>${ugx(u.totalInvested)}</td>
       <td><span class="pill-tag ${u.status==='banned'?'t-bad':'t-ok'}">${u.status==='banned'?'Banned':'Active'}</span></td>
-    </tr>`).join('') : '<tr><td colspan="5" class="empty">No matching users</td></tr>') + note;
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">No matching users</td></tr>') + note;
   document.querySelectorAll('#userRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 // Used by the live-refresh tick instead of renderUsers(): refetches the

@@ -14,6 +14,50 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-20 — Claude — Gift FAB position fix restored, quick-select amounts re-added, deposit network no longer defaults, admin user search by ID
+
+Owner, immediately after the GoPay revert: *"you raised the giftbox
+again🫤😕, also bro put quick amounts, again, also l want also to search
+users in admin by id. and why network is mtn selected?, l want when one
+selects manually, so remove default select as mtn, just leave empty such
+that one selects."*
+
+- **Gift FAB floating too high, again.** `.gift-fab`'s `bottom` was
+  `calc(150px + safe-area)` in the file the previous GoPay-revert commit
+  restored from (`0242d0e`) — the earlier `bottom:96px` fix from this same
+  session evidently never landed in that ancestor commit. Set back to
+  `calc(96px + safe-area)`, sitting just above the bottom nav.
+- **Quick-select amount chips re-added to the deposit form** — the owner's
+  "remove quick amounts" from the GoPay revert turned out to be scoped to
+  that whole redesign, not a standing preference; re-added
+  `DEPOSIT_QUICK_AMOUNTS` (`user-src/original_module.js`) and the
+  `.amt-chips`/`.amt-chip` CSS (`user-src/index.html`), on top of the
+  restored phone/network form — tapping a chip fills `#depAmount`, same as
+  the original GoPay-round implementation.
+- **Deposit network `<select>` no longer defaults to MTN Mobile Money** —
+  same fix already applied to the Withdrawal Accounts add-form's network
+  select (see the "Balance-card figures shrink..." entry above): a
+  disabled, unselected `<option value="" disabled selected>Select
+  network</option>` is now first, and `submitDepositBtn`'s handler rejects
+  submission with "Select a network" if it's still empty.
+- **Admin: search users by ID.** `_users` rows already carry `publicId`
+  (server's `/admin/users` spreads the full user doc), but `drawUsers()`'s
+  filter never checked it, and the Users table never displayed it either
+  — so even a correct manual guess couldn't be visually confirmed.
+  `admin-src/index.html`: filter now also matches a normalized `qId`
+  (input with a leading `id`/`id:` prefix stripped) against `u.publicId`,
+  and a new "ID" column shows `ID:000001`-style values (or "—" for an
+  unhealed legacy account with no publicId yet) so a match is visible, not
+  just clickable.
+- **Verification**: `node build-core.js` and `node build-admin.js` both
+  round-trip OK; `node --check` clean on `original_module.js`. `user/sw.js`
+  `CACHE` bumped `v305` → `v306`. No `server.js` changes — `/admin/users`
+  already returns `publicId` on every row, nothing server-side needed for
+  the ID search. Not re-verified live in a browser this round (same
+  standing sandbox network constraint as every other frontend round this
+  session) — visual/structural correctness checked by reading the rebuilt
+  output.
+
 ## 2026-08-20 — Claude — GoPay deposit redesign fully reverted; quick-select amounts removed; deposit flow back to phone/network fields
 
 Owner: *"Just remove them, unfortunately they never worked out as l wanted,
