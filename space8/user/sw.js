@@ -827,7 +827,12 @@
 // v299: "Log Out"→"Exit", "Withdrawal Account"→"Bind Bank Account" (Home
 // shortcut + Account matrix tile), "Support"→"Customer Service" (Account
 // menu row + sheet title).
-const CACHE = 'space8-shell-v299';
+// v300: loading screen now shares the same admin-set "Login / Register
+// background" photo (authbg) + blur/tint as the auth screens, instead of
+// staying on the flat --void background. Gift Code FAB moved from
+// Account-only to Home-only (owner: "migrate gift code box to home, so it
+// will suspend there down bottom right").
+const CACHE = 'space8-shell-v300';
 const VENDOR_CACHE = 'space8-vendor-firebase-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/giftbox.png', '/telegram-icon.png', '/simcard-icon.png', '/plans-table.jpg'];
 

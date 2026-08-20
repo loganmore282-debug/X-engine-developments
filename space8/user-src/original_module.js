@@ -660,11 +660,11 @@ function showPage(name){
   qsa('.navitem').forEach(function(n){ n.classList.toggle('active', n.dataset.page === name); });
   // Assistant bubble is Account-only -- owner: "ai assistant bubble should
   // be in account, so remove it from home, team, products." Gift-code FAB
-  // (owner: "3d image of giftCodebox will be on top of where the chat
-  // assistant is") shares the same Account-only scope, stacked directly
-  // above it.
+  // moved to Home-only (owner: "let us migrate gift code box to home, so
+  // it will suspend there down bottom right") -- was Account-only before,
+  // now lives on its own screen instead of stacked above the assistant.
   $('assistFab').style.display = name === 'account' ? 'flex' : 'none';
-  $('giftFab').style.display = name === 'account' ? 'flex' : 'none';
+  $('giftFab').style.display = name === 'home' ? 'flex' : 'none';
   window.scrollTo(0,0);
   loadPage(name);
   if (name === 'home') maybeShowAnnouncement();

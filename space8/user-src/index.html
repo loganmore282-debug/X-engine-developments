@@ -54,17 +54,22 @@ svg{display:block;}
 
 /* ---------- layout shells ---------- */
 #loadingScreen{
-  position:fixed; inset:0; background:var(--void); display:flex; flex-direction:column;
+  position:fixed; inset:0; overflow:hidden; background:var(--void); display:flex; flex-direction:column;
   align-items:center; justify-content:center; gap:20px; z-index:9999;
 }
-.loader-orbit{ width:104px; height:104px; overflow:visible; }
+/* Same admin-set "Login / Register background" photo (authbg) + blur/tint as
+   .auth-screen below -- the owner asked for the loader to share it rather
+   than staying on the flat --void background it always had. */
+#loadingScreen::before{ content:''; position:absolute; inset:-24px; background-image:var(--auth-bg-url, none); background-size:cover; background-position:center; filter:blur(var(--auth-bg-blur, 20px)); transform:scale(1.08); z-index:0; }
+#loadingScreen::after{ content:''; position:absolute; inset:0; background:rgba(244, 247, 251, var(--auth-bg-tint, .78)); z-index:0; }
+.loader-orbit{ position:relative; z-index:1; width:104px; height:104px; overflow:visible; }
 .loader-orbit .orbit-path{ stroke:var(--blue); stroke-width:4; opacity:.20; }
 .loader-orbit .orbit-core{ fill:var(--blue); }
 .loader-orbit .orbit-eight{ fill:none; stroke:var(--blue); stroke-width:7; stroke-linecap:round; stroke-linejoin:round; }
 .loader-orbit .orbit-satellite{ transform-origin:52px 52px; animation:orbitRevolution 1.45s linear infinite; }
 .loader-orbit .orbit-satellite circle{ fill:#fff; stroke:var(--blue); stroke-width:4; }
 .loader-orbit .orbit-satellite path{ fill:var(--blue); }
-.loader-status{ font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--blue); text-transform:uppercase; animation:loaderPulse 1.45s ease-in-out infinite; }
+.loader-status{ position:relative; z-index:1; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--blue); text-transform:uppercase; animation:loaderPulse 1.45s ease-in-out infinite; }
 @keyframes orbitRevolution{ to{ transform:rotate(360deg); } }
 @keyframes loaderPulse{ 50%{ opacity:.42; letter-spacing:.19em; } }
 

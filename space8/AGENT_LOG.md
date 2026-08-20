@@ -14,6 +14,54 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-19 — Claude — Loading screen shares the auth background photo; Gift Code FAB moved to Home
+
+Owner, from two screenshots (the "Preparing data" loader and the live
+Home screen): "let us put a background image like that on login and
+register, to this loader as a background too, so you will extend it to
+also show up here on loader, let us migrate gift code box to home, so it
+will suspend there down bottom right."
+
+- **Loading screen now shares the same admin-set "Login / Register
+  background" photo (the `authbg` banner slot) as `.auth-screen`**, instead
+  of staying on the flat `--void` background it always had. Login/Register
+  already rendered whatever photo the admin uploads to that slot with blur
+  + tint (`--auth-bg-url`/`--auth-bg-blur`/`--auth-bg-tint`, set in `boot()`)
+  — no code change needed there, that part is admin-data-driven and already
+  live. What was missing was `#loadingScreen` itself: added matching
+  `::before`/`::after` pseudo-elements reusing those exact same CSS vars, so
+  whatever photo the admin sets for auth now automatically covers the
+  loader too — one image, one setting, three screens (loader + login +
+  register). `.loader-orbit`/`.loader-status` got `position:relative;
+  z-index:1` so they render above the new tint layer instead of being
+  painted over by it (the pseudo-elements insert as first/last DOM child,
+  so without an explicit z-index the `::after` tint would paint on top of
+  the spinner/text, same stacking pitfall `.auth-screen`'s own `.auth-wrap
+  {z-index:1}` already solves there).
+- **Gift Code FAB (`#giftFab`) moved from Account-only to Home-only.** Was
+  sharing the exact same `name === 'account'` visibility gate as the
+  assistant bubble since Round 4 (both added the same day, stacked one
+  above the other) — now `name === 'home'` instead, its own screen,
+  position (bottom-right, unchanged CSS) staying exactly where it already
+  was. The assistant bubble (`#assistFab`) is untouched, still Account-only
+  — the owner only asked to move the gift box.
+- Files: `user-src/index.html` (loader CSS), `user-src/original_module.js`
+  (`showPage()`'s FAB visibility line).
+- Verification: `node build-core.js` (round-trip OK). Full `test-*.js`
+  suite green (client-only CSS/JS change, server.js untouched — ran anyway
+  per this project's own standing convention of never skipping the suite).
+  Playwright: rendered the built `user/index.html` with a solid-color test
+  image injected into `--auth-bg-url` — confirmed the photo shows through
+  blurred/tinted behind the loader and the orbit/text stay crisp on top
+  (screenshot taken, matches `.auth-screen`'s existing look); separately
+  exercised the exact `showPage()` FAB-visibility line for all 4 nav names
+  — gift box shows only on `home`, assistant bubble only on `account`, both
+  hidden on `products`/`team`. `user/sw.js` `CACHE` bumped `v299` → `v300`.
+  No `server.js` changes, no Railway/Render backend redeploy needed —
+  Render auto-deploys `user/` on push.
+
+---
+
 ## 2026-08-19 — Claude — AI assistant conversational-quality fixes ("train it to the highest peak")
 
 Owner showed a screenshot: the assistant correctly answered a forgotten-PIN
