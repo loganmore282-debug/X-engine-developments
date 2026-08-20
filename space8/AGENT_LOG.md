@@ -14,6 +14,130 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-20 — Claude — Deposit pending-payment screen rebuilt again: literal fidelity to the owner's GoPay reference (banner/chrome removed, standalone page, real glyphs/colors, not a reinterpretation)
+
+Owner, after the 2026-08-19 gold/orange fix still didn't match, pasted the
+entire raw HTML/CSS/JS source of the reference file directly into chat
+and sent screenshots of the live rendering next to real screenshots of
+the actual GoPay SDK page (`sdk.gopayug.com`), then, in the sharpest terms
+this session: *"l gave you everything exactly, but you are omitting all
+this source code and doing your won things, now where is number area...
+l want a different fresh page, why did you put the banner, everything
+here is different, remove records svg... dont use your own svg or
+design... COPY EVERYTHING AND PASTE TO OUR CODE ONLY THINGS WE AGREED ON
+TO MAKE CHANGES... EASE READ ALL THAT GOPAY SOURCE CODE DONT OMIT
+ANYTHING."* The 2026-08-19 fix had matched colors but still (a) kept the
+admin banner photo and the sheet's back-chevron/Records-shortcut chrome
+on this screen, (b) nested it inside the normal `#depositSheetBg` sheet
+container instead of a standalone page, (c) used our own `ico()` SVGs
+(card/refresh/phone) instead of the reference's own literal glyphs
+(▣ / ⟳ / ♟), and (d) had the step-icon circles the wrong color (orange
+`#fdeecb`/`#e58d00` instead of the reference's actual muted blue-gray
+`#e9eef4`/`#6f89aa`). Re-read the reference file in full from
+`/root/.claude/uploads/.../gopay_screenshot_recreation.html` (397 lines,
+confirmed byte-identical to the earlier pasted copy via md5sum) and
+copied its class structure/CSS values literally this time.
+
+- **`user-src/index.html`**: replaced the `.gopay-*` CSS block with values
+  carried over from the reference's own `@media(max-width:520px)` mobile
+  sizing (its own answer for how this looks on a phone, not a guess of
+  mine) — `.gopay-hero` (dark gradient banner + skewed light-streak
+  texture, exact same `background`/`:before` gradients), `.gopay-expiry`/
+  `.gopay-timer` (clip-path ribbon label + dark digit-box countdown),
+  `.gopay-timeline-card` (white card floating over the hero via negative
+  margin), `.gopay-step-line`/`.gopay-step-icon` (dashed connector +
+  circular icons, correct `#e9eef4`/`#6f89aa`), `.gopay-detail-box`/
+  `.gopay-total`, `.gopay-paid-box`/`.gopay-refresh-btn` (flat `#f09400`,
+  not the gradient I'd wrongly carried over from the reference's DIFFERENT
+  screen-1 Confirm button), `.gopay-your-account`/`.gopay-your-number`.
+  New `.gopay-page-bg`/`.gopay-page` (`position:fixed;inset:0;z-index:110`,
+  between `.sheet-bg`'s 100 and `.assist-panel`'s 150) is a genuinely
+  standalone full-page overlay, added as a new top-level element
+  (`#gopayPendingSheetBg`/`#gopayPendingSheet`) sibling to `#loadingScreen`
+  — not nested inside `#depositSheetBg`, so it carries none of that
+  container's `.sheet-head` chrome (no back-chevron, no
+  `depositRecordsBtn`) and no `bannerHtml('basket','deposit')` banner.
+  It still works with the existing `openSheet(name,...)`/`hideSheet(name)`
+  history/`_sheetStack` machinery unmodified, since it follows the same
+  `name+'SheetBg'`/`name+'Sheet'` id convention every other sheet uses —
+  only its own CSS class opts it out of the shared `.sheet-bg` look. Two
+  things deliberately NOT copied from the reference, flagged rather than
+  silently done: the reference's embedded GoPay logo image and the
+  MTN/Airtel brand marks — those are a third-party company's actual
+  trademarks, not ours to ship as our own payment brand (this exact
+  exception was already anticipated in `CLAUDE.md`'s prior "no third-party
+  GoPay/MTN/Airtel logos" note). The `.step-line`/`.step-icon` top/bottom
+  pixel offsets are also recalculated (not copied verbatim) since the
+  reference's own numbers were sized for its account-number/account-name
+  copy rows, which this screen doesn't have per the owner's own earlier,
+  separate, unretracted instruction (real MarzPay data, nothing to copy)
+  — same mechanism (one dashed line, 3 absolutely-positioned icons against
+  one card), new numbers for this content.
+- **`user-src/original_module.js`**: `renderDepositPending()` rewritten to
+  emit the above structure with the reference's own literal step glyphs
+  (▣ / ⟳ / ♟) instead of `ico('card')`/`ico('refresh')`/`ico('phone')`,
+  and to open/update `#gopayPendingSheet` instead of `#depositSheet`. New
+  `digitBoxes(mins,secs)` renders the countdown as individual `<span>`
+  digit boxes, matching the reference's own `<span>0</span><span>5</span>…`
+  markup instead of my previous plain-text "Transaction expires in 5:00"
+  line. `ICONS.refresh` (added fresh in the 2026-08-19 round, confirmed via
+  `git log -S` to have no other call site) deleted as genuinely dead code
+  now that this screen uses the reference's own glyph instead.
+  `hideSheet()`'s body-scroll-lock check (`qsa('.sheet-bg.show')`) and its
+  Refresh-spinner safety net (`if (name === 'deposit') ...`) both extended
+  to also recognize `gopayPending`/`.gopay-page-bg.show`, since this new
+  overlay is no longer inside `.sheet-bg`.
+- **Real bug caught and fixed while rewiring this**: the countdown's
+  "Start Over" button (shown once the 5-minute window expires) originally
+  called `closeSheet('gopayPending'); renderDepositForm(true);` —
+  `closeSheet()` triggers an async `history.back()`, and
+  `renderDepositForm(true)` pushes a NEW history entry (via `openSheet()`)
+  synchronously right after, before that back's `popstate` had actually
+  fired. The shared `popstate` listener hides whatever is on TOP of
+  `_sheetStack` at the time it fires — with the new 'deposit' entry
+  already pushed on top by the time the async back's popstate landed, it
+  would have hidden the freshly-reopened deposit form instead of finishing
+  the close, leaving `_sheetStack` and the visible screen out of sync.
+  Fixed by swapping the current history entry in place instead of
+  stacking two navigations (`history.replaceState` + manually toggling the
+  two sheets' `.show` classes and `_sheetStack` entries, then
+  `renderDepositForm(false)` to fill the now-visible deposit sheet without
+  it pushing its own history entry).
+- **Verification**: `node build-core.js` round-trip OK both times (initial
+  build, then again after the Start Over fix). Extracted the real
+  `renderDepositPending()` output via Node (`Module._compile` against the
+  actual `original_module.js` with DOM/localStorage/history stubs, same
+  established technique this session uses) and rendered the captured HTML
+  against the real extracted `<style>` block from `user-src/index.html` in
+  headless Chromium (`/opt/pw-browsers/chromium`) — screenshot confirms:
+  no banner, no back-chevron/Records icon, dark hero with digit-box
+  countdown, dashed-line timeline card with 3 correctly-colored
+  (`#e9eef4`/`#6f89aa`) circular icons showing the literal ▣/⟳/♟ glyphs,
+  gold `#e58d00` total, gray detail/paid boxes, orange pill Refresh
+  button, "Your payment account" as the last element in the card —
+  matching the reference's structure at every point checked. **Full
+  live-app click-through (tap Deposit Now → confirm the transition →
+  hardware-back → Start Over) could NOT be exercised this round**: this
+  sandbox cannot reach `gstatic.com`/`onrender.com` (a standing,
+  previously-documented constraint — see `CLAUDE.md`'s "What's NOT
+  verified yet" note), and a Playwright run against a locally-served
+  build with routed/mocked network calls — the same harness that worked
+  earlier this session — hung on boot in this fresh container instance
+  too, confirmed by re-running the exact pre-existing (unmodified) test
+  script as a control and getting the identical failure; this points at
+  an environment/network-egress difference in this container, not a
+  regression from this change. `node --check` confirms no syntax errors.
+  Real end-to-end device verification remains an open item (already
+  tracked in `CLAUDE.md`).
+- `user/sw.js` `CACHE` bumped `v303` → `v304`. No `server.js` changes, no
+  Railway redeploy needed.
+- **Anything left open**: the true live-app interaction flow (Deposit Now
+  → transition → Refresh polling → hardware-back → Start Over) is only
+  verified by code-reading + the isolated-component screenshot in this
+  round, not a full click-through — worth a real device/browser check
+  before treating this as fully done, same standing caveat as the rest of
+  this project's frontend.
+
 ## 2026-08-19 — Claude — Fixed a real miss: deposit pending-payment screen redone in the owner's actual GoPay color/system, not the app's own blue
 
 Owner, sharply, after seeing the previous round's blue-themed pending screen

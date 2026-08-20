@@ -250,7 +250,6 @@ var ICONS = {
   wallet: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>',
   history: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>',
   card: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
-  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>',
   doc: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>',
@@ -402,11 +401,11 @@ function hideSheet(name){
   $(name + 'SheetBg').classList.remove('show');
   var i = _sheetStack.lastIndexOf(name);
   if (i !== -1) _sheetStack.splice(i, 1);
-  if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
+  if (!qsa('.sheet-bg.show, .gopay-page-bg.show').length) document.body.style.overflow = '';
   if (_planCountdownTimer) { clearInterval(_planCountdownTimer); _planCountdownTimer = null; }
   // Safety net: if the member backs out of Deposit mid-Refresh, don't leave
   // the full-screen gopayLoading spinner stuck covering the app underneath.
-  if (name === 'deposit') gopayLoading(false);
+  if (name === 'deposit' || name === 'gopayPending') gopayLoading(false);
   // Owner: "when one leaves a screen ie one has gone to deposit, then he
   // clicks back, l really like those balances to start from zero then to
   // current so it loads like that, even referral link, even number and
@@ -721,7 +720,7 @@ function maybeShowAnnouncement(){
 }
 function hideAnnouncement(){
   $('announceBg').classList.remove('show');
-  if (!qsa('.sheet-bg.show').length) document.body.style.overflow = '';
+  if (!qsa('.sheet-bg.show, .gopay-page-bg.show').length) document.body.style.overflow = '';
 }
 // Owner: "remove cancel button there, it will be on top left of dialog,
 // clear view and we'll defined (X)" -- the bottom Cancel button is gone;
@@ -2288,50 +2287,57 @@ function gopayLoading(on){ var el = $('gopayLoading'); if (el) el.classList.togg
 // instant the deposit was created; this screen just reflects that and lets
 // them check on it (manual Refresh, or automatic polling every 3s).
 //
-// Visual system (owner, after an earlier round substituted the app's own
-// blue design here instead: "l told you very well, that use gopay color,
-// system... let it be like that, everything") -- ported directly from the
-// owner's reference (a real GoPay checkout screen, the actual third-party
-// payment SDK page MTN/Airtel collections already show): gold/orange
-// (#e58d00), a timeline card with a dashed connector and circular step
-// icons, dark digit-box countdown, light detail/paid boxes, a pill
-// Refresh button. Only the CONTENT differs from that reference, per the
-// owner's own separate, explicit asks -- not the color or component
-// system.
+// Structure/CSS below is copied from the owner's reference file (a
+// recreation of the real GoPay SDK checkout page) at the class/value
+// level, per the owner's own explicit, repeated instruction to migrate it
+// literally rather than reinterpret it -- see the CSS comment above
+// .gopay-page-bg in index.html for the exact reasoning and the 2 things
+// deliberately not copied (third-party GoPay/MTN/Airtel logos/brand
+// marks). This screen is its own standalone full-page overlay
+// (#gopayPendingSheetBg/#gopayPendingSheet), NOT the normal
+// .sheet-bg/.sheet-head deposit chrome -- no admin banner photo, no
+// back-chevron, no Records shortcut icon on this one screen, per the
+// owner's own explicit ask. Digit-box countdown and step-icon glyphs
+// (▣ / ⟳ / ♟) are the reference's own literal characters, not icons of
+// ours.
+function digitBoxes(mins, secs){
+  var s = (mins < 10 ? '0' : '') + mins + (secs < 10 ? '0' : '') + secs;
+  return s.split('').map(function(d){ return '<span>' + d + '</span>'; }).join('');
+}
 function renderDepositPending(depositId, amount, expiresAt, isFirstRender){
   stopDepositTimers();
   var acc = STATE.account || {};
-  var html = bannerHtml('basket','deposit') +
-    '<div class="sheet-title">Confirm PIN and Pay</div>' +
-    '<div class="gopay-timer-row"><div class="gopay-timer-label" id="depCountdown">Transaction expires in 5:00</div></div>' +
-    '<div class="gopay-card">' +
-      '<div class="gopay-line"></div>' +
-      '<div class="gopay-step">' +
-        '<div class="gopay-step-icon">' + ico('card') + '</div>' +
-        '<div class="gopay-step-title">Confirm PIN and Pay</div>' +
-        '<div class="gopay-step-sub">A payment prompt has already been sent to your phone.</div>' +
-        '<div class="gopay-detail-box">' +
-          '<div class="gopay-total-label">Amount to pay</div>' +
-          '<div class="gopay-total">' + ugx(amount) + '</div>' +
-          '<div class="gopay-instructions">Confirm the amount and phone number shown on that prompt, then enter your mobile-money PIN there to approve — there is nothing to copy or type here.</div>' +
-        '</div>' +
+  var html =
+    '<div class="gopay-hero">' +
+      '<div class="gopay-expiry"><div class="lbl">Transaction expires in</div>' +
+        '<div class="gopay-timer" id="depCountdown">' + digitBoxes(5, 0) + '</div>' +
       '</div>' +
-      '<div class="gopay-step">' +
-        '<div class="gopay-step-icon">' + ico('refresh') + '</div>' +
-        '<div class="gopay-step-title">Payment completed?</div>' +
-        '<div class="gopay-step-sub">Tap Refresh to check now, or wait — this checks automatically too.</div>' +
-        '<div class="gopay-paid-box">' +
-          '<div><div class="gopay-status-label">Status</div><div class="gopay-status-value" id="depStatus">Waiting for approval…</div></div>' +
+    '</div>' +
+    '<div class="gopay-timeline-card">' +
+      '<div class="gopay-step-line"></div>' +
+      '<div class="gopay-step-icon one">▣</div>' +
+      '<div class="gopay-step-icon two">⟳</div>' +
+      '<div class="gopay-step-icon three">♟</div>' +
+      '<h2 class="gopay-card-title">Confirm PIN and Pay</h2>' +
+      '<div class="gopay-sub">A payment prompt has already been sent to your phone.</div>' +
+      '<div class="gopay-detail-box">' +
+        '<div class="gopay-label">Total Amount:</div>' +
+        '<div class="gopay-total"><small>UGX</small>' + Math.round(amount).toLocaleString('en-UG') + '</div>' +
+        '<div class="gopay-instructions">Confirm the amount and phone number shown on that prompt, then enter your mobile-money PIN there to approve — there is nothing to copy or type here.</div>' +
+      '</div>' +
+      '<div class="gopay-paydone">Payment completed?</div>' +
+      '<div class="gopay-refresh-text">Tap <b>"Refresh"</b> to check if it is successful</div>' +
+      '<div class="gopay-paid-box">' +
+        '<div class="gopay-paid-row">' +
+          '<div><div class="gopay-paid-label">Status:</div><div class="gopay-paid-value" id="depStatus">Waiting for approval</div></div>' +
           '<button class="gopay-refresh-btn" id="depRefreshBtn">Refresh</button>' +
         '</div>' +
+        '<div class="gopay-note">The payment is expected to be successful in 2-10 minutes.<br>Tap Refresh to check the result.</div>' +
       '</div>' +
-      '<div class="gopay-step">' +
-        '<div class="gopay-step-icon">' + ico('phone') + '</div>' +
-        '<div class="gopay-step-title">Your payment account</div>' +
-        '<div class="gopay-account-value">' + esc(acc.phone || '') + '</div>' +
-      '</div>' +
+      '<div class="gopay-your-account">Your payment account:</div>' +
+      '<div class="gopay-your-number">' + esc(acc.phone || '') + '</div>' +
     '</div>';
-  if (isFirstRender) openSheet('deposit', html); else $('depositSheet').innerHTML = html;
+  if (isFirstRender) openSheet('gopayPending', html); else $('gopayPendingSheet').innerHTML = html;
   gopayLoading(false);
 
   function tickCountdown(){
@@ -2341,15 +2347,33 @@ function renderDepositPending(depositId, amount, expiresAt, isFirstRender){
     if (remaining <= 0) {
       stopDepositTimers();
       clearPendingDeposit();
-      el.textContent = 'This payment window has expired.';
+      var lbl = el.parentNode.querySelector('.lbl');
+      if (lbl) lbl.textContent = 'Payment window expired';
+      el.innerHTML = digitBoxes(0, 0);
       var statusEl = $('depStatus');
       if (statusEl) statusEl.textContent = 'Expired';
       var refreshBtn = $('depRefreshBtn');
-      if (refreshBtn) { refreshBtn.textContent = 'Start Over'; refreshBtn.onclick = function(){ clearPendingDeposit(); renderDepositForm(false); }; }
+      // Not closeSheet()+renderDepositForm(true): closeSheet() triggers an
+      // async history.back(), and pushing a NEW history entry (what
+      // renderDepositForm(true) -> openSheet() does) before that back's
+      // popstate fires would make the shared popstate listener hide the
+      // freshly-opened deposit form instead of finishing the gopayPending
+      // close. Swap the current history entry in place instead -- one
+      // overlay directly to another, no stacking/race.
+      if (refreshBtn) { refreshBtn.textContent = 'Start Over'; refreshBtn.onclick = function(){
+        clearPendingDeposit();
+        $('gopayPendingSheetBg').classList.remove('show');
+        var i = _sheetStack.lastIndexOf('gopayPending');
+        if (i !== -1) _sheetStack.splice(i, 1);
+        $('depositSheetBg').classList.add('show');
+        _sheetStack.push('deposit');
+        history.replaceState({ overlay: 'deposit' }, '', '');
+        renderDepositForm(false);
+      }; }
       return;
     }
     var mins = Math.floor(remaining / 60000), secs = Math.floor((remaining % 60000) / 1000);
-    el.textContent = 'Transaction expires in ' + mins + ':' + (secs < 10 ? '0' : '') + secs;
+    el.innerHTML = digitBoxes(mins, secs);
   }
   async function checkStatusOnce(){
     var r = await api('/deposit/marzpay/status', { depositId: depositId });
@@ -2362,7 +2386,7 @@ function renderDepositPending(depositId, amount, expiresAt, isFirstRender){
         toast('Deposit successful');
         STATE.account = null; STATE.loaded.home = false;
         if (STATE.currentPage === 'home') renderHome();
-        setTimeout(function(){ if (_sheetStack.indexOf('deposit') !== -1) closeSheet('deposit'); }, 1200);
+        setTimeout(function(){ if (_sheetStack.indexOf('gopayPending') !== -1) closeSheet('gopayPending'); }, 1200);
       } else {
         if (statusEl) statusEl.textContent = r.message || 'Payment failed';
         toast(r.message || 'Deposit failed', true);
