@@ -14,6 +14,50 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-20 — Claude — Startup-loader background image now paints instantly on repeat visits (real bug: it was never actually hardcoded, just looked like it should be)
+
+Owner: *"bro,do you know that the image on start up loader takes long to
+show up??? yet we hardcoded it,please fix it."* It wasn't hardcoded --
+confirmed by reading `boot()`: `--auth-bg-url` (the CSS variable
+`#loadingScreen::before` reads) only ever got set AFTER `/public/banners`
+resolved, so every single load sat with no background at all for at
+least one full network round-trip (worse on a cold Render instance)
+before the admin's photo popped in. Nothing in the shipped HTML/CSS ever
+embedded the actual image bytes.
+
+- A genuine build-time hardcode isn't the right fix here: `authbg` (and
+  `appbg`) are admin-uploaded via the Banners tab and meant to change
+  without a code deploy — baking today's photo into the static build would
+  freeze it and break that. Also this sandbox has no access to the live
+  Mongo data to know what the current uploaded photo even is.
+- **Real fix: cache the resolved background locally so every visit AFTER
+  the first paints instantly, no network wait.** `user-src/index.html`
+  gained a tiny inline `<script>` right after `#loadingScreen`'s markup —
+  runs the instant the browser reaches that point in the HTML, before the
+  large module script even starts loading — that reads a
+  `space8_bgcache` localStorage entry (authbg/appbg + their blur/tint
+  settings) and sets the CSS variables immediately from whatever was
+  cached on a PREVIOUS visit. `boot()` (`user-src/original_module.js`)
+  still does the live `/public/banners`/`/public/settings` fetch every
+  time as before, and now also writes the fresh values back into
+  `space8_bgcache` once they land — so an admin's banner change is picked
+  up by the NEXT load, the cache never goes stale forever, and the very
+  first-ever visit (nothing cached yet) is unavoidably unchanged since
+  there's nothing to paint from until that first fetch completes.
+  `resetUserState()` (logout) deliberately doesn't touch this key — same
+  "shared catalog data, not per-user" category as `products`/`settings`/
+  `banners` already get treated as.
+- **Verification**: `node build-core.js` round-trip OK; confirmed the
+  inline script survived the build (present once in `user/index.html`,
+  outside the obfuscated blob). Real Playwright test against the built
+  artifact: pre-seeded `space8_bgcache` via `addInitScript`, delayed every
+  `/public/*` network response by 1.5s, loaded the page, and read
+  `--auth-bg-url` back after only 150ms — it was already set to the
+  cached image, proving the paint genuinely happens before the network
+  could possibly have resolved, not just "looks fast because localhost is
+  fast." `user/sw.js` `CACHE` bumped `v308` → `v309`. No `server.js`
+  changes, no Railway redeploy needed.
+
 ## 2026-08-20 — Claude — Toast stays up longer, real "double loading" bug fixed (controllerchange fired on first SW claim, not just real updates), admin logo swapped to the real Space8 mark
 
 Owner: *"let this notify not disappear very soon, it should remain up for

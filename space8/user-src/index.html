@@ -582,6 +582,33 @@ select.field.placeholder{ color:var(--ink-dim); }
   </svg>
   <div class="loader-status">Preparing data</div>
 </div>
+<script>
+// Owner: "the image on start up loader takes long to show up, yet we
+// hardcoded it" -- it wasn't actually hardcoded: --auth-bg-url/--app-bg-url
+// only ever got set once boot()'s /public/banners fetch resolved, so on
+// every single load the loading screen sat with NO background for at least
+// one full network round-trip (worse on a cold Render instance) before the
+// admin's photo suddenly popped in. This tiny inline script runs the
+// instant the browser reaches this point in the HTML -- before the big
+// module script even starts loading -- and paints from whatever was cached
+// on a PREVIOUS visit, so a repeat visit shows the real background
+// immediately with zero flash-of-no-image. boot() (original_module.js)
+// still does the live fetch every time and refreshes this cache so an
+// admin's banner change is picked up on the NEXT load -- this only ever
+// removes the wait, it never goes stale forever.
+try {
+  var _bgc = JSON.parse(localStorage.getItem('space8_bgcache') || 'null');
+  if (_bgc) {
+    var _r = document.documentElement.style;
+    if (_bgc.authbg) _r.setProperty('--auth-bg-url', 'url("' + _bgc.authbg + '")');
+    _r.setProperty('--auth-bg-blur', (_bgc.authBgBlurPx != null ? _bgc.authBgBlurPx : 20) + 'px');
+    _r.setProperty('--auth-bg-tint', (_bgc.authBgTintPct != null ? _bgc.authBgTintPct : 78) / 100);
+    if (_bgc.appbg) _r.setProperty('--app-bg-url', 'url("' + _bgc.appbg + '")');
+    _r.setProperty('--app-bg-blur', (_bgc.appBgBlurPx != null ? _bgc.appBgBlurPx : 20) + 'px');
+    _r.setProperty('--app-bg-tint', (_bgc.appBgTintPct != null ? _bgc.appBgTintPct : 78) / 100);
+  }
+} catch (e) {}
+</script>
 
 <div id="screenLogin" class="auth-screen">
   <div class="auth-wrap">

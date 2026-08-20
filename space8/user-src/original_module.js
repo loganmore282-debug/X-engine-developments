@@ -2494,6 +2494,16 @@ async function boot(){
   var appTintPct = (STATE.settings||{}).appBgTintPct;
   document.documentElement.style.setProperty('--app-bg-blur', (appBlurPx != null ? appBlurPx : 20) + 'px');
   document.documentElement.style.setProperty('--app-bg-tint', (appTintPct != null ? appTintPct : 78) / 100);
+  // Refresh the loading-screen background cache (see the inline <script>
+  // right after #loadingScreen in index.html, which paints from this on
+  // the NEXT load before this module even starts) -- so an admin's banner
+  // change is picked up by then, instead of the cache going stale forever.
+  try {
+    localStorage.setItem('space8_bgcache', JSON.stringify({
+      authbg: STATE.banners.authbg || null, appbg: STATE.banners.appbg || null,
+      authBgBlurPx: blurPx, authBgTintPct: tintPct, appBgBlurPx: appBlurPx, appBgTintPct: appTintPct
+    }));
+  } catch (e) {}
   var cardBlurPx = (STATE.settings||{}).cardBlurPx;
   var cardOpacityPct = (STATE.settings||{}).cardOpacityPct;
   document.documentElement.style.setProperty('--card-blur', (cardBlurPx != null ? cardBlurPx : 0) + 'px');
