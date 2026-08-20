@@ -14,6 +14,44 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-20 — Claude — Deposit form reorganized: quick amounts above the amount field in a balanced grid, network is tappable chips instead of a dropdown
+
+Owner, from an annotated screenshot: *"the amounts are not supposed to be
+there, they should be up before amount card and they should be well
+organised, why did you leave the other space, just balance the rows very
+well not columns, also l need networks to be out not inside, so one
+clicks on any."* Two real layout problems: the quick-amount chips sat
+below the phone/network fields instead of above the amount field, and
+`.amt-chips`'s old `flex-wrap` layout gave each chip only as much width
+as its own text needed, leaving a large ragged gap on the right of every
+row (worst on `UGX 850,000`/`UGX 15,000` since they're shorter than
+`UGX 1,000,000`).
+
+- **`user-src/original_module.js`** (`openDepositSheet()`): reordered to
+  `.amt-chips` → `.auth-form` (amount + phone fields only) → `.net-chips`
+  → Deposit Now — quick amounts now sit above the amount card, network
+  selection sits below the phone field as its own row. The network
+  `<select>` is gone entirely; two `.net-chip` divs (from the existing
+  `MM_NETWORKS` list) are tap-to-select buttons, same interaction as the
+  amount chips (`selectedNetwork` closure var, `.active` class), still
+  validated before submit ("Select a network" toast if untapped).
+- **`user-src/index.html`**: `.amt-chips`/`.net-chips` switched from
+  `display:flex;flex-wrap:wrap` to `display:grid;grid-template-columns:
+  repeat(2,1fr)` — this is the actual "balance the rows" fix: every chip
+  in a row now gets an equal share of the full width instead of shrink-
+  wrapping to its own text, so there's no leftover gap regardless of which
+  amount's label is shorter. New `.net-chip` styled like `.amt-chip` but
+  larger/bolder (network choice is a more prominent decision than a quick
+  amount).
+- **Verification**: `node build-core.js` round-trip OK. Extracted the real
+  `openDepositSheet()` output via Node (same `Module._compile` + DOM-stub
+  technique as the earlier GoPay-screen verification) and rendered it
+  against the real extracted CSS in headless Chromium — screenshot
+  confirms: 10 amount chips in a clean 2-column grid above the amount
+  field, MTN/Airtel as two equal-width tappable buttons below the phone
+  field, no ragged whitespace. `user/sw.js` `CACHE` bumped `v306` → `v307`.
+  No `server.js` changes, no Railway redeploy needed.
+
 ## 2026-08-20 — Claude — Gift FAB position fix restored, quick-select amounts re-added, deposit network no longer defaults, admin user search by ID
 
 Owner, immediately after the GoPay revert: *"you raised the giftbox

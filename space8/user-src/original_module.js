@@ -2193,28 +2193,28 @@ function openDepositSheet(){
   var chips = DEPOSIT_QUICK_AMOUNTS.map(function(a){
     return '<div class="amt-chip" data-amt="' + a + '">' + ugx(a) + '</div>';
   }).join('');
+  var netChips = MM_NETWORKS.map(function(n){
+    return '<div class="net-chip" data-net="' + esc(n) + '">' + esc(n) + '</div>';
+  }).join('');
   openSheet('deposit', bannerHtml('basket','deposit') +
     '<div class="sheet-title">Deposit Funds</div>' +
     '<div class="sheet-sub">Minimum deposit ' + ugx(min) + '.</div>' +
+    '<div class="amt-chips">' + chips + '</div>' +
     '<div class="auth-form">' +
       '<div class="field">' + ico('deposit') + '<input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Amount (UGX)"></div>' +
       '<div class="field">' + ico('phone') + '<input id="depPhone" type="tel" inputmode="tel" maxlength="10" placeholder="07XXXXXXXX" value="' + esc(acc.phone||'') + '"></div>' +
-      '<select id="depNetwork" class="field" style="appearance:none">' +
-        '<option value="" disabled selected>Select network</option>' +
-        '<option value="MTN Mobile Money">MTN Mobile Money</option>' +
-        '<option value="Airtel Money">Airtel Money</option>' +
-      '</select>' +
     '</div>' +
-    '<div class="amt-chips">' + chips + '</div>' +
+    '<div class="net-chips">' + netChips + '</div>' +
     '<button class="btn btn-primary" id="submitDepositBtn" style="margin-top:14px">Deposit Now</button>' +
     '<div class="instruction-card"><b>Deposit instructions</b><ol>' +
-      '<li>Enter the amount you want to deposit, at least ' + ugx(min) + ', or tap a quick amount above.</li>' +
-      '<li>Enter the mobile-money number to pay from, and pick the correct network.</li>' +
+      '<li>Tap a quick amount above, or enter your own — at least ' + ugx(min) + '.</li>' +
+      '<li>Enter the mobile-money number to pay from, and tap the correct network.</li>' +
       '<li>Tap Deposit Now — a payment prompt will appear on that phone.</li>' +
       '<li>Approve the prompt using your mobile-money PIN.</li>' +
       '<li>Your wallet balance updates automatically once payment is confirmed.</li>' +
     '</ol></div>'
   );
+  var selectedNetwork = '';
   qsa('.amt-chip').forEach(function(c){
     c.onclick = function(){
       $('depAmount').value = c.dataset.amt;
@@ -2222,15 +2222,22 @@ function openDepositSheet(){
       c.classList.add('active');
     };
   });
+  qsa('.net-chip').forEach(function(c){
+    c.onclick = function(){
+      selectedNetwork = c.dataset.net;
+      qsa('.net-chip').forEach(function(x){ x.classList.remove('active'); });
+      c.classList.add('active');
+    };
+  });
   $('submitDepositBtn').onclick = async function(){
     var btn = $('submitDepositBtn');
     var amt = parseInt($('depAmount').value, 10);
-    var phone = $('depPhone').value, network = $('depNetwork').value;
+    var phone = $('depPhone').value;
     if (!amt || amt < min) return toast('Enter at least ' + ugx(min), true);
     if (!cleanPhone(phone)) return toast('Enter a valid mobile-money number', true);
-    if (!network) return toast('Select a network', true);
+    if (!selectedNetwork) return toast('Select a network', true);
     setBtnLoading(btn, true, 'Initiating…');
-    var r = await api('/deposit/marzpay', { amount: amt, phone: phone, network: network });
+    var r = await api('/deposit/marzpay', { amount: amt, phone: phone, network: selectedNetwork });
     setBtnLoading(btn, false);
     if (r.status === 'success') {
       toast('Check your phone to approve the payment');
