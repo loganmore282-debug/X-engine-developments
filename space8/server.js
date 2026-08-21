@@ -4740,6 +4740,12 @@ app.post('/admin/user/detail', async (req, res) => {
     const investments = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const bankAccounts = bankSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Owner: "when I tap a user, also see his team's total deposits" --
+    // reuse the SAME live wholeTeamDeposits() the Task Center's deposit-
+    // ladder milestone already uses (walks L1+L2+L3, excludes banned
+    // members' totalDeposited) rather than inventing a second, possibly
+    // divergent definition of "team deposits" for the admin panel.
+    const teamDeposits = await wholeTeamDeposits(userId);
     // The PIN is a one-way scrypt hash of a 4-digit value on purpose -- it
     // can't be "shown" to admin, only reset (see /admin/user/reset-payout-pin
     // below). Sending the raw hash here would let anyone with admin-panel
@@ -4748,7 +4754,7 @@ app.post('/admin/user/detail', async (req, res) => {
     const userData = snap.data();
     const hasPayoutPin = !!userData.payoutPinHash;
     delete userData.payoutPinHash;
-    res.json({ status: 'success', user: { id: snap.id, ...userData, hasPayoutPin }, investments, transactions, bankAccounts });
+    res.json({ status: 'success', user: { id: snap.id, ...userData, hasPayoutPin }, investments, transactions, bankAccounts, teamDeposits });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Admin can never "view" a member's payout PIN -- it's a one-way hash by

@@ -14,6 +14,31 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-21 — Claude — Admin: user detail now shows their team's total deposits
+
+Owner: *"make in admin panel, when l tap a user and see also his team's
+total deposits."* `POST /admin/user/detail` now also computes and returns
+`teamDeposits` alongside the existing `investments`/`transactions`/
+`bankAccounts` payload, using the SAME live `wholeTeamDeposits(userId)`
+helper that already backs the Task Center's whole-team-deposit milestone
+(walks the referral tree L1+L2+L3, excludes banned members' own
+`totalDeposited`) — deliberately reused rather than inventing a second,
+possibly-divergent definition of "team deposits" for the admin panel.
+
+- `admin-src/index.html`'s `openUser()` renders a new "Team's total
+  deposits" row right under the existing "Team L1 / L2 / L3" counts row,
+  reading `r.teamDeposits` (bold, same treatment as the other headline
+  money fields like Wallet balance).
+- **Verification**: `test-codex-round3-fixes.js` (still 30/30 — its
+  existing `/admin/user/detail` sort-order assertions are unaffected by
+  the additive `teamDeposits` field) and the full `test-*.js` suite green.
+  Rebuilt `admin/` via `node build-admin.js`. **`server.js` changed →
+  needs a Railway redeploy** for the new field to actually appear in
+  responses; no `user/sw.js` cache bump needed (this round never touched
+  `user-src/`).
+
+---
+
 ## 2026-08-21 — Claude — Referral link/text: removed OS share sheet, now copies to clipboard instead
 
 Owner: *"I said in the app,of website, remove sharing function, one have to
