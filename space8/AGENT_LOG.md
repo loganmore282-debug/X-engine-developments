@@ -14,6 +14,56 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-21 — Claude — New feature: "Recalculate totals" now runs automatically every 6 hours, not just on manual click
+
+Owner: *"l think it came up when l was trying to complete registrations in
+admin in integrity audit, bro, can't you make when server automatically
+recalculate totals on good interval."* Two things:
+
+1. **Confirmed `/admin/user/complete-registration` (used from the Users/
+   integrity-audit flow) shares the exact same `completeRegistrationCore()`
+   function `/register` uses** — so the welcome-bonus fix from earlier
+   today already covers this trigger too; nothing extra needed there. The
+   owner's own guess at how they hit it was correct.
+2. **Built the actual feature.** `/admin/users/recount`'s route logic was
+   extracted into a shared `recountAllTotals()` function (returns
+   `{ok:true, updated, streaksFixed, investedFixed}` or `{ok:false,
+   message}` instead of writing an HTTP response directly), so the manual
+   admin button and a new scheduled job run byte-for-byte the same logic —
+   no second hand-maintained copy to drift out of sync. A new
+   `scheduledRecount()` calls it on a `setInterval(..., 6 * 60 * 60 *
+   1000)` (6 hours — the same rationale as this file's other background
+   reconcilers: frequent enough that a stray totals/team-count drift
+   self-heals the same day, infrequent enough that the full-collection
+   scan (still bounded at the same 200k tx / 200k investments / 10k users
+   safety caps as the manual route — refuses to write on a truncated scan,
+   same as before) doesn't add meaningful load on top of the 1s/30s
+   reconcilers already running continuously), first fired 2 minutes after
+   boot so it doesn't compete with the other reconcilers' own startup
+   timers. When it actually changes anything, it writes an `adminAuditLog`
+   entry (`actor:'system'`, action `users_recounted_auto`) so the owner
+   can see it happened from Admin → Activity Log — added the matching
+   display label (`admin-src/index.html`'s `AUDIT_LABELS`, "Totals
+   auto-recalculated") so it doesn't show as a raw type string. A
+   truncated/failed run is logged to the server console and skipped
+   entirely (never partially applied) — the next scheduled run tries
+   again, same safety behavior the manual button already had.
+- **Verification**: `test-codex-round2-fixes.js` (which already covers
+  `recountAllTotals()`'s logic via the `/admin/users/recount` route,
+  including this morning's welcome-bonus fix) still 44/44 after the
+  extract-into-shared-function refactor — proves the route's observable
+  behavior is unchanged. Full `test-*.js` suite green. `scheduledRecount()`
+  itself isn't independently unit-tested (no existing precedent in this
+  suite for testing an interval-only function directly, same as
+  `sweepEphemeralState()`/the reconciler wrappers) — it's a thin ~10-line
+  wrapper around the already-tested shared function plus an audit-log
+  write, verified by reading. Rebuilt `admin/` (label change only — no
+  `user-src/` touched, no `user/sw.js` cache bump needed). **`server.js`
+  changed → needs a Railway redeploy** for the scheduler to actually start
+  running.
+
+---
+
 ## 2026-08-21 — Claude — Real bug found and fixed: welcome-bonus sign-up gifts were miscounted as real deposits, inflating Overview's "Total deposited" and exploitable via Task Center milestones
 
 Owner sent two screenshots: Analytics tab showing "Deposits (165)" = UGX

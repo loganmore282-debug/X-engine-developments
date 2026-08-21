@@ -4492,10 +4492,17 @@ app.get('/admin/users', async (req, res) => {
 // used to only ever be incremented at registration time (L3 wasn't even
 // incremented at all, only ever decremented on delete), so any account that
 // existed before that fix, or drifted for any other reason, is corrected here.
-app.get('/admin/users/recount', async (req, res) => {
-  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-  try {
-    const [txSnap, invSnap] = await Promise.all([
+// Owner: "can't you make server automatically recalculate totals on good
+// interval" -- shared out of the route below so both the manual admin
+// button AND a scheduled background job (see the bottom of this file, next
+// to the other setInterval() reconcilers) run the exact same logic, rather
+// than a second hand-written copy silently drifting out of sync with the
+// first over time. Returns { ok:true, updated, streaksFixed, investedFixed }
+// on success, or { ok:false, message } if the scan hit its safety cap (see
+// the comment on that check below) -- never throws for that expected case,
+// only for a genuine unexpected DB error.
+async function recountAllTotals() {
+  const [txSnap, invSnap] = await Promise.all([
       db.collection('transactions').limit(200000).get(),
       db.collection('investments').limit(200000).get(),
     ]);
@@ -4565,7 +4572,7 @@ app.get('/admin/users/recount', async (req, res) => {
     // tool can't handle the current data volume is a far safer failure than
     // silently corrupting real money-history fields.
     if (txSnap.size >= 200000 || invSnap.size >= 200000 || usersSnap.size >= 10000) {
-      return res.status(400).json({ status: 'error', message: 'This tool cannot scan the full dataset safely at the current volume (hit its internal limit) -- refusing to write partial totals. Contact a developer to raise the limit or add pagination before running this again.' });
+      return { ok: false, message: 'This tool cannot scan the full dataset safely at the current volume (hit its internal limit) -- refusing to write partial totals. Contact a developer to raise the limit or add pagination before running this again.' };
     }
     const referredByMap = {}; // userId -> their own referredBy
     usersSnap.forEach(d => { referredByMap[d.id] = d.data().referredBy || null; });
@@ -4615,10 +4622,43 @@ app.get('/admin/users/recount', async (req, res) => {
       updated++;
     });
     await batch.commit();
-    logAdminAction(req, 'users_recounted', { updated, streaksFixed, investedFixed });
-    res.json({ status: 'success', updated, streaksFixed, investedFixed });
+  return { ok: true, updated, streaksFixed, investedFixed };
+}
+app.get('/admin/users/recount', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const result = await recountAllTotals();
+    if (!result.ok) return res.status(400).json({ status: 'error', message: result.message });
+    logAdminAction(req, 'users_recounted', { updated: result.updated, streaksFixed: result.streaksFixed, investedFixed: result.investedFixed });
+    res.json({ status: 'success', updated: result.updated, streaksFixed: result.streaksFixed, investedFixed: result.investedFixed });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Scheduled counterpart to the route above -- owner: "can't you make server
+// automatically recalculate totals on good interval." Runs the identical
+// recountAllTotals() logic on a timer (see the bottom of this file, next to
+// runReconciler()/reconcileCashback()) instead of only ever running when an
+// admin remembers to click the button. Every 6 hours: frequent enough that
+// a stray totalDeposited/totalEarned/team-count drift (e.g. from
+// /admin/user/complete-registration, or any future bug in the same family)
+// self-heals the same day it happens, infrequent enough that this full-
+// collection scan (bounded at 200k transactions/investments, 10k users --
+// same caps as the manual route) doesn't add meaningful load on top of the
+// 1s/30s reconcilers already running continuously. A failed/truncated run
+// (see recountAllTotals()'s own safety-cap check) is logged and skipped,
+// never partially applied -- the next scheduled run tries again.
+async function scheduledRecount() {
+  try {
+    const result = await recountAllTotals();
+    if (!result.ok) { console.error('Scheduled recount skipped:', result.message); return; }
+    if (result.updated > 0) {
+      await db.collection('adminAuditLog').doc().set({
+        actor: 'system', role: 'system', action: 'users_recounted_auto',
+        meta: { updated: result.updated, streaksFixed: result.streaksFixed, investedFixed: result.investedFixed },
+        createdAt: FieldValue.serverTimestamp()
+      }).catch(e => console.error('Audit log write failed: users_recounted_auto', e.message));
+    }
+  } catch (e) { console.error('Scheduled recount error:', e.message); }
+}
 // Read-only sweep for real money-safety problems: negative balances, the same
 // payment reference credited more than once, a wallet that no longer matches
 // what its own transaction ledger says it should, and withdrawals stuck
@@ -6308,6 +6348,12 @@ connectMongo(MONGODB_URI)
     setInterval(reconcileCashback, 1000);
     setTimeout(reconcileCashback, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
+    // Owner: "can't you make server automatically recalculate totals on
+    // good interval." Every 6 hours -- see scheduledRecount()'s own comment
+    // for why that cadence. Delayed 2 minutes on boot so it never competes
+    // with the reconcilers above for DB connections during startup.
+    setInterval(scheduledRecount, 6 * 60 * 60 * 1000);
+    setTimeout(scheduledRecount, 2 * 60 * 1000);
     backfillReferralCodeLower(); // one-time, fire-and-forget, see its own comment
     backfillBannerDocs(); // one-time, fire-and-forget, see its own comment
   })

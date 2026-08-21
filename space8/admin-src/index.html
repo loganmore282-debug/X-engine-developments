@@ -1604,6 +1604,7 @@ const AUDIT_LABELS = {
   product_deleted:'Product deleted', products_cleared:'All products cleared',
   deposit_force_credited:'Deposit force-credited', promocodes_generated:'Gift codes generated', promocode_deactivated:'Gift code deactivated',
   notification_deleted:'Notification deleted',
+  users_recounted_auto:'Totals auto-recalculated',
 };
 async function renderAuditLog(){
   const r = await api('/admin/audit-log');
