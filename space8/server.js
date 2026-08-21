@@ -2282,8 +2282,25 @@ async function completeRegistrationCore(userId, referralCode) {
     else await commit();
     if (WELCOME > 0) {
       const { date, time } = nowStr();
+      // Owner-reported mismatch (2026-08-21): "Total deposited" (Overview)
+      // ran way ahead of the real matched-deposit total (Analytics). Root
+      // cause -- this row used to share the literal type 'admin_credit'
+      // with a REAL manual credit from /admin/deposit (which deliberately
+      // DOES count toward totalDeposited, standing in for a real payment).
+      // The live wallet credit above only ever touches walletBalance, never
+      // totalDeposited, for a welcome gift -- but /admin/users/recount's
+      // "admin_credit counts as deposited" rule (added for the real-credit
+      // case) couldn't tell the two apart, since they were the same type.
+      // Running "Recalculate totals" would have silently INFLATED
+      // totalDeposited by every referred user's free signup bonus -- both
+      // corrupting the Overview total further AND letting a referrer's
+      // whole-team-deposit Task Center milestone progress
+      // (wholeTeamDeposits() sums downline totalDeposited) be padded by
+      // pure sign-ups, no real deposit required. Given its own distinct
+      // type, 'welcome_bonus', so recount's deposited/earned buckets both
+      // correctly exclude it, matching what the live crediting already does.
       await db.collection('transactions').add({
-        userId, type: 'admin_credit', description: 'Welcome gift',
+        userId, type: 'welcome_bonus', description: 'Welcome gift',
         amount: WELCOME, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
     }
@@ -4498,6 +4515,16 @@ app.get('/admin/users/recount', async (req, res) => {
       // credited someone would silently ERASE that credit's contribution
       // to their totalDeposited -- same class of gap already fixed for
       // totalEarned below.
+      // 'welcome_bonus' (the once-off registration gift, see /register)
+      // is deliberately NOT counted here (2026-08-21 fix) -- it used to
+      // share the literal type 'admin_credit' with a real manual credit,
+      // which meant recount silently treated every referred sign-up's free
+      // bonus as a real deposit too, inflating totalDeposited (and, via
+      // wholeTeamDeposits(), a referrer's Task Center deposit-milestone
+      // progress) with money nobody actually deposited. The live crediting
+      // path for a welcome bonus only ever touches walletBalance, never
+      // totalDeposited -- excluding it here keeps recount's rebuilt total
+      // in agreement with what live crediting actually produces.
       if (t.type === 'deposit' || t.type === 'admin_credit') row.deposited += finiteMoney(t.amount);
       // "Cumulative Earnings" (totalEarned) is credited live from 5 sources:
       // maturity/daily payout (cashback), referral commission, task-center

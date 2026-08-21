@@ -14,6 +14,74 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-21 — Claude — Real bug found and fixed: welcome-bonus sign-up gifts were miscounted as real deposits, inflating Overview's "Total deposited" and exploitable via Task Center milestones
+
+Owner sent two screenshots: Analytics tab showing "Deposits (165)" = UGX
+5,846,200, and Overview showing "Total deposited" = UGX 10,917,200 —
+*"Balances of deposits mismatch bro, the real one is 5+ but l don't know
+what is wrong, when l click recalculate totals it stays abit and says
+server waking up."* Investigated by reading the actual crediting/recount
+code rather than guessing.
+
+**Two things going on, one cosmetic/expected, one a real bug:**
+
+1. **Not a bug — two different metrics.** Analytics' "Deposits" KPI
+   (`k.depositsAmount`/`depositsCount`) is scoped to whichever period is
+   selected just above it (7/30/90 days) AND only counts real MarzPay-
+   matched deposits. Overview's "Total deposited" (`/admin/stats`) is a
+   true ALL-TIME sum of `users.totalDeposited`, which by deliberate
+   existing design also includes real manual `/admin/deposit` credits
+   (standing in for a real payment MarzPay's gateway declined, so it still
+   counts toward a referrer's Task Center milestone progress) — so some
+   gap between the two is expected and not itself a defect.
+2. **The real bug: the once-off registration "Welcome gift" bonus
+   (`/register`) wrote its transaction row with the SAME literal type,
+   `'admin_credit'`, as a genuine manual admin credit.** The LIVE wallet
+   credit for a welcome bonus only ever touches `walletBalance`, never
+   `totalDeposited` — but `/admin/users/recount`'s "Recalculate totals"
+   tool counts every `admin_credit`-typed transaction as a deposit (a
+   correct rule for a REAL manual credit, added in an earlier round), with
+   no way to tell the two apart since they shared a type. Clicking
+   "Recalculate totals" would have silently manufactured `totalDeposited`
+   out of pure sign-ups — with 1,183 of 1,235 users having joined via
+   referral (each getting the 5,000 welcome gift), that's up to ~5.9M UGX
+   of phantom "deposits," which lines up with the ~5.07M gap the owner
+   actually saw. Worse: since `wholeTeamDeposits()` (the Task Center
+   whole-team-deposit milestone) sums downline `totalDeposited`, this
+   would have let a referrer's milestone progress be padded just by
+   people signing up under them — no real deposit required from anyone.
+   **Fixed**: the welcome-gift transaction now gets its own distinct type,
+   `'welcome_bonus'` (`server.js` `/register`'s `completeRegistrationCore`),
+   so `/admin/users/recount` naturally excludes it from both the
+   `deposited` and `earned` buckets — matching what live crediting already
+   does. Added display labels for the new type (`RECORD_META` in
+   `user-src/original_module.js`: "Welcome Bonus"; `TX_LABELS` in
+   `admin-src/index.html`: "Welcome bonus") so it doesn't fall back to a
+   raw type-name string on either app's transaction history.
+- **"Recalculate totals stays a while, says server waking up"**: not a
+  bug — Render's free tier cold-starts an idle backend instance, and the
+  owner's own admin panel already labels this correctly; it just needs to
+  finish (usually well under a minute). Told the owner directly rather
+  than treating it as something to fix in code.
+- **Verification**: extended `test-codex-round2-fixes.js` (the file that
+  already covers the ORIGINAL `admin_credit`-counts-as-deposit fix) with a
+  new section proving a real `/register` welcome bonus transaction is
+  correctly typed `welcome_bonus`, that `totalDeposited`/`totalEarned` are
+  both `0` before AND after running `/admin/users/recount` for that user —
+  full `test-*.js` suite green (44/44 in that file, no regressions
+  elsewhere). Rebuilt both `user/` (via `node build-core.js`, round-trip
+  OK) and `admin/` (via `node build-admin.js`). `user/sw.js` `CACHE`
+  bumped `v311` → `v312`. **`server.js` changed → needs a Railway
+  redeploy** for the fix to take effect on new registrations (existing
+  already-stored welcome-gift rows from before this fix keep their old
+  `admin_credit` type — no migration/backfill, same "claim-flag-by-target"
+  precedent this project already uses for other after-the-fact table
+  changes; running "Recalculate totals" from here on will correctly leave
+  them out either way since the fix is in the recount's own logic, not a
+  one-time repair of old rows).
+
+---
+
 ## 2026-08-21 — Claude — Admin: user detail now shows their team's total deposits
 
 Owner: *"make in admin panel, when l tap a user and see also his team's

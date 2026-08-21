@@ -197,6 +197,29 @@ async function setupUser(uid, phone) {
   check('admin_credit survives "Recalculate totals" instead of being erased from totalDeposited',
     (afterRecount.totalDeposited || 0) >= 40000, afterRecount.totalDeposited);
 
+  console.log('\n== Recount: welcome_bonus is NOT counted as a deposit (owner-reported Overview/Analytics mismatch, 2026-08-21) ==');
+  // setupUser() -> /register credits a real welcome_bonus transaction
+  // (DEFAULT_SETTINGS.welcomeBonus, 5000). Live crediting only ever touches
+  // walletBalance for this -- if recount ever mis-typed it as a deposit
+  // (it used to, back when this shared the literal type 'admin_credit'
+  // with a real manual credit), running "Recalculate totals" would
+  // silently manufacture totalDeposited out of nothing but a sign-up.
+  const welcomeUser = 'welcome-bonus-recount-user';
+  await setupUser(welcomeUser, '0772600005');
+  const beforeWelcomeRecount = users().get(welcomeUser);
+  check('sanity: a real welcome_bonus transaction exists for this user',
+    [...transactions().values()].some(t => t.userId === welcomeUser && t.type === 'welcome_bonus' && t.description === 'Welcome gift'),
+    [...transactions().values()].filter(t => t.userId === welcomeUser));
+  check('sanity: totalDeposited is 0 before recount (welcome bonus never touched it live)',
+    (beforeWelcomeRecount.totalDeposited || 0) === 0, beforeWelcomeRecount.totalDeposited);
+  r = await call('GET', '/admin/users/recount', { admin: true });
+  check('recount call succeeds', r.code === 200, r.body);
+  const afterWelcomeRecount = users().get(welcomeUser);
+  check('totalDeposited is STILL 0 after recount -- a welcome bonus is not a deposit',
+    (afterWelcomeRecount.totalDeposited || 0) === 0, afterWelcomeRecount.totalDeposited);
+  check('totalEarned is also unaffected -- a welcome bonus is not "earned" either',
+    (afterWelcomeRecount.totalEarned || 0) === 0, afterWelcomeRecount.totalEarned);
+
   console.log('\n== Bank-save: concurrent duplicate-account requests cannot both succeed ==');
   const bankUser = 'bank-race-user';
   await setupUser(bankUser, '0772600004');

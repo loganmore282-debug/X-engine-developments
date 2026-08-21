@@ -1130,6 +1130,7 @@ var RECORD_META = {
   team_reward:{ label: 'Task Center Reward' },
   admin_credit:{ label: 'Credit' },
   admin_debit: { label: 'Debit' },
+  welcome_bonus:{ label: 'Welcome Bonus' },
   promocode:  { label: 'Gift Code' }
 };
 function recordMeta(type){
