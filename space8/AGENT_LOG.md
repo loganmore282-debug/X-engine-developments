@@ -14,6 +14,34 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-21 — Claude — Referral link/text: removed OS share sheet, now copies to clipboard instead
+
+Owner: *"I said in the app,of website, remove sharing function, one have to
+just copy the link plus text."* `shareReferral()`
+(`user-src/original_module.js`) previously called `navigator.share()` (the
+OS share sheet), including a best-effort attachment of the plans-table
+image via the Web Share API's file-sharing capability. Both are gone — the
+function now just calls the existing `copyText(text, 'Referral message')`
+helper (already used elsewhere in this file for copy-to-clipboard, e.g. the
+referral code button), so tapping the button copies the full launch-post
+text (which already contains the referral link twice) straight to the
+clipboard and shows a "copied" toast — no share picker, no file attach.
+
+- The referral-link row's icon/button (`#shareRefBtn`) relabeled from a
+  share glyph/"Share referral link" to the same `copy` icon used elsewhere
+  and "Copy referral link"; the hint text under it changed from "...share
+  your personal link..." to "...copy your personal invite link to
+  share..." to match the new behavior.
+- Nothing server-side touched — this is entirely client-side. Rebuilt
+  `user/` via `node build-core.js` (round-trip OK). Bumped `user/sw.js`
+  cache `v310` → `v311`.
+- Verification: build round-trip clean; read the final function to confirm
+  no leftover `navigator.share`/`canShare`/file-attach code remains
+  anywhere in the file (grepped for `share` across `original_module.js` —
+  the only hit left is the `shareReferral` function name/call site itself).
+
+---
+
 ## 2026-08-20 — Claude — Real bug fixed: a blank white gap between the loading screen disappearing and Home/the announcement dialog actually showing
 
 Owner: *"bro,it brings a white screen after startup loader finishes then

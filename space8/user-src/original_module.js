@@ -1521,8 +1521,8 @@ async function renderTeam(animate){
       '<button class="iconbtn" id="copyRefCodeBtn" aria-label="Copy referral code">' + ico('copy') + '</button>' +
     '</div>' +
     '<div class="referral-label referral-link-label">Your Referral Link</div>' +
-    '<div class="referral-row referral-link-row"><div class="referral-link mono" id="referralLink">' + esc(referralLink(acc.referralCode)) + '</div><button class="iconbtn" id="shareRefBtn" aria-label="Share referral link">' + ico('share') + '</button></div>' +
-    '<div class="referral-hint">Copy your code or share your personal link to invite people.</div>' +
+    '<div class="referral-row referral-link-row"><div class="referral-link mono" id="referralLink">' + esc(referralLink(acc.referralCode)) + '</div><button class="iconbtn" id="shareRefBtn" aria-label="Copy referral link">' + ico('copy') + '</button></div>' +
+    '<div class="referral-hint">Copy your code or copy your personal invite link to share.</div>' +
   '</div>';
   html += '<div class="mystats">' +
     '<div class="card"><div class="lab">Total Referrals</div><div class="val">' + ((s.counts.l1||0)+(s.counts.l2||0)+(s.counts.l3||0)) + '</div></div>' +
@@ -1747,24 +1747,10 @@ async function shareReferral(code){
     'Join SPACE8 and explore the new platform from launch day! 🚀\n\n' +
     '🔗 ' + link + '\n\n' +
     '🚀 SPACE8 — NEW LAUNCH, NEW OPPORTUNITIES!';
-  // Owner: "when one clicks share link, it will also embed with that
-  // table" -- attach the Space8 Investment Plans graphic alongside the
-  // text via the Web Share API's file-sharing capability. Not every
-  // browser/OS that has navigator.share ALSO supports sharing files
-  // (desktop Chrome/Firefox commonly don't) -- canShare({files}) is the
-  // real capability check; a plain `navigator.share` existing is not
-  // enough on its own. Falls back to text-only share (unchanged prior
-  // behavior) wherever the image can't be attached, never blocking the
-  // share entirely just because the image fetch/attach failed.
-  var shareData = { title: 'Join Space8', text: text };
-  try {
-    var imgResp = await fetch('/plans-table.jpg');
-    var imgBlob = await imgResp.blob();
-    var imgFile = new File([imgBlob], 'space8-investment-plans.jpg', { type: imgBlob.type || 'image/jpeg' });
-    if (navigator.canShare && navigator.canShare({ files: [imgFile] })) shareData.files = [imgFile];
-  } catch (_) {}
-  if (navigator.share) navigator.share(shareData).catch(function(){});
-  else copyText(text, 'Referral message');
+  // Owner: "remove sharing, just one copy the text" -- no OS share sheet,
+  // no file attachment. Tapping the button just copies the link+text so
+  // the member can paste it wherever they want themselves.
+  copyText(text, 'Referral message');
 }
 async function redeemGiftCode(){
   var input = $('giftCodeInput');
