@@ -759,7 +759,7 @@ async function renderUsers(){
         ${d.healthy?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance matches its ledger. No duplicates, no stuck payouts.</div>`
         :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${d.alertCount} issue(s) found</div>`+
           d.alerts.map(a=>`<div class="kv"><span class="k">${K[a.kind]||a.kind}${a.phone?' · '+esc(a.phone):''}</span>
-            <span>${a.kind==='balance_mismatch'?`wallet ${ugx(a.balance)} vs ledger ${ugx(a.ledger)} (diff ${ugx(a.diff)})`
+            <span>${a.kind==='balance_mismatch'?`wallet ${ugx(a.balance)} vs ledger ${ugx(a.ledger)} (diff ${ugx(a.diff)}) &nbsp; <button class="btn sm ghost" data-repairledger="${esc(a.userId)}">Repair ledger</button>`
             : a.kind==='duplicate_credit'?`ref ${esc(String(a.ref))} credited ${a.times}×`
             : a.kind==='negative_balance'?ugx(a.balance)
             : a.kind==='phone_malformed'?`<button class="btn sm ghost" data-fixphone="${esc(a.userId)}" data-oldphone="${esc(a.phone||'')}">Fix phone</button>`
@@ -775,6 +775,14 @@ async function renderUsers(){
         const r = await api('/admin/user/set-phone', { userId: uid, phone: correct.trim() });
         if(r.status==='success'){ toast(r.message||'Phone corrected','ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Fixed'; }
         else { toast(r.message||'Could not save that number','err'); b.disabled=false; b.textContent='Fix phone'; }
+      }));
+      document.querySelectorAll('[data-repairledger]').forEach(b=>b.addEventListener('click', async ()=>{
+        const uid = b.dataset.repairledger;
+        if(!confirm('This zeroes out any stale declined-withdrawal ledger rows for this user (their wallet balance is NOT touched — it is already correct; only the ledger record catches up to it). Continue?')) return;
+        b.disabled=true; b.textContent='Repairing…';
+        const r = await api('/admin/user/repair-ledger', { userId: uid });
+        if(r.status==='success'){ toast(r.message||'Ledger repaired','ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Repaired'; }
+        else { toast(r.message||'Could not repair ledger','err'); b.disabled=false; b.textContent='Repair ledger'; }
       }));
       document.querySelectorAll('[data-completereg]').forEach(b=>b.addEventListener('click', async ()=>{
         const uid = b.dataset.completereg;

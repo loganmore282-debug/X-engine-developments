@@ -14,6 +14,101 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-23 — Claude — Found and fixed the real root cause of the owner's "Balance ≠ ledger" integrity-audit mismatches; investigated the referral-search complaint (no bug found by direct reading); Codex asked to review both plus re-verify prior fixes
+
+Owner, with two screenshots of `/admin/integrity` showing "12 issue(s) found"
+(5 `balance_mismatch` rows, 7 `registration_incomplete` rows): *"bro let us
+again ask codex to review this so as we stop more cases of ledger,also bro
+why when l search for referral it doesn't bring, tell codex to review it too
+also check the previous fixes whether they are fine."* Investigated both
+myself first, per this file's established discipline, before involving
+Codex.
+
+**Root cause of the ledger mismatches — found and fixed.** Every withdrawal
+refund path in `server.js` (`/withdraw/callback` failure branch,
+`/withdraw/marzpay/status` failure branch, `reconcilePendingWithdrawals`
+failure branch, `/admin/withdraw/reject`) correctly credits the wallet back
+via `FieldValue.increment(amount)` — but none of them ever writes a NEW
+`transactions` row for that refund. The withdrawal's ORIGINAL request-time
+row (`amount: -amt`, written at `/withdraw/request`) just sits there
+forever. `finalizeWithdrawalTransactionRecord()` (added Round 14/15, the
+shared helper all four resolution paths already call) updates that same
+row's `status`/`description` on a decline — but never touched `amount`.
+Net effect: the wallet is genuinely, correctly refunded, but
+`/admin/integrity`'s `ledgerByUser` (a raw sum of every transaction's
+`amount`) permanently keeps counting the original `-amt` debit that never
+actually happened — under-counting the ledger by exactly the sum of every
+declined/failed withdrawal a user has ever had. This exactly matches the
+screenshot pattern (small positive wallet balances against sharply negative
+computed "ledger" totals).
+- **Forward fix**: `finalizeWithdrawalTransactionRecord()` now also sets
+  `amount: 0` on the transaction row when the outcome is `'declined'`/
+  `'failed'` — the withdrawal's true net effect on the ledger is zero (debit
+  then full refund), so this keeps the ledger sum matching the real balance
+  for every FUTURE declined withdrawal. Idempotent (a second call sets the
+  same 0 again, harmless) and scoped only to the failure branch — a
+  processed/successful withdrawal's row is untouched.
+- **Historical repair**: this fix does NOT retroactively repair a
+  transactions row that was already left corrupted by the pre-fix code —
+  the 5 mismatches in the owner's screenshots are exactly this, and nothing
+  will ever call `finalizeWithdrawalTransactionRecord` again for an
+  already-resolved withdrawal. Added a new owner-only endpoint,
+  `POST /admin/user/repair-ledger` (userId) — scoped to exactly the one
+  known cause (a `type:'withdraw'`, `status:'failed'` transaction row still
+  carrying a nonzero amount), zeroes it, and reports the corrected
+  ledger/balance. Wired into the Integrity Audit modal
+  (`admin-src/index.html`): each `balance_mismatch` alert now has a "Repair
+  ledger" button, same inline-fix pattern already used for "Fix phone" and
+  "Complete registration". Deliberately does NOT touch `walletBalance`
+  (already correct) and deliberately does NOT try to force-match any
+  mismatch from a different, not-yet-understood cause — those stay flagged,
+  not silently masked.
+- **Verification**: extended `test-withdrawal-record-finalize.js` (31→46
+  checks) — every existing failure-path test (webhook, client poll,
+  reconciler, admin reject) now also asserts `amount === 0` on the
+  finalized row; new Path 8 seeds a pre-fix-shaped corrupted row plus an
+  unrelated real deposit row for the same user, runs `/admin/user/repair-
+  ledger`, and proves: exactly 1 row repaired, the bad row zeroed, the
+  unrelated deposit row untouched, wallet balance untouched, and the
+  reported ledger now exactly equals the wallet balance (the actual
+  `/admin/integrity` invariant) — plus idempotency (second run: 0 rows) and
+  a no-bad-rows no-op case, and an unauthenticated-caller 401 check. Full
+  `test-*.js` suite green, 79/79. Rebuilt `admin/` (`node build-admin.js`,
+  round-trip OK) since `admin-src/index.html` changed — `user/` untouched,
+  no cache bump needed. **`server.js` changed → needs a Railway redeploy**
+  before either the forward fix or the repair endpoint takes effect; until
+  then, the owner's existing 5 mismatches will still need `/admin/user/
+  repair-ledger` run per-user (via the new button) AFTER the redeploy.
+
+**Referral-search complaint — investigated directly, no code bug found by
+reading.** Read every plausible target: `drawUsers()`/`userSearch` (Users
+tab, matches `referralCode`/phone/publicId substrings against the full
+`_users` array from `GET /admin/users`, no `.limit()` issue at ~2,541 real
+users vs. its 10,000 cap), `drawDeps()`/`drawWits()` (Deposits/Withdrawals
+tabs, both already send `referralCode` directly per-row from
+`/admin/deposits/list`/`/admin/withdrawals/list` — the "only works after
+visiting Users tab first" bug this exact area had is the one already fixed
+in the 2026-08-17 "Personal code review" entry, confirmed still fixed).
+Every comparison found was correctly lowercased on both sides for a
+case-insensitive substring match — appropriate since referral-code
+REDEMPTION is deliberately case-sensitive (see CLAUDE.md) but SEARCH
+shouldn't need to be. No dead search box, no broken event wiring, no
+ordering dependency found. Not fixed — didn't find a bug to fix. Handed to
+Codex with these exact pointers, since a live-data reproduction (the exact
+search term the owner typed, which screen) would help more than another
+static read.
+
+**Codex asked to**: (1) review the ledger-mismatch fix above for any gap in
+the same class (a different transaction-type or resolution path that also
+never gets reconciled), (2) dig into the referral-search complaint with the
+above as a starting point, (3) re-verify this session's and recent rounds'
+previous fixes are still holding up against the current code. Findings not
+yet received as of this entry — see the next entry for the outcome, per
+this file's established "never trust a review's claims without re-reading
+the actual code" discipline.
+
+---
+
 ## 2026-08-21 — Claude — Codex full-codebase review + cold-start investigation: 2 High + 4 Medium + 3 Low findings, all confirmed real by direct code reading, all fixed
 
 Owner: *"whenever l try running recalculate totals, it takes a little of like

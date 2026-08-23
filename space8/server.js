@@ -3253,7 +3253,24 @@ async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome) {
       const newDesc = outcome === 'processed'
         ? oldDesc.replace(/, processing$/, '')
         : oldDesc.replace(/, processing$/, ' — failed, refunded to wallet');
-      return txDoc.ref.update({ status: newStatus, description: newDesc });
+      const update = { status: newStatus, description: newDesc };
+      // Real gap found 2026-08-23 (owner's own "Balance != ledger" integrity-
+      // audit screenshots): a declined/failed withdrawal's refund is applied
+      // to walletBalance directly via FieldValue.increment() at every refund
+      // call site (see the STATUS-BEFORE-REFUND comments above) -- it never
+      // writes its OWN transactions row. That leaves this SAME request-time
+      // row's original amount:-amt sitting in the ledger forever uncorrected,
+      // even though the wallet was correctly refunded -- /admin/integrity's
+      // ledgerByUser (a raw sum of every transaction.amount) permanently
+      // under-counts by that amount, tripping a false balance_mismatch alert
+      // that no later action ever clears. The wallet was genuinely refunded
+      // in full, so this withdrawal's true net effect on the ledger is zero
+      // -- zeroing amount here (only on the failed/declined outcome, only
+      // once, since a second call's regex no longer matches ", processing"
+      // and the description branch above is already a no-op then too) keeps
+      // the ledger sum matching the real balance going forward.
+      if (newStatus === 'failed') update.amount = 0;
+      return txDoc.ref.update(update);
     }));
   } catch (e) { console.warn('finalizeWithdrawalTransactionRecord (non-critical):', e.message); }
 }
@@ -5153,6 +5170,41 @@ app.post('/admin/user/set-phone', async (req, res) => {
     await ref.update({ phone });
     logAdminAction(req, 'user_phone_corrected', { userId, oldPhone, newPhone: phone });
     res.json({ status: 'success', message: `Phone corrected to ${phone}` });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Reconciliation for the balance_mismatch integrity alert, for data already
+// corrupted BEFORE the finalizeWithdrawalTransactionRecord fix above existed
+// (2026-08-23) -- that fix only stops NEW mismatches of this exact shape, it
+// doesn't retroactively repair a transactions row a declined/failed
+// withdrawal already left with a stale negative amount. Scoped to exactly
+// that one known cause (a withdraw-type transaction at status:'failed'
+// still carrying a nonzero amount) rather than blindly forcing this user's
+// ledger to match their balance by any means -- a mismatch from a genuinely
+// different, not-yet-understood cause is deliberately left alone and still
+// reported by /admin/integrity rather than silently masked. Idempotent: a
+// second run finds nothing left to zero and reports 0 rows repaired.
+app.post('/admin/user/repair-ledger', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const txSnap = await db.collection('transactions').where('userId', '==', userId).limit(10000).get();
+    const stale = txSnap.docs.filter(d => {
+      const t = d.data();
+      return t.type === 'withdraw' && t.status === 'failed' && (Number(t.amount) || 0) !== 0;
+    });
+    await Promise.all(stale.map(d => d.ref.update({ amount: 0 })));
+    let ledger = 0;
+    txSnap.docs.forEach(d => {
+      const t = d.data();
+      const amt = stale.some(s => s.id === d.id) ? 0 : (Number(t.amount) || 0);
+      ledger += amt;
+    });
+    const balance = Number(uSnap.data().walletBalance) || 0;
+    logAdminAction(req, 'user_ledger_repaired', { userId, rowsRepaired: stale.length, ledgerAfter: ledger, balance });
+    res.json({ status: 'success', message: `Repaired ${stale.length} row(s). Ledger now ${fmtUGX(ledger)} vs wallet ${fmtUGX(balance)}.`, rowsRepaired: stale.length, ledger, balance });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Reconciliation for the registration_incomplete integrity alert: a member

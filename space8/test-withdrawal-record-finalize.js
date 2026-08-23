@@ -182,6 +182,7 @@ const txDoc = txId => collMap('transactions').get(txId);
   check('wallet was refunded', collMap('users').get('wf-user-1b')?.walletBalance === 150000, collMap('users').get('wf-user-1b'));
   check('transaction record status updated to failed', txDoc(tx1b)?.status === 'failed', txDoc(tx1b));
   check('transaction description reflects the failure, not still "processing"', /refunded/.test(txDoc(tx1b)?.description || '') && !/, processing$/.test(txDoc(tx1b)?.description || ''), txDoc(tx1b)?.description);
+  check('transaction amount zeroed on failure (owner\'s Balance!=ledger report, 2026-08-23) -- the wallet refund never wrote its own row, so this SAME row must net to zero or the ledger sum permanently under-counts', txDoc(tx1b)?.amount === 0, txDoc(tx1b)?.amount);
 
   console.log('\n== Path 2: member\'s own poll (/withdraw/marzpay/status) success -- transaction record must be finalized ==');
   const tx2 = seedProcessingWithdrawal('wf-poll-ok', 'wf-user-2', 'WTX-poll-ok');
@@ -207,6 +208,7 @@ const txDoc = txId => collMap('transactions').get(txId);
   check('poll reports declined', r.body?.state === 'declined', r.body);
   check('transaction record status updated to failed', txDoc(tx2b)?.status === 'failed', txDoc(tx2b));
   check('transaction description reflects the failure', /refunded/.test(txDoc(tx2b)?.description || ''), txDoc(tx2b)?.description);
+  check('transaction amount zeroed on failure', txDoc(tx2b)?.amount === 0, txDoc(tx2b)?.amount);
 
   console.log('\n== Path 3: background reconciler (GET /admin/payments/sync) -- transaction record must be finalized for both outcomes ==');
   const tx3 = seedProcessingWithdrawal('wf-reconcile-ok', 'wf-user-3', 'WTX-reconcile-ok');
@@ -219,6 +221,7 @@ const txDoc = txId => collMap('transactions').get(txId);
     { ok: collMap('withdrawals').get('wf-reconcile-ok')?.status, fail: collMap('withdrawals').get('wf-reconcile-fail')?.status });
   check('reconciler finalized the SUCCESS transaction record', txDoc(tx3)?.status === 'success' && !/processing$/.test(txDoc(tx3)?.description || ''), txDoc(tx3));
   check('reconciler finalized the FAILURE transaction record', txDoc(tx3b)?.status === 'failed' && /refunded/.test(txDoc(tx3b)?.description || ''), txDoc(tx3b));
+  check('reconciler-finalized failure also zeroed the ledger amount', txDoc(tx3b)?.amount === 0, txDoc(tx3b)?.amount);
 
   console.log('\n== Path 4 (round 2, was missing entirely): owner force-decline (/admin/withdraw/reject) must also finalize the Records row ==');
   const tx4 = seedProcessingWithdrawal('wf-admin-reject', 'wf-user-4', 'WTX-admin-reject');
@@ -228,6 +231,7 @@ const txDoc = txId => collMap('transactions').get(txId);
   check('wallet was refunded', collMap('users').get('wf-user-4')?.walletBalance === 150000, collMap('users').get('wf-user-4'));
   check('transaction record status updated to failed', txDoc(tx4)?.status === 'failed', txDoc(tx4));
   check('transaction description reflects the failure, not still "processing"', /refunded/.test(txDoc(tx4)?.description || ''), txDoc(tx4)?.description);
+  check('transaction amount zeroed on failure', txDoc(tx4)?.amount === 0, txDoc(tx4)?.amount);
 
   console.log('\n== Path 5 (round 2, was inconsistent): sandbox immediate-success approval must ALSO strip "processing" from the description ==');
   // Sandbox mode is reached through processWithdrawalCore's own success
@@ -304,6 +308,48 @@ const txDoc = txId => collMap('transactions').get(txId);
   }
   check('BOTH duplicate transaction rows were repaired, not just one', collMap('transactions').get('tx-multi-a')?.status === 'success' && collMap('transactions').get('tx-multi-b')?.status === 'success',
     { a: collMap('transactions').get('tx-multi-a'), b: collMap('transactions').get('tx-multi-b') });
+
+  console.log('\n== Path 8 (2026-08-23 ledger-mismatch fix): /admin/user/repair-ledger fixes historical data left over from BEFORE this fix existed ==');
+  // Simulates exactly the pre-fix corrupted state the owner's own Integrity
+  // Audit screenshots showed: a declined withdrawal whose wallet was
+  // correctly refunded, but whose transactions row still carries the
+  // original negative amount because it predates the amount:0 fix above.
+  collMap('users').set('wf-user-8', { walletBalance: 100000, totalWithdrawn: 0, status: 'active' });
+  collMap('transactions').set('tx-legacy-bad', {
+    userId: 'wf-user-8', type: 'withdraw', withdrawalId: 'wf-legacy',
+    description: 'Cash out to Test Holder (MTN Mobile Money), net UGX 42,500 after 15% fee — failed, refunded to wallet',
+    amount: -50000, status: 'failed', date: '08/17/2026', time: '10:00 AM', ref: 'Bwf-legacy', createdAt: new Date()
+  });
+  // A genuine, unrelated deposit for the same user -- must survive the
+  // repair untouched, proving the repair only ever targets the specific
+  // withdraw/failed/nonzero shape, not every one of this user's rows.
+  collMap('transactions').set('tx-legacy-good', {
+    userId: 'wf-user-8', type: 'deposit', description: 'Added funds to wallet',
+    amount: 100000, status: 'success', date: '08/17/2026', time: '09:00 AM', ref: 'Bwf-legacy-dep', createdAt: new Date()
+  });
+  const repairR = await ownerCall('POST', '/admin/user/repair-ledger', { userId: 'wf-user-8' });
+  check('repair call succeeds', repairR.body?.status === 'success', repairR.body);
+  check('repair reports exactly 1 row repaired', repairR.body?.rowsRepaired === 1, repairR.body);
+  check('the stale withdraw row\'s amount is zeroed', collMap('transactions').get('tx-legacy-bad')?.amount === 0, collMap('transactions').get('tx-legacy-bad'));
+  check('the stale withdraw row\'s status/description are untouched (repair only fixes amount, not what finalize already fixed)',
+    collMap('transactions').get('tx-legacy-bad')?.status === 'failed', collMap('transactions').get('tx-legacy-bad'));
+  check('the unrelated deposit row is untouched', collMap('transactions').get('tx-legacy-good')?.amount === 100000, collMap('transactions').get('tx-legacy-good'));
+  check('wallet balance itself was never touched by the repair (it was already correct)', collMap('users').get('wf-user-8')?.walletBalance === 100000, collMap('users').get('wf-user-8'));
+  check('reported ledger now matches the wallet balance', repairR.body?.ledger === 100000 && repairR.body?.balance === 100000, repairR.body);
+
+  console.log('\n== Path 8b: repair is idempotent -- a second run on an already-repaired user finds nothing left to fix ==');
+  const repairR2 = await ownerCall('POST', '/admin/user/repair-ledger', { userId: 'wf-user-8' });
+  check('second repair call succeeds', repairR2.body?.status === 'success', repairR2.body);
+  check('second repair reports 0 rows repaired', repairR2.body?.rowsRepaired === 0, repairR2.body);
+
+  console.log('\n== Path 8c: repair on a user with no bad rows at all is a harmless no-op ==');
+  collMap('users').set('wf-user-9', { walletBalance: 0, totalWithdrawn: 0, status: 'active' });
+  const repairR3 = await ownerCall('POST', '/admin/user/repair-ledger', { userId: 'wf-user-9' });
+  check('repair on a clean user succeeds with 0 rows repaired', repairR3.body?.status === 'success' && repairR3.body?.rowsRepaired === 0, repairR3.body);
+
+  console.log('\n== Path 8d: repair is owner-only ==');
+  const repairUnauth = await call('POST', '/admin/user/repair-ledger', { body: { userId: 'wf-user-8' } });
+  check('repair rejects an unauthenticated call', repairUnauth.code === 401, repairUnauth);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
