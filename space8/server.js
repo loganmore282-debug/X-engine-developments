@@ -723,6 +723,39 @@ async function generateUniqueReferralCode(userId) {
 // already accepted elsewhere in this file, e.g. /admin/users/recount) --
 // a user base past that would need real pagination here too, not a
 // bigger hardcoded number.
+// Codex-verified real gap (2026-08-21) in the welcome_bonus fix above (see
+// completeRegistrationCore's comment): giving the welcome gift its own type
+// only changed the write path GOING FORWARD -- every welcome-gift row
+// written before that fix shipped is still sitting in the ledger typed
+// 'admin_credit', so recountAllTotals() (and the live totalDeposited it was
+// already inflating before the fix) still treats every one of those old
+// sign-up bonuses as a real deposit. Matches this file's own admin_credit
+// write shape exactly (`type: 'admin_credit', description: 'Welcome gift'`)
+// -- the ONLY other real write site for that type uses `note || 'Space8
+// credit'` as its description (see /admin/deposit), so this is a safe,
+// specific discriminator, not a guess. Run once at boot (see
+// connectMongo().then(...) below), same "one-time, fire-and-forget, additive
+// only" idiom as backfillReferralCodeLower()/backfillBannerDocs() just
+// below/above this -- retypes the row in place, touches no balance/total
+// field directly (the NEXT recount run, manual or scheduled, is what
+// actually corrects totalDeposited/totalEarned once the ledger itself is
+// clean). Bounded at 200,000 (same scale already accepted by
+// recountAllTotals()'s own transaction scan) -- a ledger past that would
+// need real pagination here too, not a bigger hardcoded number.
+async function migrateLegacyWelcomeBonusRows() {
+  try {
+    const snap = await db.collection('transactions')
+      .where('type', '==', 'admin_credit')
+      .where('description', '==', 'Welcome gift')
+      .limit(200000).get();
+    let fixed = 0;
+    for (const doc of snap.docs) {
+      await doc.ref.update({ type: 'welcome_bonus' });
+      fixed++;
+    }
+    if (fixed) console.log(`legacy welcome-bonus backfill: retyped ${fixed} row(s) from admin_credit to welcome_bonus`);
+  } catch (e) { console.warn('legacy welcome-bonus backfill warning:', e.message); }
+}
 async function backfillReferralCodeLower() {
   try {
     const snap = await db.collection('users').limit(10000).get();
@@ -4595,10 +4628,38 @@ async function recountAllTotals() {
       const u = d.data();
       const row = totals[d.id] || { deposited: 0, earned: 0 };
       const team = teamCounts[d.id] || { l1: 0, l2: 0, l3: 0 };
-      const fields = {
-        totalDeposited: row.deposited, totalEarned: row.earned,
-        teamL1Count: team.l1, teamL2Count: team.l2, teamL3Count: team.l3
-      };
+      const fields = {};
+      let changed = false;
+      // Codex-verified real race (2026-08-21): db.js's batch.commit() applies
+      // every user's update sequentially, not atomically (WriteBatch has no
+      // real multi-doc transaction -- see db.js), and this whole pass can
+      // take a while across many users. Writing an absolute `set` computed
+      // from a transaction snapshot taken at the START of this function would
+      // silently REVERT any real deposit/commission/team-join that lands live
+      // in the gap before this specific user's own write actually fires --
+      // self-healed by the next 6-hourly run, but wrong in the meantime.
+      // totalDeposited/totalEarned/teamL1-3Count are all also live-credited
+      // elsewhere via FieldValue.increment(), which MongoDB applies as an
+      // atomic, commutative $inc -- so writing the CORRECTION as an increment
+      // too (recomputed-total minus what's currently stored) means a
+      // concurrent live increment and this correction simply add together in
+      // whatever order they land, and the live credit can never be silently
+      // erased. This narrows the race window down to the gap between reading
+      // the transaction ledger and reading each user's own doc a moment
+      // later (not the whole scan) rather than fully eliminating it, which
+      // would need real Mongo sessions -- a bigger architecture change than
+      // this pass, same as the other non-atomicity gaps already documented
+      // in this file.
+      const depDelta = row.deposited - finiteMoney(u.totalDeposited);
+      if (depDelta !== 0) { fields.totalDeposited = FieldValue.increment(depDelta); changed = true; }
+      const earnDelta = row.earned - finiteMoney(u.totalEarned);
+      if (earnDelta !== 0) { fields.totalEarned = FieldValue.increment(earnDelta); changed = true; }
+      const l1Delta = team.l1 - (u.teamL1Count || 0);
+      if (l1Delta !== 0) { fields.teamL1Count = FieldValue.increment(l1Delta); changed = true; }
+      const l2Delta = team.l2 - (u.teamL2Count || 0);
+      if (l2Delta !== 0) { fields.teamL2Count = FieldValue.increment(l2Delta); changed = true; }
+      const l3Delta = team.l3 - (u.teamL3Count || 0);
+      if (l3Delta !== 0) { fields.teamL3Count = FieldValue.increment(l3Delta); changed = true; }
       // Only ever WRITE a corrected streak/lastCheckin when the ledger-true
       // value actually differs from what's stored -- keeps this a genuine
       // "only touch what's actually wrong" reconciliation, not a blanket
@@ -4609,17 +4670,32 @@ async function recountAllTotals() {
         fields.checkinStreak = real.streak;
         fields.lastCheckin = real.lastCheckin;
         streaksFixed++;
+        changed = true;
       }
       // Same "only touch what's actually wrong" treatment for totalInvested
       // -- see the corruption explanation above. Never touches walletBalance
       // or any investment/payout record, purely a display/analytics counter.
+      // Kept as an absolute set (not a delta/increment like the fields
+      // above): totalInvested is never credited live via FieldValue
+      // .increment() -- /invest/create does a plain read-modify-write of the
+      // whole field -- so there's no concurrent atomic increment for a
+      // delta-write to safely add together with here.
       const realInvested = investedByUser[d.id] || 0;
       if (realInvested !== finiteMoney(u.totalInvested)) {
         fields.totalInvested = realInvested;
         investedFixed++;
+        changed = true;
       }
-      batch.update(d.ref, fields);
-      updated++;
+      // Codex-verified real bug (2026-08-21): `updated` used to increment
+      // unconditionally for every scanned user, and every user got a
+      // batch.update() even when nothing about them was actually wrong --
+      // so scheduledRecount()'s own `if (result.updated > 0)` audit-log gate
+      // was never actually gated on anything once there was at least one
+      // user in the database, contradicting this feature's own claim (see
+      // scheduledRecount() below) that the auto-recalculate audit entry only
+      // appears when a run actually changes something. Now only genuinely-
+      // changed users are written to and counted.
+      if (changed) { batch.update(d.ref, fields); updated++; }
     });
     await batch.commit();
   return { ok: true, updated, streaksFixed, investedFixed };
@@ -6356,5 +6432,6 @@ connectMongo(MONGODB_URI)
     setTimeout(scheduledRecount, 2 * 60 * 1000);
     backfillReferralCodeLower(); // one-time, fire-and-forget, see its own comment
     backfillBannerDocs(); // one-time, fire-and-forget, see its own comment
+    migrateLegacyWelcomeBonusRows(); // one-time, fire-and-forget, see its own comment
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

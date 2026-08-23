@@ -14,6 +14,88 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-21 — Claude — Codex review of the deposit-mismatch fix: 1 High + 1 Medium + 1 Low, all confirmed real by direct code reading, all fixed
+
+Owner: *"he said that, but let us not make not make any error, review
+systematically"* — pasted back a Codex review of the two entries just below
+this one (the welcome_bonus fix + the 6-hourly auto-recount feature).
+Verified every claim against the actual current code (not Codex's cited
+line numbers, which predate several edits this session) before changing
+anything, same discipline as every prior external-review round in this
+file.
+
+1. **High, CONFIRMED — legacy welcome-gift rows never migrated.** Real by
+   construction: the earlier fix (giving the welcome bonus its own
+   `welcome_bonus` type) only changed the write path going forward — every
+   row written before that fix shipped is still sitting in the ledger typed
+   `admin_credit`, so recount still (correctly, by its own rules) counts
+   every one of those old sign-up bonuses as a real deposit. Fixed with a
+   new one-time boot backfill, `migrateLegacyWelcomeBonusRows()` (next to
+   `backfillReferralCodeLower()`/`backfillBannerDocs()`, same "one-time,
+   fire-and-forget, additive-only" idiom) — retypes any transaction row
+   matching `type:'admin_credit', description:'Welcome gift'` to
+   `welcome_bonus`. Confirmed this is a safe, specific discriminator: the
+   only OTHER real write site for `admin_credit` (`/admin/deposit`) uses
+   `note || 'Space8 credit'` as its description, never "Welcome gift"
+   verbatim. Doesn't touch any balance field itself — the next recount run
+   (manual or the new scheduled one) is what actually corrects
+   `totalDeposited`/`totalEarned` once the ledger itself is clean.
+2. **Medium, CONFIRMED — recount could silently revert a live deposit/
+   commission/team-join mid-scan.** Read `db.js`'s `WriteBatch.commit()`
+   directly: it applies every queued update sequentially with a plain
+   `for` loop + `await`, no session, no real multi-doc atomicity (same
+   non-atomicity this file has already documented for `runTransaction`
+   elsewhere). `recountAllTotals()` used to write an ABSOLUTE `set` for
+   `totalDeposited`/`totalEarned`/`teamL1-3Count`, computed from a
+   transaction snapshot read once at the very start of the function — if a
+   real live credit landed anywhere between that snapshot read and this
+   specific user's own batch-write firing (the scan can take a while
+   across many users), the live credit's contribution would be silently
+   overwritten back out, self-healing only at the NEXT scheduled run (up
+   to 6 hours later). Fixed: these fields are now corrected via
+   `FieldValue.increment(recomputed - currently-stored)` instead of an
+   absolute `set` — since these same fields are ALSO live-credited
+   elsewhere via `FieldValue.increment()` (confirmed in `db.js`: it
+   compiles to a real atomic, commutative Mongo `$inc`), a concurrent live
+   increment and this correction now simply add together in whatever order
+   they land, so the live credit can never be silently erased. This
+   narrows the race window down to the much smaller gap between reading
+   the transaction ledger and reading each user's own doc a moment later —
+   not a full elimination (that needs real Mongo sessions, a bigger
+   architecture change, same class of gap already documented elsewhere in
+   this file for `runTransaction`), but a real, cheap improvement.
+   `totalInvested` was deliberately left as an absolute set — confirmed
+   it's never live-credited via `FieldValue.increment()` (`/invest/create`
+   does a plain read-modify-write of the whole field), so there's no
+   concurrent atomic increment for a delta-write to safely combine with.
+3. **Low, CONFIRMED — `updated`/the audit-log "only when something
+   changed" claim was not actually true.** Read the code: `updated++` and
+   `batch.update(d.ref, fields)` fired unconditionally for every scanned
+   user, regardless of whether `fields` differed at all from what was
+   already stored — so `scheduledRecount()`'s own `if (result.updated > 0)`
+   audit-log gate was never actually gated on anything once there was at
+   least one user in the database, contradicting the earlier entry below's
+   claim that the auto-recalculate audit entry only appears "when it
+   actually changes something." Fixed as a side effect of the delta-based
+   rewrite above: fields are only added to the write, and a user is only
+   batch-updated and counted toward `updated`, when something about them
+   genuinely differs from what's stored.
+- **Verification**: full `test-*.js` suite (100+ files) re-run after these
+  changes — `test-codex-round2-fixes.js` (44/44, covers `admin_credit`/
+  `welcome_bonus` recount behavior directly), `test-checkin-streak-
+  recount.js` (18/18), `test-integrity-recount.js` (11/11), `test-invested-
+  recount.js` (20/20, including its own idempotency check — a second
+  recount pass reporting 0 newly-fixed accounts, which the delta-based
+  rewrite still satisfies) all green with no changes needed to any of
+  them, confirming the observable behavior of every already-tested case is
+  unchanged — only the previously-untested race/no-op-report gaps
+  actually changed. `server.js` changed → **needs a Railway redeploy** for
+  the migration and the race-narrowing fix to take effect; the boot-time
+  legacy-row migration only runs once the redeployed process actually
+  starts.
+
+---
+
 ## 2026-08-21 — Claude — New feature: "Recalculate totals" now runs automatically every 6 hours, not just on manual click
 
 Owner: *"l think it came up when l was trying to complete registrations in
