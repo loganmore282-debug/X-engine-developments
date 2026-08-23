@@ -43,6 +43,22 @@ function resetUserState(){
   STATE.bankAccounts = null;
   STATE.hasPayoutPin = false;
   Object.keys(STATE.loaded).forEach(function(k){ STATE.loaded[k] = false; });
+  // Codex-verified real bug (2026-08-21): same class of shared-device leak
+  // as the rest of this function was written to close, missed because the
+  // floating assistant's own state (ASSIST_HISTORY, the #assistBody
+  // transcript DOM) was added later and never wired into this reset. On a
+  // shared device: member A chats with the assistant (which can discuss
+  // their real balance/settings), signs out, member B signs in -- B could
+  // still see A's messages rendered in the panel (openAssistant() only
+  // shows the greeting/quick-replies "if (!$('assistBody')
+  // .childElementCount)", so a non-empty leftover transcript skips it
+  // entirely) AND every new message B sends would ship A's last 8 turns of
+  // conversation to the server as this "user"'s own history. Cleared here
+  // so both paths that call resetUserState() (doLogout() and the
+  // 'space8-auth' listener's signed-out branch) can't drift out of sync,
+  // matching every other per-user field this function already resets.
+  ASSIST_HISTORY.length = 0;
+  if ($('assistBody')) $('assistBody').innerHTML = '';
 }
 
 // ── UTILS ──────────────────────────────────────────────────────────────
@@ -514,7 +530,22 @@ if (_refCode && $('regReferral')) {
 // app the instant the Firebase account exists, even if /register then
 // fails (e.g. a bad referral code) and never actually finished creating
 // their Space8 profile. See the listener and enterApp() below.
+// Codex-verified real bug (2026-08-21): _registering used to be a bare
+// flag with no idea WHICH account it belonged to -- on a shared device, a
+// registration that failed and stayed on-screen (by design, so the member
+// can fix the referral code and retry) left it stuck `true` with nothing
+// to ever clear it if that person just walked away instead of retrying.
+// The NEXT person on that same browser signing in with THEIR OWN, totally
+// unrelated account would hit the 'space8-auth' listener's
+// `if (_registering) return;` guard below and get silently dropped -- the
+// login button itself still shows "Login successful", but the listener
+// that's supposed to actually call enterApp() bails out and does nothing,
+// leaving them stuck on the login screen. _registeringUid pins the flag to
+// the specific uid it's actually about, so a DIFFERENT uid signing in is
+// recognized as unrelated and never blocked by someone else's stale,
+// abandoned registration attempt.
 var _registering = false;
+var _registeringUid = null;
 function enterApp(){
   $('screenLogin').style.display = 'none';
   $('screenRegister').style.display = 'none';
@@ -591,7 +622,7 @@ $('registerBtn').onclick = async function(){
   // would only fail with "already in use". Detected by _registering still
   // being true (only a just-failed registration leaves it that way) plus a
   // real signed-in Firebase user.
-  var resuming = !!(_registering && window.fbAuth && window.fbAuth.currentUser);
+  var resuming = !!(_registering && _registeringUid && window.fbAuth && window.fbAuth.currentUser && window.fbAuth.currentUser.uid === _registeringUid);
   if (!resuming) {
     if (!phone) return showAuthErr('registerErr', 'Enter a valid Uganda phone number (07XXXXXXXX).');
     if (pass.length < 6) return showAuthErr('registerErr', 'Password must be at least 6 characters.');
@@ -604,6 +635,11 @@ $('registerBtn').onclick = async function(){
   _registering = true;
   try {
     if (!resuming) await window.fbCreateUser(phoneToEmail(phone), pass);
+    // Pinned to the uid this attempt is actually about the moment it's
+    // known (right after fbCreateUser resolves, or immediately for a
+    // resumed attempt where it's already signed in) -- see _registering's
+    // own comment above for why this matters.
+    _registeringUid = (window.fbAuth && window.fbAuth.currentUser) ? window.fbAuth.currentUser.uid : null;
     var r = await api('/register', { referralCode: ref || undefined, phone: phone }, 'POST', true);
     if (r.status === 'error') {
       // Firebase account exists, but the Space8 profile isn't finished --
@@ -625,13 +661,13 @@ $('registerBtn').onclick = async function(){
     // and the next retry must still skip fbCreateUser (via `resuming`
     // above) rather than attempt it again and hit "already-in-use",
     // stranding the account with no way to finish registering.
-    if (!(window.fbAuth && window.fbAuth.currentUser)) _registering = false;
+    if (!(window.fbAuth && window.fbAuth.currentUser)) { _registering = false; _registeringUid = null; }
     var msg = 'Could not create your account.';
     if (String(e.code).indexOf('email-already-in-use') !== -1) msg = 'This phone number is already registered.';
     else if (String(e.code).indexOf('weak-password') !== -1) msg = 'Choose a stronger password (min 6 characters).';
     return showAuthErr('registerErr', msg);
   }
-  _registering = false;
+  _registering = false; _registeringUid = null;
   setBtnLoading($('registerBtn'), false);
   showSuccessPopup('Registration successful ✓');
   enterApp();
@@ -2372,6 +2408,13 @@ async function assistSend(text){
   addMsg(text, 'user');
   ASSIST_HISTORY.push({ role: 'user', text: text });
   var typing = addTyping();
+  // Codex-verified real bug (2026-08-21): same authEpoch reasoning as
+  // renderHome()'s own comment -- without this, a slow reply landing after
+  // a sign-out+sign-in on the same device could render into (and get
+  // pushed onto ASSIST_HISTORY of) a completely different member's now-
+  // open assistant panel. resetUserState() (see above) closes the leftover
+  // -state half of this same bug; this closes the in-flight-response half.
+  var epoch = STATE.authEpoch;
   var reply;
   try {
     var r = await api('/assistant/chat', { message: text, history: ASSIST_HISTORY.slice(-8) });
@@ -2379,6 +2422,7 @@ async function assistSend(text){
   } catch (e) {
     reply = "Couldn't reach the assistant — check your connection, or reach Support from the Account tab.";
   }
+  if (epoch !== STATE.authEpoch) return;
   typing.remove();
   addMsg(reply, 'bot');
   ASSIST_HISTORY.push({ role: 'assistant', text: reply });
@@ -2553,8 +2597,14 @@ window.addEventListener('space8-auth', async function(e){
     // A registration attempt currently in flight (its own handler above
     // will call enterApp() once /register actually finishes) -- don't race
     // it into the app early on a Firebase account that doesn't have a
-    // finished Space8 profile yet.
-    if (_registering) return;
+    // finished Space8 profile yet. Scoped to the SAME uid via
+    // _registeringUid (see its own comment) -- a stale flag left over from
+    // a different, abandoned account must never block a real sign-in for
+    // someone else on a shared device.
+    if (_registering) {
+      if (_registeringUid && user.uid === _registeringUid) return;
+      _registering = false; _registeringUid = null;
+    }
     // Self-heal: covers a Firebase account left over from a PAST failed
     // registration attempt (a previous session, or this one after a
     // wrong-referral-code retry was abandoned) -- /register is idempotent
@@ -2608,7 +2658,7 @@ window.addEventListener('space8-auth', async function(e){
           // true, so tapping Create Account again skips fbCreateUser and
           // just retries /register.
           $('app').style.display = 'none';
-          _registering = true;
+          _registering = true; _registeringUid = user.uid;
           showRegisterScreen();
           showAuthErr('registerErr', (regR.message || 'Could not finish creating your account.') + ' You are signed in — fix the referral code (or clear it) and tap Create Account again.');
           return;
@@ -2633,6 +2683,12 @@ window.addEventListener('space8-auth', async function(e){
     stopLiveRefresh();
     resetUserState();
     closeAllSheets();
+    // Codex-verified real bug (2026-08-21): a genuine sign-out never reset
+    // _registering -- see its own comment for the shared-device scenario
+    // this leaves a DIFFERENT person's next sign-in stuck on. Belt-and-
+    // braces alongside the uid-scoping above: an explicit sign-out is
+    // itself a clean point to just clear it outright.
+    _registering = false; _registeringUid = null;
   }
 });
 
@@ -2651,6 +2707,7 @@ window.addEventListener('space8-auth', async function(e){
 // server-side cashback/maturity credits, an admin approving a deposit or
 // withdrawal, a downline referral joining/investing, a milestone reward.
 var _liveRefreshTimer = null;
+var _liveRefreshSeq = 0;
 function startLiveRefresh(){
   if (_liveRefreshTimer) return;
   _liveRefreshTimer = setInterval(async function(){
@@ -2664,8 +2721,19 @@ function startLiveRefresh(){
     // just-loaded session with the previous member's data. Same authEpoch
     // guard every other async render already uses.
     var epoch = STATE.authEpoch;
+    // Codex-verified real bug (2026-08-21): a tick every 2s doesn't wait for
+    // the PREVIOUS tick's own fetch to finish first -- on a slow connection
+    // a stale, still-in-flight tick started at T0 could return AFTER a
+    // faster, later tick (T0+2000ms) already updated STATE with genuinely
+    // newer data, silently reverting the display back to the older figures
+    // (e.g. a check-in credited between the two ticks would flicker back
+    // out) until the next tick corrects it again 2s later. Same
+    // "capture-a-sequence-number, bail if a newer one has since started"
+    // idiom _genericAsyncSeq already uses elsewhere in this file for the
+    // identical class of stale-response race.
+    var seq = ++_liveRefreshSeq;
     var results = await Promise.all([api('/account', null, 'GET', false), api('/investments', null, 'GET', false)]);
-    if (epoch !== STATE.authEpoch) return;
+    if (seq !== _liveRefreshSeq || epoch !== STATE.authEpoch) return;
     if (results[0].status === 'success') STATE.account = results[0].account;
     if (results[1].status === 'success') STATE.investments = results[1].investments || [];
     if (STATE.currentPage === 'home') renderHome();

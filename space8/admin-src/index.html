@@ -727,7 +727,18 @@ async function renderUsers(){
     $('recountBtn').addEventListener('click', async()=>{
       const b=$('recountBtn'); b.disabled=true; b.textContent='Recalculating…';
       const d=await api('/admin/users/recount');
-      toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)${d.streaksFixed?`, ${d.streaksFixed} check-in streak(s) corrected`:''}${d.investedFixed?`, ${d.investedFixed} invested total(s) corrected`:''}`:(d.message||'Failed'), d.status==='success'?'ok':'err');
+      // Codex-verified (2026-08-21): the generic "Server is waking up" copy
+      // (api()'s own catch-all for a client-side timeout) is a guess, not a
+      // diagnosis -- it fires the same way whether the server was genuinely
+      // asleep OR simply still mid-scan (this route reads every transaction/
+      // investment/user in the platform, then writes one update per user
+      // that's actually wrong -- a real minutes-scale operation at enough
+      // data volume, not just a cold start). This one button gets a more
+      // honest message: it may well still be running server-side even
+      // though this request gave up waiting.
+      const timedOut = d.status !== 'success' && /waking up/i.test(d.message || '');
+      b.disabled=false; b.textContent='Recalculate totals';
+      toast(d.status==='success'?`Totals rebuilt for ${d.updated} user(s)${d.streaksFixed?`, ${d.streaksFixed} check-in streak(s) corrected`:''}${d.investedFixed?`, ${d.investedFixed} invested total(s) corrected`:''}`:(timedOut?'This request timed out waiting -- it may still be running server-side (this scan reads every transaction/investment/user, which can genuinely take a while). Check back in a minute before retrying.':(d.message||'Failed')), d.status==='success'?'ok':'err');
       renderUsers();
     });
     $('auditBtn').addEventListener('click', async()=>{
@@ -1068,7 +1079,7 @@ async function renderWithdrawals(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
       <button class="btn sm ghost" id="witSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own — mobile money is the only withdrawal rail members can request today (an old bank-transfer option some historical records may still show has been retired).</p>
+    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own — members can withdraw to either a bound mobile money number or a bound bank account (see each row's destination).</p>
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>

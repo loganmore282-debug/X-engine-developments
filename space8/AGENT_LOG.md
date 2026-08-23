@@ -14,6 +14,196 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-21 — Claude — Codex full-codebase review + cold-start investigation: 2 High + 4 Medium + 3 Low findings, all confirmed real by direct code reading, all fixed
+
+Owner: *"whenever l try running recalculate totals, it takes a little of like
+19 seconds and says server is waking up, we need to ask codex about that
+also we need to make a review in all existing bugs so as it guides you how
+to fix them."* Sent Codex a two-part scoped prompt (the cold-start question,
+plus a fresh full-codebase review focused on everything shipped since the
+last one). Every finding verified against the actual current code (not
+Codex's own claim of having "edited" files — it ran in its own sandbox with
+no push access; `git fetch` confirmed zero new commits landed from that run,
+so nothing it touched ever reached this branch) before changing anything,
+same discipline as every prior external-review round in this file.
+
+**Ask 1 verdict — "Recalculate totals" 19s wait: genuinely both.** The
+"Server is waking up" message (`admin-src/index.html`) is a generic guess
+`api()` makes for ANY client-side timeout, not a real diagnosis — it fires
+identically whether the backend was actually asleep or just still working.
+And `recountAllTotals()` really is expensive even warm: it reads every
+transaction/investment (up to 200k each) and every user (up to 10k), then
+writes one update per user that's actually wrong, sequentially (`db.js`'s
+`WriteBatch.commit()` awaits each write one at a time — no real batching).
+At real data volumes that alone plausibly accounts for several seconds on
+top of whatever cold-start delay is also happening — there's no way to
+cleanly separate the two from the code alone. Real architectural
+improvements (an async job+poll pattern instead of one long request,
+Mongo `bulkWrite()`/aggregation instead of the compat layer's sequential
+writes, incrementally-maintained counters instead of a periodic full
+recount) are all genuine, but bigger lifts than this pass — **not
+attempted, deliberately deferred**, matching this file's established
+practice of not rushing a full redesign into a review-response pass. What
+WAS fixed (see Finding 2 below, and the recount button's own message)
+closes the two things that were actually cheap and real: a correctness
+race in the fix from earlier today, and a misleading error message.
+
+**Ask 2 — fresh full-codebase review, confirmed findings:**
+
+1. **High — a purchase could silently erase a same-instant deposit/
+   check-in/commission/gift-code credit.** `server.js` `/invest/create`'s
+   wallet debit used to be an ABSOLUTE `t.update(uRef, {walletBalance:
+   newBalance, ...})` computed from a snapshot read at the top of its own
+   transaction — but `withLock('bal:'+userId,...)` wrapping it only
+   serializes against ANOTHER invest/withdraw call for the SAME user, not
+   against `creditDeposit()`/`/checkin`/`creditReferralCommission()`/
+   `/redeem`/`/admin/deposit`, which all hold their OWN, different lock
+   keys (`dep:`, `checkin:`, `comm:`, none). Concrete scenario: a member
+   with exactly enough balance taps Buy; in the narrow window between the
+   read and the write, a real deposit/check-in/commission/gift-code credit
+   lands via its own `FieldValue.increment()`; the purchase's old absolute
+   write would silently overwrite that credit right out of existence the
+   moment it committed. Fixed by debiting via `FieldValue.increment(
+   -liveTier.price)` instead — Mongo applies `$inc` commutatively
+   regardless of which operation lands first, so a concurrent credit can no
+   longer be erased this way. `totalInvested` deliberately stays an
+   absolute self-healing write (never touched by any OTHER concurrent
+   credit path, so there's no race to close there, and `increment()` would
+   reject a legacy string-corrupted value the plain-number recompute still
+   quietly repairs).
+2. **High — two overlapping recounts could double-correct a total.** The
+   delta/increment rewrite from earlier today's entry (below) closes the
+   race against a LIVE credit landing mid-scan, but introduces a different
+   one: two recounts running at once (a double-tap, a second admin tab, or
+   the manual button clashing with the new 6-hourly `scheduledRecount()`)
+   could each read the same stale "currently stored" value before either
+   writes its own correction, each compute the SAME delta, and each apply
+   it — doubling a real correction instead of applying it once. Fixed with
+   a single global `withLock('totals-recount', ...)` wrapping the whole
+   function (renamed to `recountAllTotalsLocked()`, called through the
+   lock) — admin-only, already rare and slow, full serialization costs
+   nothing real. Also closed the SAME class of gap for `totalInvested`
+   specifically (a separate, narrower race Codex flagged: a purchase
+   landing between recount's `investments` snapshot and that user's own
+   write could get its `totalInvested` contribution silently reverted) —
+   now delta/increment-based too, except when the stored value isn't
+   already a clean number (the known legacy string-corruption case), which
+   still self-heals via a direct overwrite since there's no live increment
+   for it to race against there anyway.
+3. **Medium — the legacy welcome-bonus migration could misclassify a real
+   manual credit.** `migrateLegacyWelcomeBonusRows()` (added earlier today)
+   matched purely on `description === 'Welcome gift'` — but `/admin/deposit`'s
+   `note` is completely free-text, so an admin manually crediting a real,
+   unrelated correction (plausibly even re-crediting a welcome bonus that
+   failed to auto-credit — a genuine deposit-equivalent, not a duplicate)
+   could happen to type that exact phrase too. Fixed by cross-checking each
+   candidate row's own timestamp against that user's account-creation
+   timestamp — a genuine welcome-bonus row is written inline inside
+   `completeRegistrationCore`, seconds after the profile doc itself exists;
+   a manual admin correction realistically happens well after that. Only
+   rows within a 15-minute window of registration are migrated; anything
+   else is left as `admin_credit` (still correctly counted as a real
+   deposit) rather than guessed at.
+4. **Medium — `/admin/debit` had no balance check and no lock at all.** An
+   operator typo (extra zero, wrong user) could drive a real member's
+   wallet negative with nothing stopping it, and the whole transaction
+   never shared `withLock('bal:'+userId,...)` the way every other
+   money-debiting path does, so two concurrent debits (or a debit racing a
+   purchase/withdrawal) could each read the same "sufficient" balance
+   before either commits. Fixed: wrapped in the same per-user lock, and the
+   balance is re-checked against a fresh read taken INSIDE that lock,
+   immediately before the debit — same "re-verify live, right before the
+   money moves" pattern as the Task Center TOCTOU fix (2026-08-17). A debit
+   larger than the current balance is now rejected outright instead of
+   silently going through.
+5. **Medium — the floating assistant leaks across accounts on a shared
+   device.** Same class of bug this file has fixed twice before for other
+   state (Team/Products/bank-account caches, 2026-08-17), missed here
+   because the assistant's own state was added later and never wired into
+   `resetUserState()`: `ASSIST_HISTORY` (sent to the server as this
+   "user"'s own conversation context on every message) and the visible
+   `#assistBody` transcript DOM both survived a sign-out untouched — worse,
+   `openAssistant()` only shows the greeting/quick-replies "if the panel is
+   currently empty," so a leftover transcript from the PREVIOUS member
+   skipped it entirely and just kept showing their old messages (which can
+   include real balance figures, since the assistant can answer "how much
+   do I have"). Fixed: `resetUserState()` now clears both; `assistSend()`
+   also gained the same `authEpoch` guard every other async render in this
+   file already carries, so a slow in-flight reply can't land into a
+   different member's now-open panel either.
+6. **Medium — a failed registration could block a DIFFERENT person's
+   login on the same device.** `_registering` was a bare boolean, not tied
+   to any particular account — a registration that failed on a bad
+   referral code deliberately leaves it `true` (by design, so retrying
+   skips re-calling `fbCreateUser`), but nothing ever cleared it if that
+   person just walked away instead of retrying, and a genuine sign-out
+   never reset it either. The NEXT person signing in with their OWN,
+   unrelated account on that same browser would hit the `'space8-auth'`
+   listener's `if (_registering) return;` guard and get silently dropped —
+   their login button itself still shows "Login successful," but the
+   listener that's actually supposed to call `enterApp()` bails out and
+   does nothing, leaving them stuck on the login screen with no visible
+   error. Fixed with `_registeringUid`, pinning the flag to the specific
+   uid it's actually about — the listener (and the register button's own
+   `resuming` check) now only honors a `_registering` flag left by the
+   SAME uid currently signed in; a different uid clears the stale flag and
+   proceeds normally instead of being blocked by someone else's abandoned
+   attempt. Also cleared outright on a genuine sign-out, belt-and-braces.
+7. **Low — the 2s live-refresh loop could flicker a display back to
+   stale data.** Each tick fires a fresh `/account`+`/investments` fetch
+   with no guard against the PREVIOUS tick's own fetch still being in
+   flight — on a slow connection, an older, slower tick's response could
+   land after a newer, faster tick's already-current one, silently
+   reverting the display (e.g. a just-credited check-in bonus) until the
+   next tick corrects it 2s later. Fixed with a monotonic
+   `_liveRefreshSeq` counter, the same "capture-then-bail-if-stale" idiom
+   `_genericAsyncSeq` already uses elsewhere in this file for the identical
+   class of race. Purely cosmetic (no writes happen here) — no money-safety
+   impact, but a real, avoidable flicker.
+8. **Low — admin-panel Withdrawals copy said bank transfer had been
+   retired.** Stale from before the 2026-08-19 reactivation (see that
+   entry) — `admin-src/index.html`'s Withdrawals tab still told staff
+   "mobile money is the only withdrawal rail members can request today...
+   an old bank-transfer option... has been retired," risking a real bank
+   withdrawal being mishandled as bogus. Corrected to describe both
+   currently-supported rails.
+9. **Low — 5 assistant replies were stale**, 2 wrong-location, 2 wrong-
+   feature, 1 not settings-aware: `giftcode` and its DEEP explanation said
+   redeeming happens "under Account" — Gift Code moved to a Home-only FAB a
+   few rounds ago; `change_password` flatly said "there is no self-service
+   reset" — Password Management (Account, added 2026-08-17) IS genuine
+   self-service as long as the member still knows their current password
+   (worded to cover both that case and the genuine can't-sign-in-at-all
+   case); `account_hacked` told a compromised member to change their
+   password "from the sign-in screen," which doesn't exist — pointed at
+   Account → Password Management instead; `withdraw_weekend` unconditionally
+   claimed withdrawals process "including... at night... rather than office
+   hours" — true only while the admin-settable withdrawal-hours feature
+   (2026-08-18) is off; now reads live `settings.withdrawHoursEnabled` and
+   states the real configured window when it's on.
+- **Also fixed while in this code, not from the review**: `admin-src/
+  index.html`'s Recalculate-totals button never re-enabled itself or
+  restored its own label after the request resolved (compare its sibling
+  `auditBtn` handler, which does) — stuck reading "Recalculating…" and
+  disabled until the page was reloaded, for every outcome including
+  success. Fixed to match the audit button's own pattern. Also gave a
+  timeout specifically for this button a truthful message ("this may still
+  be running server-side... check back before retrying") instead of the
+  generic "Server is waking up" guess, without touching that shared
+  message for every OTHER admin action (out of scope, and correct as a
+  guess for most of them).
+- **Verification**: full `test-*.js` suite (100+ files) re-run clean after
+  every change; `test-assistant-corpus.js` (2219 assertions) and
+  `test-assistant-engine.js` still pass unchanged after the 5 reply-wording
+  fixes (routing is keyword/phrase-driven, not reply-text-driven, so
+  wording changes can't affect which intent a message resolves to — this
+  just confirms nothing else broke). `node -c` clean on both edited JS
+  files; `build-core.js` and `build-admin.js` both round-trip OK. Rebuilt
+  both `user/` and `admin/`. `user/sw.js` cache bumped `v312` → `v313`.
+  **`server.js` changed (Findings 1, 2, 3, 4) → needs a Railway redeploy.**
+
+---
+
 ## 2026-08-21 — Claude — Codex review of the deposit-mismatch fix: 1 High + 1 Medium + 1 Low, all confirmed real by direct code reading, all fixed
 
 Owner: *"he said that, but let us not make not make any error, review

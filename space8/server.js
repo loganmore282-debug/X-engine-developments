@@ -748,12 +748,34 @@ async function migrateLegacyWelcomeBonusRows() {
       .where('type', '==', 'admin_credit')
       .where('description', '==', 'Welcome gift')
       .limit(200000).get();
-    let fixed = 0;
+    let fixed = 0, skipped = 0;
     for (const doc of snap.docs) {
+      const t = doc.data();
+      // Codex-verified real gap (2026-08-21): matching on description alone
+      // isn't airtight -- /admin/deposit's `note` is completely free-text,
+      // so an admin manually crediting a real, unrelated correction could
+      // happen to type the exact phrase "Welcome gift" too (plausibly even
+      // for the very scenario of manually re-crediting a welcome bonus that
+      // failed to auto-credit -- a real deposit-equivalent, not a
+      // duplicate). A genuine welcome-bonus row is written inline inside
+      // completeRegistrationCore, seconds after that same user's profile
+      // doc is created -- a manual admin correction realistically happens
+      // well after that, days or weeks into the account's life. Cross-
+      // checking the transaction's own timestamp against that user's
+      // account-creation timestamp is a cheap, reliable way to only migrate
+      // rows that actually look like real registration-time credits, and
+      // leave anything that doesn't untouched (still admin_credit, still
+      // correctly counted as a real deposit) rather than guess.
+      if (!t.userId) { skipped++; continue; }
+      const uSnap = await db.collection('users').doc(t.userId).get();
+      const userCreatedAt = uSnap.exists ? uSnap.data().createdAt : null;
+      const withinRegistrationWindow = userCreatedAt && t.createdAt &&
+        Math.abs(new Date(t.createdAt).getTime() - new Date(userCreatedAt).getTime()) < 15 * 60 * 1000;
+      if (!withinRegistrationWindow) { skipped++; continue; }
       await doc.ref.update({ type: 'welcome_bonus' });
       fixed++;
     }
-    if (fixed) console.log(`legacy welcome-bonus backfill: retyped ${fixed} row(s) from admin_credit to welcome_bonus`);
+    if (fixed || skipped) console.log(`legacy welcome-bonus backfill: retyped ${fixed} row(s) from admin_credit to welcome_bonus, skipped ${skipped} that didn't look like a real registration-time credit`);
   } catch (e) { console.warn('legacy welcome-bonus backfill warning:', e.message); }
 }
 async function backfillReferralCodeLower() {
@@ -2616,20 +2638,35 @@ app.post('/invest/create', async (req, res) => {
       const isFirstInvestment = !(fresh.data().firstInvestmentDone === true || (fresh.data().totalInvested || 0) > 0);
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
-      // FieldValue.increment() on MongoDB throws "Cannot increment with
-      // non-numeric argument" outright if the stored field isn't already a
-      // number (seen live on a real account with totalInvested stored as
-      // the STRING "30000", likely from an old manual edit) -- blocking the
-      // purchase entirely instead of just producing a wrong total. This
-      // transaction is already single-writer-safe per user via the
-      // withLock('bal:'+userId) wrapping it, so computing the new values
-      // from the value just read and writing them as plain numbers is just
-      // as race-safe as increment() here, and it self-heals a corrupted
-      // string field back to numeric the moment this runs.
-      const newBalance = (Number(fresh.data().walletBalance) || 0) - liveTier.price;
+      // Codex-verified real race (2026-08-21): this used to debit
+      // walletBalance with an absolute `newBalance` computed from the
+      // snapshot read above (`t.get(uRef)`), rather than a relative
+      // FieldValue.increment() like every OTHER money path in this file
+      // (creditDeposit, /checkin, creditReferralCommission, /redeem,
+      // /admin/deposit) uses. withLock('bal:'+userId) wrapping this
+      // transaction only serializes against ANOTHER concurrent invest/
+      // withdraw call for the SAME user -- it does nothing to serialize
+      // against those OTHER credit paths, which hold their own, different
+      // lock keys ('dep:'+depositId, 'checkin:'+uid, 'comm:'+investmentId,
+      // etc). Concretely: a member with exactly enough balance for a
+      // purchase taps Buy; in the narrow window between this transaction's
+      // read and its write, a real deposit/check-in/commission/gift-code
+      // credit lands via $inc on the live document; this transaction's old
+      // absolute `walletBalance: newBalance` write would silently ERASE
+      // that credit's contribution the moment it committed, since it never
+      // re-read the post-credit balance. Fixed by debiting the price via
+      // FieldValue.increment(-liveTier.price) instead -- Mongo applies $inc
+      // operations commutatively regardless of which lands first, so a
+      // concurrent credit's own $inc can never be silently overwritten this
+      // way again. totalInvested is NOT switched to increment() -- it's
+      // never touched by any of those other concurrent credit paths (only
+      // ever written here), so there's no race to close for it, and
+      // increment() would reject a legacy string-corrupted value outright
+      // (see the self-heal note this comment used to carry) where the
+      // plain-number recompute below still quietly repairs it.
       const newInvested = (Number(fresh.data().totalInvested) || 0) + liveTier.price;
       t.update(uRef, {
-        walletBalance: newBalance, totalInvested: newInvested,
+        walletBalance: FieldValue.increment(-liveTier.price), totalInvested: newInvested,
         firstInvestmentDone: true
       });
       const { date, time } = nowStr();
@@ -4535,6 +4572,22 @@ app.get('/admin/users', async (req, res) => {
 // the comment on that check below) -- never throws for that expected case,
 // only for a genuine unexpected DB error.
 async function recountAllTotals() {
+  // Codex-verified real race (2026-08-21): the delta-based increment fix
+  // just above (see the comment on totalDeposited/totalEarned/team counts
+  // below) closes the race against a LIVE money credit landing mid-scan,
+  // but introduces a different one if two recounts overlap each other --
+  // the manual button double-tapped, a second admin tab, or the button
+  // clashing with the 6-hourly scheduledRecount(). Two concurrent runs can
+  // each read the SAME stale "currently stored" value before either has
+  // written its own correction, each compute the SAME delta, and each
+  // apply it via increment() -- doubling a real correction instead of
+  // applying it once. Serialized behind one global lock so at most one
+  // recount is ever actually scanning+writing at a time; admin-only and
+  // already rare/slow enough (whole-collection scan) that full
+  // serialization costs nothing real.
+  return withLock('totals-recount', () => recountAllTotalsLocked());
+}
+async function recountAllTotalsLocked() {
   const [txSnap, invSnap] = await Promise.all([
       db.collection('transactions').limit(200000).get(),
       db.collection('investments').limit(200000).get(),
@@ -4675,14 +4728,30 @@ async function recountAllTotals() {
       // Same "only touch what's actually wrong" treatment for totalInvested
       // -- see the corruption explanation above. Never touches walletBalance
       // or any investment/payout record, purely a display/analytics counter.
-      // Kept as an absolute set (not a delta/increment like the fields
-      // above): totalInvested is never credited live via FieldValue
-      // .increment() -- /invest/create does a plain read-modify-write of the
-      // whole field -- so there's no concurrent atomic increment for a
-      // delta-write to safely add together with here.
+      // Codex-verified real race (2026-08-21): this used to always write an
+      // ABSOLUTE `realInvested`, computed from the `investments` snapshot
+      // read once at the very start of this function -- if a real purchase
+      // landed (via /invest/create) in the gap between that read and this
+      // specific user's own batch-write firing, the new investment's price
+      // wasn't in `investedByUser` yet, so this would silently REVERT
+      // totalInvested back down, erasing the just-completed purchase's
+      // contribution (the investment record itself stays intact -- only
+      // the display/analytics counter regresses, which still matters: it
+      // feeds requireInvestToWithdraw and Task Center comparisons). Now
+      // uses the same delta/increment approach as totalDeposited/
+      // totalEarned/team counts above -- EXCEPT when the currently-stored
+      // value isn't already a clean number (the legacy string-corruption
+      // case this field is specifically known to have had), since
+      // FieldValue.increment() throws outright on a non-numeric field --
+      // that one case still self-heals via a direct absolute overwrite,
+      // same as before, since there's no live increment for it to race
+      // against with the field starting out un-incrementable anyway.
       const realInvested = investedByUser[d.id] || 0;
-      if (realInvested !== finiteMoney(u.totalInvested)) {
-        fields.totalInvested = realInvested;
+      const storedInvested = u.totalInvested;
+      if (realInvested !== finiteMoney(storedInvested)) {
+        fields.totalInvested = (storedInvested === undefined || storedInvested === null || typeof storedInvested === 'number')
+          ? FieldValue.increment(realInvested - finiteMoney(storedInvested))
+          : realInvested;
         investedFixed++;
         changed = true;
       }
@@ -4995,17 +5064,33 @@ app.post('/admin/debit', async (req, res) => {
   try {
     let newBal = 0;
     const { date, time } = nowStr();
-    await db.runTransaction(async t => {
+    // Codex-verified real gap (2026-08-21): this used to have NO check at
+    // all that the wallet actually holds `amt` -- an operator typo (an
+    // extra zero, the wrong user selected) could silently drive a real
+    // member's balance negative, and this whole transaction also never
+    // shared the same withLock('bal:'+userId) that /invest/create and
+    // /withdraw/request both use to serialize against each other -- two
+    // concurrent debits (or a debit racing a purchase/withdrawal) could
+    // each read the same "sufficient" balance before either commits and
+    // both proceed. Fixed both: wrapped in the same per-user lock every
+    // other money-debiting path already uses, and the balance is re-
+    // checked against a fresh read taken INSIDE that lock, immediately
+    // before the debit, same "re-verify live, right before the money
+    // moves" pattern already established elsewhere in this file (e.g. the
+    // Task Center claim TOCTOU fix).
+    await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
-      newBal = (uSnap.data().walletBalance || 0) - amt;
+      const bal = uSnap.data().walletBalance || 0;
+      if (amt > bal) throw new Error(`Cannot debit ${fmtUGX(amt)} -- this wallet only holds ${fmtUGX(bal)}`);
+      newBal = bal - amt;
       t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
       t.set(db.collection('transactions').doc(), {
         userId, type: 'admin_debit', description: note || 'Balance adjustment',
         amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
       });
-    });
+    }));
     logAdminAction(req, 'manual_debit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Removed ${fmtUGX(amt)}. New balance ${fmtUGX(newBal)}`, newBalance: newBal });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
