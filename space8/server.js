@@ -6511,6 +6511,22 @@ function runReconciler() {
 // have received). "No double pay" holds for exactly the same reason the
 // manual button's no-double-pay property holds -- this is that same
 // code path, not a parallel one.
+//
+// Real gap found 2026-08-23 (owner: "if it is one and has come, server
+// should wait for interval then approve... it should delay that
+// withdrawal by 10 seconds... every withdrawal should test[undergo]
+// delay"): the ORIGINAL cut only gated on time-since-the-LAST-approval
+// (_autoApproveLastRunAt), which starts at 0 (or sits stale after a long
+// idle gap) -- so a single incoming withdrawal, or the very first one
+// after enabling the feature, got approved on the very next 1s tick with
+// NO delay at all, defeating the whole point of a "settling" wait. Fixed
+// by ALSO requiring each candidate's own age (now - its createdAt) to
+// have reached the configured interval before it's eligible -- every
+// withdrawal now genuinely sits for the full interval from the moment IT
+// was requested, not just from whenever the last approval happened to be.
+// The original last-approval spacing gate is kept alongside this (not
+// replaced) so a burst of several arriving together still gets approved
+// one-at-a-time, spaced by the interval, exactly as originally asked.
 let _sweepingAutoApprove = false;
 let _autoApproveLastRunAt = 0;
 async function autoApproveWithdrawalsTick() {
@@ -6523,13 +6539,20 @@ async function autoApproveWithdrawalsTick() {
     if (Date.now() - _autoApproveLastRunAt < intervalMs) return;
     // Oldest-first, same reasoning as the other reconciler sweeps -- a
     // small lookahead window (not just the single oldest row) so one
-    // over-the-cap request (see autoApproveMaxAmount below) can't
-    // permanently block every smaller one behind it in the queue.
+    // over-the-cap request (see autoApproveMaxAmount below) or one that
+    // hasn't settled long enough yet can't permanently block every
+    // eligible one behind it in the queue.
     const snap = await db.collection('withdrawals').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(20).get();
     if (snap.empty) return;
+    const now = Date.now();
     const maxAmt = Number(s.autoApproveMaxAmount) || 0;
-    const target = snap.docs.find(d => maxAmt <= 0 || finiteMoney(d.data().amount) <= maxAmt);
-    if (!target) return; // every candidate in this window exceeds the configured cap -- wait for a manual approval or a smaller request
+    const target = snap.docs.find(d => {
+      const w = d.data();
+      const settled = (now - tsMillis(w.createdAt)) >= intervalMs;
+      const withinCap = maxAmt <= 0 || finiteMoney(w.amount) <= maxAmt;
+      return settled && withinCap;
+    });
+    if (!target) return; // nothing in this window has both settled long enough and is within the cap yet
     _autoApproveLastRunAt = Date.now();
     const result = await processWithdrawalCore(target.id, 'auto-approve-system');
     if (result.code === 200) {

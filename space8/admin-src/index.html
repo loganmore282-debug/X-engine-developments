@@ -1777,7 +1777,7 @@ async function renderSettings(){
 
     <h2 class="sec">Auto-approve withdrawals</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Server-driven: while on, the server itself approves and sends the oldest pending withdrawal request, waits the interval below, then does the next one — no tap needed per request. It reuses the exact same send logic as the "Send via MarzPay" button on the Withdrawals tab, so it can never double-pay a request or act on one that isn't still genuinely pending.</p>
+      <p class="muted" style="margin-top:0">Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested — even a single request always waits the full interval, it's never approved instantly) before the server approves and sends it. Requests that arrive close together are still sent one at a time, spaced by the same interval — no tap needed per request. It reuses the exact same send logic as the "Send via MarzPay" button on the Withdrawals tab, so it can never double-pay a request or act on one that isn't still genuinely pending.</p>
       <div class="switch-row"><span><b>Enable auto-approve</b> <span class="muted">(server keeps running even if you close this panel)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAutoApproveOn" ${s.autoApproveWithdrawalsEnabled?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">

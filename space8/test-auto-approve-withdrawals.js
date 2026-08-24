@@ -22,6 +22,19 @@
    include -- a request above it is skipped (left Pending for manual
    review) without blocking smaller requests behind it in the queue.
 
+   ROUND 2, same day -- real bug found and fixed: the owner reported "if
+   one withdrawal comes, the server automatically approves minus waiting
+   for 10s" -- confirmed true by reading the code: the original cut only
+   gated on time-since-the-LAST-approval (_autoApproveLastRunAt, which
+   starts at 0), so a single incoming withdrawal -- or the very first one
+   after enabling -- got approved on the very next 1s tick with NO delay
+   at all. Fixed by ALSO requiring each candidate's own age (now minus its
+   createdAt) to have reached the configured interval before it's
+   eligible, so every withdrawal genuinely settles for the full interval
+   from the moment it was requested, not just from whenever the last
+   approval happened to land. This file's "single freshly-created
+   withdrawal" section below is the direct regression test for that.
+
    Run: node test-auto-approve-withdrawals.js   (exits 0 = all green)   */
 
 process.env.MONGODB_URI = 'mongodb://mock';
@@ -146,6 +159,19 @@ const auditLogFor = id => Array.from(collMap('adminAuditLog').values()).find(a =
   const wDisabled = seedPendingWithdrawal('aa-user-off', 30000, 5000);
   await sleep(2200);
   check('withdrawal stayed pending while auto-approve is off', witStatus(wDisabled) === 'pending', witStatus(wDisabled));
+
+  console.log('\n== Real bug regression: a SINGLE freshly-created withdrawal must NOT be approved instantly -- it must wait the full interval from its own request time ==');
+  await setSettings({ autoApproveWithdrawalsEnabled: true, autoApproveIntervalSec: 5, autoApproveMaxAmount: 0 });
+  const wLone = seedPendingWithdrawal('aa-user-lone', 30000, 0); // "created" right now, age 0
+  console.log('  (waiting ~2s -- well under the 5s interval)');
+  await sleep(2000);
+  check('a lone, just-created withdrawal is NOT approved before its own interval has elapsed (this was the reported bug)', witStatus(wLone) === 'pending', witStatus(wLone));
+  console.log('  (waiting ~4s more so the withdrawal\'s own age genuinely exceeds the 5s interval)');
+  await sleep(4000);
+  check('the same withdrawal IS approved once it has genuinely settled for the full interval', witStatus(wLone) === 'processed', witStatus(wLone));
+  await setSettings({ autoApproveWithdrawalsEnabled: false });
+  console.log('  (waiting ~4s so the next section\'s own approval-spacing gate isn\'t still counting down from the approval just above)');
+  await sleep(4000);
 
   console.log('\n== Enabled: the OLDEST pending withdrawal is auto-approved first, idempotently, with an audit trail and a push notification ==');
   const regR = await ownerCall('POST', '/admin/push/register', { token: 'aa-admin-device-1' });

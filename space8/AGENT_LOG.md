@@ -14,6 +14,62 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-23 — Claude — Fixed a real bug in auto-approve: a single/first incoming withdrawal was being approved instantly instead of waiting the configured interval
+
+Owner: *"bro l wanted also for any incoming withdrawal, it should take that
+settled time for approval, so no immediate approval by server, so if it is
+one and has come, server should wait for interval then approve, so like it
+is 10, it should delay that withdrawal by 10seconds, so no auto should be
+there anymore, every withdrawal should test delay."* Asked two clarifying
+questions before touching anything (per this project's usual practice of
+confirming ambiguous asks rather than guessing): whether this meant a
+per-withdrawal timer instead of the existing one-at-a-time queue (owner:
+confirmed, in their own words — "if one withdrawal comes, the server
+automatically approves minus waiting for 10s... I wanted also to act on
+that incoming withdrawal, take if a withdrawal comes, it should wait for
+10s then server approves"), and whether "no auto should be there anymore"
+meant removing the Settings toggle entirely (owner: *"l didn't mean
+that"* — explicitly keep it).
+
+**Root cause, confirmed real by reading the code**: `autoApproveWithdrawalsTick()`
+(added earlier the same day) only ever gated on time-since-the-LAST-
+approval (`_autoApproveLastRunAt`, module-level, starts at `0`). For a
+single incoming withdrawal, or the very first one after the feature is
+turned on, that gate is trivially satisfied immediately (`Date.now() - 0`
+is enormous) — so it got approved on the very next 1s-cadence tick, with
+NO actual delay from its own request time. The whole point of "settle for
+10s first" never applied to the first/only withdrawal in the queue, only
+to spacing BETWEEN multiple approvals — exactly what the owner was
+reporting.
+
+- **Fix**: `autoApproveWithdrawalsTick()` (`server.js`) now ALSO requires
+  each candidate withdrawal's own age (`now - its createdAt`) to have
+  reached the configured interval before it's eligible — kept ALONGSIDE
+  the original last-approval spacing gate, not replacing it, so a burst of
+  several requests arriving close together are still sent one at a time,
+  spaced by the interval (the original ask), while EVERY withdrawal —
+  including a lone one — now genuinely sits for the full interval from the
+  moment it was requested before ever being auto-approved.
+- **Admin UI help text** (`admin-src/index.html`) rewritten to say this
+  explicitly — a single request always waits the full interval, it's never
+  approved instantly — since the old wording ("waits the interval below,
+  then does the next one") read as spacing-between-approvals only, which
+  is exactly the ambiguity that caused the original bug to go unnoticed.
+- **Verification**: `test-auto-approve-withdrawals.js` extended to 23/23
+  with a dedicated regression section — seeds a single, freshly-created
+  ("age 0") withdrawal, confirms it's still `pending` after ~2s (well
+  under the 5s test interval — this is the exact bug scenario), then
+  confirms it IS approved once its own age genuinely exceeds the interval.
+  Every other section's existing timing assumptions re-verified to still
+  hold under the new dual-gate logic (oldest-first ordering, spacing
+  between consecutive approvals, the max-amount cap not permanently
+  blocking a smaller request behind it). Full `test-*.js` suite green,
+  80/80. Rebuilt `admin/` (`node build-admin.js`, round-trip OK) since
+  `admin-src/index.html`'s help text changed — `user/` untouched, no cache
+  bump needed. **`server.js` changed → needs a Railway redeploy.**
+
+---
+
 ## 2026-08-23 — Claude — New feature: server-driven auto-approve for pending withdrawals, one every N seconds, admin-toggleable
 
 Owner: *"l also want to put a system in admin panel which approves
