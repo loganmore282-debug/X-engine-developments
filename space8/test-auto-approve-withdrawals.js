@@ -37,11 +37,26 @@ const dbPath = require.resolve('./db.js');
 const dbMod = new Module(dbPath); dbMod.exports = mockdb; dbMod.loaded = true;
 require.cache[dbPath] = dbMod;
 
+// Same mock shape test-push-notifications.js already established --
+// records every push sent via either the multicast or per-owner-device
+// path so this file can assert the auto-approve completion push fires
+// with the right title/body, not just that the withdrawal itself resolved.
+const sentPushes = [];
 const faPath = require.resolve('firebase-admin');
 const faMod = new Module(faPath);
 faMod.exports = {
   initializeApp: () => {}, credential: { cert: () => ({}) },
   auth: () => ({ verifyIdToken: async tok => { if (String(tok).startsWith('uid:')) return { uid: tok.slice(4) }; throw new Error('bad'); } }),
+  messaging: () => ({
+    sendEachForMulticast: async ({ tokens, notification, data }) => {
+      sentPushes.push({ tokens: tokens.slice(), notification, data });
+      return { responses: tokens.map(() => ({ success: true })) };
+    },
+    sendEach: async messages => {
+      messages.forEach(m => sentPushes.push({ tokens: [m.token], notification: m.notification, data: m.data }));
+      return { responses: messages.map(() => ({ success: true })) };
+    },
+  }),
 };
 faMod.loaded = true;
 require.cache[faPath] = faMod;
@@ -132,7 +147,9 @@ const auditLogFor = id => Array.from(collMap('adminAuditLog').values()).find(a =
   await sleep(2200);
   check('withdrawal stayed pending while auto-approve is off', witStatus(wDisabled) === 'pending', witStatus(wDisabled));
 
-  console.log('\n== Enabled: the OLDEST pending withdrawal is auto-approved first, idempotently, with an audit trail ==');
+  console.log('\n== Enabled: the OLDEST pending withdrawal is auto-approved first, idempotently, with an audit trail and a push notification ==');
+  const regR = await ownerCall('POST', '/admin/push/register', { token: 'aa-admin-device-1' });
+  check('admin device registered for push', regR.body?.status === 'success', regR.body);
   const wOlder = seedPendingWithdrawal('aa-user-1', 30000, 20000); // "created" 20s ago
   const wNewer = seedPendingWithdrawal('aa-user-2', 25000, 1000);  // "created" 1s ago -- must NOT go first
   await setSettings({ autoApproveWithdrawalsEnabled: true, autoApproveIntervalSec: 5, autoApproveMaxAmount: 0 });
@@ -149,6 +166,11 @@ const auditLogFor = id => Array.from(collMap('adminAuditLog').values()).find(a =
   check('the matching transaction record was finalized too (same helper the manual button uses)', collMap('transactions').get('tx-' + wOlder)?.status === 'success', collMap('transactions').get('tx-' + wOlder));
   check('a system audit-log entry was written for the auto-approval', !!auditLogFor(wOlder), auditLogFor(wOlder));
   check('the audit entry is attributed to the auto-approve system, not a human admin', auditLogFor(wOlder)?.actor === 'auto-approve-system', auditLogFor(wOlder));
+  const pushForOlder = sentPushes.find(p => p.data?.withdrawalId === wOlder);
+  check('a push notification was sent to the registered admin device for the completion', !!pushForOlder, sentPushes);
+  check('the push title says the withdrawal was auto-approved', pushForOlder?.notification?.title === 'Withdrawal auto-approved', pushForOlder);
+  check('the push data marks it as auto-approved (distinct from a new-request alert)', pushForOlder?.data?.autoApproved === '1', pushForOlder);
+  check('the push reached the registered device', pushForOlder?.tokens?.includes('aa-admin-device-1'), pushForOlder);
 
   console.log('  (waiting ~10s for the configured 5s interval to elapse, so the NEXT one is due)');
   await sleep(10000);

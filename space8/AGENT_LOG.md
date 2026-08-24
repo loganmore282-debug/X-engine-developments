@@ -76,26 +76,43 @@ parallel implementation that could drift out of sync with it.
   there isn't one here, this fires from a timer, not a request) so the
   existing admin audit log can distinguish an auto-approval from a human
   clicking "Send via MarzPay" without losing the trail either way.
-- **Verification**: new `test-auto-approve-withdrawals.js` (16/16) —
+- **Follow-up same day, owner: "l also want to receive notifications for
+  auto approve completions."** Each successful auto-approval now also
+  calls the existing `sendAdminPush()` (`server.js`) — the SAME generic
+  push already used for deposit-completion alerts, reaching every
+  registered admin/staff device. Deliberately NOT `sendWithdrawalPush`
+  (the OTHER existing push function) — that one is specifically for a
+  still-*pending* request and always attaches a quick-approve action
+  button to owner devices; that action makes no sense on a withdrawal
+  that's already done, so reusing it here would have shown a live
+  "Approve" button on an already-approved payout. The push title reads
+  "Withdrawal auto-approved", body is the amount and destination, and its
+  data payload carries `autoApproved: '1'` so a device can tell this apart
+  from a genuine new-request alert if it ever wants to.
+- **Verification**: new `test-auto-approve-withdrawals.js` (21/21) —
   proves the settings-range validation (interval floor/ceiling, negative
   max-amount rejection, boolean coercion), that a pending withdrawal is
   left untouched while the feature is off, that the OLDEST pending
   withdrawal is approved first (not the newest) with the wallet's
   `totalWithdrawn` credited and its Records-view transaction row finalized
   exactly like a manual approval would, that a system audit-log entry is
-  written and correctly attributed, that only one withdrawal is approved
-  per elapsed interval (not a burst), that a second withdrawal is
-  correctly picked up on its own later turn once the interval genuinely
-  elapses, that an over-cap request is skipped while a smaller one behind
-  it in the queue is NOT blocked, and that ticking with an empty queue is
-  a harmless no-op. All timing assertions wait for the REAL 1s
-  `setInterval` this feature registers at boot (same pattern every other
-  reconciler test in this suite already uses, e.g.
-  `test-reconciler-caps.js`), not a mocked clock. Full `test-*.js` suite
-  green, 80/80. Rebuilt `admin/` (`node build-admin.js`, round-trip OK)
-  since `admin-src/index.html` changed — `user/` untouched, no cache bump
-  needed. **`server.js` changed → needs a Railway redeploy** before the
-  toggle exists/does anything live.
+  written and correctly attributed, that a push notification is actually
+  sent to a registered admin device with the right title/body and the
+  `autoApproved` marker (mocking `admin.messaging()` the same way
+  `test-push-notifications.js` already does, not just trusting the call
+  happened), that only one withdrawal is approved per elapsed interval
+  (not a burst), that a second withdrawal is correctly picked up on its
+  own later turn once the interval genuinely elapses, that an over-cap
+  request is skipped while a smaller one behind it in the queue is NOT
+  blocked, and that ticking with an empty queue is a harmless no-op. All
+  timing assertions wait for the REAL 1s `setInterval` this feature
+  registers at boot (same pattern every other reconciler test in this
+  suite already uses, e.g. `test-reconciler-caps.js`), not a mocked
+  clock. Full `test-*.js` suite green, 80/80. Rebuilt `admin/` (`node
+  build-admin.js`, round-trip OK) since `admin-src/index.html` changed —
+  `user/` untouched, no cache bump needed. **`server.js` changed → needs
+  a Railway redeploy** before the toggle exists/does anything live,
+  including the completion push.
 
 ---
 

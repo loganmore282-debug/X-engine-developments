@@ -6537,6 +6537,14 @@ async function autoApproveWithdrawalsTick() {
         actor: 'auto-approve-system', role: 'system', action: 'withdrawal_auto_approved',
         meta: { withdrawalId: target.id, ...result.meta }, ip: null, createdAt: FieldValue.serverTimestamp()
       }).catch(e => console.error('Audit log write failed: withdrawal_auto_approved', e.message));
+      // Owner (2026-08-23): "l also want to receive notifications for auto
+      // approve completions." Reuses the SAME generic admin push already
+      // used for deposit completions (sendAdminPush, every registered
+      // admin/staff device) -- deliberately NOT sendWithdrawalPush, which
+      // is specifically for a still-PENDING request and always attaches a
+      // quick-approve action button to owner devices; that action makes no
+      // sense on a withdrawal that's already done.
+      if (result.meta) sendAdminPush('Withdrawal auto-approved', `${fmtUGX(result.meta.amount)} sent to ${result.meta.dest}`, { type: 'withdrawal', withdrawalId: target.id, autoApproved: '1' });
     } else {
       console.warn(`autoApproveWithdrawalsTick: withdrawal ${target.id} did not process cleanly (${result.code}): ${result.body?.message}`);
     }
