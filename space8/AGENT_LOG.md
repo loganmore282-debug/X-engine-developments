@@ -14,6 +14,38 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-24 — Claude — Deposit phone number no longer auto-fills with the member's own account phone
+
+Owner: *"bro also remove the number which auto puts on deposit, so one has
+to just type the number he or she gonna use for a deposit."*
+
+`openDepositSheet()` (`user-src/original_module.js`) pre-filled the
+`depPhone` input's `value` attribute with `STATE.account.phone` (the
+member's own registered login phone) — a deposit is very often paid from a
+different phone (a friend's/agent's line, a second SIM), so the auto-fill
+meant every deposit not made from the member's own number required first
+noticing and clearing the pre-filled value. Removed the `value="..."`
+attribute entirely — the field now starts genuinely blank (still keeps its
+`placeholder="07XXXXXXXX"` hint), matching the already-established design
+for deposits (see the "Payout accounts... DEPOSITS never touch this list"
+note above — deposits have always intentionally taken a phone typed fresh,
+this was just a leftover convenience default that worked against that).
+The now-unused `var acc = STATE.account || {};` in the same function was
+removed too, since nothing else in `openDepositSheet()` referenced it.
+
+This is unrelated to the auto-approve-withdrawals interval question from
+the previous entry — owner separately asked to confirm that fix didn't
+remove the spacing-between-approvals behavior (it didn't; both the
+per-withdrawal-age gate and the time-since-last-approval gate still
+coexist), answered in chat, no code change needed for that part.
+
+**Verification**: `node build-core.js` round-trip OK. Full `test-*.js`
+suite green (no test asserted the old auto-fill value, none needed
+updating). `user/sw.js` cache bumped `v313` → `v314`. Client-only change —
+`server.js` untouched, no Railway redeploy needed.
+
+---
+
 ## 2026-08-23 — Claude — Fixed a real bug in auto-approve: a single/first incoming withdrawal was being approved instantly instead of waiting the configured interval
 
 Owner: *"bro l wanted also for any incoming withdrawal, it should take that

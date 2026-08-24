@@ -2211,7 +2211,6 @@ async function changePassword(){
 // specifically about WITHDRAWALS (2026-08-16 correction), not deposits.
 var DEPOSIT_QUICK_AMOUNTS = [15000, 30000, 50000, 100000, 180000, 250000, 350000, 500000, 850000, 1000000];
 function openDepositSheet(){
-  var acc = STATE.account || {};
   var min = (STATE.settings||{}).minDeposit || 20000;
   var chips = DEPOSIT_QUICK_AMOUNTS.map(function(a){
     return '<div class="amt-chip" data-amt="' + a + '">' + ugx(a) + '</div>';
@@ -2225,7 +2224,7 @@ function openDepositSheet(){
     '<div class="amt-chips">' + chips + '</div>' +
     '<div class="auth-form">' +
       '<div class="field">' + ico('deposit') + '<input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="Amount (UGX)"></div>' +
-      '<div class="field">' + ico('phone') + '<input id="depPhone" type="tel" inputmode="tel" maxlength="10" placeholder="07XXXXXXXX" value="' + esc(acc.phone||'') + '"></div>' +
+      '<div class="field">' + ico('phone') + '<input id="depPhone" type="tel" inputmode="tel" maxlength="10" placeholder="07XXXXXXXX"></div>' +
     '</div>' +
     '<div class="net-chips">' + netChips + '</div>' +
     '<button class="btn btn-primary" id="submitDepositBtn" style="margin-top:14px">Deposit Now</button>' +
