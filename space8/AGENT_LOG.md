@@ -14,6 +14,91 @@ entry per fix/change, newest at the top. Read this in full before starting new w
 
 ---
 
+## 2026-08-23 — Claude — New feature: server-driven auto-approve for pending withdrawals, one every N seconds, admin-toggleable
+
+Owner: *"l also want to put a system in admin panel which approves
+withdrawals of any request every after 10s, so it approves 1 then waits
+for 10s then approves another, server driven, so l can toggle that mode
+and the system drives it, so withdrawals come in admin, l activate auto
+mode then server starts it should be safe,encrypted and secure,and
+indepotent and no double pay."*
+
+Built as a new background sweep, `autoApproveWithdrawalsTick()`
+(`server.js`), ticking every 1s (same cadence as the existing
+`reconcileCashback` sweep) but only actually acting once the
+admin-configured interval (`autoApproveIntervalSec`, default 10s) has
+genuinely elapsed since the last approval — this lets the interval be
+changed live from Settings without tearing down/rebuilding a timer.
+**Deliberately contains zero new money-moving logic**: it finds the
+oldest eligible `'pending'` withdrawal and calls the exact same
+`processWithdrawalCore()` the manual "Send via MarzPay" admin button
+already calls — so "safe, idempotent, no double pay" isn't a new property
+to prove, it's inherited for free from that already-hardened function
+(the in-process `_withdrawInFlight` guard against double-processing the
+same withdrawal, the `status !== 'pending'` check that makes acting on an
+already-resolved withdrawal a safe no-op, the ambiguous-network-error
+handling that never blindly retries a request MarzPay may already have
+received). This is the same code path the manual button uses, not a
+parallel implementation that could drift out of sync with it.
+
+- **New settings** (`DEFAULT_SETTINGS`): `autoApproveWithdrawalsEnabled`
+  (off by default), `autoApproveIntervalSec` (default 10, admin range
+  5–3600 — the 5s floor stops a fat-fingered value turning this into a
+  tight loop hammering MarzPay), `autoApproveMaxAmount` (default 0 =
+  unlimited). The max-amount cap is a safety valve the owner didn't
+  explicitly ask for but is cheap and fully reversible to include — with
+  it at 0 (default), behavior is exactly "approve everything" as asked;
+  set it nonzero and a request above it is skipped and left Pending for
+  manual review, without permanently blocking smaller requests behind it
+  in the queue (the sweep looks at a 20-row oldest-first window each
+  tick, not just the single oldest row, so one oversized outlier can't
+  starve everything behind it).
+- **Validation**: `autoApproveIntervalSec`/`autoApproveMaxAmount` added to
+  `SETTINGS_CRITICAL_RANGES`, `autoApproveWithdrawalsEnabled` added to
+  `SETTINGS_BOOLEAN_FIELDS` — same enforcement `/admin/settings/update`
+  already applies to every other money/rate/behavior-critical field
+  (strict numeric range or explicit boolean coercion, never trusting the
+  raw wire type).
+- **Admin UI** (`admin-src/index.html`, new "Auto-approve withdrawals"
+  card in Settings → Rates & limits area): a toggle, the two number
+  fields, and a Save button, following the exact same
+  card/switch-row/`/admin/settings/update` pattern every other settings
+  section in this file already uses. The toggle's own `change` handler
+  shows a `confirm()` dialog when turning it ON (not OFF) — this is
+  money-moving automation with no per-request human check, so a plain
+  "tick the box, then remember to hit Save" flow isn't enough friction;
+  turning it off needs no confirmation since that's always the safe
+  direction.
+- **Audit trail**: each auto-approval writes its own `adminAuditLog` row
+  (`action: 'withdrawal_auto_approved'`, `actor: 'auto-approve-system'`,
+  `role: 'system'`) directly (not through `logAdminAction()`, which
+  expects a real HTTP `req` object with an authenticated admin attached —
+  there isn't one here, this fires from a timer, not a request) so the
+  existing admin audit log can distinguish an auto-approval from a human
+  clicking "Send via MarzPay" without losing the trail either way.
+- **Verification**: new `test-auto-approve-withdrawals.js` (16/16) —
+  proves the settings-range validation (interval floor/ceiling, negative
+  max-amount rejection, boolean coercion), that a pending withdrawal is
+  left untouched while the feature is off, that the OLDEST pending
+  withdrawal is approved first (not the newest) with the wallet's
+  `totalWithdrawn` credited and its Records-view transaction row finalized
+  exactly like a manual approval would, that a system audit-log entry is
+  written and correctly attributed, that only one withdrawal is approved
+  per elapsed interval (not a burst), that a second withdrawal is
+  correctly picked up on its own later turn once the interval genuinely
+  elapses, that an over-cap request is skipped while a smaller one behind
+  it in the queue is NOT blocked, and that ticking with an empty queue is
+  a harmless no-op. All timing assertions wait for the REAL 1s
+  `setInterval` this feature registers at boot (same pattern every other
+  reconciler test in this suite already uses, e.g.
+  `test-reconciler-caps.js`), not a mocked clock. Full `test-*.js` suite
+  green, 80/80. Rebuilt `admin/` (`node build-admin.js`, round-trip OK)
+  since `admin-src/index.html` changed — `user/` untouched, no cache bump
+  needed. **`server.js` changed → needs a Railway redeploy** before the
+  toggle exists/does anything live.
+
+---
+
 ## 2026-08-23 — Claude — Found and fixed the real root cause of the owner's "Balance ≠ ledger" integrity-audit mismatches; investigated the referral-search complaint (no bug found by direct reading); Codex asked to review both plus re-verify prior fixes
 
 Owner, with two screenshots of `/admin/integrity` showing "12 issue(s) found"

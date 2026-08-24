@@ -248,6 +248,14 @@ const DEFAULT_SETTINGS = {
   // isWithinWithdrawHours() and its own comment) -- this is the actual
   // security boundary; the client only ever shows an informational note.
   withdrawHoursEnabled: false, withdrawHoursStart: 8, withdrawHoursEnd: 22,
+  // Owner (2026-08-23): "put a system in admin panel which approves
+  // withdrawals of any request every after 10s... server driven, safe,
+  // idempotent, no double pay." Off by default. autoApproveMaxAmount is a
+  // safety valve the owner didn't explicitly ask for but is cheap and
+  // reversible to include -- 0 means unlimited (no cap), so the default
+  // behavior is exactly "approve everything" as asked; set a nonzero value
+  // to make the sweep skip anything above it and leave it for manual review.
+  autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
   annEnabled: false, annTitle: '', annBody: '', annCtaLabel: '', annCtaUrl: '', announcementBg: '',
   annBgBlurPx: 6, annBgTintPct: 55,
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
@@ -4278,8 +4286,12 @@ const SETTINGS_CRITICAL_RANGES = {
   commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
   withdrawHoursStart: [0, 23], withdrawHoursEnd: [0, 23],
+  // Floor of 5s (not 0/negative) stops a fat-fingered value from turning
+  // this into a tight loop hammering MarzPay; ceiling of 1 hour is generous
+  // headroom above the owner's own "every 10s" ask.
+  autoApproveIntervalSec: [5, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'annEnabled', 'withdrawHoursEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'annEnabled', 'withdrawHoursEnabled', 'autoApproveWithdrawalsEnabled'];
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -6481,6 +6493,57 @@ function runReconciler() {
   reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
 }
 
+// Owner (2026-08-23): "put a system in admin panel which approves
+// withdrawals of any request every after 10s... server driven... safe,
+// encrypted and secure, and idempotent and no double pay." Ticks every
+// second (same cadence as reconcileCashback above) but only actually acts
+// once the admin-configured interval has genuinely elapsed since the last
+// approval -- that lets the interval itself be changed live from Settings
+// without needing to tear down and rebuild a timer. Deliberately does NOT
+// contain any new money-moving logic: it just finds the oldest eligible
+// 'pending' withdrawal and calls the exact same processWithdrawalCore()
+// the manual "Send via MarzPay" admin button already calls -- so it
+// inherits every existing safety property for free (the in-process
+// _withdrawInFlight guard against double-processing the same withdrawal,
+// the status==='pending' check that makes a second call on an
+// already-resolved withdrawal a safe no-op, the ambiguous-network-error
+// handling that refuses to blindly retry a request MarzPay may already
+// have received). "No double pay" holds for exactly the same reason the
+// manual button's no-double-pay property holds -- this is that same
+// code path, not a parallel one.
+let _sweepingAutoApprove = false;
+let _autoApproveLastRunAt = 0;
+async function autoApproveWithdrawalsTick() {
+  if (_sweepingAutoApprove) return;
+  _sweepingAutoApprove = true;
+  try {
+    const s = await getSettings();
+    if (!s.autoApproveWithdrawalsEnabled) return;
+    const intervalMs = Math.max(5, Math.round(Number(s.autoApproveIntervalSec) || 10)) * 1000;
+    if (Date.now() - _autoApproveLastRunAt < intervalMs) return;
+    // Oldest-first, same reasoning as the other reconciler sweeps -- a
+    // small lookahead window (not just the single oldest row) so one
+    // over-the-cap request (see autoApproveMaxAmount below) can't
+    // permanently block every smaller one behind it in the queue.
+    const snap = await db.collection('withdrawals').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(20).get();
+    if (snap.empty) return;
+    const maxAmt = Number(s.autoApproveMaxAmount) || 0;
+    const target = snap.docs.find(d => maxAmt <= 0 || finiteMoney(d.data().amount) <= maxAmt);
+    if (!target) return; // every candidate in this window exceeds the configured cap -- wait for a manual approval or a smaller request
+    _autoApproveLastRunAt = Date.now();
+    const result = await processWithdrawalCore(target.id, 'auto-approve-system');
+    if (result.code === 200) {
+      db.collection('adminAuditLog').doc().set({
+        actor: 'auto-approve-system', role: 'system', action: 'withdrawal_auto_approved',
+        meta: { withdrawalId: target.id, ...result.meta }, ip: null, createdAt: FieldValue.serverTimestamp()
+      }).catch(e => console.error('Audit log write failed: withdrawal_auto_approved', e.message));
+    } else {
+      console.warn(`autoApproveWithdrawalsTick: withdrawal ${target.id} did not process cleanly (${result.code}): ${result.body?.message}`);
+    }
+  } catch (e) { console.error('Auto-approve withdrawals error:', e.message); }
+  finally { _sweepingAutoApprove = false; }
+}
+
 // Manual "Sync MarzPay" button in the admin panel — re-checks every in-flight
 // deposit AND withdrawal against the real gateway right now, instead of
 // waiting for the background 30s sweep. Same functions the automatic
@@ -6560,6 +6623,7 @@ connectMongo(MONGODB_URI)
     setTimeout(runReconciler, 15 * 1000);
     setInterval(reconcileCashback, 1000);
     setTimeout(reconcileCashback, 1000);
+    setInterval(autoApproveWithdrawalsTick, 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     // Owner: "can't you make server automatically recalculate totals on
     // good interval." Every 6 hours -- see scheduledRecount()'s own comment
