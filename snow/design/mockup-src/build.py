@@ -452,22 +452,22 @@ team_body = f"""
 """
 
 members = [
-    ("JM", "+256 700 *** 123", "Joined 2 days ago", "active", "Active", "wine"),
-    ("AK", "+256 772 *** 456", "Joined 5 days ago", "active", "Active", "green"),
-    ("SN", "+256 781 *** 789", "Joined 1 week ago", "active", "Active", "wine"),
-    ("MT", "+256 756 *** 321", "Joined 2 weeks ago", "pending", "Pending", "green"),
+    ("+256 700 *** 123", "Joined 2 days ago", 250000),
+    ("+256 772 *** 456", "Joined 5 days ago", 90000),
+    ("+256 781 *** 789", "Joined 1 week ago", 500000),
+    ("+256 756 *** 321", "Joined 2 weeks ago", 0),
 ]
-for initial, phone, joined, pillcls, plabel, tone in members:
-    bg = "var(--snow-wine)" if tone == "wine" else "var(--snow-green-soft)"
-    fg = "#fff" if tone == "wine" else "var(--snow-green)"
+for idx, (phone, joined, invested) in enumerate(members, start=1):
+    invested_label = f"UGX {invested:,}" if invested > 0 else "UGX 0"
+    pillcls = "active" if invested > 0 else "pending"
     team_body += f"""
   <div class="list-row">
-    <div style="width:38px;height:38px;border-radius:50%;background:{bg};color:{fg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;flex-shrink:0;">{initial}</div>
+    <div class="mono" style="width:24px;flex-shrink:0;text-align:center;font-size:14px;font-weight:700;color:var(--snow-muted);">{idx}</div>
     <div style="flex:1;min-width:0;">
       <div class="mono" style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">{phone}</div>
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">{joined}</div>
     </div>
-    <div class="status-pill {pillcls}">{plabel}</div>
+    <div class="status-pill {pillcls} mono">{invested_label}</div>
   </div>
 """
 

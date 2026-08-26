@@ -90,6 +90,35 @@ are next before any conversion to a real single-page app begins.
 
 ---
 
+## 2026-08-26 — Claude — Round 9b: Team member rows — plain number instead of avatar, invested amount instead of Active/Pending
+
+Owner's direct correction on round 9's member-list rows, before the equivalent design
+pass had even reached My Products:
+1. Replace the colored circular avatar (initials like "JM"/"AK") with a plain number
+   — just the member's position in the list (1, 2, 3, 4...), no circle/background.
+2. Replace the Active/Pending status pill with the member's actual invested amount:
+   `UGX 0` if they haven't invested yet, the real `UGX <amount>` (comma-formatted, no
+   abbreviation) if they have — this is a more honest, data-driven signal than a
+   binary active/pending label ever was.
+
+**Applied to `build.py`'s Team member-row loop:** `members` list now holds
+`(phone, joined, invested)` tuples; the avatar `<div>` was replaced with a plain
+mono-font number (`{idx}`, from `enumerate(..., start=1)`), and the status pill now
+renders `f"UGX {invested:,}"` (or the literal `"UGX 0"` for zero) instead of an
+Active/Pending label. Kept the existing `.status-pill.active`/`.pending` CSS classes
+under the hood purely for the green/neutral color split (green pill when
+`invested > 0`, neutral-grey pill at `UGX 0`) — this is an internal styling choice
+only, no user-visible "Active"/"Pending" text remains anywhere in the row.
+
+**Verification:** Regenerated `Team.html`/`Team.png` and visually confirmed: rows now
+read "1 / +256 700 *** 123 / Joined 2 days ago / UGX 250,000" style, with the last
+sample member showing "UGX 0" in a neutral pill since their invested amount is 0.
+
+**Files touched:** `snow/design/mockup-src/build.py`, `snow/design/mockup-src/Team.html`,
+`snow/design/mockups/03-team.png`.
+
+---
+
 ## 2026-08-26 — Claude — Round 8: Codex's line-by-line correction of the round-7 Account screen; MongoDB/Firebase infra noted
 
 Owner sent Codex's detailed correction pass on round 7's Account screenshot, plus two
