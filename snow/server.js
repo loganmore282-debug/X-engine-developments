@@ -431,6 +431,33 @@ async function activeL1Count(userId) {
   snap.forEach(d => { const v = d.data(); if (v.status !== 'banned' && (v.totalInvested || 0) > 0) n += 1; });
   return n;
 }
+
+// MISSION CENTER — owner-supplied 2026-08-26, deliberately a SEPARATE system
+// from the Task Center above (owner: "it is aside"), reached via its own
+// screen/button. Two independent rewards, both MANUALLY claimed (owner:
+// "one has to claim it manually"):
+//  1. Referral "daily salary" — RECURRING, resets every day at 00:00 EAT
+//     (owner: "just like every day ie resets at 00:00"). Unclaimed on a
+//     given day is forfeited, not banked/stacked — same one-shot-per-day
+//     shape /checkin already uses (lastCheckin/today comparison), reused
+//     here as missionSalaryLastClaim/nowStr().date. Amount is a flat
+//     MISSION_SALARY_RATE per active L1 referral, scaling continuously with
+//     the live count (not stepped at the 5/10/50/100/500/1000 checkpoints —
+//     those are just worked examples: 5→1,000, 10→2,000 ... all exactly
+//     count×200), capped at MISSION_SALARY_REFERRAL_CAP referrals (owner:
+//     "Maximum eligible cap for referral tiers scales up to 1,000 total
+//     referrals" — 1,000×200 = 200,000, matching the top listed tier
+//     exactly).
+//  2. Team deposit reward — ONE-TIME per cumulative-whole-team-deposit
+//     threshold (owner confirmed "on time" or one-time, same shape as the
+//     Task Center's own deposit ladder, just a separate claim-flag
+//     namespace and different numbers), all exactly 1% of the threshold.
+const MISSION_SALARY_RATE = 200;
+const MISSION_SALARY_REFERRAL_CAP = 1000;
+const MISSION_DEPOSIT_REWARDS = [
+  { target: 150000, reward: 1500 }, { target: 300000, reward: 3000 }, { target: 600000, reward: 6000 },
+  { target: 1000000, reward: 10000 }, { target: 2500000, reward: 25000 }, { target: 5000000, reward: 50000 },
+];
 // Sum of the WHOLE team's (L1+L2+L3) deposits — powers Team's "Team
 // deposits" stat card.
 async function wholeTeamDeposits(userId) {
@@ -938,6 +965,88 @@ app.post('/team/milestone/claim', async (req, res) => {
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
     res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
   } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
+});
+
+// ── MISSION CENTER (separate from Task Center above — see the constants'
+// own comment for the full owner-supplied spec) ──
+app.get('/mission/status', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [uSnap, l1ActiveCount, teamDeposits] = await Promise.all([
+      db.collection('users').doc(userId).get(), activeL1Count(userId), wholeTeamDeposits(userId)
+    ]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const u = uSnap.data();
+    const today = nowStr().date;
+    const salaryAmount = Math.min(l1ActiveCount, MISSION_SALARY_REFERRAL_CAP) * MISSION_SALARY_RATE;
+    const salaryClaimedToday = u.missionSalaryLastClaim === today;
+    const depositRewards = MISSION_DEPOSIT_REWARDS.map(m => ({
+      target: m.target, reward: m.reward, current: teamDeposits, achieved: teamDeposits >= m.target,
+      claimed: !!u['missionDepositClaimed_' + m.target],
+    }));
+    res.json({ status: 'success', l1ActiveCount, salaryRate: MISSION_SALARY_RATE, salaryCap: MISSION_SALARY_REFERRAL_CAP,
+      salaryAmount, salaryClaimedToday, teamDeposits, depositRewards });
+  } catch (e) { console.error('Mission status error:', e.message); res.status(500).json({ status: 'error', message: 'Could not load Mission Center right now' }); }
+});
+app.post('/mission/salary/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    let result = null;
+    await withLock('mission-salary:' + userId, async () => {
+      const uRef = db.collection('users').doc(userId);
+      const uSnap = await uRef.get();
+      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      const u = uSnap.data();
+      if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      const today = nowStr().date;
+      if (u.missionSalaryLastClaim === today) { result = { code: 400, body: { status: 'error', message: "Already claimed today's salary — come back after 00:00." } }; return; }
+      const count = await activeL1Count(userId);
+      const amount = Math.min(count, MISSION_SALARY_REFERRAL_CAP) * MISSION_SALARY_RATE;
+      if (amount <= 0) { result = { code: 400, body: { status: 'error', message: 'You need at least one active referral to claim a daily salary.' } }; return; }
+      await uRef.update({ walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), missionSalaryLastClaim: today });
+      const { date, time } = nowStr();
+      await db.collection('transactions').add({
+        userId, type: 'mission_salary', description: `Mission Center: daily referral salary (${count} active referrals)`,
+        amount, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      result = { code: 200, body: { status: 'success', amount, message: `${fmtUGX(amount)} added to your wallet` } };
+    });
+    res.status(result.code).json(result.body);
+  } catch (e) { console.error('Mission salary claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim your daily salary right now' }); }
+});
+app.post('/mission/deposit/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const target = Number(req.body.target);
+  const m = MISSION_DEPOSIT_REWARDS.find(x => x.target === target);
+  if (!m) return res.status(400).json({ status: 'error', message: 'Unknown reward tier' });
+  try {
+    const progress = await wholeTeamDeposits(userId);
+    if (progress < m.target) return res.status(400).json({ status: 'error', message: `You need ${fmtUGX(m.target)} in team deposits to claim this, you have ${fmtUGX(progress)}.` });
+    const claimFlag = 'missionDepositClaimed_' + m.target;
+    let done = false, stillShort = false;
+    await withLock('mission-deposit:' + userId + ':' + claimFlag, async () => {
+      const liveProgress = await wholeTeamDeposits(userId);
+      if (liveProgress < m.target) { stillShort = true; return; }
+      await db.runTransaction(async t => {
+        const uRef = db.collection('users').doc(userId);
+        const fresh = await t.get(uRef);
+        if (!fresh.exists || fresh.data()[claimFlag] || fresh.data().status === 'banned') return;
+        const { date, time } = nowStr();
+        t.update(uRef, { walletBalance: FieldValue.increment(m.reward), totalEarned: FieldValue.increment(m.reward), [claimFlag]: true });
+        t.set(db.collection('transactions').doc(), {
+          userId, type: 'mission_deposit_reward', description: `Mission Center: team deposits reached ${fmtUGX(m.target)}`,
+          amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });
+        done = true;
+      });
+    });
+    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now — please try again.' });
+    if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
+    res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
+  } catch (e) { console.error('Mission deposit claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -2042,8 +2151,10 @@ const SETTINGS_CRITICAL_RANGES = {
   withdrawFeePct: [0, 100], minWithdraw: [0, MAX_MONEY_AMOUNT], minDeposit: [0, MAX_MONEY_AMOUNT],
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
+  dailyCheckin: [0, MAX_MONEY_AMOUNT], withdrawHoursStart: [0, 23], withdrawHoursEnd: [0, 23],
+  autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'withdrawHoursEnabled', 'autoApproveWithdrawalsEnabled'];
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -2253,7 +2364,7 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
     txSnap.forEach(d => {
       const t = d.data();
       if (t.type === 'deposit') deposited += finiteMoney(t.amount);
-      else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin'].includes(t.type)) earned += finiteMoney(t.amount);
+      else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) earned += finiteMoney(t.amount);
       else if (t.type === 'withdraw' && t.status === 'success') withdrawn += Math.abs(finiteMoney(t.amount));
     });
     let invested = 0;
@@ -2649,7 +2760,7 @@ async function recountAllTotals() {
       // here too, or a "Recalculate totals" run silently wipes it back to
       // zero — cashback/commission/team_reward (Task Center)/promocode
       // (gift codes)/checkin.
-      if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin'].includes(t.type)) row.earned += finiteMoney(t.amount);
+      if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) row.earned += finiteMoney(t.amount);
     });
     let updated = 0;
     const usersSnap = await db.collection('users').limit(10000).get();

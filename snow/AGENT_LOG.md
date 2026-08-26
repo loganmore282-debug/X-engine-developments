@@ -106,6 +106,38 @@ copy of it hasn't been separately re-audited).
 
 ---
 
+## 2026-08-26 — Claude — Round 13: Mission Center (owner-supplied referral daily-salary + deposit rewards), daily check-in now admin-editable
+
+Owner supplied exact numbers for a referral "daily salary" ladder and a team-deposit
+reward ladder, plus "daily checkin is 500, configured in admin too." Asked a 3-question
+AskUserQuestion batch (per the owner's own invitation — "ask me in questionnaire, l will
+tell you") to disambiguate the mechanic before building the wrong thing: confirmed the
+referral salary is recurring/resets daily at 00:00/manually claimed, the deposit reward
+is one-time-per-threshold/manually claimed, and the whole thing is a separate feature
+("aside") from the Task Center milestones already built, not a replacement.
+
+Built as "Mission Center" — `MISSION_SALARY_RATE`/`MISSION_SALARY_REFERRAL_CAP`/
+`MISSION_DEPOSIT_REWARDS` in `server.js`, `/mission/status`, `/mission/salary/claim`
+(day-boundary check, same shape as `/checkin`), `/mission/deposit/claim` (same
+claim-under-lock shape as Task Center's own deposit claim); a wine "Mission Center"
+button on Team opens a new sheet with a live salary-claim card and the deposit-reward
+tier list. Proactively added the two new transaction types to both totalEarned-repair
+functions this time (learned the lesson from Round 12's own near-miss on the same bug).
+`dailyCheckin` added to admin Settings (was boot-only before); `withdrawHours*`/
+`autoApprove*` added to settings validation (their admin UI toggle is still pending).
+
+**Verification**: `node --check`, the same boot smoke test as Round 12, and a full
+Playwright pass against the real obfuscated `user/index.html` — opened Team → Mission
+Center, confirmed the live salary figure (200 × active referrals), claimed it, confirmed
+it correctly flips to "Claimed today" on re-fetch, confirmed deposit-reward tiers show
+Claim vs. progress correctly. Zero errors. `user/sw.js` cache bumped to `snow-shell-v3`.
+
+**Files touched**: `snow/server.js`, `snow/admin-src/index.html`,
+`snow/user-src/original_module.js`, `snow/user/index.html`, `snow/user/sw.js`,
+`snow/CLAUDE.md`.
+
+---
+
 ## 2026-08-26 — Claude — Round 12: real space8-architecture port (multi-admin, gift codes, Task Center, activity feed, checkin, admin ops/analytics/integrity, working obfuscated build pipeline)
 
 Owner, after seeing Round 10/11 shipped and live: pointed out Snow's `server.js`/admin

@@ -373,6 +373,47 @@ it *runs* correctly):
 - `user/sw.js` cache bumped to `snow-shell-v2` (the deployed `user/index.html`'s
   structure changed — real code, not just cosmetics).
 
+**Mission Center — real owner-supplied structure, built same day, separate from Task
+Center above (owner: "it is aside").** Owner supplied exact numbers via chat (a
+referral "daily salary" table + a team-deposit reward table + terms) and, when asked to
+disambiguate the mechanic via a questionnaire, confirmed: the referral salary is
+**recurring and resets every day at 00:00 EAT, manually claimed** (not auto-credited,
+not banked if missed); the team-deposit reward is **one-time per threshold, manually
+claimed** (same shape as Task Center's own deposit ladder, just separate numbers/claim-
+flag namespace); and this whole structure is a **separate feature from Task Center**,
+reached via its own "Mission Center" button/screen — Task Center's original
+(placeholder-numbered) milestones were left untouched, not replaced.
+- `server.js`: `MISSION_SALARY_RATE` (200/active-L1-referral), `MISSION_SALARY_REFERRAL_CAP`
+  (1,000 — "Maximum eligible cap... scales up to 1,000 total referrals"; 1,000×200 =
+  200,000 matches the top listed tier exactly), `MISSION_DEPOSIT_REWARDS` (150,000→1,500
+  through 5,000,000→50,000, all exactly 1%). `GET /mission/status`, `POST
+  /mission/salary/claim` (day-boundary check via `missionSalaryLastClaim` vs.
+  `nowStr().date`, same one-shot-per-day shape `/checkin` already uses), `POST
+  /mission/deposit/claim` (same claim-flag-under-lock pattern as Task Center's own
+  deposit claim). New transaction types `mission_salary`/`mission_deposit_reward` added
+  to both `totalEarned`-repair functions' summed-type lists (learned this lesson
+  already once this round — see the `recountAllTotals()` fix above — added proactively
+  this time instead of waiting to find the same bug again).
+- `user-src/original_module.js` / `original_module.js`: a wine "Mission Center" button
+  on the Team screen (`openMissionCenterSheet()`) opens a sheet with the live salary
+  claim card and the deposit-reward tier list (Claim buttons only appear once a tier is
+  achieved; already-claimed tiers show a pill instead). No new top-level `const`/`let`
+  introduced (see the standing var-only rule above).
+- **Verification**: `node --check` + the same boot smoke test as above (dummy Firebase
+  creds, unreachable Mongo — clean). Full Playwright pass against the real obfuscated
+  `user/index.html` (not just the unobfuscated source): opened Team, clicked into
+  Mission Center, confirmed the salary amount matches `200 × active referrals` exactly,
+  claimed it, confirmed the button correctly flips to "Claimed today — resets at
+  midnight" on a live re-fetch, and confirmed the deposit-reward tiers correctly show
+  Claim vs. progress based on mocked team-deposit totals. Zero console/page errors.
+  `user/sw.js` cache bumped to `snow-shell-v3`.
+- Also added, same message: `dailyCheckin` (owner: "500") is now admin-editable in
+  Settings → Rates & limits (was previously only a boot-fallback default with no admin
+  UI); `withdrawHoursStart/End`, `autoApproveIntervalSec/MaxAmount` added to
+  `SETTINGS_CRITICAL_RANGES` validation, `withdrawHoursEnabled`/
+  `autoApproveWithdrawalsEnabled` added to `SETTINGS_BOOLEAN_FIELDS` (admin UI for
+  those two toggles is still pending — flagged in the deferred list below).
+
 **Still deliberately deferred, not attempted this round** (flag to the owner, don't
 silently build later without asking): `build-admin.js` + an obfuscated `admin/`
 (admin-src/index.html still ships unobfuscated — no UI exists yet for any of the new

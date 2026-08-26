@@ -70,7 +70,7 @@ function togglePw(id){ const el=$(id); el.type = el.type==='password' ? 'text' :
 
 // ── STATE ──
 var STATE = { user: null, account: null, settings: null, products: null, investments: null,
-  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, refCode: null, page: 'home' };
+  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, refCode: null, page: 'home', mission: null };
 
 function toast(msg, isErr){
   const el = document.createElement('div');
@@ -482,6 +482,14 @@ async function renderTeam(){
   <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-green-soft);"><div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(47,107,71,.12);color:var(--snow-green);">${ICONS.people2}</div><div style="font-size:10.5px;color:var(--snow-muted);">Level 2</div><div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-green);">${t.commRates.l2}%</div></div>
   <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-wine-soft);"><div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.people2}</div><div style="font-size:10.5px;color:var(--snow-muted);">Level 3</div><div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-wine);">${t.commRates.l3}%</div></div>
 </div>
+<button class="brand-card" style="margin:14px 20px 0;padding:18px 20px;width:calc(100% - 40px);display:flex;align-items:center;justify-content:space-between;gap:12px;border:none;cursor:pointer;text-align:left;" onclick="openMissionCenterSheet()">
+  ${waveLinesTR(90,84,'rgba(255,255,255,.55)',2,.7)}
+  <div style="position:relative;display:flex;align-items:center;gap:12px;">
+    <div class="account-icon-bubble" style="width:46px;height:46px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);">${ICONS.people2}</div>
+    <div><div style="font-size:14.5px;font-weight:800;">Mission Center</div><div style="font-size:11.5px;opacity:.85;margin-top:2px;">Daily salary &amp; team deposit rewards</div></div>
+  </div>
+  <div style="position:relative;">${ICONS.chev}</div>
+</button>
 <div class="team-summary-grid" style="margin:14px 20px 0;">
   <div class="stat-tile" style="background:var(--snow-wine-soft);border-color:transparent;display:flex;align-items:center;gap:12px;"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.people2}</div><div><div style="font-size:10.5px;color:var(--snow-muted);">Total team</div><div class="mono" style="font-size:18px;font-weight:800;color:var(--snow-wine);">${t.totalTeam}</div></div></div>
   <div class="stat-tile" style="background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:center;gap:12px;"><div class="icon-tile" style="width:38px;height:38px;background:rgba(47,107,71,.12);color:var(--snow-green);">${ICONS.user}</div><div><div style="font-size:10.5px;color:var(--snow-muted);">Team commission</div><div class="mono" style="font-size:18px;font-weight:800;color:var(--snow-green);">${fmtUGX(t.teamCommission)}</div></div></div>
@@ -507,6 +515,66 @@ async function renderTeam(){
   STATE.teamMembers = {1:null,2:null,3:null};
   switchTeamLevel(1);
 }
+window.openMissionCenterSheet = async function(){
+  openSheet('Mission Center', skRows(4));
+  const r = await api('/mission/status');
+  if (r.status !== 'success') { $('sheetBody').innerHTML = '<div class="list-empty">Could not load Mission Center right now.</div>'; return; }
+  STATE.mission = r;
+  renderMissionCenter();
+};
+function renderMissionCenter(){
+  const m = STATE.mission;
+  if (!m) return;
+  const salaryBtn = m.salaryClaimedToday
+    ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Claimed today — resets at midnight</button>`
+    : `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;" onclick="claimMissionSalary()">Claim ${fmtUGX(m.salaryAmount)}</button>`;
+  const depositRows = m.depositRewards.map(d => `
+    <div class="list-row">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13.5px;font-weight:600;">${fmtUGX(d.target)} team deposits</div>
+        <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Reward ${fmtUGX(d.reward)}</div>
+      </div>
+      ${d.claimed
+        ? `<div class="status-pill active mono">Claimed</div>`
+        : d.achieved
+          ? `<button class="primary-button" style="padding:8px 16px;font-size:12.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
+          : `<div class="status-pill pending mono">${fmtUGX(m.teamDeposits)} / ${fmtUGX(d.target)}</div>`}
+    </div>`).join('');
+  $('sheetBody').innerHTML = `
+    <div class="app-card" style="padding:18px;">
+      <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-muted);font-weight:700;">Daily Referral Salary</div>
+      <div style="font-size:13px;color:var(--snow-muted);margin-top:6px;">UGX 200 per active referral, up to 1,000 referrals. Claim once a day — resets at 00:00.</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:14px;">
+        <div class="mono" style="font-size:26px;font-weight:800;color:var(--snow-wine);">${fmtUGX(m.salaryAmount)}</div>
+        <div style="font-size:12px;color:var(--snow-muted);">${m.l1ActiveCount} active referral${m.l1ActiveCount===1?'':'s'}</div>
+      </div>
+      ${salaryBtn}
+    </div>
+    <div class="app-card" style="padding:6px 18px;margin-top:16px;">
+      <div style="padding:14px 0 4px;font-size:15px;font-weight:800;color:var(--snow-ink);">Team Deposit Rewards</div>
+      <div style="font-size:12px;color:var(--snow-muted);padding-bottom:10px;">One-time reward per threshold — claim manually once your whole team's deposits reach it.</div>
+      ${depositRows}
+    </div>
+    <p style="font-size:11.5px;color:var(--snow-muted);line-height:1.6;margin:14px 2px 0;">Daily salaries are credited once referrals meet the active-account criteria. Team deposit rewards are available to claim instantly once your team's deposits confirm.</p>`;
+}
+window.claimMissionSalary = async function(){
+  const r = await post('/mission/salary/claim', {});
+  if (r.status !== 'success') return toast(r.message || 'Could not claim', true);
+  toast(r.message || 'Claimed');
+  const s2 = await api('/mission/status');
+  if (s2.status === 'success') { STATE.mission = s2; renderMissionCenter(); }
+  const acc = await api('/account');
+  if (acc.status === 'success') STATE.account = acc.account;
+};
+window.claimMissionDeposit = async function(target){
+  const r = await post('/mission/deposit/claim', { target });
+  if (r.status !== 'success') return toast(r.message || 'Could not claim', true);
+  toast(r.message || 'Claimed');
+  const s2 = await api('/mission/status');
+  if (s2.status === 'success') { STATE.mission = s2; renderMissionCenter(); }
+  const acc = await api('/account');
+  if (acc.status === 'success') STATE.account = acc.account;
+};
 window.copyText = function(text){
   if (!text) return;
   navigator.clipboard && navigator.clipboard.writeText(text).then(()=>toast('Copied')).catch(()=>toast('Could not copy', true));

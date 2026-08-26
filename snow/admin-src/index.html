@@ -393,6 +393,9 @@ async function renderSettings(){
         <div class="field"><label>Return multiple (×)</label><input id="s_returnMultiple" value="${s.returnMultiple||30}"></div>
       </div>
       <div class="row3">
+        <div class="field"><label>Daily check-in bonus (UGX)</label><input id="s_dailyCheckin" value="${s.dailyCheckin||0}"></div>
+      </div>
+      <div class="row3">
         <div class="field"><label>Level 1 commission (%)</label><input id="s_commL1" value="${s.commL1||0}"></div>
         <div class="field"><label>Level 2 commission (%)</label><input id="s_commL2" value="${s.commL2||0}"></div>
         <div class="field"><label>Level 3 commission (%)</label><input id="s_commL3" value="${s.commL3||0}"></div>
@@ -423,6 +426,7 @@ window.saveSettings = async function(){
     minDeposit: Number($('s_minDeposit').value), minWithdraw: Number($('s_minWithdraw').value),
     withdrawFeePct: Number($('s_withdrawFeePct').value), welcomeBonus: Number($('s_welcomeBonus').value),
     maxWithdrawalsPerDay: Number($('s_maxWithdrawalsPerDay').value), returnMultiple: Number($('s_returnMultiple').value),
+    dailyCheckin: Number($('s_dailyCheckin').value),
     commL1: Number($('s_commL1').value), commL2: Number($('s_commL2').value), commL3: Number($('s_commL3').value),
     requireInvestToWithdraw: $('s_requireInvestToWithdraw').checked,
     maintenanceMode: $('s_maintenanceMode').checked, maintenanceMsg: $('s_maintenanceMsg').value,
