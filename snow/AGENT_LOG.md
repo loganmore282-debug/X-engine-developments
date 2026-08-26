@@ -16,6 +16,99 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 5: applied Codex's critique of the round-4 screenshots
+
+Owner sent Codex's review of `01-home.png`–`04-account.png` against its own round-4
+spec. All 7 points were concrete and actionable — implemented all of them directly in
+`snow/design/mockup-src/build.py`, regenerated, re-screenshotted, and re-verified by
+looking at the actual rendered PNGs (not just reasoning about the code) before
+committing:
+
+1. **One canonical wave system.** Replaced the old shallow wave path with Codex's
+   exact curve (`M0 104 C58 68 104 61 154 83 C205 105 251 95 296 62 C332 36 362 23
+   390 31 L390 126 L0 126 Z`, viewBox `0 0 390 126`) as `.brand-wave--full`, used only
+   on Home's hero. Replaced the old 4 straight diagonal green lines with Codex's exact
+   curved paths (two variants — top-right and lower-left — each 4 nested curves),
+   using a new dedicated token `--snow-wave-on-wine: #8FE0AE` instead of the plain
+   `--snow-green` those lines used before (the real bug from round 4: `--snow-green`
+   at reduced opacity directly over the wine-red background blended into a muddy
+   brown — Codex independently caught the same class of bug Claude had already fixed
+   once for a different color pairing in the earlier amber/dark-wood rounds; the fix
+   this time is the same idea, a dedicated on-wine token rather than reusing the
+   general-purpose one).
+2. **Don't force the wave into every red card.** Team's referral-code card and
+   Account's identity card were `.brand-hero` (full wave treatment) — renamed to a new
+   `.brand-card` class: same wine gradient + 28px radius, but no white wave, only the
+   top-right curved green lines. Home keeps the full `.brand-hero--full` treatment
+   with both corner-line sets.
+3. **Full 10-product catalogue on Home.** Was hardcoded to 5 tiers (a leftover from
+   round 1, never actually fixed across rounds 2–4) — added tiers 6–10 (SuperX, Marrs
+   Green, Master Artisan, Opera Mask/Lianpu, "Li") with the confirmed figures from
+   `CLAUDE.md`. Each product card now shows the REAL matching bottle photo from
+   `snow/design/reference-bottles/01…10` as a 56×56px rounded thumbnail instead of a
+   generic snowflake icon repeated on every card — makes each tier visually distinct
+   instead of interchangeable. Product-card CTA moved from a right-side button
+   (previously so cramped that `UGX 2,700,000`-scale totals wrapped awkwardly) to a
+   full-width row below the stats grid, per Codex's exact CSS.
+4. **Fixed a real cross-screen data-consistency bug.** Home's "Total Invested" showed
+   `UGX 470,000` while My Products' 3 visible plans summed to `UGX 475,000` — same
+   account, disagreeing numbers. Fixed Home to `475,000`. Also fixed both of My
+   Products' own "earned so far" figures (subtitle + Total Earned tile), which showed
+   `2,806,000` against 3 plan cards that actually sum to `2,016,000 + 2,698,000 +
+   36,000 = 4,750,000` — a real arithmetic error in the original sample data, not just
+   a rounding choice. Also updated Home's "Total Earned" tile to the same `4,750,000`
+   even though Codex's critique only named the other two figures explicitly — same
+   account, same money, and Codex's own stated principle ("financial mockup figures
+   must never contradict the plan cards") applies to that pairing too; a low-risk,
+   one-line extension of what was asked rather than scope creep.
+5. **Centralized the token/component system.** Added `--snow-wine-soft`,
+   `--snow-green-soft`, `--snow-neutral-soft` (replacing raw hex like `#F6E9EB`,
+   `#F3F6F1`, `#F1EFEC` scattered through round-4's markup) and
+   `--snow-radius-card/tile/control/sheet` (28/20/24/32px — replacing repeated
+   `border-radius:18px` etc. overrides). Added the named component classes Codex
+   asked for that round-4 was still missing: `top-bar`, `product-card` (+
+   `product-card__stats`/`__cta`/`__thumb`), `plan-card`, `stat-tile`, `icon-tile`,
+   `segmented-control` (+ `.seg`/`.seg.active`), `settings-list`, `list-row`.
+   Deliberately did NOT invent a fake `bottom-sheet` or force a new `form-field` use
+   just to exercise those classes — Codex explicitly said not to (`form-field` is
+   already proven on the login/register screens, `secondary-button` on Home's
+   Withdraw button; build `bottom-sheet` only when Deposit/Withdraw/Invest/Withdrawal
+   Account actually need one).
+6. **Confirmed already-correct, no changes needed**: token colors (no blue/amber/dark
+   wood), Home's hero-to-white-cards balance, My Products staying a clean white
+   data screen with no wine hero, Team/Account being the right place for compact wine
+   cards, the bottom nav's active-state treatment, green used correctly for
+   earnings/progress/pills/links.
+7. **Real-app implementation notes, NOT applied to these static mockup files** (Codex
+   was explicit that the 390px fixed wrapper is fine for screenshot generation but
+   must not be copied into the actual production layout) — recorded here so they
+   aren't lost before real frontend work starts: use a responsive `.app-shell`
+   (`width:100%; max-width:480px; min-height:100dvh; margin:0 auto`), make
+   `.bottom-nav` `position:sticky` with `padding-bottom:env(safe-area-inset-bottom)`,
+   and generate referral links from the deployed origin at runtime rather than
+   hardcoding `snow-platform.com` (the mockups still show that hardcoded string
+   deliberately — it's illustrative sample data in a static screenshot, not
+   something that needed fixing this round).
+
+Regenerated all 4 screens (`python3 build.py` then Playwright screenshot) and
+overwrote the committed PNGs at `snow/design/mockups/01-home.png` through
+`04-account.png`, plus the editable HTML source and `build.py` itself.
+
+**Verification**: visual inspection of each re-rendered PNG against every point in
+Codex's critique, one by one — confirmed the wave now reads as one large asymmetric
+curve matching the login/register screens' proportions, the wave-lines read as clear
+green (not muddy brown) against the wine background, all 10 products render with
+distinct real bottle thumbnails and full-width CTAs that no longer wrap, and the
+Home/My Products financial figures now agree. No automated test suite exists yet —
+still a pure design/mockup phase, no backend/frontend app code written.
+
+**Left open**: same items as the round-4 entry below — Codex's NEXT round of
+feedback (if any) on this revision hasn't come back yet; feature-scope decisions
+(OTP, statement export, auto-reinvest, KYC, referral leaderboard); check-in bonus,
+Task Center ladders, gift-code format, withdrawal hours; no backend code started.
+
+---
+
 ## 2026-08-26 — Claude — Round 4: Codex designed login/register + a full written design system; Claude built Home/My Products/Team/Account against it, sent as PNGs for Codex critique
 
 Owner sent 2 screenshots (Codex-designed login and registration screens) and a long,

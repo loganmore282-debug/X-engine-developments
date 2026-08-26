@@ -10,108 +10,139 @@
   --snow-wine-deep:#71101B;
   --snow-green:#2F6B47;
   --snow-border:#E8E4E1;
+  --snow-wave-on-wine:#8FE0AE;   /* thin decorative lines on wine surfaces only -- plain --snow-green goes muddy there */
+  --snow-wine-soft:#F6E9EB;
+  --snow-green-soft:#EEF6F0;
+  --snow-neutral-soft:#F1EFEC;
+  --snow-radius-card:28px;
+  --snow-radius-tile:20px;
+  --snow-radius-control:24px;
+  --snow-radius-sheet:32px;
 }
 *{box-sizing:border-box;}
 body{margin:0;background:var(--snow-canvas);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;}
 .mono{font-variant-numeric:tabular-nums;}
 button{cursor:pointer;font-family:inherit;}
 
-.app-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:28px;box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
-.primary-button{background:var(--snow-wine);color:#fff;border:none;border-radius:24px;font-weight:700;}
-.secondary-button{background:transparent;color:var(--snow-wine);border:1.5px solid var(--snow-wine);border-radius:24px;font-weight:600;}
+.app-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
+.primary-button{background:var(--snow-wine);color:#fff;border:none;border-radius:var(--snow-radius-control);font-weight:700;}
+.secondary-button{background:transparent;color:var(--snow-wine);border:1.5px solid var(--snow-wine);border-radius:var(--snow-radius-control);font-weight:600;}
 .status-pill{display:inline-block;border-radius:999px;font-size:10.5px;font-weight:600;padding:3px 10px;}
-.status-pill.active{background:rgba(47,107,71,.12);color:var(--snow-green);}
-.status-pill.pending{background:#F1EFEC;color:var(--snow-muted);}
+.status-pill.active{background:var(--snow-green-soft);color:var(--snow-green);}
+.status-pill.pending{background:var(--snow-neutral-soft);color:var(--snow-muted);}
+
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding:24px 20px 4px;}
 .bottom-nav{background:var(--snow-surface);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;}
 .navitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--snow-muted);}
 .navitem.active{color:var(--snow-wine);}
 .navitem .lbl{font-size:10.5px;}
 .navitem.active .lbl{font-weight:600;}
 
-.brand-hero{background:linear-gradient(160deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);position:relative;overflow:hidden;color:#fff;}
-.brand-wave{position:absolute;left:0;right:0;bottom:-1px;width:100%;height:70px;display:block;}
-.wave-lines{position:absolute;opacity:.8;}
+/* full-bleed hero: Home only -- big wave + both corner line sets */
+.brand-hero--full{position:relative;overflow:hidden;min-height:290px;padding-bottom:112px;background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);color:#fff;}
+.brand-wave--full{position:absolute;inset:auto 0 -1px;width:100%;height:126px;display:block;}
+/* compact wine card: Team referral code / Account identity -- no white wave, top-right lines only */
+.brand-card{background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);border-radius:var(--snow-radius-card);position:relative;overflow:hidden;color:#fff;}
+
 .wordmark{display:flex;align-items:center;gap:9px;}
 .wordmark .wm-text{font-weight:800;letter-spacing:2px;}
 
 .stat-label{font-size:10px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.35px;}
 .stat-val{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600;color:var(--snow-ink);margin-top:2px;}
 .section-title{font-size:17px;font-weight:800;color:var(--snow-ink);}
-.row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
-.row:last-child{border-bottom:none;}
+
+.stat-tile{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-tile);padding:12px;}
+.icon-tile{border-radius:13px;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+.product-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:16px;box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
+.product-card__stats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:10px 16px;}
+.product-card__cta{width:100%;min-height:44px;margin-top:16px;}
+.product-card__thumb{width:56px;height:56px;border-radius:16px;object-fit:cover;flex-shrink:0;background:var(--snow-neutral-soft);}
+
+.plan-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:18px;box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
+
+.segmented-control{display:flex;background:var(--snow-neutral-soft);border-radius:16px;padding:4px;gap:4px;}
+.segmented-control .seg{flex:1;text-align:center;padding:9px 0;border-radius:12px;font-size:13px;font-weight:500;color:var(--snow-muted);}
+.segmented-control .seg.active{background:#fff;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -8px rgba(17,17,17,.3);}
+
+.settings-list{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:4px 16px;}
+.list-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
+.list-row:last-child{border-bottom:none;}
 </style>
 </head>
 <body>
 <div style="width:390px;position:relative;background:var(--snow-canvas);">
 
-<div style="display:flex;align-items:center;justify-content:space-between;padding:24px 20px 4px;">
-  <div class="wordmark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg><div class="wm-text" style="font-size:17px;color:var(--snow-ink);">SNOW</div></div>
-  <div style="width:38px;height:38px;border-radius:14px;background:var(--snow-surface);border:1px solid var(--snow-border);display:flex;align-items:center;justify-content:center;color:var(--snow-ink);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></div>
-</div>
+<div class="top-bar">
+    <div class="wordmark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg><div class="wm-text" style="font-size:17px;color:var(--snow-ink);">SNOW</div></div>
+    <div style="width:38px;height:38px;border-radius:14px;background:var(--snow-surface);border:1px solid var(--snow-border);display:flex;align-items:center;justify-content:center;color:var(--snow-ink);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></div>
+  </div>
 
 <div style="margin:16px 20px 0;">
   <div style="font-size:22px;font-weight:800;color:var(--snow-ink);">Team</div>
   <div style="font-size:13px;color:var(--snow-muted);margin-top:3px;">Invite friends, earn on every level</div>
 </div>
 
-<div class="brand-hero app-card" style="margin:16px 20px 0;padding:20px;border-radius:28px;border:none;">
-  <svg class="wave-lines wave-lines-team" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
-      <path d="M20,140 C60,100 100,60 150,10" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
-      <path d="M32,140 C68,104 108,68 150,26" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
-      <path d="M44,140 C76,108 116,76 150,42" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
-      <path d="M56,140 C84,112 124,84 150,58" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
-    </svg><style>.wave-lines-team{top:-18px;right:-18px;width:130px;height:130px;}</style>
-  <div style="font-size:12px;opacity:.82;">Your Referral Code</div>
-  <div class="mono" style="font-size:27px;font-weight:800;letter-spacing:1px;margin-top:4px;">Sn7Qk2</div>
-  <div style="display:flex;align-items:center;gap:8px;margin-top:14px;background:rgba(255,255,255,.16);border-radius:14px;padding:9px 12px;">
-    <div class="mono" style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">snow-platform.com/r/Sn7Qk2</div>
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 8.5V6A1.5 1.5 0 0 0 13.5 4.5H6A1.5 1.5 0 0 0 4.5 6v7.5A1.5 1.5 0 0 0 6 15h2.5"/></svg>
+<div class="brand-card" style="margin:16px 20px 0;padding:20px;">
+  <svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:110px;height:104px;opacity:.9;">
+  <path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
+  <path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
+  <path d="M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
+  <path d="M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
+</svg>
+  <div style="position:relative;">
+    <div style="font-size:12px;opacity:.82;">Your Referral Code</div>
+    <div class="mono" style="font-size:27px;font-weight:800;letter-spacing:1px;margin-top:4px;">Sn7Qk2</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;background:rgba(255,255,255,.16);border-radius:14px;padding:9px 12px;">
+      <div class="mono" style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">snow-platform.com/r/Sn7Qk2</div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 8.5V6A1.5 1.5 0 0 0 13.5 4.5H6A1.5 1.5 0 0 0 4.5 6v7.5A1.5 1.5 0 0 0 6 15h2.5"/></svg>
+    </div>
+    <button style="width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;color:var(--snow-wine);border:none;border-radius:var(--snow-radius-control);padding:12px 0;font-size:13.5px;font-weight:700;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="2.3"/><circle cx="6" cy="12" r="2.3"/><circle cx="18" cy="18" r="2.3"/><path d="M8.1 10.8 15.9 7.2M8.1 13.2l7.8 3.6"/></svg> Share Referral Link
+    </button>
   </div>
-  <button style="width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;color:var(--snow-wine);border:none;border-radius:24px;padding:12px 0;font-size:13.5px;font-weight:700;">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="2.3"/><circle cx="6" cy="12" r="2.3"/><circle cx="18" cy="18" r="2.3"/><path d="M8.1 10.8 15.9 7.2M8.1 13.2l7.8 3.6"/></svg> Share Referral Link
-  </button>
 </div>
 
 <div style="display:flex;gap:10px;margin:16px 20px 0;">
-  <div class="app-card" style="flex:1;padding:12px;border-radius:18px;text-align:center;">
+  <div class="stat-tile" style="flex:1;text-align:center;">
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 1</div>
     <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">27%</div>
   </div>
-  <div class="app-card" style="flex:1;padding:12px;border-radius:18px;text-align:center;">
+  <div class="stat-tile" style="flex:1;text-align:center;">
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 2</div>
     <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">2%</div>
   </div>
-  <div class="app-card" style="flex:1;padding:12px;border-radius:18px;text-align:center;">
+  <div class="stat-tile" style="flex:1;text-align:center;">
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 3</div>
     <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">1%</div>
   </div>
 </div>
 
 <div style="display:flex;gap:10px;margin:10px 20px 0;">
-  <div class="app-card" style="flex:1;padding:12px;border-radius:18px;text-align:center;">
+  <div class="stat-tile" style="flex:1;text-align:center;">
     <div style="font-size:10.5px;color:var(--snow-muted);">Total Team</div>
     <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">38</div>
   </div>
-  <div class="app-card" style="flex:1;padding:12px;border-radius:18px;text-align:center;">
+  <div class="stat-tile" style="flex:1;text-align:center;">
     <div style="font-size:10.5px;color:var(--snow-muted);">Active Referrals</div>
     <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">14</div>
   </div>
-  <div class="app-card" style="flex:1;padding:12px;border-radius:18px;text-align:center;">
+  <div class="stat-tile" style="flex:1;text-align:center;">
     <div style="font-size:10.5px;color:var(--snow-muted);">Team Deposits</div>
     <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">UGX 3,140,000</div>
   </div>
 </div>
 
-<div style="margin:22px 20px 0;display:flex;background:#F1EFEC;border-radius:16px;padding:4px;gap:4px;">
-  <div style="flex:1;text-align:center;background:#fff;border-radius:12px;padding:9px 0;font-size:13px;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -8px rgba(17,17,17,.3);">Level 1</div>
-  <div style="flex:1;text-align:center;padding:9px 0;font-size:13px;font-weight:500;color:var(--snow-muted);">Level 2</div>
-  <div style="flex:1;text-align:center;padding:9px 0;font-size:13px;font-weight:500;color:var(--snow-muted);">Level 3</div>
+<div class="segmented-control" style="margin:22px 20px 0;">
+  <div class="seg active">Level 1</div>
+  <div class="seg">Level 2</div>
+  <div class="seg">Level 3</div>
 </div>
 
-<div class="app-card" style="margin:14px 20px 0;padding:6px 16px;">
+<div class="settings-list" style="margin:14px 20px 0;padding:6px 16px;">
 
-  <div class="row">
-    <div style="width:38px;height:38px;border-radius:50%;background:#F6E9EB;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">A</div>
+  <div class="list-row">
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">A</div>
     <div style="flex:1;min-width:0;">
       <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+2567****0389</div>
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 3 days ago</div>
@@ -119,8 +150,8 @@ button{cursor:pointer;font-family:inherit;}
     <div class="status-pill active">Active</div>
   </div>
 
-  <div class="row">
-    <div style="width:38px;height:38px;border-radius:50%;background:#F6E9EB;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">M</div>
+  <div class="list-row">
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">M</div>
     <div style="flex:1;min-width:0;">
       <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+2567****2214</div>
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 6 days ago</div>
@@ -128,8 +159,8 @@ button{cursor:pointer;font-family:inherit;}
     <div class="status-pill active">Active</div>
   </div>
 
-  <div class="row">
-    <div style="width:38px;height:38px;border-radius:50%;background:#F6E9EB;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">J</div>
+  <div class="list-row">
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">J</div>
     <div style="flex:1;min-width:0;">
       <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+2567****7735</div>
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 1 week ago</div>
@@ -137,8 +168,8 @@ button{cursor:pointer;font-family:inherit;}
     <div class="status-pill pending">Pending</div>
   </div>
 
-  <div class="row">
-    <div style="width:38px;height:38px;border-radius:50%;background:#F6E9EB;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">R</div>
+  <div class="list-row">
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">R</div>
     <div style="flex:1;min-width:0;">
       <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+2567****9042</div>
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 2 weeks ago</div>

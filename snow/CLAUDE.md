@@ -69,10 +69,21 @@ Task Center ladders, gift code format, withdrawal request hours.
 
 ## Design status — settled on a Codex-authored system as of 2026-08-26, now mid-build
 
-**Round 4 is the current, live design direction — read this section before touching
-visual design again.** Rounds 1–3 (ice/blue, amber/gold beer-pour, dark wood-grain —
-all Claude-only explorations) are superseded and should NOT be revisited; they're kept
-in AGENT_LOG.md purely as history of what was already tried and rejected.
+**Round 5 is the current, live design direction — read this section (and the round-5
+AGENT_LOG.md entry, which lists all 7 fixes in detail) before touching visual design
+again.** Round 4 established the token/component system below (still accurate, unchanged
+in round 5). Round 5 applied Codex's critique of round 4's screenshots: one canonical
+wave curve (used only on Home; Team/Account use a wave-less `brand-card` variant with
+just the corner lines), a dedicated `--snow-wave-on-wine` token so the green corner
+lines don't blend muddy-brown against the wine background, the full 10-product
+catalogue with real bottle-photo thumbnails per tier (was hardcoded to 5), a fixed
+cross-screen financial mismatch (Home's Total Invested/Earned now agree with My
+Products' plan cards), and a fuller token/component set (`--snow-wine-soft`/
+`green-soft`/`neutral-soft`, `--snow-radius-*`, `product-card`/`plan-card`/
+`stat-tile`/`icon-tile`/`segmented-control`/`settings-list`/`list-row`/`top-bar`).
+Rounds 1–3 (ice/blue, amber/gold beer-pour, dark wood-grain — all Claude-only
+explorations) are superseded and should NOT be revisited; they're kept in
+AGENT_LOG.md purely as history of what was already tried and rejected.
 
 **The owner had Codex design the login/register screens directly** (screenshots
 relayed back into chat, same review-prompt workflow already established on space8) and
@@ -132,10 +143,12 @@ shape is not pixel-identical between the two auth screens and these 4. If Codex'
 critique flags the wave shape specifically, that's expected and worth fixing with
 real coordinates from Codex rather than guessed ones.
 
-**Status: awaiting Codex's critique of `01-home.png` through `04-account.png`**
-(a prompt for this was drafted for the owner to send, asking Codex to review against
-its own spec above). Do not treat these 4 screens as final until that feedback comes
-back and gets applied — same "still designing" framing the owner used explicitly.
+**Status: Codex's round-4 critique has been applied (round 5) — awaiting Codex's next
+look at `01-home.png` through `04-account.png`.** Do not treat these 4 screens as
+final until that comes back — same "still designing" framing the owner used
+explicitly. The wave curve/corner-lines are now Codex's own exact coordinates (not a
+Claude approximation like round 4), so a future critique round should be about
+finer details, not the wave shape itself.
 
 ## Build/backend — not started
 
