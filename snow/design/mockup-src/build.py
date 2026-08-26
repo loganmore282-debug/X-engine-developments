@@ -226,9 +226,10 @@ home_body = f"""
   {wave_lines_top_right()}
   {wave_lines_lower_left()}
   <div style="position:relative;padding:22px 20px 0;">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      {wm(on_dark=True)}
-      <div style="width:38px;height:38px;border-radius:14px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;color:#fff;">{ICONS['bell']}</div>
+    <div style="display:flex;align-items:center;gap:9px;">
+      {snowflake_svg('var(--snow-green)', 26)}
+      <img src="{BOTTLE_BADGE}" alt="" style="height:38px;width:auto;">
+      <div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div>
     </div>
     <div style="margin-top:26px;">
       <div style="font-size:12.5px;opacity:.82;">Wallet Balance</div>

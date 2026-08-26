@@ -77,11 +77,14 @@ setup and every withdrawal, matching what the registration screen already collec
   withdrawal history, security PIN, etc.), standard settings menu rows.
 
 **Notifications feature removed (owner decision, 2026-08-26).** No bell/notifications
-screen anywhere in Snow. Known stale residue: My Products' `top_bar()` header still
-renders a bell icon (leftover from the round-4/5 spec) — owner explicitly said leave
-My Products as-is for now, so this is NOT fixed yet. Strip the bell (and don't call
-`top_bar()` with a bell at all — Account/Team's bell-less bespoke header is the
-correct pattern) when My Products finally goes through its own Codex critique round.
+screen anywhere in Snow. Home's hero header had its bell stripped the same day and now
+uses the same bespoke bell-less header as Account/Team (snowflake + `BOTTLE_BADGE` +
+"SNOW" wordmark, white text since it's on the dark hero background). Known stale
+residue: My Products' `top_bar()` header still renders a bell icon (leftover from the
+round-4/5 spec) — owner explicitly said leave My Products as-is for now, so this is
+NOT fixed yet. Strip the bell (and don't call `top_bar()` with a bell at all —
+Account/Team/Home's bell-less bespoke header is the correct pattern) when My Products
+finally goes through its own Codex critique round.
 
 ## Design status — settled on a Codex-authored system as of 2026-08-26, now mid-build
 

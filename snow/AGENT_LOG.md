@@ -119,6 +119,30 @@ sample member showing "UGX 0" in a neutral pill since their invested amount is 0
 
 ---
 
+## 2026-08-26 — Claude — Round 9c: Home header — bell removed, bottle badge added beside the snowflake
+
+Owner caught that Home's hero header still had a bell icon (notifications were
+removed project-wide) and asked for the bottle badge to sit next to the snowflake, in
+the same arrangement already established on Account/Team's headers.
+
+**Applied to `build.py`'s Home section:** replaced the `{wm(on_dark=True)}` +
+bell-`<div>` pair (which sat in a `justify-content:space-between` row) with a direct
+inline header matching Account/Team's pattern: `snowflake_svg('var(--snow-green)', 26)`
++ `<img src="{BOTTLE_BADGE}">` (38px tall) + a `.wm-text` "SNOW" label — kept white
+(`color:#fff`) since this sits on the dark wine hero, unlike Account/Team's green text
+on a light surface. Row is now left-aligned (`gap:9px`, no `justify-content`) since
+there's nothing on the right anymore.
+
+**Verification:** Regenerated `Home.html`/`Home.png`, cropped just the header region
+to inspect closely — confirmed no bell remains, the bottle badge renders at the same
+size/position relationship to the snowflake as on Account/Team, and the white
+wordmark still reads clearly against the wine gradient.
+
+**Files touched:** `snow/design/mockup-src/build.py`, `snow/design/mockup-src/Home.html`,
+`snow/design/mockups/01-home.png`.
+
+---
+
 ## 2026-08-26 — Claude — Round 8: Codex's line-by-line correction of the round-7 Account screen; MongoDB/Firebase infra noted
 
 Owner sent Codex's detailed correction pass on round 7's Account screenshot, plus two

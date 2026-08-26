@@ -73,8 +73,19 @@ button{cursor:pointer;font-family:inherit;}
 
 .account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
 .account-feature-card{min-height:190px;border-radius:var(--snow-radius-card);overflow:hidden;box-shadow:0 16px 32px -22px rgba(17,17,17,.35);position:relative;color:#fff;padding:20px;display:flex;flex-direction:column;justify-content:flex-end;}
-.account-utility-card{min-height:126px;border-radius:26px;padding:18px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;}
-.account-icon-bubble{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.account-utility-card{min-height:126px;border-radius:26px;padding:16px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;}
+.account-icon-bubble{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.utility-wine{border:1px solid rgba(148,24,39,.10);}
+.utility-wine .account-icon-bubble{background:linear-gradient(145deg,#B42638,var(--snow-wine));color:#fff;box-shadow:0 10px 20px -12px rgba(113,16,27,.55);}
+.utility-green{border:1px solid rgba(47,107,71,.12);}
+.utility-green .account-icon-bubble{background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));color:#fff;box-shadow:0 10px 20px -12px rgba(31,81,54,.5);}
+
+.team-referral-card{position:relative;overflow:hidden;min-height:220px;padding:22px;border-radius:var(--snow-radius-card);color:#fff;background:linear-gradient(145deg,var(--snow-wine),var(--snow-wine-deep));box-shadow:0 16px 32px -22px rgba(17,17,17,.35);}
+.team-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.team-deposits-card{grid-column:1 / -1;position:relative;overflow:hidden;border-radius:22px;padding:20px;color:#fff;background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));box-shadow:0 14px 28px -22px rgba(17,17,17,.3);}
+.team-level-switcher{display:flex;gap:4px;padding:4px;border-radius:16px;background:var(--snow-neutral-soft);}
+.team-level-switcher .seg{flex:1;text-align:center;padding:9px 0;border-radius:12px;font-size:13px;font-weight:500;color:var(--snow-muted);}
+.team-level-switcher .seg.active{background:#fff;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -8px rgba(17,17,17,.3);}
 </style>
 </head>
 <body>
@@ -84,9 +95,10 @@ button{cursor:pointer;font-family:inherit;}
   <svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:140px;height:133px;opacity:0.9;"><path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/></svg>
   <svg viewBox="0 0 190 112" aria-hidden="true" style="position:absolute;bottom:-4px;left:-6px;width:150px;height:88px;opacity:0.9;"><path d="M-18 100 C22 72 57 62 93 81 C124 98 154 79 204 53" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 86 C23 58 60 48 97 67 C128 84 158 65 204 39" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 72 C25 45 64 35 101 53 C132 70 162 51 204 26" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 58 C28 32 68 22 105 39 C136 56 165 37 204 13" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/></svg>
   <div style="position:relative;padding:22px 20px 0;">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div class="wordmark"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg><div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div></div>
-      <div style="width:38px;height:38px;border-radius:14px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;color:#fff;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></div>
+    <div style="display:flex;align-items:center;gap:9px;">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg>
+      <img src="../reference-bottles/01-qing-shuang-badge.png" alt="" style="height:38px;width:auto;">
+      <div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div>
     </div>
     <div style="margin-top:26px;">
       <div style="font-size:12.5px;opacity:.82;">Wallet Balance</div>
