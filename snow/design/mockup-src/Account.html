@@ -1,0 +1,132 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Snow — Account</title>
+<style>
+:root{
+  --snow-canvas:#FCFBF9;
+  --snow-surface:#FFFFFF;
+  --snow-ink:#111111;
+  --snow-muted:#737373;
+  --snow-wine:#941827;
+  --snow-wine-deep:#71101B;
+  --snow-green:#2F6B47;
+  --snow-border:#E8E4E1;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--snow-canvas);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;}
+.mono{font-variant-numeric:tabular-nums;}
+button{cursor:pointer;font-family:inherit;}
+
+.app-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:28px;box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
+.primary-button{background:var(--snow-wine);color:#fff;border:none;border-radius:24px;font-weight:700;}
+.secondary-button{background:transparent;color:var(--snow-wine);border:1.5px solid var(--snow-wine);border-radius:24px;font-weight:600;}
+.status-pill{display:inline-block;border-radius:999px;font-size:10.5px;font-weight:600;padding:3px 10px;}
+.status-pill.active{background:rgba(47,107,71,.12);color:var(--snow-green);}
+.status-pill.pending{background:#F1EFEC;color:var(--snow-muted);}
+.bottom-nav{background:var(--snow-surface);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;}
+.navitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--snow-muted);}
+.navitem.active{color:var(--snow-wine);}
+.navitem .lbl{font-size:10.5px;}
+.navitem.active .lbl{font-weight:600;}
+
+.brand-hero{background:linear-gradient(160deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);position:relative;overflow:hidden;color:#fff;}
+.brand-wave{position:absolute;left:0;right:0;bottom:-1px;width:100%;height:70px;display:block;}
+.wave-lines{position:absolute;opacity:.8;}
+.wordmark{display:flex;align-items:center;gap:9px;}
+.wordmark .wm-text{font-weight:800;letter-spacing:2px;}
+
+.stat-label{font-size:10px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.35px;}
+.stat-val{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600;color:var(--snow-ink);margin-top:2px;}
+.section-title{font-size:17px;font-weight:800;color:var(--snow-ink);}
+.row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
+.row:last-child{border-bottom:none;}
+</style>
+</head>
+<body>
+<div style="width:390px;position:relative;background:var(--snow-canvas);">
+
+<div style="display:flex;align-items:center;justify-content:space-between;padding:24px 20px 4px;">
+  <div class="wordmark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg><div class="wm-text" style="font-size:17px;color:var(--snow-ink);">SNOW</div></div>
+  <div style="width:38px;height:38px;border-radius:14px;background:var(--snow-surface);border:1px solid var(--snow-border);display:flex;align-items:center;justify-content:center;color:var(--snow-ink);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></div>
+</div>
+
+<div class="brand-hero app-card" style="margin:16px 20px 0;padding:22px;border-radius:28px;border:none;">
+  <svg class="wave-lines wave-lines-acct" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20,140 C60,100 100,60 150,10" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
+      <path d="M32,140 C68,104 108,68 150,26" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
+      <path d="M44,140 C76,108 116,76 150,42" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
+      <path d="M56,140 C84,112 124,84 150,58" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
+    </svg><style>.wave-lines-acct{top:-18px;right:-18px;width:130px;height:130px;}</style>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg></div>
+    <div style="flex:1;min-width:0;">
+      <div style="display:flex;align-items:center;gap:7px;">
+        <div class="mono" style="font-size:15.5px;font-weight:700;">+2567 12 345 678</div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 8.5V6A1.5 1.5 0 0 0 13.5 4.5H6A1.5 1.5 0 0 0 4.5 6v7.5A1.5 1.5 0 0 0 6 15h2.5"/></svg>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;margin-top:5px;">
+        <div class="mono" style="font-size:12.5px;opacity:.85;">ID: 004128</div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 8.5V6A1.5 1.5 0 0 0 13.5 4.5H6A1.5 1.5 0 0 0 4.5 6v7.5A1.5 1.5 0 0 0 6 15h2.5"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 20px 0;">
+
+  <div class="app-card" style="padding:14px 12px;border-radius:18px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+    <div style="width:34px;height:34px;border-radius:10px;background:#F6E9EB;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><path d="M15.5 14.5h2.5"/></svg></div>
+    <div style="font-size:12.5px;font-weight:700;color:var(--snow-ink);">Withdrawal Account</div>
+  </div>
+
+  <div class="app-card" style="padding:14px 12px;border-radius:18px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+    <div style="width:34px;height:34px;border-radius:10px;background:#F6E9EB;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8"/><path d="M8.5 12 12 15.5 15.5 12"/></svg></div>
+    <div style="font-size:12.5px;font-weight:700;color:var(--snow-ink);">Deposit History</div>
+  </div>
+
+  <div class="app-card" style="padding:14px 12px;border-radius:18px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+    <div style="width:34px;height:34px;border-radius:10px;background:#F6E9EB;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-8"/><path d="M8.5 12 12 8.5 15.5 12"/></svg></div>
+    <div style="font-size:12.5px;font-weight:700;color:var(--snow-ink);">Withdrawal History</div>
+  </div>
+
+  <div class="app-card" style="padding:14px 12px;border-radius:18px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
+    <div style="width:34px;height:34px;border-radius:10px;background:#F6E9EB;color:var(--snow-wine);display:flex;align-items:center;justify-content:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.6-3 7.6-7 9-4-1.4-7-4.4-7-9V6l7-3Z"/><path d="M9 12l2 2 4-4"/></svg></div>
+    <div style="font-size:12.5px;font-weight:700;color:var(--snow-ink);">Security PIN</div>
+  </div>
+
+</div>
+
+<div class="app-card" style="margin:20px 20px 0;padding:4px 16px;">
+
+  <div class="row">
+    <div style="color:var(--snow-wine);flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M14 3.5V8h4"/><path d="M9 12h6M9 15.5h6"/></svg></div>
+    <div style="flex:1;font-size:14px;font-weight:500;color:var(--snow-ink);">About Snow</div>
+    <div style="color:var(--snow-muted);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>
+  </div>
+
+  <div class="row">
+    <div style="color:var(--snow-wine);flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M14 3.5V8h4"/><path d="M9 12h6M9 15.5h6"/></svg></div>
+    <div style="flex:1;font-size:14px;font-weight:500;color:var(--snow-ink);">Rules &amp; Terms</div>
+    <div style="color:var(--snow-muted);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>
+  </div>
+
+  <div class="row">
+    <div style="color:var(--snow-wine);flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="13" width="4.5" height="6" rx="1.5"/><rect x="16.5" y="13" width="4.5" height="6" rx="1.5"/><path d="M20 19v.5A3.5 3.5 0 0 1 16.5 23H13"/></svg></div>
+    <div style="flex:1;font-size:14px;font-weight:500;color:var(--snow-ink);">Support</div>
+    <div style="color:var(--snow-muted);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>
+  </div>
+
+  <div class="row">
+    <div style="color:var(--snow-wine);flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M8 11.5 12 15.5 16 11.5"/><path d="M5 18.5h14"/></svg></div>
+    <div style="flex:1;font-size:14px;font-weight:500;color:var(--snow-ink);">Get App</div>
+    <div style="color:var(--snow-muted);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>
+  </div>
+
+  <div class="row">
+    <div style="color:var(--snow-wine-deep);flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5H6A1.5 1.5 0 0 0 4.5 6v12A1.5 1.5 0 0 0 6 19.5h3"/><path d="M14.5 8.5 19 12l-4.5 3.5"/><path d="M19 12H9.5"/></svg></div>
+    <div style="flex:1;font-size:14px;font-weight:600;color:var(--snow-wine-deep);">Log Out</div>
+  </div>
+</div>
+<div style='height:16px;'></div>
+<div class="bottom-nav" style="height:72px;"><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9"/></svg><div class="lbl">Home</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 4 3 8.5 12 13l9-4.5Z"/><path d="M3 8.5V16l9 4.5 9-4.5V8.5"/><path d="M12 13v7.5"/></svg><div class="lbl">My Products</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 8.5a3 3 0 1 1 3.5 2.96"/><path d="M15 14.5c3 .3 5.5 2.3 5.5 5.5"/></svg><div class="lbl">Team</div></div><div class="navitem active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg><div class="lbl">Account</div></div></div>
+</div>
+</body></html>

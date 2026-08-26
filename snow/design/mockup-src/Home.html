@@ -1,0 +1,167 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Snow — Home</title>
+<style>
+:root{
+  --snow-canvas:#FCFBF9;
+  --snow-surface:#FFFFFF;
+  --snow-ink:#111111;
+  --snow-muted:#737373;
+  --snow-wine:#941827;
+  --snow-wine-deep:#71101B;
+  --snow-green:#2F6B47;
+  --snow-border:#E8E4E1;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--snow-canvas);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;}
+.mono{font-variant-numeric:tabular-nums;}
+button{cursor:pointer;font-family:inherit;}
+
+.app-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:28px;box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
+.primary-button{background:var(--snow-wine);color:#fff;border:none;border-radius:24px;font-weight:700;}
+.secondary-button{background:transparent;color:var(--snow-wine);border:1.5px solid var(--snow-wine);border-radius:24px;font-weight:600;}
+.status-pill{display:inline-block;border-radius:999px;font-size:10.5px;font-weight:600;padding:3px 10px;}
+.status-pill.active{background:rgba(47,107,71,.12);color:var(--snow-green);}
+.status-pill.pending{background:#F1EFEC;color:var(--snow-muted);}
+.bottom-nav{background:var(--snow-surface);border-top:1px solid var(--snow-border);display:flex;align-items:center;justify-content:space-around;}
+.navitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--snow-muted);}
+.navitem.active{color:var(--snow-wine);}
+.navitem .lbl{font-size:10.5px;}
+.navitem.active .lbl{font-weight:600;}
+
+.brand-hero{background:linear-gradient(160deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);position:relative;overflow:hidden;color:#fff;}
+.brand-wave{position:absolute;left:0;right:0;bottom:-1px;width:100%;height:70px;display:block;}
+.wave-lines{position:absolute;opacity:.8;}
+.wordmark{display:flex;align-items:center;gap:9px;}
+.wordmark .wm-text{font-weight:800;letter-spacing:2px;}
+
+.stat-label{font-size:10px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.35px;}
+.stat-val{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600;color:var(--snow-ink);margin-top:2px;}
+.section-title{font-size:17px;font-weight:800;color:var(--snow-ink);}
+.row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
+.row:last-child{border-bottom:none;}
+</style>
+</head>
+<body>
+<div style="width:390px;position:relative;background:var(--snow-canvas);">
+
+<div class="brand-hero" style="padding:22px 20px 46px;">
+  <svg class="wave-lines wave-lines-tr" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20,140 C60,100 100,60 150,10" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
+      <path d="M32,140 C68,104 108,68 150,26" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
+      <path d="M44,140 C76,108 116,76 150,42" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
+      <path d="M56,140 C84,112 124,84 150,58" stroke="#8FE0AE" stroke-width="1.4" fill="none"/>
+    </svg><style>.wave-lines-tr{top:-24px;right:-24px;width:150px;height:150px;}</style>
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div class="wordmark"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg><div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div></div>
+    <div style="width:38px;height:38px;border-radius:14px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;color:#fff;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></div>
+  </div>
+  <div style="margin-top:26px;">
+    <div style="font-size:12.5px;opacity:.82;">Wallet Balance</div>
+    <div class="mono" style="font-size:32px;font-weight:800;margin-top:4px;">UGX 248,500</div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <div style="flex:1;background:rgba(255,255,255,.14);border-radius:16px;padding:10px 12px;">
+        <div style="font-size:11px;opacity:.8;">Total Earned</div>
+        <div class="mono" style="font-size:14.5px;font-weight:700;margin-top:2px;">UGX 96,000</div>
+      </div>
+      <div style="flex:1;background:rgba(255,255,255,.14);border-radius:16px;padding:10px 12px;">
+        <div style="font-size:11px;opacity:.8;">Total Invested</div>
+        <div class="mono" style="font-size:14.5px;font-weight:700;margin-top:2px;">UGX 470,000</div>
+      </div>
+    </div>
+  </div>
+  <svg class="brand-wave" viewBox="0 0 390 70" preserveAspectRatio="none">
+      <path d="M0,30 C90,0 160,58 260,32 C320,16 360,38 390,24 L390,70 L0,70 Z" fill="var(--snow-canvas)"></path>
+    </svg>
+</div>
+
+<div style="display:flex;gap:12px;margin:-6px 20px 0;position:relative;z-index:1;">
+  <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8"/><path d="M8.5 12 12 15.5 15.5 12"/></svg>Deposit</button>
+  <button class="secondary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-8"/><path d="M8.5 12 12 8.5 15.5 12"/></svg>Withdraw</button>
+</div>
+
+<div class="app-card" style="margin:18px 20px 0;padding:20px 22px;border-radius:24px;background:linear-gradient(120deg,#F3F6F1 0%,#E7EFE4 100%);border-color:transparent;">
+  <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-green);font-weight:700;">Referral Program</div>
+  <div style="font-size:18px;font-weight:800;margin-top:4px;max-width:250px;line-height:1.25;color:var(--snow-ink);">Earn 27% on every referral&rsquo;s first investment</div>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin:26px 20px 12px;">
+  <div class="section-title">Investment Plans</div>
+  <div style="font-size:12.5px;color:var(--snow-muted);">10 plans</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px;margin:0 20px;">
+
+  <div class="app-card" style="display:flex;align-items:center;gap:14px;padding:14px 16px;">
+    <div style="width:44px;height:44px;border-radius:13px;background:#F6E9EB;display:flex;align-items:center;justify-content:center;color:var(--snow-wine);flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--snow-wine)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">Snow Qing Shuang</div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:8px;">
+        <div><div class="stat-label">Investment</div><div class="stat-val mono">UGX 30,000</div></div>
+        <div><div class="stat-label">Daily Cashback</div><div class="stat-val mono" style="color:var(--snow-green);">UGX 6,000</div></div>
+        <div><div class="stat-label">Duration</div><div class="stat-val mono">150 days</div></div>
+        <div><div class="stat-label">Total Return</div><div class="stat-val mono">UGX 900,000</div></div>
+      </div>
+    </div>
+    <button class="primary-button" style="flex-shrink:0;padding:9px 16px;font-size:12.5px;">Invest</button>
+  </div>
+
+  <div class="app-card" style="display:flex;align-items:center;gap:14px;padding:14px 16px;">
+    <div style="width:44px;height:44px;border-radius:13px;background:#F6E9EB;display:flex;align-items:center;justify-content:center;color:var(--snow-wine);flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--snow-wine)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">Snow Ice Cool (Bing Ku)</div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:8px;">
+        <div><div class="stat-label">Investment</div><div class="stat-val mono">UGX 90,000</div></div>
+        <div><div class="stat-label">Daily Cashback</div><div class="stat-val mono" style="color:var(--snow-green);">UGX 18,000</div></div>
+        <div><div class="stat-label">Duration</div><div class="stat-val mono">150 days</div></div>
+        <div><div class="stat-label">Total Return</div><div class="stat-val mono">UGX 2,700,000</div></div>
+      </div>
+    </div>
+    <button class="primary-button" style="flex-shrink:0;padding:9px 16px;font-size:12.5px;">Invest</button>
+  </div>
+
+  <div class="app-card" style="display:flex;align-items:center;gap:14px;padding:14px 16px;">
+    <div style="width:44px;height:44px;border-radius:13px;background:#F6E9EB;display:flex;align-items:center;justify-content:center;color:var(--snow-wine);flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--snow-wine)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">Snow Brave the World</div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:8px;">
+        <div><div class="stat-label">Investment</div><div class="stat-val mono">UGX 197,000</div></div>
+        <div><div class="stat-label">Daily Cashback</div><div class="stat-val mono" style="color:var(--snow-green);">UGX 39,400</div></div>
+        <div><div class="stat-label">Duration</div><div class="stat-val mono">150 days</div></div>
+        <div><div class="stat-label">Total Return</div><div class="stat-val mono">UGX 5,910,000</div></div>
+      </div>
+    </div>
+    <button class="primary-button" style="flex-shrink:0;padding:9px 16px;font-size:12.5px;">Invest</button>
+  </div>
+
+  <div class="app-card" style="display:flex;align-items:center;gap:14px;padding:14px 16px;">
+    <div style="width:44px;height:44px;border-radius:13px;background:#F6E9EB;display:flex;align-items:center;justify-content:center;color:var(--snow-wine);flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--snow-wine)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">Snow Classic (Old Snow)</div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:8px;">
+        <div><div class="stat-label">Investment</div><div class="stat-val mono">UGX 355,000</div></div>
+        <div><div class="stat-label">Daily Cashback</div><div class="stat-val mono" style="color:var(--snow-green);">UGX 71,000</div></div>
+        <div><div class="stat-label">Duration</div><div class="stat-val mono">150 days</div></div>
+        <div><div class="stat-label">Total Return</div><div class="stat-val mono">UGX 10,650,000</div></div>
+      </div>
+    </div>
+    <button class="primary-button" style="flex-shrink:0;padding:9px 16px;font-size:12.5px;">Invest</button>
+  </div>
+
+  <div class="app-card" style="display:flex;align-items:center;gap:14px;padding:14px 16px;">
+    <div style="width:44px;height:44px;border-radius:13px;background:#F6E9EB;display:flex;align-items:center;justify-content:center;color:var(--snow-wine);flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--snow-wine)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg></div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">Snow Draft Beer (Chun Sheng)</div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:8px;">
+        <div><div class="stat-label">Investment</div><div class="stat-val mono">UGX 560,000</div></div>
+        <div><div class="stat-label">Daily Cashback</div><div class="stat-val mono" style="color:var(--snow-green);">UGX 112,000</div></div>
+        <div><div class="stat-label">Duration</div><div class="stat-val mono">150 days</div></div>
+        <div><div class="stat-label">Total Return</div><div class="stat-val mono">UGX 16,800,000</div></div>
+      </div>
+    </div>
+    <button class="primary-button" style="flex-shrink:0;padding:9px 16px;font-size:12.5px;">Invest</button>
+  </div>
+</div>
+<div style='height:16px;'></div>
+<div class="bottom-nav" style="height:72px;"><div class="navitem active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9"/></svg><div class="lbl">Home</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 4 3 8.5 12 13l9-4.5Z"/><path d="M3 8.5V16l9 4.5 9-4.5V8.5"/><path d="M12 13v7.5"/></svg><div class="lbl">My Products</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 8.5a3 3 0 1 1 3.5 2.96"/><path d="M15 14.5c3 .3 5.5 2.3 5.5 5.5"/></svg><div class="lbl">Team</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg><div class="lbl">Account</div></div></div>
+</div>
+</body></html>

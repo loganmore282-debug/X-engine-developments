@@ -16,6 +16,78 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 4: Codex designed login/register + a full written design system; Claude built Home/My Products/Team/Account against it, sent as PNGs for Codex critique
+
+Owner sent 2 screenshots (Codex-designed login and registration screens) and a long,
+detailed design-system spec Codex wrote alongside them, with the instruction: *"take it
+exactly and we start designing the site."* Both are now the source of truth for Snow's
+visual design — see `CLAUDE.md`'s Design status section for the full token/component
+breakdown, not repeated here. Short version: **white/black/wine-red/green only** — this
+supersedes and explicitly rules out all 3 of the prior Claude-only exploration rounds
+(ice/blue, amber/gold beer-pour, dark wood-grain — see the entry below this one). Wine
+red (`#941827`) is the strong branded color, bottle green (`#2F6B47`) supporting; a
+green snowflake + white "SNOW" wordmark; signature wine-red hero with a white wave
+curving into the content area and thin green parallel wave-lines in the hero corners;
+28/26/24/32px radii across cards/inputs/buttons/sheets; named reusable component
+classes (`brand-hero`, `brand-wave`, `wave-lines`, `app-card`, `form-field`,
+`primary-button`, `secondary-button`, `status-pill`, `bottom-nav`, `bottom-sheet`).
+
+The two reference screens are committed at `snow/design/mockups/00-login.png` and
+`00-register.png` — treat these as pixel-final, Codex's own output, not something to
+redraw.
+
+**Built Home, My Products, Team, and Account directly against this spec** — not a
+Claude redesign, a direct application of the same tokens/components to the other 3
+tabs (plus the top bar, which the auth screens don't have an equivalent for). Rendered
+as static PNG screenshots via Playwright rather than an interactive Claude Artifact
+link, per the owner's explicit ask this round: *"can you send me photos instead of
+artifacts of html."* Files: `snow/design/mockups/01-home.png` through
+`04-account.png`; editable source at `snow/design/mockup-src/*.html` +
+`build.py` (the Python generator that emits them — shared token/component definitions
+live inside it, matching the CSS tokens above 1:1).
+
+**Two real bugs caught and fixed before sending anything to the owner**: (1) the "SNOW"
+wordmark on the plain white top bar of My Products/Team/Account was rendered in white
+text — invisible against the white background, since the wordmark helper only had one
+white-text variant meant for the wine-red hero. Fixed with an `on_dark` parameter so
+the wordmark renders in ink-black on a white bar and white only when actually placed on
+a wine-red surface. (2) the green (`#2F6B47`) wave-line decorations, drawn at reduced
+opacity directly over the wine-red hero background, visually blended into a muddy brown
+rather than reading as green — verified by inspecting the rendered screenshot, not just
+assumed from the code. Fixed by using a brighter mint-green (`#8FE0AE`) specifically for
+the wave-lines-over-wine case and raising their opacity from .55 to .8, which reads
+clearly green against the dark red instead of blending.
+
+**Known, disclosed limitation**: the wave curve and corner-line geometry on these 4
+screens' hero cards are Claude's own approximation of the brand language Codex
+described in prose (a "large smooth wave," "thin parallel wave lines") — Codex's actual
+SVG source for the login/register hero curve was never shared, only the rendered
+screenshots, so don't assume the curve shape is pixel-identical between the auth pair
+and these 4. Flagged explicitly to the owner in chat.
+
+**This round's push**: owner said *"just push images to repo and also send on that
+critique complain in the prompt such that l give it"* — committed both the 2 Codex auth
+screenshots and the 4 new Claude-built screens (plus their editable HTML source and the
+generator script) to this branch, and drafted a critique-request prompt for Codex
+(given to the owner in chat, not saved as a repo file — same pattern as the
+color/theme-request prompt from the previous round).
+
+**Verification**: visual-only inspection of each rendered PNG (no automated test
+suite exists yet — no backend/frontend app code has been written, this is still purely
+a design/mockup phase). Both real bugs above were caught by actually looking at the
+rendered screenshots before sending them anywhere, not by reasoning about the CSS in
+the abstract — worth remembering for any future icon/color work in this file: color
+and contrast bugs on colored/gradient surfaces don't show up from reading source, only
+from rendering it.
+
+**Left open**:
+- Codex's critique of `01-home.png`–`04-account.png` hasn't come back yet — do not
+  treat these 4 as final.
+- Everything listed as "left open" in the entry below this one is still open — nothing
+  about backend, rates, or feature scope changed this round, only the visual system.
+
+---
+
 ## 2026-08-26 — Claude — Project kickoff: product ladder, rates, nav confirmed; 3 design rounds tried, owner requested Codex's color/theme opinion
 
 Owner opened a new project in this repo: *"no we are building another, it is snow but

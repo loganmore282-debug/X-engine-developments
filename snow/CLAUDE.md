@@ -67,36 +67,75 @@ Task Center ladders, gift code format, withdrawal request hours.
 - **Account** — profile identity, wallet/menu tiles (withdrawal account, deposit/
   withdrawal history, security PIN, etc.), standard settings menu rows.
 
-## Design status — 3 rounds so far, still not settled
+## Design status — settled on a Codex-authored system as of 2026-08-26, now mid-build
 
-A 5-screen design canvas mockup (Home, My Products, Team, Account, plan-detail) was
-built and iterated via Claude's design-canvas tool, published as a Claude Artifact
-(URL: `https://claude.ai/code/artifact/19cfc9b0-74f2-4c46-bb42-1cc0ea7e5447` — only
-reachable from a Claude session with access to it, not a public link; the actual
-`.dc.html` source files are NOT committed to this repo, they only exist in that
-session's scratchpad).
+**Round 4 is the current, live design direction — read this section before touching
+visual design again.** Rounds 1–3 (ice/blue, amber/gold beer-pour, dark wood-grain —
+all Claude-only explorations) are superseded and should NOT be revisited; they're kept
+in AGENT_LOG.md purely as history of what was already tried and rejected.
 
-1. **Round 1 — ice/snow theme, blue-accent, cool whites/silvery blues.** Owner's own
-   pick from a set of options offered. **Rejected**: *"don't use blue bro"*.
-2. **Round 2 — amber/gold "beer spilling colors" on a warm cream canvas**, in response
-   to *"l need a snow beer color like spilling colors"*. **Rejected**: owner pointed out
-   the theme still didn't match the real product photography (see below).
-3. **Round 3 — dark wood-grain canvas with glowing amber accents**, built directly
-   against the 10 real Snow Beer bottle reference photos (dark backdrop, glowing gold
-   liquid, condensation highlights) instead of an invented "ice" or "cream" concept.
-   **Outcome not yet confirmed** — owner then asked to bring in Codex/ChatGPT for a
-   color/theme opinion instead of continuing to iterate blind with Claude alone (owner:
-   *"you are not good at design"*).
+**The owner had Codex design the login/register screens directly** (screenshots
+relayed back into chat, same review-prompt workflow already established on space8) and
+Codex also produced a full written design-system spec at the same time. Both are now
+the source of truth:
 
-**Owner's explicit ask, this round**: get Codex's suggestion for the color palette /
-visual theme, using the real bottle photography (`snow/design/reference-bottles/`) as
-the grounding reference, and considering that space8 (the sibling project) already owns
-a blue-accent identity — Snow needs to read as visually distinct from it.
+- **Visual reference screens** (Codex-designed, pixel-final, not to be altered without
+  the owner asking): `snow/design/mockups/00-register.png`,
+  `snow/design/mockups/00-login.png`.
+- **Design tokens** (white/black/wine-red/green — **no blue, no amber/gold, no dark
+  wood theme** — all three of rounds 1–3 are explicitly ruled out by this spec):
+  ```css
+  --snow-canvas: #FCFBF9;   /* main page background */
+  --snow-surface: #FFFFFF;  /* cards, fields, sheets */
+  --snow-ink: #111111;      /* headings and primary text */
+  --snow-muted: #737373;    /* secondary text */
+  --snow-wine: #941827;     /* primary CTA, hero, active state */
+  --snow-wine-deep: #71101B;/* subtle hero depth only */
+  --snow-green: #2F6B47;    /* waves, success, links, verified state */
+  --snow-border: #E8E4E1;   /* field/card outline */
+  ```
+- **Radii**: main cards 28px, input cards 26px, primary buttons 24px, sheets/modals
+  32px 32px 0 0. Soft clean shadows, thin warm-gray borders, not harsh box-shadows.
+- **Brand language**: green snowflake mark + wordmark "SNOW"; wine-red hero areas with
+  a large smooth white wave curving into the form/content area below, plus thin
+  bottle-green parallel wave-line decorations in the hero's corners. Built with
+  SVG/CSS shapes, not a screenshot background.
+- **Component vocabulary Codex asked for** (build all future screens out of these, not
+  one-off markup): `brand-hero`, `brand-wave`, `wave-lines`, `app-card`, `form-field`,
+  `primary-button`, `secondary-button`, `status-pill`, `bottom-nav`, `bottom-sheet`.
+- **Explicit product-behavior constraints from the same spec** (relevant once backend
+  work starts, not just visual): registration fields are exactly Mobile number /
+  Password / Transaction PIN (5 digits) — no confirmation fields, no referral/checkbox/
+  social login unless the owner asks later; only show "Forgot password?" once a real
+  reset flow exists; never log/store/expose a raw password or PIN in client state;
+  money movement must stay server-side/idempotent with a ledger record per
+  balance-changing event; frontend state is display-only.
 
-**Do not restart the design from scratch without reading this section and
-AGENT_LOG.md's design-history entries first** — three real directions have already
-been tried and explicitly rejected/pending; a future session (Claude or Codex) should
-build on that history, not re-litigate it.
+**Claude then built Home, My Products, Team, and Account against this exact spec**
+(not a redesign — a direct application of the tokens/components above), rendered as
+static PNG screenshots via Playwright rather than an interactive Claude Artifact link,
+per the owner's explicit ask (*"can you send me photos instead of artifacts of html"*)
+so they're easy to hand to Codex directly:
+`snow/design/mockups/01-home.png`, `02-my-products.png`, `03-team.png`,
+`04-account.png`. Editable source for these 4 (plain standalone HTML, not the
+design-canvas `.dc.html` format used in rounds 1–3) is at
+`snow/design/mockup-src/*.html` + the Python generator `build.py` that produced them
+(`python3 build.py` regenerates the HTML from the shared token/component definitions
+inside it; screenshot with Playwright + `chromium` at `/opt/pw-browsers/chromium`,
+390px width, `device_scale_factor=2`, `full_page=True`).
+
+**Known limitation, disclosed to the owner**: the wave curvature and corner-line
+decoration on Home/Team/Account's hero cards are Claude's own approximation of the
+brand language Codex described in prose — Codex's actual SVG source for the
+login/register hero was never shared, only the rendered screenshots, so the curve
+shape is not pixel-identical between the two auth screens and these 4. If Codex's
+critique flags the wave shape specifically, that's expected and worth fixing with
+real coordinates from Codex rather than guessed ones.
+
+**Status: awaiting Codex's critique of `01-home.png` through `04-account.png`**
+(a prompt for this was drafted for the owner to send, asking Codex to review against
+its own spec above). Do not treat these 4 screens as final until that feedback comes
+back and gets applied — same "still designing" framing the owner used explicitly.
 
 ## Build/backend — not started
 
