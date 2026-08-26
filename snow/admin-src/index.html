@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snow Admin</title>
+<meta name="theme-color" content="#941827">
+<style>
+:root{
+  --wine:#941827; --wine-deep:#71101B; --green:#2F6B47; --green-deep:#1F5136;
+  --bg:#F4F7FB; --card:#FFFFFF; --ink:#0A1220; --sub:#5B6B84; --line:#D7DFEC;
+  --ok:#0F9D58; --danger:#D93025; --warn:#E8A33D;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+button{cursor:pointer;font-family:inherit;}
+input,select,textarea{font-family:inherit;}
+.mono{font-variant-numeric:tabular-nums;}
+a{color:var(--wine);}
+
+#loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,var(--wine),var(--wine-deep));}
+.login-card{background:#fff;border-radius:24px;padding:36px 32px;width:340px;box-shadow:0 24px 60px -20px rgba(0,0,0,.4);}
+.login-card h1{margin:0 0 4px;font-size:22px;font-weight:800;}
+.login-card p{margin:0 0 22px;color:var(--sub);font-size:13.5px;}
+.login-card input{width:100%;padding:13px 16px;border:1px solid var(--line);border-radius:12px;font-size:14px;margin-bottom:14px;}
+.login-card button{width:100%;padding:13px 0;border:none;border-radius:12px;background:var(--wine);color:#fff;font-weight:700;font-size:14.5px;}
+.err{color:var(--danger);font-size:12.5px;margin:-6px 0 12px;}
+
+#appScreen{display:none;}
+.topbar{background:#fff;border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;}
+.topbar .brand{font-weight:800;font-size:16px;letter-spacing:.5px;}
+.topbar .brand span{color:var(--green);}
+.tabs{display:flex;gap:4px;padding:10px 24px 0;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto;}
+.tab{padding:10px 16px;font-size:13.5px;font-weight:600;color:var(--sub);border-bottom:3px solid transparent;white-space:nowrap;}
+.tab.active{color:var(--wine);border-bottom-color:var(--wine);}
+.content{padding:22px 24px 60px;max-width:1200px;margin:0 auto;}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
+.stat-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+.stat-card .lbl{font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.4px;}
+.stat-card .val{font-size:21px;font-weight:800;margin-top:6px;}
+
+table{width:100%;border-collapse:collapse;background:var(--card);border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);}
+th,td{text-align:left;padding:10px 14px;font-size:13px;border-bottom:1px solid var(--line);}
+th{background:#F9FBFD;color:var(--sub);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.3px;}
+tr:last-child td{border-bottom:none;}
+.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;}
+.pill.ok{background:#E7F7EE;color:var(--ok);}
+.pill.warn{background:#FDF3E3;color:var(--warn);}
+.pill.bad{background:#FBE9E7;color:var(--danger);}
+.pill.mut{background:#F1EFEC;color:var(--sub);}
+.btn{border:none;border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:700;color:#fff;background:var(--wine);}
+.btn.green{background:var(--green);}
+.btn.ghost{background:#fff;color:var(--wine);border:1px solid var(--wine);}
+.btn:disabled{opacity:.5;}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+.toolbar input{padding:9px 14px;border:1px solid var(--line);border-radius:10px;font-size:13px;min-width:220px;}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:18px;}
+.card h3{margin:0 0 14px;font-size:15px;font-weight:800;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px;color:var(--sub);}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:13.5px;}
+.field textarea{min-height:80px;resize:vertical;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.checkfield{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+
+.modal-bg{position:fixed;inset:0;background:rgba(10,18,32,.45);display:none;align-items:center;justify-content:center;z-index:100;}
+.modal-bg.show{display:flex;}
+.modal{background:#fff;border-radius:18px;padding:24px;width:380px;max-width:92vw;}
+.modal h3{margin:0 0 14px;font-size:16px;}
+.toast-host{position:fixed;top:16px;right:16px;z-index:200;display:flex;flex-direction:column;gap:8px;}
+.toast{background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;box-shadow:0 12px 24px -12px rgba(0,0,0,.4);}
+.toast.err{background:var(--danger);}
+.empty{padding:30px;text-align:center;color:var(--sub);font-size:13px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>Snow Admin</h1>
+    <p>Enter the admin key to continue</p>
+    <div id="loginErr" class="err" style="display:none;"></div>
+    <input id="adminKeyInput" type="password" placeholder="Admin key" onkeydown="if(event.key==='Enter')adminLogin()">
+    <button onclick="adminLogin()" id="loginBtn">Log in</button>
+  </div>
+</div>
+
+<div id="appScreen">
+  <div class="topbar">
+    <div class="brand">SNOW <span>ADMIN</span></div>
+    <button class="btn ghost" onclick="adminLogout()">Log out</button>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="content" id="content"></div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBody"></div></div>
+<div class="toast-host" id="toastHost"></div>
+
+<script>
+// ── Update this once the real Render service URL is known ──
+const API_BASE = 'https://snow-server.onrender.com';
+let ADMIN_KEY = '';
+let CURRENT_TAB = 'dashboard';
+let CACHE = { users: null, deposits: null, withdrawals: null, products: null, settings: null, stats: null };
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-UG'); }
+function toast(msg, isErr){
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  $('toastHost').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+async function api(path, opts){
+  opts = opts || {};
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  if (ADMIN_KEY) headers['Authorization'] = 'Bearer ' + ADMIN_KEY;
+  let resp;
+  try { resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers })); }
+  catch (e) { return { status: 'error', message: 'Network error' }; }
+  let data;
+  try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response' }; }
+  return data;
+}
+function post(path, body){ return api(path, { method: 'POST', body: JSON.stringify(body || {}) }); }
+
+window.adminLogin = async function(){
+  const key = $('adminKeyInput').value.trim();
+  if (!key) return;
+  $('loginBtn').disabled = true; $('loginBtn').textContent = 'Checking…';
+  const r = await post('/admin/check-key', { key });
+  $('loginBtn').disabled = false; $('loginBtn').textContent = 'Log in';
+  if (r.status !== 'success') { $('loginErr').style.display = 'block'; $('loginErr').textContent = r.message || 'Invalid key'; return; }
+  ADMIN_KEY = key;
+  sessionStorage.setItem('snowAdminKey', key);
+  $('loginScreen').style.display = 'none';
+  $('appScreen').style.display = 'block';
+  renderTabs();
+  showTab('dashboard');
+};
+window.adminLogout = function(){
+  ADMIN_KEY = '';
+  sessionStorage.removeItem('snowAdminKey');
+  $('appScreen').style.display = 'none';
+  $('loginScreen').style.display = 'flex';
+};
+
+const TABS = [
+  ['dashboard','Dashboard'], ['users','Users'], ['deposits','Deposits'],
+  ['withdrawals','Withdrawals'], ['products','Products'], ['settings','Settings'],
+];
+function renderTabs(){
+  $('tabs').innerHTML = TABS.map(([key,label]) => `<div class="tab" data-tab="${key}" onclick="showTab('${key}')">${label}</div>`).join('');
+}
+window.showTab = async function(tab){
+  CURRENT_TAB = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  $('content').innerHTML = '<div class="empty">Loading…</div>';
+  if (tab === 'dashboard') await renderDashboard();
+  else if (tab === 'users') await renderUsers();
+  else if (tab === 'deposits') await renderDeposits();
+  else if (tab === 'withdrawals') await renderWithdrawals();
+  else if (tab === 'products') await renderProducts();
+  else if (tab === 'settings') await renderSettings();
+};
+
+// ── DASHBOARD ──
+async function renderDashboard(){
+  const r = await api('/admin/stats');
+  if (r.status !== 'success') { $('content').innerHTML = `<div class="empty">${esc(r.message||'Could not load stats')}</div>`; return; }
+  const s = r.stats;
+  CACHE.stats = s;
+  $('content').innerHTML = `
+    <div class="grid">
+      <div class="stat-card"><div class="lbl">Total Users</div><div class="val">${s.totalUsers}</div></div>
+      <div class="stat-card"><div class="lbl">Active / Banned</div><div class="val">${s.activeUsers} / ${s.bannedUsers}</div></div>
+      <div class="stat-card"><div class="lbl">Total Wallet Balance</div><div class="val mono">${fmtUGX(s.walletTotal)}</div></div>
+      <div class="stat-card"><div class="lbl">Total Deposited</div><div class="val mono">${fmtUGX(s.depositAmount)}</div></div>
+      <div class="stat-card"><div class="lbl">Total Withdrawn</div><div class="val mono">${fmtUGX(s.withdrawAmount)}</div></div>
+      <div class="stat-card"><div class="lbl">Total Invested</div><div class="val mono">${fmtUGX(s.investedAmount)}</div></div>
+      <div class="stat-card"><div class="lbl">Active Investments</div><div class="val">${s.activeInvestments}</div></div>
+      <div class="stat-card"><div class="lbl">Pending Deposits</div><div class="val" style="color:${s.pendingDepCount?'var(--warn)':'inherit'};">${s.pendingDepCount}</div></div>
+      <div class="stat-card"><div class="lbl">Pending Withdrawals</div><div class="val" style="color:${s.pendingWitCount?'var(--warn)':'inherit'};">${s.pendingWitCount}</div></div>
+    </div>
+    <div class="card">
+      <h3>Maintenance tools</h3>
+      <button class="btn" onclick="recountTotals()">Recalculate totals</button>
+      <p style="font-size:12px;color:var(--sub);margin-top:10px;">Rebuilds each user's deposited/earned totals straight from the transaction ledger. Safe to run any time.</p>
+    </div>`;
+}
+window.recountTotals = async function(){
+  toast('Recalculating…');
+  const r = await api('/admin/users/recount');
+  if (r.status !== 'success') return toast(r.message || 'Could not recalculate', true);
+  toast(`Done — ${r.updated} account${r.updated===1?'':'s'} corrected`);
+};
+
+// ── USERS ──
+async function renderUsers(){
+  const r = await api('/admin/users');
+  const users = r.status === 'success' ? r.users : [];
+  CACHE.users = users;
+  $('content').innerHTML = `
+    <div class="toolbar"><input id="userSearch" placeholder="Search phone or referral code…" oninput="filterUsers()"></div>
+    <table><thead><tr><th>Phone</th><th>ID</th><th>Wallet</th><th>Invested</th><th>Earned</th><th>Referral</th><th>Status</th><th>Actions</th></tr></thead><tbody id="usersBody"></tbody></table>`;
+  paintUsers(users);
+}
+function paintUsers(users){
+  $('usersBody').innerHTML = users.length ? users.map(u => `
+    <tr>
+      <td class="mono">${esc(u.phone||'')}</td>
+      <td class="mono">${esc(u.publicId||'—')}</td>
+      <td class="mono">${fmtUGX(u.walletBalance)}</td>
+      <td class="mono">${fmtUGX(u.totalInvested)}</td>
+      <td class="mono">${fmtUGX(u.totalEarned)}</td>
+      <td class="mono">${esc(u.referralCode||'—')}</td>
+      <td><span class="pill ${u.status==='banned'?'bad':'ok'}">${esc(u.status||'active')}</span></td>
+      <td style="white-space:nowrap;">
+        <button class="btn ghost" onclick="openCreditModal('${u.id}','credit')">Credit</button>
+        <button class="btn ghost" onclick="openCreditModal('${u.id}','debit')">Debit</button>
+        <button class="btn ${u.status==='banned'?'green':''}" onclick="toggleBan('${u.id}','${u.status==='banned'?'unban':'ban'}')">${u.status==='banned'?'Unban':'Ban'}</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="8" class="empty">No users yet</td></tr>';
+}
+window.filterUsers = function(){
+  const q = $('userSearch').value.trim().toLowerCase();
+  const filtered = (CACHE.users||[]).filter(u => !q || (u.phone||'').toLowerCase().includes(q) || (u.referralCode||'').toLowerCase().includes(q));
+  paintUsers(filtered);
+};
+window.openCreditModal = function(userId, kind){
+  $('modalBody').innerHTML = `
+    <h3>${kind==='credit'?'Credit':'Debit'} wallet</h3>
+    <div class="field"><label>Amount</label><input id="modalAmount" type="text" inputmode="numeric" placeholder="0"></div>
+    <div class="field"><label>Note (optional)</label><input id="modalNote" type="text" placeholder="Reason"></div>
+    <button class="btn" style="width:100%;padding:11px 0;" onclick="submitCreditDebit('${userId}','${kind}')">Confirm</button>`;
+  $('modalBg').classList.add('show');
+};
+window.closeModal = function(){ $('modalBg').classList.remove('show'); };
+window.submitCreditDebit = async function(userId, kind){
+  const amount = parseInt($('modalAmount').value, 10);
+  const note = $('modalNote').value;
+  if (!amount || amount <= 0) return toast('Enter a valid amount', true);
+  const r = await post(kind === 'credit' ? '/admin/deposit' : '/admin/debit', { userId, amount, note });
+  if (r.status !== 'success') return toast(r.message || 'Failed', true);
+  toast(r.message || 'Done');
+  closeModal();
+  renderUsers();
+};
+window.toggleBan = async function(userId, action){
+  const r = await post('/admin/ban', { userId, action });
+  if (r.status !== 'success') return toast(r.message || 'Failed', true);
+  toast(action === 'ban' ? 'User banned' : 'User unbanned');
+  renderUsers();
+};
+
+// ── DEPOSITS ──
+async function renderDeposits(){
+  const r = await post('/admin/deposits/list', {});
+  const rows = r.status === 'success' ? r.deposits : [];
+  $('content').innerHTML = `<table><thead><tr><th>Phone</th><th>Amount</th><th>Network</th><th>Ref</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody>` +
+    (rows.length ? rows.sort((a,b)=>(b.createdAt&&b.createdAt.seconds||0)-(a.createdAt&&a.createdAt.seconds||0)).map(d => `
+    <tr>
+      <td class="mono">${esc(d.accountPhone||'')}</td>
+      <td class="mono">${fmtUGX(d.amount)}</td>
+      <td>${esc(d.network||'—')}</td>
+      <td class="mono">${esc(d.ref||'')}</td>
+      <td><span class="pill ${depPillClass(d.status)}">${esc(d.status)}</span></td>
+      <td>${esc(d.date||'')}</td>
+      <td>${d.status!=='matched' ? `<button class="btn" onclick="forceCreditDeposit('${d.id}')">Force credit</button>` : ''}</td>
+    </tr>`).join('') : '<tr><td colspan="7" class="empty">No deposits yet</td></tr>')
+    + '</tbody></table>';
+}
+function depPillClass(s){ return s==='matched'?'ok':(s==='failed'?'bad':'warn'); }
+window.forceCreditDeposit = async function(depositId){
+  const r = await post('/admin/deposit/force-credit', { depositId });
+  if (r.status !== 'success') return toast(r.message || 'Failed', true);
+  toast(r.message || 'Credited');
+  renderDeposits();
+};
+
+// ── WITHDRAWALS ──
+async function renderWithdrawals(){
+  const r = await post('/admin/withdrawals/list', {});
+  const rows = r.status === 'success' ? r.withdrawals : [];
+  $('content').innerHTML = `<table><thead><tr><th>Phone</th><th>Amount</th><th>Net</th><th>Network</th><th>Ref</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead><tbody>` +
+    (rows.length ? rows.sort((a,b)=>(b.createdAt&&b.createdAt.seconds||0)-(a.createdAt&&a.createdAt.seconds||0)).map(w => `
+    <tr>
+      <td class="mono">${esc(w.accountPhone||'')}</td>
+      <td class="mono">${fmtUGX(w.amount)}</td>
+      <td class="mono">${fmtUGX(w.net)}</td>
+      <td>${esc(w.network||'')}</td>
+      <td class="mono">${esc(w.ref||'')}</td>
+      <td><span class="pill ${witPillClass(w.status)}">${esc(w.status)}</span></td>
+      <td>${esc(w.date||'')}</td>
+      <td style="white-space:nowrap;">${w.status==='pending' ? `<button class="btn" onclick="processWithdrawal('${w.id}')">Send</button> <button class="btn ghost" onclick="rejectWithdrawal('${w.id}')">Reject</button>` : (w.status==='processing' ? `<button class="btn ghost" onclick="rejectWithdrawal('${w.id}')">Reject</button>` : '')}</td>
+    </tr>`).join('') : '<tr><td colspan="8" class="empty">No withdrawals yet</td></tr>')
+    + '</tbody></table>';
+}
+function witPillClass(s){ return s==='processed'?'ok':(s==='declined'?'bad':'warn'); }
+window.processWithdrawal = async function(id){
+  const r = await post('/admin/withdraw/process', { withdrawalId: id });
+  if (r.status !== 'success') return toast(r.message || 'Failed', true);
+  toast(r.message || 'Sent');
+  renderWithdrawals();
+};
+window.rejectWithdrawal = async function(id){
+  const r = await post('/admin/withdraw/reject', { withdrawalId: id });
+  if (r.status !== 'success') return toast(r.message || 'Failed', true);
+  toast('Withdrawal rejected and refunded');
+  renderWithdrawals();
+};
+
+// ── PRODUCTS ──
+async function renderProducts(){
+  const r = await api('/admin/products');
+  const products = r.status === 'success' ? r.products : [];
+  CACHE.products = products;
+  $('content').innerHTML = `<div id="productsBox"></div>
+    <button class="btn" style="margin-top:10px;" onclick="saveAllProducts()">Save all changes</button>`;
+  $('productsBox').innerHTML = products.map((p,i) => `
+    <div class="card">
+      <h3>${esc(p.name)} <span style="color:var(--sub);font-weight:400;font-size:12px;">(${esc(p.key)})</span></h3>
+      <div class="row3">
+        <div class="field"><label>Name</label><input data-i="${i}" data-f="name" value="${esc(p.name)}"></div>
+        <div class="field"><label>Price (UGX)</label><input data-i="${i}" data-f="price" type="text" inputmode="numeric" value="${p.price}"></div>
+        <div class="field"><label>Cycle (days)</label><input data-i="${i}" data-f="cycle" type="text" inputmode="numeric" value="${p.cycle||150}"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Total Return (UGX)</label><input data-i="${i}" data-f="expectedReturn" type="text" inputmode="numeric" value="${p.expectedReturn||''}"></div>
+        <div class="field"><label>Image path</label><input data-i="${i}" data-f="image" value="${esc(p.image||'')}"></div>
+      </div>
+      <div class="checkfield"><input type="checkbox" data-i="${i}" data-f="active" ${p.active!==false?'checked':''}> <label style="margin:0;">Active</label></div>
+      <div class="checkfield"><input type="checkbox" data-i="${i}" data-f="comingSoon" ${p.comingSoon?'checked':''}> <label style="margin:0;">Coming Soon</label></div>
+    </div>`).join('');
+}
+window.saveAllProducts = async function(){
+  const inputs = document.querySelectorAll('#productsBox [data-i]');
+  const products = CACHE.products.map(p => Object.assign({}, p));
+  inputs.forEach(el => {
+    const i = Number(el.dataset.i), f = el.dataset.f;
+    if (el.type === 'checkbox') products[i][f] = el.checked;
+    else if (f === 'price' || f === 'cycle' || f === 'expectedReturn') products[i][f] = el.value === '' ? null : Number(el.value);
+    else products[i][f] = el.value;
+  });
+  const r = await post('/admin/products/save', { products });
+  if (r.status !== 'success') return toast(r.message || 'Could not save', true);
+  toast('Products saved');
+  renderProducts();
+};
+
+// ── SETTINGS ──
+async function renderSettings(){
+  const r = await api('/admin/settings');
+  const s = r.status === 'success' ? r.settings : {};
+  CACHE.settings = s;
+  $('content').innerHTML = `
+    <div class="card"><h3>Rates & limits</h3>
+      <div class="row3">
+        <div class="field"><label>Min deposit (UGX)</label><input id="s_minDeposit" value="${s.minDeposit||0}"></div>
+        <div class="field"><label>Min withdrawal (UGX)</label><input id="s_minWithdraw" value="${s.minWithdraw||0}"></div>
+        <div class="field"><label>Withdrawal fee (%)</label><input id="s_withdrawFeePct" value="${s.withdrawFeePct||0}"></div>
+      </div>
+      <div class="row3">
+        <div class="field"><label>Welcome bonus (UGX)</label><input id="s_welcomeBonus" value="${s.welcomeBonus||0}"></div>
+        <div class="field"><label>Max withdrawals / day</label><input id="s_maxWithdrawalsPerDay" value="${s.maxWithdrawalsPerDay||0}"></div>
+        <div class="field"><label>Return multiple (×)</label><input id="s_returnMultiple" value="${s.returnMultiple||30}"></div>
+      </div>
+      <div class="row3">
+        <div class="field"><label>Level 1 commission (%)</label><input id="s_commL1" value="${s.commL1||0}"></div>
+        <div class="field"><label>Level 2 commission (%)</label><input id="s_commL2" value="${s.commL2||0}"></div>
+        <div class="field"><label>Level 3 commission (%)</label><input id="s_commL3" value="${s.commL3||0}"></div>
+      </div>
+      <div class="checkfield"><input type="checkbox" id="s_requireInvestToWithdraw" ${s.requireInvestToWithdraw!==false?'checked':''}> <label style="margin:0;">Require at least one investment before withdrawing</label></div>
+    </div>
+    <div class="card"><h3>Maintenance</h3>
+      <div class="checkfield"><input type="checkbox" id="s_maintenanceMode" ${s.maintenanceMode?'checked':''}> <label style="margin:0;">Maintenance mode enabled</label></div>
+      <div class="field"><label>Maintenance message</label><textarea id="s_maintenanceMsg">${esc(s.maintenanceMsg||'')}</textarea></div>
+    </div>
+    <div class="card"><h3>Content</h3>
+      <div class="field"><label>About Snow</label><textarea id="s_aboutText">${esc(s.aboutText||'')}</textarea></div>
+      <div class="field"><label>Rules & Terms</label><textarea id="s_rulesText">${esc(s.rulesText||'')}</textarea></div>
+      <div class="row2">
+        <div class="field"><label>Support Telegram</label><input id="s_supportTelegram" value="${esc(s.supportTelegram||'')}"></div>
+        <div class="field"><label>Support hours</label><input id="s_supportHours" value="${esc(s.supportHours||'')}"></div>
+      </div>
+    </div>
+    <div class="card"><h3>Home banner</h3>
+      <div class="field"><label>Upload image</label><input type="file" id="bannerFile" accept="image/*"></div>
+      <button class="btn" onclick="uploadBanner()">Upload banner</button>
+      <button class="btn ghost" style="margin-left:8px;" onclick="clearBanner()">Clear banner</button>
+    </div>
+    <button class="btn" style="padding:12px 24px;" onclick="saveSettings()">Save settings</button>`;
+}
+window.saveSettings = async function(){
+  const settings = {
+    minDeposit: Number($('s_minDeposit').value), minWithdraw: Number($('s_minWithdraw').value),
+    withdrawFeePct: Number($('s_withdrawFeePct').value), welcomeBonus: Number($('s_welcomeBonus').value),
+    maxWithdrawalsPerDay: Number($('s_maxWithdrawalsPerDay').value), returnMultiple: Number($('s_returnMultiple').value),
+    commL1: Number($('s_commL1').value), commL2: Number($('s_commL2').value), commL3: Number($('s_commL3').value),
+    requireInvestToWithdraw: $('s_requireInvestToWithdraw').checked,
+    maintenanceMode: $('s_maintenanceMode').checked, maintenanceMsg: $('s_maintenanceMsg').value,
+    aboutText: $('s_aboutText').value, rulesText: $('s_rulesText').value,
+    supportTelegram: $('s_supportTelegram').value, supportHours: $('s_supportHours').value,
+  };
+  const r = await post('/admin/settings/update', { settings });
+  if (r.status !== 'success') return toast(r.message || 'Could not save', true);
+  toast('Settings saved');
+};
+window.uploadBanner = async function(){
+  const file = $('bannerFile').files[0];
+  if (!file) return toast('Choose an image first', true);
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const r = await post('/admin/banner/set', { image: reader.result });
+    if (r.status !== 'success') return toast(r.message || 'Could not upload', true);
+    toast('Banner updated');
+  };
+  reader.readAsDataURL(file);
+};
+window.clearBanner = async function(){
+  const r = await post('/admin/banner/clear', {});
+  if (r.status !== 'success') return toast(r.message || 'Failed', true);
+  toast('Banner cleared');
+};
+
+// ── START ──
+(function(){
+  const saved = sessionStorage.getItem('snowAdminKey');
+  if (saved) {
+    ADMIN_KEY = saved;
+    $('loginScreen').style.display = 'none';
+    $('appScreen').style.display = 'block';
+    renderTabs();
+    showTab('dashboard');
+  }
+})();
+</script>
+</body>
+</html>

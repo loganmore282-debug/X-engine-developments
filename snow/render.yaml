@@ -1,0 +1,84 @@
+services:
+  - type: web
+    name: snow-server
+    runtime: node
+    rootDir: snow
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: ADMIN_KEY
+        sync: false
+      - key: MARZPAY_KEY
+        sync: false
+
+  - type: web
+    name: snow-app
+    runtime: static
+    rootDir: snow/user
+    buildCommand: "echo no build needed"
+    staticPublishPath: .
+    autoDeploy: true
+    # index.html is the whole app -- no-cache means "revalidate every time",
+    # not "never store", so an unchanged build still answers 304 while a new
+    # one is picked up immediately, instead of phones sitting on stale builds.
+    headers:
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      - path: /manifest.json
+        name: Cache-Control
+        value: no-cache
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: Content-Security-Policy
+        value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    name: snow-admin
+    runtime: static
+    rootDir: snow/admin
+    buildCommand: "echo no build needed"
+    staticPublishPath: .
+    autoDeploy: true
+    # Same headers as the app, and they matter MORE here -- this panel moves
+    # money, so it must never be embeddable in someone else's page.
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: Content-Security-Policy
+        value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
