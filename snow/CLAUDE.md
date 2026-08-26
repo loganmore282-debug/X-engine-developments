@@ -152,18 +152,32 @@ shape is not pixel-identical between the two auth screens and these 4. If Codex'
 critique flags the wave shape specifically, that's expected and worth fixing with
 real coordinates from Codex rather than guessed ones.
 
-**Status: Account has its own locked structure as of round 7 — a coloured card
-matrix (feature cards + utility cards + Sign out), not a list.** Read the round-7
-AGENT_LOG.md entry before touching Account again: it covers the exact
+**Status: Account has its own locked structure as of round 7/8 — a coloured card
+matrix (feature cards + utility cards + Sign out), not a list.** Read the round-7/8
+AGENT_LOG.md entries before touching Account again: they cover the exact
 `.account-grid`/`.account-feature-card`/`.account-utility-card` CSS, why Records now
 replaces separate Deposit/Withdrawal History tiles, why Transaction PIN has no card
 here anymore, and how the real Snow Beer bottle photos got their backgrounds removed
 (`rembg`, confirmed working offline in this environment — see that entry before
-assuming background removal isn't possible here). Home/My Products/Team are still
-governed by the round-4/5/6 spec described above (Codex's original tokens/wave/
-component system) and were not part of round 7's changes except the shared bottom-nav
-icon/active-state update, which landed everywhere. Do not treat any of the 4 screens
-as fully final until the owner confirms — still "still designing."
+assuming background removal isn't possible here).
+
+**Team was rebuilt in round 9 (2026-08-26) to match Account's card language** — a
+wine-gradient `.team-referral-card` (referral code + copy bubble + invite-link pill +
+share button), a 3-panel commission strip, a `.team-summary-grid` (total team/active
+referrals tiles + a green `.team-deposits-card`), a pill-track `.team-level-switcher`,
+and a member-list `app-card` with alternating wine/green avatar bubbles and
+`+256 700 *** 123`-style masked phone numbers. Read the round-9 AGENT_LOG.md entry
+before touching Team again — it also documents (and fixes) a `BOTTLE_BADGE` variable
+ordering bug in `build.py` worth knowing about if `NameError` ever resurfaces there.
+Team's header now shares the same bell-less bottle-badge layout as Account's, so
+`top_bar()` is no longer called from Team's section.
+
+Home and My Products are still governed by the round-4/5/6 spec described above
+(Codex's original tokens/wave/component system) and have NOT yet been through their
+own dedicated Codex critique round — only the shared bottom-nav icon/active-state
+update and product-image-on-left fix have landed there. Do not treat Home or My
+Products as final until they go through the same critique-and-rebuild pass Account
+and Team already have.
 
 ## Build/backend — not started; the mockups ARE the real frontend's design phase
 
@@ -180,12 +194,13 @@ critique round reveals a shared-component change (exactly what happened across A
 rounds 6→7→8 — a real risk if conversion had started mid-way).
 
 **Practical implication**: Account has now been through Codex's critique twice (rounds
-7 and 8) and is close to locked. Home, My Products, and Team have NOT yet been through
-an equivalent Codex critique round — they still reflect the round-4/5 spec plus the
-round-6/7 shared updates (product-image-on-left, bottom-nav icon family), but nothing
-as scrutinized as Account's two rounds. Before converting to the real app, get each of
-those three through at least one real Codex critique pass the same way Account did,
-so the whole app converts in one clean sweep instead of touching converted code again
+7 and 8) and Team has been through its own full architecture rebuild (round 9) — both
+close to locked. Home and My Products have NOT yet been through an equivalent Codex
+critique round — they still reflect the round-4/5 spec plus the round-6/7 shared
+updates (product-image-on-left, bottom-nav icon family), but nothing as scrutinized as
+Account's or Team's rounds. Before converting to the real app, get each of those two
+through at least one real Codex critique pass the same way Account and Team did, so
+the whole app converts in one clean sweep instead of touching converted code again
 for a design change.
 
 **When the real conversion does happen**: follow the SAME three-part-split discipline

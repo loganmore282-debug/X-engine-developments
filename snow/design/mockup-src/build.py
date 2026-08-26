@@ -13,6 +13,7 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 # Path from the COMMITTED location (snow/design/mockup-src/) to the reference
 # bottle photos (snow/design/reference-bottles/) -- siblings under design/.
 BOTTLES_REL = "../reference-bottles"
+BOTTLE_BADGE = f"{BOTTLES_REL}/01-qing-shuang-badge.png"
 
 STYLE = """
 :root{
@@ -93,6 +94,13 @@ button{cursor:pointer;font-family:inherit;}
 .utility-wine .account-icon-bubble{background:linear-gradient(145deg,#B42638,var(--snow-wine));color:#fff;box-shadow:0 10px 20px -12px rgba(113,16,27,.55);}
 .utility-green{border:1px solid rgba(47,107,71,.12);}
 .utility-green .account-icon-bubble{background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));color:#fff;box-shadow:0 10px 20px -12px rgba(31,81,54,.5);}
+
+.team-referral-card{position:relative;overflow:hidden;min-height:220px;padding:22px;border-radius:var(--snow-radius-card);color:#fff;background:linear-gradient(145deg,var(--snow-wine),var(--snow-wine-deep));box-shadow:0 16px 32px -22px rgba(17,17,17,.35);}
+.team-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.team-deposits-card{grid-column:1 / -1;position:relative;overflow:hidden;border-radius:22px;padding:20px;color:#fff;background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));box-shadow:0 14px 28px -22px rgba(17,17,17,.3);}
+.team-level-switcher{display:flex;gap:4px;padding:4px;border-radius:16px;background:var(--snow-neutral-soft);}
+.team-level-switcher .seg{flex:1;text-align:center;padding:9px 0;border-radius:12px;font-size:13px;font-weight:500;color:var(--snow-muted);}
+.team-level-switcher .seg.active{background:#fff;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -8px rgba(17,17,17,.3);}
 """
 
 def snowflake_svg(color, size=17):
@@ -160,7 +168,12 @@ ICONS = {
     "headset": '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="13" width="4.5" height="6" rx="1.5"/><rect x="16.5" y="13" width="4.5" height="6" rx="1.5"/><path d="M20 19v.5A3.5 3.5 0 0 1 16.5 23H13"/></svg>',
     "download": '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M8 11.5 12 15.5 16 11.5"/><path d="M5 18.5h14"/></svg>',
     "logout": '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5H6A1.5 1.5 0 0 0 4.5 6v12A1.5 1.5 0 0 0 6 19.5h3"/><path d="M14.5 8.5 19 12l-4.5 3.5"/><path d="M19 12H9.5"/></svg>',
+    "people2": '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M14.8 14a5 5 0 0 1 6.7 4.7"/></svg>',
+    "link": '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M8 17.5 5.5 15A4 4 0 0 1 11 9.5"/><path d="M16 6.5 18.5 9A4 4 0 0 1 13 14.5"/></svg>',
 }
+
+def copy_bubble(size=30, icon_size=14):
+    return f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">{ICONS["copy"]}</div>'
 
 def nav_bar(active):
     items = [("home","Home"),("box","My Products"),("team","Team"),("user","Account")]
@@ -344,80 +357,114 @@ with open(os.path.join(OUT, "MyProducts.html"), "w") as f:
 print("wrote MyProducts.html")
 
 # ---------------- TEAM ----------------
+# Round 9: Codex's full architecture rebuild of Team, matching Account's
+# rebuilt (round 7/8) card language rather than the old outlined-tile grid.
+# See AGENT_LOG.md for the full breakdown.
 team_body = f"""
-{top_bar()}
+<div style="display:flex;align-items:center;justify-content:center;gap:9px;padding:24px 20px 4px;">
+  {snowflake_svg('var(--snow-green)', 26)}
+  <img src="{BOTTLE_BADGE}" alt="" style="height:38px;width:auto;">
+  <div class="wm-text" style="font-size:19px;color:var(--snow-green);">SNOW</div>
+</div>
 
 <div style="margin:16px 20px 0;">
   <div style="font-size:22px;font-weight:800;color:var(--snow-ink);">Team</div>
-  <div style="font-size:13px;color:var(--snow-muted);margin-top:3px;">Invite friends, earn on every level</div>
+  <div style="font-size:13px;color:var(--snow-muted);margin-top:3px;">Invite friends and grow your rewards</div>
 </div>
 
-<div class="brand-card" style="margin:16px 20px 0;padding:20px;">
-  {wave_lines_top_right(110, 104)}
+<div class="team-referral-card" style="margin:16px 20px 0;">
+  {wave_lines_top_right(120, 114)}
+  {soft_blob("var(--snow-wine-deep)", .4, 110, -28, -28)}
   <div style="position:relative;">
-    <div style="font-size:12px;opacity:.82;">Your Referral Code</div>
-    <div class="mono" style="font-size:27px;font-weight:800;letter-spacing:1px;margin-top:4px;">Sn7Qk2</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;background:rgba(255,255,255,.16);border-radius:14px;padding:9px 12px;">
+    <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;opacity:.8;font-weight:700;">Your Referral Code</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+      <div class="mono" style="font-size:30px;font-weight:800;letter-spacing:1px;">Sn7Qk2</div>
+      {copy_bubble()}
+    </div>
+    <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;opacity:.8;font-weight:700;margin-top:18px;">Your Invite Link</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;background:rgba(255,255,255,.16);border-radius:14px;padding:9px 12px;">
+      <div style="opacity:.85;flex-shrink:0;">{ICONS['link']}</div>
       <div class="mono" style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">snow-platform.com/r/Sn7Qk2</div>
       {ICONS['copy']}
     </div>
-    <button style="width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;color:var(--snow-wine);border:none;border-radius:var(--snow-radius-control);padding:12px 0;font-size:13.5px;font-weight:700;">
-      {ICONS['share']} Share Referral Link
+    <button style="width:100%;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;color:var(--snow-wine);border:none;border-radius:var(--snow-radius-control);padding:13px 0;font-size:13.5px;font-weight:700;">
+      {ICONS['share']} Share referral link
     </button>
   </div>
 </div>
 
-<div style="display:flex;gap:10px;margin:16px 20px 0;">
-  <div class="stat-tile" style="flex:1;text-align:center;">
+<div class="app-card" style="margin:16px 20px 0;padding:0;display:flex;overflow:hidden;">
+  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-wine-soft);">
+    <div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(148,24,39,.12);color:var(--snow-wine);">{ICONS['people2']}</div>
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 1</div>
-    <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">27%</div>
+    <div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-wine);">27%</div>
   </div>
-  <div class="stat-tile" style="flex:1;text-align:center;">
+  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-green-soft);">
+    <div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(47,107,71,.12);color:var(--snow-green);">{ICONS['people2']}</div>
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 2</div>
-    <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">2%</div>
+    <div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-green);">2%</div>
   </div>
-  <div class="stat-tile" style="flex:1;text-align:center;">
+  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-wine-soft);">
+    <div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(148,24,39,.12);color:var(--snow-wine);">{ICONS['people2']}</div>
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 3</div>
-    <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">1%</div>
+    <div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-wine);">1%</div>
   </div>
 </div>
 
-<div style="display:flex;gap:10px;margin:10px 20px 0;">
-  <div class="stat-tile" style="flex:1;text-align:center;">
-    <div style="font-size:10.5px;color:var(--snow-muted);">Total Team</div>
-    <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">38</div>
+<div class="team-summary-grid" style="margin:14px 20px 0;">
+  <div class="stat-tile" style="background:var(--snow-wine-soft);border-color:transparent;display:flex;align-items:center;gap:12px;">
+    <div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">{ICONS['people2']}</div>
+    <div>
+      <div style="font-size:10.5px;color:var(--snow-muted);">Total team</div>
+      <div class="mono" style="font-size:18px;font-weight:800;color:var(--snow-wine);">38</div>
+    </div>
   </div>
-  <div class="stat-tile" style="flex:1;text-align:center;">
-    <div style="font-size:10.5px;color:var(--snow-muted);">Active Referrals</div>
-    <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">14</div>
+  <div class="stat-tile" style="background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:center;gap:12px;">
+    <div class="icon-tile" style="width:38px;height:38px;background:rgba(47,107,71,.12);color:var(--snow-green);">{ICONS['user']}</div>
+    <div>
+      <div style="font-size:10.5px;color:var(--snow-muted);">Active referrals</div>
+      <div class="mono" style="font-size:18px;font-weight:800;color:var(--snow-green);">14</div>
+    </div>
   </div>
-  <div class="stat-tile" style="flex:1;text-align:center;">
-    <div style="font-size:10.5px;color:var(--snow-muted);">Team Deposits</div>
-    <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">UGX 3,140,000</div>
+  <div class="team-deposits-card">
+    {wave_lines_top_right(90, 84, color="rgba(255,255,255,.55)", count=2, opacity=.7)}
+    <div style="position:relative;display:flex;align-items:center;gap:12px;">
+      <div class="account-icon-bubble" style="width:46px;height:46px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);">{ICONS['wallet-lg']}</div>
+      <div>
+        <div style="font-size:11px;opacity:.85;">Team deposits</div>
+        <div class="mono" style="font-size:20px;font-weight:800;margin-top:2px;">UGX 3,140,000</div>
+      </div>
+    </div>
   </div>
 </div>
 
-<div class="segmented-control" style="margin:22px 20px 0;">
+<div class="team-level-switcher" style="margin:22px 20px 0;">
   <div class="seg active">Level 1</div>
   <div class="seg">Level 2</div>
   <div class="seg">Level 3</div>
 </div>
 
-<div class="settings-list" style="margin:14px 20px 0;padding:6px 16px;">
+<div class="app-card" style="margin:14px 20px 0;padding:6px 18px;">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 0 4px;">
+    <div style="font-size:15px;font-weight:800;color:var(--snow-ink);">Level 1 members</div>
+    <div style="font-size:12px;color:var(--snow-muted);">14 members</div>
+  </div>
 """
 
 members = [
-    ("A", "+2567****0389", "Joined 3 days ago", "active", "Active"),
-    ("M", "+2567****2214", "Joined 6 days ago", "active", "Active"),
-    ("J", "+2567****7735", "Joined 1 week ago", "pending", "Pending"),
-    ("R", "+2567****9042", "Joined 2 weeks ago", "active", "Active"),
+    ("JM", "+256 700 *** 123", "Joined 2 days ago", "active", "Active", "wine"),
+    ("AK", "+256 772 *** 456", "Joined 5 days ago", "active", "Active", "green"),
+    ("SN", "+256 781 *** 789", "Joined 1 week ago", "active", "Active", "wine"),
+    ("MT", "+256 756 *** 321", "Joined 2 weeks ago", "pending", "Pending", "green"),
 ]
-for initial, phone, joined, pillcls, plabel in members:
+for initial, phone, joined, pillcls, plabel, tone in members:
+    bg = "var(--snow-wine)" if tone == "wine" else "var(--snow-green-soft)"
+    fg = "#fff" if tone == "wine" else "var(--snow-green)"
     team_body += f"""
   <div class="list-row">
-    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">{initial}</div>
+    <div style="width:38px;height:38px;border-radius:50%;background:{bg};color:{fg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;flex-shrink:0;">{initial}</div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">{phone}</div>
+      <div class="mono" style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">{phone}</div>
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">{joined}</div>
     </div>
     <div class="status-pill {pillcls}">{plabel}</div>
@@ -440,7 +487,7 @@ print("wrote Team.html")
 # Round 8: Codex rejected the fuller ice-included cutout for the identity banner
 # (read as a blue strip, forced the phone number to 2 lines) -- badge (bottle
 # only, no ice) is now used everywhere on this screen, just larger in the banner.
-BOTTLE_BADGE = f"{BOTTLES_REL}/01-qing-shuang-badge.png"
+# (BOTTLE_BADGE is defined near the top of the file, shared with Team's header.)
 
 account_body = f"""
 <div style="display:flex;align-items:center;gap:9px;padding:24px 20px 4px;">

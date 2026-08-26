@@ -16,6 +16,80 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 9: Team screen full architecture rebuild (not a recolor)
+
+Owner sent a new Team reference image plus a detailed 7-section Codex prompt requiring
+the Team screen to be rebuilt to match Account's now-locked card language, not merely
+recolored. Applied directly to `build.py`'s Team section.
+
+**What changed:**
+1. **Header** — replaced the old bell-included `top_bar()` call with a bespoke
+   bell-less header matching Account's: snowflake + `BOTTLE_BADGE` (38px) + "SNOW"
+   wordmark in `--snow-green`. Moved `BOTTLE_BADGE = f"{BOTTLES_REL}/01-qing-shuang-badge.png"`
+   from partway through the Account section up to right after `BOTTLES_REL` near the
+   top of the file, since Team's header now needs it too and Team's section runs
+   before Account's in file execution order (this was caught and fixed before
+   regenerating — the previous edit would have raised `NameError` on `python3 build.py`).
+2. **Referral hero card** (new `.team-referral-card`) — wine gradient card (same
+   `linear-gradient(145deg, var(--snow-wine), var(--snow-wine-deep))` as Account's
+   identity banner) replacing the old straight-diagonal-line brand card: referral code
+   at 30px mono bold with a circular copy-bubble beside it, an invite-link pill
+   (chain-link icon + `snow-platform.com/r/...` + copy icon) below, and a full-width
+   white pill "Share referral link" button at the bottom. Wave-lines top-right +
+   a darker `soft_blob` bottom-left, matching Account's card decoration language.
+3. **Commission strip** — 3 equal panels (Level 1 27% / Level 2 2% / Level 3 1%) as
+   one `app-card` split into alternating wine-soft/green-soft backgrounds, each with
+   a small circular icon tile (new `people2` icon) — replaces the old plain outlined
+   6-tile grid.
+4. **Team summary grid** (new `.team-summary-grid`) — Total team (38) and Active
+   referrals (14) as two half-width soft-tinted stat tiles with icon+number, plus a
+   full-width `.team-deposits-card` (green gradient, same treatment as the wine
+   referral card) showing "Team deposits · UGX 3,140,000" in full numbers per house
+   style (no "3.1M" abbreviation).
+5. **Level switcher** (new `.team-level-switcher`) — pill-track segmented control
+   (white active pill on a neutral-soft track), replacing the old `.segmented-control`.
+6. **Member list** — rebuilt as an `app-card` with a "Level 1 members / 14 members"
+   header row, then `.list-row` entries with alternating wine/green circular avatar
+   bubbles (initials), phone numbers reformatted to `+256 700 *** 123` (masked,
+   matching the reference image — the old format was `+2567****XXXX`), join-date
+   caption, and an Active/Pending `.status-pill` on the right.
+7. **Bottom nav** — unchanged shared `nav_bar("team")` call, so the round-7 pale-wine
+   active-icon capsule applies here too, keeping Team visually unified with the other
+   3 tabs.
+
+New CSS: `.team-referral-card`, `.team-summary-grid`, `.team-deposits-card`,
+`.team-level-switcher` + `.seg`/`.seg.active` (added after the `.utility-green`
+rules). New icons: `people2` (two-person, for commission/team-size tiles), `link`
+(chain-link, for the invite-link pill). New helper: `copy_bubble()` (circular
+translucent copy-icon button, reused for both the referral code and invite link).
+
+**Why:** Codex's spec was explicit this was an architecture rebuild, not a palette
+swap — the old Team screen predated the Account card-matrix language entirely (flat
+outlined tiles, a different referral-card style, an older phone-masking format) and
+needed to be brought onto the same visual system now that Account is locked.
+
+**Verification:** Fixed the `BOTTLE_BADGE` ordering bug first (moved the definition
+above `BOTTLES_REL`'s first use), then ran `python3 build.py` (all 4 files regenerate
+cleanly, no errors) and `python3 shot.py`. Visually inspected `Team.png` against all
+7 of Codex's numbered requirements above — confirmed header matches Account's exactly
+(same badge size, same wordmark color), referral card renders with correct gradient/
+wave/blob/copy-bubble/share-button layout, commission strip and summary grid read as
+a clear hierarchy leading into the green deposits card, level switcher matches the
+pill-track style, member list shows correct alternating avatar tones and the new
+phone format, and the bottom nav's Team icon shows the same pale-wine highlight
+capsule Account uses for its own tab. Also compared side-by-side against `Account.png`
+to confirm card radii, shadow weight, and color tokens are visually identical between
+the two screens (same design system, not just similar).
+
+**Files touched:** `snow/design/mockup-src/build.py`, `snow/design/mockup-src/Team.html`,
+`snow/design/mockups/03-team.png`.
+
+**Left open:** Home and My Products have not yet been through a Codex critique round
+(only Account and now Team have). Per the owner's confirmed sequencing decision, those
+are next before any conversion to a real single-page app begins.
+
+---
+
 ## 2026-08-26 — Claude — Round 8: Codex's line-by-line correction of the round-7 Account screen; MongoDB/Firebase infra noted
 
 Owner sent Codex's detailed correction pass on round 7's Account screenshot, plus two

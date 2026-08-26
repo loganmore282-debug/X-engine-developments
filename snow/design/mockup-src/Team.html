@@ -73,110 +73,147 @@ button{cursor:pointer;font-family:inherit;}
 
 .account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
 .account-feature-card{min-height:190px;border-radius:var(--snow-radius-card);overflow:hidden;box-shadow:0 16px 32px -22px rgba(17,17,17,.35);position:relative;color:#fff;padding:20px;display:flex;flex-direction:column;justify-content:flex-end;}
-.account-utility-card{min-height:126px;border-radius:26px;padding:18px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;}
-.account-icon-bubble{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.account-utility-card{min-height:126px;border-radius:26px;padding:16px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;}
+.account-icon-bubble{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.utility-wine{border:1px solid rgba(148,24,39,.10);}
+.utility-wine .account-icon-bubble{background:linear-gradient(145deg,#B42638,var(--snow-wine));color:#fff;box-shadow:0 10px 20px -12px rgba(113,16,27,.55);}
+.utility-green{border:1px solid rgba(47,107,71,.12);}
+.utility-green .account-icon-bubble{background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));color:#fff;box-shadow:0 10px 20px -12px rgba(31,81,54,.5);}
+
+.team-referral-card{position:relative;overflow:hidden;min-height:220px;padding:22px;border-radius:var(--snow-radius-card);color:#fff;background:linear-gradient(145deg,var(--snow-wine),var(--snow-wine-deep));box-shadow:0 16px 32px -22px rgba(17,17,17,.35);}
+.team-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.team-deposits-card{grid-column:1 / -1;position:relative;overflow:hidden;border-radius:22px;padding:20px;color:#fff;background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));box-shadow:0 14px 28px -22px rgba(17,17,17,.3);}
+.team-level-switcher{display:flex;gap:4px;padding:4px;border-radius:16px;background:var(--snow-neutral-soft);}
+.team-level-switcher .seg{flex:1;text-align:center;padding:9px 0;border-radius:12px;font-size:13px;font-weight:500;color:var(--snow-muted);}
+.team-level-switcher .seg.active{background:#fff;font-weight:700;color:var(--snow-wine);box-shadow:0 4px 12px -8px rgba(17,17,17,.3);}
 </style>
 </head>
 <body>
 <div style="width:390px;position:relative;background:var(--snow-canvas);">
 
-<div class="top-bar">
-    <div class="wordmark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg><div class="wm-text" style="font-size:17px;color:var(--snow-ink);">SNOW</div></div>
-    <div style="width:38px;height:38px;border-radius:14px;background:var(--snow-surface);border:1px solid var(--snow-border);display:flex;align-items:center;justify-content:center;color:var(--snow-ink);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></div>
-  </div>
+<div style="display:flex;align-items:center;justify-content:center;gap:9px;padding:24px 20px 4px;">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg>
+  <img src="../reference-bottles/01-qing-shuang-badge.png" alt="" style="height:38px;width:auto;">
+  <div class="wm-text" style="font-size:19px;color:var(--snow-green);">SNOW</div>
+</div>
 
 <div style="margin:16px 20px 0;">
   <div style="font-size:22px;font-weight:800;color:var(--snow-ink);">Team</div>
-  <div style="font-size:13px;color:var(--snow-muted);margin-top:3px;">Invite friends, earn on every level</div>
+  <div style="font-size:13px;color:var(--snow-muted);margin-top:3px;">Invite friends and grow your rewards</div>
 </div>
 
-<div class="brand-card" style="margin:16px 20px 0;padding:20px;">
-  <svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:110px;height:104px;opacity:0.9;"><path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/></svg>
+<div class="team-referral-card" style="margin:16px 20px 0;">
+  <svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:120px;height:114px;opacity:0.9;"><path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/></svg>
+  <div style="position:absolute;right:-28px;bottom:-28px;width:110px;height:110px;border-radius:50%;background:var(--snow-wine-deep);opacity:0.4;pointer-events:none;"></div>
   <div style="position:relative;">
-    <div style="font-size:12px;opacity:.82;">Your Referral Code</div>
-    <div class="mono" style="font-size:27px;font-weight:800;letter-spacing:1px;margin-top:4px;">Sn7Qk2</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;background:rgba(255,255,255,.16);border-radius:14px;padding:9px 12px;">
+    <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;opacity:.8;font-weight:700;">Your Referral Code</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+      <div class="mono" style="font-size:30px;font-weight:800;letter-spacing:1px;">Sn7Qk2</div>
+      <div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 8.5V6A1.5 1.5 0 0 0 13.5 4.5H6A1.5 1.5 0 0 0 4.5 6v7.5A1.5 1.5 0 0 0 6 15h2.5"/></svg></div>
+    </div>
+    <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;opacity:.8;font-weight:700;margin-top:18px;">Your Invite Link</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;background:rgba(255,255,255,.16);border-radius:14px;padding:9px 12px;">
+      <div style="opacity:.85;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M8 17.5 5.5 15A4 4 0 0 1 11 9.5"/><path d="M16 6.5 18.5 9A4 4 0 0 1 13 14.5"/></svg></div>
       <div class="mono" style="flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">snow-platform.com/r/Sn7Qk2</div>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 8.5V6A1.5 1.5 0 0 0 13.5 4.5H6A1.5 1.5 0 0 0 4.5 6v7.5A1.5 1.5 0 0 0 6 15h2.5"/></svg>
     </div>
-    <button style="width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;color:var(--snow-wine);border:none;border-radius:var(--snow-radius-control);padding:12px 0;font-size:13.5px;font-weight:700;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="2.3"/><circle cx="6" cy="12" r="2.3"/><circle cx="18" cy="18" r="2.3"/><path d="M8.1 10.8 15.9 7.2M8.1 13.2l7.8 3.6"/></svg> Share Referral Link
+    <button style="width:100%;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;background:#fff;color:var(--snow-wine);border:none;border-radius:var(--snow-radius-control);padding:13px 0;font-size:13.5px;font-weight:700;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="2.3"/><circle cx="6" cy="12" r="2.3"/><circle cx="18" cy="18" r="2.3"/><path d="M8.1 10.8 15.9 7.2M8.1 13.2l7.8 3.6"/></svg> Share referral link
     </button>
   </div>
 </div>
 
-<div style="display:flex;gap:10px;margin:16px 20px 0;">
-  <div class="stat-tile" style="flex:1;text-align:center;">
+<div class="app-card" style="margin:16px 20px 0;padding:0;display:flex;overflow:hidden;">
+  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-wine-soft);">
+    <div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(148,24,39,.12);color:var(--snow-wine);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M14.8 14a5 5 0 0 1 6.7 4.7"/></svg></div>
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 1</div>
-    <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">27%</div>
+    <div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-wine);">27%</div>
   </div>
-  <div class="stat-tile" style="flex:1;text-align:center;">
+  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-green-soft);">
+    <div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(47,107,71,.12);color:var(--snow-green);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M14.8 14a5 5 0 0 1 6.7 4.7"/></svg></div>
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 2</div>
-    <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">2%</div>
+    <div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-green);">2%</div>
   </div>
-  <div class="stat-tile" style="flex:1;text-align:center;">
+  <div style="flex:1;text-align:center;padding:16px 8px;background:var(--snow-wine-soft);">
+    <div class="icon-tile" style="width:32px;height:32px;margin:0 auto 8px;background:rgba(148,24,39,.12);color:var(--snow-wine);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M14.8 14a5 5 0 0 1 6.7 4.7"/></svg></div>
     <div style="font-size:10.5px;color:var(--snow-muted);">Level 3</div>
-    <div class="mono" style="font-size:17px;font-weight:800;margin-top:3px;color:var(--snow-wine);">1%</div>
+    <div class="mono" style="font-size:16px;font-weight:800;margin-top:2px;color:var(--snow-wine);">1%</div>
   </div>
 </div>
 
-<div style="display:flex;gap:10px;margin:10px 20px 0;">
-  <div class="stat-tile" style="flex:1;text-align:center;">
-    <div style="font-size:10.5px;color:var(--snow-muted);">Total Team</div>
-    <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">38</div>
+<div class="team-summary-grid" style="margin:14px 20px 0;">
+  <div class="stat-tile" style="background:var(--snow-wine-soft);border-color:transparent;display:flex;align-items:center;gap:12px;">
+    <div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M14.8 14a5 5 0 0 1 6.7 4.7"/></svg></div>
+    <div>
+      <div style="font-size:10.5px;color:var(--snow-muted);">Total team</div>
+      <div class="mono" style="font-size:18px;font-weight:800;color:var(--snow-wine);">38</div>
+    </div>
   </div>
-  <div class="stat-tile" style="flex:1;text-align:center;">
-    <div style="font-size:10.5px;color:var(--snow-muted);">Active Referrals</div>
-    <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">14</div>
+  <div class="stat-tile" style="background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:center;gap:12px;">
+    <div class="icon-tile" style="width:38px;height:38px;background:rgba(47,107,71,.12);color:var(--snow-green);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></div>
+    <div>
+      <div style="font-size:10.5px;color:var(--snow-muted);">Active referrals</div>
+      <div class="mono" style="font-size:18px;font-weight:800;color:var(--snow-green);">14</div>
+    </div>
   </div>
-  <div class="stat-tile" style="flex:1;text-align:center;">
-    <div style="font-size:10.5px;color:var(--snow-muted);">Team Deposits</div>
-    <div class="mono" style="font-size:16px;font-weight:800;margin-top:3px;">UGX 3,140,000</div>
+  <div class="team-deposits-card">
+    <svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:90px;height:84px;opacity:0.7;"><path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="rgba(255,255,255,.55)" stroke-width="1.4" fill="none"/><path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="rgba(255,255,255,.55)" stroke-width="1.4" fill="none"/></svg>
+    <div style="position:relative;display:flex;align-items:center;gap:12px;">
+      <div class="account-icon-bubble" style="width:46px;height:46px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><path d="M15.5 14.5h2.5"/></svg></div>
+      <div>
+        <div style="font-size:11px;opacity:.85;">Team deposits</div>
+        <div class="mono" style="font-size:20px;font-weight:800;margin-top:2px;">UGX 3,140,000</div>
+      </div>
+    </div>
   </div>
 </div>
 
-<div class="segmented-control" style="margin:22px 20px 0;">
+<div class="team-level-switcher" style="margin:22px 20px 0;">
   <div class="seg active">Level 1</div>
   <div class="seg">Level 2</div>
   <div class="seg">Level 3</div>
 </div>
 
-<div class="settings-list" style="margin:14px 20px 0;padding:6px 16px;">
+<div class="app-card" style="margin:14px 20px 0;padding:6px 18px;">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 0 4px;">
+    <div style="font-size:15px;font-weight:800;color:var(--snow-ink);">Level 1 members</div>
+    <div style="font-size:12px;color:var(--snow-muted);">14 members</div>
+  </div>
 
   <div class="list-row">
-    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">A</div>
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;flex-shrink:0;">JM</div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+2567****0389</div>
-      <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 3 days ago</div>
+      <div class="mono" style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+256 700 *** 123</div>
+      <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 2 days ago</div>
     </div>
     <div class="status-pill active">Active</div>
   </div>
 
   <div class="list-row">
-    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">M</div>
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-green-soft);color:var(--snow-green);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;flex-shrink:0;">AK</div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+2567****2214</div>
-      <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 6 days ago</div>
+      <div class="mono" style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+256 772 *** 456</div>
+      <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 5 days ago</div>
     </div>
     <div class="status-pill active">Active</div>
   </div>
 
   <div class="list-row">
-    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">J</div>
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;flex-shrink:0;">SN</div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+2567****7735</div>
+      <div class="mono" style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+256 781 *** 789</div>
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 1 week ago</div>
     </div>
-    <div class="status-pill pending">Pending</div>
+    <div class="status-pill active">Active</div>
   </div>
 
   <div class="list-row">
-    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">R</div>
+    <div style="width:38px;height:38px;border-radius:50%;background:var(--snow-green-soft);color:var(--snow-green);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;flex-shrink:0;">MT</div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+2567****9042</div>
+      <div class="mono" style="font-size:13.5px;font-weight:600;color:var(--snow-ink);">+256 756 *** 321</div>
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Joined 2 weeks ago</div>
     </div>
-    <div class="status-pill active">Active</div>
+    <div class="status-pill pending">Pending</div>
   </div>
 </div>
 <div style='height:16px;'></div>
