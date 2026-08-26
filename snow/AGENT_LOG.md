@@ -16,6 +16,96 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 11: PWA, skeleton loaders, live countdown timers, admin push notifications
+
+Owner confirmed the live Render deploy works end-to-end (real registration screenshot,
+welcome bonus credited, product catalog loading) and said: *"working perfectly, so
+implementing your things you hard for got to put, implement everything"* — an explicit
+instruction to build everything Round 10 had deliberately deferred, working through it
+in priority order. This entry documents all four features together since they landed
+as one continuous pass; the CLAUDE.md "Deliberately deferred" list had gone stale (still
+listing PWA/skeleton/countdown/push as not-yet-built after they were already coded) and
+has now been corrected to match what's actually in the repo.
+
+**PWA** (`snow/user/manifest.json`, `snow/admin/manifest.json`, `snow/user/sw.js`,
+`snow/admin/sw.js`, both `icon-192/512.png` pairs — new): manifests carry Snow's wine
+theme color and branded snowflake-on-wine-gradient icons (generated via a Playwright
+render of an HTML source to a 512×512 PNG, then resized to 192×192 with PIL). Both
+service workers use space8's proven anti-leak caching pattern: network-first for
+navigations (`cache:'no-cache'`), cache-first ONLY for same-origin static shell assets,
+cross-origin (API) responses never cached under any circumstance — this is the exact
+bug class that once leaked one user's account data to the next login on the same
+device/browser on space8, so it's non-negotiable here too. Both register with hourly +
+visibility/focus update checks and a `controllerchange` auto-reload gated on
+`_hadControllerAtLoad` (so the very first SW claim on a fresh install never triggers a
+spurious reload); the user app additionally gates the reload on
+`window._moneyCallsInFlight` so a background update can never interrupt an in-flight
+deposit/withdraw/invest call. `promptInstallApp()` in the user app now wires a real
+`beforeinstallprompt` capture/defer/prompt flow instead of a toast placeholder.
+
+**Skeleton loaders** (`snow/user-src/index.html`): new `.sk`/`.sk-row`/`.sk-line`/
+`.sk-card` CSS with a `@keyframes skshimmer` background-position sweep, and `skRows(n)`/
+`skPage()` JS helpers. All 6 "Loading…" text placeholders across Home/My Products/Team/
+Account were replaced with shimmer skeletons.
+
+**Live countdown timers** (`snow/user-src/index.html`): `renderProducts()` now computes
+the next-payout boundary from the investment's real `createdAt` timestamp (not the
+display-only `date` string, which has no time-of-day precision) plus `payoutsMade`:
+`createdMs + (payoutsMade+1) * 86400000`. A module-level `startPlanCountdowns()` ticks
+every second, updating each `[data-countdown]` node's "Next cashback in HH:MM:SS" text,
+and auto-clears its own `setInterval` once no countdown nodes remain in the DOM;
+`showPage()` also clears it explicitly on every navigation so it never keeps ticking
+against a page the user has left.
+
+**Admin push notifications** (deposits + withdrawal requests), using the FCM VAPID key
+the owner supplied: `snow/server.js` gained `sendAdminPush(title, body, data)` —
+`admin.messaging().sendEachForMulticast()` against a new `adminPushTokens` collection
+(doc id = the token string itself, so re-registering a device is a natural upsert with
+no duplicate rows), pruning stale/unregistered tokens automatically from the multicast
+response — plus `POST /admin/push/register` / `/admin/push/unregister`
+(`verifyAdmin`-gated). Wired into `creditDeposit()` (fires only when `justCredited` is
+true, i.e. a genuinely new credit — never on an idempotent retry/replay of the same
+deposit) and into `/withdraw/request`'s success path (that endpoint is already
+single-attempt-guarded by `_witRequestInFlight`, so no separate dedup flag was needed
+there). Admin frontend (`snow/admin-src/index.html`, deployed copy
+`snow/admin/index.html`): a new `type="module"` script imports the Firebase Messaging
+SDK (gstatic CDN, same non-secret client web config the user app already commits),
+requests notification permission, calls `getToken()` with the owner's VAPID key against
+the already-registered SW, and posts the token to `/admin/push/register`; a new
+Dashboard card (`enableAdminPush()`/`disableAdminPush()`, state remembered in
+`localStorage`) toggles it on/off, and a foreground `onMessage()` handler toasts pushes
+that arrive while the tab is focused. `snow/admin/sw.js` gained a
+`firebase-messaging-compat` `onBackgroundMessage()` handler (via `importScripts`) so
+pushes still show as a real OS notification when the admin tab isn't open/focused;
+its cache bumped to `snow-admin-shell-v2` for this change.
+
+**Verification**: `node --check server.js` clean after the backend edits. For the two
+admin HTML script blocks (classic + module), extracted each `<script>` body to a
+temp `.js` file and ran `node --check` (module block checked with
+`--input-type=module`) — both clean. `node --check admin/sw.js` clean. Ran a
+mocked-backend Playwright pass against the deployed admin panel (local static server +
+`page.route()` intercepting every backend call): logged in, landed on Dashboard,
+confirmed the new "Push notifications" card renders with an "Enable push notifications"
+button reading the correct (disabled) state from `localStorage`, and confirmed no
+JavaScript errors from the app's own code — the only two console errors were failed
+network loads of the Firebase gstatic CDN scripts themselves (`ERR_TUNNEL_CONNECTION_
+FAILED`), because this sandbox has no outbound access to gstatic.com; this is the same
+known limitation already documented for the user app's Firebase Auth calls and isn't
+testable end-to-end here — the owner will need to confirm enable/disable and an actual
+push arriving on the real deployed site.
+
+**Left open / still deferred, unchanged from Round 10**: the obfuscated build pipeline
+(space8's `build-core.js`/`guard-src.js` — both `user-src/`/`admin-src/` still ship
+straight to `user/`/`admin/` unobfuscated), multi-admin staff accounts (still one
+shared `ADMIN_KEY`), and an independent Snow-specific ChatGPT/Codex security-audit pass
+(the money-safety logic was ported from space8's already-hardened codebase, but this
+copy of it hasn't been separately re-audited).
+
+**Files touched**: `snow/server.js`, `snow/admin-src/index.html`, `snow/admin/index.html`,
+`snow/admin/sw.js`, `snow/CLAUDE.md`.
+
+---
+
 ## 2026-08-26 — Claude — Round 9: Team screen full architecture rebuild (not a recolor)
 
 Owner sent a new Team reference image plus a detailed 7-section Codex prompt requiring

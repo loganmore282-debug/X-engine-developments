@@ -195,8 +195,26 @@ async function renderDashboard(){
       <h3>Maintenance tools</h3>
       <button class="btn" onclick="recountTotals()">Recalculate totals</button>
       <p style="font-size:12px;color:var(--sub);margin-top:10px;">Rebuilds each user's deposited/earned totals straight from the transaction ledger. Safe to run any time.</p>
-    </div>`;
+    </div>
+    <div class="card" id="pushCard"><h3>Push notifications</h3>${pushButtonHtml()}</div>`;
 }
+function pushButtonHtml(){
+  const enabled = !!localStorage.getItem('snowAdminPushToken');
+  return enabled
+    ? `<button class="btn ghost" onclick="disableAdminPush()">Disable push notifications</button><p style="font-size:12px;color:var(--sub);margin-top:10px;">You'll get an alert here on new deposits and withdrawal requests.</p>`
+    : `<button class="btn" onclick="enableAdminPush()">Enable push notifications</button><p style="font-size:12px;color:var(--sub);margin-top:10px;">Get notified the moment a deposit or withdrawal comes in.</p>`;
+}
+window.refreshPushCard = function(){
+  const el = $('pushCard');
+  if (el) el.innerHTML = '<h3>Push notifications</h3>' + pushButtonHtml();
+};
+window.disableAdminPush = async function(){
+  const token = localStorage.getItem('snowAdminPushToken');
+  if (token) await post('/admin/push/unregister', { token });
+  localStorage.removeItem('snowAdminPushToken');
+  toast('Push notifications disabled');
+  refreshPushCard();
+};
 window.recountTotals = async function(){
   toast('Recalculating…');
   const r = await api('/admin/users/recount');
@@ -463,6 +481,58 @@ if ('serviceWorker' in navigator) {
     showTab('dashboard');
   }
 })();
+</script>
+
+<script type="module">
+  import { initializeApp, getApps }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getMessaging, isSupported, getToken, onMessage }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js';
+
+  // Same non-secret client web config the user app already commits.
+  const firebaseConfig = {
+    apiKey: "AIzaSyDhaVbSaQyYRdSiP1LLze-Apb6kNNTVCsc",
+    authDomain: "snow-beer-cbf65.firebaseapp.com",
+    projectId: "snow-beer-cbf65",
+    storageBucket: "snow-beer-cbf65.firebasestorage.app",
+    messagingSenderId: "171510439127",
+    appId: "1:171510439127:web:94f15dd79aa057e3d32492",
+    measurementId: "G-4S4ZES85SS"
+  };
+  const VAPID_KEY = 'BOpdZbExrfuvo9RTEQFdq_YiOgXFY2IRHxrU8PFCTn8Q08Wk6c__M5UGaLvmk-_wvxVj8PNpfIWuIxqCq-wPNmI';
+
+  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  let messaging = null;
+  isSupported().then(ok => { if (ok) { messaging = getMessaging(app); wireForeground(); } }).catch(() => {});
+
+  function wireForeground(){
+    onMessage(messaging, (payload) => {
+      const n = payload.notification || {};
+      if (window.toast) toast((n.title || 'Snow Admin') + (n.body ? ': ' + n.body : ''));
+    });
+  }
+
+  window.enableAdminPush = async function () {
+    if (!messaging || !('serviceWorker' in navigator)) { if (window.toast) toast('Push isn\'t supported on this browser', true); return; }
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { if (window.toast) toast('Notification permission denied', true); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+      if (!token) { if (window.toast) toast('Could not get a push token', true); return; }
+      const r = await window.post('/admin/push/register', { token });
+      if (r && r.status === 'success') {
+        localStorage.setItem('snowAdminPushToken', token);
+        if (window.toast) toast('Push notifications enabled');
+      } else {
+        if (window.toast) toast((r && r.message) || 'Could not register for push', true);
+      }
+    } catch (e) {
+      if (window.toast) toast('Push setup failed: ' + e.message, true);
+    } finally {
+      if (window.refreshPushCard) refreshPushCard();
+    }
+  };
 </script>
 </body>
 </html>

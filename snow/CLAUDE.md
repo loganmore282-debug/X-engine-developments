@@ -232,16 +232,48 @@ revert to "finish designing first" without the owner saying so again.
   layout (`snow-server` web service, `snow-app`/`snow-admin` static sites with SPA
   rewrite rules and clickjacking-hardening headers). Validated as syntactically correct
   YAML/JSON with the right service names and `rootDir`s.
+- **Live and deployed** to Render (`snow-server` at `mylifeismyhappiness.onrender.com`,
+  plus `snow-app`/`snow-admin` static sites) — confirmed working end-to-end by the owner
+  (real registration, welcome bonus credited, product catalog loading).
+- **PWA** (both apps): `manifest.json`, branded `icon-192/512.png`, `sw.js` with
+  network-first navigations / cache-first same-origin shell / never-cache cross-origin
+  API responses (space8's proven anti-leak pattern), hourly + visibility/focus update
+  checks, `controllerchange` auto-reload gated so it never fires on first-ever SW claim.
+  User app additionally gates the reload on `window._moneyCallsInFlight` so a background
+  update never interrupts an in-flight deposit/withdraw/invest call, and wires a real
+  `beforeinstallprompt` capture into the "Install Snow" button.
+- **Skeleton loaders** (user app) — shimmer `skRows()`/`skPage()` helpers, replacing all
+  "Loading…" placeholders on Home/My Products/Team/Account.
+- **Live countdown timers** (My Products) — computed from real `inv.createdAt` +
+  `payoutsMade`, ticking every second, cleaned up on navigation and when no countdown
+  nodes remain.
+- **Admin push notifications** (deposits + withdrawal requests) — `sendAdminPush()` in
+  `server.js` uses `admin.messaging().sendEachForMulticast()` against an `adminPushTokens`
+  collection (doc id = token, so re-registering a device is a natural upsert; stale/
+  unregistered tokens are pruned automatically from the multicast response). The deposit
+  push fires only on a genuinely new credit (`creditDeposit()`'s `justCredited` flag), not
+  on every idempotent retry/replay; the withdrawal push fires once, on the same
+  single-attempt success path `/withdraw/request` already guards with
+  `_witRequestInFlight`. `POST /admin/push/register` / `/unregister` are
+  `verifyAdmin`-gated. Admin frontend: a Firebase Messaging module script (gstatic CDN,
+  same non-secret client config as the user app) requests notification permission, gets
+  an FCM token via the owner-supplied VAPID key, and registers it; a Dashboard card
+  toggles enable/disable and remembers state in `localStorage`. `admin/sw.js` carries a
+  `firebase-messaging-compat` background handler so pushes still show when the tab isn't
+  focused (cache bumped to `snow-admin-shell-v2` for this). Verified: `node --check` on
+  every extracted `<script>` block plus `admin/sw.js`, and a mocked-backend Playwright
+  pass confirming the Dashboard push card renders and reads its enabled/disabled state
+  correctly (the two Firebase-CDN network calls fail in this sandbox — no outbound
+  access to gstatic.com here — same known limitation as the user app's Firebase Auth;
+  not testable end-to-end until the owner tries it on the real deployed site).
 
-**Deliberately deferred, not attempted this round** (flag to the owner, don't silently
-build later without asking): PWA manifest/service-worker/install-prompt, obfuscated
-build pipeline (space8's `build-core.js`/`guard-src.js` — Snow ships `user-src/`
-straight to `user/` unobfuscated for now), live countdown timers on My Products'
-progress cards, skeleton loaders (plain "Loading…" text stands in), push notifications,
-multi-admin staff accounts (one shared `ADMIN_KEY` only), and the full ChatGPT/Codex
-security-audit rounds space8 went through (~20+ rounds) — the money-safety logic itself
-was ported from that already-hardened codebase, but this specific Snow copy of it has
-not yet been independently re-audited.
+**Deliberately deferred, not attempted yet** (flag to the owner, don't silently build
+later without asking): obfuscated build pipeline (space8's `build-core.js`/
+`guard-src.js` — Snow ships `user-src/`/`admin-src/` straight to `user/`/`admin/`
+unobfuscated for now), multi-admin staff accounts (one shared `ADMIN_KEY` only), and the
+full ChatGPT/Codex security-audit rounds space8 went through (~20+ rounds) — the
+money-safety logic itself was ported from that already-hardened codebase, but this
+specific Snow copy of it has not yet been independently re-audited.
 
 **Before this can go live**: the owner needs to (1) finish the MongoDB Atlas database
 user setup (pick a Built-in Role, click Add User — see Live infra below), (2) set

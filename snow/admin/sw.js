@@ -1,6 +1,30 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'snow-admin-shell-v1';
+const CACHE = 'snow-admin-shell-v2';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+
+// Firebase Messaging background handler -- shows a notification for pushes
+// that arrive while the admin panel tab isn't open/focused. Foreground
+// pushes are handled separately by onMessage() in index.html.
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+firebase.initializeApp({
+  apiKey: "AIzaSyDhaVbSaQyYRdSiP1LLze-Apb6kNNTVCsc",
+  authDomain: "snow-beer-cbf65.firebaseapp.com",
+  projectId: "snow-beer-cbf65",
+  storageBucket: "snow-beer-cbf65.firebasestorage.app",
+  messagingSenderId: "171510439127",
+  appId: "1:171510439127:web:94f15dd79aa057e3d32492",
+});
+const messaging = firebase.messaging();
+messaging.onBackgroundMessage((payload) => {
+  const n = payload.notification || {};
+  self.registration.showNotification(n.title || 'Snow Admin', {
+    body: n.body || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: payload.data || {}
+  });
+});
 
 self.addEventListener('install', e => {
   self.skipWaiting();

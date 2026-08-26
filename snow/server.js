@@ -405,6 +405,31 @@ function verifyAdmin(req) {
   if (header && safeEqual(header, ADMIN_KEY)) return true;
   return safeEqual(req.body?.adminKey, ADMIN_KEY);
 }
+// Push notifications for admin — deposit/withdrawal alerts. Tokens are keyed
+// by the token string itself (doc id == token) so re-registering the same
+// device is a natural upsert and never creates duplicate rows.
+async function sendAdminPush(title, body, data = {}) {
+  try {
+    const snap = await db.collection('adminPushTokens').get();
+    if (snap.empty) return;
+    const tokens = snap.docs.map(d => d.id);
+    const strData = {};
+    for (const [k, v] of Object.entries(data)) strData[k] = String(v);
+    const resp = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      data: strData,
+      webpush: { fcmOptions: { link: '/' } }
+    });
+    const stale = [];
+    resp.responses.forEach((r, i) => {
+      const code = r.success ? null : (r.error && r.error.code);
+      if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token')
+        stale.push(tokens[i]);
+    });
+    if (stale.length) await Promise.all(stale.map(t => db.collection('adminPushTokens').doc(t).delete().catch(() => {})));
+  } catch (e) { console.warn('sendAdminPush failed (non-critical):', e.message); }
+}
 function scryptHash(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
@@ -1030,7 +1055,7 @@ async function creditDeposit(depDoc) {
   if (_creditingDeposits.has(depDoc.id)) return false;
   _creditingDeposits.add(depDoc.id);
   try {
-    let credited = false;
+    let credited = false, justCredited = false, creditedAmount = 0;
     await withLock('dep:' + depDoc.id, async () => {
       const fresh = await depDoc.ref.get();
       if (!fresh.exists || fresh.data().status === 'matched') { credited = fresh.exists; return; }
@@ -1055,9 +1080,14 @@ async function creditDeposit(depDoc) {
         amount: depAmount, status: 'success', date, time, ref: fresh.data().ref,
         createdAt: FieldValue.serverTimestamp()
       });
-      credited = true;
+      credited = true; justCredited = true; creditedAmount = depAmount;
     });
-    if (credited) markDepositAttemptSucceeded(dep.userId);
+    // Only on a REAL new credit (never an idempotent replay/no-op) -- a
+    // retried webhook/poll must never fire a duplicate push for the same money.
+    if (justCredited) {
+      markDepositAttemptSucceeded(dep.userId);
+      sendAdminPush('Deposit completed', `${fmtUGX(creditedAmount)} credited to a wallet`, { type: 'deposit', depositId: depDoc.id }).catch(() => {});
+    }
     return credited;
   } finally { _creditingDeposits.delete(depDoc.id); }
 }
@@ -1219,6 +1249,7 @@ app.post('/withdraw/request', async (req, res) => {
         amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
       });
     }));
+    sendAdminPush('New withdrawal request', `${fmtUGX(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested — processing now' });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
@@ -1529,6 +1560,24 @@ app.post('/admin/check-key', async (req, res) => {
   if (!safeEqual(key, ADMIN_KEY)) { recordLoginFail('owner-key'); return res.status(401).json({ status: 'error', message: 'Invalid key' }); }
   clearLoginFails('owner-key');
   res.json({ status: 'success', token: ADMIN_KEY });
+});
+app.post('/admin/push/register', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const token = String(req.body.token || '').trim();
+  if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
+  try {
+    await db.collection('adminPushTokens').doc(token).set({ token, registeredAt: FieldValue.serverTimestamp() }, { merge: true });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/push/unregister', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const token = String(req.body.token || '').trim();
+  if (!token) return res.status(400).json({ status: 'error', message: 'Missing token' });
+  try {
+    await db.collection('adminPushTokens').doc(token).delete();
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/settings', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
