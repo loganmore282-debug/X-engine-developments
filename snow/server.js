@@ -177,8 +177,6 @@ const DEFAULT_SETTINGS = {
   dailyCheckin: 500,
   maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
-  // Owner-settable EAT withdrawal-request window, off by default.
-  withdrawHoursEnabled: false, withdrawHoursStart: 8, withdrawHoursEnd: 22,
   // Off by default — approves every pending withdrawal automatically a few
   // seconds after it's requested, server-driven, idempotent (shares the
   // exact same processWithdrawalCore path a manual admin approval uses).
@@ -264,19 +262,6 @@ function tsMillis(v) {
   if (typeof v.toMillis === 'function') return v.toMillis();
   if (v instanceof Date) return v.getTime();
   return 0;
-}
-// Owner-settable EAT withdrawal-request window (off by default). Enforced
-// server-side only, off the server's own clock — a client bypass changes
-// nothing. start===end fails OPEN deliberately: a misconfigured restriction
-// should never silently lock every member out of withdrawing.
-function isWithinWithdrawHours(sett) {
-  if (!sett.withdrawHoursEnabled) return true;
-  const start = Math.round(Number(sett.withdrawHoursStart));
-  const end = Math.round(Number(sett.withdrawHoursEnd));
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start > 23 || end < 0 || end > 23 || start === end)
-    return true;
-  const hour = eatNow().getUTCHours();
-  return start < end ? (hour >= start && hour < end) : (hour >= start || hour < end);
 }
 function eatDayKey(ts) {
   const d = new Date(tsMillis(ts) + 3 * 3600000);
@@ -1611,13 +1596,6 @@ app.post('/withdraw/request', async (req, res) => {
     const destValue = cleanPhone(req.body.phone || '');
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
-    if (!isWithinWithdrawHours(sett)) {
-      const h12 = h => { const ap = h < 12 ? 'AM' : 'PM'; let hh = h % 12; if (hh === 0) hh = 12; return hh + ':00 ' + ap; };
-      return res.status(400).json({
-        status: 'error', code: 'OUTSIDE_WITHDRAW_HOURS',
-        message: `Withdrawals can only be requested between ${h12(sett.withdrawHoursStart)} and ${h12(sett.withdrawHoursEnd)} (East Africa Time). Try again during that window.`
-      });
-    }
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
     const check = await pinCheck(userId, req.body.pin);
     if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
@@ -2151,10 +2129,10 @@ const SETTINGS_CRITICAL_RANGES = {
   withdrawFeePct: [0, 100], minWithdraw: [0, MAX_MONEY_AMOUNT], minDeposit: [0, MAX_MONEY_AMOUNT],
   welcomeBonus: [0, MAX_MONEY_AMOUNT], commL1: [0, 100], commL2: [0, 100], commL3: [0, 100],
   returnMultiple: [0, 1000], cycleDays: [1, 3650], maxWithdrawalsPerDay: [0, 1000],
-  dailyCheckin: [0, MAX_MONEY_AMOUNT], withdrawHoursStart: [0, 23], withdrawHoursEnd: [0, 23],
+  dailyCheckin: [0, MAX_MONEY_AMOUNT],
   autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'withdrawHoursEnabled', 'autoApproveWithdrawalsEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled'];
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
