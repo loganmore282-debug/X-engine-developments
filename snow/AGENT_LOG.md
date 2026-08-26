@@ -16,6 +16,101 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 8: Codex's line-by-line correction of the round-7 Account screen; MongoDB/Firebase infra noted
+
+Owner sent Codex's detailed correction pass on round 7's Account screenshot, plus two
+infra items in the same message (a MongoDB Atlas "Add New Database User" screenshot
+and a Firebase web config for a new project) — see the separate notes on those below,
+kept out of this design entry.
+
+**Applied all 7 of Codex's corrections directly to `build.py`:**
+1. Header: bottle badge enlarged 28px → 38px tall (so it reads as a real bottle, not
+   a tiny emoji-scale mark); "SNOW" wordmark recolored from black (`--snow-ink`) to
+   `var(--snow-green)`.
+2. Identity banner: swapped `01-qing-shuang-cutout.png` (bottle + the ice it stands
+   on) for `01-qing-shuang-badge.png` (bottle only, transparent, no ice) — Codex's
+   own reasoning: the ice read as a blue-ish strip and pushed the phone number onto 2
+   lines. Sized to `height:104px` in this larger banner context (vs 38px in the tiny
+   header). Phone number set to `white-space:nowrap;font-size:14.5px` (was 15.5px,
+   no nowrap) so it can never wrap even with a longer number; banner's internal gap
+   tightened 14px → 12px for extra headroom. `BOTTLE_CUTOUT` is no longer referenced
+   anywhere in the file — only `BOTTLE_BADGE` is used across the whole Account screen
+   now (header + banner both).
+3. Feature cards (Withdrawal account / Records): icon bubbles gained a white
+   translucent border (`1px solid rgba(255,255,255,.35)`) and their own soft shadow,
+   plus a new darker translucent corner blob (`soft_blob`, the card's own `-deep`
+   shade at bottom-right) layered underneath the existing top-right wave-lines, so
+   neither card reads as a flat block. "Withdrawal account" — the longer of the two
+   titles — was wrapping to 2 lines; fixed with `font-size:14px` (was 16),
+   `letter-spacing:-.25px`, `white-space:nowrap`, and tighter card padding
+   (`20px 16px` instead of a flat `20px`) — reads on one line now, matching Codex's
+   "Withdrawal account stays on one line" requirement exactly.
+4. **The 4 utility cards were restructured from vertical (icon-on-top, label-below,
+   44px white circles) to horizontal (icon-left, label-right, vertically centered,
+   62px SOLID gradient circles)** — the actual substance of this round's correction.
+   New CSS: `.utility-wine`/`.utility-green` set a `linear-gradient(145deg, ...)`
+   background + white icon color + drop shadow directly on `.account-icon-bubble`
+   when nested inside one of those two wrapper classes, plus a faint matching
+   `1px` border on the card itself (`rgba(148,24,39,.10)` wine /
+   `rgba(47,107,71,.12)` green) for the "soft premium edge" Codex asked for. Labels
+   now use each card's own `-deep` color (`--snow-wine-deep`/`--snow-green-deep`)
+   instead of the flat `--snow-ink` every card used before. Each card kept its own
+   decorative accent (soft blob for About Snow/Help Centre, a scaled-down 2-curve
+   wave-lines accent for Rules & Terms/Install Snow) — unchanged in kind from round
+   7, just recolored/repositioned now that the icon bubble is bigger and the layout
+   direction flipped.
+5. Sign out: promoted from a plain utility-card override to its own explicit
+   `min-height:104px; border-radius:28px; padding:20px` (was implicitly inheriting
+   the smaller 126px/26px utility-card defaults before), 62px solid wine icon bubble
+   (via `utility-wine`, same mechanism as the other 4 cards), and a subtle wine
+   `soft_blob` at the lower-right. Still reads "Sign out", never "Log Out".
+6. Confirmed still true, no changes needed: no Transaction PIN card, no separate
+   Deposit/Withdrawal History cards, Records alone represents all three, no blue or
+   gold anywhere (the small blue inside the authentic bottle label itself is fine
+   per Codex's own carve-out — that's the product photo, not UI chrome), bottom nav
+   unchanged from round 7's global update.
+7. One additional, unprompted but low-risk tightening: reduced `.account-utility-card`'s
+   base padding from 18px to 16px to give the now-larger 62px bubble a little more
+   room before the label wraps — labels still wrap to 2 lines for the longer ones
+   (About Snow / Rules & Terms / Help Centre / Install Snow all wrap at this card
+   width), which Codex's spec doesn't actually require to be single-line (only the
+   "Withdrawal account" feature-card title had that explicit requirement) — left as
+   a reasonable, spec-compliant trade-off rather than shrinking the 62px bubble
+   Codex explicitly said to keep.
+
+**Verification**: regenerated (`python3 build.py`, Playwright screenshot) and visually
+inspected the result against every one of Codex's 7 numbered points — confirmed the
+phone number is genuinely one line now, "Withdrawal account" is one line, all 4
+utility cards read icon-left/label-right with solid gradient 62px circles and a
+visible border, Sign out is visibly larger/more premium than a generic utility card,
+and Home/My Products/Team render unaffected (only Account-scoped CSS/markup touched
+this round).
+
+---
+
+### Infra notes (not a design change — recorded here since they arrived in the same message)
+
+- **MongoDB Atlas**: owner is creating a dedicated `snow` database user (Atlas "Add
+  New Database User" dialog, Password authentication). At the point they screenshotted
+  it, **no role had been selected yet** ("Built-in Role — 0 SELECTED") — Atlas requires
+  at least one role or privilege before "Add User" will actually save, so this needed
+  one more step (e.g. a `readWrite`-scoped role on the `snow` database, or
+  `readWriteAnyDatabase` to mirror the existing `chocomcc` user's own role visible in
+  the same project) before the user is actually usable. **The generated password shown
+  in that screenshot was NOT recorded anywhere in this repo** — per this project's
+  standing secrets rule, it belongs only in whatever hosting platform's env vars end up
+  running Snow's backend (once one exists), same as space8's `MONGODB_URI` on Render.
+- **Firebase**: owner shared a fresh web client config for a new Firebase project,
+  `snow-beer-cbf65`. Unlike the Mongo password, **this IS safe to keep in this repo** —
+  a Firebase web `apiKey`/config object is not a secret (Firebase's real access control
+  is Security Rules + App Check, not hiding this object); space8's own equivalent config
+  is already committed in `user-src/index.html`/`admin-src/index.html` following the
+  same reasoning. Recorded in `CLAUDE.md`'s infra section for when real frontend/backend
+  work starts — nothing consumes it yet, since no app code exists under `snow/` beyond
+  the design mockups.
+
+---
+
 ## 2026-08-26 — Claude — Round 7: Account rebuilt as a coloured card matrix, per Codex's own mockup + written spec
 
 Owner sent an image (an Account-screen mockup they and Codex had produced) plus a full

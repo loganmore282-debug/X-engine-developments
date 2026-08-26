@@ -175,8 +175,45 @@ user-facing frontend genuinely new. Do not assume space8's `server.js`/`db.js` c
 copied verbatim — the product ladder, rates, and nav structure above are all different
 and need to be reflected in whatever backend gets built.
 
+## Live infra (provisioning started 2026-08-26)
+
+- **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
+  a Firebase web `apiKey` is not a secret, access control is Security Rules/App Check,
+  same reasoning space8 already uses for its own committed config in
+  `user-src/index.html`/`admin-src/index.html`):
+  ```js
+  const firebaseConfig = {
+    apiKey: "AIzaSyDhaVbSaQyYRdSiP1LLze-Apb6kNNTVCsc",
+    authDomain: "snow-beer-cbf65.firebaseapp.com",
+    projectId: "snow-beer-cbf65",
+    storageBucket: "snow-beer-cbf65.firebasestorage.app",
+    messagingSenderId: "171510439127",
+    appId: "1:171510439127:web:94f15dd79aa057e3d32492",
+    measurementId: "G-4S4ZES85SS"
+  };
+  ```
+  Nothing consumes this yet — no frontend code exists under `snow/` beyond the design
+  mockups. When the real user-facing app is built, this goes into its Firebase
+  init script the same way space8's does. The Firebase **service-account JSON**
+  (server-side, genuinely secret) has NOT been provided and must never go in this repo
+  when it is — only into the backend host's env vars, exactly like space8's
+  `FIREBASE_SERVICE_ACCOUNT` on Render.
+- **MongoDB Atlas**: owner is creating a dedicated `snow` database user (same shared
+  cluster/project space8 and choco-mcc already use, separated by database name — see
+  space8's own equivalent note in `space8/CLAUDE.md`). Mid-setup as of 2026-08-26: the
+  Atlas "Add New Database User" dialog was screenshotted with username `snow` filled
+  in but **no role selected yet** — Atlas requires at least one Built-in Role or
+  Specific Privilege before "Add User" actually saves. Next step: pick a role (e.g.
+  `readWriteAnyDatabase`, matching the existing `chocomcc` user's own role in that
+  project, or a tighter `readWrite` scoped to just the `snow` database) and click Add
+  User. **The generated password was never recorded in this repo** — the resulting
+  full `MONGODB_URI` connection string is a secret and must go straight into whatever
+  hosting platform's env vars end up running Snow's backend, never into a commit, and
+  ideally never pasted into chat again either.
+
 ## Secrets — NEVER commit
 
-No infrastructure (MongoDB, Firebase, MarzPay) has been provisioned for Snow yet. When
-it is, follow the exact same pattern as space8: secrets live only in the hosting
-platform's env vars, never in this repo.
+MongoDB URI and the Firebase service-account JSON are the two real secrets Snow will
+need once backend work starts — both live ONLY in the hosting platform's env vars,
+never in this repo. The Firebase web client config above is the one exception
+(genuinely not secret) — don't confuse the two when handling future infra messages.

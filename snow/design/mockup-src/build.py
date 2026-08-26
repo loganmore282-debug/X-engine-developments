@@ -87,8 +87,12 @@ button{cursor:pointer;font-family:inherit;}
 
 .account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
 .account-feature-card{min-height:190px;border-radius:var(--snow-radius-card);overflow:hidden;box-shadow:0 16px 32px -22px rgba(17,17,17,.35);position:relative;color:#fff;padding:20px;display:flex;flex-direction:column;justify-content:flex-end;}
-.account-utility-card{min-height:126px;border-radius:26px;padding:18px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;}
-.account-icon-bubble{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.account-utility-card{min-height:126px;border-radius:26px;padding:16px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;}
+.account-icon-bubble{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.utility-wine{border:1px solid rgba(148,24,39,.10);}
+.utility-wine .account-icon-bubble{background:linear-gradient(145deg,#B42638,var(--snow-wine));color:#fff;box-shadow:0 10px 20px -12px rgba(113,16,27,.55);}
+.utility-green{border:1px solid rgba(47,107,71,.12);}
+.utility-green .account-icon-bubble{background:linear-gradient(145deg,var(--snow-green),var(--snow-green-deep));color:#fff;box-shadow:0 10px 20px -12px rgba(31,81,54,.5);}
 """
 
 def snowflake_svg(color, size=17):
@@ -433,24 +437,26 @@ print("wrote Team.html")
 # of it), bell removed, Transaction PIN tile removed, Records replaces the
 # separate Deposit/Withdrawal History tiles. See AGENT_LOG.md for the full
 # rationale, including how the bottle photos were background-removed (rembg).
-BOTTLE_CUTOUT = f"{BOTTLES_REL}/01-qing-shuang-cutout.png"   # fuller shot (w/ ice) -- identity banner
-BOTTLE_BADGE = f"{BOTTLES_REL}/01-qing-shuang-badge.png"     # bottle only, no ice -- tiny header mark
+# Round 8: Codex rejected the fuller ice-included cutout for the identity banner
+# (read as a blue strip, forced the phone number to 2 lines) -- badge (bottle
+# only, no ice) is now used everywhere on this screen, just larger in the banner.
+BOTTLE_BADGE = f"{BOTTLES_REL}/01-qing-shuang-badge.png"
 
 account_body = f"""
 <div style="display:flex;align-items:center;gap:9px;padding:24px 20px 4px;">
   {snowflake_svg('var(--snow-green)', 26)}
-  <img src="{BOTTLE_BADGE}" alt="" style="height:28px;width:auto;">
-  <div class="wm-text" style="font-size:19px;color:var(--snow-ink);">SNOW</div>
+  <img src="{BOTTLE_BADGE}" alt="" style="height:38px;width:auto;">
+  <div class="wm-text" style="font-size:19px;color:var(--snow-green);">SNOW</div>
 </div>
 
 <div class="brand-card" style="margin:16px 20px 0;padding:22px;">
   {wave_lines_top_right(110, 104)}
-  <div style="position:relative;display:flex;align-items:center;gap:14px;">
+  <div style="position:relative;display:flex;align-items:center;gap:12px;">
     <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">{snowflake_svg('#fff',26)}</div>
-    <img src="{BOTTLE_CUTOUT}" alt="" style="height:80px;width:auto;flex-shrink:0;filter:drop-shadow(0 8px 12px rgba(0,0,0,.28));">
+    <img src="{BOTTLE_BADGE}" alt="" style="height:104px;width:auto;flex-shrink:0;filter:drop-shadow(0 8px 12px rgba(0,0,0,.28));">
     <div style="flex:1;min-width:0;">
       <div style="display:flex;align-items:center;gap:7px;">
-        <div class="mono" style="font-size:15.5px;font-weight:700;">+2567 12 345 678</div>
+        <div class="mono" style="font-size:14.5px;font-weight:700;white-space:nowrap;">+2567 12 345 678</div>
         {ICONS['copy']}
       </div>
       <div style="display:flex;align-items:center;gap:7px;margin-top:5px;">
@@ -463,49 +469,52 @@ account_body = f"""
 
 <div class="account-grid" style="margin:18px 20px 0;">
 
-  <div class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);">
+  <div class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);padding:20px 16px;">
     {wave_lines_top_right(95, 90, count=3, opacity=.75)}
-    <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);color:#fff;margin-bottom:14px;">{ICONS['wallet-lg']}</div>
-    <div style="position:relative;font-size:16px;font-weight:800;">Withdrawal account</div>
+    {soft_blob("var(--snow-wine-deep)", .4, 100, -26, -26)}
+    <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;box-shadow:0 8px 16px -8px rgba(0,0,0,.3);margin-bottom:14px;">{ICONS['wallet-lg']}</div>
+    <div style="position:relative;font-size:14px;font-weight:800;letter-spacing:-.25px;white-space:nowrap;">Withdrawal account</div>
     <div style="position:relative;font-size:12px;opacity:.85;margin-top:4px;">Manage your payout account</div>
   </div>
 
-  <div class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-green) 0%,var(--snow-green-deep) 100%);">
+  <div class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-green) 0%,var(--snow-green-deep) 100%);padding:20px 16px;">
     {wave_lines_top_right(95, 90, color="rgba(255,255,255,.55)", count=3, opacity=.75)}
-    <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);color:#fff;margin-bottom:14px;">{ICONS['doc-lg']}</div>
-    <div style="position:relative;font-size:16px;font-weight:800;">Records</div>
+    {soft_blob("var(--snow-green-deep)", .45, 100, -26, -26)}
+    <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;box-shadow:0 8px 16px -8px rgba(0,0,0,.3);margin-bottom:14px;">{ICONS['doc-lg']}</div>
+    <div style="position:relative;font-size:14px;font-weight:800;letter-spacing:-.25px;">Records</div>
     <div style="position:relative;font-size:12px;opacity:.85;margin-top:4px;">Deposits &middot; Withdrawals &middot; Income</div>
   </div>
 
-  <div class="account-utility-card" style="background:var(--snow-wine-soft);">
-    {soft_blob("var(--snow-wine)", .09, 84, -18, -18)}
-    <div class="account-icon-bubble" style="position:relative;width:44px;height:44px;background:#fff;color:var(--snow-wine);margin-bottom:10px;">{ICONS['doc']}</div>
-    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-ink);">About Snow</div>
+  <div class="account-utility-card utility-wine" style="background:var(--snow-wine-soft);flex-direction:row;justify-content:flex-start;align-items:center;gap:14px;">
+    {soft_blob("var(--snow-wine)", .08, 70, -16, -16)}
+    <div class="account-icon-bubble" style="position:relative;">{ICONS['doc']}</div>
+    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-wine-deep);">About Snow</div>
   </div>
 
-  <div class="account-utility-card" style="background:var(--snow-green-soft);">
-    {wave_lines_top_right(64, 60, color="var(--snow-green)", count=2, opacity=.28)}
-    <div class="account-icon-bubble" style="position:relative;width:44px;height:44px;background:#fff;color:var(--snow-green);margin-bottom:10px;">{ICONS['shield']}</div>
-    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-ink);">Rules &amp; Terms</div>
+  <div class="account-utility-card utility-green" style="background:var(--snow-green-soft);flex-direction:row;justify-content:flex-start;align-items:center;gap:14px;">
+    {wave_lines_top_right(56, 52, color="var(--snow-green)", count=2, opacity=.3)}
+    <div class="account-icon-bubble" style="position:relative;">{ICONS['shield']}</div>
+    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-green-deep);">Rules &amp; Terms</div>
   </div>
 
-  <div class="account-utility-card" style="background:var(--snow-wine-soft);">
-    {soft_blob("var(--snow-wine)", .14, 18, 14, 78)}
-    <div class="account-icon-bubble" style="position:relative;width:44px;height:44px;background:#fff;color:var(--snow-wine);margin-bottom:10px;">{ICONS['headset']}</div>
-    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-ink);">Help Centre</div>
+  <div class="account-utility-card utility-wine" style="background:var(--snow-wine-soft);flex-direction:row;justify-content:flex-start;align-items:center;gap:14px;">
+    {soft_blob("var(--snow-wine)", .12, 16, 14, 74)}
+    <div class="account-icon-bubble" style="position:relative;">{ICONS['headset']}</div>
+    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-wine-deep);">Help Centre</div>
   </div>
 
-  <div class="account-utility-card" style="background:var(--snow-green-soft);">
-    {wave_lines_top_right(64, 60, color="var(--snow-green)", count=2, opacity=.28)}
-    <div class="account-icon-bubble" style="position:relative;width:44px;height:44px;background:#fff;color:var(--snow-green);margin-bottom:10px;">{ICONS['download']}</div>
-    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-ink);">Install Snow</div>
+  <div class="account-utility-card utility-green" style="background:var(--snow-green-soft);flex-direction:row;justify-content:flex-start;align-items:center;gap:14px;">
+    {wave_lines_top_right(56, 52, color="var(--snow-green)", count=2, opacity=.3)}
+    <div class="account-icon-bubble" style="position:relative;">{ICONS['download']}</div>
+    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-green-deep);">Install Snow</div>
   </div>
 
 </div>
 
-<div class="account-utility-card" style="margin:14px 20px 0;background:var(--snow-wine-soft);flex-direction:row;justify-content:flex-start;align-items:center;gap:14px;min-height:0;padding:16px 18px;">
-  <div class="account-icon-bubble" style="width:44px;height:44px;background:var(--snow-wine);color:#fff;flex-shrink:0;">{ICONS['logout']}</div>
-  <div style="font-size:15px;font-weight:700;color:var(--snow-wine-deep);">Sign out</div>
+<div class="account-utility-card utility-wine" style="margin:14px 20px 0;background:var(--snow-wine-soft);flex-direction:row;justify-content:flex-start;align-items:center;gap:14px;min-height:104px;border-radius:28px;padding:20px;">
+  {soft_blob("var(--snow-wine)", .1, 90, -22, -22)}
+  <div class="account-icon-bubble" style="position:relative;">{ICONS['logout']}</div>
+  <div style="position:relative;font-size:15px;font-weight:700;color:var(--snow-wine-deep);">Sign out</div>
 </div>
 """
 
