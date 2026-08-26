@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Snow Admin</title>
 <meta name="theme-color" content="#941827">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png">
 <style>
 :root{
   --wine:#941827; --wine-deep:#71101B; --green:#2F6B47; --green-deep:#1F5136;
@@ -429,6 +431,26 @@ window.clearBanner = async function(){
   if (r.status !== 'success') return toast(r.message || 'Failed', true);
   toast('Banner cleared');
 };
+
+// ── PWA: service worker auto-update ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      const checkForUpdate = () => reg.update().catch(() => {});
+      setInterval(checkForUpdate, 60 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+      window.addEventListener('focus', checkForUpdate);
+    }).catch(() => {});
+  });
+  let _swReloading = false;
+  let _hadControllerAtLoad = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_swReloading) return;
+    if (!_hadControllerAtLoad) { _hadControllerAtLoad = true; return; }
+    _swReloading = true;
+    location.reload();
+  });
+}
 
 // ── START ──
 (function(){

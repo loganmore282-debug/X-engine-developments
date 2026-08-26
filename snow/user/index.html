@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Snow</title>
 <meta name="theme-color" content="#941827">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <style>
 :root{
   --snow-canvas:#FCFBF9;
@@ -127,6 +130,12 @@ a{color:inherit;}
 .confirm-row:last-of-type{border-bottom:none;}
 
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:13px;}
+
+.sk{background:linear-gradient(90deg,var(--snow-neutral-soft) 25%,#fff 50%,var(--snow-neutral-soft) 75%);background-size:400% 100%;animation:skshimmer 1.4s ease infinite;border-radius:8px;}
+@keyframes skshimmer{0%{background-position:100% 0;}100%{background-position:-100% 0;}}
+.sk-row{display:flex;align-items:center;gap:12px;padding:14px 4px;}
+.sk-line{height:13px;}
+.sk-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:18px;}
 </style>
 </head>
 <body>
@@ -284,6 +293,22 @@ function brandWaveFull(){
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
 
 function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-UG'); }
+function skRows(n){
+  let html = '';
+  for (let i = 0; i < n; i++) html += `
+    <div class="sk-row">
+      <div class="sk" style="width:38px;height:38px;border-radius:50%;flex-shrink:0;"></div>
+      <div style="flex:1;"><div class="sk sk-line" style="width:60%;"></div><div class="sk sk-line" style="width:35%;margin-top:8px;height:10px;"></div></div>
+    </div>`;
+  return html;
+}
+function skPage(){
+  return `<div style="padding:20px;">
+    <div class="sk" style="height:140px;border-radius:var(--snow-radius-card);"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;"><div class="sk" style="flex:1;height:60px;border-radius:16px;"></div><div class="sk" style="flex:1;height:60px;border-radius:16px;"></div><div class="sk" style="flex:1;height:60px;border-radius:16px;"></div></div>
+    <div class="sk-card" style="margin-top:20px;">${skRows(3)}</div>
+  </div>`;
+}
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function $(id){ return document.getElementById(id); }
 function togglePw(id){ const el=$(id); el.type = el.type==='password' ? 'text' : 'password'; }
@@ -301,21 +326,32 @@ function toast(msg, isErr){
 }
 
 // ── API ──
+// Endpoints that actually move money -- a background service-worker reload
+// (see the registration script near the bottom of this file) waits for this
+// count to hit 0 before ever yanking the page out from under one of these.
+const MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete']);
+window._moneyCallsInFlight = 0;
 async function api(path, opts){
   opts = opts || {};
-  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-  if (window.fbAuth && window.fbAuth.currentUser) {
-    try { headers['Authorization'] = 'Bearer ' + (await window.fbAuth.currentUser.getIdToken()); } catch (_) {}
-  }
-  let resp;
+  const isMoneyCall = MONEY_ENDPOINTS.has(path);
+  if (isMoneyCall) window._moneyCallsInFlight++;
   try {
-    resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
-  } catch (e) {
-    return { status: 'error', message: 'Network error. Check your connection.' };
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    if (window.fbAuth && window.fbAuth.currentUser) {
+      try { headers['Authorization'] = 'Bearer ' + (await window.fbAuth.currentUser.getIdToken()); } catch (_) {}
+    }
+    let resp;
+    try {
+      resp = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
+    } catch (e) {
+      return { status: 'error', message: 'Network error. Check your connection.' };
+    }
+    let data;
+    try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response from server' }; }
+    return data;
+  } finally {
+    if (isMoneyCall) window._moneyCallsInFlight--;
   }
-  let data;
-  try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response from server' }; }
-  return data;
 }
 function post(path, body){ return api(path, { method: 'POST', body: JSON.stringify(body || {}) }); }
 
@@ -456,8 +492,9 @@ function updateNavIcons(){
 window.showPage = async function(name){
   STATE.page = name;
   updateNavIcons();
+  if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   const host = $('pageHost');
-  host.innerHTML = '<div style="padding:60px 0;text-align:center;color:var(--snow-muted);">Loading…</div>';
+  host.innerHTML = skPage();
   if (name === 'home') await renderHome();
   else if (name === 'products') await renderProducts();
   else if (name === 'team') await renderTeam();
@@ -557,8 +594,9 @@ async function renderProducts(){
   } else {
     investments.forEach(inv => {
       const p = (STATE.products||[]).find(x=>x.key===inv.tierKey) || {};
-      const day = Math.min(inv.payoutsTotal||150, Math.floor((Date.now()-new Date(inv.date||Date.now()).getTime())/86400000));
+      const createdMs = new Date(inv.createdAt||Date.now()).getTime();
       const pct = Math.round((inv.payoutsMade||0)/(inv.payoutsTotal||150)*100);
+      const matured = inv.status === 'matured' || (inv.payoutsMade||0) >= (inv.payoutsTotal||150);
       html += `
   <div class="plan-card">
     <div style="display:flex;align-items:center;gap:12px;">
@@ -567,7 +605,7 @@ async function renderProducts(){
         <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">${esc(inv.tierLabel)}</div>
         <div style="font-size:12px;color:var(--snow-muted);margin-top:1px;">${fmtUGX(inv.amount)} invested &middot; ${fmtUGX(inv.dailyPayout)}/day</div>
       </div>
-      <div class="status-pill ${inv.status==='matured'?'active':'pending'}">${inv.status==='matured'?'Matured':'Active'}</div>
+      <div class="status-pill ${matured?'active':'pending'}">${matured?'Matured':'Active'}</div>
     </div>
     <div style="margin-top:16px;">
       <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--snow-muted);margin-bottom:6px;">
@@ -576,18 +614,44 @@ async function renderProducts(){
       </div>
       <div style="height:8px;border-radius:999px;background:var(--snow-neutral-soft);overflow:hidden;"><div style="height:100%;border-radius:999px;background:var(--snow-green);width:${pct}%;"></div></div>
     </div>
+    ${matured ? '' : `<div style="display:flex;align-items:center;gap:6px;margin-top:14px;color:var(--snow-muted);font-size:12px;" data-countdown data-created="${createdMs}" data-payouts-made="${inv.payoutsMade||0}">${ICONS.clock} Next cashback in <span class="mono countdown-val" style="color:var(--snow-ink);font-weight:600;">--:--:--</span></div>`}
   </div>`;
     });
   }
   html += `</div><div style="height:16px;"></div>`;
   $('pageHost').innerHTML = html;
+  startPlanCountdowns();
+}
+// Live-ticking "Next cashback in HH:MM:SS" on each active plan card. Cleared
+// whenever the page changes away from My Products so it never keeps ticking
+// (and leaking a timer) in the background.
+let _countdownTimer = null;
+function startPlanCountdowns(){
+  if (_countdownTimer) clearInterval(_countdownTimer);
+  const tick = () => {
+    const nodes = document.querySelectorAll('[data-countdown]');
+    if (!nodes.length) { clearInterval(_countdownTimer); _countdownTimer = null; return; }
+    nodes.forEach(el => {
+      const created = Number(el.dataset.created);
+      const made = Number(el.dataset.payoutsMade);
+      const nextBoundary = created + (made + 1) * 86400000;
+      const remaining = Math.max(0, nextBoundary - Date.now());
+      const h = Math.floor(remaining / 3600000);
+      const m = Math.floor((remaining % 3600000) / 60000);
+      const s = Math.floor((remaining % 60000) / 1000);
+      const pad = n => String(n).padStart(2, '0');
+      el.querySelector('.countdown-val').textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+    });
+  };
+  tick();
+  _countdownTimer = setInterval(tick, 1000);
 }
 
 // ── TEAM ──
 window.switchTeamLevel = async function(level){
   const box = $('teamMembersBox');
   document.querySelectorAll('.team-level-switcher .seg').forEach(s => s.classList.toggle('active', Number(s.dataset.level)===level));
-  box.innerHTML = '<div class="list-empty">Loading…</div>';
+  box.innerHTML = skRows(3);
   if (!STATE.teamMembers[level]) {
     const r = await api('/team/members?level=' + level);
     STATE.teamMembers[level] = r.status === 'success' ? r.members : [];
@@ -681,7 +745,7 @@ async function renderTeam(){
     <div id="teamMembersHeading" style="font-size:15px;font-weight:800;color:var(--snow-ink);">Level 1 members</div>
     <div id="teamMembersCount" style="font-size:12px;color:var(--snow-muted);"></div>
   </div>
-  <div id="teamMembersBox"><div class="list-empty">Loading…</div></div>
+  <div id="teamMembersBox">${skRows(3)}</div>
 </div>
 <div style="height:16px;"></div>`;
   $('pageHost').innerHTML = html;
@@ -733,7 +797,7 @@ async function renderAccount(){
   <button class="account-utility-card utility-wine" style="background:var(--snow-wine-soft);" onclick="openInfoSheet('about')">${softBlob('var(--snow-wine)',.08,70,-16,-16)}<div class="account-icon-bubble" style="position:relative;">${ICONS.doc}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-wine-deep);">About Snow</div></button>
   <button class="account-utility-card utility-green" style="background:var(--snow-green-soft);" onclick="openInfoSheet('rules')">${waveLinesTR(56,52,'var(--snow-green)',2,.3)}<div class="account-icon-bubble" style="position:relative;">${ICONS.shield}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-green-deep);">Rules &amp; Terms</div></button>
   <button class="account-utility-card utility-wine" style="background:var(--snow-wine-soft);" onclick="openInfoSheet('help')">${softBlob('var(--snow-wine)',.12,16,14,74)}<div class="account-icon-bubble" style="position:relative;">${ICONS.headset}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-wine-deep);">Help Centre</div></button>
-  <button class="account-utility-card utility-green" style="background:var(--snow-green-soft);" onclick="toast('Install Snow from your browser menu')">${waveLinesTR(56,52,'var(--snow-green)',2,.3)}<div class="account-icon-bubble" style="position:relative;">${ICONS.download}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-green-deep);">Install Snow</div></button>
+  <button class="account-utility-card utility-green" style="background:var(--snow-green-soft);" onclick="promptInstallApp()">${waveLinesTR(56,52,'var(--snow-green)',2,.3)}<div class="account-icon-bubble" style="position:relative;">${ICONS.download}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-green-deep);">Install Snow</div></button>
 </div>
 <button class="account-utility-card utility-wine" style="margin:14px 20px 0;background:var(--snow-wine-soft);min-height:88px;border-radius:28px;padding:20px;" onclick="doLogout()">
   ${softBlob('var(--snow-wine)',.1,90,-22,-22)}
@@ -774,7 +838,7 @@ window.openInfoSheet = function(kind){
 };
 
 window.openRecordsSheet = async function(){
-  openSheet('Records', '<div class="list-empty">Loading…</div>');
+  openSheet('Records', skRows(5));
   const r = await api('/transactions');
   const rows = r.status === 'success' ? r.transactions : [];
   if (!rows.length) { $('sheetBody').innerHTML = '<div class="list-empty">No records yet.</div>'; return; }
@@ -826,7 +890,7 @@ async function pollDepositStatus(depositId){
 
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
-  openSheet('Withdraw', '<div class="list-empty">Loading…</div>');
+  openSheet('Withdraw', skRows(2));
   const r = await api('/bank/list');
   STATE.bankAccounts = r.status === 'success' ? r.accounts : [];
   const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)} — ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
@@ -858,7 +922,7 @@ window.submitWithdraw = async function(){
 };
 
 window.openWithdrawalAccountsSheet = async function(){
-  openSheet('Withdrawal Accounts', '<div class="list-empty">Loading…</div>');
+  openSheet('Withdrawal Accounts', skRows(2));
   const r = await api('/bank/list');
   STATE.bankAccounts = r.status === 'success' ? r.accounts : [];
   renderWithdrawalAccountsSheet();
@@ -960,6 +1024,44 @@ function openConfirm(title, body, onConfirm){
     if (ok) closeConfirm();
   };
   $('confirmBg').classList.add('show');
+}
+
+// ── PWA: install prompt + service worker auto-update ──
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window._installPrompt = e;
+});
+window.addEventListener('appinstalled', () => { window._installPrompt = null; });
+window.promptInstallApp = async function(){
+  if (!window._installPrompt) { toast('Already installed, or your browser doesn\'t support installing Snow.'); return; }
+  window._installPrompt.prompt();
+  await window._installPrompt.userChoice.catch(() => {});
+  window._installPrompt = null;
+};
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      const checkForUpdate = () => reg.update().catch(() => {});
+      setInterval(checkForUpdate, 60 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+      window.addEventListener('focus', checkForUpdate);
+    }).catch(() => {});
+  });
+  // Only reload when there was ALREADY a controller at page-load time --
+  // controllerchange also fires on the very first clients.claim() after a
+  // fresh install/cleared cache, which is not a real update and would
+  // otherwise bounce the app back to the loading screen for no reason.
+  let _swReloading = false;
+  let _hadControllerAtLoad = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (_swReloading) return;
+    if (!_hadControllerAtLoad) { _hadControllerAtLoad = true; return; }
+    (function tryReload(){
+      if ((window._moneyCallsInFlight || 0) > 0) { setTimeout(tryReload, 500); return; }
+      _swReloading = true;
+      location.reload();
+    })();
+  });
 }
 
 // ── START ──
