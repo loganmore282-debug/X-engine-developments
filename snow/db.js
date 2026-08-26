@@ -72,6 +72,16 @@ async function ensureIndexes() {
     ['bankAccounts',    { userId: 1 }],
     ['adminSessions',   { username: 1 }],
     ['adminAuditLog',   { createdAt: -1 }],
+    ['adminUsers',      { role: 1 }],
+    ['adminPushTokens', { role: 1 }],
+    ['promoCodes',      { code: 1 }],
+    ['promoCodes',      { codeLower: 1 }],
+    ['promoCodes',      { createdAt: -1 }],
+    ['promoRedemptions',{ userId: 1 }],
+    ['securityEvents',  { userId: 1 }],
+    ['securityEvents',  { createdAt: -1 }],
+    ['users',           { publicId: 1 }],
+    ['transactions',    { type: 1 }],
   ];
   // ONE AT A TIME -- M0's free tier has very little real concurrency headroom.
   let failed = 0;

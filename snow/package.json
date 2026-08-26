@@ -15,6 +15,9 @@
     "helmet": "^7.1.0",
     "mongodb": "^6.3.0"
   },
+  "devDependencies": {
+    "javascript-obfuscator": "^5.5.0"
+  },
   "engines": {
     "node": ">=18.0.0"
   }

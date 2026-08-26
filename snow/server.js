@@ -56,9 +56,25 @@ const adminLoginLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeade
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false,
   message: { status: 'error', message: 'Too many requests. Slow down.' } });
 app.use('/admin/check-key', adminLoginLimiter);
+app.use('/admin/login', adminLoginLimiter);
 app.use('/admin/', adminLimiter);
+// If a Bearer token is a valid staff session, attach req.adminUser so
+// verifyAdmin()/verifyOwner() below can recognise it. A raw master-key
+// Authorization header skips the DB lookup entirely and falls through
+// untouched. A transient DB hiccup must never look like "your session is
+// invalid" — it's just left unresolved, and verifyAdmin() falls through to
+// the legacy-key check (which fails closed).
+app.use('/admin/', async (req, _res, next) => {
+  const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (header && !(ADMIN_KEY && safeEqual(header, ADMIN_KEY))) {
+    try { req.adminUser = await resolveSession(header); }
+    catch (e) { console.error('Admin session resolve error:', e.message); }
+  }
+  next();
+});
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/bank/delete',
- '/account/create-profile', '/register', '/account/transaction-pin/change']
+ '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
+ '/team/milestone/claim', '/checkin']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -156,8 +172,19 @@ const DEFAULT_SETTINGS = {
   withdrawFeePct: 15, minWithdraw: 8000, minDeposit: 30000,
   welcomeBonus: 5000, commL1: 27, commL2: 2, commL3: 1,
   returnMultiple: 30, cycleDays: 150,
+  // Not yet confirmed by the owner — a reasonable Snow-scaled default,
+  // admin-editable like every other rate here.
+  dailyCheckin: 500,
   maintenanceMode: false, maintenanceMsg: '',
   maxWithdrawalsPerDay: 2, requireInvestToWithdraw: true,
+  // Owner-settable EAT withdrawal-request window, off by default.
+  withdrawHoursEnabled: false, withdrawHoursStart: 8, withdrawHoursEnd: 22,
+  // Off by default — approves every pending withdrawal automatically a few
+  // seconds after it's requested, server-driven, idempotent (shares the
+  // exact same processWithdrawalCore path a manual admin approval uses).
+  // autoApproveMaxAmount: 0 = unlimited; a nonzero value leaves anything
+  // above it for manual review instead.
+  autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', aboutText: '',
 };
@@ -238,6 +265,40 @@ function tsMillis(v) {
   if (v instanceof Date) return v.getTime();
   return 0;
 }
+// Owner-settable EAT withdrawal-request window (off by default). Enforced
+// server-side only, off the server's own clock — a client bypass changes
+// nothing. start===end fails OPEN deliberately: a misconfigured restriction
+// should never silently lock every member out of withdrawing.
+function isWithinWithdrawHours(sett) {
+  if (!sett.withdrawHoursEnabled) return true;
+  const start = Math.round(Number(sett.withdrawHoursStart));
+  const end = Math.round(Number(sett.withdrawHoursEnd));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start > 23 || end < 0 || end > 23 || start === end)
+    return true;
+  const hour = eatNow().getUTCHours();
+  return start < end ? (hour >= start && hour < end) : (hour >= start || hour < end);
+}
+function eatDayKey(ts) {
+  const d = new Date(tsMillis(ts) + 3 * 3600000);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+function dayKeyToLastCheckinFormat(key) {
+  const [y, m, d] = key.split('-');
+  return `${m}/${d}/${y}`;
+}
+// Recomputed from real check-in history on every call — a stale/corrupted
+// stored streak can never keep silently breaking a real one.
+function computeCheckinStreak(dayKeysSet) {
+  if (!dayKeysSet.size) return { streak: 0, lastCheckin: null };
+  const sorted = [...dayKeysSet].sort();
+  let streak = 1;
+  for (let i = sorted.length - 1; i > 0; i--) {
+    const cur = Date.parse(sorted[i] + 'T00:00:00Z');
+    const prev = Date.parse(sorted[i - 1] + 'T00:00:00Z');
+    if (cur - prev === 86400000) streak++; else break;
+  }
+  return { streak, lastCheckin: dayKeyToLastCheckinFormat(sorted[sorted.length - 1]) };
+}
 function eatParts(ts) {
   const ms = tsMillis(ts) || Date.now();
   const d = new Date(ms + 3 * 3600000);
@@ -267,12 +328,29 @@ function finiteMoney(v) {
   return Number.isFinite(n) ? n : 0;
 }
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; // no I/l/O/0/1
+// Gift codes share the exact same unambiguous alphabet as referral codes but
+// are 5 characters (referral codes are 6) — length is the only thing that
+// tells the two systems apart by construction, so a code typed into the
+// wrong box can never even superficially collide.
+const GIFTCODE_CHARS = CODE_CHARS;
 function randFromAlphabet(alphabet, n) {
   let s = '';
   for (let i = 0; i < n; i++) s += alphabet[crypto.randomInt(alphabet.length)];
   return s;
 }
 function randCode(n = 6) { return randFromAlphabet(CODE_CHARS, n); }
+function genGiftCode() { return randFromAlphabet(GIFTCODE_CHARS, 5); }
+async function generateUniqueGiftCode() {
+  return withLock('giftcode-gen', async () => {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const code = genGiftCode();
+      const codeLower = code.toLowerCase();
+      const dup = await db.collection('promoCodes').where('codeLower', '==', codeLower).limit(1).get();
+      if (dup.empty) return code;
+    }
+    throw new Error('Could not generate a unique gift code');
+  });
+}
 // Check-and-claim as one atomic step, under a process-local lock — this
 // app runs as a single Node process, so that's a real guarantee.
 async function generateUniqueReferralCode(userId) {
@@ -330,6 +408,28 @@ async function uniqueRef(letter) {
     if (inDep.empty && inWit.empty) return ref;
   }
   return letter + Date.now() + crypto.randomInt(1000);
+}
+// TASK CENTER — milestone rewards on top of ordinary L1/L2/L3 % commission.
+// Reward numbers are Snow-scaled defaults (flat per-referral / flat % of
+// team deposits, same shape as space8's proven ladder) — not yet confirmed
+// by the owner; flag before treating these as final.
+const TEAM_MILESTONES = [
+  { target: 2, reward: 2000 }, { target: 5, reward: 5000 }, { target: 10, reward: 10000 },
+  { target: 25, reward: 25000 }, { target: 50, reward: 50000 }, { target: 100, reward: 100000 },
+  { target: 200, reward: 200000 }, { target: 500, reward: 500000 }, { target: 1000, reward: 1000000 },
+  { target: 2000, reward: 2000000 }, { target: 5000, reward: 5000000 },
+];
+const TEAM_DEPOSIT_MILESTONES = [
+  { target: 100000, reward: 2500 }, { target: 500000, reward: 12500 }, { target: 1000000, reward: 25000 },
+  { target: 5000000, reward: 125000 }, { target: 10000000, reward: 250000 }, { target: 25000000, reward: 625000 },
+  { target: 50000000, reward: 1250000 }, { target: 100000000, reward: 2500000 }, { target: 200000000, reward: 5000000 },
+  { target: 500000000, reward: 12500000 }, { target: 1000000000, reward: 25000000 },
+];
+async function activeL1Count(userId) {
+  const snap = await db.collection('users').where('referredBy', '==', userId).get();
+  let n = 0;
+  snap.forEach(d => { const v = d.data(); if (v.status !== 'banned' && (v.totalInvested || 0) > 0) n += 1; });
+  return n;
 }
 // Sum of the WHOLE team's (L1+L2+L3) deposits — powers Team's "Team
 // deposits" stat card.
@@ -397,13 +497,22 @@ function safeEqual(a, b) {
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
 }
-// Single owner credential — no multi-admin accounts in v1. Accepts the raw
-// key as a Bearer token OR in the request body.
+// Accepts EITHER a resolved staff session (req.adminUser, attached by the
+// '/admin/' middleware below) OR the owner's raw ADMIN_KEY — every existing
+// `if (!verifyAdmin(req))` call site keeps working unchanged while
+// multi-admin accounts sit on top of it.
 function verifyAdmin(req) {
+  if (req.adminUser) return true;
   if (!ADMIN_KEY) return false;
   const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   if (header && safeEqual(header, ADMIN_KEY)) return true;
   return safeEqual(req.body?.adminKey, ADMIN_KEY);
+}
+// Owner-only actions (staff management, rates, products, gift codes, wallet
+// credit/debit/ban/delete) must never be reachable with a staff login.
+function verifyOwner(req) {
+  if (!verifyAdmin(req)) return false;
+  return !req.adminUser || req.adminUser.role === 'owner';
 }
 // Push notifications for admin — deposit/withdrawal alerts. Tokens are keyed
 // by the token string itself (doc id == token) so re-registering the same
@@ -457,8 +566,46 @@ function recordLoginFail(key) {
 }
 function clearLoginFails(key) { _loginFails.delete(key); }
 function logAdminAction(req, action, meta) {
-  db.collection('adminAuditLog').add({ action, meta: meta || {}, ip: req.ip || null, createdAt: FieldValue.serverTimestamp() })
-    .catch(e => console.warn('audit log write failed:', e.message));
+  db.collection('adminAuditLog').add({
+    actor: req.adminUser?.username || 'owner-key', role: req.adminUser?.role || 'owner',
+    action, meta: meta || {}, ip: req.ip || null, createdAt: FieldValue.serverTimestamp()
+  }).catch(e => console.warn('audit log write failed:', e.message));
+}
+
+// ── MULTI-ADMIN ACCOUNTS + SESSIONS ──
+// ADMIN_KEY stays the owner's own master credential, never handed to staff.
+// Each other admin gets a username + scrypt-hashed password (adminUsers);
+// logging in issues a random, short-lived session token (adminSessions)
+// instead of resending a password on every request, so deactivating or
+// resetting one account revokes only that person's access.
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h — forces periodic re-login
+// Used by /admin/login to run scryptVerify against SOMETHING even when the
+// username doesn't exist, so that path costs the same as a real wrong-
+// password attempt instead of returning near-instantly (timing side-channel).
+const DUMMY_PASSWORD_HASH = scryptHash(crypto.randomBytes(24).toString('hex'));
+async function createSession(username, role) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await db.collection('adminSessions').doc(token).set({
+    username, role, createdAt: FieldValue.serverTimestamp(),
+    expiresAt: new Date(Date.now() + ADMIN_SESSION_TTL_MS)
+  });
+  return token;
+}
+async function resolveSession(token) {
+  if (!token) return null;
+  const snap = await db.collection('adminSessions').doc(token).get();
+  if (!snap.exists) return null;
+  const s = snap.data();
+  if (tsMillis(s.expiresAt) < Date.now()) { db.collection('adminSessions').doc(token).delete().catch(() => {}); return null; }
+  if (s.role !== 'owner') {
+    const uSnap = await db.collection('adminUsers').doc(s.username).get();
+    if (!uSnap.exists || uSnap.data().active === false) return null;
+  }
+  return { username: s.username, role: s.role };
+}
+async function invalidateSessionsFor(username) {
+  const snap = await db.collection('adminSessions').where('username', '==', username).get();
+  await Promise.all(snap.docs.map(d => d.ref.delete().catch(() => {})));
 }
 
 // ── DEPOSIT / WITHDRAWAL ABUSE GUARDS ──
@@ -729,6 +876,16 @@ app.get('/team/stats', async (req, res) => {
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = uSnap.data();
+    const l1ActiveCount = await activeL1Count(userId);
+    const milestones = [
+      ...TEAM_MILESTONES.map(m => ({ type: 'count', target: m.target, reward: m.reward,
+        current: l1ActiveCount, achieved: l1ActiveCount >= m.target, claimed: !!u['milestoneClaimed_' + m.target] })),
+      ...TEAM_DEPOSIT_MILESTONES.map(m => ({ type: 'deposit', target: m.target, reward: m.reward,
+        current: deposits, achieved: deposits >= m.target, claimed: !!u['depositMilestoneClaimed_' + m.target] })),
+    ];
+    const rewardTxSnap = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'team_reward').get();
+    let teamRewards = 0;
+    rewardTxSnap.forEach(d => { teamRewards += finiteMoney(d.data().amount); });
     res.json({
       status: 'success',
       referralCode: u.referralCode || null,
@@ -736,12 +893,51 @@ app.get('/team/stats', async (req, res) => {
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0 },
       totalTeam: (u.teamL1Count || 0) + (u.teamL2Count || 0) + (u.teamL3Count || 0),
       teamCommission: finiteMoney(u.teamCommission),
-      teamDeposits: deposits,
+      teamDeposits: deposits, l1ActiveCount, milestones, teamRewards,
     });
   } catch (e) {
     console.error('Team stats error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load team stats' });
   }
+});
+app.post('/team/milestone/claim', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const target = Number(req.body.target);
+  const isDeposit = req.body.type === 'deposit';
+  const table = isDeposit ? TEAM_DEPOSIT_MILESTONES : TEAM_MILESTONES;
+  const m = table.find(x => x.target === target);
+  if (!m) return res.status(400).json({ status: 'error', message: 'Unknown milestone' });
+  try {
+    const progress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
+    if (progress < m.target) {
+      const need = isDeposit ? fmtUGX(m.target) : m.target;
+      const have = isDeposit ? fmtUGX(progress) : progress;
+      return res.status(400).json({ status: 'error', message: `You need ${need} to claim this, you have ${have}.` });
+    }
+    const claimFlag = (isDeposit ? 'depositMilestoneClaimed_' : 'milestoneClaimed_') + m.target;
+    let done = false, stillShort = false;
+    await withLock('milestoneclaim:' + userId + ':' + claimFlag, async () => {
+      const liveProgress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
+      if (liveProgress < m.target) { stillShort = true; return; }
+      await db.runTransaction(async t => {
+        const uRef = db.collection('users').doc(userId);
+        const fresh = await t.get(uRef);
+        if (!fresh.exists || fresh.data()[claimFlag] || fresh.data().status === 'banned') return;
+        const { date, time } = nowStr();
+        t.update(uRef, { walletBalance: FieldValue.increment(m.reward), totalEarned: FieldValue.increment(m.reward), [claimFlag]: true });
+        t.set(db.collection('transactions').doc(), {
+          userId, type: 'team_reward',
+          description: isDeposit ? `Task Center: whole team deposits ${fmtUGX(m.target)}` : `Task Center: ${m.target} active referrals`,
+          amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });
+        done = true;
+      });
+    });
+    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now — please try again.' });
+    if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
+    res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
+  } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
 });
 
 // ═══════════════════════════════════════════
@@ -767,6 +963,63 @@ app.get('/public/banner', async (_req, res) => {
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
+// ── ACTIVITY FEED — simulated, NOT real transactions. Built once here,
+// server-side, and shared by every client (cached ~4s) so everyone watching
+// at the same moment sees the identical feed.
+const _WIRE_STEP = 5000, _WIRE_CAP = 900000;
+const _DEPOSIT_LADDER = [
+  30000, 40000, 50000, 60000, 70000, 90000, 100000, 120000, 150000, 197000,
+  200000, 250000, 300000, 355000, 400000, 500000, 560000, 700000, 800000,
+  900000, 950000, 1000000, 1250000, 1500000, 2000000, 2550000, 3000000, 4500000
+];
+function maskedMsisdn(used) {
+  for (let tries = 0; tries < 50; tries++) {
+    const n = '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    if (!used.has(n)) { used.add(n); return n; }
+  }
+  return '256****' + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+}
+async function buildActivityFeed() {
+  const sett = await getSettings();
+  const minDep = Number(sett.minDeposit) || 0;
+  const minWit = Number(sett.minWithdraw) || 0;
+  let depositPool = _DEPOSIT_LADDER.slice();
+  try {
+    const products = await getProducts();
+    const prices = products.map(p => Number(p.price)).filter(n => n > 0);
+    depositPool = Array.from(new Set(depositPool.concat(prices)));
+  } catch (_) {}
+  depositPool = depositPool.filter(n => n >= minDep);
+  const withdrawPool = [];
+  for (let a = _WIRE_STEP; a <= _WIRE_CAP; a += _WIRE_STEP) withdrawPool.push(a);
+  const withdrawPoolFiltered = withdrawPool.filter(n => n >= minWit);
+  if (!depositPool.length) depositPool = [minDep || 30000];
+  if (!withdrawPoolFiltered.length) withdrawPoolFiltered.push(minWit || 8000);
+  const rows = [];
+  const usedNumbers = new Set();
+  for (let i = 0; i < 60; i++) {
+    const kind = Math.random() < 0.6 ? 'deposit' : 'withdraw';
+    const pool = kind === 'deposit' ? depositPool : withdrawPoolFiltered;
+    rows.push({ kind, phone: maskedMsisdn(usedNumbers), amount: pool[Math.floor(Math.random() * pool.length)] });
+  }
+  return rows;
+}
+let _activityFeed = [], _activityTs = 0, _activityBuilding = false;
+app.get('/public/activity-feed', async (_req, res) => {
+  if (!_activityFeed.length && !_activityBuilding) {
+    _activityBuilding = true;
+    try { _activityFeed = await buildActivityFeed(); _activityTs = Date.now(); }
+    catch (e) { console.error('Activity feed error:', e.message); }
+    finally { _activityBuilding = false; }
+  } else if (!_activityBuilding && Date.now() - _activityTs > 4000) {
+    _activityBuilding = true;
+    buildActivityFeed().then(f => { _activityFeed = f; _activityTs = Date.now(); })
+      .catch(e => console.error('Activity feed error:', e.message))
+      .finally(() => { _activityBuilding = false; });
+  }
+  res.json({ status: 'success', feed: _activityFeed });
+});
+
 // ═══════════════════════════════════════════
 // REGISTRATION / ACCOUNT
 // ═══════════════════════════════════════════
@@ -778,6 +1031,7 @@ function isWeakPin(pin) { return /^(\d)\1{4}$/.test(String(pin || '')); }
 function defaultProfileDoc(phone) {
   return {
     phone: phone || '', walletBalance: 0, totalDeposited: 0, totalEarned: 0, totalWithdrawn: 0, totalInvested: 0,
+    checkinStreak: 0, lastCheckin: null,
     teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, teamCommission: 0,
     referredBy: null, referralCode: null, registrationDone: false, status: 'active',
     createdAt: FieldValue.serverTimestamp()
@@ -904,12 +1158,51 @@ app.get('/account', async (req, res) => {
     res.json({ status: 'success', account: {
       phone: u.phone, walletBalance: u.walletBalance || 0, totalDeposited: u.totalDeposited || 0,
       totalEarned: u.totalEarned || 0, totalWithdrawn: u.totalWithdrawn || 0, totalInvested: u.totalInvested || 0,
+      checkinStreak: u.checkinStreak || 0, lastCheckin: u.lastCheckin || null,
       referralCode: u.referralCode || null, publicId: u.publicId || null, registrationDone: !!u.registrationDone,
       team: { l1: u.teamL1Count || 0, l2: u.teamL2Count || 0, l3: u.teamL3Count || 0, commission: u.teamCommission || 0 }
     } });
   } catch (e) {
     console.error('Account error:', e.message);
     res.status(500).json({ status: 'error', message: 'Could not load your account' });
+  }
+});
+app.post('/checkin', async (req, res) => {
+  const uid = await verifyAuth(req);
+  if (!uid) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    let result = null;
+    await withLock('checkin:' + uid, async () => {
+      const sett = await getSettings();
+      const ref = db.collection('users').doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      const u = snap.data();
+      if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      const today = nowStr().date;
+      if (u.lastCheckin === today) { result = { code: 400, body: { status: 'error', message: 'Already checked in today' } }; return; }
+      const ledgerSnap = await db.collection('transactions')
+        .where('userId', '==', uid).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
+      const dayKeys = new Set();
+      ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
+      const real = computeCheckinStreak(dayKeys);
+      const yesterday = new Date(eatNow().getTime() - 86400000);
+      const yPad = n => String(n).padStart(2, '0');
+      const yStr = yPad(yesterday.getUTCMonth() + 1) + '/' + yPad(yesterday.getUTCDate()) + '/' + yesterday.getUTCFullYear();
+      const streak = real.lastCheckin === yStr ? real.streak + 1 : 1;
+      const bonus = Number(sett.dailyCheckin) || 0;
+      await ref.update({ walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckin: today, checkinStreak: streak });
+      const { date, time } = nowStr();
+      await db.collection('transactions').add({
+        userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
+        amount: bonus, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      result = { code: 200, body: { status: 'success', bonus, streak } };
+    });
+    res.status(result.code).json(result.body);
+  } catch (e) {
+    console.error('Checkin error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Check-in failed' });
   }
 });
 
@@ -1209,6 +1502,13 @@ app.post('/withdraw/request', async (req, res) => {
     const destValue = cleanPhone(req.body.phone || '');
     if (!destValue) return res.status(400).json({ status: 'error', message: 'Bind a withdrawal account first.' });
     const sett = await getSettings();
+    if (!isWithinWithdrawHours(sett)) {
+      const h12 = h => { const ap = h < 12 ? 'AM' : 'PM'; let hh = h % 12; if (hh === 0) hh = 12; return hh + ':00 ' + ap; };
+      return res.status(400).json({
+        status: 'error', code: 'OUTSIDE_WITHDRAW_HOURS',
+        message: `Withdrawals can only be requested between ${h12(sett.withdrawHoursStart)} and ${h12(sett.withdrawHoursEnd)} (East Africa Time). Try again during that window.`
+      });
+    }
     if (amt < sett.minWithdraw) return res.status(400).json({ status: 'error', message: `Minimum cash-out is ${fmtUGX(sett.minWithdraw)}` });
     const check = await pinCheck(userId, req.body.pin);
     if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
@@ -1523,6 +1823,60 @@ app.post('/account/transaction-pin/change', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// GIFT CODES
+// ═══════════════════════════════════════════
+app.post('/redeem', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  // Strictly case-sensitive — a code only ever matches itself as issued.
+  const raw = String(req.body.code || '').trim().slice(0, 32);
+  if (!raw || !/^[A-Za-z0-9-]+$/.test(raw)) return res.status(400).json({ status: 'error', message: 'Enter a gift code' });
+  try {
+    let result = null;
+    await withLock('redeem:' + raw, async () => {
+      const userSnap = await db.collection('users').doc(userId).get();
+      if (!userSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      if (userSnap.data().status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
+      const codeSnap = await db.collection('promoCodes').where('code', '==', raw).limit(1).get();
+      if (codeSnap.empty) { result = { code: 400, body: { status: 'error', message: "That code isn't valid" } }; return; }
+      const codeDoc = codeSnap.docs[0];
+      const cd = codeDoc.data();
+      const code = cd.code;
+      if (cd.active === false) { result = { code: 400, body: { status: 'error', message: 'This code is no longer active' } }; return; }
+      if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now()) { result = { code: 400, body: { status: 'error', message: 'This code has expired' } }; return; }
+      const usedBy = cd.usedBy || [];
+      if (usedBy.indexOf(userId) !== -1) { result = { code: 400, body: { status: 'error', message: "You've already used this code" } }; return; }
+      if (cd.maxUses && usedBy.length >= cd.maxUses) { result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return; }
+      const reward = Number(cd.reward) || 0;
+      // CLAIM-BEFORE-CREDIT — a retried redeem after a mid-request failure
+      // must never credit twice off the same code.
+      await codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId) });
+      const claimSnap = await codeDoc.ref.get();
+      const claimedBy = (claimSnap.exists && claimSnap.data().usedBy) || [];
+      if (claimedBy.indexOf(userId) === -1) { result = { code: 500, body: { status: 'error', message: 'Could not redeem this code' } }; return; }
+      if (cd.maxUses && claimedBy.length > cd.maxUses) {
+        await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId) }).catch(() => {});
+        result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
+      }
+      await db.collection('users').doc(userId).update({
+        walletBalance: FieldValue.increment(reward), totalEarned: FieldValue.increment(reward)
+      });
+      await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
+      const { date, time } = nowStr();
+      await db.collection('transactions').add({
+        userId, type: 'promocode', description: `Gift code redeemed: ${code}`,
+        amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+      });
+      result = { code: 200, body: { status: 'success', reward } };
+    });
+    res.status(result.code).json(result.body);
+  } catch (e) {
+    console.error('Redeem error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not redeem this code' });
+  }
+});
+
+// ═══════════════════════════════════════════
 // TRANSACTIONS / HISTORY
 // ═══════════════════════════════════════════
 app.get('/transactions', async (req, res) => {
@@ -1560,6 +1914,106 @@ app.post('/admin/check-key', async (req, res) => {
   if (!safeEqual(key, ADMIN_KEY)) { recordLoginFail('owner-key'); return res.status(401).json({ status: 'error', message: 'Invalid key' }); }
   clearLoginFails('owner-key');
   res.json({ status: 'success', token: ADMIN_KEY });
+});
+// Staff login — issues a session token instead of resending a password.
+// Costs the SAME as a real wrong-password attempt for a nonexistent/
+// inactive username too (DUMMY_PASSWORD_HASH), so a login attempt can't be
+// used to enumerate valid usernames by response timing.
+app.post('/admin/login', async (req, res) => {
+  const username = String(req.body.username || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  if (!username || !password) return res.status(400).json({ status: 'error', message: 'Username and password required' });
+  if (loginLocked('staff:' + username)) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
+  try {
+    const snap = await db.collection('adminUsers').doc(username).get();
+    const validAccount = snap.exists && snap.data().active !== false;
+    const hashToCheck = validAccount ? snap.data().passwordHash : DUMMY_PASSWORD_HASH;
+    const passwordOk = scryptVerify(password, hashToCheck);
+    if (!validAccount || !passwordOk) {
+      recordLoginFail('staff:' + username);
+      return res.status(401).json({ status: 'error', message: 'Invalid username or password' });
+    }
+    clearLoginFails('staff:' + username);
+    const role = snap.data().role === 'owner' ? 'owner' : 'staff';
+    const token = await createSession(username, role);
+    res.json({ status: 'success', token, username, role });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not log in right now' }); }
+});
+app.post('/admin/logout', async (req, res) => {
+  const header = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (header) await db.collection('adminSessions').doc(header).delete().catch(() => {});
+  res.json({ status: 'success' });
+});
+app.get('/admin/admins/list', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('adminUsers').get();
+    res.json({ status: 'success', admins: snap.docs.map(d => ({ username: d.id, role: d.data().role || 'staff', active: d.data().active !== false, createdAt: d.data().createdAt || null })) });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/admins/create', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const username = String(req.body.username || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) return res.status(400).json({ status: 'error', message: 'Username must be 3-32 characters (letters, digits, . _ -).' });
+  if (password.length < 8) return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters.' });
+  try {
+    const existing = await db.collection('adminUsers').doc(username).get();
+    if (existing.exists) return res.status(400).json({ status: 'error', message: 'That username already exists.' });
+    await db.collection('adminUsers').doc(username).set({
+      role: 'staff', active: true, passwordHash: scryptHash(password), createdAt: FieldValue.serverTimestamp()
+    });
+    logAdminAction(req, 'admin_created', { username });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/admins/deactivate', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const username = String(req.body.username || '').trim().toLowerCase();
+  try {
+    await db.collection('adminUsers').doc(username).update({ active: false });
+    await invalidateSessionsFor(username);
+    logAdminAction(req, 'admin_deactivated', { username });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/admins/reactivate', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const username = String(req.body.username || '').trim().toLowerCase();
+  try {
+    await db.collection('adminUsers').doc(username).update({ active: true });
+    logAdminAction(req, 'admin_reactivated', { username });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/admins/reset-password', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const username = String(req.body.username || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  if (password.length < 8) return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters.' });
+  try {
+    await db.collection('adminUsers').doc(username).update({ passwordHash: scryptHash(password) });
+    await invalidateSessionsFor(username);
+    logAdminAction(req, 'admin_password_reset', { username });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/admins/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const username = String(req.body.username || '').trim().toLowerCase();
+  try {
+    await db.collection('adminUsers').doc(username).delete();
+    await invalidateSessionsFor(username);
+    logAdminAction(req, 'admin_deleted', { username });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/audit-log', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('adminAuditLog').orderBy('createdAt', 'desc').limit(300).get();
+    res.json({ status: 'success', log: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/push/register', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -1685,6 +2139,52 @@ app.post('/admin/products/delete', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this product' }); }
 });
+
+// ═══════════════════════════════════════════
+// ADMIN — GIFT CODES
+// ═══════════════════════════════════════════
+app.post('/admin/promocodes/generate', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const reward = Math.round(Number(req.body.reward));
+  const maxUses = req.body.maxUses ? Math.round(Number(req.body.maxUses)) : null;
+  const durationMinutes = req.body.durationMinutes ? Number(req.body.durationMinutes) : null;
+  if (!Number.isFinite(reward) || reward <= 0 || reward > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: 'Enter a valid reward amount' });
+  if (maxUses !== null && (!Number.isFinite(maxUses) || maxUses <= 0)) return res.status(400).json({ status: 'error', message: 'Max uses must be a positive number' });
+  if (durationMinutes !== null && (!Number.isFinite(durationMinutes) || durationMinutes <= 0)) return res.status(400).json({ status: 'error', message: 'Duration must be a positive number of minutes' });
+  try {
+    const code = await generateUniqueGiftCode();
+    const doc = {
+      code, codeLower: code.toLowerCase(), reward, maxUses: maxUses || null, usedBy: [], active: true,
+      createdBy: req.adminUser?.username || 'owner', createdAt: FieldValue.serverTimestamp(),
+    };
+    if (durationMinutes) doc.expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
+    await db.collection('promoCodes').add(doc);
+    logAdminAction(req, 'giftcode_generated', { code, reward, maxUses, durationMinutes });
+    res.json({ status: 'success', code, reward });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.get('/admin/promocodes/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('promoCodes').orderBy('createdAt', 'desc').limit(300).get();
+    res.json({ status: 'success', codes: snap.docs.map(d => {
+      const c = d.data();
+      return { id: d.id, code: c.code, reward: c.reward, maxUses: c.maxUses || null, uses: (c.usedBy || []).length,
+        active: c.active !== false, expiresAt: c.expiresAt || null, createdAt: c.createdAt || null };
+    }) });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/promocodes/deactivate', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const id = String(req.body.id || '');
+  if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+  try {
+    await db.collection('promoCodes').doc(id).update({ active: false });
+    logAdminAction(req, 'giftcode_deactivated', { id });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
 app.get('/admin/users', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -1712,6 +2212,174 @@ app.post('/admin/user/detail', async (req, res) => {
       withdrawals: witSnap.docs.map(d => ({ id: d.id, ...d.data() })),
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/user/reset-password', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  const newPassword = String(req.body.newPassword || '');
+  if (!userId || newPassword.length < 6) return res.status(400).json({ status: 'error', message: 'userId and a password of at least 6 characters required' });
+  try {
+    await admin.auth().updateUser(userId, { password: newPassword });
+    logAdminAction(req, 'user_password_reset', { userId });
+    res.json({ status: 'success', message: 'Password reset' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/user/set-phone', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  const phone = cleanPhone(req.body.phone || '');
+  if (!userId || !phone) return res.status(400).json({ status: 'error', message: 'userId and a valid phone required' });
+  try {
+    await db.collection('users').doc(userId).update({ phone });
+    logAdminAction(req, 'user_phone_set', { userId, phone });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Rebuilds one user's totalDeposited/totalEarned/totalWithdrawn/totalInvested
+// straight from their own transaction ledger — a single-user version of the
+// platform-wide "Recalculate totals" tool, for spot-fixing one account.
+app.post('/admin/user/repair-ledger', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const [uSnap, txSnap, invSnap] = await Promise.all([
+      db.collection('users').doc(userId).get(),
+      db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
+      db.collection('investments').where('userId', '==', userId).get(),
+    ]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    let deposited = 0, earned = 0, withdrawn = 0;
+    txSnap.forEach(d => {
+      const t = d.data();
+      if (t.type === 'deposit') deposited += finiteMoney(t.amount);
+      else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin'].includes(t.type)) earned += finiteMoney(t.amount);
+      else if (t.type === 'withdraw' && t.status === 'success') withdrawn += Math.abs(finiteMoney(t.amount));
+    });
+    let invested = 0;
+    invSnap.forEach(d => { invested += finiteMoney(d.data().amount); });
+    await db.collection('users').doc(userId).update({ totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested });
+    logAdminAction(req, 'user_ledger_repaired', { userId, deposited, earned, withdrawn, invested });
+    res.json({ status: 'success', totals: { totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested } });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Owner-only reconciliation for a registration that started (Firebase account
+// exists) but never finished (no Snow profile doc, or one stuck with
+// registrationDone:false). Reuses completeRegistrationCore so this can never
+// drift from the member's own /register path.
+app.post('/admin/user/complete-registration', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  const pin = String(req.body.pin || '');
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const ref = db.collection('users').doc(userId);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      let phone = '';
+      try { const rec = await admin.auth().getUser(userId); phone = cleanPhone((rec.email || '').split('@')[0]) || ''; } catch (_) {}
+      await ref.set(defaultProfileDoc(phone));
+    }
+    const result = await completeRegistrationCore(userId, req.body.referralCode, pin);
+    if (result.code === 200) logAdminAction(req, 'user_registration_completed', { userId });
+    res.status(result.code).json(result.body);
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Attaches a referrer to an account that registered without one (or with the
+// wrong one) — deliberately requires an existing doc (unlike the member's own
+// /register self-heal) since a typo'd/bogus userId must never phantom-create
+// an account with no real Firebase user behind it.
+app.post('/admin/user/attach-referrer', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  const code = String(req.body.referralCode || '').trim();
+  if (!userId || !code) return res.status(400).json({ status: 'error', message: 'userId and referralCode required' });
+  try {
+    await withLock('attach-referrer', async () => {
+      const uRef = db.collection('users').doc(userId);
+      const uSnap = await uRef.get();
+      if (!uSnap.exists) throw Object.assign(new Error('User not found'), { code: 404 });
+      const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+      if (refSnap.empty) throw Object.assign(new Error('That referral code does not exist.'), { code: 400 });
+      const referrerId = refSnap.docs[0].id;
+      if (referrerId === userId) throw Object.assign(new Error('Cannot refer yourself.'), { code: 400 });
+      if (refSnap.docs[0].data().status === 'banned') throw Object.assign(new Error('That referral code is no longer active.'), { code: 400 });
+      // Cycle guard — walk up from the referrer; if we ever hit userId, this
+      // would create a loop.
+      let cursor = referrerId, hops = 0;
+      while (cursor && hops < 1000) {
+        if (cursor === userId) throw Object.assign(new Error('That would create a referral loop.'), { code: 400 });
+        const cSnap = await db.collection('users').doc(cursor).get();
+        cursor = cSnap.exists ? cSnap.data().referredBy : null;
+        hops++;
+      }
+      await uRef.update({ referredBy: referrerId });
+      await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+    });
+    logAdminAction(req, 'referrer_attached', { userId, referralCode: code });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(e.code || 500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/user/reconcile-checkin', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const ledgerSnap = await db.collection('transactions')
+      .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
+    const dayKeys = new Set();
+    ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
+    const real = computeCheckinStreak(dayKeys);
+    await db.collection('users').doc(userId).update({ checkinStreak: real.streak, lastCheckin: real.lastCheckin });
+    logAdminAction(req, 'checkin_reconciled', { userId, streak: real.streak });
+    res.json({ status: 'success', streak: real.streak, lastCheckin: real.lastCheckin });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Recomputes teamL1/L2/L3 counts for the WHOLE referral tree hanging off one
+// account — used after a delete reparents a downline, since a multi-level
+// chain's counts can't be fixed with simple increments/decrements.
+async function recomputeTeamCounts(rootId) {
+  const walk = async (ids, level) => {
+    if (!ids.length || level > 3) return;
+    const snap = await db.collection('users').where('referredBy', 'in', ids).get();
+    const byParent = new Map();
+    snap.forEach(d => {
+      const p = d.data().referredBy;
+      byParent.set(p, (byParent.get(p) || 0) + 1);
+    });
+    for (const [parentId, count] of byParent) {
+      const field = level === 1 ? 'teamL1Count' : level === 2 ? 'teamL2Count' : 'teamL3Count';
+      await db.collection('users').doc(parentId).update({ [field]: count }).catch(() => {});
+    }
+    const nextIds = [];
+    snap.forEach(d => nextIds.push(d.id));
+    await walk(nextIds, level + 1);
+  };
+  await walk([rootId], 1);
+}
+app.post('/admin/user/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  if (_userBeingDeleted.has(userId)) return res.status(409).json({ status: 'error', message: 'Already deleting this account.' });
+  _userBeingDeleted.add(userId);
+  try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    // Reparent this account's own direct referrals up to ITS referrer, so a
+    // deleted account never leaves a permanently orphaned downline.
+    const parentId = uSnap.data().referredBy || null;
+    await withLock('referrer-guard:' + userId, async () => {
+      const childSnap = await db.collection('users').where('referredBy', '==', userId).get();
+      await Promise.all(childSnap.docs.map(d => d.ref.update({ referredBy: parentId })));
+    });
+    await db.collection('users').doc(userId).delete();
+    try { await admin.auth().deleteUser(userId); } catch (_) {}
+    if (parentId) await recomputeTeamCounts(parentId).catch(e => console.warn('recomputeTeamCounts warning:', e.message));
+    logAdminAction(req, 'user_deleted', { userId, reparentedTo: parentId });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+  finally { _userBeingDeleted.delete(userId); }
 });
 const _adminCreditDebounce = new Map();
 const _adminDebitDebounce = new Map();
@@ -1880,6 +2548,92 @@ app.get('/admin/stats', async (req, res) => {
     res.json({ status: 'success', stats: { totalUsers, activeUsers, bannedUsers, walletTotal, depositAmount, withdrawAmount, investedAmount, activeInvestments, pendingDepCount, pendingWitCount } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+app.post('/admin/transactions/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(300).get();
+    res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.get('/admin/referrals/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('users').where('referredBy', '!=', null).limit(2000).get();
+    const rows = snap.docs.map(d => {
+      const u = d.data();
+      return { id: d.id, phone: u.phone || '', referredBy: u.referredBy, invested: finiteMoney(u.totalInvested), status: u.status || 'active' };
+    });
+    res.json({ status: 'success', referrals: rows });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.get('/admin/badges', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [pendingDep, pendingWit] = await Promise.all([
+      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).limit(5000).get(),
+      db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get(),
+    ]);
+    res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+function bandOf(h) { return h < 6 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; }
+app.post('/admin/analytics', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [depSnap, witSnap, invSnap] = await Promise.all([
+      db.collection('pendingDeposits').where('status', '==', 'matched').limit(50000).get(),
+      db.collection('withdrawals').where('status', '==', 'processed').limit(50000).get(),
+      db.collection('investments').limit(50000).get(),
+    ]);
+    let depAmount = 0, witAmount = 0, investedAmount = 0, commissionsPaid = 0;
+    const byBand = { night: 0, morning: 0, afternoon: 0, evening: 0 };
+    depSnap.forEach(d => {
+      const dep = d.data();
+      depAmount += finiteMoney(dep.amount);
+      const h = new Date(tsMillis(dep.createdAt) + 3 * 3600000).getUTCHours();
+      byBand[bandOf(h)] += finiteMoney(dep.amount);
+    });
+    witSnap.forEach(d => witAmount += finiteMoney(d.data().net));
+    invSnap.forEach(d => investedAmount += finiteMoney(d.data().amount));
+    const commSnap = await db.collection('transactions').where('type', '==', 'commission').limit(50000).get();
+    commSnap.forEach(d => commissionsPaid += finiteMoney(d.data().amount));
+    res.json({ status: 'success', kpis: { depAmount, witAmount, investedAmount, commissionsPaid, depositsByTimeOfDay: byBand } });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/analytics/abuse', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('securityEvents').orderBy('createdAt', 'desc').limit(300).get();
+    res.json({ status: 'success', events: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Cross-checks each user's own stored walletBalance against the sum of
+// their own transaction ledger — flags a real mismatch rather than
+// silently laundering it back to a clean value (this tool's whole job is
+// to SURFACE corruption, not hide it).
+app.get('/admin/integrity', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [usersSnap, txSnap] = await Promise.all([
+      db.collection('users').limit(10000).get(),
+      db.collection('transactions').limit(200000).get(),
+    ]);
+    const ledgerByUser = {};
+    txSnap.forEach(d => {
+      const t = d.data();
+      if (!t.userId) return;
+      ledgerByUser[t.userId] = (ledgerByUser[t.userId] || 0) + (Number(t.amount) || 0);
+    });
+    const mismatches = [];
+    usersSnap.forEach(d => {
+      const u = d.data();
+      const bal = Number(u.walletBalance) || 0;
+      const ledger = ledgerByUser[d.id] || 0;
+      if (Math.abs(bal - ledger) > 1) mismatches.push({ userId: d.id, phone: u.phone || '', walletBalance: bal, ledgerSum: ledger, diff: bal - ledger });
+    });
+    res.json({ status: 'success', checked: usersSnap.size, mismatches });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 // Rebuilds totalDeposited/totalEarned from the transaction ledger — the
 // source of truth — rather than trusting drifted incremental counters.
 async function recountAllTotals() {
@@ -1891,7 +2645,11 @@ async function recountAllTotals() {
       if (!t.userId) return;
       const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
       if (t.type === 'deposit' || t.type === 'admin_credit') row.deposited += finiteMoney(t.amount);
-      if (t.type === 'cashback' || t.type === 'commission') row.earned += finiteMoney(t.amount);
+      // Every income source that credits totalEarned live must be summed
+      // here too, or a "Recalculate totals" run silently wipes it back to
+      // zero — cashback/commission/team_reward (Task Center)/promocode
+      // (gift codes)/checkin.
+      if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin'].includes(t.type)) row.earned += finiteMoney(t.amount);
     });
     let updated = 0;
     const usersSnap = await db.collection('users').limit(10000).get();
@@ -1987,6 +2745,31 @@ async function reconcileCashback() {
 function runReconciler() {
   reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
 }
+// Owner-toggleable: approves every still-pending withdrawal automatically,
+// a few seconds after it was requested — shares processWithdrawalCore with
+// the manual "Send" button, so it's exactly as safe/idempotent.
+async function autoApproveWithdrawalsTick() {
+  try {
+    const sett = await getSettings();
+    if (!sett.autoApproveWithdrawalsEnabled) return;
+    const cutoff = new Date(Date.now() - (Number(sett.autoApproveIntervalSec) || 10) * 1000);
+    const snap = await db.collection('withdrawals').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(50).get();
+    for (const doc of snap.docs) {
+      const wit = doc.data();
+      if (tsMillis(wit.createdAt) > cutoff.getTime()) continue; // not old enough yet
+      const cap = Number(sett.autoApproveMaxAmount) || 0;
+      if (cap > 0 && wit.amount > cap) continue; // above the safety cap — leave for manual review
+      await processWithdrawalCore(doc.id, 'auto-approve').catch(e => console.error('Auto-approve error:', e.message));
+    }
+  } catch (e) { console.error('Auto-approve tick error:', e.message); }
+}
+app.get('/admin/payments/sync', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const [depSettled, witSettled] = await Promise.all([reconcilePendingDeposits(), reconcilePendingWithdrawals()]);
+    res.json({ status: 'success', depositsSettled: depSettled, withdrawalsSettled: witSettled });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 
 // ── IN-MEMORY STATE SWEEPER ──
 function sweepEphemeralState() {
@@ -2018,6 +2801,7 @@ connectMongo(MONGODB_URI)
     setTimeout(runReconciler, 15 * 1000);
     setInterval(reconcileCashback, 1000);
     setTimeout(reconcileCashback, 1000);
+    setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

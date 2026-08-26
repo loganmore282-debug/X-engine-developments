@@ -106,6 +106,78 @@ copy of it hasn't been separately re-audited).
 
 ---
 
+## 2026-08-26 — Claude — Round 12: real space8-architecture port (multi-admin, gift codes, Task Center, activity feed, checkin, admin ops/analytics/integrity, working obfuscated build pipeline)
+
+Owner, after seeing Round 10/11 shipped and live: pointed out Snow's `server.js`/admin
+were a lean from-scratch MVP, not the "reskin an existing proven codebase, keep every
+feature" approach space8 itself was actually built with — quoting space8's own
+CLAUDE.md instruction verbatim as the standard: *"we just replace just name and logo,
+everything remains every feature, every code."* Backed by real numbers: space8's
+`server.js` 6,669 lines vs Snow's 2,023; space8's `admin-src/index.html` 446KB vs
+Snow's 30KB; no `assistant-engine.js`/`build-core.js`/`guard-src.js`/test suite
+equivalent in Snow at all. Confirmed accurate by direct measurement before touching
+anything.
+
+**server.js grafted with the missing architecture as an addition**, not a replace —
+Snow's live money paths (single-PIN registration, mobile-money-only withdrawal,
+deposit/invest flows) were already deployed and confirmed working by the owner; ported
+space8's ARCHITECTURE onto that foundation rather than risk regressing it. Full detail
+in the new "Round 12" section of `CLAUDE.md` (read it before touching this area again)
+— short version: multi-admin staff accounts + sessions, gift codes/promo codes, Task
+Center referral milestones, a simulated activity feed, daily check-in, admin-settable
+EAT withdrawal hours, a full admin CRUD/ops sweep (reset-password, set-phone,
+repair-ledger, complete-registration, attach-referrer, reconcile-checkin, delete-with-
+team-recompute, transactions/referrals lists, badges, analytics, abuse log, integrity
+checker), and auto-approve-withdrawals. Caught and fixed a real bug while adding this:
+`recountAllTotals()`'s earned-bucket only summed cashback/commission — the moment
+checkin/Task-Center/gift-code income started crediting `totalEarned` live, the next
+"Recalculate totals" run would have wiped it all back to zero (same bug class as
+space8's own documented Round 16 incident) — fixed before it could ever fire.
+
+**Obfuscated build pipeline — `build-core.js` + `guard-src.js`, genuinely working, not
+copy-pasted.** Ported space8's pipeline, rebranded. Two real bugs found getting it to
+actually run (not just pass `node --check`, which only proves syntax validity):
+`controlFlowFlattening: true` (space8's own setting) broke a real runtime call once
+obfuscated — left OFF with a documented reason (stringArray + hex identifiers already
+achieve the actual goal; not worth shipping broken for one extra layer). Bigger one: ANY
+top-level `const`/`let` in `original_module.js` silently breaks post-obfuscation —
+`renameGlobals:false` routes references through `window['name']`, which only resolves
+for `var`/`function` declarations (real `window` properties in a classic script), never
+`const`/`let` (never real `window` properties even at top level, though perfectly valid
+local bindings) — `window['MONEY_ENDPOINTS']` resolved to `undefined`, throwing inside
+`enterApp()` on every obfuscated build until all 5 top-level `const`/`let` in the file
+were converted to `var`. This is a general rule for every future edit, not a one-off —
+a comment now sits at the top of `original_module.js` saying so.
+
+**Verification**: `server.js` — `node --check`, plus a real boot smoke test (dummy
+Firebase service-account JSON, deliberately unreachable `MONGODB_URI`) confirming every
+route registers and the process fails ONLY at the expected Mongo-connect step. Build
+pipeline — verified with a Playwright pass against the actual built `user/index.html`
+(not the unobfuscated source) with a mocked backend: found the `const`/`let` bug this
+way (PAGEERROR: `window[...] is not a function` inside `enterApp`, invisible in the
+unobfuscated version, which rendered Home perfectly in the same harness), then
+re-verified 4 independent fresh rebuilds (obfuscation output is nondeterministic between
+runs — different hex names/string-array shuffling each time) all pass consistently
+after the fix. `user/sw.js` cache bumped to `snow-shell-v2`.
+
+**Left open, explicitly not attempted this round**: `build-admin.js` (admin still
+ships unobfuscated) and admin UI for every new backend feature above (multi-admin
+management, gift-code generation, Task Center rate editing, referrals/analytics/
+integrity dashboards, auto-approve toggle) — this is the very next round, the backend
+is ready but nothing in `admin-src/index.html` can reach it yet. The self-hosted
+assistant's actual training content (`assistant-corpus.js` equivalent) is a genuinely
+new content-authoring task, not a porting one — not started. The owner's explicit "per
+round Codex review" request — not yet done for this round; should happen before the
+next one starts.
+
+**Files touched**: `snow/server.js`, `snow/db.js`, `snow/package.json`,
+`snow/build-core.js` (new), `snow/guard-src.js` (new),
+`snow/user-src/index.html`, `snow/user-src/original_module.js` (new — extracted by
+`build-core.js`'s first run), `snow/user/index.html`, `snow/user/sw.js`,
+`snow/CLAUDE.md`.
+
+---
+
 ## 2026-08-26 — Claude — Round 9: Team screen full architecture rebuild (not a recolor)
 
 Owner sent a new Team reference image plus a detailed 7-section Codex prompt requiring
