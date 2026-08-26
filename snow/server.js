@@ -82,7 +82,13 @@ app.use('/admin/', async (req, _res, next) => {
 // photo get the larger parser instead of loosening the limit for everything.
 const smallJsonParser  = express.json({ limit: '64kb' });
 const bigJsonParser    = express.json({ limit: '4mb' });
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banners/set']);
+// Real bug fixed: this used to list '/admin/banners/set' (plural), which
+// doesn't match the actual route below ('/admin/banner/set', singular) --
+// every real banner image upload (always >64kb as base64) was silently
+// hitting the small parser and failing with "request too large." Same bug
+// class space8's CLAUDE.md documents hitting its own home-banner-slides
+// route once, before that route was added here too.
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set']);
 app.use((req, res, next) => (IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 
@@ -2095,7 +2101,7 @@ app.post('/admin/admins/delete', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-app.post('/admin/audit-log', async (req, res) => {
+app.get('/admin/audit-log', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('adminAuditLog').orderBy('createdAt', 'desc').limit(300).get();
@@ -2152,6 +2158,11 @@ app.post('/admin/settings/update', async (req, res) => {
     logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save settings' }); }
+});
+app.get('/admin/banner', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', image: await getHomeBanner() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/banner/set', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -2228,6 +2239,44 @@ app.post('/admin/products/delete', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not delete this product' }); }
 });
+app.post('/admin/products/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('products').limit(1000).get();
+    const batch = db.batch();
+    let removed = 0;
+    snap.forEach(d => { batch.set(d.ref, { key: d.id, deleted: true }, { merge: false }); removed++; });
+    await batch.commit();
+    _productsCacheTs = 0;
+    logAdminAction(req, 'products_cleared', { removed });
+    res.json({ status: 'success', removed });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear products' }); }
+});
+// Updates price/cycle/expectedReturn on every saved product doc back to the
+// current DEFAULT_PRODUCTS values, leaving image/active/comingSoon/order
+// untouched -- a saved product that was never individually edited is
+// already correct and is skipped.
+app.post('/admin/products/sync-pricing', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const defaultsByKey = new Map(DEFAULT_PRODUCTS.map(p => [p.key, p]));
+    const snap = await db.collection('products').limit(1000).get();
+    const batch = db.batch();
+    let synced = 0;
+    snap.forEach(d => {
+      const p = d.data();
+      if (p.deleted) return;
+      const def = defaultsByKey.get(d.id);
+      if (!def) return;
+      batch.update(d.ref, { price: def.price, cycle: def.cycle, expectedReturn: def.expectedReturn });
+      synced++;
+    });
+    await batch.commit();
+    _productsCacheTs = 0;
+    logAdminAction(req, 'products_synced', { synced });
+    res.json({ status: 'success', synced });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not sync pricing' }); }
+});
 
 // ═══════════════════════════════════════════
 // ADMIN — GIFT CODES
@@ -2278,7 +2327,7 @@ app.get('/admin/users', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('users').limit(10000).get();
-    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const users = snap.docs.map(d => { const { transactionPinHash, ...safe } = d.data(); return { id: d.id, ...safe }; });
     res.json({ status: 'success', users, count: users.length });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -2294,12 +2343,28 @@ app.post('/admin/user/detail', async (req, res) => {
       db.collection('withdrawals').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get(),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    // transactionPinHash never leaves this server, even to an admin --
+    // hasPayoutPin is the boolean the admin UI actually needs.
+    const { transactionPinHash, ...userSafe } = uSnap.data();
     res.json({
-      status: 'success', user: { id: uSnap.id, ...uSnap.data() },
+      status: 'success', user: { id: uSnap.id, ...userSafe, hasPayoutPin: !!transactionPinHash },
       investments: invSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       transactions: txSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       withdrawals: witSnap.docs.map(d => ({ id: d.id, ...d.data() })),
     });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/user/reset-payout-pin', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const ref = db.collection('users').doc(userId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    await ref.update({ transactionPinHash: null, pinFailCount: 0, pinLockedUntil: null });
+    logAdminAction(req, 'user_pin_reset', { userId });
+    res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/user/reset-password', async (req, res) => {

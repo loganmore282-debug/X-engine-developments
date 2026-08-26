@@ -16,7 +16,8 @@
     "mongodb": "^6.3.0"
   },
   "devDependencies": {
-    "javascript-obfuscator": "^5.5.0"
+    "javascript-obfuscator": "^5.5.0",
+    "jsdom": "^30.0.1"
   },
   "engines": {
     "node": ">=18.0.0"

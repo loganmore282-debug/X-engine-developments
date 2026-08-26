@@ -16,6 +16,68 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 14: withdraw-hours removed; admin panel ported wholesale from space8's real admin-src/index.html (not reskinned from scratch)
+- Removed the withdraw-hours restriction feature entirely from `server.js`
+  (`withdrawHoursEnabled/Start/End` in `DEFAULT_SETTINGS`, `isWithinWithdrawHours()`,
+  its call site in `/withdraw/request`, its `SETTINGS_CRITICAL_RANGES`/
+  `SETTINGS_BOOLEAN_FIELDS` entries) — owner named it explicitly as a "residue" thing
+  from the earlier space8-architecture port that doesn't belong in Snow. Committed
+  separately before the admin-panel work started this round.
+- `admin-src/index.html` replaced with a literal `cp` of space8's real 2,013-line/446KB
+  file, then transformed in place (rebrand only — palette/Firebase config/session-key
+  prefixes/server URL — plus explicit removals: the whole Banners tab, the broadcast
+  "Send notification"/"Sent notifications" cards, the withdraw-hours Settings block, and
+  the announcement-dialog cards, which turned out to have zero matching backend/frontend
+  in Snow at all). Replaced the removed banner UI with Snow's own pre-existing simple
+  single "Home banner" upload card (new `GET /admin/banner` endpoint added since nothing
+  previously let admin read back the current image for a preview).
+- Adapted Dashboard/Analytics/Referrals/Gift-Codes/Transactions render functions to
+  Snow's REAL (leaner than space8's) `/admin/stats`/`/admin/analytics`/
+  `/admin/referrals/list`/`/admin/promocodes/generate`/`/admin/transactions/list`
+  response shapes — ported UI that assumed space8's exact fields would have shown
+  blank/`NaN` cards or silently-wrong requests otherwise. Full space8-level analytics
+  richness (hourly/daily charts, forecast, staff leaderboard, categorized abuse tables)
+  is flagged as a deferred backend feature-build, not attempted this round — see
+  CLAUDE.md's Round 14 section for the full list of what's deferred and why.
+- **3 real pre-existing bugs found and fixed while porting** (not introduced this
+  round, just finally exercised by it): `GET /admin/user/detail` and `GET /admin/users`
+  were leaking `transactionPinHash` to the admin panel (now stripped, `hasPayoutPin`
+  boolean sent instead); `IMAGE_BODY_ROUTES` listed `/admin/banners/set` (plural) but
+  the real route is `/admin/banner/set` (singular) — every real banner upload has been
+  silently failing "request too large" since the feature was built; `/admin/audit-log`
+  was POST-only while the admin UI's `api()` call defaults to GET for a no-body request
+  (caught live by the new jsdom test below).
+- Added 3 new endpoints for real UI parity (space8's admin UI already called these):
+  `POST /admin/user/reset-payout-pin`, `POST /admin/products/clear`,
+  `POST /admin/products/sync-pricing`.
+- **`build-admin.js` written from scratch**, mirroring `build-core.js`'s obfuscation
+  pipeline with one deliberate difference (documented in the file's own header comment):
+  wraps the whole admin script in an IIFE before obfuscating, instead of converting every
+  top-level `const`/`let` to `var` — confirmed via grep that admin-src/index.html has
+  exactly one inline `onclick=""` anywhere (switched to the file's own `data-close`
+  convention), so nothing needs `window`-reachability once that's fixed. One real
+  cross-script dependency found and handled: the small unobfuscated tail SW-auto-update
+  script reads `_tabBusyCount` by bare name — changed to `window._tabBusyCount` (a true
+  global survives being written from inside another script's IIFE; a bare `let` would
+  not have).
+- Why: owner, furious the first time (see Round 12's own entry), then explicit again
+  this round — *"l said use space8 admin panel,just change theme and logo,plus some
+  removals,everything leave as it is... remove things like banners ,withdrawal time
+  functions, like that,remove"*.
+- Verification: `node --check server.js`; boot smoke test (dummy Firebase creds +
+  unreachable Mongo) still fails only at the Mongo-connect step; new
+  `test-admin-obfuscated-build.js` (jsdom, new devDependency) loads the REAL built
+  `admin/index.html`, mocks every fetch against Snow's real response shapes, logs in,
+  clicks through all 12 tabs + several state-mutating buttons (Clear-all/Sync-pricing,
+  Recalculate-totals/Integrity-audit, gift-code generation) — 0 thrown errors, 0
+  unmocked fetches after the audit-log method fix, Banners tab confirmed absent,
+  Settings confirmed showing the new Home-banner card and NOT the removed cards.
+  `admin/sw.js` cache bumped `v3`→`v4`.
+- Deferred: full space8-level Analytics richness; the announcement-dialog popup feature
+  (never existed end-to-end in Snow, admin UI for it removed rather than left pointing
+  at nothing); a matching AGENT_LOG entry for the withdraw-hours-removal commit itself
+  was never added at the time — folded into this entry instead of a separate backfill.
+
 ## 2026-08-26 — Claude — Round 11: PWA, skeleton loaders, live countdown timers, admin push notifications
 
 Owner confirmed the live Render deploy works end-to-end (real registration screenshot,

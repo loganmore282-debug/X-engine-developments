@@ -446,6 +446,164 @@ component change (exactly what happened across Account rounds 6→7→8). The ow
 their own Codex critique rounds later, applied directly to the now-real
 `user-src/index.html` instead of `build.py`'s mockup generator.
 
+## Round 14 (2026-08-26) — withdraw-hours removed; admin panel ported wholesale from space8, not reskinned from scratch
+
+**Owner's own words, why this round exists**: *"l said use space8 admin panel,just
+change theme and logo,plus some removals,everything leave as it is... remove things like
+banners ,withdrawal time functions, like that,remove"* — a second correction, same shape
+as the one that opened Round 12: the admin panel Round 12 shipped (`admin-src/index.html`,
+542 lines/30KB) was still a bespoke rebuild, not a literal port of space8's real
+`admin-src/index.html` (2,013 lines/446KB) the way space8's own CLAUDE.md documents its
+own admin panel was built off ChocoMCC's.
+
+**Withdraw-hours feature fully removed first** (owner explicitly named it a "residue"
+thing to remove) — `withdrawHoursEnabled/Start/End` deleted from `DEFAULT_SETTINGS`,
+`isWithinWithdrawHours()` deleted entirely, its call site + `OUTSIDE_WITHDRAW_HOURS`
+error block removed from `/withdraw/request`, its entries removed from
+`SETTINGS_CRITICAL_RANGES`/`SETTINGS_BOOLEAN_FIELDS`. **Corrects the Round 12 section
+above**, which still describes this feature as live — it no longer is; that text is kept
+as-written rather than rewritten, per this file's own established practice of correcting
+forward instead of editing history.
+
+**`admin-src/index.html` replaced with a literal `cp` of space8's real file**, then
+transformed in place — NOT rebuilt from scratch a second time:
+- **Rebrand only** (owner: "just change theme and logo"): title/brand text
+  Space8→Snow, `space8_admin_*` session/localStorage key prefixes→`snow_admin_*`,
+  `SERVER` constant→Snow's real Render URL, Firebase client config + VAPID key→Snow's
+  real project (`snow-beer-cbf65`, matching what `user-src/index.html` already commits),
+  palette (`--gold`/`--gold-deep` and the handful of literal non-token hex values —
+  brand-mark gradient center, button gradient highlight, `theme-color` meta, icon
+  strokes) → Snow's wine (`#941827`/`#71101B`). Exact same "value-only swap, keep the
+  token names" convention space8's own CLAUDE.md documents using for its own repeated
+  color changes.
+- **Removed wholesale, not just hidden**: the entire Banners tab (space8's 14-slot
+  `BANNER_LABELS` system — card-appearance sliders, glow-sweep sliders, home-slide
+  carousel — none of which Snow has a matching feature for) — nav button, `renderBanners`,
+  `BANNER_LABELS`, every dispatch-table/`VALID_TABS`/`LIVE_TABS`/owner-tab-toggle
+  reference; the broadcast "Send notification"/"Sent notifications" cards in Settings
+  (Snow's server has no `/admin/notifications/*` routes at all — confirmed by grep before
+  removing, matches the owner's original Round-1 instruction to exclude notifications
+  when porting); the withdrawal-request-hours Settings block + `HOUR_OPTIONS()` (backend
+  already gone, see above). **Also removed, owner never explicitly named but genuinely
+  orphaned**: the "Announcement dialog"/"Announcement background image" Settings cards —
+  grepped `annEnabled`/`annTitle`/`annBody`/`announcementBg` etc. in `server.js`, zero
+  matches; this is a real space8 feature (admin-configurable popup shown on Home) that
+  was never built end-to-end in Snow's own user-facing app either, so wiring admin UI to
+  it would just silently no-op. Flagged as a genuine deferred feature below, not treated
+  as done.
+- **Replaced with**: Snow's own pre-existing, much simpler single "Home banner" upload
+  card (reusing the real `/admin/banner/set`/`/admin/banner/clear` endpoints Snow already
+  had) — moved into the Settings tab where the removed cards used to be. Needed a new
+  `GET /admin/banner` endpoint (`server.js`) since nothing previously let the admin panel
+  read back the currently-set image for a preview thumbnail.
+- **Endpoint-shape mismatches found and adapted, not silently left broken**: space8's
+  `admin-src/index.html` assumes space8's own rich `/admin/stats` (13 KPI fields,
+  platform-health section), `/admin/analytics` (hourly/daily charts, tomorrow's forecast,
+  staff-approval leaderboard, 4-category abuse tables), `/admin/referrals/list`
+  (referrer+referred pairs), `/admin/promocodes/generate` (min/max random reward range +
+  server-side `count`), and `/admin/transactions/list` (`ref`-based server search) — none
+  of which match what Snow's Round-12-built endpoints actually return (leaner shapes;
+  Round 12 built *a* working analytics/stats/referrals layer, just not space8's exact
+  one). Rather than either (a) silently shipping UI that calls fields that don't exist
+  (blank/`NaN` cards) or (b) building out space8's full analytics richness as a surprise
+  scope expansion in a round about UI reskinning, **adapted the render functions to
+  Snow's real response shapes**, in the same visual style (card grids, tables) — Dashboard
+  now shows Snow's actual 10 stat fields; Analytics shows Snow's actual 4 KPIs + the
+  time-of-day band breakdown (no hourly/daily charts, no forecast, no staff leaderboard —
+  those need real new aggregation logic in `server.js`, a bigger lift, not attempted this
+  round, see Known gaps below); Referrals shows Snow's actual per-user rows; Gift Codes
+  generation is single-reward + client-side loop for "how many" (not a server-side
+  min/max range); Transactions dropped the unsupported ref-search-on-Enter feature.
+- **Real, pre-existing bugs found and fixed while touching this code** (not
+  Round-14-introduced, caught because this round finally exercised these code paths):
+  1. **`GET /admin/user/detail` and `GET /admin/users` were leaking `transactionPinHash`
+     to the admin panel** — both did a bare `...uSnap.data()`/`...d.data()` spread with no
+     field stripping. Fixed: both now destructure it out and send a `hasPayoutPin`
+     boolean instead (the admin UI's `openUser()` modal already expected exactly that
+     field name, ported verbatim from space8's own equivalent).
+  2. **`IMAGE_BODY_ROUTES` listed `/admin/banners/set` (plural) but the real route is
+     `/admin/banner/set` (singular)** — every real banner image upload (always >64KB as
+     base64) was silently hitting the 64KB `smallJsonParser` instead of the 4MB
+     `bigJsonParser` and failing with "request too large." The banner upload feature has
+     been broken in this exact way since it was first built. Fixed the route name in the
+     set.
+  3. **`/admin/audit-log` was POST-only** but every other read-only admin list endpoint
+     (`/admin/promocodes/list`, `/admin/referrals/list`, `/admin/products`, etc.) is GET,
+     and the admin UI's `api('/admin/audit-log')` call (no body) defaults to GET — caught
+     by the jsdom test below as an "unmocked fetch" failure, traced to a real
+     method mismatch. Changed to `app.get`.
+- **New endpoints added for real UI parity** (ported from space8's admin UI, which
+  already called them) rather than trimming the buttons that used them:
+  `POST /admin/user/reset-payout-pin` (owner-only, clears `transactionPinHash`/
+  `pinFailCount`/`pinLockedUntil` so the member sets a fresh PIN next time one is
+  needed), `POST /admin/products/clear` (marks every saved product doc `deleted:true`,
+  same shape as the existing single-product delete), `POST /admin/products/sync-pricing`
+  (resets price/cycle/expectedReturn on every saved product back to `DEFAULT_PRODUCTS`,
+  leaving image/active/order alone).
+- **`AUDIT_LABELS`** rewritten to Snow's real `logAdminAction()` action-name strings
+  (grepped every call site in `server.js` — Snow's names differ from space8's in several
+  places, e.g. `giftcode_generated` not `promocodes_generated`, `withdrawal_rejected` not
+  `withdraw_force_declined`) — a straight copy of space8's map would have shown raw
+  action codes instead of readable labels for most rows.
+
+**`build-admin.js` written from scratch**, mirroring `build-core.js`'s pipeline
+(obfuscate `guard-src.js` into `<script data-nx-guard>`, obfuscate the app logic, deflate
++base64, `DecompressionStream` loader IIFE) with one deliberate structural difference,
+documented in full in the file's own header comment: **`admin-src/index.html`'s main
+script is wrapped in `(function(){ ... })();` before being obfuscated, instead of
+following `original_module.js`'s "every top-level binding must be `var`" rule.**
+`renameGlobals:false` routes top-level identifier references through `window['name']` —
+correct for `var`/`function` (real `window` properties in a classic script), silently
+wrong for `const`/`let` (never become `window` properties even at top level). Admin's
+main script has dozens of top-level `const`/`let` (`SERVER`, `TX_LABELS`, `VALID_TABS`,
+`_tab`, `_users`, ...) — converting all of them was judged higher-risk than confirming
+(grep) that admin-src/index.html has exactly ONE inline `onclick=""` anywhere in its
+markup (a redundant "Close" button inside the Integrity-audit modal's own HTML string),
+switching that one spot to the file's own existing `data-close`/`addEventListener`
+convention, and then wrapping the WHOLE script in an IIFE before obfuscating — nothing
+outside the script needs any of its names reachable via `window` at all once that one
+spot is fixed, so there's no top-level scope left for `renameGlobals` to mishandle.
+**One genuine exception found and handled**: the small unobfuscated tail `<script>` (the
+SW auto-update reload gate) reads `_tabBusyCount` by bare name across the script
+boundary — `let _tabBusyCount` was changed to `window._tabBusyCount` (a real global
+survives being written from inside another script's IIFE; a `let` does not), both
+increment/decrement/read sites updated to match.
+
+**Verification — real, not assumed**: `node --check` on both `server.js` and the
+obfuscated build's intermediate files (`build-admin.js` does this itself, same as
+`build-core.js`); a boot smoke test (dummy Firebase service-account + unreachable
+`MONGODB_URI`) confirms `server.js` still fails only at the Mongo-connect step, no
+earlier syntax/runtime error. **New `test-admin-obfuscated-build.js`** (jsdom, added as a
+devDependency) — loads the REAL built `admin/index.html` (not the source), mocks every
+`fetch` call against Snow's real response shapes, logs in as owner, clicks through
+every one of the 12 tabs confirming each renders real content with zero thrown errors
+(`window.onerror`/`unhandledrejection` both captured), confirms the Banners tab button
+is genuinely gone and the Settings tab shows the new Home-banner card instead of the
+removed broadcast-notification/announcement/withdrawal-hours cards, then exercises
+Products Clear-all/Sync-pricing, Users Recalculate-totals/Integrity-audit, and Gift-Code
+generation end-to-end. This is exactly the kind of check that caught the user/app's
+real `const`/`let`-on-`window` bug in an earlier round of this project — running it
+against the real obfuscated artifact, not just the readable source, is what actually
+proves the IIFE-wrap technique above works, not just that it looks right on paper. All
+green, 0 errors, on the first fully-adapted build (the `/admin/audit-log` method
+mismatch above was caught BY this test, then fixed, then reverified). `admin/sw.js`
+cache bumped `v3`→`v4`.
+
+**Known gaps, deferred (not attempted this round, flagged rather than silently
+skipped)**:
+- Space8-level Analytics richness (hourly/daily charts, tomorrow's forecast, staff
+  approval leaderboard, categorized abuse tables) needs real new aggregation logic added
+  to `server.js`'s `/admin/stats`/`/admin/analytics`/`/admin/analytics/abuse` — a
+  backend feature-build, not an admin-UI reskin; a dedicated future round if the owner
+  wants full parity here specifically.
+- The announcement-dialog popup (admin-configurable image+blur+opacity, shown on Home)
+  exists in space8 end-to-end but was never built in Snow's `server.js` OR
+  `user-src/original_module.js` — admin UI for it was removed rather than left
+  pointing at nothing (see above). Would need the same three-file work space8's own
+  CLAUDE.md documents for this feature if the owner wants it.
+- Task Center's referral/deposit ladders and Mission Center's rates remain flagged
+  "not yet confirmed by the owner" per Round 12 — unchanged by this round.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
