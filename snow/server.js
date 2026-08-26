@@ -2253,7 +2253,11 @@ app.post('/admin/products/delete', async (req, res) => {
 app.post('/admin/products/clear', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('products').limit(1000).get();
+    // No genuine pagination available in this Mongo/Firestore-compat layer
+    // (no cursor support) -- bumped well past any realistic product-catalog
+    // size instead of silently truncating at 1,000, per the button's own
+    // "every product" promise.
+    const snap = await db.collection('products').limit(100000).get();
     const batch = db.batch();
     let removed = 0;
     // Codex-caught real bug: tombstoning (deleted:true, like the single-
@@ -2278,7 +2282,11 @@ app.post('/admin/products/sync-pricing', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const defaultsByKey = new Map(DEFAULT_PRODUCTS.map(p => [p.key, p]));
-    const snap = await db.collection('products').limit(1000).get();
+    // No genuine pagination available in this Mongo/Firestore-compat layer
+    // (no cursor support) -- bumped well past any realistic product-catalog
+    // size instead of silently truncating at 1,000, per the button's own
+    // "every product" promise.
+    const snap = await db.collection('products').limit(100000).get();
     const batch = db.batch();
     let synced = 0;
     snap.forEach(d => {
@@ -2441,7 +2449,16 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
       db.collection('users').doc(userId).get(),
       db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
       db.collection('investments').where('userId', '==', userId).get(),
-      db.collection('withdrawals').where('userId', '==', userId).where('status', '==', 'processed').limit(5000).get(),
+      // Codex-caught real bug (round 2): live crediting increments
+      // totalWithdrawn the moment a payout is marked 'processing' (MarzPay
+      // accepted it, see the send-money handler's own totalWithdrawn
+      // increment), not only once it reaches 'processed' -- and nothing
+      // increments it again when 'processing' later resolves to
+      // 'processed' (only the status field changes at that point). Scoping
+      // this query to 'processed' only would UNDER-count any user with a
+      // currently-processing withdrawal, permanently (a later recalculate
+      // run would "fix" it back down to the wrong number every time).
+      db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['processing', 'processed']).limit(5000).get(),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     let deposited = 0, earned = 0;
@@ -2460,7 +2477,8 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
     // above) tracks totalWithdrawn by NET payout. Summing gross here would
     // inflate totalWithdrawn above what the platform actually paid out.
     // Recomputed from the withdrawals collection's own `net` field instead,
-    // scoped to actually-completed ('processed') withdrawals only.
+    // scoped to withdrawals the live code path has actually credited
+    // against ('processing' or 'processed' — see the query comment above).
     let withdrawn = 0;
     witSnap.forEach(d => { withdrawn += finiteMoney(d.data().net); });
     await db.collection('users').doc(userId).update({ totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested });
@@ -2501,19 +2519,33 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
   if (!userId || !code) return res.status(400).json({ status: 'error', message: 'userId and referralCode required' });
   try {
     let referrerId;
-    await withLock('attach-referrer', async () => {
+    // Codex-caught real bug (round 2): this used to lock a bare, unrelated
+    // 'attach-referrer' global key, which does NOT serialize against a
+    // concurrent /register call for the SAME user — that path locks
+    // 'reg:'+userId and 'referrer-guard:'+referrerId. A member finishing
+    // registration with one referral code at the exact moment an admin
+    // attached a different one could both read referredBy===null and both
+    // write, corrupting both uplines' counts. Locking the same 'reg:'+userId
+    // key registration itself uses gives this real mutual exclusion.
+    await withLock('reg:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await uRef.get();
       if (!uSnap.exists) throw Object.assign(new Error('User not found'), { code: 404 });
-      // Codex-caught real bug: without this guard, a retried/duplicate
-      // request (or attaching a second code by mistake) silently overwrote
-      // referredBy and double-incremented teamL1Count for the same user.
-      if (uSnap.data().referredBy) throw Object.assign(new Error('This account already has a referrer — attach only works once.'), { code: 400 });
       const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
       if (refSnap.empty) throw Object.assign(new Error('That referral code does not exist.'), { code: 400 });
       referrerId = refSnap.docs[0].id;
       if (referrerId === userId) throw Object.assign(new Error('Cannot refer yourself.'), { code: 400 });
       if (refSnap.docs[0].data().status === 'banned') throw Object.assign(new Error('That referral code is no longer active.'), { code: 400 });
+      const existing = uSnap.data().referredBy;
+      // Codex-caught real bug (round 2): rejecting outright on any existing
+      // referredBy made a retry after a partial failure (referredBy written,
+      // then a crash/error before the L2/L3 increments or the commission
+      // credit below ran) permanently unrecoverable — every retry hit this
+      // same rejection. Re-attaching the SAME referrer is now treated as a
+      // resumed call (skips straight to the commission step, which is
+      // itself idempotent); only a DIFFERENT referrer is still rejected.
+      if (existing && existing !== referrerId) throw Object.assign(new Error('This account already has a different referrer.'), { code: 400 });
+      if (existing === referrerId) return; // already attached — resume below, don't re-increment counts
       // Cycle guard — walk up from the referrer; if we ever hit userId, this
       // would create a loop.
       let cursor = referrerId, hops = 0;
@@ -2528,6 +2560,14 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
       // referrer's teamL1Count — never L2/L3 further up the chain, unlike
       // every other place a referral relationship is created
       // (completeRegistrationCore's own commit(), same L1->L2->L3 walk).
+      // KNOWN, ACCEPTED LIMITATION (same class documented elsewhere in this
+      // file, e.g. settleInvestmentIfDue/creditReferralCommission's own
+      // crash-window notes): a crash between the referredBy write above and
+      // these increments leaves them permanently unapplied — a resumed call
+      // sees existing===referrerId and skips straight past this block. A
+      // real fix needs a durable outbox/counts-recompute mechanism, a
+      // bigger lift than this pass; not attempted, same tradeoff this
+      // codebase already accepts for registration's own identical shape.
       await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
       const l1Snap = await db.collection('users').doc(referrerId).get();
       const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;

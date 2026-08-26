@@ -48,6 +48,7 @@ const routes = {
   },
   'POST /admin/user/reset-payout-pin': { status: 'success' },
   'POST /admin/user/reconcile-checkin': { status: 'success', before: { checkinStreak: 2 }, after: { checkinStreak: 3 }, changed: true, lastCheckin: '2026-08-26' },
+  'POST /admin/user/attach-referrer': { status: 'success', commissionTriggered: false },
   'GET /admin/admins/list': { status: 'success', admins: [] },
   'GET /admin/audit-log': { status: 'success', log: [] },
   'POST /admin/analytics': { status: 'success', kpis: {
@@ -57,7 +58,9 @@ const routes = {
   'POST /admin/analytics/abuse': { status: 'success', events: [] },
   'GET /admin/badges': { status: 'success', pendingWithdrawals: 2 },
   'GET /admin/users/recount': { status: 'success', updated: 0 },
-  'GET /admin/integrity': { status: 'success', checked: 1, mismatches: [] },
+  'GET /admin/integrity': { status: 'success', checked: 1, mismatches: [
+    { userId: 'u1', phone: '+256700000001', walletBalance: 10000, ledgerSum: 5000, diff: 5000 },
+  ] },
   'POST /admin/products/clear': { status: 'success', removed: 1 },
   'POST /admin/products/sync-pricing': { status: 'success', synced: 1 },
   'POST /admin/promocodes/generate': { status: 'success', code: 'ab3Kx', reward: 5000 },
@@ -196,6 +199,22 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     doc.getElementById('reconcileStreakBtn')?.click();
     await sleep(250);
   }
+  // Re-open once more to test attach-referrer (fixture has referredBy:null)
+  const userRow3 = doc.querySelector('#userRows tr[data-uid]');
+  if (userRow3) {
+    userRow3.click();
+    await sleep(250);
+    const attachCode = doc.getElementById('attachRefCode');
+    if (!attachCode) errors.push('attachRefCode input not found (expected since referredBy is null)');
+    else { attachCode.value = 'xYz789'; doc.getElementById('attachRefBtn')?.click(); await sleep(250); }
+  }
+  // Integrity audit's "Open user" link on a mismatch row
+  doc.querySelector('.tab[data-tab="users"]').click();
+  await sleep(200);
+  doc.getElementById('auditBtn')?.click();
+  await sleep(250);
+  const openUserBtn = doc.querySelector('[data-openuser]');
+  if (openUserBtn) { openUserBtn.click(); await sleep(200); }
 
   console.log('\n=== ERRORS (' + errors.length + ') ===');
   errors.forEach(e => console.log(' -', e));

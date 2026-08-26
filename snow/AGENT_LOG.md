@@ -16,6 +16,36 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 16: Codex review of Round 15's own fix commit — 2 High + 2 Medium + 1 Low, all real, all fixed
+- Full breakdown in CLAUDE.md's Round 16 section — summary here:
+- High: `/admin/user/attach-referrer` locked an unrelated global key instead of the same
+  `'reg:'+userId` key registration itself uses, so it had NO real mutual exclusion
+  against a concurrent `/register` call for the same user (fixed — same lock key now);
+  Round 15's own "already has a referrer" guard made any partial failure (referredBy
+  written, then a crash before L2/L3 counts or the commission credit) permanently
+  unrecoverable, since every retry hit that same guard (fixed — re-attaching the SAME
+  referrer now resumes straight to the idempotent commission step instead of erroring;
+  a DIFFERENT referrer is still rejected; the residual count-increment crash window is
+  documented as a known, accepted tradeoff matching this file's existing precedent for
+  the identical risk class elsewhere).
+- Medium: repair-ledger's net-withdrawal fix from Round 15 under-counted anyone with a
+  withdrawal still in `'processing'` status, since live crediting counts that status too,
+  not only `'processed'` (fixed — query now covers both); Integrity Audit's "Recalculate
+  totals" button never actually closed the walletBalance-vs-ledger mismatch it was
+  attached to (that call doesn't touch walletBalance at all) yet the UI said "Done" —
+  replaced with an "Open user" link into the real diagnostic tools instead of a false fix.
+- Low: "Clear all products"/"Sync pricing" still silently capped at 1,000 docs — no
+  pagination cursor exists in this db compat layer, so bumped the limit to 100,000
+  (far past this business's real ~10-item catalog) rather than building real pagination.
+- Why: owner ran this project's standing Codex-review prompt against Round 15's own fix
+  commit, not just the original port — exactly the "review the fix, not just the
+  original bug" practice space8's own CLAUDE.md documents using repeatedly.
+- Verification: `node --check server.js`; boot smoke test still fails only at
+  Mongo-connect; `build-admin.js` re-run clean; `test-admin-obfuscated-build.js` extended
+  with an attach-referrer fixture + a real integrity mismatch row + interaction steps
+  exercising both — 0 errors. `admin/sw.js` cache bumped `v5`→`v6`.
+- Nothing deferred this round beyond the already-documented crash-window tradeoff.
+
 ## 2026-08-26 — Claude — Round 15: Codex review of Round 14 — 6 High + 5 Medium + 5 Low, all real, all fixed
 - Full breakdown in CLAUDE.md's Round 15 section — summary here:
 - High: 12 admin routes staff could hit directly despite UI hiding them from staff

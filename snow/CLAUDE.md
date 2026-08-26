@@ -728,6 +728,73 @@ user's detail modal and click both `resetPinBtn` (with a PIN typed in) and
 Recalculate totals) now correctly render, which they would NOT have before fix #6.
 `admin/sw.js` cache bumped `v4`→`v5`.
 
+## Round 16 (2026-08-26) — Codex review of Round 15 (the review-fix round): 2 High + 2 Medium + 1 Low, all real, all fixed
+
+Owner ran the same standing Codex-review prompt again, this time against Round 15's own
+fix commit (`c61c2b3`) — verifying the fixes, not just the original port. Found 5 more
+real issues, two of them in the very code that Round 15 had just "fixed." Same
+verify-before-touching discipline as every round.
+
+**High:**
+1. **`/admin/user/attach-referrer` locked the wrong key — no real mutual exclusion
+   against a concurrent `/register`.** Round 15 added an "already has a referrer" guard
+   but left the lock as a bare, unrelated `withLock('attach-referrer', ...)` global key —
+   registration itself locks `'reg:'+userId`/`'referrer-guard:'+referrerId`, a completely
+   different namespace. A member finishing `/register` with one code at the same moment
+   an admin attached a different one could both read `referredBy===null` and both write,
+   corrupting both uplines' counts. Fixed by locking `'reg:'+userId` — the SAME key
+   registration uses — giving genuine mutual exclusion.
+2. **The Round-15 "already has a referrer" guard made a partial failure permanently
+   unrecoverable.** If `referredBy` got written but a crash/error hit before the L2/L3
+   increments or the commission credit, EVERY retry was flatly rejected by the new guard
+   — there was no way back in. Fixed: re-attaching the SAME referrer is now treated as a
+   resumed call (skips the already-done referredBy write + count increments, proceeds
+   straight to the commission step, which was already fully idempotent) — only a
+   DIFFERENT referrer is still rejected. The underlying count-increment crash window
+   itself (referredBy written, then a crash before L2/L3 apply) is a known, accepted
+   limitation — documented in the code with the same "crash-window under-payment" framing
+   this file already uses elsewhere for the identical class of risk in
+   `completeRegistrationCore`/`creditReferralCommission`; a real fix needs a durable
+   outbox/recompute mechanism, out of scope for this pass.
+
+**Medium:**
+3. **`/admin/user/repair-ledger`'s Round-15 net-withdrawal fix under-counted.** It scoped
+   the withdrawals query to `status==='processed'` only — but live crediting increments
+   `totalWithdrawn` the moment a payout is marked `'processing'` (MarzPay accepted it),
+   not only once it reaches `'processed'`, and nothing increments it again when
+   `'processing'` later resolves. Scoping to `'processed'` alone permanently under-counted
+   any user with a payout still in flight. Fixed: query now covers
+   `status in ['processing','processed']`, matching what the live code path actually
+   credits against.
+4. **Integrity Audit's "Recalculate totals" button didn't fix what it claimed to fix.**
+   It rewrote `totalDeposited`/`totalEarned`/`totalWithdrawn`/`totalInvested` — but the
+   flagged mismatch is `walletBalance` vs. transaction-ledger sum, which that call never
+   touches. The UI dimmed the row and said "Done" as if repaired; a fresh audit would
+   report the exact same mismatch every time. Given `/admin/integrity`'s own explicit
+   design intent (see its server-side comment: SURFACE corruption, never silently launder
+   it), auto-"fixing" a flagged discrepancy isn't actually safe — deciding which side
+   (wallet or ledger) is wrong needs a human to look. Replaced the false-fix button with
+   an "Open user" link straight into that account's detail modal (credit/debit tools +
+   full transaction history), where the owner can actually diagnose it.
+
+**Low:** "Clear all products"/"Sync pricing to defaults" still silently capped at 1,000
+docs (the tombstone-vs-hard-delete bug from Round 15 was fixed correctly, but the cap
+survived) — this Mongo/Firestore-compat layer has no cursor-based pagination to build a
+genuine paginated sweep, so bumped the limit from 1,000 to 100,000 (comfortably past any
+realistic product-catalog size for this business — the real catalog is 10 items) rather
+than engineering real pagination for a practically-unreachable ceiling.
+
+**Verification**: `node --check server.js`; boot smoke test still fails only at
+Mongo-connect; `build-admin.js` re-run clean; `test-admin-obfuscated-build.js` extended
+with an `/admin/user/attach-referrer` fixture, a real `mismatches` row in the
+`/admin/integrity` fixture, and new interaction steps (fill the attach-referrer code
+field and click Attach; run the audit and click its new "Open user" link) — 0 errors.
+Codex's own noted test-harness limitation (the fetch mock doesn't inspect request
+bodies, so it can't independently prove `newPin` is actually sent on PIN reset) was
+left as-is — a real limitation, not a bug, and building body-inspection into the mock
+harness wasn't judged worth the added complexity this round. `admin/sw.js` cache bumped
+`v5`→`v6`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
