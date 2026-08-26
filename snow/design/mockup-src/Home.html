@@ -11,8 +11,9 @@
   --snow-green:#2F6B47;
   --snow-border:#E8E4E1;
   --snow-wave-on-wine:#8FE0AE;   /* thin decorative lines on wine surfaces only -- plain --snow-green goes muddy there */
-  --snow-wine-soft:#F6E9EB;
-  --snow-green-soft:#EEF6F0;
+  --snow-green-deep:#1F5136;
+  --snow-wine-soft:#F8E9EC;
+  --snow-green-soft:#EAF4EC;
   --snow-neutral-soft:#F1EFEC;
   --snow-radius-card:28px;
   --snow-radius-tile:20px;
@@ -69,24 +70,19 @@ button{cursor:pointer;font-family:inherit;}
 .settings-list{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:4px 16px;}
 .list-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
 .list-row:last-child{border-bottom:none;}
+
+.account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.account-feature-card{min-height:190px;border-radius:var(--snow-radius-card);overflow:hidden;box-shadow:0 16px 32px -22px rgba(17,17,17,.35);position:relative;color:#fff;padding:20px;display:flex;flex-direction:column;justify-content:flex-end;}
+.account-utility-card{min-height:126px;border-radius:26px;padding:18px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;}
+.account-icon-bubble{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
 </style>
 </head>
 <body>
 <div style="width:390px;position:relative;background:var(--snow-canvas);">
 
 <div class="brand-hero--full">
-  <svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:140px;height:133px;opacity:.9;">
-  <path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-</svg>
-  <svg viewBox="0 0 190 112" aria-hidden="true" style="position:absolute;bottom:-4px;left:-6px;width:150px;height:88px;opacity:.9;">
-  <path d="M-18 100 C22 72 57 62 93 81 C124 98 154 79 204 53" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M-18 86 C23 58 60 48 97 67 C128 84 158 65 204 39" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M-18 72 C25 45 64 35 101 53 C132 70 162 51 204 26" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M-18 58 C28 32 68 22 105 39 C136 56 165 37 204 13" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-</svg>
+  <svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:140px;height:133px;opacity:0.9;"><path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/></svg>
+  <svg viewBox="0 0 190 112" aria-hidden="true" style="position:absolute;bottom:-4px;left:-6px;width:150px;height:88px;opacity:0.9;"><path d="M-18 100 C22 72 57 62 93 81 C124 98 154 79 204 53" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 86 C23 58 60 48 97 67 C128 84 158 65 204 39" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 72 C25 45 64 35 101 53 C132 70 162 51 204 26" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 58 C28 32 68 22 105 39 C136 56 165 37 204 13" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/></svg>
   <div style="position:relative;padding:22px 20px 0;">
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <div class="wordmark"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg><div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div></div>
@@ -275,6 +271,6 @@ button{cursor:pointer;font-family:inherit;}
   </div>
 </div>
 <div style='height:16px;'></div>
-<div class="bottom-nav" style="height:72px;"><div class="navitem active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9"/></svg><div class="lbl">Home</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 4 3 8.5 12 13l9-4.5Z"/><path d="M3 8.5V16l9 4.5 9-4.5V8.5"/><path d="M12 13v7.5"/></svg><div class="lbl">My Products</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 8.5a3 3 0 1 1 3.5 2.96"/><path d="M15 14.5c3 .3 5.5 2.3 5.5 5.5"/></svg><div class="lbl">Team</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg><div class="lbl">Account</div></div></div>
+<div class="bottom-nav" style="height:72px;"><div class="navitem active"><div style="width:40px;height:40px;border-radius:14px;background:var(--snow-wine-soft);display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9"/></svg></div><div class="lbl">Home</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 4 3 8.5 12 13l9-4.5Z"/><path d="M3 8.5V16l9 4.5 9-4.5V8.5"/><path d="M12 13v7.5"/></svg><div class="lbl">My Products</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3"/><circle cx="5" cy="9" r="2.2"/><circle cx="19" cy="9" r="2.2"/><path d="M12 12.3c-2.9 0-5.3 1.9-5.3 5.2"/><path d="M12 12.3c2.9 0 5.3 1.9 5.3 5.2"/><path d="M5 13.5c-1.7.4-3 1.9-3 4"/><path d="M19 13.5c1.7.4 3 1.9 3 4"/></svg><div class="lbl">Team</div></div><div class="navitem"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg><div class="lbl">Account</div></div></div>
 </div>
 </body></html>

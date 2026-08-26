@@ -16,6 +16,99 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 7: Account rebuilt as a coloured card matrix, per Codex's own mockup + written spec
+
+Owner sent an image (an Account-screen mockup they and Codex had produced) plus a full
+Codex prompt implementing it. The image and prompt are now the source of truth for
+Account — implemented directly, not just described:
+
+- **Account changed from plain outlined tiles + a divider-line list to a designed
+  coloured card matrix** (`.account-grid` / `.account-feature-card` /
+  `.account-utility-card` / `.account-icon-bubble`, exact CSS from Codex's spec). Two
+  larger feature cards up top (full wine-red and full deep-bottle-green backgrounds,
+  translucent icon bubble, white title + helper text, restrained corner wave-lines) —
+  then a 2×2 row of smaller pale utility cards (About Snow / Rules & Terms / Help
+  Centre / Install Snow — each with a colored icon-in-a-white-circle and a soft
+  decorative blob or mini wave accent, never a plain white outline) — then one
+  separate full-width Sign out card. No settings-list/divider-line container anywhere
+  on this screen anymore.
+- **Records now combines Deposit History and Withdrawal History into one card** —
+  those two used to be separate tiles; there is now a single deep-green "Records"
+  feature card, helper text exactly "Deposits · Withdrawals · Income" per Codex's
+  wording. The combined Records screen itself (with All/Deposits/Withdrawals/Income
+  filters) doesn't exist yet — no real navigation has been built for any of these
+  screens — but the entry point is already consolidated to one card, matching where
+  the destination is headed.
+- **Transaction PIN tile removed from Account entirely** (per Codex: "Remove the
+  'Transaction PIN' Account card completely") — this is a naming/entry-point removal
+  only, not a reversal of the round-6 decision that Transaction PIN and the withdrawal
+  PIN are the same one PIN system (see `CLAUDE.md`); managing that PIN just doesn't get
+  its own card on this screen anymore.
+- **Notification bell removed from Account's header** — Account no longer shares the
+  generic `top_bar()` component (bell + wordmark) that My Products and Team still use;
+  it now has its own bell-less header built specifically for this screen. My
+  Products/Team were NOT touched this round and still show the bell — Codex's spec was
+  explicitly scoped to the Account screen only.
+- **Final names locked in**: "Help Centre" (was "Support"), "Install Snow" (was "Get
+  App"), "Sign out" (was "Log Out", also no longer all-caps-styled/aggressive — a soft
+  pale-wine card with one bold wine circular icon).
+- **A real Snow Beer bottle photo now appears beside the green snowflake mark, in
+  BOTH the header and the identity banner — not instead of it, alongside it**, per
+  Codex's explicit correction ("Do not replace the Snow SVG with the bottle; both must
+  appear together"). The source photo (`snow/design/reference-bottles/
+  01-qing-shuang.jpg`) has a deep blue icy studio background behind the bottle, which
+  Codex explicitly said must not show ("Do not show a blue photo background around the
+  bottle. Crop/isolate the bottle cleanly"). A plain rectangular crop could not
+  actually satisfy that — the bottle is an irregular shape inside a rectangular photo,
+  so any rectangular crop tight enough to exclude the blue on the sides still leaves it
+  above/below. Used `rembg` (already installed in this environment, confirmed working
+  without any network access needed for the model it uses) to properly cut the bottle
+  out with a transparent background instead — genuinely clean, not a crop trick. Two
+  derived assets now live alongside the original photo in
+  `snow/design/reference-bottles/`: `01-qing-shuang-cutout.png` (full bottle + the ice
+  it's standing on, transparent background — used in the larger identity banner) and
+  `01-qing-shuang-badge.png` (bottle only, ice trimmed off since it read as visual
+  noise at the tiny header-logo size — used next to the snowflake+"SNOW" wordmark).
+  Only tier 1's bottle has been cut out so far, since it's the only one this screen
+  needed; the other 9 reference photos are untouched.
+- **Bottom nav updated globally** (shared `nav_bar()`, so this landed on all 4 screens,
+  not just Account — a consistent nav across screens matters more than scoping this one
+  part narrowly): icons bumped to Codex's specified 2px stroke width, the Team icon
+  redrawn as a clearer 3-circle group glyph (the old one read more like "2 people,
+  one partial" than "team"), and the active item now shows a pale-wine rounded
+  highlight capsule behind just the icon (was: plain color change with no highlight).
+
+Also added `--snow-green-deep` (`#1F5136`, darkened from `--snow-green` by the same
+ratio `--snow-wine` → `--snow-wine-deep` uses) for the Records card's gradient, and
+updated `--snow-wine-soft`/`--snow-green-soft` to Codex's slightly revised hex values
+this round (`#F8E9EC` / `#EAF4EC`, was `#F6E9EB` / `#EEF6F0`).
+
+**Verification**: regenerated all 4 screens (`python3 build.py` then Playwright
+screenshot) and visually inspected each rendered PNG — confirmed the card matrix
+layout matches Codex's mockup image structurally (2 feature cards, 2×2 utility grid,
+full-width sign-out), confirmed no blue is visible around either bottle photo,
+confirmed Transaction PIN/bell/old list container are all genuinely gone (not just
+hidden), confirmed My Products and Team render unchanged apart from the shared nav
+update, and caught + fixed one real layout bug during this same pass: the Sign out
+card initially rendered with its icon and text pinned to the right edge instead of the
+left, because `.account-utility-card`'s base CSS defaults to
+`justify-content:flex-end` for its normal (icon-on-top, label-below) column layout,
+and switching just `flex-direction` to `row` for this one wide card without also
+overriding `justify-content` inherited that flex-end alignment sideways. Fixed by
+adding an explicit `justify-content:flex-start` override on that card only.
+
+**Left open**: same as prior rounds — no real navigation/routing exists yet (Records'
+combined-with-filters screen, Withdrawal Account, About/Rules/Help/Install destinations
+are all still just card entry points, nothing behind them); feature-scope decisions
+(OTP, statement export, auto-reinvest, KYC, referral leaderboard); check-in bonus, Task
+Center ladders, gift-code format, withdrawal hours; no backend code started. New this
+round: only 1 of 10 reference-bottle photos has a background-removed cutout — if a
+future round needs bottle cutouts on Home/My Products cards too (currently those still
+use the plain photo-with-background thumbnails from round 6), the same `rembg` approach
+works, just needs running for the other 9.
+
+---
+
 ## 2026-08-26 — Claude — Round 6: bigger left-side product image on Home; unified PIN naming; sent the full 6-screen set for the owner to hand to Codex
 
 Owner: *"l want images to be on left,not small portion,so product image should be on

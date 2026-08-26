@@ -25,8 +25,9 @@ STYLE = """
   --snow-green:#2F6B47;
   --snow-border:#E8E4E1;
   --snow-wave-on-wine:#8FE0AE;   /* thin decorative lines on wine surfaces only -- plain --snow-green goes muddy there */
-  --snow-wine-soft:#F6E9EB;
-  --snow-green-soft:#EEF6F0;
+  --snow-green-deep:#1F5136;
+  --snow-wine-soft:#F8E9EC;
+  --snow-green-soft:#EAF4EC;
   --snow-neutral-soft:#F1EFEC;
   --snow-radius-card:28px;
   --snow-radius-tile:20px;
@@ -83,6 +84,11 @@ button{cursor:pointer;font-family:inherit;}
 .settings-list{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:4px 16px;}
 .list-row{display:flex;align-items:center;gap:12px;padding:14px 4px;border-bottom:1px solid var(--snow-border);}
 .list-row:last-child{border-bottom:none;}
+
+.account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.account-feature-card{min-height:190px;border-radius:var(--snow-radius-card);overflow:hidden;box-shadow:0 16px 32px -22px rgba(17,17,17,.35);position:relative;color:#fff;padding:20px;display:flex;flex-direction:column;justify-content:flex-end;}
+.account-utility-card{min-height:126px;border-radius:26px;padding:18px;box-shadow:0 14px 28px -24px rgba(17,17,17,.28);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;}
+.account-icon-bubble{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
 """
 
 def snowflake_svg(color, size=17):
@@ -93,22 +99,32 @@ def wm(size=17, text_size=19, on_dark=False):
     return f'<div class="wordmark">{snowflake_svg("var(--snow-green)", size)}<div class="wm-text" style="font-size:{text_size}px;color:{text_color};">SNOW</div></div>'
 
 # Codex's exact curved wave-line paths, stroke set per Codex's instruction
-# (stroke-width 1.4, fill none, color = --snow-wave-on-wine)
-def wave_lines_top_right(w=140, h=133):
-    return f'''<svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:{w}px;height:{h}px;opacity:.9;">
-  <path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-</svg>'''
+# (stroke-width 1.4, fill none, color = --snow-wave-on-wine by default).
+# color/count let the same curve family decorate green surfaces (Records,
+# Rules & Terms, Install Snow) and smaller utility cards without a new path set.
+_TR_PATHS = [
+    "M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155",
+    "M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147",
+    "M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140",
+    "M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132",
+]
+_LL_PATHS = [
+    "M-18 100 C22 72 57 62 93 81 C124 98 154 79 204 53",
+    "M-18 86 C23 58 60 48 97 67 C128 84 158 65 204 39",
+    "M-18 72 C25 45 64 35 101 53 C132 70 162 51 204 26",
+    "M-18 58 C28 32 68 22 105 39 C136 56 165 37 204 13",
+]
 
-def wave_lines_lower_left(w=150, h=88):
-    return f'''<svg viewBox="0 0 190 112" aria-hidden="true" style="position:absolute;bottom:-4px;left:-6px;width:{w}px;height:{h}px;opacity:.9;">
-  <path d="M-18 100 C22 72 57 62 93 81 C124 98 154 79 204 53" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M-18 86 C23 58 60 48 97 67 C128 84 158 65 204 39" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M-18 72 C25 45 64 35 101 53 C132 70 162 51 204 26" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-  <path d="M-18 58 C28 32 68 22 105 39 C136 56 165 37 204 13" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/>
-</svg>'''
+def wave_lines_top_right(w=140, h=133, color="var(--snow-wave-on-wine)", count=4, opacity=.9):
+    paths = "".join(f'<path d="{d}" stroke="{color}" stroke-width="1.4" fill="none"/>' for d in _TR_PATHS[:count])
+    return f'<svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:{w}px;height:{h}px;opacity:{opacity};">{paths}</svg>'
+
+def wave_lines_lower_left(w=150, h=88, color="var(--snow-wave-on-wine)", count=4, opacity=.9):
+    paths = "".join(f'<path d="{d}" stroke="{color}" stroke-width="1.4" fill="none"/>' for d in _LL_PATHS[:count])
+    return f'<svg viewBox="0 0 190 112" aria-hidden="true" style="position:absolute;bottom:-4px;left:-6px;width:{w}px;height:{h}px;opacity:{opacity};">{paths}</svg>'
+
+def soft_blob(color, opacity=.10, size=90, right=-18, bottom=-18):
+    return f'<div style="position:absolute;right:{right}px;bottom:{bottom}px;width:{size}px;height:{size}px;border-radius:50%;background:{color};opacity:{opacity};pointer-events:none;"></div>'
 
 def brand_wave_full():
     return '''<svg class="brand-wave--full" viewBox="0 0 390 126" preserveAspectRatio="none" aria-hidden="true">
@@ -125,10 +141,12 @@ ICONS = {
     "deposit": '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8"/><path d="M8.5 12 12 15.5 15.5 12"/></svg>',
     "withdraw": '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-8"/><path d="M8.5 12 12 8.5 15.5 12"/></svg>',
     "chev": '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
-    "home": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9"/></svg>',
-    "box": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 4 3 8.5 12 13l9-4.5Z"/><path d="M3 8.5V16l9 4.5 9-4.5V8.5"/><path d="M12 13v7.5"/></svg>',
-    "team": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 8.5a3 3 0 1 1 3.5 2.96"/><path d="M15 14.5c3 .3 5.5 2.3 5.5 5.5"/></svg>',
-    "user": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
+    "home": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9"/></svg>',
+    "box": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 4 3 8.5 12 13l9-4.5Z"/><path d="M3 8.5V16l9 4.5 9-4.5V8.5"/><path d="M12 13v7.5"/></svg>',
+    "team": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3"/><circle cx="5" cy="9" r="2.2"/><circle cx="19" cy="9" r="2.2"/><path d="M12 12.3c-2.9 0-5.3 1.9-5.3 5.2"/><path d="M12 12.3c2.9 0 5.3 1.9 5.3 5.2"/><path d="M5 13.5c-1.7.4-3 1.9-3 4"/><path d="M19 13.5c1.7.4 3 1.9 3 4"/></svg>',
+    "user": '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
+    "wallet-lg": '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><path d="M15.5 14.5h2.5"/></svg>',
+    "doc-lg": '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M14 3.5V8h4"/><path d="M9 12h6M9 15.5h6"/></svg>',
     "clock": '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12.5" r="8"/><path d="M12 8.5v4l3 2"/></svg>',
     "copy": '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 8.5V6A1.5 1.5 0 0 0 13.5 4.5H6A1.5 1.5 0 0 0 4.5 6v7.5A1.5 1.5 0 0 0 6 15h2.5"/></svg>',
     "share": '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="6" r="2.3"/><circle cx="6" cy="12" r="2.3"/><circle cx="18" cy="18" r="2.3"/><path d="M8.1 10.8 15.9 7.2M8.1 13.2l7.8 3.6"/></svg>',
@@ -144,8 +162,13 @@ def nav_bar(active):
     items = [("home","Home"),("box","My Products"),("team","Team"),("user","Account")]
     html = '<div class="bottom-nav" style="height:72px;">'
     for key,label in items:
-        cls = "navitem active" if key==active else "navitem"
-        html += f'<div class="{cls}">{ICONS[key]}<div class="lbl">{label}</div></div>'
+        is_active = key == active
+        cls = "navitem active" if is_active else "navitem"
+        icon_wrap = (
+            f'<div style="width:40px;height:40px;border-radius:14px;background:var(--snow-wine-soft);display:flex;align-items:center;justify-content:center;">{ICONS[key]}</div>'
+            if is_active else ICONS[key]
+        )
+        html += f'<div class="{cls}">{icon_wrap}<div class="lbl">{label}</div></div>'
     html += '</div>'
     return html
 
@@ -405,13 +428,26 @@ with open(os.path.join(OUT, "Team.html"), "w") as f:
 print("wrote Team.html")
 
 # ---------------- ACCOUNT ----------------
+# Round 7: Codex's exact critique of the round-6 Account screen -- card matrix
+# instead of a list, real bottle photos beside the snowflake mark (not instead
+# of it), bell removed, Transaction PIN tile removed, Records replaces the
+# separate Deposit/Withdrawal History tiles. See AGENT_LOG.md for the full
+# rationale, including how the bottle photos were background-removed (rembg).
+BOTTLE_CUTOUT = f"{BOTTLES_REL}/01-qing-shuang-cutout.png"   # fuller shot (w/ ice) -- identity banner
+BOTTLE_BADGE = f"{BOTTLES_REL}/01-qing-shuang-badge.png"     # bottle only, no ice -- tiny header mark
+
 account_body = f"""
-{top_bar()}
+<div style="display:flex;align-items:center;gap:9px;padding:24px 20px 4px;">
+  {snowflake_svg('var(--snow-green)', 26)}
+  <img src="{BOTTLE_BADGE}" alt="" style="height:28px;width:auto;">
+  <div class="wm-text" style="font-size:19px;color:var(--snow-ink);">SNOW</div>
+</div>
 
 <div class="brand-card" style="margin:16px 20px 0;padding:22px;">
   {wave_lines_top_right(110, 104)}
-  <div style="position:relative;display:flex;align-items:center;gap:16px;">
+  <div style="position:relative;display:flex;align-items:center;gap:14px;">
     <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">{snowflake_svg('#fff',26)}</div>
+    <img src="{BOTTLE_CUTOUT}" alt="" style="height:80px;width:auto;flex-shrink:0;filter:drop-shadow(0 8px 12px rgba(0,0,0,.28));">
     <div style="flex:1;min-width:0;">
       <div style="display:flex;align-items:center;gap:7px;">
         <div class="mono" style="font-size:15.5px;font-weight:700;">+2567 12 345 678</div>
@@ -425,48 +461,51 @@ account_body = f"""
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 20px 0;">
-"""
+<div class="account-grid" style="margin:18px 20px 0;">
 
-tiles = [
-    ("wallet", "Withdrawal Account"),
-    ("deposit", "Deposit History"),
-    ("withdraw", "Withdrawal History"),
-    ("shield", "Transaction PIN"),
-]
-for key, label in tiles:
-    account_body += f"""
-  <div class="stat-tile" style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;">
-    <div class="icon-tile" style="width:34px;height:34px;">{ICONS[key]}</div>
-    <div style="font-size:12.5px;font-weight:700;color:var(--snow-ink);">{label}</div>
+  <div class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);">
+    {wave_lines_top_right(95, 90, count=3, opacity=.75)}
+    <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);color:#fff;margin-bottom:14px;">{ICONS['wallet-lg']}</div>
+    <div style="position:relative;font-size:16px;font-weight:800;">Withdrawal account</div>
+    <div style="position:relative;font-size:12px;opacity:.85;margin-top:4px;">Manage your payout account</div>
   </div>
-"""
 
-account_body += """
+  <div class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-green) 0%,var(--snow-green-deep) 100%);">
+    {wave_lines_top_right(95, 90, color="rgba(255,255,255,.55)", count=3, opacity=.75)}
+    <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);color:#fff;margin-bottom:14px;">{ICONS['doc-lg']}</div>
+    <div style="position:relative;font-size:16px;font-weight:800;">Records</div>
+    <div style="position:relative;font-size:12px;opacity:.85;margin-top:4px;">Deposits &middot; Withdrawals &middot; Income</div>
+  </div>
+
+  <div class="account-utility-card" style="background:var(--snow-wine-soft);">
+    {soft_blob("var(--snow-wine)", .09, 84, -18, -18)}
+    <div class="account-icon-bubble" style="position:relative;width:44px;height:44px;background:#fff;color:var(--snow-wine);margin-bottom:10px;">{ICONS['doc']}</div>
+    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-ink);">About Snow</div>
+  </div>
+
+  <div class="account-utility-card" style="background:var(--snow-green-soft);">
+    {wave_lines_top_right(64, 60, color="var(--snow-green)", count=2, opacity=.28)}
+    <div class="account-icon-bubble" style="position:relative;width:44px;height:44px;background:#fff;color:var(--snow-green);margin-bottom:10px;">{ICONS['shield']}</div>
+    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-ink);">Rules &amp; Terms</div>
+  </div>
+
+  <div class="account-utility-card" style="background:var(--snow-wine-soft);">
+    {soft_blob("var(--snow-wine)", .14, 18, 14, 78)}
+    <div class="account-icon-bubble" style="position:relative;width:44px;height:44px;background:#fff;color:var(--snow-wine);margin-bottom:10px;">{ICONS['headset']}</div>
+    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-ink);">Help Centre</div>
+  </div>
+
+  <div class="account-utility-card" style="background:var(--snow-green-soft);">
+    {wave_lines_top_right(64, 60, color="var(--snow-green)", count=2, opacity=.28)}
+    <div class="account-icon-bubble" style="position:relative;width:44px;height:44px;background:#fff;color:var(--snow-green);margin-bottom:10px;">{ICONS['download']}</div>
+    <div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-ink);">Install Snow</div>
+  </div>
+
 </div>
 
-<div class="settings-list" style="margin:20px 20px 0;">
-"""
-
-menu = [
-    ("doc", "About Snow"),
-    ("doc", "Rules &amp; Terms"),
-    ("headset", "Support"),
-    ("download", "Get App"),
-]
-for key, label in menu:
-    account_body += f"""
-  <div class="list-row">
-    <div style="color:var(--snow-wine);flex-shrink:0;">{ICONS[key]}</div>
-    <div style="flex:1;font-size:14px;font-weight:500;color:var(--snow-ink);">{label}</div>
-    <div style="color:var(--snow-muted);">{ICONS['chev']}</div>
-  </div>
-"""
-account_body += f"""
-  <div class="list-row">
-    <div style="color:var(--snow-wine-deep);flex-shrink:0;">{ICONS['logout']}</div>
-    <div style="flex:1;font-size:14px;font-weight:600;color:var(--snow-wine-deep);">Log Out</div>
-  </div>
+<div class="account-utility-card" style="margin:14px 20px 0;background:var(--snow-wine-soft);flex-direction:row;justify-content:flex-start;align-items:center;gap:14px;min-height:0;padding:16px 18px;">
+  <div class="account-icon-bubble" style="width:44px;height:44px;background:var(--snow-wine);color:#fff;flex-shrink:0;">{ICONS['logout']}</div>
+  <div style="font-size:15px;font-weight:700;color:var(--snow-wine-deep);">Sign out</div>
 </div>
 """
 

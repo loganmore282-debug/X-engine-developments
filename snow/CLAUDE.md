@@ -152,12 +152,18 @@ shape is not pixel-identical between the two auth screens and these 4. If Codex'
 critique flags the wave shape specifically, that's expected and worth fixing with
 real coordinates from Codex rather than guessed ones.
 
-**Status: Codex's round-4 critique has been applied (round 5) — awaiting Codex's next
-look at `01-home.png` through `04-account.png`.** Do not treat these 4 screens as
-final until that comes back — same "still designing" framing the owner used
-explicitly. The wave curve/corner-lines are now Codex's own exact coordinates (not a
-Claude approximation like round 4), so a future critique round should be about
-finer details, not the wave shape itself.
+**Status: Account has its own locked structure as of round 7 — a coloured card
+matrix (feature cards + utility cards + Sign out), not a list.** Read the round-7
+AGENT_LOG.md entry before touching Account again: it covers the exact
+`.account-grid`/`.account-feature-card`/`.account-utility-card` CSS, why Records now
+replaces separate Deposit/Withdrawal History tiles, why Transaction PIN has no card
+here anymore, and how the real Snow Beer bottle photos got their backgrounds removed
+(`rembg`, confirmed working offline in this environment — see that entry before
+assuming background removal isn't possible here). Home/My Products/Team are still
+governed by the round-4/5/6 spec described above (Codex's original tokens/wave/
+component system) and were not part of round 7's changes except the shared bottom-nav
+icon/active-state update, which landed everywhere. Do not treat any of the 4 screens
+as fully final until the owner confirms — still "still designing."
 
 ## Build/backend — not started
 
