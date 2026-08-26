@@ -54,6 +54,15 @@ Not yet specified by the owner (ask before assuming, or reuse space8's default a
 it as an assumption): daily check-in bonus amount, referral-count/whole-team-deposit
 Task Center ladders, gift code format, withdrawal request hours.
 
+**There is only ONE PIN in Snow, not two** (confirmed, owner-supplied — 2026-08-26):
+the 5-digit "Transaction PIN" set at registration (per Codex's auth spec — see Design
+status below) IS the same PIN used to authorize withdrawals — there is no separate
+"Security PIN"/"Payout PIN" concept the way earlier Nexus/space8-lineage projects had
+one. Account's menu tile is labeled "Transaction PIN", not "Security PIN", to keep this
+one system consistently named everywhere. When backend work starts: do not build two
+separate PIN fields/hashes — one `transactionPin` (or equivalent) gates both first-time
+setup and every withdrawal, matching what the registration screen already collects.
+
 ## Navigation / IA (confirmed, owner-supplied — 2026-08-26)
 
 **4 tabs: Home, My Products, Team, Account.**

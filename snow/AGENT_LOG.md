@@ -16,6 +16,55 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 6: bigger left-side product image on Home; unified PIN naming; sent the full 6-screen set for the owner to hand to Codex
+
+Owner: *"l want images to be on left,not small portion,so product image should be on
+left,also transaction pin is same as withdrawal pin,we are still planning, and l
+wanted you to send all screen images,such that l download them such l tell codex to
+design, such that we tackle everything one by one,so as of now login and register
+screens is done."*
+
+1. **Home's product-card thumbnail enlarged into a real left-side image column**, not
+   a small 56×56 icon. `.product-card` is now a flex row: the bottle photo fills a
+   118px-wide column at full card height (`object-fit:cover`), the name/stats/CTA sit
+   in a `.product-card__body` on the right. Scoped to Home's Investment Plans catalog
+   only, per the owner's wording ("product image") — My Products' plan-card thumbnail
+   (a much smaller "which plan is this" icon inside an already-dense progress card,
+   not a browsing/catalog card) was deliberately left at its existing small size;
+   flag if the owner actually wants that one enlarged too.
+2. **Confirmed and documented a real product-logic fact, not just a label change**:
+   there is only ONE PIN in Snow — the 5-digit "Transaction PIN" collected at
+   registration (per Codex's auth spec) IS the withdrawal-authorization PIN, not a
+   separate system the way some earlier Nexus/space8-lineage projects had. Renamed
+   Account's "Security PIN" tile to "Transaction PIN" to keep the naming consistent
+   with what the registration screen actually calls it, and added an explicit note to
+   `CLAUDE.md` so backend work doesn't accidentally build two separate PIN fields when
+   it starts.
+3. **Sent the complete 6-screen set** (Login, Register — Codex's own, unchanged — plus
+   Home, My Products, Team, Account) to the owner as downloadable images, per their
+   explicit ask, so they can hand the full set to Codex themselves and iterate
+   screen-by-screen outside this session. Login and Register are explicitly marked
+   **done** by the owner — do not suggest changes to those two without being asked.
+
+Regenerated `01-home.png` and `04-account.png` (the only 2 screens actually changed
+this round) and overwrote them in `snow/design/mockups/`, along with the updated
+`build.py`/`Home.html`/`Account.html` source. `MyProducts.html`/`Team.html`/their PNGs
+are unchanged this round but were re-copied alongside for consistency (same generator
+run).
+
+**Verification**: visual inspection of the re-rendered Home and Account PNGs —
+confirmed the bottle photo now reads as a real left-side image (not a small icon) on
+every one of the 10 product cards, and the Account tile correctly reads "Transaction
+PIN". No automated test suite exists yet — still a pure design/mockup phase.
+
+**Left open**: same as prior rounds — Codex's next feedback pass (now working from the
+owner's own downloaded copies, screen-by-screen, rather than a single batch prompt from
+Claude); feature-scope decisions (OTP, statement export, auto-reinvest, KYC, referral
+leaderboard); check-in bonus, Task Center ladders, gift-code format, withdrawal hours;
+no backend code started.
+
+---
+
 ## 2026-08-26 — Claude — Round 5: applied Codex's critique of the round-4 screenshots
 
 Owner sent Codex's review of `01-home.png`–`04-account.png` against its own round-4

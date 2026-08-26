@@ -68,10 +68,11 @@ button{cursor:pointer;font-family:inherit;}
 .stat-tile{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-tile);padding:12px;}
 .icon-tile{border-radius:13px;background:var(--snow-wine-soft);color:var(--snow-wine);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 
-.product-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:16px;box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
+.product-card{display:flex;align-items:stretch;background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);overflow:hidden;box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
+.product-card__body{flex:1;min-width:0;padding:16px;}
 .product-card__stats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:10px 16px;}
 .product-card__cta{width:100%;min-height:44px;margin-top:16px;}
-.product-card__thumb{width:56px;height:56px;border-radius:16px;object-fit:cover;flex-shrink:0;background:var(--snow-neutral-soft);}
+.product-card__thumb{width:118px;flex-shrink:0;object-fit:cover;background:var(--snow-neutral-soft);}
 
 .plan-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:18px;box-shadow:0 14px 34px -24px rgba(17,17,17,.25);}
 
@@ -228,17 +229,17 @@ home_body = f"""
 for img, name, inv, daily, total in PRODUCTS:
     home_body += f"""
   <div class="product-card">
-    <div style="display:flex;align-items:center;gap:14px;">
-      <img class="product-card__thumb" src="{BOTTLES_REL}/{img}" alt="{name}">
-      <div style="flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--snow-ink);">{name}</div>
+    <img class="product-card__thumb" src="{BOTTLES_REL}/{img}" alt="{name}">
+    <div class="product-card__body">
+      <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">{name}</div>
+      <div class="product-card__stats" style="margin-top:10px;">
+        <div><div class="stat-label">Investment</div><div class="stat-val mono">UGX {inv}</div></div>
+        <div><div class="stat-label">Daily Cashback</div><div class="stat-val mono" style="color:var(--snow-green);">UGX {daily}</div></div>
+        <div><div class="stat-label">Duration</div><div class="stat-val mono">150 days</div></div>
+        <div><div class="stat-label">Total Return</div><div class="stat-val mono">UGX {total}</div></div>
+      </div>
+      <button class="primary-button product-card__cta">Invest</button>
     </div>
-    <div class="product-card__stats" style="margin-top:12px;">
-      <div><div class="stat-label">Investment</div><div class="stat-val mono">UGX {inv}</div></div>
-      <div><div class="stat-label">Daily Cashback</div><div class="stat-val mono" style="color:var(--snow-green);">UGX {daily}</div></div>
-      <div><div class="stat-label">Duration</div><div class="stat-val mono">150 days</div></div>
-      <div><div class="stat-label">Total Return</div><div class="stat-val mono">UGX {total}</div></div>
-    </div>
-    <button class="primary-button product-card__cta">Invest</button>
   </div>
 """
 
@@ -431,7 +432,7 @@ tiles = [
     ("wallet", "Withdrawal Account"),
     ("deposit", "Deposit History"),
     ("withdraw", "Withdrawal History"),
-    ("shield", "Security PIN"),
+    ("shield", "Transaction PIN"),
 ]
 for key, label in tiles:
     account_body += f"""
