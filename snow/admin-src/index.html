@@ -323,7 +323,11 @@ async function doLogin(){
     const payload = username ? { username, password: secret } : { key: secret };
     const r = await fetch(SERVER+path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload), signal:AbortSignal.timeout(15000) });
     const d = await r.json();
-    if(d.status==='success'){ storeSession(d.token, d.username, d.role); openShell(); }
+    // The raw-key path only ever represents the owner (there's no other
+    // identity a master key could mean) -- default defensively even though
+    // /admin/check-key now sends username/role explicitly, in case an
+    // older deployed server.js hasn't picked up that change yet.
+    if(d.status==='success'){ storeSession(d.token, d.username || (username?'':'owner'), d.role || (username?'':'owner')); openShell(); }
     else { $('loginErr').textContent = d.message || 'Invalid credentials.'; }
   }catch(e){ $('loginErr').textContent = 'Network error. Try again.'; }
   btn.disabled=false; btn.textContent='Sign in';
@@ -646,54 +650,25 @@ async function renderUsers(){
       const d=await api('/admin/integrity');
       b.disabled=false; b.textContent='Integrity audit';
       if(d.status!=='success'){ toast(d.message||'Audit failed','err'); return; }
-      const K={negative_balance:'Negative balance',duplicate_credit:'DUPLICATE CREDIT',balance_mismatch:'Balance ≠ ledger',
-        withdrawal_no_gateway_ref:'Withdrawal has no gateway reference',withdrawal_stuck:'Withdrawal stuck pending too long',
-        withdrawal_processing_stuck:'Payout stuck on Processing -- check Verify, may already have been sent',
-        withdrawal_stuck_sending:'Lost contact with MarzPay mid-payout -- check this reference on the MarzPay dashboard before doing anything, the user may already have been paid',
-        deposit_stuck_initiating:'Lost contact with MarzPay mid-deposit -- check this reference on the MarzPay dashboard, the member may already have been charged',
-        phone_malformed:'Malformed phone -- not a real Uganda number, unsearchable by their referrer or support',
-        registration_incomplete:'Signed up but never finished registering -- no referral code, no welcome bonus, invisible to any referrer\'s team',
-        invested_mismatch:'"Invested" total does not match their real purchases -- click Recalculate totals (below, in Users) to fix'};
+      // Snow's /admin/integrity only checks one thing right now: does each
+      // user's stored walletBalance match the sum of their own transaction
+      // ledger. It does not (yet) detect duplicate credits, stuck payouts,
+      // malformed phones, or incomplete registrations -- this modal only
+      // shows what the endpoint actually returns, not space8's fuller set.
+      const mismatches = d.mismatches||[];
       openModal(`<h3>Integrity audit</h3>
-        <div class="muted" style="margin-bottom:10px">${d.usersChecked} user(s) checked · ${fdate(d.ranAt)}</div>
-        ${d.healthy?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance matches its ledger. No duplicates, no stuck payouts.</div>`
-        :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${d.alertCount} issue(s) found</div>`+
-          d.alerts.map(a=>`<div class="kv"><span class="k">${K[a.kind]||a.kind}${a.phone?' · '+esc(a.phone):''}</span>
-            <span>${a.kind==='balance_mismatch'?`wallet ${ugx(a.balance)} vs ledger ${ugx(a.ledger)} (diff ${ugx(a.diff)}) &nbsp; <button class="btn sm ghost" data-repairledger="${esc(a.userId)}">Repair ledger</button>`
-            : a.kind==='duplicate_credit'?`ref ${esc(String(a.ref))} credited ${a.times}×`
-            : a.kind==='negative_balance'?ugx(a.balance)
-            : a.kind==='phone_malformed'?`<button class="btn sm ghost" data-fixphone="${esc(a.userId)}" data-oldphone="${esc(a.phone||'')}">Fix phone</button>`
-            : a.kind==='registration_incomplete'?`${a.hours}h ago &nbsp; <button class="btn sm ghost" data-completereg="${esc(a.userId)}">Complete registration</button>`
-            : a.kind==='invested_mismatch'?`shows ${ugx(a.stored)}, real total is ${ugx(a.real)}`
-            : `${ugx(a.amount||0)} · ${a.hours}h`}</span></div>`).join('')}
+        <div class="muted" style="margin-bottom:10px">${d.checked} user(s) checked</div>
+        ${!mismatches.length?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every wallet balance matches its ledger.</div>`
+        :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${mismatches.length} mismatch(es) found</div>`+
+          mismatches.map(m=>`<div class="kv"><span class="k">Balance ≠ ledger${m.phone?' · '+esc(m.phone):''}</span>
+            <span>wallet ${ugx(m.walletBalance)} vs ledger ${ugx(m.ledgerSum)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-repairledger="${esc(m.userId)}">Recalculate totals</button></span></div>`).join('')}
         <button class="btn block" data-close>Close</button>`);
-      document.querySelectorAll('[data-fixphone]').forEach(b=>b.addEventListener('click', async ()=>{
-        const uid = b.dataset.fixphone;
-        const correct = prompt(`Current (broken) value: ${b.dataset.oldphone || '(empty)'}\n\nEnter this member's real Uganda mobile number:`, '');
-        if(correct===null || !correct.trim()) return;
-        b.disabled=true; b.textContent='Saving…';
-        const r = await api('/admin/user/set-phone', { userId: uid, phone: correct.trim() });
-        if(r.status==='success'){ toast(r.message||'Phone corrected','ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Fixed'; }
-        else { toast(r.message||'Could not save that number','err'); b.disabled=false; b.textContent='Fix phone'; }
-      }));
       document.querySelectorAll('[data-repairledger]').forEach(b=>b.addEventListener('click', async ()=>{
-        const uid = b.dataset.repairledger;
-        if(!confirm('This zeroes out any stale declined-withdrawal ledger rows for this user (their wallet balance is NOT touched — it is already correct; only the ledger record catches up to it). Continue?')) return;
-        b.disabled=true; b.textContent='Repairing…';
-        const r = await api('/admin/user/repair-ledger', { userId: uid });
-        if(r.status==='success'){ toast(r.message||'Ledger repaired','ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Repaired'; }
-        else { toast(r.message||'Could not repair ledger','err'); b.disabled=false; b.textContent='Repair ledger'; }
-      }));
-      document.querySelectorAll('[data-completereg]').forEach(b=>b.addEventListener('click', async ()=>{
-        const uid = b.dataset.completereg;
-        const code = prompt('Referral code they should be credited under, if you know who invited them (leave blank if nobody referred them):', '');
-        if(code===null) return;
-        if(!confirm('This finishes their signup for real: assigns their own referral code, credits the current welcome bonus to their wallet, and (if a referral code is entered) counts them toward that person\'s team. Continue?')) return;
-        b.disabled=true; b.textContent='Completing…';
-        const r = await api('/admin/user/complete-registration', { userId: uid, referralCode: code.trim() });
-        if(r.status==='success'){ toast(`Registration completed -- welcome bonus of ${ugx(r.welcomeBonus)} credited`,'ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Done'; }
-        else if(r.status==='already_done'){ toast('This account had already finished registering','ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Already done'; }
-        else { toast(r.message||'Could not complete registration','err'); b.disabled=false; b.textContent='Complete registration'; }
+        if(!confirm('Rebuild this user\'s deposited/earned/withdrawn/invested totals from their real transaction ledger? This does NOT touch their wallet balance directly.')) return;
+        b.disabled=true; b.textContent='Recalculating…';
+        const r = await api('/admin/user/repair-ledger', { userId: b.dataset.repairledger });
+        if(r.status==='success'){ toast('Totals recalculated','ok'); b.closest('.kv').style.opacity='0.5'; b.textContent='Done'; }
+        else { toast(r.message||'Could not recalculate','err'); b.disabled=false; b.textContent='Recalculate totals'; }
       }));
     });
   }
@@ -775,6 +750,13 @@ async function openUser(uid){
       <div style="flex:2"><input id="phoneFix" type="text" placeholder="07XXXXXXXX"></div>
       <button class="btn sky sm" id="phoneFixBtn">Save phone</button>
     </div>
+    ${u.registrationDone===false?`<label style="margin-top:14px">Complete registration</label>
+    <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">This account signed up (Firebase login works) but never finished registering -- no referral code, no welcome bonus. Finish it for them: pick their Transaction PIN and, if you know who invited them, their referrer's code.</div>
+    <div class="row">
+      <div><input id="completeRegPin" type="text" inputmode="numeric" maxlength="5" placeholder="5-digit PIN"></div>
+      <div style="flex:2"><input id="completeRegCode" type="text" placeholder="Referrer's code (optional)"></div>
+      <button class="btn sky sm" id="completeRegBtn">Complete</button>
+    </div>`:''}
     ${!u.referredBy?`<label style="margin-top:14px">Attach referrer</label>
     <div class="muted" style="font-size:11.5px;margin:-4px 0 6px">This account has no referrer. If you later learn who invited them, attach it here -- their upline gets team credit, and if this member already made their first purchase, commission on it is paid now. Works once only; an account that already has a referrer can't be changed here.</div>
     <div class="row">
@@ -789,10 +771,13 @@ async function openUser(uid){
     </tbody></table></div>`:'<p class="muted" style="margin:0">No plans purchased yet.</p>'}
     <h4 style="margin:18px 0 8px;font-size:14px">Saved cash-out accounts</h4>
     ${(r.bankAccounts||[]).length?(r.bankAccounts).map(a=>`<div class="kv"><span class="k">${esc(a.holder||'Account')}</span><span>${esc(a.network||'')} · ${esc(a.phone||'')}</span></div>`).join(''):'<p class="muted" style="margin:0">None saved.</p>'}
-    ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Payout security PIN</h4>
+    ${SESSION_ROLE==='owner'?`<h4 style="margin:18px 0 8px;font-size:14px">Transaction PIN</h4>
     <div class="kv"><span class="k">Status</span><span>${u.hasPayoutPin?'Set':'Not set yet'}</span></div>
-    <p class="muted" style="margin:2px 0 8px;font-size:12px">The PIN is one-way hashed -- it can never be viewed, only reset. Resetting clears it so the member sets a fresh one automatically next time they add/remove a payout account or send a bank-transfer cash-out.</p>
-    <button class="btn ghost sm" id="resetPinBtn" ${u.hasPayoutPin?'':'disabled'}>Reset payout PIN</button>`:''}
+    <p class="muted" style="margin:2px 0 8px;font-size:12px">The PIN is one-way hashed -- it can never be viewed, only replaced. Sets the 5-digit PIN below directly; give it to the member so they can withdraw and manage their account -- there is currently no in-app screen for them to change it themselves.</p>
+    <div class="row">
+      <div style="flex:2"><input id="pinNew" type="text" inputmode="numeric" maxlength="5" placeholder="New 5-digit PIN"></div>
+      <button class="btn ghost sm" id="resetPinBtn">Set PIN</button>
+    </div>`:''}
     <h4 style="margin:18px 0 8px;font-size:14px">Recent transactions</h4>
     <div class="table-scroll" style="max-height:230px"><table><tbody id="userTx"><tr><td>${spinnerHtml()}</td></tr></tbody></table></div>`);
   const tx=(r.transactions||[]).slice(0,25);
@@ -840,6 +825,17 @@ async function openUser(uid){
     toast(d.message||(d.status==='success'?'Phone corrected':'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
   });
+  $('completeRegBtn')?.addEventListener('click', async()=>{
+    const pin=($('completeRegPin').value||'').trim();
+    const code=($('completeRegCode').value||'').trim();
+    if(!/^\d{5}$/.test(pin)) return toast('Enter a 5-digit Transaction PIN','err');
+    if(!confirm(`Finish registration for ${u.phone}? This assigns their referral code, sets this PIN, and credits the current welcome bonus${code?' and counts them toward '+code+'\'s team':''}.`)) return;
+    const b=$('completeRegBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Completing…';
+    const d=await api('/admin/user/complete-registration',{userId:uid,pin,referralCode:code});
+    b.disabled=false; b.textContent=lbl;
+    toast(d.status==='success'?`Registration completed -- welcome bonus of ${ugx(d.welcomeBonus)} credited`:(d.status==='already_done'?'This account had already finished registering':(d.message||'Failed')), d.status==='error'?'err':'ok');
+    if(d.status==='success'||d.status==='already_done'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
+  });
   $('attachRefBtn')?.addEventListener('click', async()=>{
     const code=$('attachRefCode').value.trim();
     if(!code) return toast('Enter the referral code','err');
@@ -851,10 +847,12 @@ async function openUser(uid){
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
   });
   $('resetPinBtn')?.addEventListener('click', async()=>{
-    if(!confirm(`Clear the payout PIN for ${u.phone}? They will set a new one automatically next time they add/remove a payout account or send a bank-transfer cash-out.`)) return;
-    const b=$('resetPinBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Resetting…';
-    const d=await api('/admin/user/reset-payout-pin',{userId:uid});
-    toast(d.status==='success'?'Payout PIN cleared':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    const np=($('pinNew').value||'').trim();
+    if(!/^\d{5}$/.test(np)) return toast('Enter a new 5-digit PIN','err');
+    if(!confirm(`Set a new Transaction PIN for ${u.phone}? Give them this PIN directly -- there is no in-app way for them to see or set it themselves.`)) return;
+    const b=$('resetPinBtn'); b.disabled=true; const lbl=b.textContent; b.textContent='Setting…';
+    const d=await api('/admin/user/reset-payout-pin',{userId:uid,newPin:np});
+    toast(d.status==='success'?'New PIN set':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); } else { b.disabled=false; b.textContent=lbl; }
   });
   $('reconcileStreakBtn')?.addEventListener('click', async()=>{
@@ -883,7 +881,8 @@ async function syncMarzPay(btn, afterFn){
   const d = await api('/admin/payments/sync');
   btn.disabled=false; btn.textContent=t;
   if(d.status==='success'){
-    toast(d.settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced, nothing was waiting', 'ok');
+    const settled = (d.depositsSettled||0) + (d.withdrawalsSettled||0);
+    toast(settled>0 ? `Synced, settled ${d.depositsSettled} deposit(s), ${d.withdrawalsSettled} withdrawal(s)` : 'Synced, nothing was waiting', 'ok');
     afterFn();
   } else toast(d.message||'Sync failed','err');
 }
@@ -987,7 +986,7 @@ async function renderWithdrawals(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
       <button class="btn sm ghost" id="witSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own — members can withdraw to either a bound mobile money number or a bound bank account (see each row's destination).</p>
+    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own — members withdraw to a bound mobile money number (see each row's destination).</p>
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
@@ -1169,7 +1168,7 @@ async function renderPromoCodes(){
       const expiredNow = c.expiresAt && tsMs(c.expiresAt) < Date.now();
       const statusLabel = expiredNow ? 'Expired' : (c.active!==false?'Active':'Off');
       const statusClass = expiredNow ? 't-bad' : (c.active!==false?'t-ok':'t-mut');
-      return `<tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${ugx(c.reward)}</td><td>${c.uses||0} / ${c.maxUses||1}</td>
+      return `<tr><td><b class="mono">${esc(c.code)}</b> <button class="btn sm ghost" data-copy="${esc(c.code)}" title="Copy code">Copy</button></td><td>${ugx(c.reward)}</td><td>${c.uses||0} / ${c.maxUses||'∞'}</td>
       <td><span class="pill-tag ${statusClass}">${statusLabel}</span></td>
       <td>${c.expiresAt?fdate(c.expiresAt):'<span class="muted">Never</span>'}</td>
       <td>${fdate(c.createdAt)}</td>
@@ -1348,7 +1347,7 @@ async function renderReferrals(){
 function drawRefs(){
   const raw = ($('refSearch')?.value||'').trim().toLowerCase();
   const list = raw ? _refs.filter(x => (x.phone||'').toLowerCase().includes(raw)) : _refs;
-  $('refRows').innerHTML = list.length?list.map(x=>`<tr class="clickable" data-uid="${esc(x.id)}"><td><b>${esc(x.phone||'')}</b></td><td>${esc(x.referredBy||'')}</td><td>${ugx(x.invested)}</td><td><span class="pill-tag ${x.status==='banned'?'t-bad':'t-ok'}">${x.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):`<tr><td colspan="4" class="empty">${raw?'No matching referrals':'No referrals yet'}</td></tr>`;
+  $('refRows').innerHTML = list.length?list.map(x=>`<tr class="clickable" data-uid="${esc(x.id)}"><td><b>${esc(x.phone||'')}</b></td><td>${esc(x.referrerCode||'—')}</td><td>${ugx(x.invested)}</td><td><span class="pill-tag ${x.status==='banned'?'t-bad':'t-ok'}">${x.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):`<tr><td colspan="4" class="empty">${raw?'No matching referrals':'No referrals yet'}</td></tr>`;
   document.querySelectorAll('#refRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 // Live-refresh counterpart to renderReferrals() -- see quietRefreshUsers().
@@ -1542,7 +1541,7 @@ if ('serviceWorker' in navigator) {
     if (_swReloading) return;
     if (!_hadControllerAtLoad) { _hadControllerAtLoad = true; return; }
     (function tryReload(){
-      if (typeof _tabBusyCount !== 'undefined' && _tabBusyCount > 0) { setTimeout(tryReload, 500); return; }
+      if (typeof window._tabBusyCount !== 'undefined' && window._tabBusyCount > 0) { setTimeout(tryReload, 500); return; }
       _swReloading = true;
       location.reload();
     })();

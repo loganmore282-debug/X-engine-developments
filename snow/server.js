@@ -2006,7 +2006,14 @@ app.post('/admin/check-key', async (req, res) => {
   if (loginLocked('owner-key')) return res.status(429).json({ status: 'error', message: 'Too many attempts. Try again in 15 minutes.' });
   if (!safeEqual(key, ADMIN_KEY)) { recordLoginFail('owner-key'); return res.status(401).json({ status: 'error', message: 'Invalid key' }); }
   clearLoginFails('owner-key');
-  res.json({ status: 'success', token: ADMIN_KEY });
+  // Codex-caught real bug: this used to send only {status, token} -- the
+  // admin UI's storeSession(d.token, d.username, d.role) then stored
+  // SESSION_ROLE as undefined for the OWNER's own master-key login, so
+  // every SESSION_ROLE==='owner' check in the panel (Products/Settings/
+  // Gift Codes/Admins/Activity Log/Integrity Audit, plus everything just
+  // moved to verifyOwner()) silently treated the real owner as unprivileged
+  // staff.
+  res.json({ status: 'success', token: ADMIN_KEY, username: 'owner', role: 'owner' });
 });
 // Staff login — issues a session token instead of resending a password.
 // Costs the SAME as a real wrong-password attempt for a nonexistent/
@@ -2029,6 +2036,10 @@ app.post('/admin/login', async (req, res) => {
     clearLoginFails('staff:' + username);
     const role = snap.data().role === 'owner' ? 'owner' : 'staff';
     const token = await createSession(username, role);
+    // Codex-caught real bug: the Admins tab's "Last login" column always
+    // read "Never" -- nothing ever recorded it. Best-effort (never blocks
+    // the actual login on a write failure).
+    db.collection('adminUsers').doc(username).update({ lastLoginAt: FieldValue.serverTimestamp() }).catch(() => {});
     res.json({ status: 'success', token, username, role });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not log in right now' }); }
 });
@@ -2041,7 +2052,7 @@ app.get('/admin/admins/list', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('adminUsers').get();
-    res.json({ status: 'success', admins: snap.docs.map(d => ({ username: d.id, role: d.data().role || 'staff', active: d.data().active !== false, createdAt: d.data().createdAt || null })) });
+    res.json({ status: 'success', admins: snap.docs.map(d => ({ username: d.id, role: d.data().role || 'staff', active: d.data().active !== false, createdAt: d.data().createdAt || null, lastLoginAt: d.data().lastLoginAt || null })) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/admins/create', async (req, res) => {
@@ -2140,7 +2151,7 @@ const SETTINGS_CRITICAL_RANGES = {
 };
 const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled'];
 app.post('/admin/settings/update', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const updates = req.body.settings || {};
     for (const [key, [min, max]] of Object.entries(SETTINGS_CRITICAL_RANGES)) {
@@ -2165,7 +2176,7 @@ app.get('/admin/banner', async (req, res) => {
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/banner/set', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const image = String(req.body.image || '');
   if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
     return res.status(400).json({ status: 'error', message: 'Invalid image' });
@@ -2177,7 +2188,7 @@ app.post('/admin/banner/set', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the banner' }); }
 });
 app.post('/admin/banner/clear', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     await db.collection('banners').doc('home').delete();
     _bannerCacheTs = 0;
@@ -2211,7 +2222,7 @@ app.get('/admin/products', async (req, res) => {
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/products/save', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const list = Array.isArray(req.body.products) ? req.body.products : [];
     const sanitized = [];
@@ -2229,7 +2240,7 @@ app.post('/admin/products/save', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save products' }); }
 });
 app.post('/admin/products/delete', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const key = String(req.body.key || '');
   if (!key) return res.status(400).json({ status: 'error', message: 'key required' });
   try {
@@ -2245,7 +2256,14 @@ app.post('/admin/products/clear', async (req, res) => {
     const snap = await db.collection('products').limit(1000).get();
     const batch = db.batch();
     let removed = 0;
-    snap.forEach(d => { batch.set(d.ref, { key: d.id, deleted: true }, { merge: false }); removed++; });
+    // Codex-caught real bug: tombstoning (deleted:true, like the single-
+    // product delete route) left the doc's key in getProducts()'s
+    // touchedKeys set, which EXCLUDES it from the DEFAULT_PRODUCTS
+    // fallback -- "Clear all" made the catalogue permanently empty instead
+    // of reverting to defaults, contradicting the button's own confirm
+    // text. Hard-delete instead, so a cleared key falls straight through
+    // to its DEFAULT_PRODUCTS entry again.
+    snap.forEach(d => { batch.delete(d.ref); removed++; });
     await batch.commit();
     _productsCacheTs = 0;
     logAdminAction(req, 'products_cleared', { removed });
@@ -2268,6 +2286,10 @@ app.post('/admin/products/sync-pricing', async (req, res) => {
       if (p.deleted) return;
       const def = defaultsByKey.get(d.id);
       if (!def) return;
+      // Only touch (and count) a doc whose stored pricing genuinely
+      // differs -- a saved product that already matches the defaults
+      // shouldn't be reported as "synced" alongside ones that really changed.
+      if (p.price === def.price && p.cycle === def.cycle && p.expectedReturn === def.expectedReturn) return;
       batch.update(d.ref, { price: def.price, cycle: def.cycle, expectedReturn: def.expectedReturn });
       synced++;
     });
@@ -2302,7 +2324,7 @@ app.post('/admin/promocodes/generate', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/promocodes/list', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('promoCodes').orderBy('createdAt', 'desc').limit(300).get();
     res.json({ status: 'success', codes: snap.docs.map(d => {
@@ -2336,11 +2358,13 @@ app.post('/admin/user/detail', async (req, res) => {
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const [uSnap, invSnap, txSnap, witSnap] = await Promise.all([
+    const [uSnap, invSnap, txSnap, witSnap, bankSnap, teamDeposits] = await Promise.all([
       db.collection('users').doc(userId).get(),
       db.collection('investments').where('userId', '==', userId).limit(200).get(),
       db.collection('transactions').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(200).get(),
       db.collection('withdrawals').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(100).get(),
+      db.collection('bankAccounts').where('userId', '==', userId).get(),
+      wholeTeamDeposits(userId),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     // transactionPinHash never leaves this server, even to an admin --
@@ -2351,18 +2375,34 @@ app.post('/admin/user/detail', async (req, res) => {
       investments: invSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       transactions: txSnap.docs.map(d => ({ id: d.id, ...d.data() })),
       withdrawals: witSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+      // Codex-caught real bug: these two were never sent, so the admin
+      // modal always showed "UGX 0" / "None saved" regardless of reality.
+      bankAccounts: bankSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+      teamDeposits,
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Sets a NEW PIN chosen by the admin -- never clears transactionPinHash to
+// null. Codex-caught real bug: Snow has no auto-setup-on-first-use PIN path
+// (see the comment above PIN_LOCK_MS) -- pinCheck() unconditionally rejects
+// a null hash as NO_PIN, and /account/transaction-pin/change always
+// requires the OLD pin to match first. Clearing the hash to null would have
+// permanently locked the member out of ever setting a replacement PIN
+// themselves (can't withdraw, can't add/remove a payout account). Same
+// pattern as /admin/user/reset-password: the admin types the new value,
+// which they then relay to the member.
 app.post('/admin/user/reset-payout-pin', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = String(req.body.userId || '');
+  const newPin = String(req.body.newPin || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  if (!/^\d{5}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New PIN must be 5 digits.' });
+  if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 5 digits that are not all the same.' });
   try {
     const ref = db.collection('users').doc(userId);
     const snap = await ref.get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    await ref.update({ transactionPinHash: null, pinFailCount: 0, pinLockedUntil: null });
+    await ref.update({ transactionPinHash: scryptHash(newPin), pinFailCount: 0, pinLockedUntil: null });
     logAdminAction(req, 'user_pin_reset', { userId });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -2397,21 +2437,32 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const [uSnap, txSnap, invSnap] = await Promise.all([
+    const [uSnap, txSnap, invSnap, witSnap] = await Promise.all([
       db.collection('users').doc(userId).get(),
       db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
       db.collection('investments').where('userId', '==', userId).get(),
+      db.collection('withdrawals').where('userId', '==', userId).where('status', '==', 'processed').limit(5000).get(),
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    let deposited = 0, earned = 0, withdrawn = 0;
+    let deposited = 0, earned = 0;
     txSnap.forEach(d => {
       const t = d.data();
-      if (t.type === 'deposit') deposited += finiteMoney(t.amount);
+      // Same earning-type list and admin_credit inclusion as recountAllTotals()
+      // — this is the single-user version of the same tool, must stay in lockstep.
+      if (t.type === 'deposit' || t.type === 'admin_credit') deposited += finiteMoney(t.amount);
       else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) earned += finiteMoney(t.amount);
-      else if (t.type === 'withdraw' && t.status === 'success') withdrawn += Math.abs(finiteMoney(t.amount));
     });
     let invested = 0;
     invSnap.forEach(d => { invested += finiteMoney(d.data().amount); });
+    // Codex-caught real bug: this used to sum the withdraw transaction rows'
+    // `amount` field, which stores the GROSS requested amount (negated) --
+    // live crediting (see the several FieldValue.increment(wit.net) sites
+    // above) tracks totalWithdrawn by NET payout. Summing gross here would
+    // inflate totalWithdrawn above what the platform actually paid out.
+    // Recomputed from the withdrawals collection's own `net` field instead,
+    // scoped to actually-completed ('processed') withdrawals only.
+    let withdrawn = 0;
+    witSnap.forEach(d => { withdrawn += finiteMoney(d.data().net); });
     await db.collection('users').doc(userId).update({ totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested });
     logAdminAction(req, 'user_ledger_repaired', { userId, deposited, earned, withdrawn, invested });
     res.json({ status: 'success', totals: { totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested } });
@@ -2449,13 +2500,18 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
   const code = String(req.body.referralCode || '').trim();
   if (!userId || !code) return res.status(400).json({ status: 'error', message: 'userId and referralCode required' });
   try {
+    let referrerId;
     await withLock('attach-referrer', async () => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await uRef.get();
       if (!uSnap.exists) throw Object.assign(new Error('User not found'), { code: 404 });
+      // Codex-caught real bug: without this guard, a retried/duplicate
+      // request (or attaching a second code by mistake) silently overwrote
+      // referredBy and double-incremented teamL1Count for the same user.
+      if (uSnap.data().referredBy) throw Object.assign(new Error('This account already has a referrer — attach only works once.'), { code: 400 });
       const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
       if (refSnap.empty) throw Object.assign(new Error('That referral code does not exist.'), { code: 400 });
-      const referrerId = refSnap.docs[0].id;
+      referrerId = refSnap.docs[0].id;
       if (referrerId === userId) throw Object.assign(new Error('Cannot refer yourself.'), { code: 400 });
       if (refSnap.docs[0].data().status === 'banned') throw Object.assign(new Error('That referral code is no longer active.'), { code: 400 });
       // Cycle guard — walk up from the referrer; if we ever hit userId, this
@@ -2468,10 +2524,35 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
         hops++;
       }
       await uRef.update({ referredBy: referrerId });
+      // Codex-caught real bug: this used to only ever increment the direct
+      // referrer's teamL1Count — never L2/L3 further up the chain, unlike
+      // every other place a referral relationship is created
+      // (completeRegistrationCore's own commit(), same L1->L2->L3 walk).
       await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+      const l1Snap = await db.collection('users').doc(referrerId).get();
+      const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
+      if (l2Id && l2Id !== referrerId) {
+        await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+        const l2Snap = await db.collection('users').doc(l2Id).get();
+        const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
+        if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+      }
     });
-    logAdminAction(req, 'referrer_attached', { userId, referralCode: code });
-    res.json({ status: 'success' });
+    // Codex-caught real bug: the admin UI's own copy ("if this member
+    // already made their first purchase, commission on it is paid now")
+    // was never actually true -- nothing here ever called
+    // creditReferralCommission. Pay it now if a qualifying first
+    // investment exists, same idempotent function every other commission
+    // path in this file already uses.
+    let commissionTriggered = false;
+    const invSnap = await db.collection('investments').where('userId', '==', userId).where('isFirstInvestment', '==', true).limit(1).get();
+    if (!invSnap.empty) {
+      const inv = invSnap.docs[0];
+      await creditReferralCommission(inv.id, userId, inv.data().amount);
+      commissionTriggered = true;
+    }
+    logAdminAction(req, 'referrer_attached', { userId, referralCode: code, referrerId, commissionTriggered });
+    res.json({ status: 'success', commissionTriggered });
   } catch (e) { res.status(e.code || 500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/user/reconcile-checkin', async (req, res) => {
@@ -2479,14 +2560,21 @@ app.post('/admin/user/reconcile-checkin', async (req, res) => {
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const before = { checkinStreak: uSnap.data().checkinStreak || 0 };
     const ledgerSnap = await db.collection('transactions')
       .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
     const dayKeys = new Set();
     ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
     const real = computeCheckinStreak(dayKeys);
+    const after = { checkinStreak: real.streak };
     await db.collection('users').doc(userId).update({ checkinStreak: real.streak, lastCheckin: real.lastCheckin });
     logAdminAction(req, 'checkin_reconciled', { userId, streak: real.streak });
-    res.json({ status: 'success', streak: real.streak, lastCheckin: real.lastCheckin });
+    // Codex-caught real bug: this used to send {streak, lastCheckin} while
+    // the admin UI reads d.before.checkinStreak/d.after.checkinStreak/
+    // d.changed -- the button threw on every click. Shape fixed to match.
+    res.json({ status: 'success', before, after, changed: before.checkinStreak !== after.checkinStreak, lastCheckin: real.lastCheckin });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Recomputes teamL1/L2/L3 counts for the WHOLE referral tree hanging off one
@@ -2538,7 +2626,7 @@ app.post('/admin/user/delete', async (req, res) => {
 const _adminCreditDebounce = new Map();
 const _adminDebitDebounce = new Map();
 app.post('/admin/deposit', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, amount, note } = req.body;
   const amt = Math.round(parseFloat(amount || 0));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
@@ -2560,7 +2648,7 @@ app.post('/admin/deposit', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/debit', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, amount, note } = req.body;
   const amt = Math.round(Math.abs(parseFloat(amount || 0)));
   if (!userId || !Number.isFinite(amt) || amt <= 0 || amt > MAX_MONEY_AMOUNT)
@@ -2586,7 +2674,7 @@ app.post('/admin/debit', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/ban', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { userId, action, reason } = req.body;
   try {
     const isBan = action === 'ban';
@@ -2617,7 +2705,7 @@ app.post('/admin/deposits/list', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/deposit/force-credit', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const { depositId } = req.body;
   if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
   try {
@@ -2650,7 +2738,7 @@ app.post('/admin/withdrawals/list', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const witId = String(req.body.withdrawalId || '');
   if (_withdrawInFlight.has(witId)) return res.status(409).json({ status: 'error', message: 'This withdrawal is being sent right now. Check the list in a moment.' });
   _withdrawInFlight.add(witId);
@@ -2713,9 +2801,20 @@ app.get('/admin/referrals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const snap = await db.collection('users').where('referredBy', '!=', null).limit(2000).get();
+    // Codex-caught real bug: `referredBy` on a user doc is the referrer's
+    // raw Firebase uid, not their referral CODE -- the admin UI's "Referred
+    // user" table rendered the uid straight into the "Referrer's code"
+    // column. Resolve each unique referrer id to their real referralCode.
+    const referrerIds = [...new Set(snap.docs.map(d => d.data().referredBy).filter(Boolean))];
+    const referrerSnaps = await Promise.all(referrerIds.map(id => db.collection('users').doc(id).get()));
+    const codeById = {};
+    referrerSnaps.forEach((s, i) => { codeById[referrerIds[i]] = s.exists ? (s.data().referralCode || '') : ''; });
     const rows = snap.docs.map(d => {
       const u = d.data();
-      return { id: d.id, phone: u.phone || '', referredBy: u.referredBy, invested: finiteMoney(u.totalInvested), status: u.status || 'active' };
+      return {
+        id: d.id, phone: u.phone || '', referrerId: u.referredBy,
+        referrerCode: codeById[u.referredBy] || '', invested: finiteMoney(u.totalInvested), status: u.status || 'active',
+      };
     });
     res.json({ status: 'success', referrals: rows });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -2819,7 +2918,7 @@ async function recountAllTotals() {
   });
 }
 app.get('/admin/users/recount', async (req, res) => {
-  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const result = await recountAllTotals();
     logAdminAction(req, 'totals_recounted', result);

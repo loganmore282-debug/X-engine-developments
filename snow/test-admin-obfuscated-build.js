@@ -10,7 +10,7 @@ function mockResponse(path, body) {
 }
 
 const routes = {
-  'POST /admin/check-key': { status: 'success', token: 'OWNERKEY' },
+  'POST /admin/check-key': { status: 'success', token: 'OWNERKEY', username: 'owner', role: 'owner' },
   'GET /admin/settings': { status: 'success', settings: {
     minDeposit: 30000, minWithdraw: 8000, welcomeBonus: 5000, dailyCheckin: 500,
     withdrawFeePct: 15, commL1: 27, commL2: 2, commL3: 1, returnMultiple: 30, cycleDays: 150,
@@ -37,8 +37,17 @@ const routes = {
   ] },
   'GET /admin/promocodes/list': { status: 'success', codes: [] },
   'GET /admin/referrals/list': { status: 'success', referrals: [
-    { id: 'u1', phone: '+256700000001', referredBy: 'xYz789', invested: 30000, status: 'active' },
+    { id: 'u1', phone: '+256700000001', referrerId: 'r1', referrerCode: 'xYz789', invested: 30000, status: 'active' },
   ] },
+  'POST /admin/user/detail': { status: 'success',
+    user: { id: 'u1', phone: '+256700000001', publicId: '000001', referralCode: 'abC123', walletBalance: 10000,
+      totalDeposited: 30000, totalInvested: 30000, totalWithdrawn: 0, totalEarned: 5000, teamCommission: 0,
+      referredBy: null, teamL1Count: 0, teamL2Count: 0, teamL3Count: 0, checkinStreak: 3, status: 'active',
+      hasPayoutPin: true, registrationDone: true },
+    investments: [], transactions: [], withdrawals: [], bankAccounts: [], teamDeposits: 0,
+  },
+  'POST /admin/user/reset-payout-pin': { status: 'success' },
+  'POST /admin/user/reconcile-checkin': { status: 'success', before: { checkinStreak: 2 }, after: { checkinStreak: 3 }, changed: true, lastCheckin: '2026-08-26' },
   'GET /admin/admins/list': { status: 'success', admins: [] },
   'GET /admin/audit-log': { status: 'success', log: [] },
   'POST /admin/analytics': { status: 'success', kpis: {
@@ -162,6 +171,31 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   await sleep(200);
   const cReward = doc.getElementById('cReward');
   if (cReward) { cReward.value = '5000'; doc.getElementById('genBtn')?.click(); await sleep(300); }
+
+  // Users: open a user row's detail modal, exercise PIN reset + streak reconcile
+  doc.querySelector('.tab[data-tab="users"]').click();
+  await sleep(250);
+  const userRow = doc.querySelector('#userRows tr[data-uid]');
+  if (!userRow) errors.push('no user row found to open detail modal');
+  else {
+    userRow.click();
+    await sleep(250);
+    const pinInput = doc.getElementById('pinNew');
+    if (!pinInput) errors.push('pinNew input not found in user detail modal');
+    else {
+      pinInput.value = '13579';
+      doc.getElementById('resetPinBtn')?.click();
+      await sleep(250);
+    }
+  }
+  // Re-open (modal closes itself on success) to test reconcile-streak
+  const userRow2 = doc.querySelector('#userRows tr[data-uid]');
+  if (userRow2) {
+    userRow2.click();
+    await sleep(250);
+    doc.getElementById('reconcileStreakBtn')?.click();
+    await sleep(250);
+  }
 
   console.log('\n=== ERRORS (' + errors.length + ') ===');
   errors.forEach(e => console.log(' -', e));

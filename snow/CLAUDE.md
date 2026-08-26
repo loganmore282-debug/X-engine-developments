@@ -604,6 +604,130 @@ skipped)**:
 - Task Center's referral/deposit ladders and Mission Center's rates remain flagged
   "not yet confirmed by the owner" per Round 12 — unchanged by this round.
 
+## Round 15 (2026-08-26) — Codex review of Round 14 (the admin-panel port): 6 High + 5 Medium + 5 Low, all real, all fixed
+
+Owner ran the Codex-review prompt this project drops at the end of every round (see
+Round 14's own commit for the prompt used) against commit `07bdbeb`. Every finding was
+independently re-verified against the actual code before touching anything, same
+discipline as every fix in this file — all 16 held up as real.
+
+**High severity:**
+1. **Staff could bypass owner-only UI restrictions through direct API calls.** The
+   Round-14 port hid Settings/Products/Gift-Codes/Admins/Audit-Log tabs and the Credit/
+   Debit/Ban/Delete/Force-credit/Reject/Recalculate-totals buttons from staff in the UI,
+   but the underlying routes (`/admin/settings/update`, `/admin/banner/set|clear`,
+   `/admin/products/save|delete`, `/admin/promocodes/list`, `/admin/deposit`,
+   `/admin/debit`, `/admin/ban`, `/admin/deposit/force-credit`, `/admin/withdraw/reject`,
+   `/admin/users/recount`) still used `verifyAdmin()` (any staff account), not
+   `verifyOwner()`. A staff account could hit any of these directly, bypassing the UI
+   entirely. Fixed all 12 to `verifyOwner()`. `/admin/withdraw/process`/`/verify` stay
+   `verifyAdmin()` deliberately — those are routine staff work, per the UI's own gating.
+2. **"Reset payout PIN" would have permanently locked a member out.** It cleared
+   `transactionPinHash` to `null` — but Snow has NO auto-setup-on-first-use PIN path (the
+   Transaction PIN set at registration is the only one, per its own standing comment),
+   and `/account/transaction-pin/change` unconditionally requires the OLD pin to match
+   first, which a `null` hash can never do. Fixed to set an admin-chosen new PIN instead
+   (never clears to null), same "admin types it, hands it to the member" pattern
+   `/admin/user/reset-password` already uses. Admin UI gained a "New 5-digit PIN" input.
+3. **`/admin/user/repair-ledger` didn't repair anything the confirm dialog claimed, and
+   could write a wrong `totalWithdrawn`.** It summed the `transactions` collection's
+   withdraw rows' `amount` field (the GROSS requested amount, negated) while every live
+   crediting path increments `totalWithdrawn` by NET payout — running it would inflate
+   the stat. It also excluded `admin_credit` from `totalDeposited`, unlike
+   `recountAllTotals()`. Fixed: `totalWithdrawn` now sums `net` from the `withdrawals`
+   collection (status `processed` only); `admin_credit` included to match. Confirm-dialog
+   text corrected to describe what it actually does (recompute totals from the ledger),
+   not the different, more complex "finalize stale transaction rows" feature this text
+   was inherited from space8's own equivalent tool.
+4. **`/admin/user/attach-referrer` was non-idempotent and didn't do what its own UI
+   promised.** It only ever incremented the direct referrer's `teamL1Count` (never L2/
+   L3), never checked whether the target already had a referrer (a retry double-counted;
+   a second attach silently overwrote the first), and never paid commission despite the
+   UI saying "if this member already made their first purchase, commission on it is paid
+   now." Fixed: guards against a user who already has `referredBy`; correctly walks and
+   increments L1→L2→L3 (same shape `completeRegistrationCore`'s own commit already uses);
+   calls the existing idempotent `creditReferralCommission()` against the user's first
+   investment if one exists, returning a real `commissionTriggered` flag.
+5. **"Clear all products" made the catalogue permanently empty, not reverted to
+   defaults.** It tombstoned docs (`deleted:true`, same as the single-product delete
+   route) — but `getProducts()`'s `touchedKeys` set treats every doc it sees as "touched"
+   regardless of its `deleted` flag, excluding it from the `DEFAULT_PRODUCTS` fallback.
+   Clearing all 10 built-ins left the app with zero products, contradicting the button's
+   own confirm text ("reverts to defaults"). Fixed to hard-delete instead.
+6. **The owner's own master-key login was silently treated as unprivileged staff.**
+   `/admin/check-key` returned only `{status, token}` — the admin UI's
+   `storeSession(d.token, d.username, d.role)` then stored `SESSION_ROLE` as `undefined`
+   for the raw-key path, so every `SESSION_ROLE==='owner'` check in the whole panel
+   (now MORE of them, after fix #1 above) silently failed for the actual owner. Fixed
+   both sides: the server now sends `username:'owner', role:'owner'`; the client
+   defensively defaults to owner on that path too, in case an older deployed server.js
+   hasn't picked up the server-side fix yet.
+
+**Medium severity:**
+7. **Integrity Audit modal used a response shape space8's UI expects, not Snow's real
+   one.** Server returns `{checked, mismatches:[{userId,phone,walletBalance,ledgerSum,
+   diff}]}`; the ported UI read `d.usersChecked`/`d.alerts`/6 different alert `kind`s
+   Snow's `/admin/integrity` doesn't detect at all (duplicate credits, stuck payouts,
+   malformed phones, incomplete registrations — only wallet-vs-ledger mismatch exists).
+   Clicking the button threw. Simplified the modal to render exactly what the endpoint
+   returns, with a "Recalculate totals" button per mismatch (now meaningful after fix
+   #3). The dead `data-fixphone`/`data-completereg` alert-kind branches were removed
+   (unreachable — nothing in Snow's `/admin/integrity` ever produces those kinds).
+8. **Admin "Complete registration" could never succeed.** The (now-removed, see #7)
+   integrity-modal button sent no `pin`, but `completeRegistrationCore()` unconditionally
+   requires a valid 5-digit Transaction PIN — every attempt returned `INVALID_PIN`. Since
+   its only trigger point was the dead code removed in #7, rebuilt this as a real,
+   reachable tool instead: a "Complete registration" block inside the user-detail modal
+   (shown when `registrationDone===false`), with a PIN input + optional referrer-code
+   input, wired to send both.
+9. **User-detail modal always showed "UGX 0" team deposits and "None saved" cash-out
+   accounts** — `/admin/user/detail` never returned `teamDeposits`/`bankAccounts` even
+   though the real data (the existing `wholeTeamDeposits()` helper, the `bankAccounts`
+   collection `/bank/save` already writes to) was one query away. Both added to the
+   response.
+10. **Check-in streak reconciliation crashed on click.** Server sent
+    `{streak, lastCheckin}`; UI read `d.before.checkinStreak`/`d.after.checkinStreak`/
+    `d.changed`. Fixed the server to capture the pre-reconcile streak first and return
+    the `{before, after, changed}` shape the UI actually expects.
+11. **Referrals table showed a raw user ID in the "Referrer's code" column.**
+    `referredBy` on a user doc is the referrer's Firebase uid, not their `referralCode` —
+    `/admin/referrals/list` sent the uid straight through. Fixed to resolve each unique
+    referrer id to their real `referralCode` server-side (`referrerId`/`referrerCode`
+    now both in the response) and updated the UI to read the new field name.
+
+**Low severity, all real, all fixed:** "Sync MarzPay" always reported "nothing was
+waiting" even on a real settle (`d.settled` checked, server sends `depositsSettled`/
+`withdrawalsSettled` — no combined `settled` field); an unlimited-use gift code showed
+"0 / 1" instead of "0 / ∞" (`c.maxUses||1` turns `null` into `1`); the Admins tab's "Last
+login" column always read "Never" (nothing ever recorded `lastLoginAt` — now set,
+best-effort, on every successful `/admin/login`); "Sync pricing to defaults" counted and
+rewrote every matching saved product as "synced" even when its stored values already
+matched (now only touches/counts a genuine change); the Withdrawals tab's own copy still
+said members could withdraw to "a bound bank account" — Snow is mobile-money only, no
+`isBank`/bank-transfer code exists anywhere in `server.js`, copy corrected. One
+non-functional nit also applied: the tail SW-auto-update script's `_tabBusyCount` read
+was made explicit as `window._tabBusyCount` (it already worked correctly as a bare global
+read — Codex confirmed this itself — but the explicit form matches what this file's own
+Round 14 entry claimed).
+
+**Confirmed already correct, no change needed** (per Codex's own explicit confirmation):
+the 3 new endpoints from Round 14 (`reset-payout-pin`, `products/clear`,
+`products/sync-pricing`) are correctly `verifyOwner()`-gated; the `transactionPinHash`
+leak fix is complete, no other admin route spreads a full user doc; the
+`IMAGE_BODY_ROUTES` and `GET /admin/audit-log` fixes from Round 14 landed correctly; the
+IIFE-wrap obfuscation approach is fundamentally sound.
+
+**Verification**: `node --check server.js`; boot smoke test (dummy Firebase creds +
+unreachable Mongo) still fails only at the Mongo-connect step; `build-admin.js` re-run
+(round-trip OK); `test-admin-obfuscated-build.js` extended with real fixtures for
+`/admin/user/detail` (now including `bankAccounts`/`teamDeposits`), the corrected
+`/admin/check-key` response, the corrected `/admin/referrals/list` shape, and the
+corrected `/admin/user/reconcile-checkin` shape, plus new interaction steps that open a
+user's detail modal and click both `resetPinBtn` (with a PIN typed in) and
+`reconcileStreakBtn` — 0 errors, and the Users tab's owner-only buttons (Integrity audit,
+Recalculate totals) now correctly render, which they would NOT have before fix #6.
+`admin/sw.js` cache bumped `v4`→`v5`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

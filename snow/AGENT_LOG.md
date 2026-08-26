@@ -16,6 +16,44 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 15: Codex review of Round 14 — 6 High + 5 Medium + 5 Low, all real, all fixed
+- Full breakdown in CLAUDE.md's Round 15 section — summary here:
+- High: 12 admin routes staff could hit directly despite UI hiding them from staff
+  (moved `verifyAdmin`→`verifyOwner`); "Reset payout PIN" would have permanently locked
+  a member out (no auto-setup PIN path exists in Snow — fixed to set an admin-chosen new
+  PIN instead of clearing to null); `/admin/user/repair-ledger` summed the wrong
+  (gross, not net) withdrawal figure and excluded `admin_credit`; `/admin/user/attach-
+  referrer` was non-idempotent, only credited L1 (never L2/L3), and never paid the
+  commission its own UI text promised; "Clear all products" tombstoned docs instead of
+  hard-deleting them, which made the catalogue permanently empty instead of reverting to
+  defaults; the owner's own master-key login got treated as unprivileged staff
+  (`/admin/check-key` never sent `username`/`role`, so `SESSION_ROLE` was `undefined`).
+- Medium: Integrity Audit modal expected space8's response shape, not Snow's real one —
+  simplified to match; "Complete registration" could never succeed (no PIN field sent)
+  and its only trigger button was dead code anyway (Snow's integrity check never
+  produces that alert kind) — rebuilt as a real "Complete registration" block in the
+  user-detail modal, gated on `registrationDone===false`, that actually sends a PIN;
+  `/admin/user/detail` never sent `teamDeposits`/`bankAccounts` (always showed 0/none);
+  check-in-streak reconciliation crashed on click (response shape mismatch); Referrals
+  table rendered a raw user ID in the "Referrer's code" column instead of the resolved
+  code.
+- Low: `syncMarzPay()`'s "nothing was waiting" message fired even on a real settle
+  (checked a `d.settled` field the server never sends); an unlimited gift code showed
+  "0 / 1" instead of "0 / ∞"; Admins tab "Last login" always read "Never" (nothing ever
+  recorded `lastLoginAt` — now set on every `/admin/login`); "Sync pricing to defaults"
+  counted already-correct products as "synced"; Withdrawals tab copy still claimed bank-
+  transfer support (Snow is mobile-money only).
+- Why: owner ran this project's standing "drop a Codex-review prompt at the end of every
+  round" instruction against Round 14's commit.
+- Verification: `node --check server.js`; boot smoke test still fails only at Mongo-
+  connect; `build-admin.js` re-run clean; `test-admin-obfuscated-build.js` extended with
+  corrected fixtures (`/admin/check-key`, `/admin/user/detail`, `/admin/referrals/list`,
+  `/admin/user/reconcile-checkin`) plus new steps opening a user's detail modal and
+  exercising PIN-reset + streak-reconcile — 0 errors; confirmed the Users tab's
+  owner-only buttons now actually render (proving the master-key/role fix works, since
+  they would NOT have rendered before it). `admin/sw.js` cache bumped `v4`→`v5`.
+- Nothing deferred — all 16 findings addressed this round.
+
 ## 2026-08-26 — Claude — Round 14: withdraw-hours removed; admin panel ported wholesale from space8's real admin-src/index.html (not reskinned from scratch)
 - Removed the withdraw-hours restriction feature entirely from `server.js`
   (`withdrawHoursEnabled/Start/End` in `DEFAULT_SETTINGS`, `isWithinWithdrawHours()`,
