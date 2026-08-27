@@ -741,18 +741,34 @@ function renderMissionCenter(){
     : !m.l1ActiveCount
       ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Need at least 1 active referral</button>`
       : `<button class="primary-button" id="missionSalaryBtn" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;" onclick="claimMissionSalary()">Claim ${fmtUGX(m.salaryAmount)}</button>`;
-  const depositRows = m.depositRewards.map(d => `
-    <div class="list-row">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13.5px;font-weight:600;">${fmtUGX(d.target)} team deposits</div>
-        <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">Reward ${fmtUGX(d.reward)}</div>
+  // Owner: "l wanted these to be cards... each to be a box" -- one
+  // standalone app-card per threshold instead of rows sharing a single
+  // card, each with its own three-state button: not yet reached ("In
+  // progress", muted/disabled), reached but unclaimed ("Claim", the
+  // highlighted actionable state), already claimed ("Received", disabled).
+  const depositCards = m.depositRewards.map(d => {
+    const badge = d.claimed
+      ? `<div class="status-pill active mono">Received</div>`
+      : d.achieved
+        ? `<div class="status-pill active mono">Achieved</div>`
+        : `<div class="status-pill pending mono">${fmtUGX(m.teamDeposits)} / ${fmtUGX(d.target)}</div>`;
+    const btn = d.claimed
+      ? `<button class="secondary-button" style="width:100%;margin-top:14px;padding:12px 0;font-size:13.5px;opacity:.6;" disabled>Received</button>`
+      : d.achieved
+        ? `<button class="primary-button" id="missionDepositBtn_${d.target}" style="width:100%;margin-top:14px;padding:12px 0;font-size:13.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
+        : `<button class="secondary-button" style="width:100%;margin-top:14px;padding:12px 0;font-size:13.5px;opacity:.55;" disabled>In progress</button>`;
+    return `
+    <div class="app-card" style="padding:16px 18px;margin-top:12px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+        <div style="min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:var(--snow-ink);">${fmtUGX(d.target)} team deposits</div>
+          <div style="font-size:11.5px;color:var(--snow-muted);margin-top:2px;">Reward ${fmtUGX(d.reward)}</div>
+        </div>
+        ${badge}
       </div>
-      ${d.claimed
-        ? `<div class="status-pill active mono">Claimed</div>`
-        : d.achieved
-          ? `<button class="primary-button" id="missionDepositBtn_${d.target}" style="padding:8px 16px;font-size:12.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
-          : `<div class="status-pill pending mono">${fmtUGX(m.teamDeposits)} / ${fmtUGX(d.target)}</div>`}
-    </div>`).join('');
+      ${btn}
+    </div>`;
+  }).join('');
   $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="app-card" style="padding:18px;">
       <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-muted);font-weight:700;">Daily Referral Salary</div>
@@ -763,12 +779,12 @@ function renderMissionCenter(){
       </div>
       ${salaryBtn}
     </div>
-    <div class="app-card" style="padding:6px 18px;margin-top:16px;">
-      <div style="padding:14px 0 4px;font-size:15px;font-weight:800;color:var(--snow-ink);">Team Deposit Rewards</div>
-      <div style="font-size:12px;color:var(--snow-muted);padding-bottom:10px;">One-time reward per threshold — claim manually once your whole team's deposits reach it.</div>
-      ${depositRows}
+    <div style="margin-top:22px;padding:0 2px;">
+      <div style="font-size:15px;font-weight:800;color:var(--snow-ink);">Team Deposit Rewards</div>
+      <div style="font-size:12px;color:var(--snow-muted);margin-top:4px;">One-time reward per threshold — claim manually once your whole team's deposits reach it.</div>
     </div>
-    <p style="font-size:11.5px;color:var(--snow-muted);line-height:1.6;margin:14px 2px 0;">Daily salaries are credited once referrals meet the active-account criteria. Team deposit rewards are available to claim instantly once your team's deposits confirm.</p></div>`;
+    ${depositCards}
+    <p style="font-size:11.5px;color:var(--snow-muted);line-height:1.6;margin:16px 2px 0;">Daily salaries are credited once referrals meet the active-account criteria. Team deposit rewards are available to claim instantly once your team's deposits confirm.</p></div>`;
 }
 // Both claim buttons disable themselves for the duration of the request --
 // without this, a fast double/triple-tap (or an impatient tap while the

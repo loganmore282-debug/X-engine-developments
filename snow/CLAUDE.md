@@ -2278,6 +2278,41 @@ text). Re-ran Round 34's Mission Center double-tap/toast test and Round 39's boo
 timing test to confirm neither regressed. `node --check` clean, `node build-core.js`
 round-trip clean, `git diff --check` clean. Cache bumped `v24`→`v25`.
 
+## Round 42 (2026-08-27) — Team Deposit Rewards redesigned as standalone cards, one per threshold, each with a 3-state button
+
+Owner, from a Mission Center screenshot: "I wanted these to be cards... those things of
+deposits, so each to be a box... down will be in progress as a button not highlighted,
+after that it fulfill it turns to claim, after that received."
+
+**Before**: all six thresholds were `.list-row` entries sharing one `.app-card`, divided
+by thin borders, with a small pill (progress text, or a "Claim" button, or a "Claimed"
+pill) on the right. **Now**: each threshold is its own full `.app-card` box, stacked with
+margin between them, and every card ends in a full-width button whose label/style tracks
+exactly the 3-state progression the owner described:
+
+- **Not yet reached** — `secondary-button` (outline, transparent fill, `opacity:.55`),
+  disabled, reads "In progress" — deliberately NOT highlighted, matching "not highlighted"
+  verbatim.
+- **Reached, not yet claimed** — `primary-button` (solid wine fill), enabled, reads
+  "Claim", wired to the existing `claimMissionDeposit(target)` handler unchanged.
+- **Already claimed** — `secondary-button`, disabled, reads "Received".
+
+A small status pill in the card's top-right still shows the raw numbers for the
+in-progress state (`UGX teamDeposits / UGX target`) or a plain "Achieved"/"Received" tag
+otherwise — kept for at-a-glance detail without cluttering the big button's label. The
+section header ("Team Deposit Rewards" + its one-line explanation) moved out of the
+shared card into plain text above the stack of boxes, since there's no longer one shared
+card for it to live inside.
+
+**Verified** with Playwright, one mocked threshold in each of the three states: confirmed
+exactly 3 separate `.app-card` boxes render (not list-rows), at meaningfully different
+vertical offsets (real separate boxes, not visually merged); the claimed card shows a
+disabled `secondary-button` reading "Received"; the achieved-unclaimed card shows an
+enabled `primary-button` reading "Claim"; the not-yet-achieved card shows a disabled
+`secondary-button` reading "In progress". Screenshot confirms the visual layout reads
+cleanly as three organized, separated boxes. `node --check` clean, `node build-core.js`
+round-trip clean, `git diff --check` clean. Cache bumped `v25`→`v26`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
