@@ -2570,6 +2570,41 @@ Round 35's `authEpoch` staleness test to confirm neither regressed from touching
 shared boot path. `node --check` clean, `node build-core.js` round-trip clean, `git diff
 --check` clean. Cache bumped `v28`→`v29`.
 
+## Round 47 (2026-08-27) — three custom nav icons: beer mug (My Products), people+add (Team), person outline (Account)
+
+Owner supplied three hand-authored SVGs (detailed multi-path artwork, not the monoline
+style the rest of `ICONS` uses) and asked to swap them in, "resize and render everything
+correctly."
+
+**Where they live.** All four bottom-nav icons come from `ICONS.{home,box,team,user}`
+in `original_module.js`; `updateNavIcons()` maps `products`→`box` and `account`→`user`.
+`ICONS.box` and `ICONS.team` are nav-only. `ICONS.user` is also reused on the Team page's
+"Team commission" stat tile.
+
+**What changed.** Replaced `ICONS.box` (beer mug), `ICONS.team` (three-person icon with
+a plus badge, uses an SVG `<mask>` to cut the badge circle out of the middle figure), and
+`ICONS.user` (simple head+shoulders outline) with the owner's artwork verbatim — only the
+outer `<svg>`'s `width`/`height` were changed (1024/1536 → 20, matching every other nav
+icon's on-screen size; the `viewBox` was left untouched so the artwork just scales down,
+no distortion). HTML comments and inter-tag whitespace stripped to match the file's
+existing single-line `ICONS` entry style.
+
+**Color handling.** Beer and team keep the owner's exact fixed colors (`#000`/`#fff`/
+`#212121`) — they're illustrated multi-tone icons (foam highlights, glass shine) that
+would flatten to a silhouette if forced onto `currentColor`, and both are nav-only so
+there's no other context they need to adapt to. The account icon's `stroke="#000000"`
+was changed to `stroke="currentColor"` — unlike the other two, it's reused in the green-
+tinted "Team commission" tile where a fixed black stroke would have rendered as an
+off-theme black icon on a green tile; `currentColor` keeps it inheriting the wine-red nav
+color when active/inactive and the green stat-tile color there, matching how every other
+`ICONS` entry already behaves.
+
+**Verified** with Playwright: built the real app to the products/team/account tabs in
+turn and screenshotted the nav bar — all three render sharp at 20px, the account icon
+correctly turns wine-red in its active nav state, and correctly renders green inside the
+Team-commission tile. `node --check` clean, `node build-core.js` round-trip clean, `git
+diff --check` clean. Cache bumped `v29`→`v30`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
