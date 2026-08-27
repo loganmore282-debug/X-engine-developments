@@ -1592,6 +1592,61 @@ present after a level switch; confirmed `#recordsBody .reveal-in`, and `#sheetBo
 of the settled Team page confirms full real content renders cleanly, no leftover shimmer
 bars anywhere. Cache bumped `v15`→`v16`.
 
+## Round 31 (2026-08-27) — Round 30 corrected: staggered "live animation" reveal + instant tap feedback, not a single flat block popping in
+
+Owner: "bro this is taking very long to show up, you didn't understand what l said, l
+want contents to have a live appearing animation just like you see those live animation
+websites, so it should do like that cards everything appear just as animation not just
+to jump up directly, they should appear smoothly, and also l want it to respond quickly
+when l switch card." Round 30's `.reveal-in` was one single fade+lift applied to the
+WHOLE page/sheet as one flat unit -- reads as a single abrupt "jump," not the layered,
+one-card-after-another reveal the owner meant by "live animation websites." Worse, with
+the shimmer skeleton gone and nothing replacing it, the screen showed literally nothing
+different the instant a tab was tapped -- old content just sat there unchanged for the
+whole network round trip before suddenly snapping to the new page. That's the "taking
+very long to show up" complaint: no missing speed, just zero visual acknowledgment that
+the tap even registered.
+
+**Staggered reveal, not one flat block.** `.reveal-in`'s CSS (`user-src/index.html`)
+changed from a single `animation` on the wrapper itself to `.reveal-in > *{animation:
+revealIn .42s cubic-bezier(.22,1,.36,1) both;}` plus `:nth-child` rules staggering each
+DIRECT CHILD's `animation-delay` by 35ms (0, 35, 70, 105, 140, 175ms, then 210ms for
+everything from the 7th child on). Each of Home/Products/Team/Account's top-level
+sections (hero, action buttons, ticker, referral card, section header, product list,
+etc.) is a direct child of the `.reveal-in` wrapper, so they now visibly cascade in one
+after another -- the actual "cards everything appear... smoothly" look, not a single
+block. `animation-fill-mode:both` keeps every child invisible until its own delay
+elapses (no flash of unanimated content first). The curve itself also changed from
+`ease`/8px to a smoother `cubic-bezier(.22,1,.36,1)` easeout over 14px -- reads as a
+gentle settle rather than a linear "jump."
+
+**Instant tap feedback, independent of network speed.** New `.page-loading` class
+(`opacity:.4`, `transition:opacity .12s ease` on the container) is added the INSTANT a
+tab/level/sheet switch starts (`showPage()`, `switchTeamLevel()`, and the four sheet
+openers that fetch before rendering: Withdraw, Withdrawal Accounts, Mission Center,
+Records) and removed the moment real content is actually set. Since this toggles a
+class on a PERSISTENT element (`#pageHost`/`#sheetBody`/`#recordsBody`/
+`#teamMembersBox` -- never destroyed, only their children are replaced), the CSS
+`transition` fires immediately and doesn't need any reflow/restart trick, unlike the
+`.reveal-in` `animation` on fresh child nodes. The dim is deliberately fast (120ms) so
+it reads as "the app just registered my tap" rather than a loading spinner -- old
+content visibly dims almost instantly, then the new content's staggered reveal plays
+once it lands, however long the actual fetch takes.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright, with `/investments` deliberately delayed 500-600ms to
+simulate real network latency: confirmed `#pageHost` gains `page-loading` (opacity
+dropping below 0.6) within 80ms of `showPage('products')` being called -- proving the
+dim isn't gated on the network response; confirmed it's fully removed and back to
+opacity 1 once the delayed content lands; confirmed the first 4 top-level children of a
+freshly-rendered `.reveal-in` block have DIFFERENT computed `animation-delay` values
+(0s/.035s/.07s/.105s), proving the stagger is real, not four elements all animating at
+once. Two screenshots taken mid-transition (150ms and ~650ms after the tap) visually
+confirm the dim-then-cascade sequence -- the first shows Home's content visibly
+desaturated/dimmed with "My Products" already active in the nav, the second shows
+Products' header/title/stat-cards already settled while lower sections are still
+fading in underneath. Cache bumped `v16`→`v17`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
