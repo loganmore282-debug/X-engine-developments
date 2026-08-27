@@ -129,22 +129,26 @@ a{color:inherit;}
 .toast{background:var(--snow-ink);color:#fff;padding:11px 18px;border-radius:14px;font-size:13px;max-width:86%;text-align:center;box-shadow:0 12px 28px -14px rgba(0,0,0,.4);}
 .toast.err{background:var(--snow-wine-deep);}
 
-.confirm-bg{position:fixed;inset:0;background:rgba(17,17,17,.5);z-index:300;display:none;align-items:flex-end;justify-content:center;}
+/* All pop-up dialogs (as opposed to full-page sheets) open centered, share
+   the activity ticker's own dark pill color, and use a modest radius --
+   not the tall rounded bottom-sheet look. */
+.confirm-bg{position:fixed;inset:0;background:rgba(17,17,17,.5);z-index:300;display:none;align-items:center;justify-content:center;padding:20px;}
 .confirm-bg.show{display:flex;}
-.confirm-sheet{background:var(--snow-surface);width:100%;max-width:480px;border-radius:32px 32px 0 0;padding:24px 22px 30px;}
+.confirm-sheet{background:rgba(17,17,17,.82);color:#fff;width:100%;max-width:340px;border-radius:16px;padding:22px 20px 24px;transform:scale(.92);opacity:0;transition:transform .18s ease,opacity .18s ease;}
+.confirm-bg.show .confirm-sheet{transform:scale(1);opacity:1;}
 .confirm-sheet h3{margin:0 0 6px;font-size:18px;font-weight:800;}
-.confirm-row{display:flex;justify-content:space-between;font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--snow-border);}
+.confirm-row{display:flex;justify-content:space-between;font-size:13.5px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.14);}
 .confirm-row:last-of-type{border-bottom:none;}
 
 /* Centered popup (opens from the middle, not a bottom sheet) -- the
    treasure-chest gift-code entry on Home. */
 .chest-modal-bg{position:fixed;inset:0;background:rgba(17,17,17,.55);z-index:310;display:none;align-items:center;justify-content:center;padding:20px;}
 .chest-modal-bg.show{display:flex;}
-.chest-modal{background:var(--snow-surface);width:100%;max-width:340px;border-radius:28px;padding:26px 22px;text-align:center;transform:scale(.92);opacity:0;transition:transform .18s ease,opacity .18s ease;}
+.chest-modal{background:rgba(17,17,17,.82);color:#fff;width:100%;max-width:340px;border-radius:16px;padding:22px 20px;text-align:center;transform:scale(.92);opacity:0;transition:transform .18s ease,opacity .18s ease;}
 .chest-modal-bg.show .chest-modal{transform:scale(1);opacity:1;}
 .chest-modal img{width:96px;height:auto;display:block;margin:0 auto 10px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.28));}
 .chest-modal h3{margin:0 0 6px;font-size:18px;font-weight:800;}
-.chest-modal p{margin:0 0 18px;font-size:13px;color:var(--snow-muted);}
+.chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
 
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:13px;}
 .list-end{padding:16px 4px 4px;text-align:center;color:var(--snow-muted);font-size:12px;}
@@ -255,7 +259,7 @@ a{color:inherit;}
       <input id="chestCodeInput" type="text" placeholder="Enter code" autocapitalize="characters" autocomplete="off">
     </div>
     <button class="primary-button" id="chestSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:6px;" onclick="submitChestCode()">Open</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:var(--snow-muted);" onclick="closeChestModal()">Cancel</button>
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeChestModal()">Cancel</button>
   </div>
 </div>
 

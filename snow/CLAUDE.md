@@ -1478,6 +1478,54 @@ tappable Referral card from Round 26, product Invest buttons, nav items, etc.) �
 per-element changes needed. Rebuilt, confirmed the rule is present in the deployed
 `user/index.html`. Cache bumped `v12`→`v13`.
 
+## Round 28 (2026-08-27) — every pop-up dialog restyled dark/centered/thin/less-rounded; ticker sped up further
+
+Owner: "l want all pop ups to open from middle and same background color like that of
+activity checker and not round and should be abit thin, and bro activity checker is
+slow increase speed." Inventoried every actual pop-up dialog in the app (as opposed to
+the full-page `.sheet-bg` navigations like Deposit/Withdraw/Records, which are page
+transitions, not pop-ups) — there are exactly two: `.confirm-bg`/`.confirm-sheet`
+(`openConfirm()`, used by invest-confirm and the generic PIN-confirm flows like removing
+a withdrawal account) and `.chest-modal-bg`/`.chest-modal` (the treasure-chest gift-code
+entry, already centered since Round 23).
+
+**Confirm dialog**: `.confirm-bg` changed `align-items:flex-end` (bottom sheet) →
+`center`, with `padding:20px` so it never touches the screen edges. `.confirm-sheet`'s
+background changed from `var(--snow-surface)` (white) to `rgba(17,17,17,.82)` — the
+exact same color the activity ticker pill already uses — `max-width` dropped
+480px→340px (thin, matching the chest modal's own width) and `border-radius` dropped
+32px 32px 0 0 (tall bottom-sheet rounding) → a flat, uniform 16px (much less round, as
+asked). Added the same scale+fade entrance transition the chest modal already had, so
+both pop-ups now animate identically. `.confirm-row`'s divider lines switched from
+`var(--snow-border)` (a light-mode grey) to `rgba(255,255,255,.14)` so they're visible
+against the new dark card.
+
+**Chest modal**: same treatment — background → `rgba(17,17,17,.82)`, `border-radius`
+28px → 16px. Both dialogs now read `color:#fff` at the card level so their headings
+inherit white automatically; the subtitle/description text in both (previously
+`var(--snow-muted)`, a mid-grey tuned for a white background) switched to
+`rgba(255,255,255,.65)` for correct contrast on dark, and both dialogs' Cancel buttons
+(previously `color:var(--snow-muted)`) got the same treatment — 4 call sites total
+(`openInvestConfirm()`'s subtitle + Cancel, `openConfirm()`'s own Cancel, and the chest
+modal's static Cancel button in `index.html`). The `#chestCodeInput`/`#confirmPin` input
+fields were left as plain white pills (no `.form-field` wrapper, so they were never
+affected by the dark-mode sweep) — a light input on the new dark card reads cleanly, no
+change needed there.
+
+**Ticker sped up again**: scroll rate raised 90px/sec → 160px/sec (floor duration
+7s→4s) — this is the third speed increase this session (45→90→160px/sec across Rounds
+26/28).
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright: ticker's computed `animation-duration` now sits at the new
+4s floor for a short mocked feed; invest-confirm's `.confirm-sheet` computed
+`background-color` is `rgba(17,17,17,.82)`, `border-radius` is `16px`, `max-width` is
+`340px`, and its bounding box is centered both horizontally and vertically in the
+viewport (not pinned to the bottom); the chest modal's computed background/radius match
+the same values. Screenshots confirm both dialogs now look visually identical in
+treatment — dark, centered, thin, modestly rounded — matching the activity ticker's own
+color. Cache bumped `v13`→`v14`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

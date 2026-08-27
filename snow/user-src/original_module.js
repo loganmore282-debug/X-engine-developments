@@ -460,7 +460,7 @@ async function renderActivityTicker(){
   track.style.animation = 'none';
   track.innerHTML = `<span style="padding-right:48px;">${joined}</span><span style="padding-right:48px;" aria-hidden="true">${joined}</span>`;
   const singleWidth = track.scrollWidth / 2;
-  const duration = Math.max(7, singleWidth / 90); // ~90px/sec, floor so a short feed doesn't whip past
+  const duration = Math.max(4, singleWidth / 160); // ~160px/sec, floor so a short feed doesn't whip past
   track.style.animation = `tickerFlow ${duration}s linear infinite`;
 }
 function stopActivityTicker(){
@@ -968,13 +968,13 @@ window.openInvestConfirm = function(tierKey){
   const dailyPayout = Math.round((p.expectedReturn||p.price*30)/(p.cycle||150));
   $('confirmSheet').innerHTML = `
     <h3>Confirm purchase</h3>
-    <p style="color:var(--snow-muted);font-size:13px;margin:0 0 12px;">${esc(p.name)}</p>
+    <p style="color:rgba(255,255,255,.65);font-size:13px;margin:0 0 12px;">${esc(p.name)}</p>
     <div class="confirm-row"><span>Investment</span><span class="mono">${fmtUGX(p.price)}</span></div>
     <div class="confirm-row"><span>Daily cashback</span><span class="mono">${fmtUGX(dailyPayout)}</span></div>
     <div class="confirm-row"><span>Duration</span><span class="mono">${p.cycle||150} days</span></div>
     <div class="confirm-row"><span>Total return</span><span class="mono">${fmtUGX(p.expectedReturn||p.price*30)}</span></div>
     <button class="primary-button" id="investConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;" onclick="confirmInvest('${esc(tierKey)}')">Confirm & Invest</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:var(--snow-muted);" onclick="closeConfirm()">Cancel</button>`;
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
   $('confirmBg').classList.add('show');
 };
 window.closeConfirm = function(){ $('confirmBg').classList.remove('show'); };
@@ -993,7 +993,7 @@ function openConfirm(title, body, onConfirm){
     <p style="color:var(--snow-muted);font-size:13px;margin:0 0 14px;">${esc(body)}</p>
     <input id="confirmPin" type="text" inputmode="numeric" maxlength="5" placeholder="5-digit PIN" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;margin-bottom:14px;">
     <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;">Confirm</button>
-    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:var(--snow-muted);" onclick="closeConfirm()">Cancel</button>`;
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
   $('confirmActionBtn').onclick = async () => {
     const pinValue = $('confirmPin').value.trim();
     if (!/^\d{5}$/.test(pinValue)) return toast('Enter your 5-digit Transaction PIN', true);
