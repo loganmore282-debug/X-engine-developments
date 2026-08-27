@@ -1647,6 +1647,75 @@ desaturated/dimmed with "My Products" already active in the nav, the second show
 Products' header/title/stat-cards already settled while lower sections are still
 fading in underneath. Cache bumped `v16`→`v17`.
 
+## Round 32 (2026-08-27) — cache-first instant page switches + a real background auto-refresh for balances; the dim from Round 31 removed
+
+Owner: "no need for deem confirmation, the page should have loaded all contents and
+catched and have auto update of new data, regardless such as balances and everything."
+Two asks: (1) drop Round 31's dim-on-tap feedback entirely, (2) actually fix the root
+cause it was compensating for — Home/Products/Team always threw away whatever they'd
+already shown and re-fetched from scratch on every single tab visit, so switching
+tabs was never actually instant, and nothing ever updated in the background while a
+member just sat on a screen looking at their balance.
+
+**Dim removed.** `.page-loading` (the opacity-.4 pseudo-loading state) deleted from
+`user-src/index.html`'s CSS and every `.classList.add/remove('page-loading')` call
+site (`showPage`, `switchTeamLevel`, `openMissionCenterSheet`, `openRecordsSheet`,
+`openWithdrawSheet`, `openWithdrawalAccountsSheet`, plus their matching removals).
+
+**Cache-first rendering, all 3 data-heavy pages.** `renderHome()`/`renderProducts()`/
+`renderTeam()` each split into a pure paint function (`paintHome()`/`paintProducts()`/
+`paintTeam()`, builds HTML from whatever's already in `STATE`, no fetch) plus the
+orchestrating `render*()`: if `STATE.account`/`STATE.investments`/`STATE.teamStats`
+already holds data from a previous visit, paint it INSTANTLY (synchronous, zero
+network wait, same `.reveal-in` stagger as a genuine first paint) before ever touching
+the network, then fetch fresh data in the background and reconcile once it lands. A
+truly first-ever visit (nothing cached yet) still has to wait for the one unavoidable
+fetch — there's nothing to show before that.
+
+**Reconciling after the background fetch never rebuilds the page.** This is the part
+that actually matters: replacing `pageHost.innerHTML` again to update 2-3 numbers
+would tear down and restart the activity ticker's running marquee, the chest-swing
+animation, and the plan countdowns -- exactly the "Home banner carousel stuck on
+frame one" class of bug the sibling space8 project's own CLAUDE.md documents hitting
+and fixing (Round 0y there) from this same mistake. So the background reconcile is
+surgical: `patchHomeBalances()` (new `id="homeWallet"`/`id="homeTotalEarned"`/
+`id="homeTotalInvested"` on the 3 hero figures) and `patchTeamStats()` (new
+`id="teamTotalCount"`/`id="teamCommissionAmt"`/`id="teamDepositsAmt"`) just update
+`textContent` on those specific nodes -- nothing else in the DOM is touched. Products
+doesn't get a surgical patch (an investment's own progress bar, status pill, and
+countdown timer can genuinely change shape, not just a number) -- it does a full quiet
+repaint with no animation on the background reconcile, safe because
+`startPlanCountdowns()` was already idempotent (clears its own prior interval).
+
+**Real background auto-refresh while just sitting on a page.** New `startLiveRefresh()`
+(a single global timer, checks `STATE.page` on every 8s tick rather than tracking
+which page started it, so it naturally follows the member across tabs) re-fetches
+`/account` while on Home or `/team/stats` while on Team and patches the same surgical
+spots -- balances now genuinely update on their own, matching "auto update of new
+data, regardless." Idempotent (`stopLiveRefresh()` first) and started once per
+`showPage()` call; stopped in `doLogout()` so a signed-out session never keeps polling.
+Deliberately scoped to Home + Team's balance/summary figures (what the owner named) --
+Products' periodic case was judged lower-value to build a bespoke per-card patcher for
+right now and left on refresh-on-visit only.
+
+**Real bug fixed in passing**: `startActivityTicker()` never cleared a prior interval
+before setting a new one (`_activityRefreshTimer = setInterval(...)` was a bare
+reassignment) -- harmless before this round since it was only ever called once per
+real navigation, but would have silently stacked a leaked interval on every quiet
+reconcile if it had ever been called from one. Made idempotent (`stopActivityTicker()`
+first) as a defensive fix, matching `startPlanCountdowns()`'s existing pattern.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright, with mocked `/account` and `/team/stats` returning
+different values on their 2nd+ call: confirmed switching Team→Home shows the CACHED
+wallet balance within 20ms (long before a real fetch could resolve); confirmed the
+activity ticker's DOM node (tagged with a marker) survives both the background
+reconcile after a tab switch AND a full 8s live-refresh tick untouched, while the
+wallet balance visibly updates to the new mocked value; confirmed switching Team to
+Level 2 and then waiting past a live-refresh tick leaves Level 2 still selected (not
+reset to Level 1) while the team commission figure still updates; confirmed zero
+`.page-loading` elements exist anywhere. Cache bumped `v17`→`v18`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

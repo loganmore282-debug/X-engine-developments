@@ -170,12 +170,6 @@ a{color:inherit;}
 .reveal-in > *:nth-child(6){animation-delay:175ms;}
 .reveal-in > *:nth-child(n+7){animation-delay:210ms;}
 
-/* Instant tap feedback: pageHost/sheetBody dim the moment a switch starts
-   (a real CSS transition on a persistent element, not a fresh node, so it
-   responds immediately -- no waiting on the network round trip to see
-   anything happen) and un-dim the instant fresh content lands. */
-#pageHost, #sheetBody, #recordsBody, #teamMembersBox{transition:opacity .12s ease;}
-.page-loading{opacity:.4;}
 </style>
 </head>
 <body>

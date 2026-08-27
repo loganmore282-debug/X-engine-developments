@@ -168,6 +168,7 @@ window.doRegister = async function(){
   catch (e) { $('regError').innerHTML = `<div class="auth-error">${esc(fbErrMsg(e))}</div>`; setBtnLoading('regBtn', false, 'Register'); }
 };
 window.doLogout = async function(){
+  stopLiveRefresh();
   Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null });
   await window.fbSignOut();
 };
@@ -247,24 +248,57 @@ function updateNavIcons(){
     btn.classList.toggle('active', active);
   });
 }
+// Keeps balances/team stats quietly current while the app just sits open --
+// no navigation needed to see fresh numbers. Started once per page-enter
+// (idempotent -- always clears any prior timer first) and checks
+// STATE.page on every tick rather than tracking which page started it, so
+// it naturally follows the user across tabs without needing to be
+// restarted per-page. Only ever patches specific numeric fields in place
+// (never a full page rebuild) so it can't disturb the activity ticker, the
+// chest-swing animation, plan countdowns, or whichever team level/tab the
+// member currently has open.
+var _liveRefreshTimer = null;
+function stopLiveRefresh(){ clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; }
+function startLiveRefresh(){
+  stopLiveRefresh();
+  _liveRefreshTimer = setInterval(async () => {
+    if (STATE.page === 'home') {
+      const r = await api('/account');
+      if (r.status === 'success' && STATE.page === 'home') { STATE.account = r.account; patchHomeBalances(); }
+    } else if (STATE.page === 'team') {
+      const r = await api('/team/stats');
+      if (r.status === 'success' && STATE.page === 'team') { STATE.teamStats = r; patchTeamStats(); }
+    }
+  }, 8000);
+}
 window.showPage = async function(name){
   STATE.page = name;
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   stopActivityTicker();
-  const host = $('pageHost');
-  host.classList.add('page-loading'); // instant dim so the tap feels acknowledged right away
   if (name === 'home') await renderHome();
   else if (name === 'products') await renderProducts();
   else if (name === 'team') await renderTeam();
   else if (name === 'account') await renderAccount();
-  host.classList.remove('page-loading');
+  startLiveRefresh();
 };
 
 // ── HOME ──
+// Cache-first: a page revisit paints instantly from whatever STATE already
+// holds (no network wait, no loading affordance needed), then a background
+// fetch quietly brings it up to date. `patchHomeBalances()` updates just the
+// 3 money figures in place afterward (and on a standing timer via
+// startLiveRefresh()) without rebuilding the page -- rebuilding would tear
+// down and restart the ticker/chest-swing animations every few seconds.
 async function renderHome(){
+  const hadCache = !!STATE.account;
+  if (hadCache) paintHome();
   const [accR, invR] = await Promise.all([ api('/account'), api('/investments') ]);
   if (accR.status === 'success') STATE.account = accR.account;
+  if (STATE.page !== 'home') return; // navigated away while awaiting
+  if (hadCache) patchHomeBalances(); else paintHome();
+}
+function paintHome(){
   const a = STATE.account || {};
   const products = STATE.products || [];
   let html = `
@@ -281,15 +315,15 @@ async function renderHome(){
     </div>
     <div style="margin-top:26px;">
       <div style="font-size:12.5px;opacity:.82;">Wallet Balance</div>
-      <div class="mono" style="font-size:32px;font-weight:800;margin-top:4px;">${fmtUGX(a.walletBalance)}</div>
+      <div id="homeWallet" class="mono" style="font-size:32px;font-weight:800;margin-top:4px;">${fmtUGX(a.walletBalance)}</div>
       <div style="display:flex;gap:10px;margin-top:16px;">
         <div style="flex:1;background:rgba(255,255,255,.14);border-radius:16px;padding:10px 12px;">
           <div style="font-size:11px;opacity:.8;">Total Earned</div>
-          <div class="mono" style="font-size:14.5px;font-weight:700;margin-top:2px;">${fmtUGX(a.totalEarned)}</div>
+          <div id="homeTotalEarned" class="mono" style="font-size:14.5px;font-weight:700;margin-top:2px;">${fmtUGX(a.totalEarned)}</div>
         </div>
         <div style="flex:1;background:rgba(255,255,255,.14);border-radius:16px;padding:10px 12px;">
           <div style="font-size:11px;opacity:.8;">Total Invested</div>
-          <div class="mono" style="font-size:14.5px;font-weight:700;margin-top:2px;">${fmtUGX(a.totalInvested)}</div>
+          <div id="homeTotalInvested" class="mono" style="font-size:14.5px;font-weight:700;margin-top:2px;">${fmtUGX(a.totalInvested)}</div>
         </div>
       </div>
     </div>
@@ -339,12 +373,25 @@ async function renderHome(){
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   startActivityTicker();
 }
+function patchHomeBalances(){
+  const a = STATE.account || {};
+  const w = $('homeWallet'); if (w) w.textContent = fmtUGX(a.walletBalance);
+  const e = $('homeTotalEarned'); if (e) e.textContent = fmtUGX(a.totalEarned);
+  const i = $('homeTotalInvested'); if (i) i.textContent = fmtUGX(a.totalInvested);
+}
 
 // ── MY PRODUCTS ──
 async function renderProducts(){
+  const hadCache = Array.isArray(STATE.investments);
+  if (hadCache) paintProducts(true);
   const r = await api('/investments');
-  const investments = r.status === 'success' ? r.investments : [];
-  STATE.investments = investments;
+  if (r.status === 'success') STATE.investments = r.investments;
+  else if (!hadCache) STATE.investments = [];
+  if (STATE.page !== 'products') return; // navigated away while awaiting
+  paintProducts(!hadCache);
+}
+function paintProducts(animate){
+  const investments = STATE.investments || [];
   const active = investments.filter(i => i.status === 'active' || i.status === 'matured');
   const totalInvested = active.reduce((s,i)=>s+(i.amount||0),0);
   const totalEarned = active.reduce((s,i)=>s+(i.paidOut||0),0);
@@ -393,7 +440,7 @@ async function renderProducts(){
     });
   }
   html += `</div><div style="height:16px;"></div>`;
-  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
+  $('pageHost').innerHTML = animate ? '<div class="reveal-in">' + html + '</div>' : html;
   startPlanCountdowns();
 }
 // Live-ticking "Next cashback in HH:MM:SS" on each active plan card. Cleared
@@ -454,6 +501,7 @@ function stopActivityTicker(){
   if (track) track.style.animation = 'none';
 }
 function startActivityTicker(){
+  stopActivityTicker(); // idempotent -- a stray extra call must never leak a second interval
   renderActivityTicker();
   _activityRefreshTimer = setInterval(renderActivityTicker, 20000);
 }
@@ -462,7 +510,6 @@ function startActivityTicker(){
 window.switchTeamLevel = async function(level){
   document.querySelectorAll('.team-level-switcher .seg').forEach(s => s.classList.toggle('active', Number(s.dataset.level)===level));
   if (!STATE.teamMembers[level]) {
-    $('teamMembersBox').classList.add('page-loading');
     const r = await api('/team/members?level=' + level);
     STATE.teamMembers[level] = r.status === 'success' ? r.members : [];
   }
@@ -489,7 +536,6 @@ function renderTeamMembers(level){
   $('teamMembersHeading').textContent = `Level ${level} members`;
   $('teamMembersCount').textContent = `${members.length} member${members.length===1?'':'s'}`;
   const box = $('teamMembersBox');
-  box.classList.remove('page-loading');
   if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">No members at this level yet.</div>'; return; }
   box.innerHTML = '<div class="reveal-in">' + members.map((m,idx) => `
   <div class="list-row">
@@ -502,9 +548,22 @@ function renderTeamMembers(level){
   </div>`).join('') + '</div>';
 }
 async function renderTeam(){
+  const hadCache = !!STATE.teamStats;
+  if (hadCache) paintTeam();
   const r = await api('/team/stats');
-  const t = r.status === 'success' ? r : { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
-  STATE.teamStats = t;
+  if (r.status === 'success') STATE.teamStats = r;
+  else if (!hadCache) STATE.teamStats = { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
+  if (STATE.page !== 'team') return; // navigated away while awaiting
+  if (hadCache) patchTeamStats(); else paintTeam();
+}
+function patchTeamStats(){
+  const t = STATE.teamStats || {};
+  const tt = $('teamTotalCount'); if (tt) tt.textContent = t.totalTeam;
+  const tc = $('teamCommissionAmt'); if (tc) tc.textContent = fmtUGX(t.teamCommission);
+  const td = $('teamDepositsAmt'); if (td) td.textContent = fmtUGX(t.teamDeposits);
+}
+function paintTeam(){
+  const t = STATE.teamStats || { referralCode:'', commRates:{l1:27,l2:2,l3:1}, team:{l1:0,l2:0,l3:0}, totalTeam:0, teamCommission:0, teamDeposits:0 };
   const link = t.referralCode ? (location.origin + '/?ref=' + t.referralCode) : '';
   let html = `
 <div style="display:flex;align-items:center;justify-content:center;gap:9px;padding:24px 20px 4px;">
@@ -548,11 +607,11 @@ async function renderTeam(){
   <div style="position:relative;">${ICONS.chev}</div>
 </button>
 <div class="team-summary-grid" style="margin:14px 20px 0;">
-  <div class="stat-tile" style="background:var(--snow-wine-soft);border-color:transparent;display:flex;align-items:center;gap:12px;"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.people2}</div><div><div style="font-size:10.5px;color:var(--snow-muted);">Total team</div><div class="mono" style="font-size:18px;font-weight:800;color:var(--snow-wine);">${t.totalTeam}</div></div></div>
-  <div class="stat-tile" style="background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:center;gap:12px;"><div class="icon-tile" style="width:38px;height:38px;background:rgba(47,107,71,.12);color:var(--snow-green);">${ICONS.user}</div><div><div style="font-size:10.5px;color:var(--snow-muted);">Team commission</div><div class="mono" style="font-size:18px;font-weight:800;color:var(--snow-green);">${fmtUGX(t.teamCommission)}</div></div></div>
+  <div class="stat-tile" style="background:var(--snow-wine-soft);border-color:transparent;display:flex;align-items:center;gap:12px;"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.people2}</div><div><div style="font-size:10.5px;color:var(--snow-muted);">Total team</div><div id="teamTotalCount" class="mono" style="font-size:18px;font-weight:800;color:var(--snow-wine);">${t.totalTeam}</div></div></div>
+  <div class="stat-tile" style="background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:center;gap:12px;"><div class="icon-tile" style="width:38px;height:38px;background:rgba(47,107,71,.12);color:var(--snow-green);">${ICONS.user}</div><div><div style="font-size:10.5px;color:var(--snow-muted);">Team commission</div><div id="teamCommissionAmt" class="mono" style="font-size:18px;font-weight:800;color:var(--snow-green);">${fmtUGX(t.teamCommission)}</div></div></div>
   <div class="team-deposits-card">
     ${waveLinesTR(90,84,'rgba(255,255,255,.55)',2,.7)}
-    <div style="position:relative;display:flex;align-items:center;gap:12px;"><div class="account-icon-bubble" style="width:46px;height:46px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);">${ICONS.walletLg}</div><div><div style="font-size:11px;opacity:.85;">Team deposits</div><div class="mono" style="font-size:20px;font-weight:800;margin-top:2px;">${fmtUGX(t.teamDeposits)}</div></div></div>
+    <div style="position:relative;display:flex;align-items:center;gap:12px;"><div class="account-icon-bubble" style="width:46px;height:46px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);">${ICONS.walletLg}</div><div><div style="font-size:11px;opacity:.85;">Team deposits</div><div id="teamDepositsAmt" class="mono" style="font-size:20px;font-weight:800;margin-top:2px;">${fmtUGX(t.teamDeposits)}</div></div></div>
   </div>
 </div>
 <div class="team-level-switcher" style="margin:22px 20px 0;">
@@ -574,9 +633,8 @@ async function renderTeam(){
 }
 window.openMissionCenterSheet = async function(){
   openSheet('Mission Center', '');
-  $('sheetBody').classList.add('page-loading');
   const r = await api('/mission/status');
-  if (r.status !== 'success') { $('sheetBody').classList.remove('page-loading'); $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>'; return; }
+  if (r.status !== 'success') { $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>'; return; }
   STATE.mission = r;
   renderMissionCenter();
 };
@@ -598,7 +656,6 @@ function renderMissionCenter(){
           ? `<button class="primary-button" style="padding:8px 16px;font-size:12.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
           : `<div class="status-pill pending mono">${fmtUGX(m.teamDeposits)} / ${fmtUGX(d.target)}</div>`}
     </div>`).join('');
-  $('sheetBody').classList.remove('page-loading');
   $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="app-card" style="padding:18px;">
       <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-muted);font-weight:700;">Daily Referral Salary</div>
@@ -794,7 +851,6 @@ window.openRecordsSheet = async function(){
       <button class="seg" data-cat="withdraw" onclick="switchRecordsTab('withdraw')">Withdrawals</button>
     </div>
     <div id="recordsBody" style="margin-top:16px;"></div>`);
-  $('recordsBody').classList.add('page-loading');
   const r = await api('/transactions');
   _recordsRows = r.status === 'success' ? r.transactions : [];
   renderRecordsTab('income');
@@ -807,7 +863,6 @@ window.switchRecordsTab = function(cat){
 function renderRecordsTab(cat){
   const body = $('recordsBody');
   if (!body) return;
-  body.classList.remove('page-loading');
   const rows = _recordsRows.filter(t => recordsTabMatch(cat, t));
   if (!rows.length) { body.innerHTML = '<div class="list-empty reveal-in">No records yet.</div>'; return; }
   body.innerHTML = '<div class="reveal-in"><div class="settings-list">' + rows.map(t => `
@@ -859,11 +914,9 @@ async function pollDepositStatus(depositId){
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
   openSheet('Withdraw', '');
-  $('sheetBody').classList.add('page-loading');
   const r = await api('/bank/list');
   STATE.bankAccounts = r.status === 'success' ? r.accounts : [];
   const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)} — ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
-  $('sheetBody').classList.remove('page-loading');
   $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minWithdraw)}, ${s.withdrawFeePct||15}% fee applies)</label><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0"></div>
     <div class="form-field"><label>Withdrawal account</label>
@@ -893,14 +946,12 @@ window.submitWithdraw = async function(){
 
 window.openWithdrawalAccountsSheet = async function(){
   openSheet('Withdrawal Accounts', '');
-  $('sheetBody').classList.add('page-loading');
   const r = await api('/bank/list');
   STATE.bankAccounts = r.status === 'success' ? r.accounts : [];
   renderWithdrawalAccountsSheet();
 };
 function renderWithdrawalAccountsSheet(){
   const list = STATE.bankAccounts || [];
-  $('sheetBody').classList.remove('page-loading');
   let html = '<div class="reveal-in"><div class="settings-list" style="margin-bottom:18px;">';
   html += list.length ? list.map(a => `
     <div class="list-row">
