@@ -794,9 +794,13 @@ async function settleInvestmentIfDue(doc) {
       });
       if (amount <= 0) return;
       try {
-        await db.collection('users').doc(f.userId).update({
+        // Nested under bal:<userId> so this credit can't interleave with a
+        // concurrent absolute-value rewrite of the same totals (repair-ledger,
+        // recountAllTotals) reading stale data mid-increment (see those
+        // functions' own bal: locking and CLAUDE.md's Round 17/19 notes).
+        await withLock('bal:' + f.userId, () => db.collection('users').doc(f.userId).update({
           walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount)
-        });
+        }));
       } catch (creditErr) {
         await doc.ref.update({ payoutsMade: fMade, paidOut: FieldValue.increment(-amount), status: 'active' }).catch(() => {});
         throw creditErr;
@@ -862,10 +866,11 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
       const reward = Math.round(amount * pct / 100);
       if (reward <= 0) continue;
       await invRef.update({ commissionPaidLevels: FieldValue.arrayUnion(i) });
-      await db.collection('users').doc(id).update({
+      // Nested under bal:<id> -- see settleInvestmentIfDue's own comment.
+      await withLock('bal:' + id, () => db.collection('users').doc(id).update({
         walletBalance: FieldValue.increment(reward), teamCommission: FieldValue.increment(reward),
         totalEarned: FieldValue.increment(reward)
-      });
+      }));
       await db.collection('transactions').add({
         userId: id, type: 'commission', description: `Level ${i + 1} reward`,
         amount: reward, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
@@ -959,7 +964,8 @@ app.post('/team/milestone/claim', async (req, res) => {
     await withLock('milestoneclaim:' + userId + ':' + claimFlag, async () => {
       const liveProgress = isDeposit ? await wholeTeamDeposits(userId) : await activeL1Count(userId);
       if (liveProgress < m.target) { stillShort = true; return; }
-      await db.runTransaction(async t => {
+      // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
+      await withLock('bal:' + userId, () => db.runTransaction(async t => {
         const uRef = db.collection('users').doc(userId);
         const fresh = await t.get(uRef);
         if (!fresh.exists || fresh.data()[claimFlag] || fresh.data().status === 'banned') return;
@@ -971,7 +977,7 @@ app.post('/team/milestone/claim', async (req, res) => {
           amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
         done = true;
-      });
+      }));
     });
     if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now — please try again.' });
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
@@ -1017,7 +1023,8 @@ app.post('/mission/salary/claim', async (req, res) => {
       const count = await activeL1Count(userId);
       const amount = Math.min(count, MISSION_SALARY_REFERRAL_CAP) * MISSION_SALARY_RATE;
       if (amount <= 0) { result = { code: 400, body: { status: 'error', message: 'You need at least one active referral to claim a daily salary.' } }; return; }
-      await uRef.update({ walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), missionSalaryLastClaim: today });
+      // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
+      await withLock('bal:' + userId, () => uRef.update({ walletBalance: FieldValue.increment(amount), totalEarned: FieldValue.increment(amount), missionSalaryLastClaim: today }));
       const { date, time } = nowStr();
       await db.collection('transactions').add({
         userId, type: 'mission_salary', description: `Mission Center: daily referral salary (${count} active referrals)`,
@@ -1042,7 +1049,8 @@ app.post('/mission/deposit/claim', async (req, res) => {
     await withLock('mission-deposit:' + userId + ':' + claimFlag, async () => {
       const liveProgress = await wholeTeamDeposits(userId);
       if (liveProgress < m.target) { stillShort = true; return; }
-      await db.runTransaction(async t => {
+      // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
+      await withLock('bal:' + userId, () => db.runTransaction(async t => {
         const uRef = db.collection('users').doc(userId);
         const fresh = await t.get(uRef);
         if (!fresh.exists || fresh.data()[claimFlag] || fresh.data().status === 'banned') return;
@@ -1053,7 +1061,7 @@ app.post('/mission/deposit/claim', async (req, res) => {
           amount: m.reward, milestone: m.target, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
         });
         done = true;
-      });
+      }));
     });
     if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now — please try again.' });
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
@@ -1164,10 +1172,17 @@ app.post('/account/create-profile', async (req, res) => {
   const userId = auth.uid;
   const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
   try {
-    const ref = db.collection('users').doc(userId);
-    const snap = await ref.get();
-    if (snap.exists) return res.json({ status: 'success', message: 'Profile already exists' });
-    await ref.set(defaultProfileDoc(phone));
+    // Locked on the same 'reg:'+userId key as registration itself -- an
+    // unconditional .set() here without the lock (the old behaviour) could
+    // race a concurrent /register and wipe a just-completed registration
+    // (registrationDone/walletBalance/referralCode) back to a fresh default
+    // doc. Re-checks existence AFTER acquiring the lock, not before.
+    await withLock('reg:' + userId, async () => {
+      const ref = db.collection('users').doc(userId);
+      const snap = await ref.get();
+      if (snap.exists) return;
+      await ref.set(defaultProfileDoc(phone));
+    });
     res.json({ status: 'success' });
   } catch (e) {
     console.error('create-profile error:', e.message);
@@ -1177,11 +1192,22 @@ app.post('/account/create-profile', async (req, res) => {
 // Shared by the member's own /register — the ONE place that ever assigns a
 // referral code, links a referrer's team counts, sets the Transaction PIN,
 // or credits the welcome bonus.
-async function completeRegistrationCore(userId, referralCode, pin) {
+// `phone` is only used to create the profile doc if it's genuinely still
+// missing -- creation MUST happen inside this same 'reg:'+userId lock, not
+// before it (two concurrent /register calls for a brand-new user, e.g. a
+// slow first load racing a page reload, both used to read "doc missing"
+// and then unconditionally .set() a fresh default doc AFTER completion had
+// already landed, wiping registrationDone/walletBalance/referralCode back
+// to defaults and letting the second call register -- and pay the welcome
+// bonus -- a second time).
+async function completeRegistrationCore(userId, referralCode, pin, phone) {
   return withLock('reg:' + userId, async () => {
     const userRef = db.collection('users').doc(userId);
-    const userSnap = await userRef.get();
-    if (!userSnap.exists) return { code: 404, body: { status: 'error', message: 'User not found' } };
+    let userSnap = await userRef.get();
+    if (!userSnap.exists) {
+      await userRef.set(defaultProfileDoc(phone));
+      userSnap = await userRef.get();
+    }
     if (userSnap.data().registrationDone)
       return { code: 200, body: { status: 'already_done', referralCode: userSnap.data().referralCode || null } };
 
@@ -1252,13 +1278,8 @@ app.post('/register', async (req, res) => {
   if (!auth) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const userId = auth.uid;
   try {
-    const ref = db.collection('users').doc(userId);
-    const existing = await ref.get();
-    if (!existing.exists) {
-      const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
-      await ref.set(defaultProfileDoc(phone));
-    }
-    const result = await completeRegistrationCore(userId, req.body.referralCode, req.body.pin);
+    const phone = phoneFromVerifiedEmail(auth.email, req.body.phone);
+    const result = await completeRegistrationCore(userId, req.body.referralCode, req.body.pin, phone);
     const { referrerId, ...memberBody } = result.body;
     res.status(result.code).json(memberBody);
   } catch (e) {
@@ -1312,7 +1333,8 @@ app.post('/checkin', async (req, res) => {
       const yStr = yPad(yesterday.getUTCMonth() + 1) + '/' + yPad(yesterday.getUTCDate()) + '/' + yesterday.getUTCFullYear();
       const streak = real.lastCheckin === yStr ? real.streak + 1 : 1;
       const bonus = Number(sett.dailyCheckin) || 0;
-      await ref.update({ walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckin: today, checkinStreak: streak });
+      // Nested under bal:<uid> -- see settleInvestmentIfDue's own comment.
+      await withLock('bal:' + uid, () => ref.update({ walletBalance: FieldValue.increment(bonus), totalEarned: FieldValue.increment(bonus), lastCheckin: today, checkinStreak: streak }));
       const { date, time } = nowStr();
       await db.collection('transactions').add({
         userId: uid, type: 'checkin', description: `Daily check-in, day ${streak}`,
@@ -1339,38 +1361,51 @@ app.post('/invest/create', async (req, res) => {
   try {
     const sett = await getSettings();
     let invId, liveTier, cycle, expectedReturn, dailyPayout;
-    await withLock('bal:' + userId, () => db.runTransaction(async t => {
+    // NOT db.runTransaction -- that helper just runs queued ops sequentially
+    // with no rollback (M0 has no real multi-document transactions), so it
+    // gave no real protection here anyway. Awaiting the debit directly lets
+    // this catch a failure in the writes AFTER it and issue an exact
+    // compensating refund, instead of silently leaving the user charged for
+    // an investment that was never actually created.
+    await withLock('bal:' + userId, async () => {
       liveTier = await getProductByKey(tier.key);
       if (!liveTier || liveTier.active === false || liveTier.comingSoon) throw new Error('This product is not available right now.');
       cycle = Number(liveTier.cycle) || sett.cycleDays;
       expectedReturn = Number(liveTier.expectedReturn) || Math.round(liveTier.price * sett.returnMultiple);
       dailyPayout = Math.round(expectedReturn / cycle);
       const uRef = db.collection('users').doc(userId);
-      const fresh = await t.get(uRef);
+      const fresh = await uRef.get();
       if (!fresh.exists) throw new Error('User not found');
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       const bal = fresh.data().walletBalance || 0;
       if (bal < liveTier.price) throw new Error(`Need ${fmtUGX(liveTier.price)}, have ${fmtUGX(bal)}`);
-      const isFirstInvestment = !(fresh.data().firstInvestmentDone === true || (fresh.data().totalInvested || 0) > 0);
+      const wasFirstInvestmentDone = fresh.data().firstInvestmentDone === true;
+      const isFirstInvestment = !(wasFirstInvestmentDone || (fresh.data().totalInvested || 0) > 0);
       const invRef = db.collection('investments').doc();
       invId = invRef.id;
-      const newInvested = (Number(fresh.data().totalInvested) || 0) + liveTier.price;
       // Debited via increment(), not an absolute newBalance write, so a
       // concurrent credit from a different lock key (deposit, commission)
       // landing mid-transaction can never be silently overwritten.
-      t.update(uRef, { walletBalance: FieldValue.increment(-liveTier.price), totalInvested: newInvested, firstInvestmentDone: true });
+      await uRef.update({ walletBalance: FieldValue.increment(-liveTier.price), totalInvested: FieldValue.increment(liveTier.price), firstInvestmentDone: true });
       const { date, time } = nowStr();
-      t.set(invRef, {
-        userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
-        status: 'active', dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
-        isFirstInvestment, commissionPaidLevels: [], commissionPending: isFirstInvestment === true,
-        date, time, createdAt: FieldValue.serverTimestamp()
-      });
-      t.set(db.collection('transactions').doc(), {
-        userId, type: 'investment', description: `Bought ${liveTier.name}`, amount: -liveTier.price,
-        status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
-      });
-    }));
+      try {
+        await invRef.set({
+          userId, tierKey: liveTier.key, tierLabel: liveTier.name, amount: liveTier.price, cycle, expectedReturn,
+          status: 'active', dailyPayout, payoutsTotal: cycle, payoutsMade: 0, paidOut: 0,
+          isFirstInvestment, commissionPaidLevels: [], commissionPending: isFirstInvestment === true,
+          date, time, createdAt: FieldValue.serverTimestamp()
+        });
+        await db.collection('transactions').add({
+          userId, type: 'investment', description: `Bought ${liveTier.name}`, amount: -liveTier.price,
+          status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
+        });
+      } catch (createErr) {
+        await uRef.update({ walletBalance: FieldValue.increment(liveTier.price), totalInvested: FieldValue.increment(-liveTier.price), firstInvestmentDone: wasFirstInvestmentDone }).catch(compErr => {
+          console.error(`MONEY-SAFETY: investment ${invRef.id} creation failed AFTER debiting user ${userId} ${liveTier.price}, and the compensating refund ALSO failed -- wallet is short by ${liveTier.price}. Manual fix required.`, compErr.message);
+        });
+        throw createErr;
+      }
+    });
     creditReferralCommission(invId, userId, liveTier.price).catch(e => console.error('Commission error:', e.message));
     res.json({ status: 'success', investmentId: invId, message: `Bought ${liveTier.name} for ${fmtUGX(liveTier.price)}` });
   } catch (e) {
@@ -1463,37 +1498,67 @@ app.post('/deposit/marzpay', async (req, res) => {
   }
 });
 const _creditingDeposits = new Set();
+// A deposit is only genuinely DONE once the wallet was actually credited --
+// status alone reaching 'matched' is not enough, because CLAIM-BEFORE-CREDIT
+// below deliberately flips status first and can leave it 'matched' with
+// needsManualCredit:true if the wallet write itself then fails. Treating
+// bare status==='matched' as "done" (the old behaviour) made that stuck
+// state permanently unrecoverable: every future call here, and
+// /admin/deposit/force-credit's own guard, both short-circuited on status
+// alone and never retried the actual credit.
+function depositFullyCredited(d) { return d.status === 'matched' && !d.needsManualCredit; }
 async function creditDeposit(depDoc) {
   const dep = depDoc.data();
-  if (dep.status === 'matched') return true;
+  if (depositFullyCredited(dep)) return true;
   if (_creditingDeposits.has(depDoc.id)) return false;
   _creditingDeposits.add(depDoc.id);
   try {
     let credited = false, justCredited = false, creditedAmount = 0;
     await withLock('dep:' + depDoc.id, async () => {
       const fresh = await depDoc.ref.get();
-      if (!fresh.exists || fresh.data().status === 'matched') { credited = fresh.exists; return; }
-      const depUserId = fresh.data().userId;
-      const depAmount = Number(fresh.data().amount) || 0;
+      if (!fresh.exists) { credited = false; return; }
+      const fd = fresh.data();
+      if (depositFullyCredited(fd)) { credited = true; return; }
+      const depUserId = fd.userId;
+      const depAmount = Number(fd.amount) || 0;
+      const retryingStuckCredit = fd.status === 'matched' && fd.needsManualCredit === true;
       // CLAIM-BEFORE-CREDIT: flip to 'matched' before touching the wallet, so
       // a retry from the webhook, the client poll, or the reconciler is a
-      // clean no-op instead of a double credit.
-      await depDoc.ref.update({ status: 'matched', creditedAt: FieldValue.serverTimestamp() });
+      // clean no-op instead of a double credit. Skipped when we're already
+      // retrying a stuck credit -- status is 'matched' already, re-setting
+      // creditedAt would misreport when this deposit actually completed.
+      if (!retryingStuckCredit) {
+        await depDoc.ref.update({ status: 'matched', creditedAt: FieldValue.serverTimestamp() });
+      }
       try {
-        await db.collection('users').doc(depUserId).update({
+        // Nested under bal:<depUserId> -- see settleInvestmentIfDue's own comment.
+        await withLock('bal:' + depUserId, () => db.collection('users').doc(depUserId).update({
           walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount)
-        });
+        }));
       } catch (creditErr) {
         await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
         console.error(`DEPOSIT CREDIT FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, creditErr.message);
         throw creditErr;
       }
+      // Ledger row is deduped by the deposit's own unique `ref` -- on a
+      // stuck-credit retry the wallet write above is what mattered; only
+      // add the "Wallet recharge" row if a previous partial attempt didn't
+      // already manage to write one before failing.
+      if (retryingStuckCredit) {
+        const existingTx = await db.collection('transactions').where('type', '==', 'deposit').where('ref', '==', fd.ref).limit(1).get();
+        if (!existingTx.empty) {
+          await depDoc.ref.update({ needsManualCredit: FieldValue.delete() }).catch(() => {});
+          credited = true; justCredited = true; creditedAmount = depAmount;
+          return;
+        }
+      }
       const { date, time } = nowStr();
       await db.collection('transactions').add({
         userId: depUserId, type: 'deposit', description: 'Wallet recharge',
-        amount: depAmount, status: 'success', date, time, ref: fresh.data().ref,
+        amount: depAmount, status: 'success', date, time, ref: fd.ref,
         createdAt: FieldValue.serverTimestamp()
       });
+      await depDoc.ref.update({ needsManualCredit: FieldValue.delete() }).catch(() => {});
       credited = true; justCredited = true; creditedAmount = depAmount;
     });
     // Only on a REAL new credit (never an idempotent replay/no-op) -- a
@@ -1513,7 +1578,17 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     if (!depSnap.exists || depSnap.data().userId !== userId)
       return res.status(404).json({ status: 'error', message: 'Deposit not found' });
     const dep = depSnap.data();
-    if (dep.status === 'matched') return res.json({ status: 'success', state: 'matched' });
+    if (dep.status === 'matched') {
+      // Best-effort self-heal: if a prior credit attempt got the status to
+      // 'matched' but failed to actually pay the wallet (needsManualCredit),
+      // retry it here so the user's own poll loop -- which normally stops
+      // the instant it sees 'matched' -- has a real chance to fix this
+      // without needing an admin to notice first. Never let a retry failure
+      // here turn into an error response; the deposit did genuinely match
+      // at the gateway, the periodic reconciler keeps retrying regardless.
+      if (dep.needsManualCredit) await creditDeposit(depSnap).catch(() => {});
+      return res.json({ status: 'success', state: 'matched' });
+    }
     if (dep.status === 'failed')  return res.json({ status: 'success', state: 'failed', message: dep.failureReason });
     if (!dep.marzTxUuid) return res.json({ status: 'success', state: 'pending' });
     const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
@@ -1637,9 +1712,14 @@ app.post('/withdraw/request', async (req, res) => {
     const net = amt - fee;
     const ref = await uniqueRef('S');
     let witId;
-    await withLock('bal:' + userId, () => db.runTransaction(async t => {
+    // NOT db.runTransaction -- see /invest/create's own comment on why: no
+    // real rollback exists here anyway, so awaiting each write directly lets
+    // this catch a failure after the debit and refund it exactly, instead of
+    // silently leaving the member charged with no withdrawal request to show
+    // for it.
+    await withLock('bal:' + userId, async () => {
       const uRef = db.collection('users').doc(userId);
-      const fresh = await t.get(uRef);
+      const fresh = await uRef.get();
       if (!fresh.exists) throw new Error('User not found');
       if (fresh.data().status === 'banned') { const banErr = new Error('Account suspended. Contact customer service.'); banErr.code = 'BANNED'; throw banErr; }
       if (sett.requireInvestToWithdraw !== false && (fresh.data().totalInvested || 0) <= 0)
@@ -1649,20 +1729,27 @@ app.post('/withdraw/request', async (req, res) => {
       const maxPerDay = Number(sett.maxWithdrawalsPerDay) || 0;
       if (maxPerDay > 0) {
         const today = nowStr().date;
-        const todaySnap = await t.get(db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today));
+        const todaySnap = await db.collection('withdrawals').where('userId', '==', userId).where('date', '==', today).get();
         if (todaySnap.size >= maxPerDay)
           throw new Error(`You've reached today's limit of ${maxPerDay} cash-out${maxPerDay === 1 ? '' : 's'}. Try again tomorrow.`);
       }
       const witRef = db.collection('withdrawals').doc();
       witId = witRef.id;
-      t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
+      await uRef.update({ walletBalance: FieldValue.increment(-amt) });
       const { date, time } = nowStr();
-      t.set(witRef, { userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref, status: 'pending', date, time, createdAt: FieldValue.serverTimestamp() });
-      t.set(db.collection('transactions').doc(), {
-        userId, type: 'withdraw', description: `Cash out to ${holder} (${rawNetwork}), net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, processing`,
-        amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
-      });
-    }));
+      try {
+        await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref, status: 'pending', date, time, createdAt: FieldValue.serverTimestamp() });
+        await db.collection('transactions').add({
+          userId, type: 'withdraw', description: `Cash out to ${holder} (${rawNetwork}), net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, processing`,
+          amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
+        });
+      } catch (createErr) {
+        await uRef.update({ walletBalance: FieldValue.increment(amt) }).catch(compErr => {
+          console.error(`MONEY-SAFETY: withdrawal ${witRef.id} creation failed AFTER debiting user ${userId} ${amt}, and the compensating refund ALSO failed -- wallet is short by ${amt}. Manual fix required.`, compErr.message);
+        });
+        throw createErr;
+      }
+    });
     sendAdminPush('New withdrawal request', `${fmtUGX(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
     res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested — processing now' });
   } catch (e) {
@@ -1682,6 +1769,51 @@ async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome) {
       return txDoc.ref.update(update);
     }));
   } catch (e) { console.warn('finalizeWithdrawalTransactionRecord (non-critical):', e.message); }
+}
+// Applies the wallet-side refund recorded on a declined withdrawal
+// (refundPending + refundAmount/refundNetToUnwind, set atomically together
+// with the 'declined' status transition by declineWithdrawalAndRefund
+// below) and clears refundPending once it lands. Idempotent and safe to
+// call again on the same withdrawal -- re-reads the doc and does nothing if
+// refundPending is already false, so both the original decline call and a
+// later reconciler retry can safely call this without double-refunding.
+async function completeWithdrawalRefund(witRef, userId) {
+  try {
+    const fresh = await witRef.get();
+    if (!fresh.exists || !fresh.data().refundPending) return;
+    const fd = fresh.data();
+    const uRef = db.collection('users').doc(userId);
+    const update = { walletBalance: FieldValue.increment(fd.refundAmount || 0) };
+    if (fd.refundNetToUnwind) update.totalWithdrawn = FieldValue.increment(-fd.refundNetToUnwind);
+    await uRef.update(update);
+    await witRef.update({ refundPending: FieldValue.delete(), refundAmount: FieldValue.delete(), refundNetToUnwind: FieldValue.delete() }).catch(() => {});
+  } catch (e) {
+    console.error(`MONEY-SAFETY: withdrawal refund failed for ${witRef.id} user ${userId} -- refundPending stays true, the reconciler will retry.`, e.message);
+  }
+}
+// Declines a withdrawal (only from one of fromStatuses, else a no-op — lets
+// every caller pass the SAME status guard it already checked outside the
+// lock without re-duplicating that logic) and refunds its full gross amount.
+// The status flip + a durable refundPending marker land in ONE atomic
+// single-document update (Mongo's updateOne is atomic per document even
+// without M0's missing multi-document transactions); the wallet refund is a
+// separate write right after it. If that second write fails -- a network
+// blip, a process crash -- the withdrawal is left 'declined' with
+// refundPending:true instead of silently declined-and-unrefunded with no
+// trace: reconcileStuckWithdrawalRefunds (in the periodic reconciler) scans
+// for exactly that and retries it.
+async function declineWithdrawalAndRefund(witRef, userId, reason, fromStatuses) {
+  let didDecline = false;
+  await withLock('bal:' + userId, async () => {
+    const fresh = await witRef.get();
+    if (!fresh.exists || !fromStatuses.includes(fresh.data().status)) return;
+    const fd = fresh.data();
+    const netToUnwind = fd.status === 'processing' ? fd.net : 0;
+    await witRef.update({ status: 'declined', failureReason: reason, refundPending: true, refundAmount: fd.amount, refundNetToUnwind: netToUnwind });
+    didDecline = true;
+    await completeWithdrawalRefund(witRef, userId);
+  });
+  return didDecline;
 }
 // Guarded transition to 'processed' — shares the SAME 'bal:'+userId lock key
 // every failure/refund path already uses, so a success and a failure branch
@@ -1807,13 +1939,7 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
     }
     if (FAILED_STATUSES.has(marzStatus)) {
-      await withLock('bal:' + userId, () => db.runTransaction(async t => {
-        const fresh = await t.get(witSnap.ref);
-        if (!fresh.exists || fresh.data().status !== 'processing') return;
-        const uRef = db.collection('users').doc(userId);
-        t.update(witSnap.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
-        t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
-      }));
+      await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the mobile-money provider', ['processing']);
       await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined');
       return res.json({ status: 'success', state: 'declined' });
     }
@@ -1859,13 +1985,7 @@ app.post('/withdraw/callback', async (req, res) => {
         if (candidate.reference && candidate.reference === wit.marzReference) { uuid = webhookUuid; tx = candidate; doc.ref.update({ marzTxUuid: uuid }).catch(() => {}); }
       }
       if (!uuid || !tx || !FAILED_STATUSES.has(tx.status)) return;
-      await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {
-        const fresh = await t.get(doc.ref);
-        if (!fresh.exists || fresh.data().status !== 'processing') return;
-        const uRef = db.collection('users').doc(wit.userId);
-        t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
-        t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
-      }));
+      await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
       await finalizeWithdrawalTransactionRecord(doc.id, 'declined');
     }
   } catch (e) { console.error('Withdraw callback error:', e.message); }
@@ -1972,9 +2092,10 @@ app.post('/redeem', async (req, res) => {
         await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId) }).catch(() => {});
         result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
       }
-      await db.collection('users').doc(userId).update({
+      // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
+      await withLock('bal:' + userId, () => db.collection('users').doc(userId).update({
         walletBalance: FieldValue.increment(reward), totalEarned: FieldValue.increment(reward)
-      });
+      }));
       await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
       const { date, time } = nowStr();
       await db.collection('transactions').add({
@@ -2709,6 +2830,26 @@ app.post('/admin/user/delete', async (req, res) => {
       const childSnap = await db.collection('users').where('referredBy', '==', userId).get();
       await Promise.all(childSnap.docs.map(d => d.ref.update({ referredBy: parentId })));
     });
+    // Deletes the login + this user's non-financial personal data. Deliberately
+    // does NOT touch investments/transactions/withdrawals -- those are the
+    // financial ledger (audit trail, referral-commission source data for
+    // OTHER users' records, admin financial reporting) and stay intact,
+    // orphaned from any login, exactly like any real fintech's "close
+    // account, keep the books" behavior. The admin UI's confirm prompt says
+    // this explicitly now -- it used to claim "ALL data: deposits,
+    // withdrawals, plans, transactions" would go, which was never true.
+    const [bankSnap, promoSnap, secSnap, depSnap] = await Promise.all([
+      db.collection('bankAccounts').where('userId', '==', userId).get(),
+      db.collection('promoRedemptions').where('userId', '==', userId).get(),
+      db.collection('securityEvents').where('userId', '==', userId).get(),
+      db.collection('pendingDeposits').where('userId', '==', userId).where('status', '!=', 'matched').get(),
+    ]);
+    await Promise.all([
+      ...bankSnap.docs.map(d => d.ref.delete()),
+      ...promoSnap.docs.map(d => d.ref.delete()),
+      ...secSnap.docs.map(d => d.ref.delete()),
+      ...depSnap.docs.map(d => d.ref.delete()),
+    ]);
     await db.collection('users').doc(userId).delete();
     try { await admin.auth().deleteUser(userId); } catch (_) {}
     if (parentId) await recomputeTeamCounts(parentId).catch(e => console.warn('recomputeTeamCounts warning:', e.message));
@@ -2730,13 +2871,17 @@ app.post('/admin/deposit', async (req, res) => {
   _adminCreditDebounce.set(userId, Date.now());
   try {
     const { date, time } = nowStr();
-    await db.runTransaction(async t => {
+    // Locked on bal:<userId> -- this was the one money-crediting path in the
+    // whole codebase with no lock at all, meaning a concurrent repair-ledger/
+    // recountAllTotals absolute-value rewrite (both bal:-locked) could race
+    // this increment and silently drop it. Matches /admin/debit's own locking.
+    await withLock('bal:' + userId, () => db.runTransaction(async t => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
       t.update(uRef, { walletBalance: FieldValue.increment(amt), totalDeposited: FieldValue.increment(amt) });
       t.set(db.collection('transactions').doc(), { userId, type: 'admin_credit', description: note || 'Snow credit', amount: amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
-    });
+    }));
     logAdminAction(req, 'manual_credit', { userId, amount: amt, note });
     res.json({ status: 'success', message: `Credited ${fmtUGX(amt)}` });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -2779,6 +2924,22 @@ app.post('/admin/ban', async (req, res) => {
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Groups already-processed rows by calendar day (Kampala time, matching
+// eatDayKey everywhere else) for the admin "Processed per day" charts.
+// `rows` must already be filtered to only the processed ones.
+function groupProcessedByDay(rows, timestampField, amountField = 'amount') {
+  const byDay = {};
+  let processedAmount = 0;
+  for (const r of rows) {
+    const amt = finiteMoney(r[amountField]);
+    processedAmount += amt;
+    const day = eatDayKey(r[timestampField] || r.createdAt);
+    const row = byDay[day] || (byDay[day] = { day, count: 0, amount: 0 });
+    row.count++; row.amount += amt;
+  }
+  const processedByDay = Object.values(byDay).sort((a, b) => a.day < b.day ? -1 : 1);
+  return { processedByDay, processedAmount };
+}
 app.post('/admin/deposits/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -2795,7 +2956,8 @@ app.post('/admin/deposits/list', async (req, res) => {
     unresolvedSnap.docs.forEach(d => { if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() }); });
     const rows = Array.from(byId.values());
     rows.forEach(r => { r.accountPhone = phones[r.userId] || ''; r.referralCode = refCodes[r.userId] || ''; counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1; });
-    res.json({ status: 'success', deposits: rows, counts, total: rows.length });
+    const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(r => r.status === 'matched'), 'creditedAt');
+    res.json({ status: 'success', deposits: rows, counts, total: rows.length, processedByDay, processedAmount });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/deposit/force-credit', async (req, res) => {
@@ -2805,7 +2967,7 @@ app.post('/admin/deposit/force-credit', async (req, res) => {
   try {
     const snap = await db.collection('pendingDeposits').doc(depositId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
-    if (snap.data().status === 'matched') return res.json({ status: 'success', message: 'Already credited' });
+    if (depositFullyCredited(snap.data())) return res.json({ status: 'success', message: 'Already credited' });
     const ok = await creditDeposit(snap);
     if (!ok) return res.status(409).json({ status: 'error', message: 'Could not credit. Try again' });
     logAdminAction(req, 'deposit_force_credited', { depositId, amount: snap.data().amount });
@@ -2828,7 +2990,8 @@ app.post('/admin/withdrawals/list', async (req, res) => {
     unresolvedSnap.docs.forEach(d => { if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() }); });
     const rows = Array.from(byId.values());
     rows.forEach(w => { w.accountPhone = phones[w.userId] || ''; w.referralCode = refCodes[w.userId] || ''; counts[w.status] = (counts[w.status] || 0) + 1; });
-    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length });
+    const { processedByDay, processedAmount } = groupProcessedByDay(rows.filter(w => w.status === 'processed'), 'processedAt', 'net');
+    res.json({ status: 'success', withdrawals: rows, counts, total: rows.length, processedByDay, processedAmount });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.post('/admin/withdraw/reject', async (req, res) => {
@@ -2842,17 +3005,7 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
     if (w.status !== 'pending' && w.status !== 'processing') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
-    let refunded = false;
-    await withLock('bal:' + w.userId, () => db.runTransaction(async t => {
-      const fresh = await t.get(ref);
-      if (!fresh.exists || (fresh.data().status !== 'pending' && fresh.data().status !== 'processing')) return;
-      const wasProcessing = fresh.data().status === 'processing';
-      const uRef = db.collection('users').doc(w.userId);
-      t.update(ref, { status: 'declined', failureReason: 'Rejected by admin' });
-      t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount) });
-      if (wasProcessing) t.update(uRef, { totalWithdrawn: FieldValue.increment(-fresh.data().net) });
-      refunded = true;
-    }));
+    const refunded = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing']);
     if (refunded) await finalizeWithdrawalTransactionRecord(witId, 'declined');
     logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId });
     res.json({ status: 'success', message: 'Withdrawal rejected and refunded' });
@@ -2981,12 +3134,19 @@ app.get('/admin/integrity', async (req, res) => {
     res.json({ status: 'success', checked: usersSnap.size, mismatches });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Rebuilds totalDeposited/totalEarned from the transaction ledger — the
-// source of truth — rather than trusting drifted incremental counters.
+// Rebuilds totalDeposited/totalEarned/totalInvested and each user's
+// check-in streak from the real ledger/investments/check-in history --
+// the source of truth -- rather than trusting drifted incremental counters.
+// The admin UI's "Recalculate totals" button has always claimed all four;
+// this used to only actually rebuild the first two (Codex-caught, round 19).
 async function recountAllTotals() {
   return withLock('totals-recount', async () => {
-    const txSnap = await db.collection('transactions').limit(200000).get();
+    const [txSnap, invSnap] = await Promise.all([
+      db.collection('transactions').limit(200000).get(),
+      db.collection('investments').limit(50000).get(),
+    ]);
     const totals = {};
+    const checkinDayKeys = {};
     txSnap.forEach(d => {
       const t = d.data();
       if (!t.userId) return;
@@ -2997,18 +3157,46 @@ async function recountAllTotals() {
       // zero — cashback/commission/team_reward (Task Center)/promocode
       // (gift codes)/checkin.
       if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) row.earned += finiteMoney(t.amount);
+      if (t.type === 'checkin') (checkinDayKeys[t.userId] || (checkinDayKeys[t.userId] = new Set())).add(eatDayKey(t.createdAt));
     });
-    let updated = 0;
+    const invested = {};
+    invSnap.forEach(d => {
+      const inv = d.data();
+      if (!inv.userId) return;
+      invested[inv.userId] = (invested[inv.userId] || 0) + finiteMoney(inv.amount);
+    });
+    let updated = 0, investedFixed = 0, streaksFixed = 0;
     const usersSnap = await db.collection('users').limit(10000).get();
     for (const doc of usersSnap.docs) {
       const row = totals[doc.id] || { deposited: 0, earned: 0 };
+      const realInvested = invested[doc.id] || 0;
+      const realStreak = computeCheckinStreak(checkinDayKeys[doc.id] || new Set());
       const u = doc.data();
-      if (finiteMoney(u.totalDeposited) !== row.deposited || finiteMoney(u.totalEarned) !== row.earned) {
-        await doc.ref.update({ totalDeposited: row.deposited, totalEarned: row.earned });
+      const update = {};
+      let investedChanged = false, streakChanged = false;
+      if (finiteMoney(u.totalDeposited) !== row.deposited) update.totalDeposited = row.deposited;
+      if (finiteMoney(u.totalEarned) !== row.earned) update.totalEarned = row.earned;
+      if (finiteMoney(u.totalInvested) !== realInvested) { update.totalInvested = realInvested; investedChanged = true; }
+      if ((u.checkinStreak || 0) !== realStreak.streak || (u.lastCheckin || null) !== realStreak.lastCheckin) {
+        update.checkinStreak = realStreak.streak; update.lastCheckin = realStreak.lastCheckin; streakChanged = true;
+      }
+      if (Object.keys(update).length) {
+        // Per-user bal:<userId>, not the outer 'totals-recount' lock this
+        // whole function holds -- that lock only serializes recount runs
+        // against each other, not against a live credit landing on this one
+        // user between this loop's read (the `totals`/`invested` snapshots
+        // above) and this specific overwrite, which would otherwise erase it
+        // (see repair-ledger's own bal: locking for the single-user version
+        // of this same hazard). Scoped per-user, not held for the whole
+        // loop, so one recount run doesn't serialize every user's money ops
+        // platform-wide for its full duration.
+        await withLock('bal:' + doc.id, () => doc.ref.update(update));
         updated++;
+        if (investedChanged) investedFixed++;
+        if (streakChanged) streaksFixed++;
       }
     }
-    return { ok: true, updated };
+    return { ok: true, updated, investedFixed, streaksFixed };
   });
 }
 app.get('/admin/users/recount', async (req, res) => {
@@ -3041,6 +3229,13 @@ async function reconcilePendingDeposits() {
       if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(doc); settled++; }
       else if (FAILED_STATUSES.has(marzStatus)) await markDepositFailed(doc.ref, dep.userId, DEPOSIT_FAILED_MSG);
     }
+    // Deposits stuck 'matched' with needsManualCredit:true (the wallet write
+    // itself failed after status already claimed the credit) never show up
+    // in the 'pending' scan above -- retry them here every tick regardless
+    // of whether any user is actively polling, so a stuck credit heals on
+    // its own even if the user never reopens the deposit screen.
+    const stuckSnap = await db.collection('pendingDeposits').where('needsManualCredit', '==', true).limit(50).get();
+    for (const doc of stuckSnap.docs) { if (await creditDeposit(doc).catch(() => false)) settled++; }
   } catch (e) { console.error('Reconcile deposits error:', e.message); }
   return settled;
 }
@@ -3056,18 +3251,28 @@ async function reconcilePendingWithdrawals() {
         if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
         settled++;
       } else if (FAILED_STATUSES.has(marzStatus)) {
-        await withLock('bal:' + wit.userId, () => db.runTransaction(async t => {
-          const fresh = await t.get(doc.ref);
-          if (!fresh.exists || fresh.data().status !== 'processing') return;
-          const uRef = db.collection('users').doc(wit.userId);
-          t.update(doc.ref, { status: 'declined', failureReason: 'Payout failed at the mobile-money provider' });
-          t.update(uRef, { walletBalance: FieldValue.increment(fresh.data().amount), totalWithdrawn: FieldValue.increment(-fresh.data().net) });
-        }));
+        await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
         await finalizeWithdrawalTransactionRecord(doc.id, 'declined');
         settled++;
       }
     }
   } catch (e) { console.error('Reconcile withdrawals error:', e.message); }
+  return settled;
+}
+// Withdrawals left 'declined' with refundPending:true -- the wallet-side
+// refund itself failed after the decline was already committed (see
+// declineWithdrawalAndRefund's own comment). Retried every reconciler tick
+// regardless of which caller originally declined it.
+async function reconcileStuckWithdrawalRefunds() {
+  let settled = 0;
+  try {
+    const snap = await db.collection('withdrawals').where('refundPending', '==', true).limit(50).get();
+    for (const doc of snap.docs) {
+      const w = doc.data();
+      await withLock('bal:' + w.userId, () => completeWithdrawalRefund(doc.ref, w.userId));
+      settled++;
+    }
+  } catch (e) { console.error('Reconcile stuck withdrawal refunds error:', e.message); }
   return settled;
 }
 async function reconcileCommissions() {
@@ -3090,7 +3295,7 @@ async function reconcileCashback() {
   finally { _sweepingCashback = false; }
 }
 function runReconciler() {
-  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileCommissions).catch(() => {});
+  reconcilePendingDeposits().then(reconcilePendingWithdrawals).then(reconcileStuckWithdrawalRefunds).then(reconcileCommissions).catch(() => {});
 }
 // Owner-toggleable: approves every still-pending withdrawal automatically,
 // a few seconds after it was requested — shares processWithdrawalCore with

@@ -68,6 +68,8 @@ async function ensureIndexes() {
     ['pendingDeposits', { ref: 1 }],
     ['pendingDeposits', { userId: 1, createdAt: -1 }],
     ['pendingDeposits', { status: 1, createdAt: 1 }],
+    ['pendingDeposits', { needsManualCredit: 1 }],
+    ['withdrawals',     { refundPending: 1 }],
     ['products',        { key: 1 }],
     ['bankAccounts',    { userId: 1 }],
     ['adminSessions',   { username: 1 }],
@@ -211,7 +213,18 @@ class DocumentReference {
   async update(updates) {
     const op = buildMongoUpdate(updates);
     if (!Object.keys(op).length) return;
-    await _mdb.collection(this._col).updateOne({ _id: this.id }, op);
+    const result = await _mdb.collection(this._col).updateOne({ _id: this.id }, op);
+    // Real Firestore's .update() throws NOT_FOUND when the target document
+    // doesn't exist -- this codebase's business logic (deposit/withdrawal
+    // crediting, registration, etc.) is written assuming that failure is
+    // loud, not silent. Mongo's updateOne() matching zero documents
+    // otherwise resolves "successfully" with nothing written, which would
+    // let a caller believe a credit/debit landed when it didn't.
+    if (result.matchedCount === 0) {
+      const err = new Error(`update() on ${this._col}/${this.id} matched no document`);
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
   }
   async delete() {
     await _mdb.collection(this._col).deleteOne({ _id: this.id });

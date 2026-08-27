@@ -749,7 +749,7 @@ async function openUser(uid){
       ${SESSION_ROLE==='owner'?`<button class="btn ok sm" id="creditBtn">Credit</button>
       <button class="btn danger sm" id="debitBtn">Debit</button>
       <button class="btn ${u.status==='banned'?'ghost':'danger'} sm" id="banBtn">${u.status==='banned'?'Unban':'Ban'}</button>
-      <button class="btn danger sm" id="delBtn" title="Permanently delete this account and ALL its data">Delete account</button>`:'<p class="muted" style="margin:0">Credit, debit, ban and delete are owner-only.</p>'}
+      <button class="btn danger sm" id="delBtn" title="Permanently deletes the login and personal data. Investments/transactions/withdrawals are kept as financial records.">Delete account</button>`:'<p class="muted" style="margin:0">Credit, debit, ban and delete are owner-only.</p>'}
     </div>
     ${SESSION_ROLE==='owner'?`<label style="margin-top:14px">Reset password (Firebase)</label>
     <div class="row">
@@ -876,12 +876,12 @@ async function openUser(uid){
     toast(d.changed?`Streak corrected: ${d.before.checkinStreak} → ${d.after.checkinStreak}`:`Streak was already correct (${d.after.checkinStreak})`, 'ok');
   });
   $('delBtn')?.addEventListener('click', async()=>{
-    const typed = prompt(`This PERMANENTLY deletes ${u.phone} and ALL their data: deposits, withdrawals, plans, transactions, referrals. This cannot be undone.\n\nType DELETE to confirm:`);
+    const typed = prompt(`This PERMANENTLY deletes ${u.phone}'s login and personal data (bound withdrawal accounts, gift-code history, security log, any unmatched pending deposit). Their investments, transactions and withdrawals are KEPT as financial records, orphaned from any login. This cannot be undone.\n\nType DELETE to confirm:`);
     if (typed === null) return;
     if (typed.trim() !== 'DELETE') return toast('Not deleted, you must type DELETE exactly','err');
     const b=$('delBtn'); b.disabled=true; b.textContent='Deleting…';
     const d=await api('/admin/user/delete',{userId:uid,confirm:'DELETE'});
-    toast(d.status==='success'?'Account and all data deleted':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    toast(d.status==='success'?'Login and personal data deleted (financial records kept)':(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
     else { b.disabled=false; b.textContent='Delete account'; }
   });

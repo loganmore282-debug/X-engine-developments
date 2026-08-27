@@ -979,6 +979,148 @@ profile card in `renderAccount()` — the owner doesn't want the public user ID 
 there at all; the phone number row is now the only line in that card. `publicId` isn't
 referenced anywhere else in the frontend. Cache bumped `v4`→`v5`.
 
+## Round 19 (2026-08-27) — Codex full-codebase money-safety audit: 9 findings, all real, all fixed
+
+Owner asked for a fresh Codex review after the design-correction round above. This one
+covered the WHOLE codebase (not just a recent diff) against HEAD `4138001`, specifically
+prompted to focus on M0's-no-real-transactions money-safety invariants. All 9 findings
+were verified against the actual code before fixing (not taken on faith) and all 9 were
+real.
+
+**High — concurrent registration could double-credit the welcome bonus, fixed.**
+`/register` and `/account/create-profile` both used to read "profile missing?" then
+unconditionally `.set()` a fresh default doc, OUTSIDE the `reg:`+userId lock that
+`completeRegistrationCore` holds. Two concurrent calls for the same brand-new user (a
+slow first load racing a reload, or the ghost-account self-heal in `enterApp()` firing
+twice) could have the second call's `.set()` — which is an unconditional REPLACE, not a
+conditional create — land AFTER the first had already completed registration, wiping
+`registrationDone`/`walletBalance`/`referralCode` back to defaults and letting the
+second call register (and pay the welcome bonus) a second time. Fixed by moving profile
+creation inside `completeRegistrationCore`'s own `reg:`+userId lock, re-checking
+existence after acquiring it; `/account/create-profile` now acquires the same lock too.
+
+**High — `db.js`'s `.update()` silently no-op'd on a missing document, fixed.**
+Real Firestore's `.update()` throws NOT_FOUND when the target doc doesn't exist; this
+Mongo-backed compat layer's `updateOne()` just matched zero documents and resolved
+"successfully" with nothing written. Every piece of business logic in this codebase was
+written assuming Firestore's strict semantics (the file's own header comment calls
+itself a "Firestore compatibility layer"), so this was a real, cross-cutting deviation —
+e.g. a deposit could be marked matched while the wallet credit silently no-op'd if the
+user doc had somehow gone missing. Fixed at the root: `DocumentReference.update()` now
+checks `matchedCount` and throws if zero. Audited all 71 `.update()` call sites in
+server.js first — every one already sits inside this codebase's pervasive
+try/catch-per-route convention, or already has an explicit `.catch(()=>{})` for the
+sites that intend best-effort semantics, so this converts silent corruption into a
+loud, already-handled failure everywhere, not a new crash risk.
+
+**High — a failed deposit wallet credit was permanently unrecoverable, fixed.**
+`creditDeposit()`'s CLAIM-BEFORE-CREDIT pattern flips a deposit to `status:'matched'`
+BEFORE crediting the wallet (deliberately, to make retries idempotent) — but if the
+wallet write itself then failed, the function set `needsManualCredit:true` and the
+deposit was stuck: every future call here, AND `/admin/deposit/force-credit`'s own
+guard, both short-circuited on `status==='matched'` alone and never actually retried the
+credit. The one recovery button that existed always replied "Already credited." Fixed
+with a `depositFullyCredited(d)` helper (`status==='matched' && !needsManualCredit`)
+used everywhere instead of a bare status check, so a stuck credit is genuinely
+retryable — the ledger row is deduped by the deposit's own `ref` so a retry can't
+double-write it. Wired into three self-heal paths, not just the admin button: the
+user's own `/deposit/marzpay/status` poll now retries a stuck credit in the background
+before replying (never lets a retry failure surface as an error — the deposit did
+genuinely match at the gateway), and the periodic reconciler now also scans
+`needsManualCredit:true` deposits every tick regardless of whether anyone's polling.
+
+**High — a declined withdrawal could end up unrefunded with zero trace, fixed.**
+Every decline/refund path (`/withdraw/marzpay/status`, `/withdraw/callback`,
+`/admin/withdraw/reject`, `reconcilePendingWithdrawals`) queued the status flip to
+`declined` BEFORE the wallet refund, via `db.runTransaction` — which, on M0, is just
+sequential writes with no rollback. If the refund write failed after the status flip
+landed, the withdrawal was declined and the money simply never came back, invisibly (a
+retry would see `status !== 'processing'` and skip). Consolidated all 4 near-identical
+call sites into one `declineWithdrawalAndRefund(witRef, userId, reason, fromStatuses)`
+helper: the status flip now lands together with a durable `refundPending: true` +
+`refundAmount`/`refundNetToUnwind` marker in ONE atomic single-document update (Mongo's
+`updateOne` is atomic per-document even without real transactions), mirroring the
+deposit side's `needsManualCredit` pattern. `completeWithdrawalRefund()` applies the
+refund and clears the marker, idempotently — safe to call again if the first attempt
+partially failed. A new `reconcileStuckWithdrawalRefunds()` pass, added to the existing
+30s reconciler tick, scans for `refundPending:true` and retries automatically.
+
+**High — investment/withdrawal creation could debit the wallet with nothing to show for
+it, fixed.** `/invest/create` and `/withdraw/request` both queued the wallet debit as
+the FIRST op in a `db.runTransaction`, with the investment/withdrawal doc and ledger row
+queued after — on M0 that's just sequential writes, so a failure in either of the later
+two left the user charged with no investment/withdrawal request created, no ledger row,
+and (since the client already treats `/invest/`/`/withdraw/request` as never-retry money
+calls per this project's own convention) no natural retry to even reveal the problem.
+Rewrote both to await each write directly instead of going through the queued-ops
+`db.runTransaction` wrapper (which gave no real atomicity here anyway) — a failure after
+the debit now triggers an exact compensating refund (the debit amount, plus reverting
+`totalInvested`/`firstInvestmentDone` to their pre-write values) before re-throwing the
+original error to the client.
+
+**Medium — money-crediting paths used lock keys unrelated to `bal:`+userId, so
+`repair-ledger`'s (and `recountAllTotals`'s) exclusive window wasn't actually exclusive,
+fixed.** Cashback payouts (`payout:`), referral commission (`comm:`), Task Center
+milestone claims (`milestoneclaim:`), Mission Center salary/deposit rewards
+(`mission-salary:`/`mission-deposit:`), daily check-in (`checkin:`), gift-code redemption
+(`redeem:`), and — worst of all — `/admin/deposit` (no lock at all) could all land a
+wallet increment while `repair-ledger` or `recountAllTotals` was mid-read-then-absolute-
+overwrite of that same user's totals, silently erasing the increment's effect. Every one
+of these now nests a `bal:`+userId lock around its specific wallet-touching write, always
+acquired AFTER the operation-specific lock (a single consistent ordering across the whole
+codebase, so this can never deadlock). `recountAllTotals()` — a platform-wide scan — now
+takes `bal:`+userId per-user for just that user's overwrite, not the whole loop, so one
+recount run doesn't serialize every user's money operations for its full duration.
+
+**Medium — "Delete account and ALL data" didn't delete most of what it claimed, and the
+admin UI actively promised it would, fixed both ways.** The backend only ever deleted the
+`users/` profile doc and the Firebase Auth user; investments, transactions, withdrawals,
+bound withdrawal accounts, gift-code redemption history, and security events all stayed.
+Chose NOT to build full cascading deletion of the financial ledger (investments/
+transactions/withdrawals) — those are the audit trail, the source data behind OTHER
+users' referral-commission records, and admin financial reporting; deleting them on
+request is exactly the kind of decision this codebase is deliberately careful about
+elsewhere (see Round 17's Integrity Audit deferral). Instead: the backend now actually
+deletes the clearly-safe, non-financial per-user leaves (bound withdrawal accounts,
+promo-redemption history, security events, any unmatched pending deposit), and the admin
+UI's confirm prompt/button title/toast now say exactly that — investments/transactions/
+withdrawals are explicitly called out as kept, orphaned from the deleted login, instead
+of falsely promising "ALL data."
+
+**Low — "Recalculate totals" only recalculated 2 of the 4 things its own button already
+claimed; deposit/withdrawal "Processed per day" charts were built into the admin UI but
+silently never rendered, both fixed.** `recountAllTotals()`'s button title and toast
+message have always referenced fixing invested totals and check-in streaks
+(`d.investedFixed`, `d.streaksFixed` in the existing frontend code) but the function only
+ever rebuilt `totalDeposited`/`totalEarned`. Extended it to also recompute
+`totalInvested` from the `investments` collection and each user's real check-in streak
+from their check-in ledger (reusing `computeCheckinStreak()`, the exact same helper
+`/admin/user/reconcile-checkin` already uses for one user at a time) in the same pass —
+completing a feature the UI clearly expected rather than just narrowing the UI's claim.
+Separately, `/admin/deposits/list` and `/admin/withdrawals/list` never returned
+`processedByDay`/`processedAmount`, so the admin dashboard's own chart code
+(`dpbd.length ? ... : ''`) silently rendered nothing — no error, just an absent feature.
+Added a shared `groupProcessedByDay()` helper and wired both endpoints.
+
+**Verified**: `node --check` on server.js/db.js/original_module.js; `node build-admin.js`
+— clean round-trip; `node test-admin-obfuscated-build.js` against the freshly built
+artifact — 0 errors across all 12 admin tabs. user-src/user weren't touched this round
+(no rebuild needed there). Every fix above was checked against the actual cited
+file:line in server.js before being accepted, not applied from the report alone — this
+is the same "verify, don't just trust" discipline as every prior Codex-review round.
+
+**Left open (deliberately, not an oversight)**: several reward paths (cashback,
+referral commission, Task Center/Mission Center claims, daily check-in) still credit the
+wallet BEFORE writing the matching transactions-collection ledger row, so a failure in
+that specific last step leaves the wallet correctly credited but the Records-tab entry
+missing. Money-safety-wise this is already mitigated by construction — every one of
+these uses a claim-before-credit pattern on its own flag/status first, so a retry can
+never double-pay — but the ledger row itself has no retry/dedup like the deposit and
+withdrawal paths above got this round. Deferred: fixing all ~6 remaining sites the same
+way is real, mechanical work, but doing it carefully under this round's own time budget
+alongside 9 higher-severity findings risked rushing exactly the class of change this
+project is most careful about. Worth a dedicated round.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
