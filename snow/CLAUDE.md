@@ -1121,6 +1121,40 @@ way is real, mechanical work, but doing it carefully under this round's own time
 alongside 9 higher-severity findings risked rushing exactly the class of change this
 project is most careful about. Worth a dedicated round.
 
+## Round 20 (2026-08-27) — real horizontal-overflow bug on Account: Sign Out button was wider than the viewport
+
+Owner sent a phone screenshot and said the page "isn't well sized," that pinch-zooming
+and reopening the app shifted things around, and specifically suspected the Sign Out
+button. They were right, and it was a genuine CSS bug, not a red herring:
+`.account-utility-card` (the shared class for About Snow/Rules & Terms/Help Centre/
+Install Snow/Sign Out) sets `width:100%` — needed because these are `<button>`s, not
+`<div>`s (unlike the original mockup source), and buttons don't stretch to fill a grid
+cell the way a block-level `<div>` does. The four cards inside `.account-grid` are fine
+— `width:100%` there means 100% of their OWN grid cell, no extra margin. But the Sign
+Out button sits OUTSIDE the grid as a standalone element with its own `margin:14px 20px
+0`, and `width:100%` there means 100% of `.wrap` (full device width) — PLUS the 40px of
+horizontal margin on top of that, pushing the button's right edge 20px past the visual
+viewport. A wider-than-viewport element is exactly what makes a mobile browser allow
+(and sometimes force) pinch-zoom/pan to reach it, matching the owner's exact complaint.
+The Mission Center button on the Team page (`user-src/original_module.js`, `.brand-card`
+usage) already had the correct fix for this same class of bug (`width:calc(100% - 40px)`
+alongside its own margin) — Sign Out just never got it. Fixed by adding the same
+`width:calc(100% - 40px)` to Sign Out's inline style. Grepped every other `width:100%`
+class/usage in the codebase afterward to confirm nothing else has this pattern (SVGs and
+form inputs with no horizontal margin, or buttons that already have the calc() fix) —
+this was the only real instance.
+
+Also hardened against pinch-zoom generally, not just this one overflow: the viewport
+meta tag gained `user-scalable=no`/`minimum-scale=1` (was only `maximum-scale=1`, which
+several browsers don't reliably honor on its own), and `html,body` gained
+`touch-action:manipulation` — a CSS-level pinch-zoom/double-tap-zoom disable that works
+even on browsers that ignore the viewport meta's zoom restrictions.
+
+**Verified**: `node build-core.js` — clean round-trip. Playwright check at all 5 required
+widths (320/360/390/412/430px) against the fixed build confirmed
+`document.documentElement.scrollWidth === clientWidth` (no horizontal overflow) at every
+width. Cache bumped `v5`→`v6`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

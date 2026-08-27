@@ -625,7 +625,7 @@ async function renderAccount(){
   <button class="account-utility-card utility-wine" style="background:var(--snow-wine-soft);" onclick="openInfoSheet('help')">${softBlob('var(--snow-wine)',.12,16,14,74)}<div class="account-icon-bubble" style="position:relative;">${ICONS.headset}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-wine-deep);">Help Centre</div></button>
   <button class="account-utility-card utility-green" style="background:var(--snow-green-soft);" onclick="promptInstallApp()">${waveLinesTR(56,52,'var(--snow-green)',2,.3)}<div class="account-icon-bubble" style="position:relative;">${ICONS.download}</div><div style="position:relative;font-size:14px;font-weight:700;color:var(--snow-green-deep);">Install Snow</div></button>
 </div>
-<button class="account-utility-card utility-wine" style="margin:14px 20px 0;background:var(--snow-wine-soft);min-height:88px;border-radius:28px;padding:20px;" onclick="doLogout()">
+<button class="account-utility-card utility-wine" style="margin:14px 20px 0;width:calc(100% - 40px);background:var(--snow-wine-soft);min-height:88px;border-radius:28px;padding:20px;" onclick="doLogout()">
   ${softBlob('var(--snow-wine)',.1,90,-22,-22)}
   <div class="account-icon-bubble" style="position:relative;">${ICONS.logout}</div>
   <div style="position:relative;font-size:15px;font-weight:700;color:var(--snow-wine-deep);">Sign out</div>
