@@ -604,7 +604,6 @@ async function renderAccount(){
     <img src="/badge.png" alt="" style="height:104px;width:auto;flex-shrink:0;filter:drop-shadow(0 8px 12px rgba(0,0,0,.28));">
     <div style="flex:1;min-width:0;">
       <div style="display:flex;align-items:center;gap:7px;"><div class="mono" style="font-size:14.5px;font-weight:700;white-space:nowrap;">${esc(a.phone||'')}</div><button style="border:none;background:none;color:#fff;padding:0;" onclick="copyText('${esc(a.phone||'')}')">${ICONS.copy}</button></div>
-      <div style="display:flex;align-items:center;gap:7px;margin-top:5px;"><div class="mono" style="font-size:12.5px;opacity:.85;">ID: ${esc(a.publicId||'—')}</div><button style="border:none;background:none;color:#fff;padding:0;" onclick="copyText('${esc(a.publicId||'')}')">${ICONS.copy}</button></div>
     </div>
   </div>
 </div>

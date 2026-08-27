@@ -107,7 +107,7 @@ a{color:inherit;}
 .form-field .input-wrap{position:relative;}
 .form-field input{width:100%;padding:15px 44px 15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);color:var(--snow-ink);}
 .form-field input:focus{outline:none;border-color:var(--snow-wine);}
-.form-field .eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--snow-muted);background:none;border:none;padding:4px;}
+.form-field .eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--snow-muted);background:none;border:none;padding:4px;display:flex;align-items:center;justify-content:center;}
 .form-hint{font-size:11.5px;color:var(--snow-muted);margin-top:6px;}
 .auth-error{background:var(--snow-wine-soft);color:var(--snow-wine-deep);border-radius:14px;padding:10px 14px;font-size:12.5px;margin-bottom:14px;}
 
@@ -169,7 +169,7 @@ a{color:inherit;}
           <label>Password</label>
           <div class="input-wrap">
             <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
-            <button class="eye" onclick="togglePw('loginPassword')">👁</button>
+            <button class="eye" onclick="togglePw('loginPassword')"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
           </div>
         </div>
         <button class="primary-button" id="loginBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:6px;" onclick="doLogin()">Login</button>
@@ -187,7 +187,7 @@ a{color:inherit;}
           <label>Password</label>
           <div class="input-wrap">
             <input id="regPassword" type="password" placeholder="Password" autocomplete="new-password">
-            <button class="eye" onclick="togglePw('regPassword')">👁</button>
+            <button class="eye" onclick="togglePw('regPassword')"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
           </div>
         </div>
         <div class="form-field">

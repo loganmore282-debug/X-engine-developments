@@ -968,6 +968,17 @@ data) after this deploys, since `snow-shell-v4` only forces a refresh on next la
 confirm with them whether what they saw really was the stale-cache version, since that
 changes whether any further sizing/colour work is actually needed.
 
+**Same-round follow-up fixes** (owner caught these immediately after the above landed):
+the password show/hide button on Login/Register was a 👁 emoji, not an SVG — replaced
+with a proper outline-eye SVG icon (matching this app's icon style elsewhere:
+`stroke=currentColor`, `stroke-width:1.75`) in both `#loginPassword` and `#regPassword`
+fields in `index.html`; `.form-field .eye` given `display:flex;align-items:center;
+justify-content:center` so the SVG centers cleanly (the emoji had relied on font
+line-height). Also removed the "ID: 004128" row (and its copy button) from the Account
+profile card in `renderAccount()` — the owner doesn't want the public user ID shown
+there at all; the phone number row is now the only line in that card. `publicId` isn't
+referenced anywhere else in the frontend. Cache bumped `v4`→`v5`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
