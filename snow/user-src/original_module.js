@@ -227,6 +227,7 @@ window.doLogout = async function(){
   stopLiveRefresh();
   STATE.authEpoch++;
   Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, mission: null });
+  clearCachedState();
   await window.fbSignOut();
 };
 
@@ -265,7 +266,57 @@ window.addEventListener('snow-auth', async (ev) => {
   $('loadingScreen').style.display = 'flex';
   await enterApp();
 });
+// Real feature: a returning member used to sit through the loading screen
+// on EVERY app open, even though nothing about their account usually
+// changed since last time. Owner (relaying a friend's advice on instant-
+// loading sites): "it loads basic ui features as backend loads user data
+// through api... no delays." The app already does this cache-first pattern
+// per-sheet (Withdraw, Records, Mission Center); this extends it to the
+// boot sequence itself using a small persisted snapshot (localStorage
+// survives a full page reload, unlike STATE, which doesn't) -- a RETURNING
+// visit paints instantly from last-known data with zero network wait, then
+// quietly refreshes in the background. A first-ever login on a device has
+// nothing to paint from yet, so it still goes through the one real,
+// unavoidable network round trip (bootFromNetwork, unchanged from before).
+var CACHED_STATE_KEY = 'snow_state_cache';
+function loadCachedState(uid){
+  if (!uid) return null;
+  try {
+    const raw = localStorage.getItem(CACHED_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Never trust a snapshot saved for a DIFFERENT account -- a shared
+    // device switching users must never paint one member's cached balance
+    // into another's session, same reasoning as STATE.authEpoch's own
+    // cross-session guard.
+    if (!parsed || parsed.uid !== uid) return null;
+    return parsed;
+  } catch (_) { return null; }
+}
+function saveCachedState(uid){
+  try {
+    localStorage.setItem(CACHED_STATE_KEY, JSON.stringify({
+      uid, account: STATE.account, investments: STATE.investments, teamStats: STATE.teamStats,
+      bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, mission: STATE.mission,
+    }));
+  } catch (_) {}
+}
+function clearCachedState(){
+  try { localStorage.removeItem(CACHED_STATE_KEY); } catch (_) {}
+}
 async function enterApp(){
+  const uid = STATE.user && STATE.user.uid;
+  const cached = loadCachedState(uid);
+  if (!cached) return bootFromNetwork(uid);
+  STATE.account = cached.account; STATE.investments = cached.investments;
+  STATE.teamStats = cached.teamStats; STATE.bankAccounts = cached.bankAccounts;
+  STATE.transactions = cached.transactions; STATE.mission = cached.mission;
+  $('loadingScreen').style.display = 'none';
+  $('app').style.display = '';
+  showPage(STATE.page || 'home');
+  refreshAppDataInBackground(uid);
+}
+async function bootFromNetwork(uid){
   let r = await api('/account');
   if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.message === 'User not found')) {
     // Ghost account (Firebase user exists, our profile never finished) or a
@@ -312,9 +363,38 @@ async function enterApp(){
   if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
   if (txR.status === 'success') STATE.transactions = txR.transactions;
   if (missionR.status === 'success') STATE.mission = missionR;
+  saveCachedState(uid);
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
+}
+// Runs right after painting instantly from cache -- reconciles with the
+// real server state silently, no spinner, no repaint flicker (only patches
+// the live numbers already on screen if Home happens to be open, matching
+// renderHome()'s own patchHomeBalances() pattern rather than a full
+// re-render). Errors here are non-fatal: the member is already looking at
+// real (if slightly stale) data, so a failed background refresh just means
+// try again on the next open, never a forced sign-out.
+async function refreshAppDataInBackground(uid){
+  try {
+    const [accR, invR, teamR, bankR, txR, missionR] = await Promise.all([
+      api('/account'), api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions'), api('/mission/status')
+    ]);
+    // Signed out, or switched to a different account, while this was in
+    // flight -- api()'s own authEpoch guard already turns each response
+    // into a discarded {stale:true} error in that case, but bail out
+    // explicitly too so a stale snapshot never gets written back to disk.
+    if (!STATE.user || STATE.user.uid !== uid) return;
+    if (accR.status === 'error' && accR.code === 'BANNED') { toast(accR.message, true); await window.fbSignOut(); return; }
+    if (accR.status === 'success') STATE.account = accR.account;
+    if (invR.status === 'success') STATE.investments = invR.investments;
+    if (teamR.status === 'success') STATE.teamStats = teamR;
+    if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
+    if (txR.status === 'success') STATE.transactions = txR.transactions;
+    if (missionR.status === 'success') STATE.mission = missionR;
+    saveCachedState(uid);
+    if (STATE.page === 'home') patchHomeBalances();
+  } catch (_) {}
 }
 
 // ── NAV ──

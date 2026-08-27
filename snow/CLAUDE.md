@@ -2512,6 +2512,64 @@ the live preview's holder/network/number in real time. Cache bumped `v27`→`v28
 **server.js and admin-src both changed — needs a Render redeploy** (Render should
 auto-deploy from this push; see Round 38's correction on Render vs Railway).
 
+## Round 46 (2026-08-27) — instant boot: a returning visit now paints from a persisted local snapshot with zero network wait, refreshing silently in the background
+
+Owner relayed a friend's explanation of how other sites load instantly: "it loads basic
+ui features as backend loads user data through api... some use Ajax requests so no
+delays." Asked for the same: "after registration or login or visit us no wait, all data
+or site loads immediately."
+
+**What was actually slow.** Every app open — not just the first ever login — sat behind
+a full-screen loading spinner for the entire `/account` + five-endpoint prefetch round
+trip, even for a member who'd used the app minutes earlier and whose data almost
+certainly hadn't changed. The individual sheets (Withdraw, Withdrawal Accounts, Records,
+Mission Center as of Round 39/41) already had this exact cache-first treatment — paint
+instantly from `STATE`, refresh quietly in the background — but `STATE` only lives in
+memory and resets on every full page reload, so it never helped the ONE moment that
+matters most for "feels instant": opening the app fresh.
+
+**Fix: a small persisted snapshot, `localStorage['snow_state_cache']`.** `enterApp()`
+now checks for a cached snapshot keyed by the current Firebase `uid` before doing
+anything else:
+- **Cache hit** (any return visit after the first successful boot on this device):
+  `STATE` is populated straight from the snapshot, the loading screen is skipped
+  entirely, and `showPage()` paints real, meaningful numbers immediately — genuinely
+  zero network wait. `refreshAppDataInBackground()` then quietly re-fetches the same
+  five endpoints `bootFromNetwork()` always did, and if Home happens to be the open
+  page, patches in the fresh numbers via the existing `patchHomeBalances()` (in-place
+  text update, not a repaint — same anti-flicker reasoning as Round 41's Mission Center
+  fix). The fresh snapshot is saved back to `localStorage` for next time.
+- **No cache** (first-ever login on this device, or a cleared browser): falls through
+  to `bootFromNetwork()`, which is the exact same blocking-spinner logic that already
+  existed — completely unchanged, zero regression risk for that path, since there is
+  genuinely nothing to paint instantly from yet.
+
+**Cross-session safety carried over from Round 35/41.** `loadCachedState(uid)` refuses
+any snapshot whose stored `uid` doesn't match the CURRENT Firebase user — a shared
+device switching accounts can never have one member's cached balance flash onto
+another's screen, same reasoning as `STATE.authEpoch`'s own guard (which still
+separately protects the background refresh's in-flight responses regardless).
+`doLogout()` now also explicitly clears the cache, both for this guard's defense-in-depth
+and so a signed-out device doesn't keep a former member's full financial snapshot
+sitting in `localStorage` indefinitely. A failed background refresh is treated as
+non-fatal (the member is already looking at real, if slightly stale, data) — it does
+NOT force a sign-out the way a failed `bootFromNetwork()` still correctly does; only an
+explicit `BANNED` response from the background refresh triggers a sign-out, same as the
+network-boot path.
+
+**Verified** with Playwright driving the real `snow-auth` → `enterApp()` flow across four
+scenarios: (1) a first-ever boot with `/account` deliberately delayed 400ms still shows
+the loading screen and takes the full round trip, unchanged — and saves a cache
+afterward; (2) a second context seeded with that exact cache, `/account` delayed 600ms
+and returning a DIFFERENT (fresh) balance, paints the OLD cached balance in ~183ms (no
+wait at all), then the fresh balance silently replaces it once the delayed background
+refresh resolves, with no visible reload; (3) a cache saved under a different `uid` is
+correctly ignored, falling back to the full network boot; (4) `doLogout()` correctly
+clears the persisted cache. Re-ran Round 41's Mission Center silent-refresh test and
+Round 35's `authEpoch` staleness test to confirm neither regressed from touching the
+shared boot path. `node --check` clean, `node build-core.js` round-trip clean, `git diff
+--check` clean. Cache bumped `v28`→`v29`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
