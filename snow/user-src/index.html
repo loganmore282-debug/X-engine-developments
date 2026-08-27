@@ -8,6 +8,9 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&display=swap" rel="stylesheet">
 <style>
 :root{
   --snow-canvas:#FCFBF9;
@@ -31,7 +34,7 @@
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;touch-action:manipulation;}
 body{background:var(--snow-canvas);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
-.mono{font-variant-numeric:tabular-nums;}
+.mono{font-variant-numeric:lining-nums tabular-nums;font-family:'Bodoni Moda',Didot,'Playfair Display',Georgia,serif;}
 button{cursor:pointer;font-family:inherit;}
 input{font-family:inherit;}
 a{color:inherit;}
@@ -99,6 +102,9 @@ a{color:inherit;}
 #loadingScreen{position:fixed;inset:0;background:var(--snow-canvas);display:flex;align-items:center;justify-content:center;z-index:500;}
 #loadingScreen .spin{width:40px;height:40px;border-radius:50%;border:3px solid var(--snow-wine-soft);border-top-color:var(--snow-wine);animation:sp .8s linear infinite;}
 @keyframes sp{to{transform:rotate(360deg);}}
+@keyframes tickerFlow{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+@keyframes chestSwing{0%,100%{transform:rotate(-6deg);}50%{transform:rotate(6deg);}}
+.chest-hang{animation:chestSwing 2.6s ease-in-out infinite;transform-origin:50% -6px;}
 
 .auth-hero{position:relative;overflow:hidden;padding:26px 20px 0;background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);color:#fff;min-height:230px;}
 .auth-wave{position:absolute;inset:auto 0 -1px;width:100%;height:70px;display:block;}

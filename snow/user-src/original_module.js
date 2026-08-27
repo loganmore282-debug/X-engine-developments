@@ -285,7 +285,7 @@ async function renderHome(){
   let html = `
 <div class="brand-hero--full">
   ${waveLinesTR(140,133)}
-  <button aria-label="Open gift code" onclick="openChestModal()" style="position:absolute;top:-6px;right:20px;z-index:2;width:64px;height:60px;border:none;background:none;padding:0;cursor:pointer;filter:drop-shadow(0 8px 12px rgba(0,0,0,.4));">
+  <button aria-label="Open gift code" onclick="openChestModal()" class="chest-hang" style="position:absolute;top:-6px;right:20px;z-index:2;width:64px;height:60px;border:none;background:none;padding:0;cursor:pointer;filter:drop-shadow(0 8px 12px rgba(0,0,0,.4));">
     <img src="/treasure-chest.png" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
   </button>
   <div style="position:relative;padding:22px 20px 0;">
@@ -315,9 +315,11 @@ async function renderHome(){
   <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openDepositSheet()">${ICONS.deposit}Deposit</button>
   <button class="secondary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openWithdrawSheet()">${ICONS.withdraw}Withdraw</button>
 </div>
-<div id="activityTicker" style="position:fixed;left:50%;transform:translateX(-50%);bottom:88px;width:calc(100% - 40px);max-width:440px;box-sizing:border-box;z-index:50;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:rgba(17,17,17,.82);box-shadow:0 10px 24px -10px rgba(0,0,0,.5);">
+<div id="activityTicker" style="position:fixed;left:50%;transform:translateX(-50%);bottom:88px;width:calc(100% - 40px);max-width:440px;box-sizing:border-box;z-index:50;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:rgba(17,17,17,.82);box-shadow:0 10px 24px -10px rgba(0,0,0,.5);overflow:hidden;">
   <span style="width:6px;height:6px;border-radius:50%;background:var(--snow-green);flex-shrink:0;"></span>
-  <span id="activityTickerText" class="mono" style="font-size:11.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">Loading activity&hellip;</span>
+  <div style="overflow:hidden;flex:1;min-width:0;">
+    <div id="activityTickerTrack" class="mono" style="display:inline-flex;white-space:nowrap;color:#fff;font-size:11.5px;">Loading activity&hellip;</div>
+  </div>
 </div>
 <div class="app-card" style="margin:18px 20px 0;padding:20px 22px;background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
   <div style="min-width:0;">
@@ -434,30 +436,41 @@ function startPlanCountdowns(){
   _countdownTimer = setInterval(tick, 1000);
 }
 
-// Thin rotating "recent activity" strip on Home -- simulated, not real
+// Floating "recent activity" strip on Home -- simulated, not real
 // transactions (see server.js's /public/activity-feed, which says the same
-// thing; this is just the first frontend consumer of a feed that already
-// existed). Cleared on every page change the same way _countdownTimer is,
-// so it never keeps writing into a detached DOM node in the background.
-var _activityTimer = null, _activityFeedRows = [], _activityIdx = 0;
-function stopActivityTicker(){ if (_activityTimer) { clearInterval(_activityTimer); _activityTimer = null; } }
-function renderActivityTick(){
-  const el = $('activityTickerText');
-  if (!el || !_activityFeedRows.length) return;
-  const row = _activityFeedRows[_activityIdx % _activityFeedRows.length];
-  _activityIdx++;
+// thing). Continuously flows/scrolls like a real ticker tape via a pure CSS
+// animation (translateX 0 -> -50% over a track holding two back-to-back
+// copies of the same joined text, looping seamlessly) rather than swapping
+// between discrete messages. Refreshed with new feed data periodically;
+// stopped on every page change the same way _countdownTimer is, so it never
+// keeps refreshing into a detached DOM node in the background.
+var _activityRefreshTimer = null;
+function activityRowText(row){
   const verb = row.kind === 'deposit' ? 'just deposited' : 'just withdrew';
-  el.textContent = row.phone + ' ' + verb + ' ' + fmtUGX(row.amount);
+  return row.phone + ' ' + verb + ' ' + fmtUGX(row.amount);
 }
-async function startActivityTicker(){
-  stopActivityTicker();
+async function renderActivityTicker(){
+  const track = $('activityTickerTrack');
+  if (!track) return;
   const r = await api('/public/activity-feed');
-  if (STATE.page !== 'home' || !$('activityTickerText')) return; // navigated away while awaiting
-  _activityFeedRows = (r.status === 'success' && Array.isArray(r.feed)) ? r.feed : [];
-  if (!_activityFeedRows.length) return;
-  _activityIdx = 0;
-  renderActivityTick();
-  _activityTimer = setInterval(renderActivityTick, 3200);
+  if (STATE.page !== 'home' || !$('activityTickerTrack')) return; // navigated away while awaiting
+  const rows = (r.status === 'success' && Array.isArray(r.feed)) ? r.feed : [];
+  if (!rows.length) return;
+  const joined = rows.map(row => esc(activityRowText(row))).join('&nbsp;&nbsp;&nbsp;&middot;&nbsp;&nbsp;&nbsp;');
+  track.style.animation = 'none';
+  track.innerHTML = `<span style="padding-right:48px;">${joined}</span><span style="padding-right:48px;" aria-hidden="true">${joined}</span>`;
+  const singleWidth = track.scrollWidth / 2;
+  const duration = Math.max(14, singleWidth / 45); // ~45px/sec, floor so a short feed doesn't whip past
+  track.style.animation = `tickerFlow ${duration}s linear infinite`;
+}
+function stopActivityTicker(){
+  clearInterval(_activityRefreshTimer); _activityRefreshTimer = null;
+  const track = $('activityTickerTrack');
+  if (track) track.style.animation = 'none';
+}
+function startActivityTicker(){
+  renderActivityTicker();
+  _activityRefreshTimer = setInterval(renderActivityTicker, 20000);
 }
 
 // ── TEAM ──

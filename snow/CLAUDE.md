@@ -1326,6 +1326,51 @@ the chest, filled a code, submitted against a mocked success response (modal clo
 account refreshes) and a mocked failure response (inline error text renders, modal
 stays open) — both screenshotted. Cache bumped `v8`→`v9`.
 
+## Round 24 (2026-08-27) — corrected Round 23's ticker/chest again: real marquee flow + a live swinging chest, plus a Didone serif number font
+
+Owner's Round 23 fix wasn't wrong on positioning, but it wasn't what "float or flow" meant:
+"l didn't say that remove it and put down, but why l stress up with you l told you just
+like you see the space8 activity checker, numbers float or flow on activity bar" — they
+meant the TEXT ITSELF should continuously scroll like a ticker tape, not a fixed pill that
+swaps between discrete rotating messages every 3.2s (which is what Round 23 shipped). Also
+flagged, for the first time: "the gift box is static it is not suspending... space8 gift
+box had a live suspend animation" — the chest button (real photo since Round 23) has never
+actually swung. Plus a font request from two reference specimen images: a Didone-style
+serif for numbers ("Didone Room Numbers" / "Lining Figures").
+
+**Ticker, rebuilt as a real marquee**: replaced the old `_activityTimer` / discrete
+`renderActivityTick()` rotation with a seamless CSS marquee — `renderActivityTicker()`
+joins all feed rows into one string, renders it TWICE back-to-back inside
+`#activityTickerTrack` (`display:inline-flex;white-space:nowrap`), then runs
+`@keyframes tickerFlow { from{translateX(0)} to{translateX(-50%)} }` linearly on infinite
+loop — because the content is duplicated, `-50%` lands exactly back on the same visual
+position, so the loop never jumps. Speed is content-driven, not a fixed duration:
+`duration = max(14, singleWidth / 45)` (~45px/sec), so a short feed doesn't whip past
+unreadably fast. Old 3.2s-rotation state (`_activityIdx`, single-span swap) removed
+entirely; kept the 20s poll-refresh of the underlying feed data and the
+`STATE.page !== 'home'` guard against a stale render landing after navigating away.
+
+**Chest, given a live swing**: `.chest-hang{animation:chestSwing 2.6s ease-in-out
+infinite;transform-origin:50% -6px}`, `@keyframes chestSwing{0%,100%{rotate(-6deg)}
+50%{rotate(6deg)}}` — pivots from a point above the image (like it's hanging off a hook)
+rather than its own center, continuously, matching "live suspend animation."
+
+**Number font**: added Google Fonts (`Bodoni Moda`, first webfont this app has ever
+depended on — previously fully system-font) via `<link rel="preconnect">` +
+`<link rel="stylesheet">`, and pointed `.mono` (the class every UGX figure and numeric
+stat already uses app-wide) at it: `font-family:'Bodoni Moda',Didot,'Playfair Display',
+Georgia,serif` with a `lining-nums tabular-nums` variant, so every existing money figure
+picks up the serif Didone look for free with no markup changes anywhere else, and
+degrades to Didot/Playfair/Georgia if the webfont fails to load (offline, blocked CDN).
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright across all 5 required widths (with `fonts.googleapis.com`/
+`fonts.gstatic.com` routes aborted, simulating no network — confirms the CSS `font-family`
+list itself is applied even when the webfont can't load): no horizontal overflow,
+`#activityTickerTrack` has exactly 2 duplicate child `<span>`s with computed
+`animationName === 'tickerFlow'`, the chest button's computed `animationName ===
+'chestSwing'`, `.mono` computed `fontFamily` contains `'Bodoni'`. Cache bumped `v9`→`v10`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
