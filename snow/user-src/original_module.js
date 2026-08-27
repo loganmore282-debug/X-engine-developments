@@ -321,12 +321,12 @@ async function renderHome(){
     <div id="activityTickerTrack" class="mono" style="display:inline-flex;white-space:nowrap;color:#fff;font-size:11.5px;">Loading activity&hellip;</div>
   </div>
 </div>
-<div class="app-card" style="margin:18px 20px 0;padding:20px 22px;background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+<div class="app-card" style="margin:18px 20px 0;padding:20px 22px;background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;" onclick="showPage('team')">
   <div style="min-width:0;">
     <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-green);font-weight:700;">Referral Program</div>
     <div style="font-size:18px;font-weight:800;margin-top:4px;max-width:250px;line-height:1.25;color:var(--snow-ink);">Earn ${(STATE.settings&&STATE.settings.commL1)||27}% on every referral&rsquo;s first investment</div>
   </div>
-  <button style="flex-shrink:0;border:none;cursor:pointer;font-family:inherit;background:var(--snow-wine);color:#fff;border-radius:999px;padding:5px 12px;font-size:10.5px;font-weight:700;" onclick="openCheckinSheet()">Check In</button>
+  <button style="flex-shrink:0;border:none;cursor:pointer;font-family:inherit;background:var(--snow-wine);color:#fff;border-radius:999px;padding:5px 12px;font-size:10.5px;font-weight:700;" onclick="event.stopPropagation();openCheckinSheet()">Go check in</button>
 </div>
 <div style="display:flex;align-items:baseline;justify-content:space-between;margin:26px 20px 12px;">
   <div class="section-title">Investment Plans</div>
@@ -460,7 +460,7 @@ async function renderActivityTicker(){
   track.style.animation = 'none';
   track.innerHTML = `<span style="padding-right:48px;">${joined}</span><span style="padding-right:48px;" aria-hidden="true">${joined}</span>`;
   const singleWidth = track.scrollWidth / 2;
-  const duration = Math.max(14, singleWidth / 45); // ~45px/sec, floor so a short feed doesn't whip past
+  const duration = Math.max(7, singleWidth / 90); // ~90px/sec, floor so a short feed doesn't whip past
   track.style.animation = `tickerFlow ${duration}s linear infinite`;
 }
 function stopActivityTicker(){

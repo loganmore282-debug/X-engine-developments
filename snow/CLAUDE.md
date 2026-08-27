@@ -1428,6 +1428,40 @@ tab shows the 3 seeded credit-type rows (cashback/commission/checkin) with a "No
 data" footer; Deposits and Withdrawals tabs each show exactly their 1 seeded row.
 Screenshots confirm all three visually. Cache bumped `v10`→`v11`.
 
+## Round 26 (2026-08-27) — faster ticker, Referral card now silently opens Team on tap, "Check In" pill relabeled "Go check in"
+
+Owner, three small ones: "increase speed of activity checker"; "when one taps on the
+referral statement tab, it opens team, don't put anything what shows to tap, just
+silence it, so when one taps referral statement, he goes to team"; "l wanted a statement
+to be 'Go check in' not checkin."
+
+**Ticker speed**: `renderActivityTicker()`'s scroll-speed constant doubled, 45px/sec →
+90px/sec, and its floor duration (protects a short feed from whipping past unreadably
+fast) dropped 14s → 7s — matches the same proportional halving as the speed doubling.
+
+**Referral card → Team, no visual affordance**: the whole `.app-card` (the green
+"Referral Program / Earn X% on every referral's first investment" card on Home) now
+carries `onclick="showPage('team')"` — tapping anywhere on the card's text area jumps
+straight to the Team tab. Deliberately no chevron, no "tap to view" text, no color/cursor
+change added — the owner was explicit ("don't put anything what shows to tap, just
+silence it"), so this is a bare click handler with zero new visual signal. The card's
+own pill button (opens the check-in sheet) needed `onclick="event.stopPropagation();
+openCheckinSheet()"` added so tapping it doesn't ALSO fire the card's own navigate-to-
+Team handler underneath — confirmed via Playwright that tapping the button still opens
+Check-in and stays on Home, while tapping the card's text area navigates to Team.
+
+**Button relabeled**: that same pill button's text changed from "Check In" to "Go check
+in" (exact casing per the owner's own wording). The check-in SHEET's own submit button
+("Check In · UGX 500") is a different element entirely and was left untouched — the
+owner's "a statement" referred to the Home card's pill, not the sheet's submit action.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright: ticker's computed `animation-duration` now sits at the new
+7s floor for a short mocked feed (was 14s); the pill button's text reads exactly "Go
+check in"; tapping the card's text area sets `STATE.page` to `'team'`; tapping the pill
+button afterward leaves `STATE.page` at `'home'` and opens the Check-in sheet.
+Screenshots confirm both outcomes. Cache bumped `v11`→`v12`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
