@@ -2435,6 +2435,83 @@ never an unsafe full-replace of a doc with other live fields.
 **needs a Render redeploy** for the `/withdraw/callback` hardening to take effect (Render
 should auto-deploy from this push; see Round 38's correction on Render vs Railway).
 
+## Round 45 (2026-08-27) — duplicate admin push notifications investigated + mitigated, double-crediting re-audited (all claim/commission paths already safe), withdrawal/deposit ledger descriptions simplified, Withdrawal Accounts redesigned as bank-card tiles
+
+Owner, from a screenshot of two identical "New withdrawal request UGX 20,000..." Android
+notifications: "why notifications are double, remove double sending, bro also check every
+endpoint no double crediting or double functions, in referrals, claiming, gift codes and
+everything." A separate Records screenshot showed only ONE real withdrawal in the ledger
+(confirming this is a notification-delivery duplicate, not a double-charge/double-request
+bug). Also: "instead of putting many words make it simple no need to put name, need only
+withdrawal, status amount, SIMPLE ALSO ON DEPOSIT," plus two reference bank-card images:
+"I want a saved account to appear like a bank card, so it has XXXX XXXX before saving,
+and after saving it shows holder name and number, pick any of the best designs."
+
+**Duplicate push notifications — root cause and mitigation.** `sendAdminPush()` has
+exactly one call site for this message and only fires once per real withdrawal (confirmed
+via the Records screenshot showing a single ledger row) -- so the duplication isn't a
+server-side double-send, it's the SAME physical device holding two still-valid FCM
+tokens simultaneously (a well-known web-push gotcha: an installed PWA and a regular
+browser tab get separate token registrations even on the same phone/browser, and a token
+can silently rotate after a browser/service-worker update, leaving the old one still
+"valid" and still registered). There's no way to detect "these two opaque token strings
+are actually the same device" from the tokens alone, so this can't be fixed by
+deduplicating server-side logic. Mitigated two ways: (1) `enablePush()` now retires any
+DIFFERENT token previously stored in this same browser's `localStorage` before
+registering a new one, so one browsing context can no longer accumulate more than one
+live registration going forward; (2) new owner-only "Reset all devices" button in
+Settings → Push notifications (new `/admin/push/clear-all`, plus `/admin/push/list` to
+show how many devices are currently registered) wipes every registered token in one
+click so the CURRENT accumulated duplicates can actually be cleared -- each device,
+including the owner's own, just needs to tap "Notify" again afterward.
+
+**Double-crediting re-audit, referrals/claiming/gift codes/everything.** Re-verified
+every claim/credit path in server.js by hand: `creditReferralCommission()`
+(`withLock('comm:'+investmentId)`, per-level `commissionPaidLevels` claim-before-credit
+array, skips already-paid levels on any retry), `/team/milestone/claim` (per-milestone
+lock + `db.runTransaction` with a fresh re-check of the claim flag inside the lock),
+`/mission/salary/claim` (`withLock('mission-salary:'+userId)`, fresh
+`missionSalaryLastClaim===today` re-check), `/mission/deposit/claim` (same shape as the
+Task Center milestone claim), `/redeem` (`withLock('redeem:'+code)`, per-user
+already-used + max-uses checks inside the lock), and `creditDeposit()` (already covered
+in Round 44). All confirmed already correctly guarded against double-crediting -- no
+new fix needed anywhere in this list; this was independent re-verification of the
+existing design, not new code.
+
+**Ledger descriptions simplified.** Withdrawal: `Cash out to ${holder} (${network}), net
+${...} after ${fee}% fee, processing` → `Withdrawal — Processing — ${amount}` (holder
+name, network, and fee breakdown dropped from the one-line description; still fully
+recorded on the withdrawal doc itself, just not repeated here). `finalizeWithdrawalTransactionRecord()`
+used to edit the OLD description text with a regex matching a literal ", processing"
+suffix -- fragile, and no longer applicable once the suffix wording changed. Rewritten
+to rebuild the description fresh from the row's own stored amount every time instead:
+`Withdrawal — Success — ${amount}` or `Withdrawal — Failed, refunded — ${amount}`.
+Deposit: `Wallet recharge` → `Deposit — Success — ${amount}` (a deposit only ever reaches
+this ledger row on success, so the status word never varies) -- matches the same
+template for visual consistency between the two transaction types in Records.
+
+**Withdrawal Accounts redesigned as bank-card tiles.** Each saved account now renders as
+its own gradient card (matching the app's wine brand color) with a chip icon, the
+network name, the phone number grouped into card-number-style chunks
+(`cardPhoneDisplay()`, groups of 4 digits), and the holder name -- replacing the old
+plain list-row. A live preview card sits above the Add-account form, showing the masked
+`XXXX XXXX XX` placeholder the owner asked for until the holder/network/phone fields are
+filled in, then updates in real time as they're typed (`updateBankCardPreview()`, wired
+to each field's `oninput`/`onchange`) -- so what's shown while filling the form is
+exactly what the saved card will look like. Delete button unchanged functionally, just
+moved onto the card itself.
+
+**Verified**: `node --check server.js` clean, `node build-core.js` and
+`node build-admin.js` both round-trip clean, `git diff --check` clean. Playwright: a
+saved account's card shows the real holder name (uppercased) and grouped phone number
+with a working delete button (confirmed the delete flow still calls `/bank/delete`
+correctly and the list falls back to the empty state afterward); the empty preview card
+shows the masked placeholder and is marked visually muted; typing into the form updates
+the live preview's holder/network/number in real time. Cache bumped `v27`→`v28`.
+
+**server.js and admin-src both changed — needs a Render redeploy** (Render should
+auto-deploy from this push; see Round 38's correction on Render vs Railway).
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

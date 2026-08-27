@@ -396,6 +396,14 @@ async function enablePush(){
     const reg = await navigator.serviceWorker.ready;
     const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
     if (!token) return toast('Could not get a push token', 'err');
+    // Real bug fixed: a token can rotate (browser/service-worker update) --
+    // without this, the OLD token from this same browser stayed registered
+    // forever, so this one context alone could end up holding two live
+    // tokens and receiving every push twice. If this browser already had a
+    // DIFFERENT token stored, retire it server-side before storing the new
+    // one, so this context only ever keeps one live registration.
+    let prevToken = ''; try { prevToken = localStorage.getItem('snow_admin_push_token') || ''; } catch(_){}
+    if (prevToken && prevToken !== token) await api('/admin/push/unregister', { token: prevToken }).catch(()=>{});
     const r = await api('/admin/push/register', { token });
     if (r.status !== 'success') return toast(r.message || 'Could not enable notifications', 'err');
     try { localStorage.setItem('snow_admin_push_token', token); } catch(_){}
@@ -1386,13 +1394,14 @@ window.addEventListener('beforeunload', (e) => {
   if (_aboutBlocksDirty) { e.preventDefault(); e.returnValue = ''; }
 });
 async function renderSettings(){
-  const [r, br, hbr, abr] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/about-content')
+  const [r, br, hbr, abr, pr] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/about-content'), api('/admin/push/list')
   ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
   const bannerImage = br.image||'';
   const helpBannerImage = hbr.image||'';
+  const pushTokenCount = pr.status==='success' ? pr.count : null;
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
@@ -1423,6 +1432,13 @@ async function renderSettings(){
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Mobile-money recharges run on MarzPay automatically; cash-outs wait as Pending until an admin sends them from the Withdrawals tab.</p>
       <button class="btn block" id="saveRates">Save rates</button>
+    </div>
+
+    <h2 class="sec">Push notifications</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">${pushTokenCount==null?'Could not load registered devices.':`${pushTokenCount} device${pushTokenCount===1?'':'s'} currently registered for push alerts.`} Each browser/installed-app registers itself when you tap "Notify" up top -- a device can occasionally end up registered twice (e.g. after a browser update rotates its token), which shows up as the same alert arriving more than once on one phone.</p>
+      ${SESSION_ROLE==='owner'?`<button class="btn danger block" id="pushClearAllBtn">Reset all devices</button>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Wipes every registered device -- each one (including yours) needs to tap "Notify" again afterward.</p>`:''}
     </div>
 
     <h2 class="sec">Auto-approve withdrawals</h2>
@@ -1503,6 +1519,16 @@ async function renderSettings(){
       maintenanceMsg:$('sMaintMsg').value.trim(),
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  const pushClearAllBtn = $('pushClearAllBtn');
+  if (pushClearAllBtn) pushClearAllBtn.addEventListener('click', async()=>{
+    if (!confirm('Reset push notifications for every registered device? Each one, including this one, will need to tap "Notify" again to start receiving alerts.')) return;
+    const d = await api('/admin/push/clear-all', {});
+    if (d.status !== 'success') return toast(d.message||'Failed', 'err');
+    try { localStorage.removeItem('snow_admin_push_token'); } catch(_){}
+    setPushUIState(false);
+    toast(`Cleared ${d.cleared} device${d.cleared===1?'':'s'} -- tap Notify to re-enable on this device`, 'ok');
+    renderSettings();
   });
   // Confirms before the checkbox itself is even left checked -- this is
   // money-moving automation with no per-request human check, so a plain

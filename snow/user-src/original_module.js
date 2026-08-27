@@ -1187,29 +1187,65 @@ window.openWithdrawalAccountsSheet = async function(){
   else if (!hadCache) STATE.bankAccounts = [];
   if (!hadCache && $('sheetBody')) renderWithdrawalAccountsSheet();
 };
+// Groups a phone number into card-number-style chunks of 4 digits; an empty
+// number shows the masked "XXXX XXXX XX" placeholder the owner asked for.
+function cardPhoneDisplay(phone){
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return 'XXXX XXXX XX';
+  return (digits.match(/.{1,4}/g) || []).join(' ');
+}
+function chipSvg(){
+  return `<svg width="30" height="22" viewBox="0 0 30 22" fill="none" aria-hidden="true"><rect x="1" y="1" width="28" height="20" rx="4" fill="#e8c789" stroke="rgba(0,0,0,.15)"/><path d="M9 1v20M20 1v20M1 7h28M1 15h28" stroke="rgba(0,0,0,.2)" stroke-width="1"/></svg>`;
+}
+// One shared card template for both a live "what this will look like"
+// preview while filling the Add form (holder/network/phone all still
+// blank -> masked placeholders) and each already-saved account (real
+// holder name + number). deleteId, if given, adds the remove button.
+function bankCardHtml(a, deleteId){
+  a = a || {};
+  const empty = !a.holder && !a.network && !a.phone;
+  const holder = a.holder ? esc(a.holder).toUpperCase() : 'YOUR NAME';
+  const network = a.network ? esc(a.network) : 'Mobile Money';
+  return `
+  <div class="bank-card${empty ? ' bank-card-empty' : ''}">
+    ${waveLinesTR(90,84,'rgba(255,255,255,.4)',3,.6)}
+    <div class="bank-card-top">
+      ${chipSvg()}
+      <div class="bank-card-network">${network}</div>
+    </div>
+    <div class="bank-card-number mono">${cardPhoneDisplay(a.phone)}</div>
+    <div class="bank-card-bottom">
+      <div class="bank-card-holder">${holder}</div>
+      ${deleteId ? `<button class="bank-card-delete" onclick="deleteWithdrawalAccount('${deleteId}')">${ICONS.trash}</button>` : ''}
+    </div>
+  </div>`;
+}
+window.updateBankCardPreview = function(){
+  const el = $('bankCardPreview'); if (!el) return;
+  el.innerHTML = bankCardHtml({
+    holder: $('bankHolder') ? $('bankHolder').value.trim() : '',
+    network: $('bankNetwork') ? $('bankNetwork').value : '',
+    phone: $('bankPhone') ? $('bankPhone').value : '',
+  });
+};
 function renderWithdrawalAccountsSheet(){
   const list = STATE.bankAccounts || [];
-  let html = '<div class="reveal-in"><div class="settings-list" style="margin-bottom:18px;">';
-  html += list.length ? list.map(a => `
-    <div class="list-row">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13.5px;font-weight:600;">${esc(a.holder)}</div>
-        <div style="font-size:11.5px;color:var(--snow-muted);margin-top:1px;">${esc(a.network)} &middot; ${esc(a.phone)}</div>
-      </div>
-      <button style="border:none;background:none;color:var(--snow-wine);padding:6px;" onclick="deleteWithdrawalAccount('${a.id}')">${ICONS.trash}</button>
-    </div>`).join('') : '<div class="list-empty">No withdrawal accounts saved.</div>';
-  html += '</div>';
+  let html = '<div class="reveal-in">';
+  html += list.length
+    ? list.map(a => bankCardHtml(a, a.id)).join('')
+    : '<div class="list-empty" style="margin-bottom:14px;">No withdrawal accounts saved.</div>';
   html += `
-    <div class="section-title" style="margin-bottom:14px;">Add withdrawal account</div>
-    <div class="form-field"><label>Account holder name</label><input id="bankHolder" type="text" placeholder="Full name"></div>
+    <div class="section-title" style="margin:18px 0 14px;">Add withdrawal account</div>
+    <div id="bankCardPreview">${bankCardHtml({})}</div>
+    <div class="form-field"><label>Account holder name</label><input id="bankHolder" type="text" placeholder="Full name" oninput="updateBankCardPreview()"></div>
     <div class="form-field"><label>Network</label>
-      <select id="bankNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
+      <select id="bankNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);" onchange="updateBankCardPreview()">
         <option value="" disabled selected>Select network</option>
         <option value="MTN Mobile Money">MTN Mobile Money</option>
         <option value="Airtel Money">Airtel Money</option>
       </select>
     </div>
-    <div class="form-field"><label>Phone number</label><input id="bankPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" oninput="sanitizePhoneInput(this)"></div>
+    <div class="form-field"><label>Phone number</label><input id="bankPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" oninput="sanitizePhoneInput(this);updateBankCardPreview()"></div>
     <button class="primary-button" id="bankSaveBtn" style="width:100%;padding:15px 0;font-size:15px;" onclick="saveWithdrawalAccount()">Save account</button></div>`;
   $('sheetBody').innerHTML = html;
 }

@@ -1620,8 +1620,11 @@ async function creditDeposit(depDoc) {
         }
       }
       const { date, time } = nowStr();
+      // Owner: "SIMPLE ALSO ON DEPOSIT" -- same short template as the
+      // withdrawal description above (a deposit only ever reaches this row
+      // on success, so the status word is always "Success").
       await db.collection('transactions').add({
-        userId: depUserId, type: 'deposit', description: 'Wallet recharge',
+        userId: depUserId, type: 'deposit', description: `Deposit — Success — ${fmtUGX(depAmount)}`,
         amount: depAmount, status: 'success', date, time, ref: fd.ref,
         createdAt: FieldValue.serverTimestamp()
       });
@@ -1810,8 +1813,13 @@ app.post('/withdraw/request', async (req, res) => {
       const { date, time } = nowStr();
       try {
         await witRef.set({ userId, amount: amt, fee, net, holder, network: rawNetwork, phone: destValue, ref, status: 'pending', date, time, createdAt: FieldValue.serverTimestamp() });
+        // Owner: "instead of putting many words make it simple, no need to
+        // put name, need only withdrawal, status, amount" -- dropped the
+        // holder name, network, and fee breakdown that used to be spelled
+        // out here (still recorded on the withdrawal doc itself, just not
+        // repeated in this one-line ledger description).
         await db.collection('transactions').add({
-          userId, type: 'withdraw', description: `Cash out to ${holder} (${rawNetwork}), net ${fmtUGX(net)} after ${sett.withdrawFeePct}% fee, processing`,
+          userId, type: 'withdraw', description: `Withdrawal — Processing — ${fmtUGX(amt)}`,
           amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
         });
       } catch (createErr) {
@@ -1841,10 +1849,13 @@ async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome) {
     const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(10).get();
     if (txSnap.empty) return;
     const newStatus = outcome === 'processed' ? 'success' : 'failed';
+    const statusLabel = outcome === 'processed' ? 'Success' : 'Failed, refunded';
     await Promise.all(txSnap.docs.map(txDoc => {
-      const oldDesc = txDoc.data().description || '';
-      const newDesc = outcome === 'processed' ? oldDesc.replace(/, processing$/, '') : oldDesc.replace(/, processing$/, ' — failed, refunded to wallet');
-      const update = { status: newStatus, description: newDesc };
+      // Rebuilt fresh from the row's own stored amount rather than editing
+      // the old text -- simpler and no longer coupled to the exact
+      // "processing" suffix the description used to always end with.
+      const amt = Math.abs(Number(txDoc.data().amount) || 0);
+      const update = { status: newStatus, description: `Withdrawal — ${statusLabel} — ${fmtUGX(amt)}` };
       if (newStatus === 'failed') update.amount = 0; // wallet was refunded in full — zero this row so the ledger sum stays correct
       return txDoc.ref.update(update);
     }));
@@ -2386,6 +2397,32 @@ app.post('/admin/push/unregister', async (req, res) => {
   try {
     await db.collection('adminPushTokens').doc(token).delete();
     res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Real bug fixed: owner reported the SAME push notification arriving twice
+// on one phone. sendAdminPush() sends to every token in adminPushTokens,
+// and a single physical device can end up registered under more than one
+// still-valid token over time (browser vs. installed-PWA each get their
+// own FCM registration scope, a token can rotate after a browser/service-
+// worker update, etc.) -- there's no way to detect "these two opaque
+// tokens are actually the same device" from the token strings alone, so
+// the practical fix is a one-click reset: wipe every registered token,
+// then each device/browser re-subscribes cleanly via the existing
+// Notify button, ending up with exactly one live token per context again.
+app.get('/admin/push/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('adminPushTokens').get();
+    res.json({ status: 'success', count: snap.size, tokens: snap.docs.map(d => ({ token: d.id.slice(0, 16) + '…', registeredAt: d.data().registeredAt || null })) });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/push/clear-all', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('adminPushTokens').get();
+    await Promise.all(snap.docs.map(d => d.ref.delete()));
+    logAdminAction(req, 'push_tokens_cleared', { count: snap.size });
+    res.json({ status: 'success', cleared: snap.size });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/settings', async (req, res) => {
