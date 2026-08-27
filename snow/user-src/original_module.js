@@ -315,7 +315,7 @@ async function renderHome(){
   <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openDepositSheet()">${ICONS.deposit}Deposit</button>
   <button class="secondary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openWithdrawSheet()">${ICONS.withdraw}Withdraw</button>
 </div>
-<div id="activityTicker" style="position:fixed;left:50%;transform:translateX(-50%);bottom:88px;width:calc(100% - 40px);max-width:440px;box-sizing:border-box;z-index:50;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:rgba(17,17,17,.82);box-shadow:0 10px 24px -10px rgba(0,0,0,.5);overflow:hidden;">
+<div id="activityTicker" style="margin:14px 20px 0;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:rgba(17,17,17,.82);box-shadow:0 6px 16px -8px rgba(0,0,0,.35);overflow:hidden;">
   <span style="width:6px;height:6px;border-radius:50%;background:var(--snow-green);flex-shrink:0;"></span>
   <div style="overflow:hidden;flex:1;min-width:0;">
     <div id="activityTickerTrack" class="mono" style="display:inline-flex;white-space:nowrap;color:#fff;font-size:11.5px;">Loading activity&hellip;</div>
@@ -792,20 +792,44 @@ window.submitChestCode = async function(){
   if (STATE.page === 'home') renderHome();
 };
 
+var _recordsRows = [];
+var INCOME_TX_TYPES = new Set(['cashback','commission','team_reward','mission_salary','mission_deposit_reward','welcome_bonus','checkin','promocode','admin_credit']);
+function recordsTabMatch(cat, t){
+  if (cat === 'deposit') return t.type === 'deposit';
+  if (cat === 'withdraw') return t.type === 'withdraw';
+  return INCOME_TX_TYPES.has(t.type);
+}
 window.openRecordsSheet = async function(){
-  openSheet('Records', skRows(5));
+  openSheet('Records', `
+    <div class="segmented-control" id="recordsTabs">
+      <button class="seg active" data-cat="income" onclick="switchRecordsTab('income')">Income</button>
+      <button class="seg" data-cat="deposit" onclick="switchRecordsTab('deposit')">Deposits</button>
+      <button class="seg" data-cat="withdraw" onclick="switchRecordsTab('withdraw')">Withdrawals</button>
+    </div>
+    <div id="recordsBody" style="margin-top:16px;">` + skRows(5) + `</div>`);
   const r = await api('/transactions');
-  const rows = r.status === 'success' ? r.transactions : [];
-  if (!rows.length) { $('sheetBody').innerHTML = '<div class="list-empty">No records yet.</div>'; return; }
-  $('sheetBody').innerHTML = '<div class="settings-list">' + rows.map(t => `
+  _recordsRows = r.status === 'success' ? r.transactions : [];
+  renderRecordsTab('income');
+};
+window.switchRecordsTab = function(cat){
+  const tabs = $('recordsTabs');
+  if (tabs) tabs.querySelectorAll('.seg').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+  renderRecordsTab(cat);
+};
+function renderRecordsTab(cat){
+  const body = $('recordsBody');
+  if (!body) return;
+  const rows = _recordsRows.filter(t => recordsTabMatch(cat, t));
+  if (!rows.length) { body.innerHTML = '<div class="list-empty">No records yet.</div>'; return; }
+  body.innerHTML = '<div class="settings-list">' + rows.map(t => `
     <div class="list-row">
       <div style="flex:1;min-width:0;">
         <div style="font-size:13.5px;font-weight:600;">${esc(cleanDesc(t.description))}</div>
         <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">${esc(t.date||'')} ${esc(t.time||'')}</div>
       </div>
       <div class="mono" style="font-size:13px;font-weight:700;color:${t.amount<0?'var(--snow-wine)':'var(--snow-green)'};">${t.amount<0?'-':'+'}${fmtUGX(Math.abs(t.amount))}</div>
-    </div>`).join('') + '</div>';
-};
+    </div>`).join('') + '</div><div class="list-end">No more data</div>';
+}
 function cleanDesc(d){ return d || ''; }
 
 window.openDepositSheet = function(){

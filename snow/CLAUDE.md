@@ -1371,6 +1371,63 @@ list itself is applied even when the webfont can't load): no horizontal overflow
 `animationName === 'tickerFlow'`, the chest button's computed `animationName ===
 'chestSwing'`, `.mono` computed `fontFamily` contains `'Bodoni'`. Cache bumped `v9`→`v10`.
 
+## Round 25 (2026-08-27) — chest-modal image ordering, ticker moved back inline, Records got 3 category tabs + "No more data" footer
+
+Owner, three more corrections on top of Round 24: "on pop up l expect the treasure box
+image to be the first, so it will alter popup height" -- the chest-code modal (Round 23)
+had the image ABOVE the title already conceptually but it wasn't actually there yet at
+all (Round 23 never added an image to the modal, only the hanging chest button on Home) --
+this was a genuinely new addition, not a reorder. Second: "activity checker should be
+there where it was in in-between referral statement and deposit and withdrawal buttons" --
+a real reversal of Round 23's "float it" fix: the owner never wanted it detached from
+layout at all, they want it back sitting inline in the gap between the Deposit/Withdraw
+buttons and the Referral Program card (Round 24's marquee-flow rebuild is unaffected --
+only the CONTAINER's positioning changes here, not the scrolling text logic). Third: "on
+records l wanted you to put with there 3 categories in income, deposits and withdrawals...
+put 'no more data' just like space8 was" -- the existing Records screen (`openRecordsSheet`)
+showed one flat combined list.
+
+**Chest modal image**: added `<img src="/treasure-chest.png">` as the modal's first
+child, above the "Treasure Chest" heading (`user-src/index.html`) -- `.chest-modal img`
+sized to 96px with the same drop-shadow treatment as the hanging Home button, so the
+popup is visibly taller now that a real product image leads it, exactly as asked.
+
+**Ticker, un-floated**: `#activityTicker` (`renderHome()`,
+`user-src/original_module.js`) dropped `position:fixed`/`bottom`/`z-index`/`max-width`
+entirely -- it's a normal `margin:14px 20px 0` block now, sitting exactly where it
+already was in DOM order (between the Deposit/Withdraw row and the Referral Program
+card), so no markup reordering was needed, only the CSS that had pulled it out of flow.
+Round 24's marquee (`renderActivityTicker()`/`tickerFlow` keyframe) is untouched -- the
+text still continuously scrolls, it just does so inside an inline pill again instead of
+a fixed-position one.
+
+**Records, redesigned with 3 tabs + end-of-list footer**: reused the app's existing
+`.segmented-control`/`.seg` pill-tab component (previously only used for Team's Level
+1/2/3 switcher) rather than inventing a new tab style, since it's already the
+established segmented-tab pattern in this codebase. `openRecordsSheet()` now fetches
+`/transactions` once, caches it in `_recordsRows`, and `renderRecordsTab(cat)` filters
+client-side into three buckets: `INCOME_TX_TYPES` (a `Set` covering every credit type
+that isn't a deposit -- `cashback`, `commission`, `team_reward`, `mission_salary`,
+`mission_deposit_reward`, `welcome_bonus`, `checkin`, `promocode`, `admin_credit`, cross-
+checked against every `type:'...'` transaction-writing call site in `server.js` so
+nothing real income-shaped is missed), `type==='deposit'`, and `type==='withdraw'`.
+Switching tabs (`switchRecordsTab()`) just re-filters the already-fetched rows, no
+re-fetch. Every non-empty tab now ends with a `<div class="list-end">No more data</div>`
+footer (new `.list-end` CSS rule, `user-src/index.html`), matching space8's own
+`listEndFooter()` convention the owner pointed at by name. Investment purchases
+(`type:'investment'`, a debit) and `admin_debit` intentionally don't appear in any of
+the 3 tabs -- the owner asked for exactly income/deposits/withdrawals, and a plan
+purchase is already visible under My Products.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright across all 5 required widths: no horizontal overflow, ticker
+confirmed NOT `position:fixed` and geometrically sits between the Deposit/Withdraw
+buttons and the Referral Program card. At 390px: chest modal's first child is the `<img>`
+(not the title); Records shows exactly 3 tabs labeled Income/Deposits/Withdrawals; Income
+tab shows the 3 seeded credit-type rows (cashback/commission/checkin) with a "No more
+data" footer; Deposits and Withdrawals tabs each show exactly their 1 seeded row.
+Screenshots confirm all three visually. Cache bumped `v10`→`v11`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
