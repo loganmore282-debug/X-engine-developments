@@ -2685,6 +2685,42 @@ cache test and Round 45's delete-flow test (both touch the same boot path) -- no
 regressions. `node --check` clean, `node build-core.js` round-trip clean, `git diff
 --check` clean. Cache bumped `v32`→`v33`.
 
+## Round 51 (2026-08-27) — auto-submit login when Chrome's native picker fills the fields
+
+Owner's screenshots showed Round 50's auto sign-in NOT firing -- what actually happened
+was Chrome's own native "Use saved password?" bubble (the Google-icon sheet, a totally
+separate thing from the Credential Management API), which appeared because there are
+3+ saved logins for this origin. `tryAutoSignIn()`'s `mediation:'silent'` call is
+*designed* to refuse to auto-pick between several matches (that's the browser
+deliberately not guessing), so it correctly fell through to the empty login form; Chrome
+then filled the tapped fields via its own picker, and nothing was listening for that --
+so it sat there filled but unsubmitted until the owner tapped Login by hand.
+
+**The real problem: that fill is invisible to JS by ordinary means.** Chrome's native
+autofill (via the picker or plain remembered-field autofill) sets `.value` directly with
+no `input`/`change` event at all. The one reliable, long-standing signal is the
+`:-webkit-autofill` CSS pseudo-class the browser tags the field with -- toggling a
+no-op `animation-name` on that pseudo-class in index.html's CSS fires a real
+`animationstart` DOM event that normal typing never triggers. Wired that to
+`#loginPhone`/`#loginPassword` only (not the Register fields -- auto-submitting a new
+account with a saved LOGIN credential wouldn't make sense). The listener in
+original_module.js debounces briefly (Chrome fills both fields close together but not
+always the same tick), then submits automatically once both fields are non-empty and
+login isn't already in flight, guarded so it only fires once per sign-in
+(`window._autofillLoginTried`, reset on `doLogout()` so a second account's picker later
+in the same tab can also auto-submit).
+
+**Verified** with Playwright: since `page.fill()` bypasses real browser autofill
+entirely (no way to trigger genuine `:-webkit-autofill` state from automation), tests
+set `.value` directly (replicating exactly what Chrome's picker does -- no events) and
+dispatch a synthetic `animationstart` with `animationName: 'onAutoFillStart'` to
+exercise the actual JS wiring: both fields filled this way auto-submits exactly once;
+a repeat animation event doesn't double-submit; only the phone field filled does NOT
+auto-submit (no half-credential submissions); logout resets the guard so a second
+account autofilled later in the same tab still auto-submits. Re-ran Round 50's 5 tests
+plus Round 46's instant-boot test -- no regressions. `node --check` clean, `node
+build-core.js` round-trip clean, `git diff --check` clean. Cache bumped `v33`→`v34`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

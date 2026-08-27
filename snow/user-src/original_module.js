@@ -277,8 +277,41 @@ window.doLogout = async function(){
   if (credManSupported() && navigator.credentials.preventSilentAccess) {
     try { await navigator.credentials.preventSilentAccess(); } catch (_) {}
   }
+  window._autofillLoginTried = false;
   await window.fbSignOut();
 };
+
+// ── AUTOFILL AUTO-SUBMIT (Login only) ──
+// This is a SEPARATE case from tryAutoSignIn() above. That covers the one
+// stored credential, zero-UI scenario; this covers what actually happens
+// once Chrome has several saved logins for the site and falls back to its
+// own native "Use saved password?" picker (its own bubble, not something
+// this page can suppress or drive) -- picking one there fills the fields
+// but fires NO input/change event at all, so there was nothing to react to
+// and the member had to tap Login manually even though the values were
+// already correct on screen. The :-webkit-autofill CSS trick (see the
+// #loginPhone/#loginPassword rules in index.html) is the one reliable way
+// to get a real DOM event out of that -- toggling a no-op animation on the
+// pseudo-class fires 'animationstart', which normal typing never does.
+(function(){
+  let debounce = null;
+  function maybeAutoSubmit(){
+    if (window._autofillLoginTried) return;
+    const phone = $('loginPhone'), pass = $('loginPassword'), btn = $('loginBtn');
+    if (!phone || !pass || !btn || btn.disabled) return;
+    if (!phone.value || !pass.value) return;
+    window._autofillLoginTried = true;
+    window.doLogin();
+  }
+  document.addEventListener('animationstart', (e) => {
+    if (e.animationName !== 'onAutoFillStart') return;
+    if (e.target.id !== 'loginPhone' && e.target.id !== 'loginPassword') return;
+    // Chrome's picker fills both fields together but not always in the same
+    // tick -- give the second field a moment to land before checking.
+    clearTimeout(debounce);
+    debounce = setTimeout(maybeAutoSubmit, 80);
+  });
+})();
 
 // ── BOOT ──
 async function boot(){
