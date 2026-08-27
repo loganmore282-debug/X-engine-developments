@@ -2605,6 +2605,17 @@ correctly turns wine-red in its active nav state, and correctly renders green in
 Team-commission tile. `node --check` clean, `node build-core.js` round-trip clean, `git
 diff --check` clean. Cache bumped `v29`→`v30`.
 
+## Round 48 (2026-08-27) — My Products nav icon swapped again: bottles + mugs lineup
+
+Owner replaced Round 47's single beer mug with a more detailed illustration (a lineup
+of bottles and mugs, black silhouette, single `fill-rule="evenodd"` path). Same
+treatment as Round 47: `ICONS.box` swapped verbatim, only the outer `<svg>`'s
+`width`/`height` changed (1536 → 20, `viewBox` untouched) so it scales down cleanly;
+kept the fixed `fill="#000000"` since `box` is nav-only (no `currentColor` needed).
+Verified with a Playwright screenshot of the nav bar, zoomed 4x — the bottle/mug detail
+stays legible even shrunk to 20px. `node --check` clean, `node build-core.js` round-trip
+clean, `git diff --check` clean. Cache bumped `v30`→`v31`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
