@@ -73,7 +73,7 @@ function togglePw(id, btn){
 
 // ── STATE ──
 var STATE = { user: null, account: null, settings: null, products: null, investments: null,
-  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, refCode: null, page: 'home', mission: null };
+  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, refCode: null, page: 'home', mission: null };
 
 function toast(msg, isErr){
   const el = document.createElement('div');
@@ -230,6 +230,19 @@ async function enterApp(){
     return;
   }
   STATE.account = r.account;
+  // Prefetch everything every tab needs, all in parallel, before the loading
+  // screen ever comes down -- so the very first tab switch (and opening
+  // Withdraw/Withdrawal Accounts/Records) is already cache-first-instant
+  // instead of only becoming fast after a first visit to each one. This adds
+  // no real time over the account fetch alone since it's parallel, not
+  // sequential -- one network round trip's worth of latency, not four.
+  const [invR, teamR, bankR, txR] = await Promise.all([
+    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions')
+  ]);
+  if (invR.status === 'success') STATE.investments = invR.investments;
+  if (teamR.status === 'success') STATE.teamStats = teamR;
+  if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
+  if (txR.status === 'success') STATE.transactions = txR.transactions;
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
@@ -836,14 +849,20 @@ window.submitChestCode = async function(){
   if (STATE.page === 'home') renderHome();
 };
 
-var _recordsRows = [];
+var _recordsTab = 'income';
 var INCOME_TX_TYPES = new Set(['cashback','commission','team_reward','mission_salary','mission_deposit_reward','welcome_bonus','checkin','promocode','admin_credit']);
 function recordsTabMatch(cat, t){
   if (cat === 'deposit') return t.type === 'deposit';
   if (cat === 'withdraw') return t.type === 'withdraw';
   return INCOME_TX_TYPES.has(t.type);
 }
+// Cache-first: STATE.transactions is already prefetched at login (see
+// enterApp()), so this normally has data to show the instant the sheet
+// opens -- no network wait. Still quietly re-fetches in the background to
+// stay current for next time.
 window.openRecordsSheet = async function(){
+  _recordsTab = 'income';
+  const hadCache = Array.isArray(STATE.transactions);
   openSheet('Records', `
     <div class="segmented-control" id="recordsTabs">
       <button class="seg active" data-cat="income" onclick="switchRecordsTab('income')">Income</button>
@@ -851,11 +870,15 @@ window.openRecordsSheet = async function(){
       <button class="seg" data-cat="withdraw" onclick="switchRecordsTab('withdraw')">Withdrawals</button>
     </div>
     <div id="recordsBody" style="margin-top:16px;"></div>`);
+  if (hadCache) renderRecordsTab(_recordsTab);
   const r = await api('/transactions');
-  _recordsRows = r.status === 'success' ? r.transactions : [];
-  renderRecordsTab('income');
+  if (r.status === 'success') STATE.transactions = r.transactions;
+  else if (!hadCache) STATE.transactions = [];
+  if (!$('recordsBody')) return; // sheet closed while awaiting
+  renderRecordsTab(_recordsTab);
 };
 window.switchRecordsTab = function(cat){
+  _recordsTab = cat;
   const tabs = $('recordsTabs');
   if (tabs) tabs.querySelectorAll('.seg').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
   renderRecordsTab(cat);
@@ -863,7 +886,7 @@ window.switchRecordsTab = function(cat){
 function renderRecordsTab(cat){
   const body = $('recordsBody');
   if (!body) return;
-  const rows = _recordsRows.filter(t => recordsTabMatch(cat, t));
+  const rows = (STATE.transactions || []).filter(t => recordsTabMatch(cat, t));
   if (!rows.length) { body.innerHTML = '<div class="list-empty reveal-in">No records yet.</div>'; return; }
   body.innerHTML = '<div class="reveal-in"><div class="settings-list">' + rows.map(t => `
     <div class="list-row">
@@ -911,11 +934,23 @@ async function pollDepositStatus(depositId){
   }
 }
 
+// Cache-first: STATE.bankAccounts is prefetched at login. Deliberately does
+// NOT quietly repaint once the background re-fetch lands (unlike Home/Team/
+// Products) -- this sheet has live input fields (amount, PIN) and silently
+// replacing them out from under someone mid-entry would be a much worse bug
+// than a slightly-stale account list. The background fetch still keeps
+// STATE.bankAccounts current for the NEXT time this sheet opens.
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
+  const hadCache = Array.isArray(STATE.bankAccounts);
   openSheet('Withdraw', '');
+  if (hadCache) paintWithdrawSheet(s);
   const r = await api('/bank/list');
-  STATE.bankAccounts = r.status === 'success' ? r.accounts : [];
+  if (r.status === 'success') STATE.bankAccounts = r.accounts;
+  else if (!hadCache) STATE.bankAccounts = [];
+  if (!hadCache && $('sheetBody')) paintWithdrawSheet(s);
+};
+function paintWithdrawSheet(s){
   const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)} — ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
   $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minWithdraw)}, ${s.withdrawFeePct||15}% fee applies)</label><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0"></div>
@@ -926,7 +961,7 @@ window.openWithdrawSheet = async function(){
     </div>
     <div class="form-field"><label>Transaction PIN</label><input id="witPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code"></div>
     <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button></div>`;
-};
+}
 window.submitWithdraw = async function(){
   const amount = parseInt($('witAmount').value, 10);
   const pin = $('witPin').value.trim();
@@ -944,11 +979,19 @@ window.submitWithdraw = async function(){
   if (STATE.page==='home') renderHome();
 };
 
+// Cache-first, same reasoning as openWithdrawSheet() above -- this sheet
+// also has a live add-account form, so a background refetch never forces a
+// repaint over it. renderWithdrawalAccountsSheet() itself is still called
+// directly (a real repaint, not stale) right after a save/delete succeeds --
+// that's a genuine, expected state change, not a surprise mid-typing.
 window.openWithdrawalAccountsSheet = async function(){
+  const hadCache = Array.isArray(STATE.bankAccounts);
   openSheet('Withdrawal Accounts', '');
+  if (hadCache) renderWithdrawalAccountsSheet();
   const r = await api('/bank/list');
-  STATE.bankAccounts = r.status === 'success' ? r.accounts : [];
-  renderWithdrawalAccountsSheet();
+  if (r.status === 'success') STATE.bankAccounts = r.accounts;
+  else if (!hadCache) STATE.bankAccounts = [];
+  if (!hadCache && $('sheetBody')) renderWithdrawalAccountsSheet();
 };
 function renderWithdrawalAccountsSheet(){
   const list = STATE.bankAccounts || [];

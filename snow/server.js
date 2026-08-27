@@ -319,18 +319,29 @@ function finiteMoney(v) {
   return Number.isFinite(n) ? n : 0;
 }
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; // no I/l/O/0/1
-// Gift codes share the exact same unambiguous alphabet as referral codes but
-// are 5 characters (referral codes are 6) — length is the only thing that
-// tells the two systems apart by construction, so a code typed into the
-// wrong box can never even superficially collide.
+// Gift codes keep this original mixed-case alphabet, now at 8 characters
+// (was 5, owner request 2026-08-27). Still can't collide with a referral
+// code by construction — referral codes are 6 chars from a DIFFERENT
+// (uppercase-only) alphabet below, so length alone already told the two
+// apart and still does.
 const GIFTCODE_CHARS = CODE_CHARS;
+// Referral codes, changed 2026-08-27 (owner: uppercase letters + numbers
+// only, e.g. "FTD6GH", "fully recognized, encrypted, safeguarded and
+// global so no repetition"). Same unambiguous-character philosophy as
+// CODE_CHARS (no I/O/0/1) but uppercase-only, no lowercase. Every
+// already-issued mixed-case code (old CODE_CHARS-based) keeps working
+// untouched forever -- redemption/matching below is exact-string
+// comparison against whatever's actually stored, no case transform, no
+// migration needed. This only changes what NEWLY generated codes look
+// like going forward.
+const REFERRAL_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/O/0/1
 function randFromAlphabet(alphabet, n) {
   let s = '';
   for (let i = 0; i < n; i++) s += alphabet[crypto.randomInt(alphabet.length)];
   return s;
 }
-function randCode(n = 6) { return randFromAlphabet(CODE_CHARS, n); }
-function genGiftCode() { return randFromAlphabet(GIFTCODE_CHARS, 5); }
+function randCode(n = 6) { return randFromAlphabet(REFERRAL_CHARS, n); }
+function genGiftCode() { return randFromAlphabet(GIFTCODE_CHARS, 8); }
 async function generateUniqueGiftCode() {
   return withLock('giftcode-gen', async () => {
     for (let attempt = 0; attempt < 30; attempt++) {

@@ -1716,6 +1716,94 @@ Level 2 and then waiting past a live-refresh tick leaves Level 2 still selected 
 reset to Level 1) while the team commission figure still updates; confirmed zero
 `.page-loading` elements exist anywhere. Cache bumped `v17`→`v18`.
 
+## Round 33 (2026-08-27) — Withdraw/Withdrawal Accounts/Records now cache-first too, everything prefetched during the boot spinner, admin user-ID column removed, referral codes go uppercase-alnum, gift codes extended to 8 chars
+
+Owner, five items in one message: (1) "withdraw account is taking long to load up... also
+records" -- Round 32 only made Home/Products/Team cache-first, these 3 sheets still
+blocked on a fresh fetch every open; (2) "after startup spin loader, every data should
+have been loaded up and cached for smooth navigation... it should load up very very fast
+all data" -- nothing was prefetched at login beyond the account itself; (3) "no need for
+id, so remove them in admin panel" -- the admin Users table's ID column; (4) "change
+nature and character of referral codes... already existing should still work but l need
+new referral codes of 6 characters, alphabetical capital letters and numbers... like
+FTD6GH"; (5) "change gift codes, they should be extended to 8 characters."
+
+**Boot-time prefetch.** `enterApp()` (`user-src/original_module.js`) now fetches
+`/investments`, `/team/stats`, `/bank/list`, and `/transactions` all together via
+`Promise.all` right after the account load, before the loading screen ever comes down
+-- new `STATE.transactions` cache slot added alongside the existing ones. This is
+genuinely free: parallel requests share one network round trip's worth of latency, not
+four sequential ones, so the spinner isn't meaningfully slower than before, it just does
+more work in that same window.
+
+**Withdraw / Withdrawal Accounts / Records sheets, cache-first.** Same pattern Round 32
+established for the main tabs: `openWithdrawSheet()`/`openWithdrawalAccountsSheet()`/
+`openRecordsSheet()` paint instantly from `STATE.bankAccounts`/`STATE.transactions`
+when already cached (true on every open now, thanks to the boot prefetch above), then
+quietly re-fetch in the background. **Deliberate asymmetry from Home/Team**: Withdraw
+and Withdrawal Accounts both contain LIVE INPUT FIELDS (amount/PIN, or the add-account
+form) -- silently replacing the sheet body once the background fetch lands would wipe
+whatever the member had already started typing, a much worse bug than a few-seconds-
+stale account list. So those two sheets' background re-fetch updates `STATE` for NEXT
+time only and never forces a repaint over an open form; Records (read-only, no inputs)
+gets the same full quiet-repaint treatment as Products. `_recordsRows` (a bare module
+var) was folded into `STATE.transactions` so it participates in the same cache
+consistently.
+
+**Admin: ID column removed.** `admin-src/index.html`'s Users table dropped the `<th>ID
+</th>` header and each row's `ID:000042` cell (`u.publicId`) -- table went from 6 to 5
+columns (`colspan` on the two empty-state rows updated to match), and the search bar's
+placeholder no longer mentions searching "or user ID" since the id is never shown
+anywhere to search for anymore. The underlying `publicId` field/search-matching logic
+(`qId` in `drawUsers()`) was left in place, untouched and harmless -- not something the
+owner asked to rip out, just to stop displaying.
+
+**Referral codes: new uppercase-alphanumeric alphabet, 6 chars, old codes untouched.**
+`server.js` gained a dedicated `REFERRAL_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'`
+(uppercase letters + digits, still excluding the same ambiguous I/O/0/1 the original
+alphabet always excluded) -- `randCode()` (used only by `generateUniqueReferralCode()`)
+now draws from this instead of the old mixed-case `CODE_CHARS`, producing codes like
+"FTD6GH" exactly matching the owner's example. Every already-issued mixed-case code
+keeps working forever with zero migration: redemption/matching (`completeRegistrationCore`,
+`/admin/user/attach-referrer`) was already, and remains, a plain exact-string comparison
+against whatever's actually stored in `referralCode` -- it never transformed case before
+and doesn't need to now, so an old code and a new code both just match themselves. Already
+"fully recognized, encrypted, safeguarded and global" per the owner's own wording --
+`crypto.randomInt`-backed (not a biased byte-mod), globally unique via the existing
+`withLock('referral-code-gen',...)` check-and-claim-as-one-atomic-step, checked against
+the ENTIRE `users` collection (not per-server/per-shard) since this runs as a single
+Node process. No client-side change needed -- Snow's registration flow has never had a
+manual referral-code text field (only ever `?ref=CODE` in the URL, captured verbatim,
+case round-trips through `encodeURIComponent`/`decodeURIComponent` exactly), so there
+was no `autocapitalize` bug to fix here the way space8 once had.
+
+**Gift codes: 8 characters (was 5).** `genGiftCode()` now calls
+`randFromAlphabet(GIFTCODE_CHARS, 8)` -- alphabet itself (the original mixed-case
+`CODE_CHARS`) is unchanged, only length changed, per the owner's explicit ask (character
+set was never in question). Gift and referral codes still can't collide by construction
+even after this change -- 8 vs. 6 characters, still a different length, same as the
+original 5-vs-6 design. `/redeem`'s existing 32-char input cap comfortably covers 8-char
+codes, no change needed there; no `maxlength` attribute existed on the client's
+`#chestCodeInput` gift-code field to bump either.
+
+**Verified**: `node --check` clean on both `server.js` and `original_module.js`,
+`node build-core.js` + `node build-admin.js` both clean round-trips, `git diff --check`
+clean. Standalone extraction of the exact `randFromAlphabet`/`randCode`/`genGiftCode`
+logic run 2,000 times each: every referral code matches `^[A-HJ-NP-Z2-9]{6}$` (uppercase,
+no ambiguous chars, exactly 6 long); every gift code is exactly 8 chars from the
+mixed-case alphabet. Playwright, with `/bank/list`/`/transactions` deliberately delayed
+~400ms to simulate real network latency: confirmed `STATE.bankAccounts`/
+`STATE.transactions`/`STATE.investments`/`STATE.teamStats` are all populated within
+~200ms of `enterApp()` finishing (the boot prefetch); confirmed the Withdraw sheet's
+body, the Records sheet's Deposits tab, and the Withdrawal Accounts list all render
+real rows within ~30-40ms of being opened (long before the 400ms mock delay could
+possibly resolve) -- genuinely instant, not just visually faster. Cache bumped
+`v18`→`v19` (user), `v7`→`v8` (admin).
+
+**`server.js` changed → needs a Railway redeploy** for the new referral/gift code
+generation to take effect live; remind the owner which file goes there, per the
+recurring pattern this project keeps hitting.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
