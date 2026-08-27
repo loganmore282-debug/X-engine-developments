@@ -1718,8 +1718,12 @@ app.post('/deposit/callback', async (req, res) => {
 // ═══════════════════════════════════════════
 const _withdrawInFlight = new Set();
 const _witRequestInFlight = new Set();
-// The Transaction PIN set at registration is the ONLY PIN in Snow — it
-// gates every withdrawal request and every withdrawal-account bind/delete.
+// The Transaction PIN set at registration is the ONLY PIN in Snow -- it
+// gates every actual money-moving withdrawal request. It no longer gates
+// binding/removing a withdrawal account (owner, Round 39: "remove pin
+// putting here, only it will be on Withdrawals") -- saving/removing a
+// payout destination doesn't move money by itself, see /bank/save and
+// /bank/delete for that change.
 const PIN_LOCK_MS = 15 * 60 * 1000;
 const PIN_MAX_FAILS = 5;
 async function pinCheck(userId, pin) {
@@ -2043,13 +2047,40 @@ app.post('/withdraw/callback', async (req, res) => {
     if (wit.status !== 'processing') return;
     const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
     if (isSuccess) {
-      // Best-effort live re-check: only VETOES the webhook on an explicit
-      // contradiction; a check that itself fails/is empty never blocks a
-      // genuinely-completed payout from being marked processed.
+      // Real bug fixed: this endpoint has no webhook signature/secret check
+      // (unlike a call WE make outward to MarzPay with our own key, an
+      // inbound POST here is just whatever hit the URL) -- the live re-check
+      // against MarzPay's own API is what actually makes this safe to act
+      // on, not the webhook body itself. It's a "best-effort" check in the
+      // sense that an inconclusive/failed live check never BLOCKS a
+      // genuinely-completed payout -- but if there's no uuid to check
+      // against AT ALL (neither our own record's marzTxUuid nor one on the
+      // webhook), there is nothing to verify the claim against, so this
+      // used to fall through and mark it processed on the unauthenticated
+      // webhook's say-so alone. Now it leaves the withdrawal untouched
+      // instead -- same "refuse rather than trust an unverifiable claim"
+      // posture /deposit/callback already uses. Recoverable by hand via
+      // /admin/withdraw/verify (reports "no_reference" for exactly this
+      // case) + /admin/withdraw/reject if MarzPay's dashboard confirms it
+      // wasn't actually sent.
       const uuidForCheck = wit.marzTxUuid || webhookUuid;
-      if (uuidForCheck) {
-        const liveStatus = await marzGetSendStatus(uuidForCheck);
+      if (!uuidForCheck) return;
+      const liveStatus = await marzGetSendStatus(uuidForCheck);
+      if (wit.marzTxUuid) {
+        // Re-checking OUR OWN previously-recorded uuid (captured straight
+        // from MarzPay's original send-money response) -- an inconclusive
+        // result here (MarzPay briefly down, a network blip) is trusted not
+        // to be doubted, matching this block's original intent.
         if (liveStatus && !SUCCESS_STATUSES.has(liveStatus)) return;
+      } else {
+        // No uuid of our own -- checking only the WEBHOOK's own claimed
+        // uuid, which an attacker who guessed/knew this withdrawal's
+        // marzReference could set to anything. An inconclusive result here
+        // (e.g. the uuid doesn't exist at MarzPay at all) is indistinguishable
+        // from a fabricated one, so this requires an explicit confirmed
+        // success rather than giving an unproven uuid the same benefit of
+        // the doubt as one we already know is real.
+        if (!SUCCESS_STATUSES.has(liveStatus)) return;
       }
       if (webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
       if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');

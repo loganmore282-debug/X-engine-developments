@@ -2346,6 +2346,95 @@ to sit naturally against the wave's reserved space, matching Home's own spacing
 convention. `node --check` clean, `node build-core.js` round-trip clean, `git diff
 --check` clean. Cache bumped `v26`→`v27`.
 
+## Round 44 (2026-08-27) — full-system bug/vulnerability sweep (owner: "check through the system to see that no bugs and vulnerabilities"): 2 real findings, both fixed
+
+Owner asked for a general audit, not tied to a specific screenshot/complaint. Went through
+server.js systematically rather than waiting for another Codex round: rate limiting, CORS,
+security headers, the NoSQL-injection guard (`stripMongoOperators`, confirmed it covers
+every place `req.body` values ever reach a Mongo filter — `req.query` is used exactly
+once, for a `parseInt`-clamped level number, not a filter value), every `.where()` call
+(confirmed field names are always hardcoded literals, never attacker-influenced), the auth
+model (`verifyAuth`/`verifyAdmin`/`verifyOwner`, session TTL, login lockout + dummy-hash
+timing normalization, scrypt + timing-safe comparisons throughout), every single
+`/admin/*` route's auth check (all present; the only 3 without one are `/admin/check-key`,
+`/admin/login`, `/admin/logout` — the auth entry points themselves), XSS escaping
+discipline across both `admin-src` and `user-src` (every place a user/admin-controlled
+field reaches `innerHTML` goes through `esc()`; `confirm()`/`prompt()`/`.textContent`
+call sites don't need it and correctly don't have it), a repo-wide secret-leak scan (only
+hit was the already-known-safe Firebase web `apiKey`), and `db.js`'s `.set()`/`.update()`
+semantics (unchanged, still correct).
+
+**Finding #1 (real, low severity — stale comment, not a live vulnerability).**
+`/withdraw/request`'s section comment still read "The Transaction PIN... gates every
+withdrawal request and every withdrawal-account bind/delete" — factually wrong since
+Round 39 deliberately removed the PIN requirement from `/bank/save`/`/bank/delete`. Not
+a code bug, but exactly the kind of stale comment that misleads future work (a future
+session, or Codex, could read it as ground truth and "restore" a PIN check the owner
+explicitly asked to remove). Corrected to describe the current, Round 39 behavior.
+
+**Finding #2 (real, fixed — genuine defense-in-depth gap in `/withdraw/callback`).**
+This route is hit by MarzPay's servers over the open internet with no signature/shared-
+secret verification of its own — safety instead comes entirely from independently
+re-checking the claimed transaction against MarzPay's own status API using our own
+credentials before acting (`/deposit/callback` already does this correctly: it only
+credits after `SUCCESS_STATUSES.has(tx.status)` from a live re-fetch, full stop). The
+withdrawal callback's success branch had a "best-effort" re-check that was written to
+tolerate an *inconclusive* result (comment: "a check that itself fails/is empty never
+blocks a genuinely-completed payout") so a transient MarzPay hiccup couldn't wrongly
+strand a real payout — but this leniency had two real gaps:
+  - If NEITHER our own recorded `marzTxUuid` NOR the webhook's own uuid existed at all,
+    there was nothing to check against, and the code fell through and marked the
+    withdrawal `processed` on the raw webhook body's say-so alone — no independent
+    verification attempted at all.
+  - Traced `_marzFetchTxStatus()`: any failure mode — MarzPay 404s a uuid that doesn't
+    exist, a timeout, a malformed response — all collapse to the same
+    `{status:'', reference:null}`. Since empty string is falsy, the original check
+    (`if (liveStatus && !SUCCESS_STATUSES.has(liveStatus)) return;`) treats "MarzPay
+    says this uuid doesn't exist" identically to "MarzPay didn't answer in time" —
+    both are silently waved through. Combined with the first gap, an attacker who knew
+    a withdrawal's `marzReference` (the value the callback is looked up by) could supply
+    a completely fabricated `transaction.uuid` in the callback body and have it accepted,
+    since a nonexistent uuid produces the exact same inconclusive result the code was
+    designed to forgive.
+  - Practical exploitability is low — `marzReference` is a server-generated
+    `crypto.randomUUID()` (122 bits), never returned to any client or exposed anywhere
+    in the API surface, so guessing it is computationally infeasible. But the *logic*
+    gap was real, and a wrongly-`processed` withdrawal has no self-correction path
+    anywhere in this codebase: the periodic reconciler and `/admin/withdraw/reject` both
+    only ever touch `'processing'`-status withdrawals, never `'processed'` ones — so a
+    false mark here would be a silent, permanent, unrecoverable-except-by-hand-editing-
+    the-database data-integrity error, exactly the class of bug worth closing on
+    principle even at low practical likelihood.
+
+  Fixed by distinguishing the *provenance* of the uuid being checked: if it's our own
+  previously-recorded `marzTxUuid` (captured directly from MarzPay's original
+  send-money response — trustworthy), an inconclusive live re-check keeps the original
+  lenient behavior. If it's ONLY the webhook's own claimed uuid (attacker-suppliable,
+  never independently confirmed by us), the check now requires an EXPLICIT confirmed
+  success (`SUCCESS_STATUSES.has(liveStatus)`) with no benefit of the doubt — matching
+  `/deposit/callback`'s existing strict posture. A genuine MarzPay webhook still works
+  identically either way, since a real transaction's uuid genuinely resolves to
+  `'success'` when checked. Traced through all 5 relevant cases by hand (own-uuid
+  success, own-uuid inconclusive, no uuid at all, webhook-only fabricated uuid,
+  webhook-only genuine uuid) to confirm the fix closes exactly the gap and nothing else
+  — full trace kept in the commit message. The `isFailed` branch was independently
+  re-checked and found already safe: it requires an explicit `FAILED_STATUSES.has(...)`
+  with no leniency at all, and for a webhook-only uuid it additionally cross-checks the
+  live transaction's own `reference` field against our stored `marzReference` before
+  even accepting it — no change needed there.
+
+**Also spot-checked** (no issues found): `creditDeposit()`'s claim-before-credit +
+in-process-Set + lock triple guard against double-crediting; `/redeem`'s
+`withLock('redeem:'+code)` serialization against a race on the same gift code;
+`sanitizeProductInput()`'s field validation; every `.set()` call site confirmed to
+either be a genuinely fresh single-purpose doc (banners/home, banners/help,
+content/about — never sharing fields with anything else) or a checked-then-create path,
+never an unsafe full-replace of a doc with other live fields.
+
+`node --check server.js` clean, `git diff --check` clean. This round is server.js-only —
+**needs a Render redeploy** for the `/withdraw/callback` hardening to take effect (Render
+should auto-deploy from this push; see Round 38's correction on Render vs Railway).
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
