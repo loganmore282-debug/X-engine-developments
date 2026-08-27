@@ -256,6 +256,10 @@ a{color:inherit;}
           <input id="regPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code">
           <div class="form-hint">This PIN also authorizes every withdrawal.</div>
         </div>
+        <div class="form-field">
+          <label>Referral code <span style="font-weight:400;color:var(--snow-muted);">(optional)</span></label>
+          <input id="regReferral" type="text" placeholder="Enter a friend's code" autocomplete="off" maxlength="12">
+        </div>
         <button class="primary-button" id="regBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:6px;" onclick="doRegister()">Register</button>
         <p style="text-align:center;margin:18px 0;font-size:13.5px;">Already have an account? <a href="#" style="color:var(--snow-green);font-weight:700;text-decoration:none;" onclick="showAuthTab('login');return false;">Login</a></p>
         <div style="height:64px;"></div>

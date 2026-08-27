@@ -2634,6 +2634,57 @@ Screenshot comparison against Team/Account confirms it now reads at a matching v
 size. `node --check` clean, `node build-core.js` round-trip clean, `git diff --check`
 clean. Cache bumped `v31`→`v32`.
 
+## Round 50 (2026-08-27) — visible referral code box + referral links land on Register + saved-credential auto sign-in
+
+Owner, looking at a real referral link (`.../?ref=QcNBht`): "where is box for
+referralCode?" -- there wasn't one. Register only ever silently forwarded whatever
+`captureReferralFromUrl()` found in `?ref=`; someone who got a code by word of mouth
+(not a link) had no way to enter it, and there was no on-screen confirmation the link's
+code had actually been picked up. Also asked for auto sign-in "for those who use Google
+password credentials autofill" and for the referral link to "work correctly in right
+area."
+
+**Referral code box.** Added a `regReferral` input to the Register pane (below PIN,
+optional, no forced case transform -- codes are case-sensitive exact-match on the
+server, e.g. `QcNBht`; uppercasing it would silently break real codes).
+`captureReferralFromUrl()` now prefills this box from `?ref=` AND calls
+`showAuthTab('register')` so a referral link lands directly on Create Account instead
+of the default Login pane -- the "work correctly in right area" part. The box stays
+editable either way; `doRegister()` reads whatever's in it at submit time (link-supplied
+or hand-typed) into `STATE.refCode`, which already flowed into the `/register` payload.
+
+**Ghost-account trap this exposed and fixed.** Before this box existed, a bad referral
+code was structurally impossible (the URL only ever carried real, freshly-generated
+codes). A typo'd hand-entered code is now a real scenario, and the self-heal
+`/register` call's existing failure path signs the member out on ANY error --
+including `BAD_REFERRAL` -- which would have stranded a real Firebase auth account with
+no profile doc: retrying registration then hits "email already in use" and they're
+locked out for good (the exact ghost-account class of bug fixed once already).
+`bootFromNetwork()` now special-cases `BAD_REFERRAL`: toasts that the code was invalid,
+drops it, and retries registration once with `referralCode: ''` -- the PIN and welcome
+bonus still go through, only the referral bonus is skipped.
+
+**Saved-credential auto sign-in.** Implemented via the actual Credential Management API
+(`navigator.credentials`), not by trying to read autofilled input values (browsers
+deliberately keep those out of reach of script). After a successful login or
+registration, `storeCredentialIfPossible()` calls `navigator.credentials.store(...)`.
+On a fresh boot with no Firebase session, the `snow-auth` handler now calls
+`tryAutoSignIn()` once, which asks for a stored credential with `mediation:'silent'` --
+resolves instantly to nothing if none exists (normal case, zero added delay) or signs
+straight in with zero taps if Chrome has exactly one saved match. `doLogout()` now also
+calls `navigator.credentials.preventSilentAccess()`, so an explicit sign-out doesn't
+immediately loop the member back in on the next boot.
+
+**Verified** with Playwright across 5 scenarios: (1) a referral link lands on Register
+with the code prefilled, case preserved exactly; (2) a hand-edited code (overwriting
+the link's) is what actually gets sent; (3) a `BAD_REFERRAL` response is retried
+without the code and the member still lands in the app, not signed out; (4) a stubbed
+silent credential resolves and signs in with zero UI, skipping the login screen
+entirely; (5) `doLogout()` calls `preventSilentAccess()`. Re-ran Round 46's instant-boot
+cache test and Round 45's delete-flow test (both touch the same boot path) -- no
+regressions. `node --check` clean, `node build-core.js` round-trip clean, `git diff
+--check` clean. Cache bumped `v32`→`v33`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

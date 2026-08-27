@@ -199,6 +199,36 @@ function fbErrMsg(e){
   if (code === 'auth/too-many-requests') return 'Too many attempts. Try again shortly.';
   return e && e.message ? e.message : 'Something went wrong. Try again.';
 }
+// ── SAVED-CREDENTIAL AUTO SIGN-IN ──
+// Chrome (and other Credential Management API browsers) can silently hand
+// back a previously-stored password credential with zero user interaction
+// -- the "sign in automatically next visit" behaviour the owner asked for
+// after seeing it on another site. This is a real browser API for exactly
+// that, not something achievable by just reading autofilled input values
+// (browsers deliberately keep autofilled field contents out of reach of
+// script for privacy, so there's no DOM-level way to detect/trigger this).
+function credManSupported(){
+  return !!(window.PasswordCredential && navigator.credentials && navigator.credentials.get && navigator.credentials.store);
+}
+async function storeCredentialIfPossible(email, pass){
+  if (!credManSupported()) return;
+  try { await navigator.credentials.store(new PasswordCredential({ id: email, password: pass })); } catch (_) {}
+}
+// Returns true if a stored credential was found AND a sign-in attempt was
+// kicked off (the resulting snow-auth event -- success or failure -- drives
+// the UI from there); false means "nothing to do, show the normal auth
+// screen". mediation:'silent' never shows any browser UI -- it resolves to
+// null immediately if there's more than one saved credential or the user
+// previously signed out (see doLogout's preventSilentAccess() below).
+async function tryAutoSignIn(){
+  if (!credManSupported()) return false;
+  try {
+    const cred = await navigator.credentials.get({ password: true, mediation: 'silent' });
+    if (!cred || cred.type !== 'password' || !cred.password) return false;
+    await window.fbSignIn(cred.id, cred.password);
+    return true;
+  } catch (_) { return false; }
+}
 window.doLogin = async function(){
   const phone = cleanPhone($('loginPhone').value);
   const pass = $('loginPassword').value;
@@ -206,7 +236,11 @@ window.doLogin = async function(){
   if (!pass) return $('loginError').innerHTML = '<div class="auth-error">Enter your password.</div>';
   $('loginError').innerHTML = '';
   setBtnLoading('loginBtn', true);
-  try { await window.fbSignIn(phoneToEmail(phone), pass); }
+  try {
+    const email = phoneToEmail(phone);
+    await window.fbSignIn(email, pass);
+    storeCredentialIfPossible(email, pass);
+  }
   catch (e) { $('loginError').innerHTML = `<div class="auth-error">${esc(fbErrMsg(e))}</div>`; setBtnLoading('loginBtn', false, 'Login'); }
 };
 window.doRegister = async function(){
@@ -218,9 +252,17 @@ window.doRegister = async function(){
   if (!/^\d{5}$/.test(pin)) return $('regError').innerHTML = '<div class="auth-error">Transaction PIN must be exactly 5 digits.</div>';
   $('regError').innerHTML = '';
   setBtnLoading('regBtn', true);
+  // Referral code box is prefilled from ?ref= (see captureReferralFromUrl)
+  // but stays editable -- whatever's in the box at submit time wins,
+  // whether that's the link's code, untouched, or something typed by hand.
+  STATE.refCode = $('regReferral').value.trim();
   window._pendingRegPin = pin;
   window._pendingRegPhone = phone;
-  try { await window.fbCreateUser(phoneToEmail(phone), pass); }
+  try {
+    const email = phoneToEmail(phone);
+    await window.fbCreateUser(email, pass);
+    storeCredentialIfPossible(email, pass);
+  }
   catch (e) { $('regError').innerHTML = `<div class="auth-error">${esc(fbErrMsg(e))}</div>`; setBtnLoading('regBtn', false, 'Register'); }
 };
 window.doLogout = async function(){
@@ -228,6 +270,13 @@ window.doLogout = async function(){
   STATE.authEpoch++;
   Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, mission: null });
   clearCachedState();
+  // Without this, an explicit logout would immediately silently sign the
+  // member right back in on the next boot via tryAutoSignIn() -- Chrome
+  // still has the credential, it's just been told not to hand it back
+  // without asking first.
+  if (credManSupported() && navigator.credentials.preventSilentAccess) {
+    try { await navigator.credentials.preventSilentAccess(); } catch (_) {}
+  }
   await window.fbSignOut();
 };
 
@@ -241,7 +290,13 @@ function captureReferralFromUrl(){
   try {
     const params = new URLSearchParams(location.search);
     const ref = params.get('ref');
-    if (ref) STATE.refCode = ref;
+    if (!ref) return;
+    STATE.refCode = ref;
+    // Referral codes are case-sensitive on the server (exact-match lookup,
+    // e.g. "QcNBht") -- must NOT be uppercased/lowercased here or a real
+    // code silently stops matching.
+    $('regReferral').value = ref;
+    showAuthTab('register');
   } catch (_) {}
 }
 
@@ -255,6 +310,14 @@ window.addEventListener('snow-auth', async (ev) => {
   STATE.authEpoch++;
   STATE.user = user;
   if (!user) {
+    // Only worth trying once, on the very first "nobody's signed in" we see
+    // this page load (a real boot) -- not after an in-session doLogout(),
+    // which already called preventSilentAccess() specifically so this
+    // wouldn't immediately hand the same member right back in.
+    if (!window._triedAutoSignIn) {
+      window._triedAutoSignIn = true;
+      if (await tryAutoSignIn()) return; // fbSignIn() re-fires snow-auth with the real user; loading screen stays up meanwhile
+    }
     $('loadingScreen').style.display = 'none';
     $('app').style.display = 'none';
     $('authScreen').style.display = '';
@@ -322,11 +385,28 @@ async function bootFromNetwork(uid){
     // Ghost account (Firebase user exists, our profile never finished) or a
     // fresh registration still finishing -- retry /register, which
     // self-heals a missing profile doc and is a safe no-op if already done.
-    const reg = await post('/register', {
+    let reg = await post('/register', {
       referralCode: STATE.refCode || '',
       pin: window._pendingRegPin || '',
       phone: window._pendingRegPhone || '',
     });
+    // A typo'd referral code (now that it's a hand-editable box, not just a
+    // silent value from ?ref=) must NOT sign the member back out -- their
+    // Firebase auth account already exists at this point with no profile
+    // doc yet, so a sign-out here would strand them: retrying register
+    // later hits "email already in use" and they're locked out for good
+    // (the exact ghost-account trap Round-something-earlier already fixed
+    // once). Retry once with the referral dropped instead; everything else
+    // (PIN, welcome bonus) still goes through.
+    if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode) {
+      toast(reg.message || 'That referral code is invalid -- continuing without it.', true);
+      STATE.refCode = '';
+      reg = await post('/register', {
+        referralCode: '',
+        pin: window._pendingRegPin || '',
+        phone: window._pendingRegPhone || '',
+      });
+    }
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       $('loadingScreen').style.display = 'none';
       toast(reg.message || 'Could not complete registration', true);
