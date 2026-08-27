@@ -2081,8 +2081,10 @@ app.post('/bank/save', async (req, res) => {
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (uSnap.exists && uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
-    const check = await pinCheck(userId, req.body.pin);
-    if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
+    // Owner: the transaction PIN belongs to the actual Withdraw money flow
+    // only, not to managing which accounts CAN receive a future withdrawal
+    // -- saving/removing a payout destination here doesn't move any money by
+    // itself (see /withdraw/request, still fully PIN-gated, for that).
     const dup = await withLock('bank-save:' + userId, async () => {
       const dupSnap = await db.collection('bankAccounts').where('userId', '==', userId).where('phone', '==', phone).limit(1).get();
       if (!dupSnap.empty) return true;
@@ -2112,8 +2114,8 @@ app.post('/bank/delete', async (req, res) => {
     const ref = db.collection('bankAccounts').doc(id);
     const snap = await ref.get();
     if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Account not found' });
-    const check = await pinCheck(userId, req.body.pin);
-    if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
+    // Same reasoning as /bank/save above -- no PIN needed to remove a payout
+    // destination, only to actually withdraw money.
     await ref.delete();
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the withdrawal account' }); }

@@ -278,17 +278,24 @@ async function enterApp(){
   STATE.account = r.account;
   // Prefetch everything every tab needs, all in parallel, before the loading
   // screen ever comes down -- so the very first tab switch (and opening
-  // Withdraw/Withdrawal Accounts/Records) is already cache-first-instant
-  // instead of only becoming fast after a first visit to each one. This adds
-  // no real time over the account fetch alone since it's parallel, not
-  // sequential -- one network round trip's worth of latency, not four.
-  const [invR, teamR, bankR, txR] = await Promise.all([
-    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions')
+  // Withdraw/Withdrawal Accounts/Records/Mission Center) is already
+  // cache-first-instant instead of only becoming fast after a first visit to
+  // each one. This adds no real time over the account fetch alone since it's
+  // parallel, not sequential -- one network round trip's worth of latency,
+  // not five. Mission Center specifically used to open blank and block on
+  // its own /mission/status round trip every single time (it does two
+  // sequential-ish DB lookups server-side, activeL1Count + wholeTeamDeposits,
+  // genuinely slower than the other tabs) -- owner: "mission centers takes
+  // long to load." Prefetching it here means that wait happens once, during
+  // the loading screen the member already sits through, not again per open.
+  const [invR, teamR, bankR, txR, missionR] = await Promise.all([
+    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions'), api('/mission/status')
   ]);
   if (invR.status === 'success') STATE.investments = invR.investments;
   if (teamR.status === 'success') STATE.teamStats = teamR;
   if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
   if (txR.status === 'success') STATE.transactions = txR.transactions;
+  if (missionR.status === 'success') STATE.mission = missionR;
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
@@ -690,12 +697,18 @@ function paintTeam(){
   STATE.teamMembers = {1:null,2:null,3:null};
   switchTeamLevel(1);
 }
+// Cache-first, same reasoning as openWithdrawalAccountsSheet() -- STATE.mission
+// is already populated during enterApp()'s boot prefetch, so this paints
+// instantly from that on every open after the first, then quietly refreshes
+// in the background instead of blocking the sheet on a fresh round trip.
 window.openMissionCenterSheet = async function(){
+  const hadCache = !!STATE.mission;
   openSheet('Mission Center', '');
+  if (hadCache) renderMissionCenter();
+  else $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Loading…</div>';
   const r = await api('/mission/status');
-  if (r.status !== 'success') { $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>'; return; }
-  STATE.mission = r;
-  renderMissionCenter();
+  if (r.status === 'success') { STATE.mission = r; if ($('sheetBody')) renderMissionCenter(); }
+  else if (!hadCache && $('sheetBody')) $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>';
 };
 function renderMissionCenter(){
   const m = STATE.mission;
@@ -1130,20 +1143,21 @@ function renderWithdrawalAccountsSheet(){
       </select>
     </div>
     <div class="form-field"><label>Phone number</label><input id="bankPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" oninput="sanitizePhoneInput(this)"></div>
-    <div class="form-field"><label>Transaction PIN</label><input id="bankPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code"></div>
     <button class="primary-button" id="bankSaveBtn" style="width:100%;padding:15px 0;font-size:15px;" onclick="saveWithdrawalAccount()">Save account</button></div>`;
   $('sheetBody').innerHTML = html;
 }
+// No PIN here (owner: "remove pin putting here, only it will be on
+// Withdrawals") -- saving/removing a payout destination doesn't move money
+// by itself; the actual Withdraw flow (openWithdrawSheet/submitWithdraw)
+// keeps its own PIN field untouched.
 window.saveWithdrawalAccount = async function(){
   const holder = $('bankHolder').value.trim();
   const network = $('bankNetwork').value;
   const phone = $('bankPhone').value;
-  const pin = $('bankPin').value.trim();
   if (!holder) return toast('Enter the account holder name', true);
   if (!network) return toast('Select a network', true);
-  if (!/^\d{5}$/.test(pin)) return toast('Enter your 5-digit Transaction PIN', true);
   $('bankSaveBtn').disabled = true; $('bankSaveBtn').textContent = 'Please wait…';
-  const r = await post('/bank/save', { holder, network, phone, pin });
+  const r = await post('/bank/save', { holder, network, phone });
   $('bankSaveBtn').disabled = false; $('bankSaveBtn').textContent = 'Save account';
   if (r.status !== 'success') return toast(r.message || 'Could not save account', true);
   toast('Withdrawal account saved');
@@ -1152,8 +1166,8 @@ window.saveWithdrawalAccount = async function(){
   renderWithdrawalAccountsSheet();
 };
 window.deleteWithdrawalAccount = function(id){
-  openConfirm('Remove withdrawal account?', 'Enter your Transaction PIN to confirm.', async (pinValue) => {
-    const r = await post('/bank/delete', { id, pin: pinValue });
+  openSimpleConfirm('Remove withdrawal account?', 'This cannot be undone.', async () => {
+    const r = await post('/bank/delete', { id });
     if (r.status !== 'success') { toast(r.message || 'Could not remove account', true); return false; }
     toast('Account removed');
     const list = await api('/bank/list');
@@ -1188,18 +1202,19 @@ window.confirmInvest = async function(tierKey){
   toast(r.message || 'Purchase successful');
   if (STATE.page === 'home') renderHome();
 };
-function openConfirm(title, body, onConfirm){
+// Plain yes/no confirm, no PIN -- used where an action doesn't move money
+// (e.g. removing a saved withdrawal account, see deleteWithdrawalAccount()).
+// The actual money-moving confirm flows (Invest, Withdraw) have their own
+// dedicated PIN-carrying dialogs and don't go through this.
+function openSimpleConfirm(title, body, onConfirm){
   $('confirmSheet').innerHTML = `
     <h3>${esc(title)}</h3>
-    <p style="color:var(--snow-muted);font-size:13px;margin:0 0 14px;">${esc(body)}</p>
-    <input id="confirmPin" type="text" inputmode="numeric" maxlength="5" placeholder="5-digit PIN" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;margin-bottom:14px;">
+    <p style="color:rgba(255,255,255,.65);font-size:13px;margin:0 0 14px;">${esc(body)}</p>
     <button class="primary-button" id="confirmActionBtn" style="width:100%;padding:15px 0;font-size:15px;">Confirm</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
   $('confirmActionBtn').onclick = async () => {
-    const pinValue = $('confirmPin').value.trim();
-    if (!/^\d{5}$/.test(pinValue)) return toast('Enter your 5-digit Transaction PIN', true);
     $('confirmActionBtn').disabled = true; $('confirmActionBtn').textContent = 'Please wait…';
-    const ok = await onConfirm(pinValue);
+    const ok = await onConfirm();
     $('confirmActionBtn').disabled = false; $('confirmActionBtn').textContent = 'Confirm';
     if (ok) closeConfirm();
   };

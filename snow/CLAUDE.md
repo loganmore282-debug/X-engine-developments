@@ -2149,6 +2149,53 @@ not "did someone remember to copy a file somewhere."
 
 This round is admin-only — no user-src or server.js changes, so no cache bump needed.
 
+## Round 39 (2026-08-27) — PIN dropped from adding/removing a withdrawal account (kept only on the actual Withdraw flow); Mission Center prefetched during boot so it stops opening blank
+
+Owner, from a Withdrawal Accounts screenshot: "remove pin putting here, only it will
+be on Withdrawals." Separately: "mission centers takes long to load."
+
+**PIN removed from bank-account management.** The "Add withdrawal account" form had
+its own Transaction PIN field, and removing a saved account went through a PIN-required
+confirm dialog too — both send the PIN straight to `/bank/save` / `/bank/delete`, which
+both called the shared `pinCheck()` before doing anything. Neither action moves money by
+itself (it only changes which account a FUTURE withdrawal could pay out to); the actual
+Withdraw flow (`openWithdrawSheet`/`witPin`, `/withdraw/request`) keeps its own PIN
+requirement completely untouched. Removed the `bankPin` input and its validation from
+`saveWithdrawalAccount()`, and replaced the PIN-required `openConfirm()` used by
+`deleteWithdrawalAccount()` with a new plain yes/no `openSimpleConfirm()` (no PIN input)
+— `openConfirm()` itself is now deleted outright since that was its only caller.
+Server-side, dropped the `pinCheck()` call from both `/bank/save` and `/bank/delete`.
+
+**Mission Center prefetched at boot, cache-first like every other sheet.**
+`openMissionCenterSheet()` used to `openSheet('Mission Center', '')` and then block on
+a fresh `/mission/status` fetch before painting anything — a genuinely blank sheet every
+single open, unlike Withdraw/Withdrawal Accounts/Records which were already made
+cache-first in Rounds 32/33. `/mission/status` itself is real work server-side
+(`activeL1Count` + `wholeTeamDeposits`, not a single flat read), so this wasn't just a
+missing-cache issue -- it's genuinely one of the slower endpoints. Fixed by adding
+`api('/mission/status')` to `enterApp()`'s existing boot-time `Promise.all` prefetch
+(now five calls instead of four, still fully parallel -- no added latency over the
+account fetch alone) and rewriting `openMissionCenterSheet()` to paint instantly from
+`STATE.mission` when already cached, refreshing in the background afterward, exactly
+matching `openWithdrawalAccountsSheet()`'s own pattern.
+
+**Verified**: `node --check` clean on both files, `node build-core.js` round-trip clean,
+`git diff --check` clean. Playwright: the Add-account form has no `bankPin` element and
+`/bank/save`'s request body carries no `pin` key; `deleteWithdrawalAccount()`'s confirm
+dialog has no PIN input and `/bank/delete`'s body carries no `pin` key either; the
+Withdraw money sheet's own `witPin` field is confirmed still present and untouched.
+For Mission Center: booted through the real `snow-auth` → `enterApp()` flow with
+`/mission/status` mocked at a deliberately slow 700ms, confirmed `STATE.mission` is
+already populated the moment the app becomes visible (i.e. the wait already happened
+during the loading screen), then opened Mission Center and measured time-to-real-content
+at 57ms (fire-and-forget timing -- an earlier version of this same check awaited
+`openMissionCenterSheet()`'s full promise including its background refresh and wrongly
+measured ~760ms, a test-methodology mistake, not a product one; corrected before
+trusting the result). Cache bumped `v22`→`v23`.
+
+**server.js changed — Render should auto-deploy this push** (see Round 38's correction:
+Snow is on Render with `autoDeploy: true`, not Railway).
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
