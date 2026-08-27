@@ -2105,6 +2105,50 @@ bumped `v21`→`v22`.
 
 **server.js changed — needs a Railway redeploy.**
 
+## Round 38 (2026-08-27) — fixed a real draft-loss bug in the admin About block editor; corrected a recurring documentation mistake (Railway → Render)
+
+Owner: "l can be writing, but when l go back it doesn't go back, again l start afresh."
+Reproduced and confirmed real: `renderSettings()` re-fetches from the server and
+overwrites `_aboutBlocks` EVERY time the Settings tab is (re-)entered — including
+switching to another admin tab and back, with no reload involved. Any text typed into a
+block, or any add/move/delete, that hadn't been saved yet was silently wiped the moment
+the admin switched tabs and returned, because the re-render always trusted the server's
+last-saved copy over whatever was sitting in memory.
+
+Fixed with a dirty-flag guard: new `_aboutBlocksDirty` boolean, set `true` by every
+mutation (add text, add image, move up/down, delete, or typing in a block's textarea),
+checked by `renderSettings()` — `if (!_aboutBlocksDirty) _aboutBlocks = ...` — so a
+re-render while mid-edit keeps the in-memory draft instead of refetching over it.
+Cleared back to `false` only once `/admin/about-content/set` actually succeeds, at which
+point local and server state genuinely match again and it's safe to resume trusting
+fresh fetches. Also added a `beforeunload` guard that warns before closing/reloading the
+tab entirely while `_aboutBlocksDirty` is true — same protection, for the more severe
+case of leaving the page outright rather than just switching admin tabs.
+
+**Verified** with Playwright against the actual built (obfuscated) admin bundle, driven
+through the real login/tab-click code path (seeded `sessionStorage.snow_admin_token`
+so the app's own "already logged in" branch runs, then clicked the real Settings tab
+button) rather than calling internal function names directly — the build obfuscates and
+mangles those, so a real interaction-driven test was the only way to exercise the actual
+shipped code: typed a draft paragraph into a new text block, switched to the Dashboard
+tab and back to Settings, and confirmed the exact typed text was still there (previously
+would have been wiped). Then mocked a successful save followed by a *different* fetched
+About payload (simulating the server's now-current saved state) and confirmed switching
+tabs away and back after that save picks up the new content — proving the dirty flag
+actually clears on save rather than permanently freezing the editor on the first draft
+forever. `node build-admin.js` round-trip clean, `git diff --check` clean.
+
+**Also corrected a recurring mistake in this file**: Rounds 35–37 each told the owner
+"server.js changed — needs a Railway redeploy." That's wrong for Snow — Snow's backend
+deploys via **Render** (`render.yaml`, all three services `autoDeploy: true`), not
+Railway (that's the sibling Voltra project's setup, a different codebase entirely).
+Every push to this branch should auto-deploy `snow-server`/`snow-app`/`snow-admin` on
+Render with no manual step — if a change still isn't showing up live after a push, the
+right thing to check is the Render dashboard's deploy status for the relevant service,
+not "did someone remember to copy a file somewhere."
+
+This round is admin-only — no user-src or server.js changes, so no cache bump needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

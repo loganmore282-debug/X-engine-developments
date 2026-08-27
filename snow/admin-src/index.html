@@ -1372,7 +1372,19 @@ async function quietRefreshReferrals(){
 }
 
 // ── SETTINGS ──
+// Real bug fixed: switching to another tab and back re-ran renderSettings(),
+// which always overwrote _aboutBlocks with whatever was last SAVED on the
+// server -- silently discarding any text/images the admin had added but not
+// yet saved (owner: "l can be writing, but when l go back it doesn't go
+// back, again l start afresh"). _aboutBlocksDirty tracks whether the local
+// draft has unsaved changes; while dirty, a re-render keeps the in-memory
+// draft instead of refetching over it. Cleared back to false only once the
+// draft is actually saved (or the tab is left and the app is reloaded fresh).
 let _aboutBlocks = [];
+let _aboutBlocksDirty = false;
+window.addEventListener('beforeunload', (e) => {
+  if (_aboutBlocksDirty) { e.preventDefault(); e.returnValue = ''; }
+});
 async function renderSettings(){
   const [r, br, hbr, abr] = await Promise.all([
     api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/about-content')
@@ -1381,7 +1393,7 @@ async function renderSettings(){
   const s = r.settings||{};
   const bannerImage = br.image||'';
   const helpBannerImage = hbr.image||'';
-  _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
+  if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
     <h2 class="sec">Rates &amp; limits</h2>
@@ -1565,6 +1577,7 @@ async function renderSettings(){
   });
   $('abAddText').addEventListener('click', ()=>{
     _aboutBlocks.push({ type:'text', text:'' });
+    _aboutBlocksDirty = true;
     renderAboutBlocksEditor();
     const areas = document.querySelectorAll('#aboutBlocksList textarea');
     if (areas.length) areas[areas.length-1].focus();
@@ -1574,6 +1587,7 @@ async function renderSettings(){
     try {
       const image = await fileToDataUrl(f,1280,0.82);
       _aboutBlocks.push({ type:'image', image });
+      _aboutBlocksDirty = true;
       renderAboutBlocksEditor();
     } catch(err){ toast(err.message||'Could not read image','err'); }
   });
@@ -1581,6 +1595,7 @@ async function renderSettings(){
     await withTabBusy((async()=>{
       const d = await api('/admin/about-content/set', { blocks: _aboutBlocks });
       toast(d.status==='success'?'About page saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') _aboutBlocksDirty = false;
     })());
   });
 }
@@ -1603,16 +1618,16 @@ function renderAboutBlocksEditor(){
         : `<textarea data-ab-text="${i}" rows="4" placeholder="Write a paragraph…">${esc(b.text)}</textarea>`}
     </div>`).join('');
   box.querySelectorAll('[data-ab-up]').forEach(btn=>btn.addEventListener('click', ()=>{
-    const i=+btn.dataset.abUp; [_aboutBlocks[i-1],_aboutBlocks[i]]=[_aboutBlocks[i],_aboutBlocks[i-1]]; renderAboutBlocksEditor();
+    const i=+btn.dataset.abUp; [_aboutBlocks[i-1],_aboutBlocks[i]]=[_aboutBlocks[i],_aboutBlocks[i-1]]; _aboutBlocksDirty=true; renderAboutBlocksEditor();
   }));
   box.querySelectorAll('[data-ab-down]').forEach(btn=>btn.addEventListener('click', ()=>{
-    const i=+btn.dataset.abDown; [_aboutBlocks[i+1],_aboutBlocks[i]]=[_aboutBlocks[i],_aboutBlocks[i+1]]; renderAboutBlocksEditor();
+    const i=+btn.dataset.abDown; [_aboutBlocks[i+1],_aboutBlocks[i]]=[_aboutBlocks[i],_aboutBlocks[i+1]]; _aboutBlocksDirty=true; renderAboutBlocksEditor();
   }));
   box.querySelectorAll('[data-ab-del]').forEach(btn=>btn.addEventListener('click', ()=>{
-    _aboutBlocks.splice(+btn.dataset.abDel,1); renderAboutBlocksEditor();
+    _aboutBlocks.splice(+btn.dataset.abDel,1); _aboutBlocksDirty=true; renderAboutBlocksEditor();
   }));
   box.querySelectorAll('[data-ab-text]').forEach(ta=>ta.addEventListener('input', ()=>{
-    _aboutBlocks[+ta.dataset.abText].text = ta.value;
+    _aboutBlocks[+ta.dataset.abText].text = ta.value; _aboutBlocksDirty=true;
   }));
 }
 
