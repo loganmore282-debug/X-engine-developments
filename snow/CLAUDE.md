@@ -1526,6 +1526,39 @@ the same values. Screenshots confirm both dialogs now look visually identical in
 treatment — dark, centered, thin, modestly rounded — matching the activity ticker's own
 color. Cache bumped `v13`→`v14`.
 
+## Round 29 (2026-08-27) — clarified "notifies" = toast messages, not a notifications bell; recentered them to match
+
+Owner: "also the notifies should have same background color and should open from
+middle." Snow has NO notifications-bell feature at all -- it was explicitly removed by
+owner decision on 2026-08-26 (documented above, "Design status" section) -- so before
+touching anything, asked the owner directly what "notifies" meant (build the removed
+feature back? just strip the one leftover dead bell icon on My Products? or something
+else). Owner clarified: "l said notifies is checkin successful, entervalid amount enter
+account holder name, etc all of them" -- they meant the `toast()` popups (the small
+message bubbles for success/validation feedback across the whole app), not the
+notifications-bell concept at all. Good thing to have asked -- building a whole
+removed feature back would have been exactly the wrong direction.
+
+`#toastHost` (`user-src/index.html`) was `position:fixed;left:0;right:0;bottom:96px`,
+stacking messages bottom-up. Changed to `position:fixed;inset:0;...justify-content:
+center;padding:20px` so toasts now appear centered in the viewport, matching every
+other pop-up from Round 28. `.toast`'s background changed from the opaque
+`var(--snow-ink)` (#111111 solid) to `rgba(17,17,17,.82)` -- the exact same
+semi-transparent value the activity ticker and both dialogs already use -- and its
+`border-radius` bumped 14px→16px to match. `.toast.err` (validation/error messages,
+e.g. "Enter a valid amount") switched from the opaque `var(--snow-wine-deep)` to
+`rgba(148,24,39,.88)` -- same wine hue, same semi-transparent treatment as everything
+else, so it now reads as a family with the success toast rather than a flat solid color,
+while staying clearly red/distinct so errors are still recognizable.
+
+**Verified**: `node build-core.js` clean round-trip, `git diff --check` clean.
+Playwright: a fired success toast's computed `background-color` is `rgba(17, 17, 17,
+0.82)`, `border-radius` is `16px`, and its bounding box is centered both horizontally
+and vertically in the viewport; a fired error toast's background is
+`rgba(148, 24, 39, 0.88)` with the same radius. Screenshot confirms the toast now
+floats centered over the page instead of anchored near the bottom nav. Cache bumped
+`v14`→`v15`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
