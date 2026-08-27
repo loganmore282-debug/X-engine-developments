@@ -480,19 +480,21 @@ async function activeL1Count(userId) {
 //     shape /checkin already uses (lastCheckin/today comparison), reused
 //     here as missionSalaryLastClaim/nowStr().date. Amount is a flat
 //     MISSION_SALARY_RATE per active L1 referral, scaling continuously with
-//     the live count (not stepped at the 5/10/50/100/500/1000 checkpoints —
-//     those are just worked examples: 5→1,000, 10→2,000 ... all exactly
-//     count×200), capped at MISSION_SALARY_REFERRAL_CAP referrals (owner:
+//     the live count, capped at MISSION_SALARY_REFERRAL_CAP referrals (owner:
 //     "Maximum eligible cap for referral tiers scales up to 1,000 total
-//     referrals" — 1,000×200 = 200,000, matching the top listed tier
-//     exactly).
+//     referrals"). Rate changed 2026-08-27 (owner: "daily per referral change
+//     it from 200 to 750ugx") — was 200, now 750 (1,000×750 = 750,000 at the
+//     cap). Purely a constant change, no other code depends on the old
+//     value — every consumer (salaryAmount here, /team/stats,
+//     /mission/claim) already computes off this constant live, nothing
+//     hardcodes 200 anywhere else in server.js or the frontend.
 //  2. Team deposit reward — ONE-TIME per cumulative-whole-team-deposit
 //     threshold (owner confirmed "on time" or one-time, same shape as the
 //     Task Center's own deposit ladder, just a separate claim-flag
 //     namespace and different numbers), all exactly 5% of the threshold
 //     (owner's own worked examples: 150,000 -> 7,500, 300,000 -> 15,000;
 //     every other tier scaled from those two the same way).
-const MISSION_SALARY_RATE = 200;
+const MISSION_SALARY_RATE = 750;
 const MISSION_SALARY_REFERRAL_CAP = 1000;
 const MISSION_DEPOSIT_REWARDS = [
   { target: 150000, reward: 7500 }, { target: 300000, reward: 15000 }, { target: 600000, reward: 30000 },
@@ -1844,19 +1846,31 @@ app.post('/withdraw/request', async (req, res) => {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   } finally { _witRequestInFlight.delete(userId); }
 });
-async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome) {
+// `refunded` MUST be the real, confirmed result of the wallet-side refund
+// (declineWithdrawalAndRefund's/completeWithdrawalRefund's own return value)
+// -- not just "did the status become declined." Zeroing this row's amount
+// is what tells /admin/integrity's ledger sum "this debit has been
+// reversed"; doing that before the wallet refund has actually landed
+// (e.g. it failed and fell through to the reconciler) makes the ledger
+// claim the money's back when it isn't yet, producing exactly the
+// walletBalance-vs-ledger mismatch this was found from. When refunded is
+// false, the row is left as its real, still-outstanding debit (with an
+// honest "refund pending" description) until a later call — from the
+// reconciler, once completeWithdrawalRefund actually succeeds — finalizes
+// it with refunded:true.
+async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome, refunded) {
   try {
     const txSnap = await db.collection('transactions').where('withdrawalId', '==', withdrawalId).limit(10).get();
     if (txSnap.empty) return;
     const newStatus = outcome === 'processed' ? 'success' : 'failed';
-    const statusLabel = outcome === 'processed' ? 'Success' : 'Failed, refunded';
+    const statusLabel = outcome === 'processed' ? 'Success' : (refunded ? 'Failed, refunded' : 'Failed, refund pending');
     await Promise.all(txSnap.docs.map(txDoc => {
       // Rebuilt fresh from the row's own stored amount rather than editing
       // the old text -- simpler and no longer coupled to the exact
       // "processing" suffix the description used to always end with.
       const amt = Math.abs(Number(txDoc.data().amount) || 0);
       const update = { status: newStatus, description: `Withdrawal — ${statusLabel} — ${fmtUGX(amt)}` };
-      if (newStatus === 'failed') update.amount = 0; // wallet was refunded in full — zero this row so the ledger sum stays correct
+      if (newStatus === 'failed' && refunded) update.amount = 0; // wallet was CONFIRMED refunded in full — zero this row so the ledger sum stays correct
       return txDoc.ref.update(update);
     }));
   } catch (e) { console.warn('finalizeWithdrawalTransactionRecord (non-critical):', e.message); }
@@ -1868,18 +1882,24 @@ async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome) {
 // call again on the same withdrawal -- re-reads the doc and does nothing if
 // refundPending is already false, so both the original decline call and a
 // later reconciler retry can safely call this without double-refunding.
+// Returns true once refundPending is CONFIRMED false (whether it just now
+// cleared it, or it was already clear) -- callers use this to know whether
+// it's actually safe to zero this withdrawal's transaction-ledger row (see
+// finalizeWithdrawalTransactionRecord's own comment for why that must wait).
 async function completeWithdrawalRefund(witRef, userId) {
   try {
     const fresh = await witRef.get();
-    if (!fresh.exists || !fresh.data().refundPending) return;
+    if (!fresh.exists || !fresh.data().refundPending) return true;
     const fd = fresh.data();
     const uRef = db.collection('users').doc(userId);
     const update = { walletBalance: FieldValue.increment(fd.refundAmount || 0) };
     if (fd.refundNetToUnwind) update.totalWithdrawn = FieldValue.increment(-fd.refundNetToUnwind);
     await uRef.update(update);
     await witRef.update({ refundPending: FieldValue.delete(), refundAmount: FieldValue.delete(), refundNetToUnwind: FieldValue.delete() }).catch(() => {});
+    return true;
   } catch (e) {
     console.error(`MONEY-SAFETY: withdrawal refund failed for ${witRef.id} user ${userId} -- refundPending stays true, the reconciler will retry.`, e.message);
+    return false;
   }
 }
 // Declines a withdrawal (only from one of fromStatuses, else a no-op — lets
@@ -1893,8 +1913,20 @@ async function completeWithdrawalRefund(witRef, userId) {
 // refundPending:true instead of silently declined-and-unrefunded with no
 // trace: reconcileStuckWithdrawalRefunds (in the periodic reconciler) scans
 // for exactly that and retries it.
+// Returns { declined, refunded } -- `declined` is whether the status
+// transition happened at all; `refunded` is the real signal callers need
+// before they're allowed to zero the ledger row (see
+// finalizeWithdrawalTransactionRecord). These used to be conflated into one
+// boolean that only ever meant "declined" -- every call site either ignored
+// it or (worse, at /admin/withdraw/reject) treated it AS "refunded", which
+// was wrong the moment the wallet-side write failed and fell through to the
+// reconciler: the ledger row got zeroed immediately regardless, silently
+// telling /admin/integrity the money had already gone back when the wallet
+// was still short by the full amount until the reconciler's later retry
+// caught up -- a real, reproducible source of the "wallet balance ≠ ledger"
+// mismatches the owner reported.
 async function declineWithdrawalAndRefund(witRef, userId, reason, fromStatuses) {
-  let didDecline = false;
+  let didDecline = false, refunded = false;
   await withLock('bal:' + userId, async () => {
     const fresh = await witRef.get();
     if (!fresh.exists || !fromStatuses.includes(fresh.data().status)) return;
@@ -1902,9 +1934,9 @@ async function declineWithdrawalAndRefund(witRef, userId, reason, fromStatuses) 
     const netToUnwind = fd.status === 'processing' ? fd.net : 0;
     await witRef.update({ status: 'declined', failureReason: reason, refundPending: true, refundAmount: fd.amount, refundNetToUnwind: netToUnwind });
     didDecline = true;
-    await completeWithdrawalRefund(witRef, userId);
+    refunded = await completeWithdrawalRefund(witRef, userId);
   });
-  return didDecline;
+  return { declined: didDecline, refunded };
 }
 // Guarded transition to 'processed' — shares the SAME 'bal:'+userId lock key
 // every failure/refund path already uses, so a success and a failure branch
@@ -2030,8 +2062,8 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
     }
     if (FAILED_STATUSES.has(marzStatus)) {
-      await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the mobile-money provider', ['processing']);
-      await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined');
+      const { refunded } = await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the mobile-money provider', ['processing']);
+      await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined', refunded);
       return res.json({ status: 'success', state: 'declined' });
     }
     res.json({ status: 'success', state: 'processing' });
@@ -2103,8 +2135,8 @@ app.post('/withdraw/callback', async (req, res) => {
         if (candidate.reference && candidate.reference === wit.marzReference) { uuid = webhookUuid; tx = candidate; doc.ref.update({ marzTxUuid: uuid }).catch(() => {}); }
       }
       if (!uuid || !tx || !FAILED_STATUSES.has(tx.status)) return;
-      await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
-      await finalizeWithdrawalTransactionRecord(doc.id, 'declined');
+      const { refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
+      await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
     }
   } catch (e) { console.error('Withdraw callback error:', e.message); }
 });
@@ -3261,10 +3293,11 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     // sent -- if MarzPay's dashboard shows it WAS sent, take no action here
     // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
-    const refunded = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending']);
-    if (refunded) await finalizeWithdrawalTransactionRecord(witId, 'declined');
-    logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId });
-    res.json({ status: 'success', message: 'Withdrawal rejected and refunded' });
+    const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending']);
+    if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied — refresh and try again.' });
+    await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
+    logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded });
+    res.json({ status: 'success', message: refunded ? 'Withdrawal rejected and refunded' : 'Withdrawal rejected — refund is pending and will complete shortly' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _withdrawInFlight.delete(witId); }
 });
@@ -3565,8 +3598,8 @@ async function reconcilePendingWithdrawals() {
         if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
         settled++;
       } else if (FAILED_STATUSES.has(marzStatus)) {
-        await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
-        await finalizeWithdrawalTransactionRecord(doc.id, 'declined');
+        const { refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
+        await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
         settled++;
       }
     }
@@ -3583,7 +3616,14 @@ async function reconcileStuckWithdrawalRefunds() {
     const snap = await db.collection('withdrawals').where('refundPending', '==', true).limit(50).get();
     for (const doc of snap.docs) {
       const w = doc.data();
-      await withLock('bal:' + w.userId, () => completeWithdrawalRefund(doc.ref, w.userId));
+      const refunded = await withLock('bal:' + w.userId, () => completeWithdrawalRefund(doc.ref, w.userId));
+      // Closes the loop for a refund that failed at decline time and only
+      // just now caught up here: the transaction-ledger row was correctly
+      // left un-zeroed by finalizeWithdrawalTransactionRecord back then
+      // (see its own comment) specifically so this moment — refund
+      // actually confirmed — is what finally zeroes it, not the decline
+      // itself.
+      if (refunded) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', true);
       settled++;
     }
   } catch (e) { console.error('Reconcile stuck withdrawal refunds error:', e.message); }

@@ -971,7 +971,7 @@ function renderMissionCenter(){
   $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="app-card" style="padding:18px;">
       <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-muted);font-weight:700;">Daily Referral Salary</div>
-      <div style="font-size:13px;color:var(--snow-muted);margin-top:6px;">UGX 200 per active referral, up to 1,000 referrals. Claim once a day — resets at 00:00.</div>
+      <div style="font-size:13px;color:var(--snow-muted);margin-top:6px;">${fmtUGX(m.salaryRate)} per active referral, up to ${(m.salaryCap||0).toLocaleString('en-UG')} referrals. Claim once a day — resets at 00:00.</div>
       <div style="display:flex;align-items:baseline;gap:8px;margin-top:14px;">
         <div class="mono" style="font-size:26px;font-weight:800;color:var(--snow-wine);">${fmtUGX(m.salaryAmount)}</div>
         <div style="font-size:12px;color:var(--snow-muted);">${m.l1ActiveCount} active referral${m.l1ActiveCount===1?'':'s'}</div>

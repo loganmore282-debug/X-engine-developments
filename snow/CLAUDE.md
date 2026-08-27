@@ -2783,6 +2783,61 @@ caller. 20/20 checks passed. `node --check server.js` clean, `node build-admin.j
 round-trip clean, `git diff --check` clean. No `user-src/`/`user/` changes this round, so
 no cache bump needed. **`server.js` changed → needs a Railway redeploy.**
 
+## Round 53 (2026-08-27) — found and fixed a real cause of walletBalance-vs-ledger mismatches; Mission Center daily-per-referral rate 200 → 750
+
+Owner ran Round 52's widened audit against the live database and it surfaced a
+walletBalance mismatch, with "fix it once more perfectly." Since the audit only
+*detects* (deliberately never guess-fixes a wallet, per its own design), the actual
+work here was finding a real bug that PRODUCES this class of mismatch and closing it —
+not just re-running the audit.
+
+**The bug**: every withdrawal-decline path (`/withdraw/marzpay/status`, `/withdraw/
+callback`, `/admin/withdraw/reject`, `reconcilePendingWithdrawals`) called
+`finalizeWithdrawalTransactionRecord(id, 'declined')` unconditionally right after
+`declineWithdrawalAndRefund(...)`, which zeroes the withdrawal's transaction-ledger row
+(the trick that keeps the ledger sum matching the wallet once a debit's been reversed).
+But `declineWithdrawalAndRefund`'s old return value only ever meant "the status became
+declined" — it said nothing about whether the wallet-side refund write actually
+succeeded. `completeWithdrawalRefund` swallows its own errors internally (by design, so
+the periodic reconciler can retry a transient failure) — but nothing stopped the caller
+from zeroing the ledger row anyway, immediately, even when that inner write had just
+failed. Net effect: the ledger claims "this debit was refunded" for a wallet that's
+still short by the full amount, until the reconciler's later retry happens to also
+succeed — a real, reproducible walletBalance-vs-ledger gap of exactly the withdrawal
+amount, persisting for as long as the refund stays stuck (worst case, permanently, if
+the reconciler retry keeps failing too).
+
+**Fix**: `completeWithdrawalRefund` now returns whether refundPending is CONFIRMED false
+after the call; `declineWithdrawalAndRefund` returns `{declined, refunded}` instead of
+one conflated boolean; `finalizeWithdrawalTransactionRecord` takes a `refunded` param and
+only zeroes the ledger row when it's true (otherwise leaves the row as its real,
+still-outstanding debit with an honest "refund pending" description). All 4 external call
+sites updated to thread the real result through instead of assuming success.
+`reconcileStuckWithdrawalRefunds` now also finalizes the ledger row (with `refunded:
+true`) the moment a previously-stuck refund actually lands, closing the loop for the
+deferred case. Bonus: `/admin/withdraw/reject` no longer claims "rejected and refunded"
+when the status transition itself didn't happen (was returning success unconditionally).
+
+**Mission Center rate**: owner: "daily per referral change it from 200 to 750ugx" —
+`MISSION_SALARY_RATE` in `server.js` (200→750), a single constant every consumer
+(`/mission/status`'s `salaryAmount`, `/team/stats`) already computes off live. Also found
+and fixed a hardcoded "UGX 200 per active referral, up to 1,000 referrals" copy string in
+`user-src/original_module.js` that would have silently kept lying about the old rate —
+now interpolates `m.salaryRate`/`m.salaryCap` from the same `/mission/status` response the
+rest of the screen already uses, so this can't drift out of sync again on a future rate
+change.
+
+**Verified** with the same mock-DB harness as Round 52: reproduced the exact bug by
+forcing the wallet-side refund write to fail once mid-decline — confirmed the ledger row
+correctly stays un-zeroed and `/admin/integrity` stays honest (no false mismatch) while
+the refund is genuinely pending, then confirmed the reconciler's later retry both credits
+the wallet AND (only then) zeroes the ledger row, with `/admin/integrity` clean
+throughout every step (13/13 checks). Re-ran Round 52's integrity suite (20/20, no
+regressions). Playwright-verified the Mission Center copy renders the live rate. `node
+--check server.js`/`original_module.js` clean, `node build-core.js` round-trip clean,
+`git diff --check` clean. Cache bumped `v34`→`v35`. **`server.js` changed → needs a
+Railway redeploy.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
