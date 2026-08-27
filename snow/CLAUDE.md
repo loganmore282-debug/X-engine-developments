@@ -2016,6 +2016,95 @@ from the API response (`user-src/original_module.js` has no hardcoded reward num
 and there's no admin UI for this ladder either, so no other file needed touching.
 `node --check server.js` clean. **server.js changed — needs a Railway redeploy.**
 
+## Round 37 (2026-08-27) — Help Centre gets an admin banner + Telegram/Customer Service links; About Snow becomes an admin-authored block article with scroll-triggered reveal; a real Round 35 regression caught and fixed along the way
+
+Owner, from screenshots of the plain-text Help Centre and About Snow pages: wants a
+banner on Help Centre (owner: "it should not be rounded frame no") plus a Telegram
+group link and a customer service link; and wants About Snow rebuilt as a proper
+article — an admin-authored ordered mix of text and images ("I will not put one image,
+no I will put many images and about writings every after any group of words I put
+image or before, or even not to put"), with each block animating in as the member
+scrolls down to it.
+
+**Help Centre banner + links.** Generalized the existing single-slot Home banner
+pattern (`banners/home` doc, `/admin/banner*` routes) into a second, fully independent
+slot: `banners/help` doc, new `/public/help-banner`, `/admin/help-banner`,
+`/admin/help-banner/set`, `/admin/help-banner/clear` routes — deliberately NOT a shared
+multi-slot generalization of the existing home-banner code, to avoid touching or risking
+that already-working (if currently unused by the frontend) path at all. The two link
+buttons reuse settings fields that already existed and were already admin-editable
+(`telegramGroup`, `supportTelegram`) rather than adding new ones — admin's own "Direct
+contact (Telegram)" field is now explicitly labelled "— shown as 'Customer Service'" so
+it's clear what it feeds. Either link's button simply doesn't render if its field is
+blank. Banner and links are lazy-fetched only when a member actually opens Help Centre
+(`openHelpSheet()`), not folded into `/public/settings`. Banner rendered with
+`border-radius:0` per the owner's explicit "not rounded" instruction.
+
+**About Snow as an admin-authored block article.** New `content/about` doc — an ordered
+array of `{type:'text',text}` / `{type:'image',image}` blocks, admin's own order, admin
+decides whether/where images go. Kept in its own collection (not `/public/settings`,
+which every page load fetches) since it can carry several embedded images at once —
+`getAboutContent()`'s own comment explains why. New `/public/about-content`,
+`/admin/about-content`, `/admin/about-content/set` routes; the save route validates each
+block (text capped 4000 chars, each image the same data-URI-and-2.8MB check used
+everywhere else images are accepted), caps the array at 60 blocks and the total payload
+at 11MB (comfortably under Mongo's 16MB BSON document limit), and gets its own
+`hugeJsonParser` (13mb) since the admin's existing `bigJsonParser` (4mb, sized for a
+single image) isn't enough for "many images" saved in one request. Falls back to a
+single text block built from the old `aboutText` setting if no blocks have been saved
+yet, so an admin who never touches the new editor still sees the old copy rather than a
+blank page.
+
+**Scroll-triggered reveal.** New `.scroll-reveal`/`.in-view` CSS (transition-based, not
+the existing `.reveal-in` keyframe animation used elsewhere — that one fires once on
+first paint regardless of scroll position; this one needs to fire per-block as it
+actually enters view) plus an `IntersectionObserver` in `openAboutSheet()` that adds
+`.in-view` (and un-observes) each block the first time it's at least 15% visible.
+Watches with the default root (browser viewport) rather than `#sheetBg` explicitly —
+`.sheet-bg` is `position:fixed;inset:0`, so its own bounding box already equals the
+viewport, making the two equivalent without extra wiring. The observer is disconnected
+and re-created on every `openAboutSheet()` call, and also disconnected in `closeSheet()`/
+the `popstate` handler, so repeatedly opening/closing About never accumulates observers
+holding references to detached DOM nodes.
+
+**Admin panel.** New "Help Centre banner" upload/remove block (mirrors Home banner's
+UI exactly, square-cornered thumbnail). About page split into two independent saves:
+tagline (unchanged, still a `settings` field) and a new block editor — `_aboutBlocks`
+array held in memory while the Settings tab is open, "+ Add text block" / "+ Add image
+block" buttons, and per-block move-up/move-down/delete controls, redrawn in full on
+every change (small list, cheap to re-render). "Save about page" posts the whole array
+to `/admin/about-content/set`.
+
+**Real regression caught during verification, not shipped.** Testing Help Centre with
+Playwright surfaced `STATE.settings` coming back `{}` even though the mocked
+`/public/settings` response was correct — traced to Round 35's own `authEpoch` staleness
+guard: `boot()`'s very first `/public/settings` + `/public/products` fetch always races
+the app's own first `snow-auth` event (which unconditionally bumps `authEpoch`), so the
+guard was discarding that legitimate boot-time response as "stale" on every single page
+load — a real bug shipped in the last round, not something in this round's new code.
+Fixed by exempting any `/public/*` path from the epoch check inside `api()`: those
+endpoints are never per-user (settings, products, banners, the About article), so they
+can never be the cross-session leak Round 35 was guarding against, and gating them was
+pure breakage with no safety benefit. Re-ran Round 35's own authEpoch Playwright test
+afterward to confirm the real per-user protection (`/account` etc.) is untouched.
+
+**Verified**: `node --check server.js` / `user-src/original_module.js` clean,
+`node build-core.js` and `node build-admin.js` both round-trip clean, `git diff --check`
+clean. Playwright: Help Centre renders the mocked banner image with computed
+`border-radius:0`, and exactly two link buttons with the correct labels/hrefs when both
+telegramGroup/supportTelegram are set; About page renders all blocks with images at
+`border-radius:0`, blocks below the fold start NOT `.in-view`, and scrolling the sheet
+to the bottom brings additional blocks into `.in-view` that weren't before (confirming
+the reveal is genuinely scroll-triggered, not just an on-open animation) — caught the
+first version of this same test giving a false pass because short test content fit
+entirely on-screen already, so retested with deliberately tall padding blocks to force
+real off-screen content. Re-ran Round 35's authEpoch test suite (stale in-flight
+response discarded, normal response passes through, `doLogout()` still bumps/resets)
+to confirm the `/public/*` exemption didn't weaken the actual per-user guard. Cache
+bumped `v21`→`v22`.
+
+**server.js changed — needs a Railway redeploy.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

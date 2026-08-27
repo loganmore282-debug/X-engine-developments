@@ -82,14 +82,20 @@ app.use('/admin/', async (req, _res, next) => {
 // photo get the larger parser instead of loosening the limit for everything.
 const smallJsonParser  = express.json({ limit: '64kb' });
 const bigJsonParser    = express.json({ limit: '4mb' });
+// The About page article can carry several embedded images at once (owner:
+// "I will not put one image, no I will put many images"), well past a
+// single-image upload -- gets its own larger cap instead of loosening
+// bigJsonParser for the single-image routes that don't need it.
+const hugeJsonParser   = express.json({ limit: '13mb' });
 // Real bug fixed: this used to list '/admin/banners/set' (plural), which
 // doesn't match the actual route below ('/admin/banner/set', singular) --
 // every real banner image upload (always >64kb as base64) was silently
 // hitting the small parser and failing with "request too large." Same bug
 // class space8's CLAUDE.md documents hitting its own home-banner-slides
 // route once, before that route was added here too.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set']);
-app.use((req, res, next) => (IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set']);
+const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set']);
+app.use((req, res, next) => (HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
 
 const CORS_ALLOWED_ORIGINS = new Set([
@@ -249,6 +255,36 @@ async function getHomeBanner() {
   } catch (_) { _bannerCache = _bannerCache || null; }
   _bannerCacheTs = Date.now();
   return _bannerCache;
+}
+// Separate admin-configurable banner for the Help Centre page -- its own
+// doc ('banners'/'help' vs 'banners'/'home') and its own cache, kept fully
+// independent of the Home banner above so neither can step on the other.
+let _helpBannerCache = null, _helpBannerCacheTs = 0;
+async function getHelpBanner() {
+  if (Date.now() - _helpBannerCacheTs < 60 * 1000 && _helpBannerCache !== null) return _helpBannerCache;
+  try {
+    const snap = await db.collection('banners').doc('help').get();
+    _helpBannerCache = (snap.exists && snap.data().image) || null;
+  } catch (_) { _helpBannerCache = _helpBannerCache || null; }
+  _helpBannerCacheTs = Date.now();
+  return _helpBannerCache;
+}
+// Admin-authored "About" article: an ordered list of {type:'text',text} /
+// {type:'image',image} blocks -- the admin decides the order and whether/
+// where images go (owner: "I will write and put images... every after any
+// group of words I put image or before, or even not to put"). Kept in its
+// own collection/doc, not the settings doc, because it can carry several
+// embedded images -- folding that into /public/settings would bloat EVERY
+// settings fetch on EVERY page load, not just the rare visit to this page.
+let _aboutCache = null, _aboutCacheTs = 0;
+async function getAboutContent() {
+  if (Date.now() - _aboutCacheTs < 60 * 1000 && _aboutCache !== null) return _aboutCache;
+  try {
+    const snap = await db.collection('content').doc('about').get();
+    _aboutCache = (snap.exists && Array.isArray(snap.data().blocks)) ? snap.data().blocks : null;
+  } catch (_) { _aboutCache = _aboutCache || null; }
+  _aboutCacheTs = Date.now();
+  return _aboutCache;
 }
 
 // ── HELPERS ──
@@ -1102,6 +1138,16 @@ app.get('/public/products', async (_req, res) => {
 });
 app.get('/public/banner', async (_req, res) => {
   try { res.json({ status: 'success', image: await getHomeBanner() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.get('/public/help-banner', async (_req, res) => {
+  try { res.json({ status: 'success', image: await getHelpBanner() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Lazy-loaded only when a member actually opens the About page -- not part
+// of /public/settings, see getAboutContent()'s own comment for why.
+app.get('/public/about-content', async (_req, res) => {
+  try { res.json({ status: 'success', blocks: await getAboutContent() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 
@@ -2366,6 +2412,65 @@ app.post('/admin/banner/clear', async (req, res) => {
     _bannerCacheTs = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the banner' }); }
+});
+app.get('/admin/help-banner', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', image: await getHelpBanner() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/help-banner/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const image = String(req.body.image || '');
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+    return res.status(400).json({ status: 'error', message: 'Invalid image' });
+  try {
+    await db.collection('banners').doc('help').set({ image });
+    _helpBannerCacheTs = 0;
+    logAdminAction(req, 'help_banner_set', {});
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the banner' }); }
+});
+app.post('/admin/help-banner/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    await db.collection('banners').doc('help').delete();
+    _helpBannerCacheTs = 0;
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the banner' }); }
+});
+app.get('/admin/about-content', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', blocks: await getAboutContent() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/about-content/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const raw = Array.isArray(req.body.blocks) ? req.body.blocks : null;
+  if (!raw || raw.length > 60) return res.status(400).json({ status: 'error', message: 'Invalid content -- 60 blocks max' });
+  const blocks = [];
+  let totalSize = 0;
+  for (const b of raw) {
+    if (b && b.type === 'text') {
+      const text = String(b.text || '').slice(0, 4000).trim();
+      if (!text) continue;
+      blocks.push({ type: 'text', text });
+      totalSize += text.length;
+    } else if (b && b.type === 'image') {
+      const image = String(b.image || '');
+      if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+        return res.status(400).json({ status: 'error', message: 'One of the images is invalid or too large' });
+      blocks.push({ type: 'image', image });
+      totalSize += image.length;
+    }
+  }
+  // Stays comfortably under Mongo's 16MB BSON document limit.
+  if (totalSize > 11_000_000) return res.status(400).json({ status: 'error', message: 'Total content is too large -- remove or compress some images' });
+  try {
+    await db.collection('content').doc('about').set({ blocks });
+    _aboutCacheTs = 0;
+    logAdminAction(req, 'about_content_set', { blockCount: blocks.length });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the About page' }); }
 });
 function sanitizeProductInput(p, fallbackOrder) {
   const key = String(p?.key || '').trim();

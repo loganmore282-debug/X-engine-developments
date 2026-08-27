@@ -1372,11 +1372,16 @@ async function quietRefreshReferrals(){
 }
 
 // ── SETTINGS ──
+let _aboutBlocks = [];
 async function renderSettings(){
-  const [r, br] = await Promise.all([api('/admin/settings'), api('/admin/banner')]);
+  const [r, br, hbr, abr] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/about-content')
+  ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
   const bannerImage = br.image||'';
+  const helpBannerImage = hbr.image||'';
+  _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
     <h2 class="sec">Rates &amp; limits</h2>
@@ -1432,11 +1437,23 @@ async function renderSettings(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeBannerFile" accept="image/*" hidden></label>
     </div>
 
+    <h2 class="sec">Help Centre banner</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Shown at the top of the app's Help Centre page, above the Telegram/support links below. Square corners by design, no rounding.</p>
+      <div class="banner-row">
+        ${helpBannerImage?`<img class="img-thumb" style="border-radius:0" src="${esc(helpBannerImage)}" onerror="this.style.opacity=.3">`:'<div class="img-thumb" style="opacity:.25;border-radius:0"></div>'}
+        <div style="flex:1;min-width:0;font-size:12px;word-break:break-all">${helpBannerImage?'Custom image':'<span class="muted">No banner set</span>'}</div>
+        ${helpBannerImage?`<button class="btn danger sm" id="helpBannerClear">Remove</button>`:''}
+      </div>
+      <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="helpBannerFile" accept="image/*" hidden></label>
+    </div>
+
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
+      <p class="muted" style="margin-top:0">"Telegram group" and "Direct contact" also show as the two buttons on the app's Help Centre page — leave either blank to hide its button.</p>
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
       <label>Telegram channel</label><input id="spTgChan" value="${esc(v('telegramChannel',''))}" placeholder="https://t.me/yourchannel">
-      <label>Direct contact (Telegram)</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/youragent">
+      <label>Direct contact (Telegram) — shown as "Customer Service"</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/youragent">
       <label>WhatsApp group</label><input id="spWaGroup" value="${esc(v('whatsappGroup',''))}" placeholder="https://chat.whatsapp.com/yourgroup">
       <label>WhatsApp contact</label><input id="spWaContact" value="${esc(v('whatsappContact',''))}" placeholder="https://wa.me/256700000000">
       <label>Support hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Every day, 8am – 9pm">
@@ -1453,10 +1470,16 @@ async function renderSettings(){
     <h2 class="sec">About page</h2>
     <div class="panel-card">
       <label>App tagline (shown under the logo)</label><input id="abTag" value="${esc(v('brandTagline',''))}" placeholder="Grow your money with Snow.">
-      <label>About text (shown on the app's About page)</label>
-      <textarea id="abText" rows="8" placeholder="Describe Snow for your users. Leave a blank line between paragraphs.">${esc(v('aboutText',''))}</textarea>
+      <button class="btn block" id="saveTagline" style="margin-top:6px">Save tagline</button>
+    </div>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Build the About page as an ordered list of blocks — add as many text blocks and images as you like, in any order (an image doesn't need to follow every paragraph, and you can skip images entirely). Members see each block animate in as they scroll down.</p>
+      <div id="aboutBlocksList"></div>
+      <button class="btn block" id="abAddText">+ Add text block</button>
+      <label class="btn block file-btn">+ Add image block<input type="file" id="abAddImageFile" accept="image/*" hidden></label>
       <button class="btn block" id="saveAbout">Save about page</button>
     </div>`;
+  renderAboutBlocksEditor();
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
@@ -1505,6 +1528,26 @@ async function renderSettings(){
       if (d.status==='success') renderSettings();
     })());
   });
+  $('helpBannerFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    await withTabBusy((async()=>{
+      try {
+        toast('Uploading…','ok');
+        const image = await fileToDataUrl(f,1280,0.82);
+        const d = await api('/admin/help-banner/set', { image });
+        toast(d.status==='success'?'Help Centre banner saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        if (d.status==='success') renderSettings();
+      } catch(err){ toast(err.message||'Could not read image','err'); }
+    })());
+  });
+  const helpBannerClear = $('helpBannerClear');
+  if (helpBannerClear) helpBannerClear.addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/help-banner/clear', {});
+      toast(d.status==='success'?'Banner removed':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      if (d.status==='success') renderSettings();
+    })());
+  });
   $('saveSupport').addEventListener('click', async()=>{
     const upd = { supportTelegram:$('spTg').value.trim(),
       telegramGroup:$('spTgGroup').value.trim(), telegramChannel:$('spTgChan').value.trim(),
@@ -1516,10 +1559,61 @@ async function renderSettings(){
     const d=await api('/admin/settings/update', { settings: { rulesText:$('regText').value } });
     toast(d.status==='success'?'Regulation saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
-  $('saveAbout').addEventListener('click', async()=>{
-    const upd = { brandTagline:$('abTag').value.trim(), aboutText:$('abText').value };
-    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'About saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  $('saveTagline').addEventListener('click', async()=>{
+    const d=await api('/admin/settings/update', { settings: { brandTagline:$('abTag').value.trim() } });
+    toast(d.status==='success'?'Tagline saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
+  $('abAddText').addEventListener('click', ()=>{
+    _aboutBlocks.push({ type:'text', text:'' });
+    renderAboutBlocksEditor();
+    const areas = document.querySelectorAll('#aboutBlocksList textarea');
+    if (areas.length) areas[areas.length-1].focus();
+  });
+  $('abAddImageFile').addEventListener('change', async e=>{
+    const f=e.target.files[0]; e.target.value=''; if(!f) return;
+    try {
+      const image = await fileToDataUrl(f,1280,0.82);
+      _aboutBlocks.push({ type:'image', image });
+      renderAboutBlocksEditor();
+    } catch(err){ toast(err.message||'Could not read image','err'); }
+  });
+  $('saveAbout').addEventListener('click', async()=>{
+    await withTabBusy((async()=>{
+      const d = await api('/admin/about-content/set', { blocks: _aboutBlocks });
+      toast(d.status==='success'?'About page saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+    })());
+  });
+}
+// About page block editor -- a plain ordered array of {type:'text',text} /
+// {type:'image',image} kept in _aboutBlocks while the tab is open, redrawn
+// in full on every add/move/delete/edit (small list, cheap to re-render).
+function renderAboutBlocksEditor(){
+  const box = $('aboutBlocksList'); if (!box) return;
+  if (!_aboutBlocks.length) { box.innerHTML = '<p class="muted" style="margin:8px 0">No blocks yet — add a text block or an image below.</p>'; return; }
+  box.innerHTML = _aboutBlocks.map((b,i)=>`
+    <div class="panel-card" style="margin-bottom:8px;padding:10px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <span class="muted" style="font-size:11px;flex:1;">${i+1}. ${b.type==='image'?'Image':'Text'}</span>
+        <button class="btn sm" data-ab-up="${i}" ${i===0?'disabled':''}>↑</button>
+        <button class="btn sm" data-ab-down="${i}" ${i===_aboutBlocks.length-1?'disabled':''}>↓</button>
+        <button class="btn danger sm" data-ab-del="${i}">Delete</button>
+      </div>
+      ${b.type==='image'
+        ? `<img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;">`
+        : `<textarea data-ab-text="${i}" rows="4" placeholder="Write a paragraph…">${esc(b.text)}</textarea>`}
+    </div>`).join('');
+  box.querySelectorAll('[data-ab-up]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const i=+btn.dataset.abUp; [_aboutBlocks[i-1],_aboutBlocks[i]]=[_aboutBlocks[i],_aboutBlocks[i-1]]; renderAboutBlocksEditor();
+  }));
+  box.querySelectorAll('[data-ab-down]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const i=+btn.dataset.abDown; [_aboutBlocks[i+1],_aboutBlocks[i]]=[_aboutBlocks[i],_aboutBlocks[i+1]]; renderAboutBlocksEditor();
+  }));
+  box.querySelectorAll('[data-ab-del]').forEach(btn=>btn.addEventListener('click', ()=>{
+    _aboutBlocks.splice(+btn.dataset.abDel,1); renderAboutBlocksEditor();
+  }));
+  box.querySelectorAll('[data-ab-text]').forEach(ta=>ta.addEventListener('input', ()=>{
+    _aboutBlocks[+ta.dataset.abText].text = ta.value;
+  }));
 }
 
 // ── MODAL ──

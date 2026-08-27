@@ -169,6 +169,15 @@ a{color:inherit;}
 .reveal-in > *:nth-child(6){animation-delay:175ms;}
 .reveal-in > *:nth-child(n+7){animation-delay:210ms;}
 
+/* About page article blocks -- reveals each text/image block as it scrolls
+   into view (owner: "whenever one scrolls down, images and words I placed
+   show animation"), distinct from .reveal-in above which fires once on
+   first paint regardless of scroll position. */
+.scroll-reveal{opacity:0;transform:translateY(22px);transition:opacity .55s cubic-bezier(.22,1,.36,1),transform .55s cubic-bezier(.22,1,.36,1);}
+.scroll-reveal.in-view{opacity:1;transform:translateY(0);}
+.about-block{margin-bottom:18px;}
+.about-block:last-child{margin-bottom:0;}
+
 </style>
 </head>
 <body>

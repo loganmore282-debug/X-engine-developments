@@ -123,6 +123,14 @@ async function api(path, opts){
   // a different user's login happened while this request was in flight (see
   // STATE.authEpoch's own comment), the response belongs to a session that
   // no longer exists on screen and must never be written into STATE.
+  // /public/* endpoints are exempt: they're not per-user (settings,
+  // products, banners, the About article), so they can never leak one
+  // member's data into another's session -- and boot()'s very first
+  // /public/settings + /public/products fetch always races the app's own
+  // first snow-auth firing (which bumps the epoch unconditionally, see
+  // below), so gating them here would discard that legitimate boot data
+  // every single page load.
+  const isPublicCall = path.indexOf('/public/') === 0;
   const startEpoch = STATE.authEpoch;
   try {
     const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
@@ -137,7 +145,7 @@ async function api(path, opts){
     }
     let data;
     try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response from server' }; }
-    if (STATE.authEpoch !== startEpoch) return { status: 'error', message: 'Session changed', stale: true };
+    if (!isPublicCall && STATE.authEpoch !== startEpoch) return { status: 'error', message: 'Session changed', stale: true };
     return data;
   } finally {
     if (isMoneyCall) window._moneyCallsInFlight--;
@@ -832,22 +840,68 @@ function openSheet(title, bodyHtml){
 window.closeSheet = function(){
   $('sheetBg').classList.remove('show');
   document.body.style.overflow = '';
+  if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
   if (history.state && history.state.sheet) history.back();
 };
 window.addEventListener('popstate', () => {
   $('sheetBg').classList.remove('show');
   document.body.style.overflow = '';
+  if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
 });
 
 window.openInfoSheet = function(kind){
+  if (kind === 'about') return openAboutSheet();
+  if (kind === 'help') return openHelpSheet();
   const s = STATE.settings || {};
   const map = {
-    about: ['About Snow', s.aboutText || 'Snow lets you invest in a range of plans with daily cashback and a 3-level referral program.'],
     rules: ['Rules & Terms', s.rulesText || 'Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + (s.withdrawFeePct||15) + '% fee applies. Referral commission: Level 1 ' + (s.commL1||27) + '%, Level 2 ' + (s.commL2||2) + '%, Level 3 ' + (s.commL3||1) + '%.'],
-    help: ['Help Centre', (s.supportTelegram ? 'Telegram: ' + s.supportTelegram + '\\n' : '') + (s.supportHours ? 'Support hours: ' + s.supportHours : 'Contact support for help with your account.')],
   };
   const [title, body] = map[kind] || ['Info', ''];
   openSheet(title, `<p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p>`);
+};
+// Help Centre banner + the two support links are lazy-fetched only when
+// this page is actually opened (the banner can be a large embedded image,
+// see getHelpBanner()'s own comment server-side), so the sheet paints
+// immediately with just the links/text while the image streams in.
+window.openHelpSheet = async function(){
+  const s = STATE.settings || {};
+  const links = (s.telegramGroup ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;" href="${esc(s.telegramGroup)}" target="_blank" rel="noopener">Telegram Group</a>` : '')
+    + (s.supportTelegram ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-ink);" href="${esc(s.supportTelegram)}" target="_blank" rel="noopener">Customer Service</a>` : '');
+  openSheet('Help Centre', `<div class="reveal-in">
+    <div id="helpBannerWrap"></div>
+    ${links ? `<div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">${links}</div>` : ''}
+    <p style="white-space:pre-line;line-height:1.6;color:var(--snow-muted);margin-top:18px;font-size:13px;">${esc(s.supportHours ? 'Support hours: ' + s.supportHours : 'Contact support for help with your account.')}</p>
+  </div>`);
+  const r = await api('/public/help-banner');
+  const wrap = $('helpBannerWrap');
+  if (wrap && r.status === 'success' && r.image) {
+    wrap.innerHTML = `<img src="${esc(r.image)}" style="width:100%;display:block;border-radius:0;" alt="">`;
+  }
+};
+// About page: an admin-authored ordered list of text/image blocks (see
+// /public/about-content), rendered as an article and revealed block-by-
+// block as the member scrolls (owner: "whenever one scrolls down, images
+// and words I placed show animation").
+let _aboutScrollObserver = null;
+window.openAboutSheet = async function(){
+  const s = STATE.settings || {};
+  openSheet('About Snow', `<div id="aboutArticle" class="reveal-in"><p style="color:var(--snow-muted);">Loading…</p></div>`);
+  const r = await api('/public/about-content');
+  const wrap = $('aboutArticle');
+  if (!wrap) return; // sheet was closed again before this resolved
+  const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
+    : [{ type: 'text', text: s.aboutText || 'Snow lets you invest in a range of plans with daily cashback and a 3-level referral program.' }];
+  wrap.innerHTML = blocks.map(b => b.type === 'image'
+    ? `<div class="scroll-reveal about-block"><img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;" alt=""></div>`
+    : `<div class="scroll-reveal about-block"><p style="white-space:pre-line;line-height:1.7;color:var(--snow-ink);">${esc(b.text)}</p></div>`
+  ).join('');
+  if (_aboutScrollObserver) _aboutScrollObserver.disconnect();
+  _aboutScrollObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('in-view'); _aboutScrollObserver.unobserve(e.target); }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -8% 0px' });
+  wrap.querySelectorAll('.scroll-reveal').forEach(el => _aboutScrollObserver.observe(el));
 };
 
 window.openCheckinSheet = function(){
