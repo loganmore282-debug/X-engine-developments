@@ -2616,6 +2616,24 @@ Verified with a Playwright screenshot of the nav bar, zoomed 4x — the bottle/m
 stays legible even shrunk to 20px. `node --check` clean, `node build-core.js` round-trip
 clean, `git diff --check` clean. Cache bumped `v30`→`v31`.
 
+## Round 49 (2026-08-27) — My Products icon bumped 20px→26px to match the others' visual weight
+
+Owner: icon looked smaller than Team/Account even after Round 48. Measured with
+Playwright (`getBoundingClientRect()` on each nav `<svg>`) — all four were already
+rendering at an identical 20×20 CSS-px box, so it wasn't a sizing bug. The real cause:
+the bottles/mugs artwork is a dense engraving-style illustration (fine internal
+linework, lots of thin negative space) versus the bold solid shapes of Team (filled
+silhouette) and Account (thick 128-unit stroke on a 1536 viewBox) — same box, much
+lower ink coverage, so it reads visually lighter/smaller at a glance even though its
+own bounding box fills the viewBox just as fully as the others'.
+
+Can't redraw the artwork's internal detail, so compensated the only way that's
+actually correct: bumped `ICONS.box`'s own `width`/`height` from 20 to 26 (viewBox
+untouched) so its on-screen footprint is bigger, closing the apparent-weight gap.
+Screenshot comparison against Team/Account confirms it now reads at a matching visual
+size. `node --check` clean, `node build-core.js` round-trip clean, `git diff --check`
+clean. Cache bumped `v31`→`v32`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
