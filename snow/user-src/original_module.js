@@ -101,12 +101,22 @@ var STATE = { user: null, account: null, settings: null, products: null, investm
   // STATE.x = ...` call site is automatically safe with no per-site changes.
   authEpoch: 0 };
 
+// Real bug fixed: every toast() call used to just append another element,
+// with no limit on how many could be stacked up on screen at once -- a
+// burst of rapid calls (see copyText()/shareReferral()'s own fix below, and
+// Mission Center's Round 34 fix) piled up a wall of overlapping "Copied"
+// pills covering the whole screen (owner screenshot). Owner: "only one
+// notify is enough." A new toast now removes whatever's currently showing
+// first, so at most one is ever visible -- the latest call always wins.
+let _activeToastEl = null, _activeToastTimer = null;
 function toast(msg, isErr){
+  if (_activeToastEl) { _activeToastEl.remove(); clearTimeout(_activeToastTimer); }
   const el = document.createElement('div');
   el.className = 'toast' + (isErr ? ' err' : '');
   el.textContent = msg;
   $('toastHost').appendChild(el);
-  setTimeout(() => el.remove(), 3200);
+  _activeToastEl = el;
+  _activeToastTimer = setTimeout(() => { el.remove(); if (_activeToastEl === el) _activeToastEl = null; }, 3200);
 }
 
 // ── API ──
@@ -785,14 +795,33 @@ window.claimMissionDeposit = async function(target){
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
 };
-window.copyText = function(text){
-  if (!text) return;
+// Real bug fixed: these had no guard against firing more than once per tap
+// -- unlike every other button in this app (witSubmitBtn, bankSaveBtn,
+// missionSalaryBtn, etc.) neither disables itself, so a double-registered
+// tap (common on touchscreens -- synthetic mouse+touch click events, or an
+// actual accidental double-tap) called navigator.share()/clipboard.writeText
+// again immediately, which is what the owner saw as "many share requests."
+// Keyed by action so tapping copy-code then copy-link a moment apart still
+// both work -- only truly rapid repeats of the SAME action are dropped.
+const _lastTapAt = {};
+function rapidTapGuardOk(key){
+  const now = Date.now();
+  if (now - (_lastTapAt[key] || 0) < 700) return false;
+  _lastTapAt[key] = now;
+  return true;
+}
+function writeClipboard(text){
   navigator.clipboard && navigator.clipboard.writeText(text).then(()=>toast('Copied')).catch(()=>toast('Could not copy', true));
+}
+window.copyText = function(text){
+  if (!text || !rapidTapGuardOk('copy:' + text)) return;
+  writeClipboard(text);
 };
 window.shareReferral = function(link){
+  if (!rapidTapGuardOk('share')) return;
   const text = `Join Snow and start earning — sign up with my link: ${link}`;
   if (navigator.share) navigator.share({ text }).catch(()=>{});
-  else copyText(link);
+  else writeClipboard(link);
 };
 
 // ── ACCOUNT ──

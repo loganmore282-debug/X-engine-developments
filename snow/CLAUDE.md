@@ -2196,6 +2196,52 @@ trusting the result). Cache bumped `v22`→`v23`.
 **server.js changed — Render should auto-deploy this push** (see Round 38's correction:
 Snow is on Render with `autoDeploy: true`, not Railway).
 
+## Round 40 (2026-08-27) — toast() now shows at most one notification at a time (app-wide); Team page's copy/share buttons no longer fire multiple times per tap
+
+Owner screenshots of the Team page: a tall wall of overlapping "Copied" toast pills
+covering the entire card, plus "when one taps on share it randomly generates many
+shares requests." Quoted: "only one notify is enough."
+
+**Two distinct bugs, both real, both fixed.** (1) `toast()` itself had no cap on how
+many could be on screen at once -- every call just appended another `<div>`, so ANY
+burst of repeated calls, regardless of cause, piled up visually (this is the same
+underlying weakness Round 34's Mission Center fix worked around by preventing the
+*calls* rather than the *stacking*, but never touched `toast()` itself). (2)
+`copyText()`/`shareReferral()` specifically had zero guard against firing more than
+once per tap -- unlike every submit-style button elsewhere in this app, they don't
+disable themselves, so a double-registered click event (touchscreens routinely fire a
+synthetic mouse `click` alongside the `touch` events, and an accidental double-tap does
+the same) called `navigator.clipboard.writeText()` or `navigator.share()` again
+immediately. For `navigator.share()` specifically this is the literal "many shares
+requests" the owner saw -- each call queues/opens the native share sheet again.
+
+**Fix 1 — `toast()` is now single-instance, app-wide.** A new call removes whatever
+toast is currently showing (and clears its pending removal timer) before showing the
+new one, so at most one is ever visible and the latest call always wins. This is a
+blanket fix that also backstops every OTHER place in the app that calls `toast()`, not
+just Team's copy/share buttons -- satisfies "only one notify is enough" literally and
+generally, not just for this one page.
+
+**Fix 2 — `copyText()`/`shareReferral()` guarded against rapid repeats.** New
+`rapidTapGuardOk(key)` helper: drops any call within 700ms of the last call with the
+SAME key, keyed per-action (`'copy:' + text` for copies, `'share'` for the share
+button) rather than one global lock -- tapping "copy code" then "copy link" a moment
+later still both work; only genuine rapid-fire repeats of the exact same action are
+dropped. `shareReferral()`'s no-`navigator.share` fallback now calls a small
+`writeClipboard()` helper directly instead of going back through the guarded
+`copyText()`, avoiding a double-guard bug where the fallback path would have
+immediately failed its own guard check right after the outer call had just claimed it.
+
+**Verified** with Playwright: firing `copyText()` six times rapidly with the same text
+leaves exactly one toast on screen (previously would have stacked six); firing
+`shareReferral()` six times rapidly (with `navigator.share` stubbed to count calls)
+invokes it exactly once, not six; copying a genuinely different piece of text
+immediately after still works normally (confirming the guard is per-action, not a
+blanket lock); re-ran Round 34's own Mission Center toast test to confirm the new
+single-instance `toast()` doesn't regress that fix (still exactly 1 network call and 1
+toast from 5 rapid taps). `node --check` clean, `node build-core.js` round-trip clean,
+`git diff --check` clean. Cache bumped `v23`→`v24`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
