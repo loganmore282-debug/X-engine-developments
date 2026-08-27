@@ -878,6 +878,96 @@ modal's copy); the standalone `withLock2` serialization script described above (
 committed — a throwaway verification, the logic itself is what's committed).
 `admin/sw.js` cache bumped `v6`→`v7`.
 
+## Round 18 (2026-08-27) — design-correction pass on Account/Login/Register against the approved mockups: restored the missing Snow bottle badge and the wave-line hero decorations
+
+Owner sent a phone screenshot of the deployed Account screen plus a detailed brief
+claiming the live app didn't match the approved design: wrong/"random" card colours,
+oversized cards/icons/text, a missing Snow bottle image beside the header wordmark and
+in the profile card, and missing "green pill-shaped" decorations on Login/Register.
+Explicit instruction: this is a faithful restoration against the approved mockups, not
+a redesign — keep the existing architecture, sections, and tap actions exactly as they
+are.
+
+**Investigation first, before touching anything.** Diffed `user-src/original_module.js`'s
+`renderAccount()` and the shared `.account-feature-card`/`.account-utility-card` CSS in
+`user-src/index.html` line-by-line against `design/mockup-src/Account.html` (the actual
+HTML source Codex's Account mockup was screenshotted from). They already matched almost
+exactly — same colours (wine/green gradients on the two feature cards, `--snow-wine-soft`/
+`--snow-green-soft` pale tints on the four utility cards and Sign out, exactly as
+designed), same or smaller card heights than the mockup (`account-utility-card` 100px vs
+the mockup's 126px, Sign-out card 88px vs the mockup's 104px), same wrapping behaviour
+("About Snow", "Rules & Terms" wrap to two lines in the mockup too — confirmed by
+re-viewing `04-account.png` closely, not just from memory). A rendered-to-screenshot
+comparison (see Verification) came out visually near-identical to the mockup. Conclusion:
+the "oversized/wrong colour" complaint is almost certainly the owner's phone sitting on
+a stale PWA cache (`snow-shell-v3`, unchanged across several prior commits that touched
+`original_module.js`) rather than a real code defect — flagged to the owner rather than
+guessing at cosmetic changes the mockup doesn't call for. The one genuine, confirmed gap:
+**no `<img>` bottle tag existed anywhere in the codebase.** `design/mockup-src/Account.html`
+(and, newly discovered this round, `Home.html` and `Team.html` too — grepped all three)
+all reference `design/reference-bottles/01-qing-shuang-badge.png` — a pre-cropped 168×537
+RGBA cutout of the Qing Shuang bottle — at `height:38px` next to the header wordmark and
+`height:104px` (with a drop-shadow) inside the Account profile card. `MyProducts.html`'s
+mockup has no such badge, so that header was correctly left alone.
+
+**Login/Register decorations: the mockups show wave-lines, not pills.** Re-viewed
+`design/mockups/00-login.png` and `00-register.png` at full resolution specifically to
+settle this — both clearly show the same thin curved parallel-line motif used everywhere
+else in the app (`waveLinesTR()`'s path family), not pill shapes; CLAUDE.md's own
+"Brand language" section already documents this as "thin bottle-green parallel wave-line
+decorations in the hero's corners." Treated "pill-shaped" as the owner's informal
+description of that same motif rather than a literal spec, since the brief explicitly
+said to use the approved mockups as the source of truth. Also confirmed neither mockup
+shows a bottle image on the auth screens — so none was added there; adding one would
+have been inventing a design element the approved mockups don't contain. Note:
+`design/mockup-src/` has no `Login.html`/`Register.html` (`git log` shows these two PNGs
+were never generated from a checked-in HTML source, unlike the other four screens) —
+sized 941×1672 and 864×1821 rather than the other mockups' consistent 780×1848
+(390 CSS px × 2), i.e. these two are not pixel-exact code-driven mockups. The wave-line
+paths added here reuse the exact SVG path data already used elsewhere in the app
+(`waveLinesTR()`'s 4-path set), not new invented artwork.
+
+**Changes made** (`user-src/original_module.js`, `user-src/index.html`):
+1. Copied `design/reference-bottles/01-qing-shuang-badge.png` to `user/badge.png`
+   (served at `/badge.png`) — reusing the existing approved cutout asset, not a new one.
+2. Added `<img src="/badge.png">` next to the snowflake+wordmark header in
+   `renderAccount()`, `renderHome()`, and `renderTeam()` (38px), and inside the Account
+   profile card (104px, `drop-shadow`) — all at the exact sizes/positions the mockup
+   sources use.
+3. Added the same wave-line SVG (top-right corner + a second bottom-left cluster near
+   the wave transition) to `.auth-hero` in `index.html`, shared by both Login and
+   Register panes, plus a third low-opacity cluster at the bottom of the Register pane
+   only (matching that mockup specifically) — `position:relative` added to `#registerPane`
+   so it anchors correctly.
+4. `user/sw.js` cache bumped `snow-shell-v3` → `snow-shell-v4` (this is very likely the
+   actual fix for most of what the owner saw — see above) and `badge.png` added to the
+   precache `SHELL` list.
+
+**Deliberately NOT changed**: card/icon/text sizes (already matched or beat the mockup),
+utility-card colours (already correct per the mockup source), Login/Register's stacked
+vs. horizontal wordmark-layout difference between the two auth mockups (an existing,
+pre-this-round inconsistency between two non-code-driven mockups, out of scope for what
+was actually reported), and no bottle was added to Login/Register (not in the approved
+design).
+
+**Verification**: `node build-core.js` — clean round-trip both before and after. Built
+a Playwright harness (`python3` + `/opt/pw-browsers/chromium`, not committed — a
+throwaway verification script) that serves `user/` over a local `http.server`, stubs
+the two `gstatic` Firebase ESM imports and the `/account`, `/public/settings`,
+`/public/products`, `/team/stats`, `/investments` API calls with fixture JSON, and
+screenshots Account, Login, Register, Home, and Team at 320/360/390/412/430px CSS width
+(2x device scale). Caught and fixed one real bug this way: the first version of the
+Register-pane bottom wave-line decoration overlapped the Register button and the
+"Already have an account?" text at all five widths — fixed by inserting a 64px spacer
+before the absolutely-positioned decoration. Re-screenshotted after the fix: no overlap,
+no clipping, no horizontal scroll at any of the 5 required widths; the 390px Account
+screenshot is near pixel-identical to `04-account.png` once compared side by side.
+
+**Left open**: the owner should hard-close and reopen the installed PWA (or clear site
+data) after this deploys, since `snow-shell-v4` only forces a refresh on next launch —
+confirm with them whether what they saw really was the stale-cache version, since that
+changes whether any further sizing/colour work is actually needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

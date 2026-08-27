@@ -268,6 +268,7 @@ async function renderHome(){
   <div style="position:relative;padding:22px 20px 0;">
     <div style="display:flex;align-items:center;gap:9px;">
       ${snowflakeSvg('var(--snow-green)',26)}
+      <img src="/badge.png" alt="" style="height:38px;width:auto;">
       <div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div>
     </div>
     <div style="margin-top:26px;">
@@ -453,6 +454,7 @@ async function renderTeam(){
   let html = `
 <div style="display:flex;align-items:center;justify-content:center;gap:9px;padding:24px 20px 4px;">
   ${snowflakeSvg('var(--snow-green)',26)}
+  <img src="/badge.png" alt="" style="height:38px;width:auto;">
   <div class="wm-text" style="font-size:19px;color:var(--snow-green);">SNOW</div>
 </div>
 <div style="margin:16px 20px 0;">
@@ -592,12 +594,14 @@ async function renderAccount(){
   let html = `
 <div style="display:flex;align-items:center;gap:9px;padding:24px 20px 4px;">
   ${snowflakeSvg('var(--snow-green)',26)}
+  <img src="/badge.png" alt="" style="height:38px;width:auto;">
   <div class="wm-text" style="font-size:19px;color:var(--snow-green);">SNOW</div>
 </div>
 <div class="brand-card" style="margin:16px 20px 0;padding:22px;">
   ${waveLinesTR(110,104)}
   <div style="position:relative;display:flex;align-items:center;gap:12px;">
     <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${snowflakeSvg('#fff',26)}</div>
+    <img src="/badge.png" alt="" style="height:104px;width:auto;flex-shrink:0;filter:drop-shadow(0 8px 12px rgba(0,0,0,.28));">
     <div style="flex:1;min-width:0;">
       <div style="display:flex;align-items:center;gap:7px;"><div class="mono" style="font-size:14.5px;font-weight:700;white-space:nowrap;">${esc(a.phone||'')}</div><button style="border:none;background:none;color:#fff;padding:0;" onclick="copyText('${esc(a.phone||'')}')">${ICONS.copy}</button></div>
       <div style="display:flex;align-items:center;gap:7px;margin-top:5px;"><div class="mono" style="font-size:12.5px;opacity:.85;">ID: ${esc(a.publicId||'—')}</div><button style="border:none;background:none;color:#fff;padding:0;" onclick="copyText('${esc(a.publicId||'')}')">${ICONS.copy}</button></div>

@@ -146,7 +146,9 @@ a{color:inherit;}
 <div id="authScreen" style="display:none;">
   <div class="wrap" style="padding-bottom:0;">
     <div class="auth-hero" id="authHero">
-      <div class="wordmark" style="justify-content:center;">
+      <svg viewBox="0 0 190 180" aria-hidden="true" style="position:absolute;top:-4px;right:-6px;width:150px;height:142px;opacity:0.9;pointer-events:none;"><path d="M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/></svg>
+      <svg viewBox="0 0 190 112" aria-hidden="true" style="position:absolute;bottom:-4px;left:-6px;width:150px;height:88px;opacity:0.9;pointer-events:none;"><path d="M-18 100 C22 72 57 62 93 81 C124 98 154 79 204 53" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 86 C23 58 60 48 97 67 C128 84 158 65 204 39" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 72 C25 45 64 35 101 53 C132 70 162 51 204 26" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/><path d="M-18 58 C28 32 68 22 105 39 C136 56 165 37 204 13" stroke="var(--snow-wave-on-wine)" stroke-width="1.4" fill="none"/></svg>
+      <div class="wordmark" style="position:relative;justify-content:center;">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--snow-green)" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg>
         <div class="wm-text" style="font-size:24px;">SNOW</div>
       </div>
@@ -173,7 +175,7 @@ a{color:inherit;}
         <button class="primary-button" id="loginBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:6px;" onclick="doLogin()">Login</button>
         <p style="text-align:center;margin:18px 0;font-size:13.5px;">New to Snow? <a href="#" style="color:var(--snow-green);font-weight:700;text-decoration:none;" onclick="showAuthTab('register');return false;">Create account</a></p>
       </div>
-      <div id="registerPane" style="display:none;">
+      <div id="registerPane" style="display:none;position:relative;">
         <h1 style="font-size:26px;font-weight:800;margin:20px 0 4px;">Create account</h1>
         <p style="color:var(--snow-muted);margin:0 0 20px;">Start your Snow journey</p>
         <div id="regError"></div>
@@ -195,6 +197,8 @@ a{color:inherit;}
         </div>
         <button class="primary-button" id="regBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:6px;" onclick="doRegister()">Register</button>
         <p style="text-align:center;margin:18px 0;font-size:13.5px;">Already have an account? <a href="#" style="color:var(--snow-green);font-weight:700;text-decoration:none;" onclick="showAuthTab('login');return false;">Login</a></p>
+        <div style="height:64px;"></div>
+        <svg viewBox="0 0 190 112" aria-hidden="true" style="position:absolute;bottom:0;left:-20px;width:150px;height:88px;opacity:0.35;pointer-events:none;"><path d="M-18 100 C22 72 57 62 93 81 C124 98 154 79 204 53" stroke="var(--snow-green)" stroke-width="1.4" fill="none"/><path d="M-18 86 C23 58 60 48 97 67 C128 84 158 65 204 39" stroke="var(--snow-green)" stroke-width="1.4" fill="none"/><path d="M-18 72 C25 45 64 35 101 53 C132 70 162 51 204 26" stroke="var(--snow-green)" stroke-width="1.4" fill="none"/><path d="M-18 58 C28 32 68 22 105 39 C136 56 165 37 204 13" stroke="var(--snow-green)" stroke-width="1.4" fill="none"/></svg>
       </div>
     </div>
   </div>
