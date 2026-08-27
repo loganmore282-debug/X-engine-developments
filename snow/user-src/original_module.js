@@ -14,6 +14,7 @@ var ICONS = {
   deposit: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8"/><path d="M8.5 12 12 15.5 15.5 12"/></svg>',
   withdraw: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-8"/><path d="M8.5 12 12 8.5 15.5 12"/></svg>',
   chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+  backArrow: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
   home: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9"/></svg>',
   box: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.5 12 4 3 8.5 12 13l9-4.5Z"/><path d="M3 8.5V16l9 4.5 9-4.5V8.5"/><path d="M12 13v7.5"/></svg>',
   team: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3"/><circle cx="5" cy="9" r="2.2"/><circle cx="19" cy="9" r="2.2"/><path d="M12 12.3c-2.9 0-5.3 1.9-5.3 5.2"/><path d="M12 12.3c2.9 0 5.3 1.9 5.3 5.2"/><path d="M5 13.5c-1.7.4-3 1.9-3 4"/><path d="M19 13.5c1.7.4 3 1.9 3 4"/></svg>',
@@ -31,6 +32,8 @@ var ICONS = {
   people2: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M14.8 14a5 5 0 0 1 6.7 4.7"/></svg>',
   link: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M8 17.5 5.5 15A4 4 0 0 1 11 9.5"/><path d="M16 6.5 18.5 9A4 4 0 0 1 13 14.5"/></svg>',
   trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12"/></svg>',
+  eye: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A11.4 11.4 0 0 1 12 5c7 0 11 7 11 7a17.5 17.5 0 0 1-3.1 3.9M6.7 6.7C3.6 8.5 1 12 1 12s4 7 11 7a10.6 10.6 0 0 0 4.3-.9"/><path d="M9.5 9.8A3 3 0 0 0 12 15a3 3 0 0 0 2.2-.97"/></svg>',
 };
 function snowflakeSvg(color, size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg>`; }
 function waveLinesTR(w,h,color,count,opacity){
@@ -66,7 +69,15 @@ function skPage(){
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function $(id){ return document.getElementById(id); }
-function togglePw(id){ const el=$(id); el.type = el.type==='password' ? 'text' : 'password'; }
+function togglePw(id, btn){
+  const el = $(id);
+  const showing = el.type === 'password';
+  el.type = showing ? 'text' : 'password';
+  if (btn) {
+    btn.innerHTML = showing ? ICONS.eyeOff : ICONS.eye;
+    btn.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+  }
+}
 
 // ── STATE ──
 var STATE = { user: null, account: null, settings: null, products: null, investments: null,

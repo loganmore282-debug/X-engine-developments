@@ -1155,6 +1155,56 @@ widths (320/360/390/412/430px) against the fixed build confirmed
 `document.documentElement.scrollWidth === clientWidth` (no horizontal overflow) at every
 width. Cache bumped `v5`→`v6`.
 
+## Round 21 (2026-08-27) — SVG icon audit against the approved mockups: 2 real gaps found (both fixed), everything else already matched exactly
+
+Owner asked for a full audit of the user frontend's SVG icon system against the approved
+mockup source, listing ~18 specific icons to check and warning against inventing
+replacements. Did the audit by diffing every `viewBox="0 0 24 24"` `<svg>...</svg>` in
+`design/mockup-src/Account.html`, `Home.html`, `Team.html`, and `MyProducts.html`
+character-for-character (via `grep -oE`, not eyeballing) against `ICONS`/`snowflakeSvg()`
+in `user-src/original_module.js`. Result: snowflake, copy, withdrawal/wallet, records,
+about/document, shield, headset, download, logout, and all four bottom-nav icons (home,
+products, team, account) were **already byte-identical** to the mockup source across all
+four files — same path data, viewBox, stroke-width, linecap/linejoin, per-icon pixel
+size. Nothing to change there; this had already been ported correctly. Copy-ID icon is
+correctly N/A — the owner had this removed entirely in an earlier round (Round 18
+follow-up) and no trace of it remains.
+
+Two real gaps, both fixed:
+1. **The sheet-header back button was a literal "←" Unicode character**, not an SVG —
+   the one hit from `rg -n "emoji|...|←|..."` across both source files. No mockup covers
+   this sub-component (the 4 frozen mockups are full-screen only, no sheet/back-button
+   state), so rather than inventing a new shape, mirrored the app's own existing `chev`
+   icon (`M9 6l6 6-6 6`, already used elsewhere) into a new `ICONS.backArrow`
+   (`M15 6l-6 6 6 6`) — same viewBox/stroke-width/line-style family, just pointing the
+   other way. Wired into the static `index.html` markup (can't reference the JS `ICONS`
+   object from static HTML, so it's the same literal-SVG-in-markup pattern already used
+   for the auth-hero's snowflake/wave decorations).
+2. **The password show/hide icon never actually toggled appearance** — same static eye
+   SVG regardless of whether the password was shown or hidden (a leftover from the
+   previous round's emoji→SVG swap, which didn't wire up state). Added `ICONS.eyeOff`
+   (crossed-out eye, same stroke family) and rewrote `togglePw(id, btn)` to swap the
+   button's innerHTML + `aria-label` between `eye`/`eyeOff` based on the resulting input
+   type. No mockup shows this interaction (a static screenshot can't), so this was
+   corrected against the icon's own stated purpose (visibility toggle) rather than a
+   specific mockup pixel.
+
+Deliberately did NOT introduce the `.snow-svg`/`.bottom-nav-icon`/etc. uniform CSS
+sizing classes suggested as an implementation pattern in the request — the mockup source
+uses different explicit per-icon pixel sizes depending on context (15/16/17/18/20/26px),
+not a single uniform token, and the current code already sets each size inline to match.
+A uniform CSS class would have overridden those already-correct per-instance sizes.
+
+**Verified**: `node --check user-src/original_module.js` clean; `node build-core.js`
+clean round-trip; `git diff --check` clean (no whitespace errors); `rg` for
+emoji/Unicode-arrow patterns across both source files — zero matches. Playwright across
+all 5 required widths (320/360/390/412/430px): no horizontal overflow, no
+`[object Object]`/`undefined` leaking into rendered text, back-button confirmed
+rendering `<svg>` (not `←`), and the eye icon confirmed changing on click (innerHTML
+differs before/after, input type toggles to `text`). Cache bumped `v6`→`v7`. No backend,
+API, routing, auth, or page-architecture changes — icon markup + one small stateful
+toggle function only.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
