@@ -49,8 +49,33 @@ function brandWaveFull(){
   return `<svg class="brand-wave--full" viewBox="0 0 390 126" preserveAspectRatio="none" aria-hidden="true"><path d="M0 104 C58 68 104 61 154 83 C205 105 251 95 296 62 C332 36 362 23 390 31 L390 126 L0 126 Z" fill="var(--snow-canvas)"></path></svg>`;
 }
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
+// Decorative only (pointer-events:none, aria-hidden) -- hangs from the top
+// edge of the hero (negative top, clipped by .brand-hero--full's own
+// overflow:hidden) alongside the existing wave-line "spills", not replacing
+// them. Gold is a deliberate one-off accent for this single ornament, not a
+// new palette token -- everything else on Home stays the approved red/green.
+function treasureChestSvg(){
+  return `<svg viewBox="0 0 64 60" aria-hidden="true" style="position:absolute;top:-6px;right:20px;width:52px;height:49px;pointer-events:none;filter:drop-shadow(0 6px 10px rgba(0,0,0,.35));">
+    <path d="M32 0v9" stroke="#E8C468" stroke-width="2" stroke-linecap="round"/>
+    <path d="M9 27a23 18 0 0 1 46 0" fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="7" y="27" width="50" height="7" rx="1.5" fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linejoin="round"/>
+    <rect x="5" y="34" width="54" height="21" rx="4" fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M32 34v21" stroke="#E8C468" stroke-width="2"/>
+    <path d="M9 27v7M55 27v7" stroke="#E8C468" stroke-width="2.2"/>
+    <rect x="26" y="40" width="12" height="9" rx="2.5" fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linejoin="round"/>
+    <circle cx="32" cy="44.3" r="1.5" fill="#E8C468"/>
+  </svg>`;
+}
 
 function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-UG'); }
+// Matches server.js's nowStr().date exactly (Kampala/EAT, UTC+3) -- used
+// client-side only to show "claimed today" state without an extra round
+// trip; the server is still the real source of truth on submit.
+function eatTodayStr(){
+  const d = new Date(Date.now() + 3 * 3600000);
+  const pad = n => String(n).padStart(2, '0');
+  return pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()) + '/' + d.getUTCFullYear();
+}
 function skRows(n){
   let html = '';
   for (let i = 0; i < n; i++) html += `
@@ -95,7 +120,7 @@ function toast(msg, isErr){
 // Endpoints that actually move money -- a background service-worker reload
 // (see the registration script near the bottom of this file) waits for this
 // count to hit 0 before ever yanking the page out from under one of these.
-var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete']);
+var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete', '/checkin']);
 window._moneyCallsInFlight = 0;
 async function api(path, opts){
   opts = opts || {};
@@ -259,6 +284,7 @@ window.showPage = async function(name){
   STATE.page = name;
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
+  stopActivityTicker();
   const host = $('pageHost');
   host.innerHTML = skPage();
   if (name === 'home') await renderHome();
@@ -276,6 +302,7 @@ async function renderHome(){
   let html = `
 <div class="brand-hero--full">
   ${waveLinesTR(140,133)}
+  ${treasureChestSvg()}
   <div style="position:relative;padding:22px 20px 0;">
     <div style="display:flex;align-items:center;gap:9px;">
       ${snowflakeSvg('var(--snow-green)',26)}
@@ -303,9 +330,16 @@ async function renderHome(){
   <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openDepositSheet()">${ICONS.deposit}Deposit</button>
   <button class="secondary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openWithdrawSheet()">${ICONS.withdraw}Withdraw</button>
 </div>
-<div class="app-card" style="margin:18px 20px 0;padding:20px 22px;background:var(--snow-green-soft);border-color:transparent;">
-  <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-green);font-weight:700;">Referral Program</div>
-  <div style="font-size:18px;font-weight:800;margin-top:4px;max-width:250px;line-height:1.25;color:var(--snow-ink);">Earn ${(STATE.settings&&STATE.settings.commL1)||27}% on every referral&rsquo;s first investment</div>
+<div style="display:flex;align-items:center;gap:8px;margin:14px 20px 0;padding:8px 14px;border-radius:999px;background:var(--snow-neutral-soft);">
+  <span style="width:6px;height:6px;border-radius:50%;background:var(--snow-green);flex-shrink:0;"></span>
+  <span id="activityTickerText" class="mono" style="font-size:11.5px;color:var(--snow-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Loading activity&hellip;</span>
+</div>
+<div class="app-card" style="margin:12px 20px 0;padding:20px 22px;background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+  <div style="min-width:0;">
+    <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-green);font-weight:700;">Referral Program</div>
+    <div style="font-size:18px;font-weight:800;margin-top:4px;max-width:250px;line-height:1.25;color:var(--snow-ink);">Earn ${(STATE.settings&&STATE.settings.commL1)||27}% on every referral&rsquo;s first investment</div>
+  </div>
+  <button style="flex-shrink:0;border:none;cursor:pointer;font-family:inherit;background:var(--snow-wine);color:#fff;border-radius:999px;padding:5px 12px;font-size:10.5px;font-weight:700;" onclick="openCheckinSheet()">Check In</button>
 </div>
 <div style="display:flex;align-items:baseline;justify-content:space-between;margin:26px 20px 12px;">
   <div class="section-title">Investment Plans</div>
@@ -331,6 +365,7 @@ async function renderHome(){
   });
   html += `</div><div style="height:16px;"></div>`;
   $('pageHost').innerHTML = html;
+  startActivityTicker();
 }
 
 // ── MY PRODUCTS ──
@@ -412,6 +447,32 @@ function startPlanCountdowns(){
   };
   tick();
   _countdownTimer = setInterval(tick, 1000);
+}
+
+// Thin rotating "recent activity" strip on Home -- simulated, not real
+// transactions (see server.js's /public/activity-feed, which says the same
+// thing; this is just the first frontend consumer of a feed that already
+// existed). Cleared on every page change the same way _countdownTimer is,
+// so it never keeps writing into a detached DOM node in the background.
+var _activityTimer = null, _activityFeedRows = [], _activityIdx = 0;
+function stopActivityTicker(){ if (_activityTimer) { clearInterval(_activityTimer); _activityTimer = null; } }
+function renderActivityTick(){
+  const el = $('activityTickerText');
+  if (!el || !_activityFeedRows.length) return;
+  const row = _activityFeedRows[_activityIdx % _activityFeedRows.length];
+  _activityIdx++;
+  const verb = row.kind === 'deposit' ? 'just deposited' : 'just withdrew';
+  el.textContent = row.phone + ' ' + verb + ' ' + fmtUGX(row.amount);
+}
+async function startActivityTicker(){
+  stopActivityTicker();
+  const r = await api('/public/activity-feed');
+  if (STATE.page !== 'home' || !$('activityTickerText')) return; // navigated away while awaiting
+  _activityFeedRows = (r.status === 'success' && Array.isArray(r.feed)) ? r.feed : [];
+  if (!_activityFeedRows.length) return;
+  _activityIdx = 0;
+  renderActivityTick();
+  _activityTimer = setInterval(renderActivityTick, 3200);
 }
 
 // ── TEAM ──
@@ -672,6 +733,36 @@ window.openInfoSheet = function(kind){
   };
   const [title, body] = map[kind] || ['Info', ''];
   openSheet(title, `<p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p>`);
+};
+
+window.openCheckinSheet = function(){
+  const a = STATE.account || {};
+  const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
+  const streak = Number(a.checkinStreak) || 0;
+  const claimedToday = a.lastCheckin === eatTodayStr();
+  openSheet('Daily Check-in', `
+    <div class="app-card" style="padding:24px 20px;text-align:center;">
+      <div style="font-size:12.5px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.5px;">Current streak</div>
+      <div class="mono" style="font-size:36px;font-weight:800;margin-top:6px;color:var(--snow-green);">${streak}<span style="font-size:15px;font-weight:600;color:var(--snow-muted);"> day${streak===1?'':'s'}</span></div>
+      <div style="font-size:13px;color:var(--snow-muted);margin-top:12px;line-height:1.5;">Check in daily to keep your streak and earn ${fmtUGX(bonus)} every day.</div>
+      <button class="primary-button" id="checkinBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:20px;" ${claimedToday?'disabled':''} onclick="submitCheckin()">${claimedToday?'Claimed today':'Check In &middot; '+fmtUGX(bonus)}</button>
+    </div>`);
+};
+window.submitCheckin = async function(){
+  const btn = $('checkinBtn');
+  if (!btn || btn.disabled) return;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Checking in…';
+  const r = await post('/checkin', {});
+  if (r.status !== 'success') {
+    btn.disabled = false; btn.textContent = label;
+    return toast(r.message || 'Could not check in', true);
+  }
+  toast(`${fmtUGX(r.bonus)} added — day ${r.streak} streak`);
+  const acc = await api('/account');
+  if (acc.status === 'success') STATE.account = acc.account;
+  closeSheet();
+  if (STATE.page === 'home') renderHome();
 };
 
 window.openRecordsSheet = async function(){

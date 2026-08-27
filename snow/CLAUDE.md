@@ -1205,6 +1205,63 @@ differs before/after, input type toggles to `text`). Cache bumped `v6`→`v7`. N
 API, routing, auth, or page-architecture changes — icon markup + one small stateful
 toggle function only.
 
+## Round 22 (2026-08-27) — Home screen: wired up two already-built-but-unused backend features (check-in, activity feed) + a decorative treasure chest
+
+Owner sent an annotated screenshot (hand-drawn circles) asking for three additions to
+Home: a small "go checkin" box near the Referral Program card, a thin "dummy activity
+checker" strip between the Deposit/Withdraw buttons and that card, and a treasure chest
+hanging from the top-right corner alongside the existing green wave-line decorations
+(sent a reference photo of a red/gold chest, said explicitly not to remove the wave-lines).
+
+**Investigated before building anything**: grepped `user-src/original_module.js` for any
+existing check-in or activity-feed UI — found none. But `server.js` already has a
+complete `POST /checkin` (streak math, `dailyCheckin` bonus, already returns
+`{bonus, streak}`) and a complete `GET /public/activity-feed` (explicitly commented
+"simulated, NOT real transactions" — literally the "dummy activity checker" being asked
+for, already building masked-phone deposit/withdraw rows server-side, refreshed ~4s,
+shared across clients). Both were ported from space8 in Round 12 and never got a Snow
+frontend consumer. This meant no backend work was needed for two of the three asks —
+just wiring existing, complete endpoints to new Home UI.
+
+1. **Activity ticker**: thin pill strip (`#activityTickerText`, single line, ellipsis-
+   truncated) inserted between the buttons row and the Referral Program card. Fetches
+   `/public/activity-feed` once per Home render, then rotates through the returned rows
+   every 3.2s via `setInterval`, rendering e.g. "256****1234 just deposited UGX 200,000"
+   via `.textContent` (not innerHTML — sidesteps any escaping question entirely).
+   `_activityTimer` cleared in `showPage()` on every page change, same pattern
+   `_countdownTimer` already uses, so it never keeps ticking into a detached DOM node.
+2. **Check-in**: small wine-colored pill button ("Check In") added to the Referral
+   Program card via `justify-content:space-between` flexbox (not `position:absolute` —
+   tried that first, reverted after confirming it left a real risk of the heading text's
+   first line colliding with the pill for some `commL1` values/screen widths; flexbox
+   guarantees no collision regardless of content length). Opens a new `openCheckinSheet()`
+   using the existing `openSheet()` pattern (same as Records/About/Rules/Help), showing
+   the real streak + bonus from `STATE.account`/`STATE.settings`, computing "claimed
+   today" client-side via a new `eatTodayStr()` (mirrors server.js's `nowStr().date`
+   exactly, Kampala/UTC+3) so the button is correctly disabled without an extra round
+   trip. `submitCheckin()` posts to `/checkin`, refreshes `STATE.account`, closes the
+   sheet, and re-renders Home if still on it. `/checkin` added to `MONEY_ENDPOINTS` (it
+   credits a real bonus, same "don't let an SW reload interrupt this" protection every
+   other money call already gets).
+3. **Treasure chest**: new `treasureChestSvg()` — a simplified line-art chest (domed lid,
+   banded body, lock plate) in a one-off gold accent (`#E8C468`, not a new palette token,
+   used only here), absolutely positioned with a negative top offset so it's clipped by
+   `.brand-hero--full`'s own `overflow:hidden` for the "hanging in from above" look the
+   owner asked for. Added alongside the existing `waveLinesTR()` call, not replacing it.
+   Purely decorative (`pointer-events:none`, `aria-hidden`) — the request was entirely
+   about placement/appearance, not a tap-to-open mechanic, so none was invented.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright across all 5 required widths with fixture data for
+`/account`, `/public/activity-feed`, etc. — no horizontal overflow, ticker text
+populated and confirmed rotating, checkin sheet screenshotted in both claimable and
+already-claimed-today states. One real debugging detour: the FIRST verification pass
+showed `/account`/`/investments`/`/public/activity-feed` all failing with
+`net::ERR_FAILED` — turned out to be the deployed service worker intercepting
+cross-origin fetches inside the Playwright test browser (a test-harness artifact, not
+an app bug); fixed by launching the test context with `service_workers="block"`. Cache
+bumped `v7`→`v8`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
