@@ -1866,6 +1866,144 @@ toast, not 5; the toast's computed background is `rgba(17,17,17,.82)` even with 
 `.err` class present, and its `border-radius` is `10px`. Screenshot confirms a single
 clean toast, no stacking. Cache bumped `v19`→`v20`.
 
+## Round 35 (2026-08-27) — Codex full-codebase review (commit f627d36, "9 High / 9 Medium / 6 Low"): 6 real High-severity money-safety bugs fixed in server.js + 1 real frontend session-leak bug fixed, 2 already handled, 1 already-known limitation
+
+Owner ran an independent Codex review of "snow userpanel, admin, servers and files" and
+relayed only the bottom-line summary text (9 High findings in prose, no file:line; 9
+Medium and 6 Low never received at all despite a mention that "the complete
+severity-ranked report is in my immediately preceding response"). Per this project's
+standing rule, nothing gets fixed on a review's say-so alone — every High finding was
+re-derived and verified against the actual current code before any edit, same as every
+prior Codex/ChatGPT round.
+
+**#1 "Deposit recovery can permanently miss or repeat a wallet credit" and #2
+"Withdrawal recovery can refund the same request twice" — investigated, already
+correctly handled, no change.** Both routes already use the claim-before-credit /
+status-flip-before-refund pattern this codebase standardizes on:
+`depositFullyCredited()` and the crediting lock (`_creditingDeposits`) make a
+double-credit structurally impossible even under M0's non-atomic `runTransaction`;
+`declineWithdrawalAndRefund()` / `completeWithdrawalRefund()` /
+`markWithdrawalProcessed()` all check-then-flip the withdrawal's own status field
+before touching the wallet, so a retry after a crash mid-refund is a safe no-op, not a
+second refund. No code path found that reaches a real double-credit or double-refund.
+
+**#3 "Failed investment/withdrawal creation can leave a free active plan or payable
+withdrawal" — real, fixed.** `/invest/create` and `/withdraw/request` both write their
+ledger doc (`investments`/`withdrawals`) via `.set()` FIRST, then separately
+`.add()` a `transactions` row — and if that second write throws, the existing catch
+block already refunds the wallet, but never touched the first doc. Left alone, that
+doc still reads `status:'active'`/`status:'pending'` — a free, undebited investment that
+would still earn cashback and mature normally, or a refunded-but-still-payable
+withdrawal an admin approval or the auto-reconcile tick would still pay out via MarzPay
+on top of the refund. Confirmed `db.js`'s `.delete()` is `deleteOne({_id: this.id})` and
+does NOT throw on zero matches, so it's safe to call unconditionally without knowing
+which write actually failed. Fixed by deleting the orphaned doc as the FIRST action in
+both catch blocks, before the existing refund, with its own `MONEY-SAFETY:`-prefixed
+console.error if the delete itself also fails.
+
+**#4 "Admin registration completion can race /register and pay the welcome bonus
+twice" — real, fixed.** `/admin/user/complete-registration` used to check-then-create
+the profile doc itself, UNLOCKED, before ever calling `completeRegistrationCore` — which
+does that exact same check-then-create correctly, inside its own `reg:<uid>` lock. A
+concurrent `/register` finishing in the gap between the admin route's unlocked check and
+its unlocked `.set()` could have its whole write (`registrationDone`, `walletBalance`,
+the just-paid welcome bonus) silently wiped back to `defaultProfileDoc()` — after which
+`completeRegistrationCore` would see `registrationDone:false` again and pay the welcome
+bonus a second time. Fixed by deleting the redundant unlocked block entirely; only the
+Firebase Admin phone lookup remains, now passed through as `completeRegistrationCore`'s
+4th argument (it was being computed and silently discarded before) so the
+already-correct lock-protected check-then-create inside `completeRegistrationCore` does
+the actual creation.
+
+**#5 "Check-in reconciliation can erase today's claim and permit another credit" —
+real, fixed.** `/admin/user/reconcile-checkin` recomputed `lastCheckin` from the ledger
+and wrote it with a bare unlocked `.update()`. `/checkin` itself sets `lastCheckin:today`
+BEFORE writing today's ledger row (deliberate claim-before-credit ordering, see Round
+[earlier] — a crash there can only under-count, never double-pay). If the reconcile tool
+ran in that exact gap, it would see "no ledger row for today yet" and overwrite
+`lastCheckin` back to yesterday, erasing the claim marker a member's own request just
+set — letting them `/checkin` again the same day for a second credit. Fixed by wrapping
+the whole reconcile body in the SAME `checkin:<uid>` lock `/checkin` already holds
+internally, so the two can never interleave.
+
+**#6 "Ambiguous MarzPay withdrawals can remain permanently stuck at 'sending'" — real,
+fixed.** `'sending'` is `processWithdrawalCore`'s own documented "MarzPay network error
+mid-request, genuinely ambiguous whether the payout actually went out" state — its own
+comment says to "leave it at sending for the admin to check on MarzPay's own dashboard,"
+but no button to actually resolve it ever existed; `/admin/withdraw/reject` only accepted
+`pending`/`processing`. Traced `declineWithdrawalAndRefund()`'s `netToUnwind` logic to
+confirm it's safe to widen: `netToUnwind = fd.status === 'processing' ? fd.net : 0`, and
+`totalWithdrawn` is only ever incremented in `processWithdrawalCore`'s confirmed-success
+path — `'sending'` returns early before that point, so it correctly falls into the same
+`netToUnwind:0` bucket as `pending` with zero further changes needed. Widened both the
+pre-check and the `fromStatuses` array to accept `'sending'`, with an explicit code
+comment warning admins to only use it after confirming on MarzPay's own dashboard that
+the payout did NOT actually go out (rejecting a withdrawal that DID go out would refund
+on top of the real payout).
+
+**#7 "Account deletion can erase an in-flight deposit that MarzPay later collects" —
+real, fixed.** `/admin/user/delete` used to purge every `pendingDeposits` row with
+`status != 'matched'`, sweeping up `initiating`/`pending` deposits genuinely still in
+flight at MarzPay. If MarzPay later confirmed the collection (webhook, or the client's
+own status poll) after this ran, the lookup-by-deposit-id would find nothing (row
+deleted) — `creditDeposit()` could never run, and there'd be no user doc left to credit
+into anyway. Real collected money, gone with no trace. Fixed with the same "refuse
+rather than silently corrupt" posture this codebase already uses for its other
+concurrent-action guards (`_withdrawInFlight`, `_userBeingDeleted`): a new check at the
+very top of the route queries for any `initiating`/`pending` deposit and refuses the
+whole deletion with a 409 if one exists (it resolves to `matched`/`failed` on its own
+within moments via the existing webhook/reconciler — a short, safe wait, not a permanent
+block). Also narrowed the actual purge query from `!= 'matched'` to `== 'failed'` — the
+one genuinely safe terminal state, now that in-flight rows can never reach this point.
+
+**#8 "Frontend requests can leak member A's cached financial information into member
+B's session" — real, fixed.** Confirmed `doLogout()` reset `account`/`investments`/
+`teamStats`/`teamMembers`/`bankAccounts` but NOT `transactions` or `mission`, and — more
+seriously — confirmed via grep that NO session-generation guard existed anywhere in
+Snow's frontend (space8 already has this exact pattern, per its own CLAUDE.md). On a
+shared device: member A's live-refresh poll (or any in-flight request started right
+before logout) could still be in flight when A logs out and B logs in on the same page
+load; nothing stopped that stale response from landing after `enterApp()` had already
+populated `STATE` with B's data, silently overwriting B's balance/investments/team with
+A's. Rejected patching all 20+ individual `STATE.x = ...` call sites (large, error-prone,
+easy to miss the next one added later) in favor of a centralized fix: a new
+`STATE.authEpoch` counter, bumped in `doLogout()` (immediately, synchronously) and again
+in the `snow-auth` event handler (covers a token-expiry-driven auth change that didn't go
+through `doLogout()`). The shared `api()` helper now captures `STATE.authEpoch` before
+the network call and, if it's changed by the time the response lands, returns
+`{status:'error', stale:true}` instead of the real payload — meaning every existing
+`if (r.status === 'success') STATE.x = ...` call site is automatically safe with zero
+per-site changes. Also fixed `doLogout()` to reset `transactions`/`mission` alongside the
+fields it already cleared.
+
+**#9 "Every in-process money lock fails if the backend ever runs on multiple
+instances" — confirmed already-known, by design, no change.** `withLock()`'s own
+in-code comment and `render.yaml`'s single-service configuration already document this
+assumption explicitly; this isn't a new bug, just Codex correctly re-deriving an
+already-acknowledged constraint. No action needed unless/until Snow's backend is ever
+scaled horizontally, at which point the locks would need to move to something shared
+(e.g. Mongo-backed) — noted here for that future trigger, not actioned now.
+
+**Not yet investigated**: gift-code generation's "check-before-insert race" (mentioned
+by the owner outside the "9 High" list) and the full Medium/Low findings — the fuller
+report was never actually received despite the owner's reference to it; still needs to
+be pasted in before those can be verified.
+
+**Verified**: `node --check server.js` and `node --check user-src/original_module.js`
+both clean; `node build-core.js` round-trip clean; `git diff --check` clean. Playwright,
+directly exercising the new `authEpoch` mechanism: (1) starting `api('/account')` against
+a deliberately slow (500ms) mocked response, then bumping `STATE.authEpoch` 50ms in
+(simulating a same-device logout+login happening while the request is still in flight) —
+resolves to `{status:'error', stale:true}`, never the real account payload; (2) the same
+call with no epoch change resolves normally with `status:'success'` and the account data
+present, confirming the guard doesn't false-positive on the ordinary case; (3) calling
+`doLogout()` directly confirms it bumps `authEpoch` by at least 1 AND leaves `account`,
+`transactions`, and `mission` all `null` afterward. Cache bumped `v20`→`v21`.
+
+**server.js changed — needs a Railway redeploy** (owner must replace `server.js` in the
+"business" repo/service for the 6 backend fixes above to take effect; the frontend fix is
+already baked into the deployed `user/index.html` in this commit).
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

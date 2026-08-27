@@ -1411,6 +1411,14 @@ app.post('/invest/create', async (req, res) => {
           status: 'success', date, time, investmentId: invRef.id, createdAt: FieldValue.serverTimestamp()
         });
       } catch (createErr) {
+        // Codex-caught real bug: invRef.set() can succeed while the
+        // following transactions.add() throws -- the refund below fixes the
+        // wallet, but WITHOUT this delete the investments doc stays behind
+        // with status:'active', a free plan with no matching debit that
+        // would still earn cashback and mature normally.
+        await invRef.delete().catch(delErr => {
+          console.error(`MONEY-SAFETY: investment ${invRef.id} ledger-row write failed AND the investment doc itself could not be deleted -- a free undebited active investment may be left behind for user ${userId}. Manual fix required.`, delErr.message);
+        });
         await uRef.update({ walletBalance: FieldValue.increment(liveTier.price), totalInvested: FieldValue.increment(-liveTier.price), firstInvestmentDone: wasFirstInvestmentDone }).catch(compErr => {
           console.error(`MONEY-SAFETY: investment ${invRef.id} creation failed AFTER debiting user ${userId} ${liveTier.price}, and the compensating refund ALSO failed -- wallet is short by ${liveTier.price}. Manual fix required.`, compErr.message);
         });
@@ -1755,6 +1763,15 @@ app.post('/withdraw/request', async (req, res) => {
           amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
         });
       } catch (createErr) {
+        // Codex-caught real bug: same shape as the investment path above --
+        // witRef.set() can succeed while transactions.add() throws, leaving
+        // a status:'pending' withdrawal doc behind even after the refund
+        // below restores the wallet. Left alone, admin approval or the
+        // auto-approve/reconcile tick would still see it as a real pending
+        // withdrawal and pay it out via MarzPay on top of the refund.
+        await witRef.delete().catch(delErr => {
+          console.error(`MONEY-SAFETY: withdrawal ${witRef.id} ledger-row write failed AND the withdrawal doc itself could not be deleted -- a refunded-but-still-payable withdrawal may be left behind for user ${userId}. Manual fix required.`, delErr.message);
+        });
         await uRef.update({ walletBalance: FieldValue.increment(amt) }).catch(compErr => {
           console.error(`MONEY-SAFETY: withdrawal ${witRef.id} creation failed AFTER debiting user ${userId} ${amt}, and the compensating refund ALSO failed -- wallet is short by ${amt}. Manual fix required.`, compErr.message);
         });
@@ -2661,14 +2678,22 @@ app.post('/admin/user/complete-registration', async (req, res) => {
   const pin = String(req.body.pin || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const ref = db.collection('users').doc(userId);
-    const existing = await ref.get();
-    if (!existing.exists) {
-      let phone = '';
-      try { const rec = await admin.auth().getUser(userId); phone = cleanPhone((rec.email || '').split('@')[0]) || ''; } catch (_) {}
-      await ref.set(defaultProfileDoc(phone));
-    }
-    const result = await completeRegistrationCore(userId, req.body.referralCode, pin);
+    // Codex-caught real bug: this used to check-then-create the profile doc
+    // here, UNLOCKED, before ever calling completeRegistrationCore -- which
+    // does that exact same check-then-create itself, but correctly, INSIDE
+    // its own reg:+userId lock (see its own body). A concurrent /register
+    // call finishing registration in the gap between this unlocked check and
+    // this unlocked .set() could have its whole write (registrationDone,
+    // walletBalance, the just-paid welcome bonus) silently wiped back to
+    // defaultProfileDoc() by this .set() landing after -- completeRegistrationCore
+    // would then see registrationDone:false again and pay the welcome bonus
+    // a second time. Fixed by just not doing this here at all: only the
+    // phone lookup is still needed (for a genuinely missing doc), passed
+    // through so the lock-protected check-then-create inside
+    // completeRegistrationCore does the actual creation safely.
+    let phone = '';
+    try { const rec = await admin.auth().getUser(userId); phone = cleanPhone((rec.email || '').split('@')[0]) || ''; } catch (_) {}
+    const result = await completeRegistrationCore(userId, req.body.referralCode, pin, phone);
     if (result.code === 200) logAdminAction(req, 'user_registration_completed', { userId });
     res.status(result.code).json(result.body);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -2786,21 +2811,33 @@ app.post('/admin/user/reconcile-checkin', async (req, res) => {
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const uSnap = await db.collection('users').doc(userId).get();
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    const before = { checkinStreak: uSnap.data().checkinStreak || 0 };
-    const ledgerSnap = await db.collection('transactions')
-      .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
-    const dayKeys = new Set();
-    ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
-    const real = computeCheckinStreak(dayKeys);
-    const after = { checkinStreak: real.streak };
-    await db.collection('users').doc(userId).update({ checkinStreak: real.streak, lastCheckin: real.lastCheckin });
-    logAdminAction(req, 'checkin_reconciled', { userId, streak: real.streak });
-    // Codex-caught real bug: this used to send {streak, lastCheckin} while
-    // the admin UI reads d.before.checkinStreak/d.after.checkinStreak/
-    // d.changed -- the button threw on every click. Shape fixed to match.
-    res.json({ status: 'success', before, after, changed: before.checkinStreak !== after.checkinStreak, lastCheckin: real.lastCheckin });
+    // Codex-caught real bug: this recomputed lastCheckin purely from the
+    // transaction ledger and wrote it with a bare .update(), completely
+    // unguarded by the checkin:<uid> lock /checkin itself holds. /checkin
+    // sets lastCheckin=today BEFORE writing today's own ledger row (a
+    // deliberate claim-before-credit ordering so a crash there can only
+    // under-count, never double-pay) -- if this reconcile tool runs in that
+    // exact gap, it would see "no ledger row for today yet" and overwrite
+    // lastCheckin back to yesterday, erasing the claim marker the user's
+    // own request just set. The member could then call /checkin again the
+    // same day and get credited a second time. Wrapped in the same lock so
+    // the two can never interleave.
+    let result = null;
+    await withLock('checkin:' + userId, async () => {
+      const uSnap = await db.collection('users').doc(userId).get();
+      if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
+      const before = { checkinStreak: uSnap.data().checkinStreak || 0 };
+      const ledgerSnap = await db.collection('transactions')
+        .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
+      const dayKeys = new Set();
+      ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
+      const real = computeCheckinStreak(dayKeys);
+      const after = { checkinStreak: real.streak };
+      await db.collection('users').doc(userId).update({ checkinStreak: real.streak, lastCheckin: real.lastCheckin });
+      logAdminAction(req, 'checkin_reconciled', { userId, streak: real.streak });
+      result = { code: 200, body: { status: 'success', before, after, changed: before.checkinStreak !== after.checkinStreak, lastCheckin: real.lastCheckin } };
+    });
+    res.status(result.code).json(result.body);
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Recomputes teamL1/L2/L3 counts for the WHOLE referral tree hanging off one
@@ -2834,6 +2871,22 @@ app.post('/admin/user/delete', async (req, res) => {
   try {
     const uSnap = await db.collection('users').doc(userId).get();
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    // Codex-caught real bug: this used to delete every pendingDeposits row
+    // with status != 'matched', which also swept up 'initiating'/'pending'
+    // deposits that are genuinely still in flight at MarzPay -- not
+    // resolved yet, not a dead end. If MarzPay later confirmed the
+    // collection (webhook, or the client's own status poll) after this ran,
+    // the lookup by deposit id would find nothing (row deleted), so
+    // creditDeposit() could never run -- and even if it somehow could,
+    // there'd be no user doc left to credit into. Real collected money,
+    // gone with no trace. Refuse the deletion outright while any such
+    // deposit exists, same "refuse rather than silently corrupt" posture
+    // this codebase already uses for concurrent-action guards elsewhere --
+    // it resolves to 'matched' or 'failed' on its own within moments via
+    // the existing webhook/reconciler, so this is a short, safe wait, not a
+    // permanent block.
+    const inFlightDepSnap = await db.collection('pendingDeposits').where('userId', '==', userId).where('status', 'in', ['initiating', 'pending']).limit(1).get();
+    if (!inFlightDepSnap.empty) return res.status(409).json({ status: 'error', message: 'This account has a deposit still being confirmed with the payment provider. Wait a moment for it to settle, then try deleting again.' });
     // Reparent this account's own direct referrals up to ITS referrer, so a
     // deleted account never leaves a permanently orphaned downline.
     const parentId = uSnap.data().referredBy || null;
@@ -2849,11 +2902,14 @@ app.post('/admin/user/delete', async (req, res) => {
     // account, keep the books" behavior. The admin UI's confirm prompt says
     // this explicitly now -- it used to claim "ALL data: deposits,
     // withdrawals, plans, transactions" would go, which was never true.
+    // Only 'failed' pendingDeposits are purged here -- a real terminal
+    // state, safe to remove (see the in-flight guard above for why
+    // 'initiating'/'pending' can never reach this point).
     const [bankSnap, promoSnap, secSnap, depSnap] = await Promise.all([
       db.collection('bankAccounts').where('userId', '==', userId).get(),
       db.collection('promoRedemptions').where('userId', '==', userId).get(),
       db.collection('securityEvents').where('userId', '==', userId).get(),
-      db.collection('pendingDeposits').where('userId', '==', userId).where('status', '!=', 'matched').get(),
+      db.collection('pendingDeposits').where('userId', '==', userId).where('status', '==', 'failed').get(),
     ]);
     await Promise.all([
       ...bankSnap.docs.map(d => d.ref.delete()),
@@ -3015,8 +3071,20 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     const snap = await ref.get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
-    if (w.status !== 'pending' && w.status !== 'processing') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
-    const refunded = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing']);
+    // Codex-caught real bug: 'sending' (a MarzPay network error mid-request
+    // -- genuinely ambiguous whether the payout went out, see
+    // processWithdrawalCore's own comment) was never an accepted status
+    // here, and nothing else in the codebase ever resolves it either --
+    // once a withdrawal landed on 'sending' it was permanently stuck, with
+    // literally no code path able to move it anywhere else. This is exactly
+    // the recovery action that comment describes ("leave it at 'sending'
+    // for the admin to check on MarzPay's own dashboard") but the button to
+    // actually do it never existed. Only use this for a 'sending' row after
+    // manually confirming on MarzPay's dashboard that it was NOT actually
+    // sent -- if MarzPay's dashboard shows it WAS sent, take no action here
+    // (the payout already happened; rejecting would refund on top of it).
+    if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
+    const refunded = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending']);
     if (refunded) await finalizeWithdrawalTransactionRecord(witId, 'declined');
     logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId });
     res.json({ status: 'success', message: 'Withdrawal rejected and refunded' });

@@ -88,7 +88,18 @@ function togglePw(id, btn){
 
 // ── STATE ──
 var STATE = { user: null, account: null, settings: null, products: null, investments: null,
-  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, refCode: null, page: 'home', mission: null };
+  teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, refCode: null, page: 'home', mission: null,
+  // Codex-caught real bug: on a shared device, a request started by member A
+  // (e.g. the live-refresh poll, or a tab opened right before logout) could
+  // still be in flight when A logs out and B logs in on the same page load --
+  // there was nothing stopping that stale response from landing and writing
+  // A's balance/investments/team into STATE right after enterApp() just
+  // populated it with B's data. Bumped on every auth transition (doLogout()
+  // and the snow-auth handler below); api()/post() capture the epoch before
+  // the network call and discard the response if it's changed by the time
+  // the response lands, so every existing `if (r.status === 'success')
+  // STATE.x = ...` call site is automatically safe with no per-site changes.
+  authEpoch: 0 };
 
 function toast(msg, isErr){
   const el = document.createElement('div');
@@ -108,6 +119,11 @@ async function api(path, opts){
   opts = opts || {};
   const isMoneyCall = MONEY_ENDPOINTS.has(path);
   if (isMoneyCall) window._moneyCallsInFlight++;
+  // Captured before the network round-trip, checked after -- if a logout or
+  // a different user's login happened while this request was in flight (see
+  // STATE.authEpoch's own comment), the response belongs to a session that
+  // no longer exists on screen and must never be written into STATE.
+  const startEpoch = STATE.authEpoch;
   try {
     const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
     if (window.fbAuth && window.fbAuth.currentUser) {
@@ -121,6 +137,7 @@ async function api(path, opts){
     }
     let data;
     try { data = await resp.json(); } catch (_) { data = { status: 'error', message: 'Unexpected response from server' }; }
+    if (STATE.authEpoch !== startEpoch) return { status: 'error', message: 'Session changed', stale: true };
     return data;
   } finally {
     if (isMoneyCall) window._moneyCallsInFlight--;
@@ -184,7 +201,8 @@ window.doRegister = async function(){
 };
 window.doLogout = async function(){
   stopLiveRefresh();
-  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null });
+  STATE.authEpoch++;
+  Object.assign(STATE, { account: null, investments: null, teamStats: null, teamMembers: {1:null,2:null,3:null}, bankAccounts: null, transactions: null, mission: null });
   await window.fbSignOut();
 };
 
@@ -205,6 +223,11 @@ function captureReferralFromUrl(){
 // ── AUTH STATE HANDLER ──
 window.addEventListener('snow-auth', async (ev) => {
   const user = ev.detail;
+  // Also bump here (not just doLogout()) -- this is what actually fires when
+  // a DIFFERENT user logs in right after, and it's the guard that matters if
+  // Firebase's own token expiry/refresh ever drops us out without doLogout()
+  // having run first.
+  STATE.authEpoch++;
   STATE.user = user;
   if (!user) {
     $('loadingScreen').style.display = 'none';
