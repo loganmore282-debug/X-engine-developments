@@ -16,6 +16,47 @@ on.
 
 ---
 
+## 2026-08-26 — Claude — Round 17: Codex review of Round 16's own fix commit — 1 High fixed + 1 High acknowledged (already documented) + 2 Medium fixed + 1 Low fixed
+- Full breakdown in CLAUDE.md's Round 17 section — summary here:
+- High (fixed): `/admin/user/attach-referrer` locking only `'reg:'+userId` still left a
+  cross-user race — a different user's own `/register` or attach-referrer call uses a
+  DIFFERENT `'reg:'` key, so two concurrent admin calls attaching U->R and R->U could
+  both pass the cycle check before either wrote, producing a genuine referral cycle.
+  Fixed with a new `withLock2(keyA, keyB, fn)` helper (always sorted acquisition order,
+  same-key guard against self-deadlock) locking BOTH users' `'reg:'` keys. Verified
+  empirically with a standalone script firing two `withLock2` calls in opposite key
+  order and confirming genuine serialization, not just reasoning about the code.
+- High (acknowledged, not re-litigated): Codex itself called the "resumability doesn't
+  restore missing team counts" gap "a documented limitation rather than an accidentally
+  hidden one" — Round 16's own comment already said so. With the routine concurrency
+  path now closed by the fix above, what's left is a genuine process-crash-only edge
+  case, same accepted-tradeoff class this codebase already carries elsewhere. Considered
+  reusing the existing `recomputeTeamCounts()` helper to close it properly, traced its
+  actual level-by-level semantics, and rejected that under review-round time pressure —
+  didn't want to risk introducing a new counting bug while chasing this one.
+- Medium: `/admin/user/repair-ledger` read+overwrote `totalWithdrawn` with no lock, while
+  every withdrawal status transition that touches the same field is serialized through
+  `withLock('bal:'+userId, ...)` — a repair running mid-settlement could land a stale
+  total that a concurrent decline's own subtraction then applies on top of, permanently
+  under-counting. Fixed by wrapping repair-ledger's read-compute-write in that same lock.
+  Integrity Audit's "Open user" link (Round 16) is honest but the panel genuinely has no
+  tool that can close a wallet-vs-ledger mismatch (Credit/Debit move both sides equally,
+  so neither changes the gap) — said so explicitly in the modal's copy rather than
+  building a new "resolve mismatch" feature under time pressure.
+- Low: `commissionTriggered` used to mean "a qualifying investment exists," not "money
+  actually moved" — `creditReferralCommission()` now returns whether it truly paid a NEW
+  level this call, and the caller uses that instead of inferring it.
+- Why: owner ran this project's standing Codex-review prompt against Round 16's own fix
+  commit — third consecutive round of "review the fix, not just the original bug."
+- Verification: `node --check server.js`; boot smoke test still fails only at Mongo-
+  connect; `build-admin.js` re-run clean; `test-admin-obfuscated-build.js` still 0 errors;
+  a standalone (uncommitted) Node script empirically confirmed `withLock2`'s
+  serialization and same-key-twice safety before trusting it. `admin/sw.js` cache bumped
+  `v6`→`v7`.
+- Deferred (documented, not silently dropped): the crash-window team-count gap above; a
+  real "resolve integrity mismatch" workflow (trust-wallet vs. trust-ledger, typed
+  confirm, audit-logged) — flagged as a genuine future feature, not a bug fix.
+
 ## 2026-08-26 — Claude — Round 16: Codex review of Round 15's own fix commit — 2 High + 2 Medium + 1 Low, all real, all fixed
 - Full breakdown in CLAUDE.md's Round 16 section — summary here:
 - High: `/admin/user/attach-referrer` locked an unrelated global key instead of the same

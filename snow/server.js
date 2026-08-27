@@ -482,6 +482,19 @@ function withLock(key, fn) {
   return run;
 }
 const _userBeingDeleted = new Set();
+// Locks TWO keys for one operation, always acquiring them in the same
+// deterministic (sorted) order regardless of call-site argument order --
+// required so two operations that both need keyA+keyB can never deadlock
+// by acquiring them in opposite orders (withLock's promise-chain "lock" has
+// no timeout/detection, so an actual opposite-order acquisition would hang
+// forever, not just contend). Only introduce this pattern where a single
+// withLock(key) genuinely isn't enough — see /admin/user/attach-referrer's
+// own comment for why it needs both users' keys.
+function withLock2(keyA, keyB, fn) {
+  if (keyA === keyB) return withLock(keyA, fn); // same key twice would deadlock (waits on its own tail)
+  const [first, second] = [keyA, keyB].sort();
+  return withLock(first, () => withLock(second, fn));
+}
 
 async function verifyAuth(req) {
   const header = req.headers.authorization || '';
@@ -807,19 +820,25 @@ async function settleAllForUser(userId) {
 // investment doc; each level is CLAIMED before its wallet credit so a crash
 // mid-loop can only ever under-pay (visible, fixable by hand), never repeat
 // a payment on the next reconciler tick.
+// Returns whether this call actually paid a NEW level (false for a no-op
+// re-check, e.g. everything already paid, buyer/level ineligible, or no
+// referrer at all) -- callers that report "commission credited" to an
+// admin/owner should use this instead of assuming a qualifying investment
+// existing means money moved.
 async function creditReferralCommission(investmentId, buyerId, amount) {
-  await withLock('comm:' + investmentId, async () => {
+  return withLock('comm:' + investmentId, async () => {
+    let paidAny = false;
     const invRef = db.collection('investments').doc(investmentId);
     const invSnap = await invRef.get();
-    if (!invSnap.exists) return;
-    if (invSnap.data().isFirstInvestment !== true) { await invRef.update({ commissionPending: false }); return; }
+    if (!invSnap.exists) return paidAny;
+    if (invSnap.data().isFirstInvestment !== true) { await invRef.update({ commissionPending: false }); return paidAny; }
     const paidLevels = invSnap.data().commissionPaidLevels || [];
 
     const sett = await getSettings();
     const buyerSnap = await db.collection('users').doc(buyerId).get();
-    if (!buyerSnap.exists || buyerSnap.data().status === 'banned') { await invRef.update({ commissionPending: false }); return; }
+    if (!buyerSnap.exists || buyerSnap.data().status === 'banned') { await invRef.update({ commissionPending: false }); return paidAny; }
     const l1Id = buyerSnap.data().referredBy;
-    if (!l1Id) { await invRef.update({ commissionPending: false }); return; }
+    if (!l1Id) { await invRef.update({ commissionPending: false }); return paidAny; }
     const rates = [sett.commL1, sett.commL2, sett.commL3];
     const l1Snap = await db.collection('users').doc(l1Id).get();
     let chain = [{ id: l1Id, snap: l1Snap }];
@@ -851,8 +870,10 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
         userId: id, type: 'commission', description: `Level ${i + 1} reward`,
         amount: reward, status: 'success', date, time, investmentId, createdAt: FieldValue.serverTimestamp()
       });
+      paidAny = true;
     }
     await invRef.update({ commissionPending: false });
+    return paidAny;
   });
 }
 
@@ -2445,43 +2466,55 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
   const userId = String(req.body.userId || '');
   if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
   try {
-    const [uSnap, txSnap, invSnap, witSnap] = await Promise.all([
-      db.collection('users').doc(userId).get(),
-      db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
-      db.collection('investments').where('userId', '==', userId).get(),
-      // Codex-caught real bug (round 2): live crediting increments
-      // totalWithdrawn the moment a payout is marked 'processing' (MarzPay
-      // accepted it, see the send-money handler's own totalWithdrawn
-      // increment), not only once it reaches 'processed' -- and nothing
-      // increments it again when 'processing' later resolves to
-      // 'processed' (only the status field changes at that point). Scoping
-      // this query to 'processed' only would UNDER-count any user with a
-      // currently-processing withdrawal, permanently (a later recalculate
-      // run would "fix" it back down to the wrong number every time).
-      db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['processing', 'processed']).limit(5000).get(),
-    ]);
-    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
-    let deposited = 0, earned = 0;
-    txSnap.forEach(d => {
-      const t = d.data();
-      // Same earning-type list and admin_credit inclusion as recountAllTotals()
-      // — this is the single-user version of the same tool, must stay in lockstep.
-      if (t.type === 'deposit' || t.type === 'admin_credit') deposited += finiteMoney(t.amount);
-      else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) earned += finiteMoney(t.amount);
+    // Codex-caught real bug (round 3): every withdrawal status transition
+    // that touches totalWithdrawn (send, decline, verify, reconcile — see
+    // every other withLock('bal:'+userId, ...) site in this file) is
+    // serialized through this exact lock key. Reading+overwriting
+    // totalWithdrawn here without it could race a settlement mid-flight:
+    // e.g. repair reads a withdrawal as still 'processing' (so it's
+    // included) right as the decline path is about to subtract its net
+    // from totalWithdrawn — repair's overwrite lands with the OLD
+    // (too-high) total included, then decline's own subtraction runs on
+    // top of that, leaving totalWithdrawn too LOW by that amount, permanently.
+    const result = await withLock('bal:' + userId, async () => {
+      const [uSnap, txSnap, invSnap, witSnap] = await Promise.all([
+        db.collection('users').doc(userId).get(),
+        db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
+        db.collection('investments').where('userId', '==', userId).get(),
+        // Live crediting increments totalWithdrawn the moment a payout is
+        // marked 'processing' (MarzPay accepted it, see the send-money
+        // handler's own totalWithdrawn increment), not only once it
+        // reaches 'processed' -- and nothing increments it again when
+        // 'processing' later resolves to 'processed' (only the status
+        // field changes at that point). Scoping this query to 'processed'
+        // only would UNDER-count any user with a currently-processing
+        // withdrawal, permanently.
+        db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['processing', 'processed']).limit(5000).get(),
+      ]);
+      if (!uSnap.exists) return { notFound: true };
+      let deposited = 0, earned = 0;
+      txSnap.forEach(d => {
+        const t = d.data();
+        // Same earning-type list and admin_credit inclusion as recountAllTotals()
+        // — this is the single-user version of the same tool, must stay in lockstep.
+        if (t.type === 'deposit' || t.type === 'admin_credit') deposited += finiteMoney(t.amount);
+        else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) earned += finiteMoney(t.amount);
+      });
+      let invested = 0;
+      invSnap.forEach(d => { invested += finiteMoney(d.data().amount); });
+      // This used to sum the withdraw transaction rows' `amount` field,
+      // which stores the GROSS requested amount (negated) -- live crediting
+      // (see the several FieldValue.increment(wit.net) sites above) tracks
+      // totalWithdrawn by NET payout. Recomputed from the withdrawals
+      // collection's own `net` field instead, scoped to withdrawals the
+      // live code path has actually credited against.
+      let withdrawn = 0;
+      witSnap.forEach(d => { withdrawn += finiteMoney(d.data().net); });
+      await db.collection('users').doc(userId).update({ totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested });
+      return { notFound: false, deposited, earned, withdrawn, invested };
     });
-    let invested = 0;
-    invSnap.forEach(d => { invested += finiteMoney(d.data().amount); });
-    // Codex-caught real bug: this used to sum the withdraw transaction rows'
-    // `amount` field, which stores the GROSS requested amount (negated) --
-    // live crediting (see the several FieldValue.increment(wit.net) sites
-    // above) tracks totalWithdrawn by NET payout. Summing gross here would
-    // inflate totalWithdrawn above what the platform actually paid out.
-    // Recomputed from the withdrawals collection's own `net` field instead,
-    // scoped to withdrawals the live code path has actually credited
-    // against ('processing' or 'processed' — see the query comment above).
-    let withdrawn = 0;
-    witSnap.forEach(d => { withdrawn += finiteMoney(d.data().net); });
-    await db.collection('users').doc(userId).update({ totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested });
+    if (result.notFound) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const { deposited, earned, withdrawn, invested } = result;
     logAdminAction(req, 'user_ledger_repaired', { userId, deposited, earned, withdrawn, invested });
     res.json({ status: 'success', totals: { totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -2518,24 +2551,40 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
   const code = String(req.body.referralCode || '').trim();
   if (!userId || !code) return res.status(400).json({ status: 'error', message: 'userId and referralCode required' });
   try {
+    // Look up the candidate referrer BEFORE locking anything -- we need to
+    // know referrerId's identity to lock it, and referral codes don't
+    // change, so an unlocked read here is safe (re-verified inside the
+    // lock below before anything is written).
+    const preSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
+    if (preSnap.empty) return res.status(400).json({ status: 'error', message: 'That referral code does not exist.' });
+    const candidateReferrerId = preSnap.docs[0].id;
+    if (candidateReferrerId === userId) return res.status(400).json({ status: 'error', message: 'Cannot refer yourself.' });
     let referrerId;
     // Codex-caught real bug (round 2): this used to lock a bare, unrelated
     // 'attach-referrer' global key, which does NOT serialize against a
-    // concurrent /register call for the SAME user — that path locks
-    // 'reg:'+userId and 'referrer-guard:'+referrerId. A member finishing
-    // registration with one referral code at the exact moment an admin
-    // attached a different one could both read referredBy===null and both
-    // write, corrupting both uplines' counts. Locking the same 'reg:'+userId
-    // key registration itself uses gives this real mutual exclusion.
-    await withLock('reg:' + userId, async () => {
+    // concurrent /register call for the SAME user.
+    // Codex-caught real bug (round 3): locking only 'reg:'+userId still
+    // left a cross-user race — e.g. attaching U to R concurrently with R
+    // itself registering/being attached to a parent P could read R's
+    // referredBy before P's write lands (missing R's own upline's L2/L3
+    // count), or two concurrent admin calls attaching U->R and R->U could
+    // both pass the cycle check before either writes, creating a genuine
+    // referral cycle. Locking BOTH 'reg:'+userId AND 'reg:'+referrerId
+    // (see withLock2, always sorted to avoid deadlock) closes both: any
+    // other operation that touches either user's own 'reg:' key --
+    // including a concurrent registration or attach-referrer call for
+    // EITHER of them -- now genuinely serializes against this one.
+    await withLock2('reg:' + userId, 'reg:' + candidateReferrerId, async () => {
       const uRef = db.collection('users').doc(userId);
       const uSnap = await uRef.get();
       if (!uSnap.exists) throw Object.assign(new Error('User not found'), { code: 404 });
-      const refSnap = await db.collection('users').where('referralCode', '==', code).limit(1).get();
-      if (refSnap.empty) throw Object.assign(new Error('That referral code does not exist.'), { code: 400 });
-      referrerId = refSnap.docs[0].id;
-      if (referrerId === userId) throw Object.assign(new Error('Cannot refer yourself.'), { code: 400 });
-      if (refSnap.docs[0].data().status === 'banned') throw Object.assign(new Error('That referral code is no longer active.'), { code: 400 });
+      // Re-verify inside the lock -- the pre-lock read above could be
+      // stale if the referrer account changed state while we were
+      // acquiring the lock (banned in the meantime, etc).
+      const refSnap = await db.collection('users').doc(candidateReferrerId).get();
+      if (!refSnap.exists) throw Object.assign(new Error('That referral code does not exist.'), { code: 400 });
+      referrerId = candidateReferrerId;
+      if (refSnap.data().status === 'banned') throw Object.assign(new Error('That referral code is no longer active.'), { code: 400 });
       const existing = uSnap.data().referredBy;
       // Codex-caught real bug (round 2): rejecting outright on any existing
       // referredBy made a retry after a partial failure (referredBy written,
@@ -2584,12 +2633,17 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
     // creditReferralCommission. Pay it now if a qualifying first
     // investment exists, same idempotent function every other commission
     // path in this file already uses.
+    // Codex-caught real bug (round 3): this used to set commissionTriggered
+    // true just because a qualifying investment EXISTED, even when
+    // creditReferralCommission() paid nothing new (already paid, buyer/
+    // level ineligible, etc) -- a resumed call after the levels were
+    // already credited would still tell the owner "commission credited."
+    // Uses the function's own real return value now.
     let commissionTriggered = false;
     const invSnap = await db.collection('investments').where('userId', '==', userId).where('isFirstInvestment', '==', true).limit(1).get();
     if (!invSnap.empty) {
       const inv = invSnap.docs[0];
-      await creditReferralCommission(inv.id, userId, inv.data().amount);
-      commissionTriggered = true;
+      commissionTriggered = await creditReferralCommission(inv.id, userId, inv.data().amount);
     }
     logAdminAction(req, 'referrer_attached', { userId, referralCode: code, referrerId, commissionTriggered });
     res.json({ status: 'success', commissionTriggered });

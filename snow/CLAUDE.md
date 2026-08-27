@@ -795,6 +795,89 @@ left as-is — a real limitation, not a bug, and building body-inspection into t
 harness wasn't judged worth the added complexity this round. `admin/sw.js` cache bumped
 `v5`→`v6`.
 
+## Round 17 (2026-08-26) — Codex review of Round 16's own fix commit: 1 High + 2 Medium + 1 Low confirmed real, 1 High acknowledged as already-documented, all addressed
+
+Owner ran the standing Codex-review prompt a third time, against Round 16's fix commit
+(`bc83283`). Codex explicitly confirmed the same-user `/register` race from Round 15 is
+genuinely closed and that concurrent retries cannot overpay commission — then found one
+more real concurrency gap this project's own money-safety locking convention exists
+specifically to prevent, plus 3 smaller real issues.
+
+**High — cross-user referral-graph race, real and fixed.** `/admin/user/attach-referrer`
+locked only `'reg:'+userId` (fixed in Round 16) — but a DIFFERENT user's own registration
+or attach-referrer call uses a DIFFERENT `'reg:'+theirId` key, so two operations touching
+different-but-related users (attaching U to R at the same moment R itself is being
+attached to a parent P, or two concurrent admin calls attaching U→R and R→U) still had no
+real mutual exclusion. Concretely demonstrated: two concurrent attach calls (U→R and R→U)
+could both pass the cycle-check before either writes, producing a genuine referral cycle.
+Fixed with a new `withLock2(keyA, keyB, fn)` helper — locks BOTH users' `'reg:'` keys,
+always in the same sorted order regardless of which order the caller passes them in (so
+two operations needing the same two keys can never deadlock by acquiring them in opposite
+order), with a same-key guard (locking the same key against itself would hang forever
+under this project's promise-chain `withLock`, which has no reentrancy). The referrer
+lookup itself now happens in two phases: an unlocked pre-lookup (referral codes don't
+change, safe to read before locking) to learn the referrer's id well enough to lock it,
+then a fresh re-read of both accounts INSIDE the double lock before anything is written.
+**Verified empirically, not just by reasoning** — a standalone Node script fired two
+`withLock2` calls for the same two keys with arguments in OPPOSITE order and confirmed
+genuine serialization (total elapsed time equals the sum of both operations' delays, no
+interleaving) plus confirmed the same-key-twice guard doesn't hang, before trusting the
+fix.
+
+**High — "resumability doesn't restore missing team counts" — acknowledged, not
+re-litigated.** Codex noted Round 16's own comment already documents this as a known,
+accepted crash-window tradeoff (referredBy written, then a crash before L2/L3 counts or
+commission apply — a resumed call skips re-incrementing to stay double-count-safe, so the
+counts stay under-corrected). Codex's own framing: "a documented limitation rather than
+an accidentally hidden one." With finding #1 above now closing the ROUTINE concurrency
+path into this window, what's left is a genuine process-crash-only edge case — the same
+class of risk this codebase already accepts elsewhere (`completeRegistrationCore`,
+`creditReferralCommission`'s own crash-window notes) without a durable outbox/recompute
+mechanism. Not built this round either, for the same reason: real fix needs bigger
+architecture (see the file's own prior "known gaps" list), and reusing the existing
+`recomputeTeamCounts()` helper here was considered and rejected after tracing its actual
+level-by-level semantics — it doesn't compute what this specific gap would need cleanly,
+and adapting it under review-round time pressure risked introducing a new counting bug
+while "fixing" this one.
+
+**Medium — repair-ledger could race a withdrawal settling mid-repair, real and fixed.**
+Every withdrawal status transition that touches `totalWithdrawn` (send, decline, verify,
+reconcile) is serialized through `withLock('bal:'+userId, ...)` — but `/admin/user/
+repair-ledger`'s read-then-overwrite of that same field held no lock at all. Concrete
+failure: repair reads a withdrawal as still `'processing'` (included in its sum) right as
+the decline path is about to subtract its net from `totalWithdrawn`; repair's overwrite
+lands with the stale (too-high) total baked in, then decline's own subtraction runs on
+top of that — `totalWithdrawn` ends up too LOW, permanently. Fixed by wrapping the whole
+read-compute-write in the same `'bal:'+userId` lock key every other withdrawal-total
+mutation already uses.
+
+**Medium — Integrity Audit's "Open user" link (Round 16) is honest but the panel
+genuinely has no way to close a wallet-vs-ledger mismatch — acknowledged in the UI rather
+than built as a new feature.** Codex is right that Credit/Debit in the user-detail modal
+move BOTH walletBalance and the ledger by the same amount (that's their whole point —
+keeping the two in sync for a real top-up/correction), so neither can ever close a
+mismatch BETWEEN them; the diff is identical before and after either. A genuine fix (an
+explicit "trust wallet" vs. "trust ledger" resolution workflow, typed confirmation,
+`bal:`-locked, audit-logged, re-verified against a fresh audit before showing resolved)
+is a real, higher-stakes feature — building it under review-round time pressure risked
+shipping a rushed tool for exactly the kind of money-correctness decision this codebase
+is most careful about elsewhere. Deferred; the modal's copy now says explicitly that nothing
+in the panel closes this today, instead of implying Credit/Debit might.
+
+**Low — `commissionTriggered` could say "credited" when nothing new was paid, real and
+fixed.** `creditReferralCommission()` now returns whether it actually applied a NEW
+level this call (false for a pure re-check — already fully paid, buyer/level ineligible,
+no referrer) instead of every caller inferring "triggered" from "a qualifying investment
+exists." `/admin/user/attach-referrer` uses the real return value now.
+
+**Verification**: `node --check server.js`; boot smoke test still fails only at
+Mongo-connect; `build-admin.js` re-run clean; `test-admin-obfuscated-build.js` still 0
+errors (its attach-referrer/integrity-mismatch fixtures from Round 16 cover the endpoint
+shape unchanged by this round's fix, which is purely server-side locking + the Integrity
+modal's copy); the standalone `withLock2` serialization script described above (not
+committed — a throwaway verification, the logic itself is what's committed).
+`admin/sw.js` cache bumped `v6`→`v7`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
