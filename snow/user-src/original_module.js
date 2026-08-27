@@ -60,6 +60,21 @@ function eatTodayStr(){
   return pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()) + '/' + d.getUTCFullYear();
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Caps how many digits a phone field accepts, based on which format the
+// person is actually typing -- a bare "0" local number tops out at 10
+// digits ("0769968158"), a "256"/"+256" international number tops out at
+// 12 ("256769968158", the + doesn't count as a digit). Nothing was capping
+// this before -- someone could type an arbitrarily long garbled string into
+// any phone field with no limit at all. Wired to every phone input's own
+// oninput, not a static maxlength, since the right cap depends on which
+// format the field is currently holding.
+function sanitizePhoneInput(el){
+  const hadPlus = el.value.charAt(0) === '+';
+  let digits = el.value.replace(/\D/g, '');
+  const maxDigits = digits.startsWith('0') ? 10 : 12;
+  if (digits.length > maxDigits) digits = digits.slice(0, maxDigits);
+  el.value = (hadPlus ? '+' : '') + digits;
+}
 function $(id){ return document.getElementById(id); }
 function togglePw(id, btn){
   const el = $(id);
@@ -656,7 +671,9 @@ function renderMissionCenter(){
   if (!m) return;
   const salaryBtn = m.salaryClaimedToday
     ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Claimed today — resets at midnight</button>`
-    : `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;" onclick="claimMissionSalary()">Claim ${fmtUGX(m.salaryAmount)}</button>`;
+    : !m.l1ActiveCount
+      ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Need at least 1 active referral</button>`
+      : `<button class="primary-button" id="missionSalaryBtn" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;" onclick="claimMissionSalary()">Claim ${fmtUGX(m.salaryAmount)}</button>`;
   const depositRows = m.depositRewards.map(d => `
     <div class="list-row">
       <div style="flex:1;min-width:0;">
@@ -666,7 +683,7 @@ function renderMissionCenter(){
       ${d.claimed
         ? `<div class="status-pill active mono">Claimed</div>`
         : d.achieved
-          ? `<button class="primary-button" style="padding:8px 16px;font-size:12.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
+          ? `<button class="primary-button" id="missionDepositBtn_${d.target}" style="padding:8px 16px;font-size:12.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
           : `<div class="status-pill pending mono">${fmtUGX(m.teamDeposits)} / ${fmtUGX(d.target)}</div>`}
     </div>`).join('');
   $('sheetBody').innerHTML = `<div class="reveal-in">
@@ -686,9 +703,22 @@ function renderMissionCenter(){
     </div>
     <p style="font-size:11.5px;color:var(--snow-muted);line-height:1.6;margin:14px 2px 0;">Daily salaries are credited once referrals meet the active-account criteria. Team deposit rewards are available to claim instantly once your team's deposits confirm.</p></div>`;
 }
+// Both claim buttons disable themselves for the duration of the request --
+// without this, a fast double/triple-tap (or an impatient tap while the
+// first request is still in flight) fired several concurrent requests, each
+// with its own toast(), stacking up a pile of identical messages. Matches
+// the same disable-during-request pattern every other submit button in this
+// app already follows (witSubmitBtn, bankSaveBtn, confirmActionBtn, etc.).
 window.claimMissionSalary = async function(){
+  const btn = $('missionSalaryBtn');
+  if (!btn || btn.disabled) return;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Claiming…';
   const r = await post('/mission/salary/claim', {});
-  if (r.status !== 'success') return toast(r.message || 'Could not claim', true);
+  if (r.status !== 'success') {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+    return toast(r.message || 'Could not claim', true);
+  }
   toast(r.message || 'Claimed');
   const s2 = await api('/mission/status');
   if (s2.status === 'success') { STATE.mission = s2; renderMissionCenter(); }
@@ -696,8 +726,15 @@ window.claimMissionSalary = async function(){
   if (acc.status === 'success') STATE.account = acc.account;
 };
 window.claimMissionDeposit = async function(target){
+  const btn = $('missionDepositBtn_' + target);
+  if (!btn || btn.disabled) return;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Claiming…';
   const r = await post('/mission/deposit/claim', { target });
-  if (r.status !== 'success') return toast(r.message || 'Could not claim', true);
+  if (r.status !== 'success') {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+    return toast(r.message || 'Could not claim', true);
+  }
   toast(r.message || 'Claimed');
   const s2 = await api('/mission/status');
   if (s2.status === 'success') { STATE.mission = s2; renderMissionCenter(); }
@@ -903,7 +940,7 @@ window.openDepositSheet = function(){
   const s = STATE.settings || {};
   openSheet('Deposit', `
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0"></div>
-    <div class="form-field"><label>Mobile-money phone number</label><input id="depPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" value="${esc((STATE.account&&STATE.account.phone)||'')}"></div>
+    <div class="form-field"><label>Mobile-money phone number</label><input id="depPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" value="${esc((STATE.account&&STATE.account.phone)||'')}" oninput="sanitizePhoneInput(this)"></div>
     <div class="form-field"><label>Network</label>
       <select id="depNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
         <option value="MTN Mobile Money">MTN Mobile Money</option>
@@ -1015,7 +1052,7 @@ function renderWithdrawalAccountsSheet(){
         <option value="Airtel Money">Airtel Money</option>
       </select>
     </div>
-    <div class="form-field"><label>Phone number</label><input id="bankPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX"></div>
+    <div class="form-field"><label>Phone number</label><input id="bankPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" oninput="sanitizePhoneInput(this)"></div>
     <div class="form-field"><label>Transaction PIN</label><input id="bankPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code"></div>
     <button class="primary-button" id="bankSaveBtn" style="width:100%;padding:15px 0;font-size:15px;" onclick="saveWithdrawalAccount()">Save account</button></div>`;
   $('sheetBody').innerHTML = html;

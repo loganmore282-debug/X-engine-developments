@@ -1804,6 +1804,68 @@ possibly resolve) -- genuinely instant, not just visually faster. Cache bumped
 generation to take effect live; remind the owner which file goes there, per the
 recurring pattern this project keeps hitting.
 
+## Round 34 (2026-08-27) — real Mission Center double-tap bug fixed (toast pile-up), all phone inputs length-capped by format, toast color/roundness finished
+
+Owner sent two screenshots: a Register screen with an unbounded phone field, and Mission
+Center with a tall stack of overlapping "You need at least one active referral..." error
+toasts after tapping Claim. Quoted almost verbatim: phone numbers need a format-aware
+length cap (10 digits for a bare "07..." local number, 12 digits for "256.../+256..."
+international, the "+" itself not counted); "there is race conditions or glitch, when
+one taps claim"; and a repeat of the standing toast requirement (centered, same color,
+not rounded) with "I don't want even a notify to override like that."
+
+**Real bug, verified against the code, not assumed from the screenshot.**
+`claimMissionSalary()`/`claimMissionDeposit()` had ZERO guard against being invoked
+twice — no button disabling, no in-flight check, unlike every other submit-style
+handler in this codebase (`witSubmitBtn`, `bankSaveBtn`, `confirmActionBtn`,
+`chestSubmitBtn` all already disable themselves during their request). A rapid or even
+just slightly-impatient multi-tap fired one request PER tap, each with its own
+`toast()` call — exactly the stacked pile in the screenshot. Separately, the salary
+button was ALSO tappable with `l1ActiveCount===0` (rendering "Claim UGX 0"), meaning
+every tap for that very common case was guaranteed to fail server-side and produce
+another toast — the underlying reason someone would tap it repeatedly in the first
+place, thinking it wasn't responding.
+
+Fixed both halves: (1) the salary button now renders disabled with "Need at least 1
+active referral" instead of a tappable "Claim UGX 0" when `l1ActiveCount` is 0 (a
+client-side pre-check that avoids a doomed request entirely); (2) both
+`claimMissionSalary()` and the per-target `claimMissionDeposit()` now disable their own
+button (`id="missionSalaryBtn"` / `id="missionDepositBtn_<target>"`) and bail out
+immediately (`if (!btn || btn.disabled) return;`) if already in flight, restoring the
+label only on failure (success re-renders the whole sheet anyway) — same pattern every
+other submit button already used, just never applied to these two.
+
+**Toast styling, finished.** Owner has now said "same color" for every pop-up twice —
+`.toast.err`'s red-tinted background (`rgba(148,24,39,.88)`, kept in Round 29 as a
+deliberate error-distinction choice) is gone; error toasts now use the exact same
+`rgba(17,17,17,.82)` as success toasts and every other dialog, full stop. Also reduced
+`border-radius` 16px→10px — at a toast's short height (~55-60px for 2 lines of text),
+16px was landing close to a full pill/capsule shape even though the same 16px reads as
+a modest, clearly "not round" corner on the much taller confirm-dialog/chest-modal
+surfaces; 10px reads correctly "not rounded" at toast height specifically.
+
+**Phone inputs, all 4 of them, format-aware length cap.** New `sanitizePhoneInput(el)`
+helper (`user-src/original_module.js`) — not a static `maxlength` (the right cap
+differs by format): strips to digits-only, keeps a leading `+` if present without
+counting it, then caps at 10 digits if the number starts with `0` (bare local format)
+or 12 digits otherwise (256/+256 international format) — matches the owner's own
+worked examples exactly (`0769968158` / `+256769968158` / `256769968158`). Wired via
+`oninput="sanitizePhoneInput(this)"` on every phone field in the app, not just the one
+in the screenshot: `regPhone`, `loginPhone`, `depPhone` (Deposit sheet), and `bankPhone`
+(Withdrawal Accounts add-account form) — all four had the exact same unbounded gap.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright: typing 18+ characters into `regPhone` starting `07...`
+lands on exactly `0769968158` (10 digits); starting `+256...` lands on exactly
+`+256769968158` (12 digits, `+` excluded from the count); starting `256...` (no `+`)
+lands on exactly `256769968158`; with 0 active referrals the salary button reads "Need
+at least 1 active referral" and is disabled (no "Claim UGX 0" ever rendered); firing
+`claimMissionSalary()` 5 times back-to-back with a deliberately slow (500ms) mocked
+`/mission/salary/claim` response results in exactly 1 real network call and exactly 1
+toast, not 5; the toast's computed background is `rgba(17,17,17,.82)` even with the
+`.err` class present, and its `border-radius` is `10px`. Screenshot confirms a single
+clean toast, no stacking. Cache bumped `v19`→`v20`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

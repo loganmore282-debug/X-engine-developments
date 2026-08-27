@@ -126,8 +126,7 @@ a{color:inherit;}
 .sheet-body{padding:4px 20px 40px;max-width:480px;margin:0 auto;}
 
 #toastHost{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:600;pointer-events:none;padding:20px;}
-.toast{background:rgba(17,17,17,.82);color:#fff;padding:11px 18px;border-radius:16px;font-size:13px;max-width:86%;text-align:center;box-shadow:0 12px 28px -14px rgba(0,0,0,.4);}
-.toast.err{background:rgba(148,24,39,.88);}
+.toast{background:rgba(17,17,17,.82);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;max-width:86%;text-align:center;box-shadow:0 12px 28px -14px rgba(0,0,0,.4);}
 
 /* All pop-up dialogs (as opposed to full-page sheets) open centered, share
    the activity ticker's own dark pill color, and use a modest radius --
@@ -197,7 +196,7 @@ a{color:inherit;}
         <div id="loginError"></div>
         <div class="form-field">
           <label>Mobile number</label>
-          <input id="loginPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" autocomplete="tel">
+          <input id="loginPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <div class="form-field">
           <label>Password</label>
@@ -215,7 +214,7 @@ a{color:inherit;}
         <div id="regError"></div>
         <div class="form-field">
           <label>Mobile number</label>
-          <input id="regPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" autocomplete="tel">
+          <input id="regPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" autocomplete="tel" oninput="sanitizePhoneInput(this)">
         </div>
         <div class="form-field">
           <label>Password</label>
