@@ -1462,6 +1462,22 @@ check in"; tapping the card's text area sets `STATE.page` to `'team'`; tapping t
 button afterward leaves `STATE.page` at `'home'` and opens the Check-in sheet.
 Screenshots confirm both outcomes. Cache bumped `v11`→`v12`.
 
+## Round 27 (2026-08-27) — removed the blue tap-highlight flash on every button/link
+
+Owner sent a screenshot with a blue squiggle they'd hand-drawn around the Invest button
+to point at it: "why when l taps something it shows that blue shed offs, remove them
+where they exist." That's Android/Chrome's default `-webkit-tap-highlight-color` — a
+translucent blue rectangle every browser flashes over a tapped link/button unless a page
+explicitly disables it — never neutralized anywhere in `user-src/index.html`. Confirmed
+this is a known, already-solved issue in the sibling `space8` project
+(`user-src/index.html`'s `*{box-sizing:border-box; -webkit-tap-highlight-color:
+transparent;}`), so applied the identical fix here: `*{-webkit-tap-highlight-color:
+transparent;}` added right after the existing `html,body{...touch-action:manipulation;}`
+rule. One global rule covers every tappable element in the app (buttons, the newly
+tappable Referral card from Round 26, product Invest buttons, nav items, etc.) — no
+per-element changes needed. Rebuilt, confirmed the rule is present in the deployed
+`user/index.html`. Cache bumped `v12`→`v13`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
