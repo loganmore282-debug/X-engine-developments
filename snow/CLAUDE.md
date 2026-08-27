@@ -1262,6 +1262,70 @@ cross-origin fetches inside the Playwright test browser (a test-harness artifact
 an app bug); fixed by launching the test context with `service_workers="block"`. Cache
 bumped `v7`→`v8`.
 
+## Round 23 (2026-08-27) — corrected Round 22's treasure chest (real photo, tappable, opens a centered gift-code popup) and floated the activity ticker
+
+Owner corrected two things from Round 22, both real misreadings on my part, not just
+preference: (1) "that treasure chest box exactly not svg" -- they'd sent a reference
+photo of a real chest and wanted THAT image used, tappable, opening a centered popup
+("opens from middle") where the user types a code, comparing it to "space8 gift box";
+(2) "activity checker to float not to change... server side... with all its logics" --
+wanted it detached from the page layout (floating/fixed), not an inline row that shifts
+other content, while keeping it genuinely server-driven (which it already was).
+
+**Treasure chest, corrected**: deleted the SVG line-art (`treasureChestSvg()`, added
+last round) entirely -- the owner explicitly said not-SVG. Background-removed the
+owner's own reference photo with `rembg` (same tool CLAUDE.md already documents using
+for the Snow Beer bottle cutouts, confirmed working offline again), trimmed to its
+bounding box, saved as `user/treasure-chest.png` (409×447 RGBA, added to `sw.js`'s
+`SHELL` precache list same as `badge.png`). Wrapped in a real `<button>` (not a bare
+`<img>`) so it's genuinely tappable, kept the same hanging position (negative `top`,
+clipped by `.brand-hero--full`'s `overflow:hidden`) and kept the wave-line "spills"
+untouched, as instructed both rounds.
+
+Investigated "space8 gift box" before building: grepped for any existing gift-code
+redemption UI in `original_module.js` -- there is none, but `server.js`'s `POST
+/redeem` (gift-code redemption, admin-manageable promo codes) is fully built and
+had no frontend consumer either, same pattern as Round 22's check-in/activity-feed
+discovery. So the chest is the redemption entry point: tapping it opens a NEW
+`.chest-modal-bg`/`.chest-modal` popup -- deliberately NOT reusing `.sheet-bg` (slides
+up, covers most of the screen) or `.confirm-bg` (bottom-anchored) since neither
+"opens from the middle" -- a genuinely new centered, scale+fade-in dialog pattern
+(`align-items:center`, `transform:scale(.92)→scale(1)` transition). Code input +
+Open/Cancel buttons, wired to the real `/redeem` endpoint via `submitChestCode()`;
+success refreshes `STATE.account` and re-renders Home, failure shows the server's own
+message inline. `/redeem` added to `MONEY_ENDPOINTS` (same SW-reload protection every
+other money call gets).
+
+**Real bug caught during verification, not a guess**: the chest button was initially
+unclickable in the actual rendered page -- Playwright's click kept timing out with
+"element intercepts pointer events." Traced it with `elementFromPoint()`: the header's
+`display:flex` wordmark row (a plain block-level flex container, `width:auto` = fills
+its containing block) was invisibly spanning the FULL hero width even though its
+visible content (snowflake+badge+SNOW) only occupies the left portion, and — because
+both it and the chest button are `position`-participating elements with `z-index:auto`
+in the same stacking context — it painted on top in DOM order, silently eating the
+chest's clicks across its whole invisible right-hand area. Fixed with an explicit
+`z-index:2` on the chest button. Would not have been caught by a visual screenshot
+alone (nothing looked wrong) — only by actually clicking it in the harness.
+
+**Activity ticker, corrected**: moved out of the normal document flow entirely.
+`#activityTicker` is now `position:fixed`, centered (`left:50%;
+transform:translateX(-50%)`), floating just above the bottom nav
+(`bottom:88px` — the same clearance zone `#toastHost` already uses, an established
+"floating UI" area in this app), dark semi-transparent pill, so it no longer pushes
+the Referral Program card up/down or otherwise participates in layout. The underlying
+logic is unchanged from Round 22 — still a real fetch to `/public/activity-feed` on
+every Home render, rotating every 3.2s, cleared on page change via the same
+`_activityTimer`/`stopActivityTicker()` pattern.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean, emoji/Unicode-arrow `rg` sweep clean. Playwright across all 5 required
+widths: no horizontal overflow, treasure-chest image confirmed loaded
+(`naturalWidth > 0`), ticker confirmed `position:fixed`. Full interaction test: tapped
+the chest, filled a code, submitted against a mocked success response (modal closes,
+account refreshes) and a mocked failure response (inline error text renders, modal
+stays open) — both screenshotted. Cache bumped `v8`→`v9`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

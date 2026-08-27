@@ -129,6 +129,15 @@ a{color:inherit;}
 .confirm-row{display:flex;justify-content:space-between;font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--snow-border);}
 .confirm-row:last-of-type{border-bottom:none;}
 
+/* Centered popup (opens from the middle, not a bottom sheet) -- the
+   treasure-chest gift-code entry on Home. */
+.chest-modal-bg{position:fixed;inset:0;background:rgba(17,17,17,.55);z-index:310;display:none;align-items:center;justify-content:center;padding:20px;}
+.chest-modal-bg.show{display:flex;}
+.chest-modal{background:var(--snow-surface);width:100%;max-width:340px;border-radius:28px;padding:26px 22px;text-align:center;transform:scale(.92);opacity:0;transition:transform .18s ease,opacity .18s ease;}
+.chest-modal-bg.show .chest-modal{transform:scale(1);opacity:1;}
+.chest-modal h3{margin:0 0 6px;font-size:18px;font-weight:800;}
+.chest-modal p{margin:0 0 18px;font-size:13px;color:var(--snow-muted);}
+
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:13px;}
 
 .sk{background:linear-gradient(90deg,var(--snow-neutral-soft) 25%,#fff 50%,var(--snow-neutral-soft) 75%);background-size:400% 100%;animation:skshimmer 1.4s ease infinite;border-radius:8px;}
@@ -225,6 +234,19 @@ a{color:inherit;}
 
 <div class="confirm-bg" id="confirmBg" onclick="if(event.target===this)closeConfirm()">
   <div class="confirm-sheet" id="confirmSheet"></div>
+</div>
+
+<div class="chest-modal-bg" id="chestModalBg" onclick="if(event.target===this)closeChestModal()">
+  <div class="chest-modal">
+    <h3>Treasure Chest</h3>
+    <p>Enter your gift code to open it.</p>
+    <div id="chestError"></div>
+    <div class="form-field" style="text-align:left;">
+      <input id="chestCodeInput" type="text" placeholder="Enter code" autocapitalize="characters" autocomplete="off">
+    </div>
+    <button class="primary-button" id="chestSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:6px;" onclick="submitChestCode()">Open</button>
+    <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:var(--snow-muted);" onclick="closeChestModal()">Cancel</button>
+  </div>
 </div>
 
 <div id="toastHost"></div>

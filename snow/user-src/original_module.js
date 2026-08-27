@@ -49,23 +49,6 @@ function brandWaveFull(){
   return `<svg class="brand-wave--full" viewBox="0 0 390 126" preserveAspectRatio="none" aria-hidden="true"><path d="M0 104 C58 68 104 61 154 83 C205 105 251 95 296 62 C332 36 362 23 390 31 L390 126 L0 126 Z" fill="var(--snow-canvas)"></path></svg>`;
 }
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
-// Decorative only (pointer-events:none, aria-hidden) -- hangs from the top
-// edge of the hero (negative top, clipped by .brand-hero--full's own
-// overflow:hidden) alongside the existing wave-line "spills", not replacing
-// them. Gold is a deliberate one-off accent for this single ornament, not a
-// new palette token -- everything else on Home stays the approved red/green.
-function treasureChestSvg(){
-  return `<svg viewBox="0 0 64 60" aria-hidden="true" style="position:absolute;top:-6px;right:20px;width:52px;height:49px;pointer-events:none;filter:drop-shadow(0 6px 10px rgba(0,0,0,.35));">
-    <path d="M32 0v9" stroke="#E8C468" stroke-width="2" stroke-linecap="round"/>
-    <path d="M9 27a23 18 0 0 1 46 0" fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="7" y="27" width="50" height="7" rx="1.5" fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linejoin="round"/>
-    <rect x="5" y="34" width="54" height="21" rx="4" fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linejoin="round"/>
-    <path d="M32 34v21" stroke="#E8C468" stroke-width="2"/>
-    <path d="M9 27v7M55 27v7" stroke="#E8C468" stroke-width="2.2"/>
-    <rect x="26" y="40" width="12" height="9" rx="2.5" fill="none" stroke="#E8C468" stroke-width="2.2" stroke-linejoin="round"/>
-    <circle cx="32" cy="44.3" r="1.5" fill="#E8C468"/>
-  </svg>`;
-}
 
 function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-UG'); }
 // Matches server.js's nowStr().date exactly (Kampala/EAT, UTC+3) -- used
@@ -120,7 +103,7 @@ function toast(msg, isErr){
 // Endpoints that actually move money -- a background service-worker reload
 // (see the registration script near the bottom of this file) waits for this
 // count to hit 0 before ever yanking the page out from under one of these.
-var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete', '/checkin']);
+var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete', '/checkin', '/redeem']);
 window._moneyCallsInFlight = 0;
 async function api(path, opts){
   opts = opts || {};
@@ -302,7 +285,9 @@ async function renderHome(){
   let html = `
 <div class="brand-hero--full">
   ${waveLinesTR(140,133)}
-  ${treasureChestSvg()}
+  <button aria-label="Open gift code" onclick="openChestModal()" style="position:absolute;top:-6px;right:20px;z-index:2;width:64px;height:60px;border:none;background:none;padding:0;cursor:pointer;filter:drop-shadow(0 8px 12px rgba(0,0,0,.4));">
+    <img src="/treasure-chest.png" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
+  </button>
   <div style="position:relative;padding:22px 20px 0;">
     <div style="display:flex;align-items:center;gap:9px;">
       ${snowflakeSvg('var(--snow-green)',26)}
@@ -330,11 +315,11 @@ async function renderHome(){
   <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openDepositSheet()">${ICONS.deposit}Deposit</button>
   <button class="secondary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openWithdrawSheet()">${ICONS.withdraw}Withdraw</button>
 </div>
-<div style="display:flex;align-items:center;gap:8px;margin:14px 20px 0;padding:8px 14px;border-radius:999px;background:var(--snow-neutral-soft);">
+<div id="activityTicker" style="position:fixed;left:50%;transform:translateX(-50%);bottom:88px;width:calc(100% - 40px);max-width:440px;box-sizing:border-box;z-index:50;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:rgba(17,17,17,.82);box-shadow:0 10px 24px -10px rgba(0,0,0,.5);">
   <span style="width:6px;height:6px;border-radius:50%;background:var(--snow-green);flex-shrink:0;"></span>
-  <span id="activityTickerText" class="mono" style="font-size:11.5px;color:var(--snow-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Loading activity&hellip;</span>
+  <span id="activityTickerText" class="mono" style="font-size:11.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">Loading activity&hellip;</span>
 </div>
-<div class="app-card" style="margin:12px 20px 0;padding:20px 22px;background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+<div class="app-card" style="margin:18px 20px 0;padding:20px 22px;background:var(--snow-green-soft);border-color:transparent;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
   <div style="min-width:0;">
     <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-green);font-weight:700;">Referral Program</div>
     <div style="font-size:18px;font-weight:800;margin-top:4px;max-width:250px;line-height:1.25;color:var(--snow-ink);">Earn ${(STATE.settings&&STATE.settings.commL1)||27}% on every referral&rsquo;s first investment</div>
@@ -762,6 +747,35 @@ window.submitCheckin = async function(){
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
   closeSheet();
+  if (STATE.page === 'home') renderHome();
+};
+
+// Treasure chest on Home -- opens a centered popup (not a bottom sheet) to
+// redeem a gift code, reusing the existing /redeem endpoint. Same feature as
+// admin's promo codes, just entered here via the chest instead of an
+// Account menu item.
+window.openChestModal = function(){
+  $('chestCodeInput').value = '';
+  $('chestError').innerHTML = '';
+  $('chestModalBg').classList.add('show');
+  setTimeout(() => $('chestCodeInput').focus(), 50);
+};
+window.closeChestModal = function(){
+  $('chestModalBg').classList.remove('show');
+};
+window.submitChestCode = async function(){
+  const raw = $('chestCodeInput').value.trim();
+  if (!raw) { $('chestError').innerHTML = '<div class="auth-error">Enter a code</div>'; return; }
+  const btn = $('chestSubmitBtn');
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Opening…';
+  const r = await post('/redeem', { code: raw });
+  btn.disabled = false; btn.textContent = label;
+  if (r.status !== 'success') { $('chestError').innerHTML = `<div class="auth-error">${esc(r.message || 'Could not redeem this code')}</div>`; return; }
+  closeChestModal();
+  toast(`${fmtUGX(r.reward)} added to your wallet`);
+  const acc = await api('/account');
+  if (acc.status === 'success') STATE.account = acc.account;
   if (STATE.page === 'home') renderHome();
 };
 
