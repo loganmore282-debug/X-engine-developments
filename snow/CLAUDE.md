@@ -2242,6 +2242,42 @@ single-instance `toast()` doesn't regress that fix (still exactly 1 network call
 toast from 5 rapid taps). `node --check` clean, `node build-core.js` round-trip clean,
 `git diff --check` clean. Cache bumped `v23`→`v24`.
 
+## Round 41 (2026-08-27) — Mission Center's background refresh no longer silently repaints the sheet when it already had a cache to show
+
+Owner: "when I open mission center, it opens very well but I think again it reloads
+silently... please remove that override."
+
+**Real bug, and a genuine deviation from this app's own established pattern.**
+Round 39 made `openMissionCenterSheet()` cache-first (paint instantly from
+`STATE.mission`, refresh in the background) but got the second half wrong: it called
+`renderMissionCenter()` again unconditionally whenever the background `/mission/status`
+refetch succeeded, regardless of whether a cache had already been shown. Every OTHER
+cache-first sheet in this app — `openWithdrawSheet`, `openWithdrawalAccountsSheet`,
+`openRecordsSheet` — only repaints from that background refetch when there was NO cache
+to show initially (`if (!hadCache && ...)`); once something's already on screen, they
+just update `STATE` quietly for next time and leave the DOM alone. Mission Center's
+extra repaint replayed the `.reveal-in` entrance animation on every element a moment
+after the sheet had already finished opening — visually indistinguishable from the
+whole sheet quietly reloading itself, exactly what the owner described.
+
+Fixed by matching the same guarded shape as the other three: `if (!hadCache &&
+$('sheetBody')) { ... }` now wraps the repaint (success renders normally, failure shows
+the existing "could not load" message), so a background refresh that finds nothing new
+to show never touches the DOM again once the cached content is already visible. Claiming
+a salary/deposit reward still explicitly calls `renderMissionCenter()` itself afterward
+(that's a real state change the user just caused, not a passive background poll) —
+untouched by this fix.
+
+**Verified** with Playwright: booted through the real `snow-auth` → `enterApp()` flow
+with `/mission/status` mocked at a deliberately slow 500ms so its background refetch
+would still be in flight when checked, tagged the actual `sheetBody` DOM node with a
+marker attribute right after the first (cached) paint, waited past the mocked delay, and
+confirmed the marker — and the full `innerHTML` — were byte-identical afterward (a
+repaint would have wiped the marker and produced new HTML even with the same visible
+text). Re-ran Round 34's Mission Center double-tap/toast test and Round 39's boot-prefetch
+timing test to confirm neither regressed. `node --check` clean, `node build-core.js`
+round-trip clean, `git diff --check` clean. Cache bumped `v24`→`v25`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -711,14 +711,27 @@ function paintTeam(){
 // is already populated during enterApp()'s boot prefetch, so this paints
 // instantly from that on every open after the first, then quietly refreshes
 // in the background instead of blocking the sheet on a fresh round trip.
+// Real bug fixed: this used to always repaint sheetBody once the background
+// /mission/status refetch resolved, even when there was already a cached
+// copy shown instantly on open -- every other cache-first sheet
+// (openWithdrawSheet, openWithdrawalAccountsSheet, openRecordsSheet) only
+// repaints from that refetch when there was NO cache to show initially,
+// otherwise it just updates STATE silently for next time. Owner: "it opens
+// very well but I think again it reloads silently" -- that second,
+// unnecessary repaint replayed the .reveal-in entrance animation a moment
+// after opening, which read as the sheet quietly reloading itself. Now
+// matches the same guarded pattern as the others.
 window.openMissionCenterSheet = async function(){
   const hadCache = !!STATE.mission;
   openSheet('Mission Center', '');
   if (hadCache) renderMissionCenter();
   else $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Loading…</div>';
   const r = await api('/mission/status');
-  if (r.status === 'success') { STATE.mission = r; if ($('sheetBody')) renderMissionCenter(); }
-  else if (!hadCache && $('sheetBody')) $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>';
+  if (r.status === 'success') STATE.mission = r;
+  if (!hadCache && $('sheetBody')) {
+    if (r.status === 'success') renderMissionCenter();
+    else $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>';
+  }
 };
 function renderMissionCenter(){
   const m = STATE.mission;
