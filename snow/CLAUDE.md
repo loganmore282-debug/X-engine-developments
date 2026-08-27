@@ -2721,6 +2721,68 @@ account autofilled later in the same tab still auto-submits. Re-ran Round 50's 5
 plus Round 46's instant-boot test -- no regressions. `node --check` clean, `node
 build-core.js` round-trip clean, `git diff --check` clean. Cache bumped `v33`→`v34`.
 
+## Round 52 (2026-08-27) — Integrity audit widened to actually catch "abnormal counts" like 1,000,000,500, ported from Space8's proven design
+
+Owner: "we have been having abnormal counts like 1,000,000,500... such counts should be
+bugged out, also l dont want to servant kind of issue in integrity audit everything
+should be connected perfectly." Snow's `/admin/integrity` (built in Round 44's sweep)
+only ever checked ONE thing — `walletBalance` vs. the transaction ledger — so a corrupted
+`totalDeposited`/`totalEarned`/`totalInvested`, a double-credited deposit, a negative
+balance, or a stalled registration could all sit there indefinitely with nothing to ever
+surface them.
+
+**Where "1,000,000,500" comes from, concretely**: it's the textbook signature of JS
+string concatenation (`"1000000" + "500"` → the string `"1000000500"`, read back as a
+very real-looking but wildly wrong number) — confirmed against the sibling Space8
+project's own history, which hit and root-caused this EXACT figure shape (`UGX
+1,500,015,000`, `"15000"+"15000"`) in an admin dashboard aggregator that once did a bare
+`total += u.totalInvested` with no `Number()` coercion. Audited every summation site in
+`server.js`/`db.js` for the same class of bug (`grep '+= '`, every `FieldValue.increment`
+call site, `db.js`'s `$inc` compilation) — all of Snow's current aggregation already goes
+through `finiteMoney()`/real MongoDB `$inc` (which throws on a non-numeric field rather
+than silently corrupting it), so there's no LIVE instance of the bug to fix in Snow's code
+today. The fix here is the other half of "everything should be connected perfectly":
+make sure a value like this — however it happens, now or in the future, including a
+manual DB edit — can never again sit undetected.
+
+**`/admin/integrity` widened** (`server.js`): the existing `walletBalance`-vs-ledger
+check now runs for `totalDeposited`/`totalEarned`/`totalInvested` too, each against the
+exact same real-ledger computation `/admin/users/recount` already rebuilds from
+(extracted into a new shared `computeRealTotals()` so the audit and the fix tool can
+never quietly disagree about what "correct" means). Plus 3 qualitative checks ported
+directly from Space8's own integrity audit, already proven there against this exact bug
+class: **duplicate_credit** (the same deposit `ref` credited more than once — the literal
+double-credit race this platform's `_creditingDeposits` locking exists to prevent, so a
+regression here is exactly what this tool should catch), **negative_balance** (should be
+structurally impossible if every debit path checks funds first), and
+**registration_incomplete** (a profile that exists but never finished `/register`,
+invisible to any referrer's team, given an hour's grace). Response now carries both
+`mismatches` (the 4 numeric fields, `{field, stored, real, diff}`) and `alerts` (the 3
+qualitative flags, `{kind, ...}`).
+
+**Admin UI** (`admin-src/index.html`): the Integrity Audit modal renders both arrays,
+explains which mismatches "Recalculate totals" can actually auto-close
+(totalDeposited/Earned/Invested — it rebuilds them from this same ledger) vs. which need
+a human (`walletBalance` — Credit/Debit move both sides together by design, so neither
+button can close that specific gap). Button tooltip updated to describe what's actually
+checked now instead of the original single-field description.
+
+**Verified** with a from-scratch Node harness (space8's own `test-mockdb.js`, copied in —
+an in-memory Firestore-compat mock faithful enough to run the real `server.js` against
+with zero MongoDB) reproducing the reported bug directly: seeded a user with
+`walletBalance`/`totalDeposited` both stored as the exact `1,000,000,500` while the real
+ledger (two real deposits + a cashback) sums to `1,005,000`/`1,000,000` — both correctly
+flagged, exact diffs shown. Also seeded a duplicate-ref deposit (flagged), a negative
+balance (flagged as both `negative_balance` AND an independent `walletBalance` mismatch,
+correctly not deduplicated since they're different signals), a stalled registration
+(flagged), and a fully clean account (zero false positives on either array). Ran
+`/admin/users/recount` afterward and confirmed it actually closes the
+`totalDeposited`/`totalEarned` mismatches it claims to, while correctly leaving
+`walletBalance` untouched and still flagged. Both endpoints reject an unauthenticated
+caller. 20/20 checks passed. `node --check server.js` clean, `node build-admin.js`
+round-trip clean, `git diff --check` clean. No `user-src/`/`user/` changes this round, so
+no cache bump needed. **`server.js` changed → needs a Railway redeploy.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -630,7 +630,7 @@ async function renderUsers(){
   const isOwner = SESSION_ROLE === 'owner';
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="usersCount">Users (${_users.length})</h2>
-      ${isOwner?`<button class="btn sm ghost" id="auditBtn" title="Recompute every balance from the transaction ledger and flag mismatches, duplicate credits and stuck withdrawals">Integrity audit</button>
+      ${isOwner?`<button class="btn sm ghost" id="auditBtn" title="Check every user's wallet balance/deposited/earned/invested against the real records, plus duplicate deposit credits, negative balances, and stuck registrations">Integrity audit</button>
       <button class="btn sm ghost" id="recountBtn" title="Rebuild every user's deposit/earning/invested totals AND check-in streaks from the real ledger">Recalculate totals</button>`:''}</div>
     <div class="panel-card"><input id="userSearch" placeholder="Search phone or referral code"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Phone</th><th>Referral code</th><th>Balance</th><th>Invested</th><th>Status</th></tr></thead><tbody id="userRows"></tbody></table></div>`;
@@ -658,36 +658,48 @@ async function renderUsers(){
       const d=await api('/admin/integrity');
       b.disabled=false; b.textContent='Integrity audit';
       if(d.status!=='success'){ toast(d.message||'Audit failed','err'); return; }
-      // Snow's /admin/integrity only checks one thing right now: does each
-      // user's stored walletBalance match the sum of their own transaction
-      // ledger. It does not (yet) detect duplicate credits, stuck payouts,
-      // malformed phones, or incomplete registrations -- this modal only
-      // shows what the endpoint actually returns, not space8's fuller set.
+      // /admin/integrity checks FOUR of a user's own stored running totals
+      // against what the real transaction/investment records add up to
+      // (walletBalance vs the full ledger, every transaction type net;
+      // totalDeposited/totalEarned/totalInvested vs the same ledger/
+      // investments source "Recalculate totals" rebuilds from), PLUS 3
+      // qualitative flags ported from Space8's own integrity audit:
+      // duplicate_credit (the same deposit ref credited more than once --
+      // the exact double-credit race this platform's locking exists to
+      // prevent), negative_balance (should be structurally impossible),
+      // and registration_incomplete (a profile that never finished
+      // /register, invisible to any referrer's team). It does not (yet)
+      // detect stuck payouts or malformed phones -- this modal only shows
+      // what the endpoint actually returns, not space8's fuller set.
       const mismatches = d.mismatches||[];
-      // Codex-caught real bug (round 2): the "Recalculate totals" button
-      // here rewrote totalDeposited/totalEarned/totalWithdrawn/
-      // totalInvested -- it never touched walletBalance or added a missing
-      // transaction row, so it could NOT actually close a walletBalance-vs-
-      // ledger mismatch, yet the UI dimmed the row and said "Done" as if it
-      // had. This flag's whole job is to SURFACE a real discrepancy (see
-      // /admin/integrity's own server-side comment) for a human to
-      // investigate -- which side is wrong isn't something safe to guess
-      // automatically. Replaced the false "fix" button with a link straight
-      // into that user's own detail modal, where the owner can diagnose it.
-      // Codex-caught real bug (round 3): Credit/Debit in that modal move
-      // BOTH walletBalance and the ledger by the same amount (by design --
-      // they're supposed to keep the two in sync for a genuine top-up/
-      // correction), so neither can actually CLOSE a wallet-vs-ledger
-      // mismatch either -- the diff stays exactly the same after either.
-      // There is currently no tool anywhere in this panel that can close
-      // this specific kind of mismatch; said so explicitly rather than
-      // implying Credit/Debit are a way to resolve it.
+      const alerts = d.alerts||[];
+      const total = mismatches.length + alerts.length;
+      const FIELD_LABEL = { walletBalance:'Wallet balance', totalDeposited:'Total deposited', totalEarned:'Total earned', totalInvested:'Total invested' };
+      const ALERT_LABEL = { duplicate_credit:'Duplicate deposit credit', negative_balance:'Negative balance', registration_incomplete:'Registration never completed' };
+      // Codex-caught real bug (round 2, still true for walletBalance only):
+      // "Recalculate totals" rewrites totalDeposited/totalEarned/
+      // totalInvested straight from this same real-ledger computation, so
+      // it DOES close those three kinds of mismatch. It never touches
+      // walletBalance (Credit/Debit move both the wallet and the ledger
+      // together by design, so neither can close a wallet-vs-ledger gap --
+      // that one needs a human to diagnose which side is wrong). Each row
+      // below says which applies instead of implying one button fixes all.
+      const walletMismatches = mismatches.filter(m=>m.field==='walletBalance');
+      const recountableMismatches = mismatches.filter(m=>m.field!=='walletBalance');
+      const alertRow = a => {
+        if (a.kind==='duplicate_credit') return `<span>ref <code>${esc(a.ref)}</code> credited ${a.times}x &nbsp; <button class="btn sm ghost" data-openuser="${esc(a.userId)}">Open user</button></span>`;
+        if (a.kind==='negative_balance') return `<span>balance ${ugx(a.balance)} &nbsp; <button class="btn sm ghost" data-openuser="${esc(a.userId)}">Open user</button></span>`;
+        if (a.kind==='registration_incomplete') return `<span>${a.hours}h ago, still not finished &nbsp; <button class="btn sm ghost" data-openuser="${esc(a.userId)}">Open user</button></span>`;
+        return `<span><button class="btn sm ghost" data-openuser="${esc(a.userId)}">Open user</button></span>`;
+      };
       openModal(`<h3>Integrity audit</h3>
         <div class="muted" style="margin-bottom:10px">${d.checked} user(s) checked</div>
-        ${!mismatches.length?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every wallet balance matches its ledger.</div>`
-        :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${mismatches.length} mismatch(es) found. This tool only detects a mismatch, it can't close one — Credit/Debit move both the wallet and the ledger together, so neither changes the gap. Open each user to investigate which side is wrong by hand.</div>`+
-          mismatches.map(m=>`<div class="kv"><span class="k">Balance ≠ ledger${m.phone?' · '+esc(m.phone):''}</span>
-            <span>wallet ${ugx(m.walletBalance)} vs ledger ${ugx(m.ledgerSum)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-openuser="${esc(m.userId)}">Open user</button></span></div>`).join('')}
+        ${!total?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance/total matches its real records, no duplicate credits, no negative balances, no stuck registrations.</div>`
+        :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${total} issue(s) found.${walletMismatches.length?` ${walletMismatches.length} wallet-balance mismatch(es) can't be auto-closed — Credit/Debit move both sides together, so open the user and diagnose by hand.`:''}${recountableMismatches.length?` ${recountableMismatches.length} deposited/earned/invested mismatch(es) will be fixed by "Recalculate totals" above.`:''}</div>`+
+          mismatches.map(m=>`<div class="kv"><span class="k">${FIELD_LABEL[m.field]||m.field} ≠ real${m.phone?' · '+esc(m.phone):''}</span>
+            <span>stored ${ugx(m.stored)} vs real ${ugx(m.real)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-openuser="${esc(m.userId)}">Open user</button></span></div>`).join('')+
+          alerts.map(a=>`<div class="kv"><span class="k">${ALERT_LABEL[a.kind]||a.kind}${a.phone?' · '+esc(a.phone):''}</span>
+            ${alertRow(a)}</div>`).join('')}
         <button class="btn block" data-close>Close</button>`);
       document.querySelectorAll('[data-openuser]').forEach(b=>b.addEventListener('click', ()=>{ closeModal(); openUser(b.dataset.openuser); }));
     });

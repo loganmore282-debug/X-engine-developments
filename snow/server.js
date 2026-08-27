@@ -3363,33 +3363,114 @@ app.post('/admin/analytics/abuse', async (req, res) => {
     res.json({ status: 'success', events: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
-// Cross-checks each user's own stored walletBalance against the sum of
-// their own transaction ledger — flags a real mismatch rather than
-// silently laundering it back to a clean value (this tool's whole job is
-// to SURFACE corruption, not hide it).
+// Cross-checks every one of a user's own stored running totals --
+// walletBalance, totalDeposited, totalEarned, totalInvested -- against what
+// the real transaction/investment records actually add up to, and flags any
+// mismatch (owner: "abnormal counts... should be bugged out... everything
+// should be connected perfectly" — previously this only checked
+// walletBalance, so a drifted totalDeposited/totalEarned/totalInvested
+// (however it happened -- a missed increment, a stale write, a manual DB
+// edit) could sit there indefinitely with nothing ever surfacing it). This
+// tool's whole job is to SURFACE corruption, not hide or guess-fix it --
+// each mismatch names the field, what's stored, and what the ledger says it
+// should be, so a huge, out-of-place number like "1,000,000,500" shows up
+// as an exact, explained diff instead of just looking odd on a stat card.
+// Also flags 3 qualitative problems that a pure number-mismatch check can't
+// catch by itself, ported from the sibling Space8 project's own integrity
+// audit (already battle-tested there against this exact class of bug):
+// duplicate_credit (the same deposit `ref` credited more than once -- the
+// literal double-credit race CLAUDE.md's money-safety invariants exist to
+// prevent, so a regression here is exactly what this tool should catch),
+// negative_balance (should be structurally impossible if every debit path
+// checks funds first -- a real one means a debit path skipped that check),
+// and registration_incomplete (a profile that exists but never finished
+// /register, invisible to any referrer's team, given an hour's grace so
+// someone mid-signup right now isn't flagged).
 app.get('/admin/integrity', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [usersSnap, txSnap] = await Promise.all([
+    const [usersSnap, txSnap, { totals: realTotals, invested: realInvested }] = await Promise.all([
       db.collection('users').limit(10000).get(),
       db.collection('transactions').limit(200000).get(),
+      computeRealTotals(),
     ]);
+    // walletBalance is checked against the FULL ledger (every transaction
+    // type, deposits/earnings positive, investments/withdrawals/debits
+    // negative -- see how each is written) since it's the live net balance,
+    // not a lifetime-income-only figure.
     const ledgerByUser = {};
+    const refSeen = {}; // `${userId}::${ref}` -> count, deposits only (the only type with a real, reusable ref field)
     txSnap.forEach(d => {
       const t = d.data();
       if (!t.userId) return;
       ledgerByUser[t.userId] = (ledgerByUser[t.userId] || 0) + (Number(t.amount) || 0);
+      if (t.ref && t.type === 'deposit') {
+        const key = t.userId + '::' + t.ref;
+        refSeen[key] = (refSeen[key] || 0) + 1;
+      }
     });
     const mismatches = [];
+    const alerts = [];
+    Object.entries(refSeen).forEach(([key, times]) => {
+      if (times > 1) {
+        const [userId, ref] = key.split('::');
+        alerts.push({ kind: 'duplicate_credit', userId, ref, times });
+      }
+    });
+    const now = Date.now();
     usersSnap.forEach(d => {
       const u = d.data();
-      const bal = Number(u.walletBalance) || 0;
-      const ledger = ledgerByUser[d.id] || 0;
-      if (Math.abs(bal - ledger) > 1) mismatches.push({ userId: d.id, phone: u.phone || '', walletBalance: bal, ledgerSum: ledger, diff: bal - ledger });
+      const phone = u.phone || '';
+      const row = realTotals[d.id] || { deposited: 0, earned: 0 };
+      const bal = finiteMoney(u.walletBalance);
+      const checks = [
+        { field: 'walletBalance', stored: bal, real: ledgerByUser[d.id] || 0 },
+        { field: 'totalDeposited', stored: finiteMoney(u.totalDeposited), real: row.deposited },
+        { field: 'totalEarned', stored: finiteMoney(u.totalEarned), real: row.earned },
+        { field: 'totalInvested', stored: finiteMoney(u.totalInvested), real: realInvested[d.id] || 0 },
+      ];
+      for (const c of checks) {
+        if (Math.abs(c.stored - c.real) > 1) mismatches.push({ userId: d.id, phone, field: c.field, stored: c.stored, real: c.real, diff: c.stored - c.real });
+      }
+      if (bal < 0) alerts.push({ kind: 'negative_balance', userId: d.id, phone, balance: bal });
+      if (!u.registrationDone && (now - tsMillis(u.createdAt)) / 3600000 > 1)
+        alerts.push({ kind: 'registration_incomplete', userId: d.id, phone, hours: Math.round((now - tsMillis(u.createdAt)) / 3600000) });
     });
-    res.json({ status: 'success', checked: usersSnap.size, mismatches });
+    res.json({ status: 'success', checked: usersSnap.size, mismatches, alerts });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Single source of truth for what totalDeposited/totalEarned/totalInvested
+// SHOULD be, derived from the real transaction/investment records rather
+// than the incremental counters on the user doc. Shared by recountAllTotals
+// (which writes the fix) and /admin/integrity (which only reports the gap)
+// so the two can never quietly disagree about what "correct" means.
+async function computeRealTotals() {
+  const [txSnap, invSnap] = await Promise.all([
+    db.collection('transactions').limit(200000).get(),
+    db.collection('investments').limit(50000).get(),
+  ]);
+  const totals = {};
+  const checkinDayKeys = {};
+  txSnap.forEach(d => {
+    const t = d.data();
+    if (!t.userId) return;
+    const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
+    if (t.type === 'deposit' || t.type === 'admin_credit') row.deposited += finiteMoney(t.amount);
+    // Every income source that credits totalEarned live must be summed
+    // here too, or a "Recalculate totals" run silently wipes it back to
+    // zero — cashback/commission/team_reward (Task Center)/promocode
+    // (gift codes)/checkin.
+    if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) row.earned += finiteMoney(t.amount);
+    if (t.type === 'checkin') (checkinDayKeys[t.userId] || (checkinDayKeys[t.userId] = new Set())).add(eatDayKey(t.createdAt));
+  });
+  const invested = {};
+  invSnap.forEach(d => {
+    const inv = d.data();
+    if (!inv.userId) return;
+    invested[inv.userId] = (invested[inv.userId] || 0) + finiteMoney(inv.amount);
+  });
+  return { totals, invested, checkinDayKeys };
+}
 // Rebuilds totalDeposited/totalEarned/totalInvested and each user's
 // check-in streak from the real ledger/investments/check-in history --
 // the source of truth -- rather than trusting drifted incremental counters.
@@ -3397,30 +3478,7 @@ app.get('/admin/integrity', async (req, res) => {
 // this used to only actually rebuild the first two (Codex-caught, round 19).
 async function recountAllTotals() {
   return withLock('totals-recount', async () => {
-    const [txSnap, invSnap] = await Promise.all([
-      db.collection('transactions').limit(200000).get(),
-      db.collection('investments').limit(50000).get(),
-    ]);
-    const totals = {};
-    const checkinDayKeys = {};
-    txSnap.forEach(d => {
-      const t = d.data();
-      if (!t.userId) return;
-      const row = totals[t.userId] || (totals[t.userId] = { deposited: 0, earned: 0 });
-      if (t.type === 'deposit' || t.type === 'admin_credit') row.deposited += finiteMoney(t.amount);
-      // Every income source that credits totalEarned live must be summed
-      // here too, or a "Recalculate totals" run silently wipes it back to
-      // zero — cashback/commission/team_reward (Task Center)/promocode
-      // (gift codes)/checkin.
-      if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) row.earned += finiteMoney(t.amount);
-      if (t.type === 'checkin') (checkinDayKeys[t.userId] || (checkinDayKeys[t.userId] = new Set())).add(eatDayKey(t.createdAt));
-    });
-    const invested = {};
-    invSnap.forEach(d => {
-      const inv = d.data();
-      if (!inv.userId) return;
-      invested[inv.userId] = (invested[inv.userId] || 0) + finiteMoney(inv.amount);
-    });
+    const { totals, invested, checkinDayKeys } = await computeRealTotals();
     let updated = 0, investedFixed = 0, streaksFixed = 0;
     const usersSnap = await db.collection('users').limit(10000).get();
     for (const doc of usersSnap.docs) {
