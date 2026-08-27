@@ -48,6 +48,12 @@ function softBlob(color,opacity,size,right,bottom){
 function brandWaveFull(){
   return `<svg class="brand-wave--full" viewBox="0 0 390 126" preserveAspectRatio="none" aria-hidden="true"><path d="M0 104 C58 68 104 61 154 83 C205 105 251 95 296 62 C332 36 362 23 390 31 L390 126 L0 126 Z" fill="var(--snow-canvas)"></path></svg>`;
 }
+// Account page's own bottom-wave shape -- a repeating triple-scallop instead
+// of Home's single diagonal S-curve, so the two full-bleed heroes read as
+// visually distinct rather than the same banner reused.
+function accountWaveFull(){
+  return `<svg class="account-wave--full" viewBox="0 0 390 100" preserveAspectRatio="none" aria-hidden="true"><path d="M0 58 C40 38 80 78 120 62 C160 46 200 82 240 64 C280 48 320 76 360 58 C375 51 384 47 390 44 L390 100 L0 100 Z" fill="var(--snow-canvas)"></path></svg>`;
+}
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
 
 function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-UG'); }
@@ -858,22 +864,25 @@ async function renderAccount(){
   const a = STATE.account || {};
   const s = STATE.settings || {};
   let html = `
-<div style="display:flex;align-items:center;gap:9px;padding:24px 20px 4px;">
-  ${snowflakeSvg('var(--snow-green)',26)}
-  <img src="/badge.png" alt="" style="height:38px;width:auto;">
-  <div class="wm-text" style="font-size:19px;color:var(--snow-green);">SNOW</div>
-</div>
-<div class="brand-card" style="margin:16px 20px 0;padding:22px;">
-  ${waveLinesTR(110,104)}
-  <div style="position:relative;display:flex;align-items:center;gap:12px;">
-    <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${snowflakeSvg('#fff',26)}</div>
-    <img src="/badge.png" alt="" style="height:104px;width:auto;flex-shrink:0;filter:drop-shadow(0 8px 12px rgba(0,0,0,.28));">
-    <div style="flex:1;min-width:0;">
-      <div style="display:flex;align-items:center;gap:7px;"><div class="mono" style="font-size:14.5px;font-weight:700;white-space:nowrap;">${esc(a.phone||'')}</div><button style="border:none;background:none;color:#fff;padding:0;" onclick="copyText('${esc(a.phone||'')}')">${ICONS.copy}</button></div>
+<div class="account-hero--full">
+  ${waveLinesTR(120,114)}
+  <div style="position:relative;padding:24px 20px 0;">
+    <div style="display:flex;align-items:center;gap:9px;">
+      ${snowflakeSvg('var(--snow-green)',26)}
+      <img src="/badge.png" alt="" style="height:38px;width:auto;">
+      <div class="wm-text" style="font-size:19px;color:#fff;">SNOW</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:24px;">
+      <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${snowflakeSvg('#fff',26)}</div>
+      <img src="/badge.png" alt="" style="height:104px;width:auto;flex-shrink:0;filter:drop-shadow(0 8px 12px rgba(0,0,0,.28));">
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:7px;"><div class="mono" style="font-size:14.5px;font-weight:700;white-space:nowrap;">${esc(a.phone||'')}</div><button style="border:none;background:none;color:#fff;padding:0;" onclick="copyText('${esc(a.phone||'')}')">${ICONS.copy}</button></div>
+      </div>
     </div>
   </div>
+  ${accountWaveFull()}
 </div>
-<div class="account-grid" style="margin:18px 20px 0;">
+<div class="account-grid" style="margin:-8px 20px 0;position:relative;z-index:1;">
   <button class="account-feature-card" style="background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);padding:20px 16px;" onclick="openWithdrawalAccountsSheet()">
     ${waveLinesTR(95,90,undefined,3,.75)}${softBlob('var(--snow-wine-deep)',.4,100,-26,-26)}
     <div class="account-icon-bubble" style="position:relative;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;margin-bottom:14px;">${ICONS.walletLg}</div>

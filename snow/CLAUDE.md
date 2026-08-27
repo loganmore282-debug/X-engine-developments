@@ -2313,6 +2313,39 @@ enabled `primary-button` reading "Claim"; the not-yet-achieved card shows a disa
 cleanly as three organized, separated boxes. `node --check` clean, `node build-core.js`
 round-trip clean, `git diff --check` clean. Cache bumped `v25`→`v26`.
 
+## Round 43 (2026-08-27) — Account page's profile header rebuilt as a full-bleed hero with its own distinct wave shape
+
+Owner, from an Account screenshot: "change the profile card it should fill upper
+part, also wavy design but different from that of home, don't remove contents which
+were there."
+
+**Before**: a plain wordmark row (padded, on the page's cream background) sat above a
+separate inset `.brand-card` (rounded corners, `margin:16px 20px 0`) containing the
+snowflake icon bubble, product bottle image, and phone number + copy button.
+
+**Now**: both pieces are merged into one full-bleed hero (`.account-hero--full`, no
+margin, edge-to-edge, `min-height:230px`) — same structural pattern Home's hero already
+uses to "fill the upper part," but with its own bottom-edge wave shape
+(`accountWaveFull()`, a repeating triple-scallop curve) instead of Home's single
+diagonal S-curve (`brandWaveFull()`), so the two full-bleed heroes read as genuinely
+different designs rather than the same banner reused. The wordmark text switched from
+green (readable on the page's cream background) to white (readable on the new wine
+gradient background) — matching the exact same green-icon/white-text convention Home's
+hero already uses for the identical reason. Every other piece of content is byte-for-
+byte the same: snowflake icon bubble, product bottle image, phone number, copy button —
+nothing removed, per the owner's explicit instruction.
+
+**Verified** with Playwright: the hero spans the full width of `#pageHost` and sits
+flush at the very top (0px offset); the phone number text and copy button are still
+present and unchanged; the wordmark text now computes to white
+(`rgb(255,255,255)`); the wave's SVG path data is confirmed non-empty and structurally
+distinct from Home's own wave path. Screenshot confirms the visual result: a solid
+wine-colored header filling the top of the screen, a distinct scalloped wave transition
+into the page content below, and the Withdrawal account/Records grid pulled up slightly
+to sit naturally against the wave's reserved space, matching Home's own spacing
+convention. `node --check` clean, `node build-core.js` round-trip clean, `git diff
+--check` clean. Cache bumped `v26`→`v27`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

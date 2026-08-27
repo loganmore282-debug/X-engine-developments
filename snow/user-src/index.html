@@ -58,6 +58,13 @@ a{color:inherit;}
 .brand-hero--full{position:relative;overflow:hidden;min-height:250px;padding-bottom:100px;background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);color:#fff;}
 .brand-wave--full{position:absolute;inset:auto 0 -1px;width:100%;height:126px;display:block;}
 .brand-card{background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);border-radius:var(--snow-radius-card);position:relative;overflow:hidden;color:#fff;}
+/* Account page's profile header -- same full-bleed "fills the upper part"
+   shape as Home's hero, but its own scalloped triple-bump wave (accountWaveFull())
+   instead of Home's single S-curve (brandWaveFull()), so the two read as
+   distinct, not copy-pasted (owner: "wavy design but different from that
+   of home"). */
+.account-hero--full{position:relative;overflow:hidden;min-height:230px;padding-bottom:58px;background:linear-gradient(145deg,var(--snow-wine) 0%,var(--snow-wine-deep) 100%);color:#fff;}
+.account-wave--full{position:absolute;inset:auto 0 -1px;width:100%;height:86px;display:block;}
 
 .wordmark{display:flex;align-items:center;gap:9px;}
 .wordmark .wm-text{font-weight:800;letter-spacing:2px;}
