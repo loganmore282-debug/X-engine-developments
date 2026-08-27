@@ -2004,6 +2004,18 @@ present, confirming the guard doesn't false-positive on the ordinary case; (3) c
 "business" repo/service for the 6 backend fixes above to take effect; the frontend fix is
 already baked into the deployed `user/index.html` in this commit).
 
+## Round 36 (2026-08-27) — Mission Center's Team Deposit Rewards ladder changed from 1%→5% of threshold
+
+Owner: "the first reward of deposit should be 7500ugx, next is 15000, hence calculate
+others" — confirmed against `MISSION_DEPOSIT_REWARDS` in server.js, which was a flat 1%
+of each threshold (150,000→1,500, 300,000→3,000, ...). 7,500 and 15,000 on those same two
+thresholds are exactly 5%, so scaled the whole ladder to 5% uniformly:
+150,000→7,500, 300,000→15,000, 600,000→30,000, 1,000,000→50,000, 2,500,000→125,000,
+5,000,000→250,000. Backend-only constant — the frontend renders `depositRewards` purely
+from the API response (`user-src/original_module.js` has no hardcoded reward numbers),
+and there's no admin UI for this ladder either, so no other file needed touching.
+`node --check server.js` clean. **server.js changed — needs a Railway redeploy.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -453,12 +453,14 @@ async function activeL1Count(userId) {
 //  2. Team deposit reward — ONE-TIME per cumulative-whole-team-deposit
 //     threshold (owner confirmed "on time" or one-time, same shape as the
 //     Task Center's own deposit ladder, just a separate claim-flag
-//     namespace and different numbers), all exactly 1% of the threshold.
+//     namespace and different numbers), all exactly 5% of the threshold
+//     (owner's own worked examples: 150,000 -> 7,500, 300,000 -> 15,000;
+//     every other tier scaled from those two the same way).
 const MISSION_SALARY_RATE = 200;
 const MISSION_SALARY_REFERRAL_CAP = 1000;
 const MISSION_DEPOSIT_REWARDS = [
-  { target: 150000, reward: 1500 }, { target: 300000, reward: 3000 }, { target: 600000, reward: 6000 },
-  { target: 1000000, reward: 10000 }, { target: 2500000, reward: 25000 }, { target: 5000000, reward: 50000 },
+  { target: 150000, reward: 7500 }, { target: 300000, reward: 15000 }, { target: 600000, reward: 30000 },
+  { target: 1000000, reward: 50000 }, { target: 2500000, reward: 125000 }, { target: 5000000, reward: 250000 },
 ];
 // Sum of the WHOLE team's (L1+L2+L3) deposits — powers Team's "Team
 // deposits" stat card.
