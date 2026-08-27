@@ -153,11 +153,11 @@ a{color:inherit;}
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:13px;}
 .list-end{padding:16px 4px 4px;text-align:center;color:var(--snow-muted);font-size:12px;}
 
-.sk{background:linear-gradient(90deg,var(--snow-neutral-soft) 25%,#fff 50%,var(--snow-neutral-soft) 75%);background-size:400% 100%;animation:skshimmer 1.4s ease infinite;border-radius:8px;}
-@keyframes skshimmer{0%{background-position:100% 0;}100%{background-position:-100% 0;}}
-.sk-row{display:flex;align-items:center;gap:12px;padding:14px 4px;}
-.sk-line{height:13px;}
-.sk-card{background:var(--snow-surface);border:1px solid var(--snow-border);border-radius:var(--snow-radius-card);padding:18px;}
+/* Real content fades/lifts into place once it's ready -- no shimmer
+   placeholders. Freshly-inserted DOM (a fresh innerHTML assignment) always
+   plays this from the start, so no manual restart/reflow trick is needed. */
+@keyframes revealIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.reveal-in{animation:revealIn .28s ease;}
 </style>
 </head>
 <body>

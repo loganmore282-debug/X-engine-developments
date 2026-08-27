@@ -1559,6 +1559,39 @@ and vertically in the viewport; a fired error toast's background is
 floats centered over the page instead of anchored near the bottom nav. Cache bumped
 `v14`→`v15`.
 
+## Round 30 (2026-08-27) — removed every shimmer skeleton loader; real content now fades/lifts into place when it's ready
+
+Owner: "also now remove skeleton loaders, l want this live animation, when one switches
+tabs or nav icon contents, contents appear." Snow had exactly one skeleton system --
+`skRows(n)`/`skPage()` (`user-src/original_module.js`) plus the `.sk`/`.sk-row`/
+`.sk-line`/`.sk-card`/`@keyframes skshimmer` CSS -- used as placeholder content while an
+async fetch was in flight, at 6 call sites: `showPage()`'s bottom-nav tab switch (a full
+`skPage()` shimmer shown before Home/Products/Team/Account's own render function
+resolved), `switchTeamLevel()`, the initial `teamMembersBox` in `renderTeam()`'s own
+markup, Mission Center, Records, Withdraw, and Withdrawal Accounts sheets.
+
+Deleted `skRows()`/`skPage()` and the shimmer CSS entirely. Replaced with a single
+`.reveal-in` class (`@keyframes revealIn{from{opacity:0;transform:translateY(8px)}
+to{opacity:1;transform:translateY(0)}}`, `.reveal-in{animation:revealIn .28s ease;}`)
+wrapped around the REAL content at every one of those 6 spots, once it's actually ready
+-- not around a placeholder. Since each of these is a fresh `innerHTML =` assignment
+(brand-new DOM nodes every time, never reused), the animation plays automatically from
+frame zero on every tab switch / sheet open with no manual restart or reflow trick
+needed. In the gap between switching tabs and the fetch resolving, the PREVIOUS page's
+content now stays visible (rather than snapping to a shimmer skeleton) until the new
+content is ready and replaces it with the fade/lift-in -- matches "when one switches
+tabs... contents appear" directly: nothing shows until there's real content to show, and
+that content visibly animates in rather than popping in flatly.
+
+**Verified**: `node --check` clean, `node build-core.js` clean round-trip, `git diff
+--check` clean. Playwright: confirmed zero `.sk`/`.sk-row`/`.sk-line`/`.sk-card`
+elements exist anywhere in the built app; confirmed `#pageHost > .reveal-in` is present
+after switching to Products/Team/Account; confirmed `#teamMembersBox .reveal-in` is
+present after a level switch; confirmed `#recordsBody .reveal-in`, and `#sheetBody >
+.reveal-in` for the Withdraw, Withdrawal Accounts, and Mission Center sheets. Screenshot
+of the settled Team page confirms full real content renders cleanly, no leftover shimmer
+bars anywhere. Cache bumped `v15`→`v16`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

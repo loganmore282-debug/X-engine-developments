@@ -59,22 +59,6 @@ function eatTodayStr(){
   const pad = n => String(n).padStart(2, '0');
   return pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()) + '/' + d.getUTCFullYear();
 }
-function skRows(n){
-  let html = '';
-  for (let i = 0; i < n; i++) html += `
-    <div class="sk-row">
-      <div class="sk" style="width:38px;height:38px;border-radius:50%;flex-shrink:0;"></div>
-      <div style="flex:1;"><div class="sk sk-line" style="width:60%;"></div><div class="sk sk-line" style="width:35%;margin-top:8px;height:10px;"></div></div>
-    </div>`;
-  return html;
-}
-function skPage(){
-  return `<div style="padding:20px;">
-    <div class="sk" style="height:140px;border-radius:var(--snow-radius-card);"></div>
-    <div style="display:flex;gap:10px;margin-top:16px;"><div class="sk" style="flex:1;height:60px;border-radius:16px;"></div><div class="sk" style="flex:1;height:60px;border-radius:16px;"></div><div class="sk" style="flex:1;height:60px;border-radius:16px;"></div></div>
-    <div class="sk-card" style="margin-top:20px;">${skRows(3)}</div>
-  </div>`;
-}
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function $(id){ return document.getElementById(id); }
 function togglePw(id, btn){
@@ -268,8 +252,6 @@ window.showPage = async function(name){
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   stopActivityTicker();
-  const host = $('pageHost');
-  host.innerHTML = skPage();
   if (name === 'home') await renderHome();
   else if (name === 'products') await renderProducts();
   else if (name === 'team') await renderTeam();
@@ -351,7 +333,7 @@ async function renderHome(){
   </div>`;
   });
   html += `</div><div style="height:16px;"></div>`;
-  $('pageHost').innerHTML = html;
+  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   startActivityTicker();
 }
 
@@ -408,7 +390,7 @@ async function renderProducts(){
     });
   }
   html += `</div><div style="height:16px;"></div>`;
-  $('pageHost').innerHTML = html;
+  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   startPlanCountdowns();
 }
 // Live-ticking "Next cashback in HH:MM:SS" on each active plan card. Cleared
@@ -475,9 +457,7 @@ function startActivityTicker(){
 
 // ── TEAM ──
 window.switchTeamLevel = async function(level){
-  const box = $('teamMembersBox');
   document.querySelectorAll('.team-level-switcher .seg').forEach(s => s.classList.toggle('active', Number(s.dataset.level)===level));
-  box.innerHTML = skRows(3);
   if (!STATE.teamMembers[level]) {
     const r = await api('/team/members?level=' + level);
     STATE.teamMembers[level] = r.status === 'success' ? r.members : [];
@@ -505,8 +485,8 @@ function renderTeamMembers(level){
   $('teamMembersHeading').textContent = `Level ${level} members`;
   $('teamMembersCount').textContent = `${members.length} member${members.length===1?'':'s'}`;
   const box = $('teamMembersBox');
-  if (!members.length) { box.innerHTML = '<div class="list-empty">No members at this level yet.</div>'; return; }
-  box.innerHTML = members.map((m,idx) => `
+  if (!members.length) { box.innerHTML = '<div class="list-empty reveal-in">No members at this level yet.</div>'; return; }
+  box.innerHTML = '<div class="reveal-in">' + members.map((m,idx) => `
   <div class="list-row">
     <div class="mono" style="width:24px;flex-shrink:0;text-align:center;font-size:14px;font-weight:700;color:var(--snow-muted);">${idx+1}</div>
     <div style="flex:1;min-width:0;">
@@ -514,7 +494,7 @@ function renderTeamMembers(level){
       <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">${timeAgo(m.createdAt)}</div>
     </div>
     <div class="status-pill ${m.invested>0?'active':'pending'} mono">${m.invested>0?fmtUGX(m.invested):'UGX 0'}</div>
-  </div>`).join('');
+  </div>`).join('') + '</div>';
 }
 async function renderTeam(){
   const r = await api('/team/stats');
@@ -580,17 +560,17 @@ async function renderTeam(){
     <div id="teamMembersHeading" style="font-size:15px;font-weight:800;color:var(--snow-ink);">Level 1 members</div>
     <div id="teamMembersCount" style="font-size:12px;color:var(--snow-muted);"></div>
   </div>
-  <div id="teamMembersBox">${skRows(3)}</div>
+  <div id="teamMembersBox"></div>
 </div>
 <div style="height:16px;"></div>`;
-  $('pageHost').innerHTML = html;
+  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
   STATE.teamMembers = {1:null,2:null,3:null};
   switchTeamLevel(1);
 }
 window.openMissionCenterSheet = async function(){
-  openSheet('Mission Center', skRows(4));
+  openSheet('Mission Center', '');
   const r = await api('/mission/status');
-  if (r.status !== 'success') { $('sheetBody').innerHTML = '<div class="list-empty">Could not load Mission Center right now.</div>'; return; }
+  if (r.status !== 'success') { $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>'; return; }
   STATE.mission = r;
   renderMissionCenter();
 };
@@ -612,7 +592,7 @@ function renderMissionCenter(){
           ? `<button class="primary-button" style="padding:8px 16px;font-size:12.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
           : `<div class="status-pill pending mono">${fmtUGX(m.teamDeposits)} / ${fmtUGX(d.target)}</div>`}
     </div>`).join('');
-  $('sheetBody').innerHTML = `
+  $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="app-card" style="padding:18px;">
       <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-muted);font-weight:700;">Daily Referral Salary</div>
       <div style="font-size:13px;color:var(--snow-muted);margin-top:6px;">UGX 200 per active referral, up to 1,000 referrals. Claim once a day — resets at 00:00.</div>
@@ -627,7 +607,7 @@ function renderMissionCenter(){
       <div style="font-size:12px;color:var(--snow-muted);padding-bottom:10px;">One-time reward per threshold — claim manually once your whole team's deposits reach it.</div>
       ${depositRows}
     </div>
-    <p style="font-size:11.5px;color:var(--snow-muted);line-height:1.6;margin:14px 2px 0;">Daily salaries are credited once referrals meet the active-account criteria. Team deposit rewards are available to claim instantly once your team's deposits confirm.</p>`;
+    <p style="font-size:11.5px;color:var(--snow-muted);line-height:1.6;margin:14px 2px 0;">Daily salaries are credited once referrals meet the active-account criteria. Team deposit rewards are available to claim instantly once your team's deposits confirm.</p></div>`;
 }
 window.claimMissionSalary = async function(){
   const r = await post('/mission/salary/claim', {});
@@ -701,7 +681,7 @@ async function renderAccount(){
   <div style="position:relative;font-size:15px;font-weight:700;color:var(--snow-wine-deep);">Sign out</div>
 </button>
 <div style="height:16px;"></div>`;
-  $('pageHost').innerHTML = html;
+  $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
 
 // ── SHEETS ──
@@ -806,7 +786,7 @@ window.openRecordsSheet = async function(){
       <button class="seg" data-cat="deposit" onclick="switchRecordsTab('deposit')">Deposits</button>
       <button class="seg" data-cat="withdraw" onclick="switchRecordsTab('withdraw')">Withdrawals</button>
     </div>
-    <div id="recordsBody" style="margin-top:16px;">` + skRows(5) + `</div>`);
+    <div id="recordsBody" style="margin-top:16px;"></div>`);
   const r = await api('/transactions');
   _recordsRows = r.status === 'success' ? r.transactions : [];
   renderRecordsTab('income');
@@ -820,15 +800,15 @@ function renderRecordsTab(cat){
   const body = $('recordsBody');
   if (!body) return;
   const rows = _recordsRows.filter(t => recordsTabMatch(cat, t));
-  if (!rows.length) { body.innerHTML = '<div class="list-empty">No records yet.</div>'; return; }
-  body.innerHTML = '<div class="settings-list">' + rows.map(t => `
+  if (!rows.length) { body.innerHTML = '<div class="list-empty reveal-in">No records yet.</div>'; return; }
+  body.innerHTML = '<div class="reveal-in"><div class="settings-list">' + rows.map(t => `
     <div class="list-row">
       <div style="flex:1;min-width:0;">
         <div style="font-size:13.5px;font-weight:600;">${esc(cleanDesc(t.description))}</div>
         <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">${esc(t.date||'')} ${esc(t.time||'')}</div>
       </div>
       <div class="mono" style="font-size:13px;font-weight:700;color:${t.amount<0?'var(--snow-wine)':'var(--snow-green)'};">${t.amount<0?'-':'+'}${fmtUGX(Math.abs(t.amount))}</div>
-    </div>`).join('') + '</div><div class="list-end">No more data</div>';
+    </div>`).join('') + '</div><div class="list-end">No more data</div></div>';
 }
 function cleanDesc(d){ return d || ''; }
 
@@ -869,11 +849,11 @@ async function pollDepositStatus(depositId){
 
 window.openWithdrawSheet = async function(){
   const s = STATE.settings || {};
-  openSheet('Withdraw', skRows(2));
+  openSheet('Withdraw', '');
   const r = await api('/bank/list');
   STATE.bankAccounts = r.status === 'success' ? r.accounts : [];
   const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)} — ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
-  $('sheetBody').innerHTML = `
+  $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minWithdraw)}, ${s.withdrawFeePct||15}% fee applies)</label><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0"></div>
     <div class="form-field"><label>Withdrawal account</label>
       ${STATE.bankAccounts.length
@@ -881,7 +861,7 @@ window.openWithdrawSheet = async function(){
         : `<div class="form-hint">No withdrawal account saved yet.</div><button class="secondary-button" style="width:100%;padding:12px 0;margin-top:8px;" onclick="openWithdrawalAccountsSheet()">Add withdrawal account</button>`}
     </div>
     <div class="form-field"><label>Transaction PIN</label><input id="witPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code"></div>
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button>`;
+    <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button></div>`;
 };
 window.submitWithdraw = async function(){
   const amount = parseInt($('witAmount').value, 10);
@@ -901,14 +881,14 @@ window.submitWithdraw = async function(){
 };
 
 window.openWithdrawalAccountsSheet = async function(){
-  openSheet('Withdrawal Accounts', skRows(2));
+  openSheet('Withdrawal Accounts', '');
   const r = await api('/bank/list');
   STATE.bankAccounts = r.status === 'success' ? r.accounts : [];
   renderWithdrawalAccountsSheet();
 };
 function renderWithdrawalAccountsSheet(){
   const list = STATE.bankAccounts || [];
-  let html = '<div class="settings-list" style="margin-bottom:18px;">';
+  let html = '<div class="reveal-in"><div class="settings-list" style="margin-bottom:18px;">';
   html += list.length ? list.map(a => `
     <div class="list-row">
       <div style="flex:1;min-width:0;">
@@ -930,7 +910,7 @@ function renderWithdrawalAccountsSheet(){
     </div>
     <div class="form-field"><label>Phone number</label><input id="bankPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX"></div>
     <div class="form-field"><label>Transaction PIN</label><input id="bankPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code"></div>
-    <button class="primary-button" id="bankSaveBtn" style="width:100%;padding:15px 0;font-size:15px;" onclick="saveWithdrawalAccount()">Save account</button>`;
+    <button class="primary-button" id="bankSaveBtn" style="width:100%;padding:15px 0;font-size:15px;" onclick="saveWithdrawalAccount()">Save account</button></div>`;
   $('sheetBody').innerHTML = html;
 }
 window.saveWithdrawalAccount = async function(){
