@@ -36,16 +36,23 @@ var ICONS = {
   eyeOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A11.4 11.4 0 0 1 12 5c7 0 11 7 11 7a17.5 17.5 0 0 1-3.1 3.9M6.7 6.7C3.6 8.5 1 12 1 12s4 7 11 7a10.6 10.6 0 0 0 4.3-.9"/><path d="M9.5 9.8A3 3 0 0 0 12 15a3 3 0 0 0 2.2-.97"/></svg>',
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
-// subagent-audit-caught, owner-reported: the old branch-tick path data
-// wasn't actually symmetric around each spoke (e.g. one branch nearly
-// horizontal, the other nearly vertical, off the SAME tip) -- rendered
-// with round caps this read as a bent arrow/pinwheel, not a snowflake.
-// Rebuilt from real trigonometry (6 tips 60° apart, one symmetric V-shaped
-// branch pair per tip at a consistent angle off its own spoke) and visually
-// confirmed before shipping. stroke-linejoin:round added so each branch's
-// two segments (now one continuous polyline through the shared vertex, not
-// two lines stacking round caps on top of each other) meet cleanly.
-function snowflakeSvg(color, size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5L12 21.5M3.77 7.25L20.23 16.75M20.23 7.25L3.77 16.75"/><path d="M10.51 3.67L12 5.8L13.49 3.67M4.04 9.13L6.63 8.9L5.53 6.54M5.53 17.46L6.63 15.1L4.04 14.87M13.49 20.33L12 18.2L10.51 20.33M19.96 14.87L17.37 15.1L18.47 17.46M18.47 6.54L17.37 8.9L19.96 9.13"/></svg>`; }
+// Owner: "l need exactly this ❄️" -- a hand-drawn stroke-based approximation
+// (even a geometrically-corrected one, see the prior version of this
+// comment) was never going to match the real emoji glyph people actually
+// recognize, since Unicode only defines the codepoint U+2744, not one
+// universal outline -- every vendor (Apple/Google/Microsoft/Twemoji) draws
+// it differently. Codex was asked (with repo + AGENT_LOG.md access) for the
+// closest legally-reusable, recognizable rendition and returned Twemoji's
+// official snowflake (twitter/twemoji assets/svg/2744.svg), normalized from
+// its native 36x36 viewBox down to this app's 24x24 icon convention. It's a
+// FILLED silhouette (3 paths, six-fold symmetry), not a stroke icon like
+// every other ICONS entry -- fill="${color}" with no stroke is correct here,
+// don't "fix" it to match the stroke convention elsewhere in this file.
+// Attribution (required, CC BY 4.0 -- Twemoji explicitly allows this to live
+// in source code rather than a visible UI credit): snowflake artwork
+// adapted from Twemoji by Twitter, Inc. and other contributors, licensed
+// under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+function snowflakeSvg(color, size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" aria-hidden="true"><path d="M12.667 18.391V5.61L15.885 2.391C15.885 2.391 16.357 1.919 15.885 1.447C15.414.976 14.943 1.447 14.943 1.447L12.667 3.724V.667C12.667.667 12.667 0 12 0C11.333 0 11.333.667 11.333.667V3.724L9.057 1.447C9.057 1.447 8.586.976 8.115 1.447C7.643 1.919 8.115 2.391 8.115 2.391L11.333 5.61V18.391L8.115 21.609C8.115 21.609 7.643 22.081 8.115 22.552C8.586 23.023 9.057 22.552 9.057 22.552L11.333 20.276V23.333C11.333 23.333 11.333 24 12 24C12.667 24 12.667 23.333 12.667 23.333V20.276L14.943 22.552C14.943 22.552 15.414 23.023 15.885 22.552C16.357 22.081 15.885 21.609 15.885 21.609L12.667 18.391Z"/><path d="M23.081 13.911C22.909 13.267 22.265 13.439 22.265 13.439L17.868 14.617L6.799 8.227L5.621 3.83C5.621 3.83 5.449 3.186 4.805 3.359C4.16 3.531 4.333 4.175 4.333 4.175L5.167 7.285L2.519 5.755C2.519 5.755 1.941 5.422 1.608 5.999C1.275 6.577 1.852 6.91 1.852 6.91L4.499 8.439L1.39 9.271C1.39 9.271.745 9.444.919 10.088C1.091 10.733 1.735 10.56 1.735 10.56L6.133 9.382L17.201 15.773L18.379 20.17C18.379 20.17 18.552 20.814 19.196 20.641C19.84 20.468 19.667 19.825 19.667 19.825L18.834 16.715L21.482 18.244C21.482 18.244 22.06 18.577 22.393 18.001C22.727 17.423 22.149 17.089 22.149 17.089L19.501 15.561L22.61 14.728C22.61 14.727 23.254 14.555 23.081 13.911Z"/><path d="M22.61 9.271L19.501 8.438L22.149 6.909C22.149 6.909 22.727 6.575 22.393 5.998C22.059 5.42 21.482 5.754 21.482 5.754L18.835 7.282L19.667 4.173C19.667 4.173 19.84 3.529 19.196 3.357C18.552 3.184 18.379 3.828 18.379 3.828L17.201 8.225L6.132 14.617L1.736 13.439C1.736 13.439 1.092 13.266.919 13.91C.746 14.555 1.391 14.727 1.391 14.727L4.499 15.559L1.852 17.088C1.852 17.088 1.275 17.422 1.609 17.999C1.942 18.576 2.519 18.243 2.519 18.243L5.167 16.714L4.333 19.823C4.333 19.823 4.161 20.467 4.805 20.639C5.449 20.813 5.622 20.169 5.622 20.169L6.801 15.771L17.87 9.381L22.267 10.559C22.267 10.559 22.911 10.732 23.083 10.088C23.253 9.443 22.61 9.271 22.61 9.271Z"/></svg>`; }
 function waveLinesTR(w,h,color,count,opacity){
   color = color || 'var(--snow-wave-on-wine)'; count = count || 4; opacity = opacity == null ? .9 : opacity;
   const paths = ["M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155","M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147","M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140","M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132"];

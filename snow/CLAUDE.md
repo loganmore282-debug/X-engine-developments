@@ -3632,6 +3632,57 @@ suites — no regressions. Cache bumped `v47`→`v48` (user), `v9`→`v10` (admi
 files also changed, even though `admin-src/index.html` itself has no inline snowflake
 copy to fix). `user-src/`-only + icon-asset change — no Render redeploy needed.
 
+## Round 67 (2026-08-28) — snowflake replaced with the real Twemoji ❄️ glyph everywhere (superseding Round 66's hand-drawn fix)
+
+Owner, after seeing Round 66's geometrically-corrected but still hand-drawn snowflake:
+"l need exactly this ❄️, ask codex in a prompt on how to do it." Right call — Unicode
+only defines the codepoint U+2744, not one universal outline (every vendor draws it
+differently), so no amount of manual redrawing was ever going to match the actual emoji
+people recognize. Wrote Codex a prompt (given repo + branch access and pointed at
+`AGENT_LOG.md`/`CLAUDE.md`/the real `snowflakeSvg()` code, not just a prose description)
+asking for the closest legally-reusable, recognizable rendition. Codex returned Twemoji's
+official snowflake (`twitter/twemoji` `assets/svg/2744.svg`), normalized from its native
+36×36 viewBox to this app's 24×24 icon convention, as 3 filled paths — genuinely
+different from every stroke-based `ICONS` entry elsewhere in this app (verified by
+rendering it standalone before touching anything: it's clearly the real, recognizable
+emoji shape, not another guess).
+
+**Applied verbatim** to `snowflakeSvg()` (`user-src/original_module.js`) and the
+identical inline copy in the auth-screen header (`user-src/index.html`) — `fill="${color}"`
+with no stroke now, a deliberate one-off exception to this app's usual stroke-icon
+convention, documented in both places so a future edit doesn't "fix" it back to match.
+
+**Re-derived the maskable-icon safe-zone math properly this round — Round 66's own
+sizing was needlessly small.** Android's maskable-icon spec guarantees content survives
+adaptive-icon cropping if it stays within a circle of **diameter 80% of the full icon
+width** — i.e. **radius 80% of the icon's HALF-width**, not 40% as Round 66 mistakenly
+computed (confusing "40% of full width" with "40% of half-width" — the two are exactly
+2× apart). Measured the Twemoji glyph's own real extent first (it touches its 24×24
+viewBox's edges exactly, e.g. the top spoke tip sits at literal y=0) rather than trusting
+Codex's suggested `scale(.8)` transform blindly — chose `scale(.68)` instead (comfortable
+margin under the 80% ceiling, not sitting exactly on it) and verified the resulting PNG's
+actual white-pixel extent sits at 68% of the half-width, both larger and more correctly
+justified than Round 66's overly-conservative 38%.
+
+**License, real and now satisfied.** Twemoji is CC BY 4.0 — commercial use, recoloring,
+and resizing are all permitted, attribution required, and Twemoji's own license
+explicitly allows that attribution to live in source code rather than a visible UI
+credit. Added as a comment directly above `snowflakeSvg()` and above the auth-header's
+inline copy: *"Snowflake artwork adapted from Twemoji by Twitter, Inc. and other
+contributors, licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."*
+Anyone touching this glyph in a future round needs to keep this comment attached to it.
+
+**Regenerated both icon sizes** (`user/` and `admin/`, same wine gradient background as
+before) with the new glyph at the corrected 68%-of-half-width scale.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. Playwright, against the real built app: both the auth-screen and Home-header
+snowflakes render the exact Twemoji path data (checked via each SVG's actual `d`
+attribute). Icon files re-inspected visually and their white-pixel extent measured
+programmatically to confirm the corrected 68% safe-zone sizing. Re-ran Rounds 59/62/65's
+own suites — no regressions. Cache bumped `v48`→`v49` (user), `v10`→`v11` (admin).
+`user-src/`-only + icon-asset change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
