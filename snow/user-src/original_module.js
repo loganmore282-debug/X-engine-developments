@@ -686,7 +686,7 @@ function paintProducts(animate){
 <div class="section-title" style="margin:26px 20px 12px;">Active Plans</div>
 <div style="display:flex;flex-direction:column;gap:14px;margin:0 20px;">`;
   if (!investments.length) {
-    html += `<div class="list-empty">No products yet — browse plans on Home to get started.</div>`;
+    html += `<div class="list-empty"><div class="empty-icon">${ICONS.box}</div>No products yet — browse plans on Home to get started.</div>`;
   } else {
     investments.forEach(inv => {
       const p = (STATE.products||[]).find(x=>x.key===inv.tierKey) || {};

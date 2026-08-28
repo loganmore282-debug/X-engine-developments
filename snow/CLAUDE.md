@@ -2838,6 +2838,23 @@ regressions). Playwright-verified the Mission Center copy renders the live rate.
 `git diff --check` clean. Cache bumped `v34`→`v35`. **`server.js` changed → needs a
 Railway redeploy.**
 
+## Round 54 (2026-08-27) — beer/bottles SVG added to My Products' empty state, centered
+
+Owner, with a screenshot of the "No products yet" empty state circled: wants the beer
+icon there too, as an SVG, centered. Reused `ICONS.box` verbatim (the bottles+mugs
+illustration already live as the My Products nav icon since Round 48) rather than
+re-embedding new SVG code — same artwork the owner already sent, now shown at both the
+nav icon size and here. `renderMyProducts()`'s empty-state branch
+(`user-src/original_module.js`) wraps it in a new `.empty-icon` div; new CSS
+(`user-src/index.html`) sizes it to 64px and centers it via `.list-empty`'s existing
+`text-align:center` — no layout changes needed elsewhere since `.list-empty` was already
+a centered block.
+
+**Verified** with Playwright: confirmed the icon's bounding-box center lands exactly on
+the viewport's horizontal center (195px on a 390px-wide screen), screenshot shows it
+sitting cleanly above the empty-state text. `node --check` clean, `node build-core.js`
+round-trip clean, `git diff --check` clean. Cache bumped `v35`→`v36`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
