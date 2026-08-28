@@ -3378,6 +3378,32 @@ Cache bumped `v41`→`v42` (user), `v8`→`v9` (admin). **`server.js` changed �
 should auto-deploy this push** (see Round 38's correction: Snow is on Render with
 `autoDeploy: true`, not Railway).
 
+## Round 61 (2026-08-28) — announcement dialog given a fixed, reasonable height with an internal scroll region
+
+Owner: "bro, the dialog should have a fixed height, so words should be small, should be
+reasonable height" — confirmed (asked which dialog) they meant the Home announcement
+popup specifically. `.announce-modal p` had no height constraint at all, so an
+admin-authored `annBody` of any real length made the whole dialog grow to match —
+capable of running off both edges of the viewport on a long message.
+
+Fixed: `.announce-modal` capped at `max-height:70vh`, laid out as a column
+(`display:flex;flex-direction:column`) with the title and OK button `flex-shrink:0` so
+they always stay visible/reachable; the body text now sits in a new `.announce-scroll`
+wrapper (`overflow-y:auto;flex:1;min-height:0`) that scrolls internally once content
+exceeds the available space, instead of pushing the dialog's own height past a
+reasonable size. Body text size reduced `13.5px`→`12.5px` and title `18px`→`16.5px`
+("words should be small"), line-height tightened slightly to match.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. New Playwright check with a deliberately long (30-paragraph) mocked `annBody`:
+the dialog's own bounding box stays under 85% of viewport height and never runs off
+either edge; the OK button stays visible/clickable regardless of body length; the new
+`.announce-scroll` region's `scrollHeight` (2306px) genuinely exceeds its `clientHeight`
+(459px), confirming the overflow is actually being caught by the scroll region and not
+just visually hidden. Re-ran Round 59's frontend suite (covers this same dialog's
+scroll-lock/centering behavior from Rounds 56–57) — no regressions. Cache bumped
+`v42`→`v43`. `user-src/`-only change — no Render redeploy needed for the backend.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

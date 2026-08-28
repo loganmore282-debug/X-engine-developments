@@ -187,9 +187,11 @@ a{color:inherit;}
    and centered scale-in, with its own close (X) button and left-aligned
    multi-line body text since this holds a real paragraph, not a one-line
    caption. */
-.announce-modal{position:relative;text-align:left;}
-.announce-modal h3{font-size:18px;font-weight:800;margin:0 0 10px;padding-right:24px;}
-.announce-modal p{white-space:pre-line;line-height:1.6;font-size:13.5px;color:rgba(255,255,255,.85);margin:0;}
+.announce-modal{position:relative;text-align:left;max-height:70vh;display:flex;flex-direction:column;}
+.announce-modal h3{font-size:16.5px;font-weight:800;margin:0 0 8px;padding-right:24px;flex-shrink:0;}
+.announce-scroll{overflow-y:auto;flex:1;min-height:0;}
+.announce-modal p{white-space:pre-line;line-height:1.55;font-size:12.5px;color:rgba(255,255,255,.85);margin:0;}
+.announce-modal .primary-button{flex-shrink:0;}
 .announce-close{position:absolute;top:-8px;right:-6px;width:30px;height:30px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
 
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:13px;}
@@ -337,8 +339,8 @@ a{color:inherit;}
   <div class="chest-modal announce-modal">
     <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h3 id="announceTitle" style="display:none;"></h3>
-    <p id="announceBody"></p>
-    <button class="primary-button" style="width:100%;padding:14px 0;font-size:15px;margin-top:20px;" onclick="confirmAnnounce()">OK</button>
+    <div class="announce-scroll"><p id="announceBody"></p></div>
+    <button class="primary-button" style="width:100%;padding:14px 0;font-size:15px;margin-top:16px;" onclick="confirmAnnounce()">OK</button>
   </div>
 </div>
 
