@@ -628,7 +628,21 @@ window.showPage = async function(name){
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   stopActivityTicker();
-  if (name === 'home') { await renderHome(); await withTimeout(_bootPromise, 6000); maybeShowAnnouncement(); }
+  if (name === 'home') {
+    await renderHome();
+    await withTimeout(_bootPromise, 6000);
+    // subagent-audit-caught: this used to call maybeShowAnnouncement()
+    // unconditionally the instant the wait above resolved -- but a member
+    // impatient enough to tap Deposit/Withdraw/the gift-code chest while that
+    // wait was still in flight would have the dialog pop up ON TOP of
+    // whatever they'd already opened, since none of those open as a page nav
+    // (they're overlays stacked over Home, which never stops being
+    // STATE.page) -- owner: "it can show up when you are in another area or
+    // deposit or withdrawal screen or giftcode screen." Only show it if the
+    // member is still genuinely just looking at plain Home with nothing else
+    // open by the time this resolves.
+    if (STATE.page === 'home' && !isAnyOverlayOpen()) maybeShowAnnouncement();
+  }
   else if (name === 'products') await renderProducts();
   else if (name === 'team') await renderTeam();
   else if (name === 'account') await renderAccount();
@@ -882,13 +896,26 @@ function activityRowText(row){
 async function renderActivityTicker(){
   const track = $('activityTickerTrack');
   if (!track) return;
+  // subagent-audit-caught: this used to check STATE.activityFeed immediately,
+  // racing boot()'s own prefetch instead of actually using it -- on the
+  // cache-hit instant-boot path (Round 46), paintHome()/startActivityTicker()
+  // fire synchronously the moment the app becomes visible, almost always
+  // BEFORE boot()'s three parallel fetches (settings/products/activity-feed)
+  // have had time to land over a real network. STATE.activityFeed was still
+  // null nearly every time, so this fell straight into its own live fetch and
+  // showed "Loading activity…" regardless of the prefetch -- owner: "activity
+  // checker is not loaded... it should have loaded everything after startup
+  // spin loader." Awaiting the SAME _bootPromise every other prefetch
+  // consumer already awaits makes this genuinely wait for (not race) the
+  // prefetch on the very first call; resolves near-instantly on every call
+  // after the first, since _bootPromise only ever settles once.
+  await withTimeout(_bootPromise, 6000);
+  if (STATE.page !== 'home' || !$('activityTickerTrack')) return; // navigated away while awaiting
   let rows;
   if (STATE.activityFeed) {
-    // Already prefetched by boot() before the loading screen came down --
-    // consume it once so the ticker paints immediately instead of showing a
-    // blank strip while it does its own fetch (owner: "the activity checker
-    // should be loaded up too"). Every call after this one does a real
-    // fetch again, same as before.
+    // Prefetched by boot() -- consume it once so the ticker paints from the
+    // prefetch instead of firing a redundant live fetch. Every call after
+    // this one does a real fetch again, same as before.
     rows = STATE.activityFeed;
     STATE.activityFeed = null;
   } else {
@@ -1255,6 +1282,16 @@ async function renderAccount(){
 // always does, it's a static element whose innerHTML just gets replaced).
 // See openWithdrawSheet/openWithdrawalAccountsSheet/openMissionCenterSheet.
 var _openSheetTitle = null;
+// Used by showPage()'s deferred maybeShowAnnouncement() call to check whether
+// the member has since opened a sheet, the gift-code chest, or a confirm
+// dialog on top of Home while the announcement's own wait was still in
+// flight -- none of those are page navigations (STATE.page stays 'home'
+// throughout), so _openSheetTitle alone isn't enough on its own.
+function isAnyOverlayOpen(){
+  return !!(_openSheetTitle
+    || ($('chestModalBg') && $('chestModalBg').classList.contains('show'))
+    || ($('confirmBg') && $('confirmBg').classList.contains('show')));
+}
 function openSheet(title, bodyHtml){
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
@@ -1297,7 +1334,7 @@ window.openInfoSheet = function(kind){
     rules: ['Rules & Terms', s.rulesText || 'Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + (s.withdrawFeePct||15) + '% fee applies. Referral commission: Level 1 ' + (s.commL1||27) + '%, Level 2 ' + (s.commL2||2) + '%, Level 3 ' + (s.commL3||1) + '%.'],
   };
   const [title, body] = map[kind] || ['Info', ''];
-  openSheet(title, `<p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p>`);
+  openSheet(title, `<div class="reveal-in"><p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p></div>`);
 };
 // Help Centre banner + the two support links are lazy-fetched only when
 // this page is actually opened (the banner can be a large embedded image,
@@ -1357,13 +1394,14 @@ window.openCheckinSheet = function(){
   const bonus = Number(STATE.settings && STATE.settings.dailyCheckin) || 0;
   const streak = Number(a.checkinStreak) || 0;
   const claimedToday = a.lastCheckin === eatTodayStr();
-  openSheet('Daily Check-in', `
+  openSheet('Daily Check-in', `<div class="reveal-in">
     <div class="app-card" style="padding:24px 20px;text-align:center;">
       <div style="font-size:12.5px;color:var(--snow-muted);text-transform:uppercase;letter-spacing:.5px;">Current streak</div>
       <div class="mono" style="font-size:36px;font-weight:800;margin-top:6px;color:var(--snow-green);">${streak}<span style="font-size:15px;font-weight:600;color:var(--snow-muted);"> day${streak===1?'':'s'}</span></div>
       <div style="font-size:13px;color:var(--snow-muted);margin-top:12px;line-height:1.5;">Check in daily to keep your streak and earn ${fmtUGX(bonus)} every day.</div>
       <button class="primary-button" id="checkinBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:20px;" ${claimedToday?'disabled':''} onclick="submitCheckin()">${claimedToday?'Claimed today':'Check In &middot; '+fmtUGX(bonus)}</button>
-    </div>`);
+    </div>
+  </div>`);
 };
 window.submitCheckin = async function(){
   const btn = $('checkinBtn');
@@ -1524,7 +1562,7 @@ window.openDepositSheet = function(){
   const chipsHtml = quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
     quickAmts.map(p => `<button type="button" class="quick-amt" data-amt="${p}" onclick="pickDepositAmount(${p})">${fmtUGX(p)}</button>`).join('')
   }</div>` : '';
-  openSheet('Deposit', `
+  openSheet('Deposit', `<div class="reveal-in">
     <div class="form-hint" style="margin:-6px 0 14px;line-height:1.6;">
       1. Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount below.<br>
       2. Confirm your mobile-money number and network.<br>
@@ -1540,7 +1578,8 @@ window.openDepositSheet = function(){
         <option value="Airtel Money">Airtel Money</option>
       </select>
     </div>
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Deposit</button>`);
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Deposit</button>
+  </div>`);
 };
 window.pickDepositAmount = function(amt){
   $('depAmount').value = amt;

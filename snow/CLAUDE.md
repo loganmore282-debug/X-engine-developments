@@ -3404,6 +3404,67 @@ just visually hidden. Re-ran Round 59's frontend suite (covers this same dialog'
 scroll-lock/centering behavior from Rounds 56–57) — no regressions. Cache bumped
 `v42`→`v43`. `user-src/`-only change — no Render redeploy needed for the backend.
 
+## Round 62 (2026-08-28) — announcement dialog no longer pops up over another open screen, activity ticker actually uses its boot-time prefetch instead of racing it, Deposit gets its live-appearing animation
+
+Owner, four complaints in one message: the activity ticker still shows "Loading
+activity…" instead of being ready right after the spin loader; the announcement dialog
+takes long to show up, and can show up while already on Deposit/Withdrawal/gift-code —
+"no it should show up immediately"; and opening Deposit "doesn't show live appearing
+animation just like other pages." Investigated all four against the actual code rather
+than guessing at CSS tweaks.
+
+**Announcement popping up over another screen — real, root-caused.** `showPage()`'s
+`'home'` branch calls `maybeShowAnnouncement()` unconditionally the instant its own
+`withTimeout(_bootPromise, 6000)` wait resolves — but Deposit/Withdraw/the gift-code
+chest all open as OVERLAYS stacked on top of Home (`STATE.page` stays `'home'`
+throughout; none of them are a page navigation). On the common repeat-visit case
+(Round 46's cache-hit instant boot), the app becomes visible with zero network wait
+while `boot()`'s own settings/products/activity-feed fetch is still genuinely in
+flight — plenty of time for an impatient member to tap Deposit before that wait
+resolves. When it then resolved, the dialog popped up ON TOP of whatever they'd
+already opened, exactly matching "it can show up when you are in another area or
+deposit or withdrawal screen or giftcode screen." Fixed with a new `isAnyOverlayOpen()`
+helper (checks `_openSheetTitle` for any open sheet, plus `#chestModalBg`/`#confirmBg`'s
+own `.show` class for the gift-code and confirm/invest-confirm dialogs, since those
+don't use the sheet system at all) — the deferred call now only fires
+`if (STATE.page === 'home' && !isAnyOverlayOpen())`.
+
+**Activity ticker racing its own prefetch instead of using it — real, root-caused.**
+`renderActivityTicker()` checked `STATE.activityFeed` (boot()'s prefetch target)
+SYNCHRONOUSLY, with no wait — on the cache-hit instant-boot path,
+`paintHome()`→`startActivityTicker()`→`renderActivityTicker()` all fire in the same
+tick the app becomes visible, almost always before `boot()`'s three parallel fetches
+have had time to land over a real network. `STATE.activityFeed` was still `null` nearly
+every time, so the ticker fell straight into its own separate live fetch and showed
+"Loading activity…" regardless of the prefetch genuinely existing — the prefetch
+(built in Round 57 specifically to fix this same complaint) was real but never actually
+being waited for. Fixed by awaiting the exact same `withTimeout(_bootPromise, 6000)`
+every other prefetch consumer already awaits, before checking `STATE.activityFeed` —
+genuinely waits for (not races) the prefetch on the very first call, resolves
+near-instantly on every call after since `_bootPromise` only ever settles once.
+
+**Deposit sheet missing the reveal-in stagger — real, and found in 2 more places while
+checking.** `openDepositSheet()`'s HTML string was never wrapped in `<div
+class="reveal-in">`, unlike every other sheet (Withdraw, Withdrawal Accounts, Records,
+Mission Center, Help Centre, About) — so it popped in flat instead of the cascading
+entrance every other sheet has had since Round 31. Fixed, and grepped every other
+`openSheet(` call site for the same gap while in there: Daily Check-in and the generic
+Rules & Terms info sheet had the identical omission — fixed both too.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. New Playwright pass, reproducing the actual race conditions rather than just
+asserting the code looks right: (1) confirms `#sheetBody > .reveal-in` on Deposit;
+(2) seeds a cache-hit boot with a 1.5s-delayed live `/public/settings`, taps Deposit
+~80ms after the app becomes visible (well before the delayed settings/boot could
+possibly resolve), waits past the delay, and confirms the announcement never shows
+while the Deposit sheet stays open; (3) confirms an uninterrupted Home visit still
+shows the announcement normally; (4) with `/public/activity-feed` delayed 3s inside a
+fresh (non-cached) network boot, confirms the ticker shows the real prefetched feed
+text — not "Loading activity…" — within 400ms of the app becoming visible, since the
+loading screen itself was already gated on that same slow fetch finishing. Re-ran
+Rounds 59–61's own suites afterward — all still pass, zero regressions. Cache bumped
+`v43`→`v44`. `user-src/`-only change — no Render redeploy needed for the backend.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
