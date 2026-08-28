@@ -36,7 +36,16 @@ var ICONS = {
   eyeOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A11.4 11.4 0 0 1 12 5c7 0 11 7 11 7a17.5 17.5 0 0 1-3.1 3.9M6.7 6.7C3.6 8.5 1 12 1 12s4 7 11 7a10.6 10.6 0 0 0 4.3-.9"/><path d="M9.5 9.8A3 3 0 0 0 12 15a3 3 0 0 0 2.2-.97"/></svg>',
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
-function snowflakeSvg(color, size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg>`; }
+// subagent-audit-caught, owner-reported: the old branch-tick path data
+// wasn't actually symmetric around each spoke (e.g. one branch nearly
+// horizontal, the other nearly vertical, off the SAME tip) -- rendered
+// with round caps this read as a bent arrow/pinwheel, not a snowflake.
+// Rebuilt from real trigonometry (6 tips 60° apart, one symmetric V-shaped
+// branch pair per tip at a consistent angle off its own spoke) and visually
+// confirmed before shipping. stroke-linejoin:round added so each branch's
+// two segments (now one continuous polyline through the shared vertex, not
+// two lines stacking round caps on top of each other) meet cleanly.
+function snowflakeSvg(color, size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5L12 21.5M3.77 7.25L20.23 16.75M20.23 7.25L3.77 16.75"/><path d="M10.51 3.67L12 5.8L13.49 3.67M4.04 9.13L6.63 8.9L5.53 6.54M5.53 17.46L6.63 15.1L4.04 14.87M13.49 20.33L12 18.2L10.51 20.33M19.96 14.87L17.37 15.1L18.47 17.46M18.47 6.54L17.37 8.9L19.96 9.13"/></svg>`; }
 function waveLinesTR(w,h,color,count,opacity){
   color = color || 'var(--snow-wave-on-wine)'; count = count || 4; opacity = opacity == null ? .9 : opacity;
   const paths = ["M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155","M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147","M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140","M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132"];

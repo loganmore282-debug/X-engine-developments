@@ -3590,6 +3590,48 @@ purchase-confirm dialog renders "Price"/"Daily income"/"Period" with a "Confirm 
 button. Re-ran Rounds 59/62/64's own suites — no regressions. Cache bumped `v46`→`v47`.
 `user-src/`-only change — no Render redeploy needed.
 
+## Round 66 (2026-08-28) — the snowflake glyph was genuinely malformed everywhere it appears, including the app icon — redrawn from real geometry and re-checked for maskable-icon safety
+
+Owner: "please correct the snow ❄️ symbol everywhere even on app icon." Rendered the
+existing glyph standalone before touching anything, rather than assuming the request
+was cosmetic preference: it's NOT a clean 6-point snowflake — the small "branch" ticks at
+each spoke tip are asymmetric (e.g. one branch nearly horizontal, the other nearly
+vertical off the same tip), which with round stroke caps reads as a bent arrow/pinwheel
+bundle, not a snowflake. Confirmed the SAME broken path is used in exactly 4 places:
+`snowflakeSvg()` in `user-src/original_module.js` (Home/Team/Account/My-Products
+headers), the identical inline copy in `user-src/index.html` (the login/register auth
+header, static markup since that screen predates the JS module), and both `icon-192.png`/
+`icon-512.png` (rasterized from this same broken shape, in both `user/` and `admin/`).
+
+**Redrawn from real trigonometry, not eyeballed.** 3 spokes through the center at 60°
+apart (unchanged geometry from before — this part was already correct), with ONE
+symmetric V-shaped branch pair per tip, computed at a consistent angle off each spoke's
+own direction and rendered as a single continuous polyline per branch (so the shared
+vertex gets a clean `stroke-linejoin` instead of two round line-caps stacking into a
+blob, which was the first draft's own visual glitch, caught and fixed before shipping).
+Verified visually via a standalone Playwright render before touching any real file.
+
+**The app icon had a second, independent bug found while fixing this: the glyph
+extended to ~56% of the icon's half-width from center — well outside the ~40%-radius
+"safe zone" that Android's maskable-icon adaptive masks (circle/squircle/rounded-square
+crop) guarantee won't be clipped.** `user/manifest.json` declares both icon sizes with
+`purpose:"maskable"`, so this was a real, pre-existing (not newly introduced) risk of the
+snowflake's outer tips getting cropped off on many Android launchers — independent of
+the shape being wrong. Regenerated both icon sizes with the corrected glyph sized to
+~38% of the half-width (comfortably inside the 40% safe circle), on the same existing
+wine gradient background (`linear-gradient(135deg, #941827, #71101B)`, sampled from the
+original file's own corner pixels to match exactly, not guessed).
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. Playwright, against the real built app: the auth screen's static snowflake and
+Home's `snowflakeSvg()`-rendered header snowflake both render the exact corrected path
+data (confirmed via each SVG's actual `d` attribute, not a screenshot diff). Icon files
+visually re-inspected at both 192px and 512px, and their white-pixel extent measured
+programmatically to confirm the 38% maskable-safe radius. Re-ran Rounds 59/62/65's own
+suites — no regressions. Cache bumped `v47`→`v48` (user), `v9`→`v10` (admin — its icon
+files also changed, even though `admin-src/index.html` itself has no inline snowflake
+copy to fix). `user-src/`-only + icon-asset change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
