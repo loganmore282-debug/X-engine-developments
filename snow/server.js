@@ -718,6 +718,17 @@ async function banUserAutomatically(userId, reason) {
 }
 async function markDepositFailed(depRef, userId, reason) {
   await depRef.update({ status: 'failed', failureReason: reason }).catch(() => {});
+  // Flip the ledger row created up front (see /deposit/marzpay) from
+  // "Processing" to "Failed" too, same as creditDeposit() does for a
+  // successful match -- otherwise a failed deposit is stuck showing
+  // "Processing" in Records forever.
+  try {
+    const txSnap = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
+    await Promise.all(txSnap.docs.map(txDoc => {
+      const amt = Math.abs(Number(txDoc.data().amount) || 0);
+      return txDoc.ref.update({ status: 'failed', description: `Deposit — Failed — ${fmtUGX(amt)}` });
+    }));
+  } catch (e) { console.warn('markDepositFailed: could not update ledger row:', e.message); }
 }
 
 // ── MARZPAY (mobile money collect/send) ──
@@ -1526,6 +1537,24 @@ app.post('/deposit/marzpay', async (req, res) => {
     if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
 
+    // Validate BEFORE touching the debounce/abuse-attempt counters below --
+    // a below-minimum amount or a missing phone number must never consume a
+    // debounce slot or count toward the auto-ban threshold. Before this fix
+    // EVERY call reached those counters first regardless of outcome, so a
+    // member who simply typed too little then immediately retried with the
+    // real minimum hit a false "already being processed" (the failed
+    // attempt had already claimed the debounce window on a deposit that was
+    // never actually created), and a couple more retries after that could
+    // rack up enough recorded "attempts" to trip the 5-in-a-minute auto-ban
+    // -- getting suspended for nothing more than fumbling the minimum
+    // amount. Owner: "when you try to deposit with little amount, it says
+    // minimum deposit is 30k, when you try again deposit with that very
+    // minimum amount, it says deposit is already being processed!!, when
+    // you try again once more it says account suspended."
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
+    const phone = cleanPhone(req.body.phone || uSnap.data().phone || '');
+    if (!phone) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
+
     const attemptCount = recordDepositAttempt(userId);
     if (attemptCount >= 5 && !_depAttemptsSucceeded.has(userId)) {
       await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
@@ -1537,10 +1566,6 @@ app.post('/deposit/marzpay', async (req, res) => {
       return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
     _depCreateDebounce.set(userId, Date.now());
 
-    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
-    const phone = cleanPhone(req.body.phone || uSnap.data().phone || '');
-    if (!phone) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
-
     const ref = await uniqueRef('S');
     const marzReference = crypto.randomUUID();
     const { date, time } = nowStr();
@@ -1550,6 +1575,23 @@ app.post('/deposit/marzpay', async (req, res) => {
       userId, phone, network, amount: amt, ref, marzReference, status: 'initiating',
       date, time, createdAt: FieldValue.serverTimestamp()
     });
+    // Owner: "deposits are not recorded why" -- withdrawals have always
+    // shown up in Records immediately, as "Processing", the instant they're
+    // requested; deposits used to only get a ledger row once fully
+    // credited, so anything still pending (or that failed at the provider)
+    // was invisible the whole time. Mirrors withdrawal's own
+    // create-now/finalize-later row exactly, keyed on depositId instead of
+    // withdrawalId. Awaited (unlike a fire-and-forget write) so the row is
+    // guaranteed to exist by the time the response reaches the client and
+    // Records is checked -- "recorded immediately" has to mean immediately,
+    // not "eventually, if a later read happens to lose the race." No
+    // compensating rollback needed if this write itself fails (unlike
+    // withdrawal, no money has moved yet at this point) --
+    // creditDeposit()'s own find-or-create step below covers that case.
+    await db.collection('transactions').add({
+      userId, type: 'deposit', description: `Deposit — Processing — ${fmtUGX(amt)}`,
+      amount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
+    }).catch(e => console.error(`Deposit ledger row create failed for dep=${depRef.id}:`, e.message));
     // Respond the instant our own write lands — do not wait on MarzPay's own
     // round-trip. The status screen's own polling picks up the resolution.
     res.json({ status: 'success', depositId: depRef.id, reference: ref, message: 'Payment initiated. Check your phone.' });
@@ -1618,27 +1660,40 @@ async function creditDeposit(depDoc) {
         console.error(`DEPOSIT CREDIT FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, creditErr.message);
         throw creditErr;
       }
-      // Ledger row is deduped by the deposit's own unique `ref` -- on a
-      // stuck-credit retry the wallet write above is what mattered; only
-      // add the "Wallet recharge" row if a previous partial attempt didn't
-      // already manage to write one before failing.
-      if (retryingStuckCredit) {
-        const existingTx = await db.collection('transactions').where('type', '==', 'deposit').where('ref', '==', fd.ref).limit(1).get();
-        if (!existingTx.empty) {
-          await depDoc.ref.update({ needsManualCredit: FieldValue.delete() }).catch(() => {});
-          credited = true; justCredited = true; creditedAmount = depAmount;
-          return;
+      // The ledger row was already created up front, at deposit-request
+      // time (mirrors the withdrawal flow) -- find it by depositId and flip
+      // it to Success rather than adding a second row. Idempotent by
+      // design (find-or-create keyed on depositId, not on a one-shot
+      // "did we already add a row" branch), so retrying this after a
+      // transient failure -- the ledger write itself throwing right after
+      // the wallet was already credited, or a very old deposit that
+      // predates this row existing at all -- can never leave the deposit
+      // permanently invisible in Records, which is exactly the bug the
+      // owner hit ("deposits are not recorded why").
+      try {
+        const txSnap = await db.collection('transactions').where('depositId', '==', depDoc.id).limit(5).get();
+        if (!txSnap.empty) {
+          await Promise.all(txSnap.docs.map(txDoc => txDoc.ref.update({
+            status: 'success', description: `Deposit — Success — ${fmtUGX(depAmount)}`
+          })));
+        } else {
+          const { date, time } = nowStr();
+          await db.collection('transactions').add({
+            userId: depUserId, type: 'deposit', description: `Deposit — Success — ${fmtUGX(depAmount)}`,
+            amount: depAmount, status: 'success', date, time, ref: fd.ref, depositId: depDoc.id,
+            createdAt: FieldValue.serverTimestamp()
+          });
         }
+      } catch (ledgerErr) {
+        // Wallet is already credited above -- never let a ledger-row
+        // hiccup here look like the deposit never happened. Flag for
+        // retry the same way a wallet-increment failure does; the
+        // status-poll's own self-heal branch (and the periodic
+        // reconciler) will retry this exact idempotent update next time.
+        await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
+        console.error(`DEPOSIT LEDGER ROW UPDATE FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, ledgerErr.message);
+        throw ledgerErr;
       }
-      const { date, time } = nowStr();
-      // Owner: "SIMPLE ALSO ON DEPOSIT" -- same short template as the
-      // withdrawal description above (a deposit only ever reaches this row
-      // on success, so the status word is always "Success").
-      await db.collection('transactions').add({
-        userId: depUserId, type: 'deposit', description: `Deposit — Success — ${fmtUGX(depAmount)}`,
-        amount: depAmount, status: 'success', date, time, ref: fd.ref,
-        createdAt: FieldValue.serverTimestamp()
-      });
       await depDoc.ref.update({ needsManualCredit: FieldValue.delete() }).catch(() => {});
       credited = true; justCredited = true; creditedAmount = depAmount;
     });

@@ -2987,6 +2987,81 @@ hanging forever. `node --check` clean, `build-core.js` round-trip clean, `git di
 --check` clean. Cache bumped `v38`→`v39`. `user-src/`-only change — **no Railway
 redeploy needed.**
 
+## Round 58 (2026-08-28) — Fixed the deposit abuse-guard false-ban chain, deposits not recording, deposit quick amounts, plain deposit/withdraw records, deposit+withdraw instructions
+
+Owner (verbatim, several issues in one message): "when you try to deposit with little
+amount, it says minimum deposit is 30k, when you try again deposit with that very minimum
+amount, it says deposit is already being processed!!, when you try again once more it
+says account suspended... please l also need quick amounts, juck put quick amounts basing
+on products prices start from 30000, so dont put word quick amounts, just arrange
+correctly, also deposits are not recorded why, l need deposit and withdrawals to be plain
+no details, so deposit amount and status, also withdrawals, amount and status, also put
+deposit instructions and withdrawal instructions, l didn't say to put quick amounts on
+withdrawal, l said on deposit, arrange very well."
+
+**Real root cause of the ban chain** (`server.js` `/deposit/marzpay`): `recordDepositAttempt()`
+(the 5-in-a-minute auto-ban counter) and the 7s `_depCreateDebounce` set both ran BEFORE
+the `amt < sett.minDeposit` / phone validation, for every single call regardless of
+outcome. So: attempt 1 (too small) still claimed the debounce window and counted as an
+"attempt" even though no deposit was ever created; the immediate retry with the real
+minimum then hit a FALSE "already being processed" (nothing was actually processing);
+a couple more retries born from that confusion pushed the attempt count to 5 within the
+same minute and auto-banned the account — getting suspended for nothing more than
+fumbling the minimum amount. Fixed by moving both the minDeposit/phone validation ahead
+of the attempt-counter and debounce checks, so only requests that would actually create a
+real deposit ever touch either guard. The real abuse case (5+ *valid* attempts, none
+completed) still bans correctly — verified both directions.
+
+**Deposits not recorded** (`server.js`): withdrawals have always gotten a `transactions`
+ledger row the instant they're requested ("Processing"), later flipped in place once they
+resolve. Deposits never got that — a row was only ever added once `creditDeposit()`
+actually succeeded, so anything still pending, or that failed at MarzPay, was invisible in
+Records the whole time. Fixed to mirror withdrawal's pattern exactly: `/deposit/marzpay`
+now `await`s a `transactions.add()` (status `pending`, description "Deposit — Processing —
+X", keyed by a new `depositId` field) before responding, so the row is guaranteed to exist
+by the time the client can check Records. `creditDeposit()`'s ledger step was rewritten
+from "add a new row keyed by dedup-checking `ref`" to "find the row by `depositId` and
+update it in place" (falls back to creating one if somehow missing) — idempotent by
+construction, so a retry can never produce a duplicate. Also closed a related pre-existing
+gap while in there: if that ledger update itself ever threw right after the wallet was
+already credited, the deposit had no way to signal for a retry (only a wallet-increment
+failure ever set `needsManualCredit`) and would sit fully paid but permanently missing from
+Records — the ledger step is now wrapped the same way, flagging `needsManualCredit` on
+failure so the status-poll's self-heal branch and the reconciler both retry it.
+`markDepositFailed()` now flips the same row to "Deposit — Failed — X" too.
+
+**Quick amounts** (`user-src/`, deposit only — explicitly not withdrawal): `openDepositSheet()`
+now renders one chip per distinct product price (from `STATE.products`, sorted ascending,
+filtered to `>= minDeposit`) directly under the Amount field — no "Quick Amounts" heading,
+just the chip row (`.quick-amts`/`.quick-amt`, new CSS). Tapping a chip fills the amount
+field and highlights itself (`pickDepositAmount()`/`syncDepositQuickAmt()`); typing a
+matching amount by hand highlights the same chip. Driven off live product prices rather
+than a hardcoded list, so it stays correct automatically if the owner reprices/adds a
+product in admin.
+
+**Plain deposit/withdraw records** (`user-src/`): `renderRecordsTab()`'s row label for the
+Deposits/Withdrawals tabs is now just the status word (`depWitStatusLabel()` — the middle
+segment of the server's own "Deposit — Success — UGX X" description), since the amount
+already has its own column on the right — no more repeating amount+type in the text too.
+Income-tab rows (cashback, commission, etc.) are untouched, matching the owner's request
+scoped to deposit/withdraw only.
+
+**Instructions**: both `openDepositSheet()` and `paintWithdrawSheet()` gained a short
+numbered instructions block above the form fields (uses the live `minDeposit`/`minWithdraw`/
+`withdrawFeePct` settings, not hardcoded numbers).
+
+**Verified**: a new Node harness (`snow-test-mockdb.js` + a real `/deposit/marzpay` HTTP
+round trip, MarzPay's own network call stubbed) proved all 21 checks — the exact repro (too
+small → real minimum → no false "already being processed" → not banned), 5 straight
+invalid attempts never banning, the real 5-valid-attempts-none-completed case still
+banning, a deposit row existing immediately as "Processing" right after the request, and
+that row updating in place (not duplicating) to "Success" once force-credited. A Playwright
+pass (5 checks) confirmed the quick-amount chips (values, order, no label text, tap-to-fill
++ highlight), withdrawal has no chips, both sheets show their instructions, and Records
+shows plain status-only rows for deposit/withdraw while income rows are unchanged. `node
+--check` clean on both files, `build-core.js` round-trip clean, `git diff --check` clean.
+Cache bumped `v39`→`v40`. **`server.js` changed → needs a Railway redeploy.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

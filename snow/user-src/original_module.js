@@ -1351,6 +1351,22 @@ window.switchRecordsTab = function(cat){
   if (tabs) tabs.querySelectorAll('.seg').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
   renderRecordsTab(cat);
 };
+// Owner: "l need deposit and withdrawals to be plain no details, so
+// deposit amount and status, also withdrawals, amount and status." The
+// amount is already shown on its own in the right-hand mono column, so the
+// server's own "Deposit — Success — UGX 30,000" / "Withdrawal — Failed,
+// refunded — UGX 50,000" description is trimmed here to just its middle
+// segment (the plain status word) for the Deposits/Withdrawals tabs,
+// dropping the type prefix and the repeated amount. Income-tab rows
+// (cashback, commission, etc.) are untouched -- only deposit/withdraw were
+// asked to go plain.
+function depWitStatusLabel(desc){
+  const parts = String(desc || '').split(' — ');
+  return parts.length >= 2 ? parts[1] : (desc || '');
+}
+function recordsRowLabel(cat, t){
+  return (cat === 'deposit' || cat === 'withdraw') ? depWitStatusLabel(t.description) : cleanDesc(t.description);
+}
 function renderRecordsTab(cat){
   const body = $('recordsBody');
   if (!body) return;
@@ -1359,7 +1375,7 @@ function renderRecordsTab(cat){
   body.innerHTML = '<div class="reveal-in"><div class="settings-list">' + rows.map(t => `
     <div class="list-row">
       <div style="flex:1;min-width:0;">
-        <div style="font-size:13.5px;font-weight:600;">${esc(cleanDesc(t.description))}</div>
+        <div style="font-size:13.5px;font-weight:600;">${esc(recordsRowLabel(cat, t))}</div>
         <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">${esc(t.date||'')} ${esc(t.time||'')}</div>
       </div>
       <div class="mono" style="font-size:13px;font-weight:700;color:${t.amount<0?'var(--snow-wine)':'var(--snow-green)'};">${t.amount<0?'-':'+'}${fmtUGX(Math.abs(t.amount))}</div>
@@ -1367,10 +1383,31 @@ function renderRecordsTab(cat){
 }
 function cleanDesc(d){ return d || ''; }
 
+// Owner: "l also need quick amounts, juck put quick amounts basing on
+// products prices start from 30000, so dont put word quick amounts, just
+// arrange correctly" -- no "Quick Amounts" heading, just the chip row
+// itself, one chip per distinct product price (so it stays correct
+// automatically if the owner ever adds/reprices a product in admin,
+// instead of a hardcoded list going stale). Deposit only -- "l didn't say
+// to put quick amounts on withdrawal, l said on deposit."
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
+  const quickAmts = Array.from(new Set((STATE.products || [])
+    .map(p => Number(p.price) || 0)
+    .filter(p => p >= (Number(s.minDeposit) || 0))))
+    .sort((a, b) => a - b);
+  const chipsHtml = quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
+    quickAmts.map(p => `<button type="button" class="quick-amt" data-amt="${p}" onclick="pickDepositAmount(${p})">${fmtUGX(p)}</button>`).join('')
+  }</div>` : '';
   openSheet('Deposit', `
-    <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0"></div>
+    <div class="form-hint" style="margin:-6px 0 14px;line-height:1.6;">
+      1. Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount below.<br>
+      2. Confirm your mobile-money number and network.<br>
+      3. Tap Deposit, then approve the prompt on your phone.<br>
+      4. Your wallet updates automatically once payment is confirmed.
+    </div>
+    <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
+    ${chipsHtml}
     <div class="form-field"><label>Mobile-money phone number</label><input id="depPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" value="${esc((STATE.account&&STATE.account.phone)||'')}" oninput="sanitizePhoneInput(this)"></div>
     <div class="form-field"><label>Network</label>
       <select id="depNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
@@ -1380,6 +1417,16 @@ window.openDepositSheet = function(){
     </div>
     <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Deposit</button>`);
 };
+window.pickDepositAmount = function(amt){
+  $('depAmount').value = amt;
+  syncDepositQuickAmt();
+};
+function syncDepositQuickAmt(){
+  const box = $('depQuickAmts');
+  if (!box) return;
+  const val = parseInt($('depAmount').value, 10);
+  box.querySelectorAll('.quick-amt').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.amt) === val));
+}
 window.submitDeposit = async function(){
   const amount = parseInt($('depAmount').value, 10);
   const phone = $('depPhone').value;
@@ -1421,6 +1468,12 @@ window.openWithdrawSheet = async function(){
 function paintWithdrawSheet(s){
   const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)} — ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
   $('sheetBody').innerHTML = `<div class="reveal-in">
+    <div class="form-hint" style="margin:-6px 0 14px;line-height:1.6;">
+      1. Enter an amount (min ${fmtUGX(s.minWithdraw)}). A ${s.withdrawFeePct||15}% fee applies.<br>
+      2. Select a saved withdrawal account.<br>
+      3. Enter your Transaction PIN and tap Request Withdrawal.<br>
+      4. Funds are sent to your mobile-money number once processed.
+    </div>
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minWithdraw)}, ${s.withdrawFeePct||15}% fee applies)</label><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0"></div>
     <div class="form-field"><label>Withdrawal account</label>
       ${STATE.bankAccounts.length
