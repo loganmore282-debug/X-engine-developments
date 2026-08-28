@@ -2938,6 +2938,55 @@ centered card over a dimmed Home background, X top-right, full-width OK button. 
 --check` clean. Cache bumped `v37`→`v38`. **`server.js` changed → needs a Railway
 redeploy.**
 
+## Round 57 (2026-08-27) — Announcement dialog scroll-chaining fix + boot sequence waits for everything before the spinner drops
+
+Owner: "but when one scrolls it, it scrolls even contents in home, l don't want that,
+also, it takes long to load up, l want everything to be loaded up and cached after spin
+loader, as well as the activity checker, should be loaded up too." Two separate bugs.
+
+**Scroll-chaining.** `maybeShowAnnouncement()`/`closeAnnounce()` (added Round 56) never
+locked `document.body.style.overflow` while the dialog was open, unlike `openSheet()`/
+`closeSheet()`, which already do. Since `.announce-modal` has no internal scroll region
+of its own (no `max-height`/`overflow-y`), what the owner was actually scrolling was the
+Home page sitting behind the fixed overlay. Fixed by locking body scroll on open and
+restoring it on close — same one-line pattern `openSheet()` already established. Found
+the identical latent gap in the pre-existing `openChestModal()`/`closeChestModal()` gift-
+code modal while looking at this (same missing lock, just less noticeable with short
+content) and fixed it too, for consistency, using the exact same pattern.
+
+**Slow/incomplete boot.** `boot()` (fetches `/public/settings` + `/public/products`) ran
+fire-and-forget from module load with nothing ever awaiting it — both `enterApp()`'s
+cache-hit fast path and `bootFromNetwork()`'s real-network path dropped the loading
+screen with zero dependency on it finishing. Two visible symptoms: (1) `STATE.settings`
+could still be empty when `maybeShowAnnouncement()` ran right after, silently no-op'ing
+the just-built announcement dialog on some boots; (2) the Home activity ticker
+(`renderActivityTicker()`) always did its own separate `/public/activity-feed` fetch
+*after* Home was already painted, showing a blank strip for a beat — exactly the "activity
+checker should be loaded up too" complaint. Fixed by: extending `boot()` to also prefetch
+`/public/activity-feed` into `STATE.activityFeed`; capturing its promise as
+`_bootPromise` instead of discarding it; adding a `withTimeout()` helper (races the
+promise against a 6s cap so a stuck settings/feed call can never strand a member on the
+spinner forever); awaiting `withTimeout(_bootPromise, 6000)` in `enterApp()`'s cache-hit
+branch before hiding the spinner, and folding the same wait into `bootFromNetwork()`'s
+existing `Promise.all` (runs concurrently with the investments/team/bank/tx/mission
+prefetch, not sequentially after it — adds no extra latency since `boot()` was already
+kicked off at module load, long before login even resolves); changing
+`renderActivityTicker()` to consume `STATE.activityFeed` as a one-shot cache on its first
+call (skipping the network fetch and the loading placeholder), with every call after that
+still doing a real fetch on its normal 20s interval, unchanged.
+
+**Verified** with Playwright (5 scenarios): scrolling inside the open announcement
+dialog no longer moves `window.scrollY` (`document.body.style.overflow` confirmed
+`'hidden'` while open, restored to `''` on close); the chest/gift-code modal locks and
+restores the same way; with `/public/settings` + `/public/activity-feed` both artificially
+delayed 1.5s, the loading screen is confirmed still showing partway through, and once it
+drops, the announcement dialog and a populated activity ticker are both already there
+with no separate pop-in, on both the cache-hit and network-boot paths; a stuck (never-
+responding) `/public/settings` still reaches the app within the 6s timeout cap, not
+hanging forever. `node --check` clean, `build-core.js` round-trip clean, `git diff
+--check` clean. Cache bumped `v38`→`v39`. `user-src/`-only change — **no Railway
+redeploy needed.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -315,10 +315,29 @@ window.doLogout = async function(){
 })();
 
 // ── BOOT ──
+// Owner: "it takes long to load up, l want everything to be loaded up and
+// cached after spin loader, as well as the activity checker, should be
+// loaded up too." Before this, boot() ran fire-and-forget from module load
+// with nothing ever awaiting it -- both enterApp()'s cache-hit path and
+// bootFromNetwork() dropped the loading screen with zero dependency on
+// settings/products actually being ready, so the announcement dialog could
+// silently no-op (STATE.settings still empty) and the activity ticker
+// always did its own separate fetch-after-paint, showing a blank/loading
+// strip on Home for a beat. Now the activity feed is prefetched here too,
+// and every caller awaits this same promise (capped by withTimeout, see
+// below) before the spinner ever comes down, so nothing pops in afterward.
 async function boot(){
-  const [s, p] = await Promise.all([ api('/public/settings'), api('/public/products') ]);
+  const [s, p, f] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed') ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   STATE.products = p.status === 'success' ? p.products : [];
+  STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
+}
+// Bounds how long the loading screen will wait on boot() -- a slow/stuck
+// settings or activity-feed call must never strand a member on the spinner
+// forever; past this cap the app proceeds with whatever boot() has (or
+// hasn't) filled in yet, same as before this change.
+function withTimeout(promise, ms){
+  return Promise.race([ promise, new Promise(resolve => setTimeout(resolve, ms)) ]);
 }
 function captureReferralFromUrl(){
   try {
@@ -408,6 +427,7 @@ async function enterApp(){
   STATE.account = cached.account; STATE.investments = cached.investments;
   STATE.teamStats = cached.teamStats; STATE.bankAccounts = cached.bankAccounts;
   STATE.transactions = cached.transactions; STATE.mission = cached.mission;
+  await withTimeout(_bootPromise, 6000);
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
@@ -470,7 +490,8 @@ async function bootFromNetwork(uid){
   // long to load." Prefetching it here means that wait happens once, during
   // the loading screen the member already sits through, not again per open.
   const [invR, teamR, bankR, txR, missionR] = await Promise.all([
-    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions'), api('/mission/status')
+    api('/investments'), api('/team/stats'), api('/bank/list'), api('/transactions'), api('/mission/status'),
+    withTimeout(_bootPromise, 6000) // settings/products/activity-feed -- runs concurrently, not sequentially, since boot() already started at module load
   ]);
   if (invR.status === 'success') STATE.investments = invR.investments;
   if (teamR.status === 'success') STATE.teamStats = teamR;
@@ -582,9 +603,15 @@ function maybeShowAnnouncement(){
   $('announceBody').textContent = s.annBody;
   window._announceUrl = url;
   $('announceBg').classList.add('show');
+  // Without this, scrolling the dialog's own message text chains straight
+  // through into the Home page sitting behind it (owner: "when one scrolls
+  // it, it scrolls even contents in home") -- same lock openSheet() already
+  // applies for real sheets, just missing here since this modal isn't one.
+  document.body.style.overflow = 'hidden';
 }
 window.closeAnnounce = function(){
   $('announceBg').classList.remove('show');
+  document.body.style.overflow = '';
 };
 window.confirmAnnounce = function(){
   if (window._announceUrl) window.open(window._announceUrl, '_blank', 'noopener');
@@ -792,9 +819,20 @@ function activityRowText(row){
 async function renderActivityTicker(){
   const track = $('activityTickerTrack');
   if (!track) return;
-  const r = await api('/public/activity-feed');
-  if (STATE.page !== 'home' || !$('activityTickerTrack')) return; // navigated away while awaiting
-  const rows = (r.status === 'success' && Array.isArray(r.feed)) ? r.feed : [];
+  let rows;
+  if (STATE.activityFeed) {
+    // Already prefetched by boot() before the loading screen came down --
+    // consume it once so the ticker paints immediately instead of showing a
+    // blank strip while it does its own fetch (owner: "the activity checker
+    // should be loaded up too"). Every call after this one does a real
+    // fetch again, same as before.
+    rows = STATE.activityFeed;
+    STATE.activityFeed = null;
+  } else {
+    const r = await api('/public/activity-feed');
+    if (STATE.page !== 'home' || !$('activityTickerTrack')) return; // navigated away while awaiting
+    rows = (r.status === 'success' && Array.isArray(r.feed)) ? r.feed : [];
+  }
   if (!rows.length) return;
   const joined = rows.map(row => esc(activityRowText(row))).join('&nbsp;&nbsp;&nbsp;&middot;&nbsp;&nbsp;&nbsp;');
   track.style.animation = 'none';
@@ -1248,10 +1286,12 @@ window.openChestModal = function(){
   $('chestCodeInput').value = '';
   $('chestError').innerHTML = '';
   $('chestModalBg').classList.add('show');
+  document.body.style.overflow = 'hidden'; // same scroll-chaining gap as the announcement dialog -- see maybeShowAnnouncement()
   setTimeout(() => $('chestCodeInput').focus(), 50);
 };
 window.closeChestModal = function(){
   $('chestModalBg').classList.remove('show');
+  document.body.style.overflow = '';
 };
 window.submitChestCode = async function(){
   const raw = $('chestCodeInput').value.trim();
@@ -1598,5 +1638,5 @@ if ('serviceWorker' in navigator) {
 
 // ── START ──
 captureReferralFromUrl();
-boot();
+var _bootPromise = boot();
 
