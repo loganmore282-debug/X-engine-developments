@@ -76,20 +76,31 @@ function eatTodayStr(){
   return pad(d.getUTCMonth() + 1) + '/' + pad(d.getUTCDate()) + '/' + d.getUTCFullYear();
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-// Caps how many digits a phone field accepts, based on which format the
-// person is actually typing -- a bare "0" local number tops out at 10
-// digits ("0769968158"), a "256"/"+256" international number tops out at
-// 12 ("256769968158", the + doesn't count as a digit). Nothing was capping
-// this before -- someone could type an arbitrarily long garbled string into
-// any phone field with no limit at all. Wired to every phone input's own
-// oninput, not a static maxlength, since the right cap depends on which
-// format the field is currently holding.
+// Every phone field is now local-number-only -- the "+256" country code is
+// a static chip next to the input (see .phone-field/.phone-prefix), not
+// something typed here at all (owner: "make +256 static, so one can type
+// 07xxxxxxxx or 7xxxxxxxx... just the system understand it"). Caps at 10
+// digits for the "0"-leading Ugandan style ("0769968158") or 9 for the bare
+// style ("769968158") -- both are accepted identically by the server's own
+// cleanPhone(), so which one someone types doesn't matter. Also tolerates
+// someone pasting a full number WITH the country code straight into this
+// now-local-only field (strips a leading "256" back off first) rather than
+// mangling it down to a wrong, truncated value.
 function sanitizePhoneInput(el){
-  const hadPlus = el.value.charAt(0) === '+';
   let digits = el.value.replace(/\D/g, '');
-  const maxDigits = digits.startsWith('0') ? 10 : 12;
+  if (digits.startsWith('256') && digits.length > 9) digits = digits.slice(3);
+  const maxDigits = digits.startsWith('0') ? 10 : 9;
   if (digits.length > maxDigits) digits = digits.slice(0, maxDigits);
-  el.value = (hadPlus ? '+' : '') + digits;
+  el.value = digits;
+}
+// Strips a stored full/international phone ("+256709123456", "256709123456")
+// back down to the local display form ("0709123456") for prefilling the
+// now-local-only Deposit phone field from STATE.account.phone -- the chip
+// already shows "+256" separately, so the input itself must never contain it.
+function localPhoneDisplay(fullPhone){
+  let digits = String(fullPhone || '').replace(/\D/g, '');
+  if (digits.startsWith('256') && digits.length > 9) digits = digits.slice(3);
+  return digits ? '0' + digits.replace(/^0+/, '') : '';
 }
 function $(id){ return document.getElementById(id); }
 function togglePw(id, btn){
@@ -488,34 +499,44 @@ async function enterApp(){
   showPage(STATE.page || 'home');
   refreshAppDataInBackground(uid);
 }
+// Shared by both bootFromNetwork() branches below -- retries /register,
+// which self-heals a missing profile doc and is a safe no-op if already
+// done. A typo'd referral code (now that it's a hand-editable box, not just
+// a silent value from ?ref=) must NOT sign the member back out -- their
+// Firebase auth account already exists at this point with no profile doc
+// yet, so a sign-out here would strand them: retrying register later hits
+// "email already in use" and they're locked out for good (the exact
+// ghost-account trap Round-something-earlier already fixed once). Retry
+// once with the referral dropped instead; everything else (PIN, welcome
+// bonus) still goes through.
+async function registerCurrentUser(pin, phone){
+  let reg = await post('/register', { referralCode: STATE.refCode || '', pin: pin || '', phone: phone || '' });
+  if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode) {
+    toast(reg.message || 'That referral code is invalid -- continuing without it.', true);
+    STATE.refCode = '';
+    reg = await post('/register', { referralCode: '', pin: pin || '', phone: phone || '' });
+  }
+  return reg;
+}
 async function bootFromNetwork(uid){
-  let r = await api('/account');
-  if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.message === 'User not found')) {
-    // Ghost account (Firebase user exists, our profile never finished) or a
-    // fresh registration still finishing -- retry /register, which
-    // self-heals a missing profile doc and is a safe no-op if already done.
-    let reg = await post('/register', {
-      referralCode: STATE.refCode || '',
-      pin: window._pendingRegPin || '',
-      phone: window._pendingRegPhone || '',
-    });
-    // A typo'd referral code (now that it's a hand-editable box, not just a
-    // silent value from ?ref=) must NOT sign the member back out -- their
-    // Firebase auth account already exists at this point with no profile
-    // doc yet, so a sign-out here would strand them: retrying register
-    // later hits "email already in use" and they're locked out for good
-    // (the exact ghost-account trap Round-something-earlier already fixed
-    // once). Retry once with the referral dropped instead; everything else
-    // (PIN, welcome bonus) still goes through.
-    if (reg.status === 'error' && reg.code === 'BAD_REFERRAL' && STATE.refCode) {
-      toast(reg.message || 'That referral code is invalid -- continuing without it.', true);
-      STATE.refCode = '';
-      reg = await post('/register', {
-        referralCode: '',
-        pin: window._pendingRegPin || '',
-        phone: window._pendingRegPhone || '',
-      });
-    }
+  let r;
+  // subagent-audit-caught: a brand-new registration always paid for a
+  // GUARANTEED-to-fail /account call first (the profile doc genuinely
+  // doesn't exist yet the instant after Firebase account creation), THEN
+  // /register, THEN a second /account -- three sequential network round
+  // trips before the real prefetch even started, on every single signup --
+  // owner: "the startup loader should load all data, and should be fast...
+  // no taking long." doRegister() sets _pendingRegPin/_pendingRegPhone
+  // right before creating the Firebase account, so their presence here
+  // reliably means this boot is for a registration that JUST happened in
+  // THIS tab -- skip straight to /register instead of wasting a call
+  // already known to fail. Captured into locals and cleared immediately so
+  // a later re-login in the same tab session (no page reload) never
+  // wrongly takes this shortcut again.
+  if (window._pendingRegPin) {
+    const pin = window._pendingRegPin, phone = window._pendingRegPhone;
+    window._pendingRegPin = ''; window._pendingRegPhone = '';
+    const reg = await registerCurrentUser(pin, phone);
     if (reg.status !== 'success' && reg.status !== 'already_done') {
       $('loadingScreen').style.display = 'none';
       toast(reg.message || 'Could not complete registration', true);
@@ -523,6 +544,21 @@ async function bootFromNetwork(uid){
       return;
     }
     r = await api('/account');
+  } else {
+    r = await api('/account');
+    if (r.status === 'error' && (r.code === 'NOT_FOUND' || r.message === 'User not found')) {
+      // Ghost account (Firebase user exists, our profile never finished in
+      // an earlier session -- e.g. a crash/reload between account creation
+      // and /register finishing) -- self-heal the same way.
+      const reg = await registerCurrentUser(window._pendingRegPin || '', window._pendingRegPhone || '');
+      if (reg.status !== 'success' && reg.status !== 'already_done') {
+        $('loadingScreen').style.display = 'none';
+        toast(reg.message || 'Could not complete registration', true);
+        await window.fbSignOut();
+        return;
+      }
+      r = await api('/account');
+    }
   }
   if (r.status === 'error') {
     $('loadingScreen').style.display = 'none';
@@ -1586,7 +1622,7 @@ window.openDepositSheet = function(){
     </div>
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
     ${chipsHtml}
-    <div class="form-field"><label>Mobile-money phone number</label><input id="depPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" value="${esc((STATE.account&&STATE.account.phone)||'')}" oninput="sanitizePhoneInput(this)"></div>
+    <div class="form-field"><label>Mobile-money phone number</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${esc(localPhoneDisplay((STATE.account&&STATE.account.phone)||''))}" oninput="sanitizePhoneInput(this)"></div></div>
     <div class="form-field"><label>Network</label>
       <select id="depNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
         <option value="MTN Mobile Money">MTN Mobile Money</option>
@@ -1751,7 +1787,7 @@ function renderWithdrawalAccountsSheet(){
         <option value="Airtel Money">Airtel Money</option>
       </select>
     </div>
-    <div class="form-field"><label>Phone number</label><input id="bankPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" oninput="sanitizePhoneInput(this);updateBankCardPreview()"></div>
+    <div class="form-field"><label>Phone number</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="bankPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" oninput="sanitizePhoneInput(this);updateBankCardPreview()"></div></div>
     <button class="primary-button" id="bankSaveBtn" style="width:100%;padding:15px 0;font-size:15px;" onclick="saveWithdrawalAccount()">Save account</button></div>`;
   $('sheetBody').innerHTML = html;
 }

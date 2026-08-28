@@ -3502,6 +3502,76 @@ pass (Round 59's own first-boot-with-delayed-settings test still correctly shows
 ~3s wait for that one genuine no-cache-yet edge case, unchanged and expected). Cache
 bumped `v44`→`v45`. `user-src/`-only change — no Render redeploy needed.
 
+## Round 64 (2026-08-28) — registration boot skips a wasted, guaranteed-to-fail /account call; every phone field is now a static "+256" chip + local-number-only input
+
+Owner, from two screenshots (the Register screen, then a bare startup spinner): "the
+startup loader should load all data, and should be fast bro, no taking long, may be
+internet but it should load very fast, also one number, only just make (+256) static,
+so one can type 07xxxxxxxx or 7xxxxxxxx, l didn't say put that no, just the system
+understand it."
+
+**Registration was paying for a guaranteed-to-fail network round trip — real, and
+fixed.** Traced `bootFromNetwork()`: every single new registration called `/account`
+FIRST — a call that's structurally certain to fail with `NOT_FOUND`, since the profile
+doc genuinely doesn't exist yet the instant after Firebase account creation — THEN
+`/register`, THEN a SECOND `/account` to re-fetch the now-created profile. Three
+sequential round trips before the real (already-parallelized) prefetch even started, on
+every single signup — exactly the "loader taking long" the screenshots show right after
+tapping Register. `doRegister()` already sets `window._pendingRegPin`/
+`_pendingRegPhone` right before creating the Firebase account, which reliably signals
+"this boot is for a registration that just happened in this tab" — used that to skip
+straight to `/register` instead of wasting the doomed first `/account` call, cutting the
+blocking sequential portion from 3 round trips to 2. The two globals are captured into
+locals and cleared immediately so a later re-login in the same tab session (no reload)
+never wrongly takes this shortcut. A normal login (no pending registration) is
+completely unaffected — still `/account`-first, unchanged. The pre-existing ghost-account
+self-heal path (ordinary login into an account whose `/register` never finished in an
+earlier session) is also unchanged, just refactored to share the same
+`registerCurrentUser()` helper instead of duplicating the retry-on-`BAD_REFERRAL` logic
+inline. Beyond this, the boot sequence was already about as parallelized as it can safely
+be (Rounds 32/33/46/57's own work) — any further speedup (e.g. firing the account/
+investments/team/etc. calls all at once instead of account-then-the-rest) would risk
+querying endpoints before a brand-new profile doc exists; not attempted here. If loading
+still feels slow after this, the remaining cause is very likely server cold-start
+(Render's free tier spins a service down after inactivity) or genuine network latency,
+not app code — worth checking Render's dashboard/plan if it persists.
+
+**Phone fields redesigned: static "+256" chip + local-number-only input.** Every phone
+field (`loginPhone`, `regPhone`, `depPhone`, `bankPhone`) used to be one free-text field
+with a "+256 7XX XXX XXX" placeholder — someone had to type the country code themselves,
+in whichever of several forms occurred to them. New `.phone-field`/`.phone-prefix` CSS: a
+fixed, non-editable "+256" chip sits to the left of the input, which now only ever holds
+the local number ("07XXXXXXXX" or "7XXXXXXXX," accepted identically — "just the system
+understand it"). `sanitizePhoneInput()` rewritten for this local-only shape (caps at 10
+digits for the "0"-leading style, 9 for the bare style, and gracefully strips a leading
+"256" back off if someone pastes a full international number into the field instead of
+mangling it); new `localPhoneDisplay()` strips `STATE.account.phone`'s stored
+`+256XXXXXXXXX` back down to a local `"0XXXXXXXXX"` display value for prefilling the
+Deposit sheet's phone field, since the chip already shows the country code separately.
+
+**Backward compatibility, checked before touching anything, not assumed.** Traced
+`doLogin()`/`doRegister()`: both already call `cleanPhone()` on the raw input BEFORE
+constructing the Firebase Auth identity via `phoneToEmail()`, and `cleanPhone()` already
+normalizes any of "0XXX"/bare "XXX"/"256XXX"/"+256XXX" to the exact same canonical
+`+256XXXXXXXXX` shape — meaning `phoneToEmail()` has ALWAYS received the identical
+normalized value regardless of which raw format someone typed, for every single already-
+registered account. This UI change doesn't alter that pipeline at all, only which format
+the field lets someone type in the first place — so no already-registered member's login
+identity is affected, and none needed a fallback/dual-lookup mechanism.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. New Playwright pass: (1) the static prefix reads exactly "+256"; typing
+"0709123456789" caps at "0709123456" (10 digits), typing "709123456789" (no leading 0)
+caps at "709123456" (9 digits), and pasting a full "+256709123456" correctly strips back
+down to "709123456" rather than mangling it; (2) a real registration flow (through the
+actual Firebase-stub → `snow-auth` → `bootFromNetwork()` path) confirms `/register` is
+called FIRST, before any `/account` call — the actual bug fixed — and confirms the
+resulting Firebase email is unaffected (still the same `cleanPhone()`-normalized value a
+raw "0XXX"/"XXX"/"256XXX" input would already have produced); (3) a normal login (no
+pending registration) confirms the `/account`-first path is untouched. Re-ran Rounds
+59–63's own suites — all still pass, zero regressions. Cache bumped `v45`→`v46`.
+`user-src/`-only change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

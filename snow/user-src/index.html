@@ -134,6 +134,15 @@ a{color:inherit;}
 .form-field input{width:100%;padding:15px 44px 15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);color:var(--snow-ink);}
 .form-field input:focus{outline:none;border-color:var(--snow-wine);}
 .form-field .eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--snow-muted);background:none;border:none;padding:4px;display:flex;align-items:center;justify-content:center;}
+/* Owner: "make (+256) static, so one can type 07xxxxxxxx or 7xxxxxxxx... just
+   the system understand it" -- every phone field is now a static, fixed
+   "+256" chip next to a local-number-only input, instead of one free-text
+   field where the country code had to be typed (and could be typed several
+   different ways). See sanitizePhoneInput()'s own comment for why this is
+   safe for already-registered accounts. */
+.phone-field{display:flex;gap:8px;}
+.phone-prefix{flex-shrink:0;padding:15px 12px;border:1px solid var(--snow-border);border-radius:26px;background:var(--snow-neutral-soft);color:var(--snow-ink);font-size:15px;font-weight:700;display:flex;align-items:center;}
+.phone-field input{flex:1;min-width:0;width:auto;padding:15px 16px;}
 /* Chrome's own "Use saved password?" picker fills #loginPhone/#loginPassword
    with zero JS-visible events -- there's no input/change to listen for. The
    browser DOES tag autofilled fields with the :-webkit-autofill pseudo-class
@@ -253,7 +262,7 @@ a{color:inherit;}
         <div id="loginError"></div>
         <div class="form-field">
           <label>Mobile number</label>
-          <input id="loginPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          <div class="phone-field"><span class="phone-prefix">+256</span><input id="loginPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" autocomplete="tel" oninput="sanitizePhoneInput(this)"></div>
         </div>
         <div class="form-field">
           <label>Password</label>
@@ -271,7 +280,7 @@ a{color:inherit;}
         <div id="regError"></div>
         <div class="form-field">
           <label>Mobile number</label>
-          <input id="regPhone" type="tel" inputmode="tel" placeholder="+256 7XX XXX XXX" autocomplete="tel" oninput="sanitizePhoneInput(this)">
+          <div class="phone-field"><span class="phone-prefix">+256</span><input id="regPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" autocomplete="tel" oninput="sanitizePhoneInput(this)"></div>
         </div>
         <div class="form-field">
           <label>Password</label>
