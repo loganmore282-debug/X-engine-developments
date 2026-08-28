@@ -2889,6 +2889,55 @@ correctly shows the (now-refreshed) transaction data. Separately verified the no
 first-open path still paints once the fetch resolves. `node --check` clean, `node
 build-core.js` round-trip clean, `git diff --check` clean. Cache bumped `v36`→`v37`.
 
+## Round 56 (2026-08-27) — Home announcement dialog built end-to-end (a real first, not a restore)
+
+Owner: "you removed announcement dialog, put it back — it should open from middle and
+have background as that of activity checker, it will have OK button, but okay button
+should have link inside it, so when one taps ok it triggers link and joins telegram
+group, and also X button on top right." Important correction made while reading the
+history before touching anything: this was never actually a regression to "put back" —
+per Round 14's own notes, the announcement dialog existed in the sibling Space8 project
+but was **never built end-to-end in Snow** on either the backend or `user-src/`; only its
+now-orphaned admin-panel UI (pointing at nothing) got removed when Space8's admin panel
+was ported over. So this round is a genuine first build, not a restore — the owner's
+"you removed" refers accurately to that admin-UI removal, just not to a working feature
+ever having existed for members.
+
+**Backend** (`server.js`): `annEnabled` (bool), `annTitle`, `annBody` added to
+`DEFAULT_SETTINGS` (flow through `/public/settings` automatically, no new endpoint —
+reuses the existing generic `/admin/settings/update`); `annEnabled` added to
+`SETTINGS_BOOLEAN_FIELDS`. No image/blur fields at all this time (unlike Space8's
+version) — the owner explicitly wants the SAME solid dark look the Home activity ticker
+already has, not a photo, so there's no upload plumbing to build.
+
+**Frontend** (`user-src/`): reused the existing `#chestModalBg`/`.chest-modal` centered-
+modal pattern verbatim (`rgba(17,17,17,.82)` background — confirmed by direct CSS
+comparison to be the exact same color as `#activityTicker`, the Home ticker pill, not
+just visually similar) rather than inventing new modal CSS — a new `#announceBg`/
+`.announce-modal` sibling element in `index.html`, static markup + `.show` class toggle,
+same tap-outside-to-close convention. `maybeShowAnnouncement()` (`original_module.js`)
+fires from `showPage()` every time `name==='home'` (matches the one established
+precedent for this exact feature from Space8's own build — same hook every other
+per-page action already uses, no new timer/listener), gated on `annEnabled && annBody`.
+OK button (`confirmAnnounce()`) opens `telegramGroup` (falls back to `telegramChannel`)
+in a new tab via `window.open` then closes; the X button (`closeAnnounce()`) just closes.
+Empty `annTitle` hides the title element entirely rather than showing a blank line.
+
+**Admin UI** (`admin-src/index.html`): new "Home announcement dialog" card in Settings
+(Enabled checkbox, Title, Message textarea, Save), positioned right after Home banner —
+plain text fields, no image upload, matching the simpler backend shape.
+
+**Verified** with Playwright (4 scenarios): enabled announcement shows on the very first
+Home entry, its modal's computed center matches the viewport center exactly, and its
+background color is byte-identical to `#activityTicker`'s; tapping OK opens exactly the
+configured `telegramGroup` URL (via a stubbed `window.open`) and closes the dialog;
+tapping X closes without opening anything; `annEnabled:false` never shows it; an empty
+`annTitle` correctly hides the title element. Screenshot confirms the visual: dark
+centered card over a dimmed Home background, X top-right, full-width OK button. `node
+--check` clean, `node build-core.js`/`build-admin.js` round-trip clean, `git diff
+--check` clean. Cache bumped `v37`→`v38`. **`server.js` changed → needs a Railway
+redeploy.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

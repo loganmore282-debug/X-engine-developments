@@ -197,6 +197,15 @@ const DEFAULT_SETTINGS = {
   autoApproveWithdrawalsEnabled: false, autoApproveIntervalSec: 10, autoApproveMaxAmount: 0,
   supportTelegram: '', telegramGroup: '', telegramChannel: '', supportHours: '',
   rulesText: '', aboutText: '',
+  // Home announcement dialog, owner: "put it back... opens from middle...
+  // background as that of activity checker [ticker]... OK button... triggers
+  // link and joins telegram group... X button top right." A real feature
+  // that was flagged as a deferred gap when the admin panel was ported from
+  // Space8 (Round 14) -- Space8's version needed its own admin-uploaded
+  // image + blur/tint sliders; this one deliberately doesn't (owner wants
+  // the SAME solid dark pill look the Home activity ticker already uses,
+  // not a photo), so no image-upload plumbing is needed at all here.
+  annEnabled: false, annTitle: '', annBody: '',
 };
 // Daily Cashback × 150 = Total Return = Investment × 30, per tier — every
 // figure below is stamped explicitly rather than derived, matching the
@@ -2469,7 +2478,7 @@ const SETTINGS_CRITICAL_RANGES = {
   dailyCheckin: [0, MAX_MONEY_AMOUNT],
   autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
 };
-const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled'];
+const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled'];
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

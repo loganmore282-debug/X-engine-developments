@@ -1477,6 +1477,15 @@ async function renderSettings(){
       <label class="btn block file-btn" style="margin-top:10px">Upload image<input type="file" id="homeBannerFile" accept="image/*" hidden></label>
     </div>
 
+    <h2 class="sec">Home announcement dialog</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Shown centered over Home every time a member opens or returns to it. Dark background, matching the Home activity ticker — no image to upload. The OK button opens Telegram group above (falls back to the channel link if group is blank) and closes the dialog; the X in the corner just closes it.</p>
+      <label style="width:auto;display:flex;align-items:center;gap:8px;margin-bottom:10px;"><input type="checkbox" id="annOn" ${s.annEnabled?'checked':''} style="width:auto"> Enabled</label>
+      <label>Title (optional)</label><input id="annTitleInput" value="${esc(v('annTitle',''))}" placeholder="Welcome to Snow!">
+      <label>Message</label><textarea id="annBodyInput" rows="5" placeholder="Tell members what's new, or invite them to your Telegram group…">${esc(v('annBody',''))}</textarea>
+      <button class="btn block" id="saveAnn" style="margin-top:6px">Save announcement</button>
+    </div>
+
     <h2 class="sec">Help Centre banner</h2>
     <div class="panel-card">
       <p class="muted" style="margin-top:0">Shown at the top of the app's Help Centre page, above the Telegram/support links below. Square corners by design, no rounding.</p>
@@ -1557,6 +1566,10 @@ async function renderSettings(){
       autoApproveMaxAmount:+$('sAutoApproveMaxAmt').value
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Auto-approve settings saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('saveAnn').addEventListener('click', async()=>{
+    const upd = { annEnabled:$('annOn').checked, annTitle:$('annTitleInput').value.trim(), annBody:$('annBodyInput').value.trim() };
+    const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Announcement saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });
   $('homeBannerFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;

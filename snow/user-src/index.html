@@ -179,6 +179,15 @@ a{color:inherit;}
 .chest-modal img{width:96px;height:auto;display:block;margin:0 auto 10px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.28));}
 .chest-modal h3{margin:0 0 6px;font-size:18px;font-weight:800;}
 .chest-modal p{margin:0 0 18px;font-size:13px;color:rgba(255,255,255,.65);}
+/* Home announcement dialog -- reuses .chest-modal's exact dark background
+   (rgba(17,17,17,.82), the same color the Home activity ticker pill uses)
+   and centered scale-in, with its own close (X) button and left-aligned
+   multi-line body text since this holds a real paragraph, not a one-line
+   caption. */
+.announce-modal{position:relative;text-align:left;}
+.announce-modal h3{font-size:18px;font-weight:800;margin:0 0 10px;padding-right:24px;}
+.announce-modal p{white-space:pre-line;line-height:1.6;font-size:13.5px;color:rgba(255,255,255,.85);margin:0;}
+.announce-close{position:absolute;top:-8px;right:-6px;width:30px;height:30px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
 
 .list-empty{padding:30px 4px;text-align:center;color:var(--snow-muted);font-size:13px;}
 .list-empty .empty-icon{display:flex;justify-content:center;margin-bottom:14px;opacity:.85;}
@@ -317,6 +326,15 @@ a{color:inherit;}
     </div>
     <button class="primary-button" id="chestSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:6px;" onclick="submitChestCode()">Open</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeChestModal()">Cancel</button>
+  </div>
+</div>
+
+<div class="chest-modal-bg" id="announceBg" onclick="if(event.target===this)closeAnnounce()">
+  <div class="chest-modal announce-modal">
+    <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h3 id="announceTitle" style="display:none;"></h3>
+    <p id="announceBody"></p>
+    <button class="primary-button" style="width:100%;padding:14px 0;font-size:15px;margin-top:20px;" onclick="confirmAnnounce()">OK</button>
   </div>
 </div>
 

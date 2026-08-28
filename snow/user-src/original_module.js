@@ -34,6 +34,7 @@ var ICONS = {
   trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12"/></svg>',
   eye: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A11.4 11.4 0 0 1 12 5c7 0 11 7 11 7a17.5 17.5 0 0 1-3.1 3.9M6.7 6.7C3.6 8.5 1 12 1 12s4 7 11 7a10.6 10.6 0 0 0 4.3-.9"/><path d="M9.5 9.8A3 3 0 0 0 12 15a3 3 0 0 0 2.2-.97"/></svg>',
+  x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
 function snowflakeSvg(color, size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M4.2 6.5l15.6 11M4.2 17.5l15.6-11"/><path d="M12 2l-2 2.3M12 2l2 2.3M12 22l-2-2.3M12 22l2-2.3M4.2 6.5l3 .3M4.2 6.5l1-2.8M19.8 6.5l-3 .3M19.8 6.5l-1-2.8M4.2 17.5l3-.3M4.2 17.5l1 2.8M19.8 17.5l-3-.3M19.8 17.5l-1 2.8"/></svg>`; }
 function waveLinesTR(w,h,color,count,opacity){
@@ -551,11 +552,43 @@ window.showPage = async function(name){
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   stopActivityTicker();
-  if (name === 'home') await renderHome();
+  if (name === 'home') { await renderHome(); maybeShowAnnouncement(); }
   else if (name === 'products') await renderProducts();
   else if (name === 'team') await renderTeam();
   else if (name === 'account') await renderAccount();
   startLiveRefresh();
+};
+// Home announcement dialog -- owner: "put it back, it should open from
+// middle and have background as that of activity checker [the Home
+// activity ticker pill, #activityTicker -- rgba(17,17,17,.82), the exact
+// color the pre-existing chest/gift-code modal already reuses too]... OK
+// button... but okay button should have link inside it, so when one taps
+// ok, it triggers link and joins telegram group, and also X button on top
+// right of it." A real feature that never actually existed end-to-end in
+// this app before now (it was only ever a dead admin-panel section pointing
+// at nothing -- see CLAUDE.md's Round 14 note); built fresh here, not
+// restored from a prior working version. Markup/CSS mirror the existing
+// #chestModalBg centered-modal pattern exactly (static HTML + .show class
+// toggle, tap-outside-to-close), not a new one-off. Fires every time Home
+// is entered (matching the one established precedent for this exact
+// feature, from the sibling Space8 project) -- same hook point showPage()
+// already uses for every other per-page action, no separate timer/listener.
+function maybeShowAnnouncement(){
+  const s = STATE.settings;
+  if (!s || !s.annEnabled || !s.annBody) return;
+  const url = s.telegramGroup || s.telegramChannel || '';
+  $('announceTitle').style.display = s.annTitle ? '' : 'none';
+  $('announceTitle').textContent = s.annTitle || '';
+  $('announceBody').textContent = s.annBody;
+  window._announceUrl = url;
+  $('announceBg').classList.add('show');
+}
+window.closeAnnounce = function(){
+  $('announceBg').classList.remove('show');
+};
+window.confirmAnnounce = function(){
+  if (window._announceUrl) window.open(window._announceUrl, '_blank', 'noopener');
+  closeAnnounce();
 };
 
 // ── HOME ──
