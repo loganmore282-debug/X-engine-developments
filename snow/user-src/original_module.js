@@ -629,19 +629,34 @@ window.showPage = async function(name){
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   stopActivityTicker();
   if (name === 'home') {
-    await renderHome();
-    await withTimeout(_bootPromise, 6000);
-    // subagent-audit-caught: this used to call maybeShowAnnouncement()
-    // unconditionally the instant the wait above resolved -- but a member
-    // impatient enough to tap Deposit/Withdraw/the gift-code chest while that
-    // wait was still in flight would have the dialog pop up ON TOP of
-    // whatever they'd already opened, since none of those open as a page nav
-    // (they're overlays stacked over Home, which never stops being
-    // STATE.page) -- owner: "it can show up when you are in another area or
-    // deposit or withdrawal screen or giftcode screen." Only show it if the
-    // member is still genuinely just looking at plain Home with nothing else
-    // open by the time this resolves.
-    if (STATE.page === 'home' && !isAnyOverlayOpen()) maybeShowAnnouncement();
+    // Deliberately NOT awaited: renderHome() does its own account/investments
+    // refresh (a real network round trip even on a cache-hit repaint), and
+    // the announcement decision below depends only on STATE.settings, not on
+    // that data at all -- awaiting it first was adding a real, needless
+    // delay before the dialog could ever show, on top of the (now-removed)
+    // wait a few lines below. paintHome()'s synchronous portion still runs
+    // in this same tick either way (everything in renderHome() before its
+    // own first `await` executes before control returns here), so Home's
+    // paint ordering is unaffected -- only the ANNOUNCEMENT's own timing
+    // changes here.
+    renderHome();
+    // subagent-audit-caught, corrected again: owner wants this to show with
+    // genuinely ZERO wait after the startup loader, and on every single
+    // return to Home -- not "wait for boot() first." STATE.settings is
+    // already known by the time this runs in every real case: a fresh
+    // network boot (bootFromNetwork()) already awaits _bootPromise as part
+    // of its own spinner-gated Promise.all before ever calling showPage()
+    // the first time, and a cache-hit boot (Round 46) restores
+    // STATE.settings from the cached snapshot before showPage() runs too --
+    // so showing immediately off whatever STATE.settings already holds,
+    // instead of re-awaiting _bootPromise every time, is what actually
+    // delivers "immediately, no wait 0s" AND "even clicking back to home."
+    // The wait below only ever matters for a genuinely first-ever boot with
+    // nothing cached yet and a still-in-flight live settings fetch -- a real
+    // edge case, not the normal path.
+    const showAnnouncementNow = () => { if (STATE.page === 'home' && !isAnyOverlayOpen()) maybeShowAnnouncement(); };
+    if (STATE.settings) showAnnouncementNow();
+    else withTimeout(_bootPromise, 6000).then(showAnnouncementNow);
   }
   else if (name === 'products') await renderProducts();
   else if (name === 'team') await renderTeam();

@@ -3465,6 +3465,43 @@ loading screen itself was already gated on that same slow fetch finishing. Re-ra
 Rounds 59–61's own suites afterward — all still pass, zero regressions. Cache bumped
 `v43`→`v44`. `user-src/`-only change — no Render redeploy needed for the backend.
 
+## Round 63 (2026-08-28) — announcement dialog corrected again: genuinely 0-wait, on every single Home visit including tab switches
+
+Owner, on Round 62's fix: "but l wanted the announcement dialog to show up immediately
+no wait 0s after start up loader, also even clicking back to home." Round 62 fixed the
+dialog popping up over another screen but still left a real, avoidable delay in the
+normal case: `showPage()`'s `'home'` branch awaited `renderHome()` (a real network round
+trip for account+investments, even on a cache-hit repaint) THEN awaited
+`withTimeout(_bootPromise, 6000)` before ever considering the announcement — two
+sequential waits the announcement's own decision doesn't actually depend on.
+
+**The announcement only ever needs `STATE.settings`**, and traced through every real
+boot path, that's already populated by the time `showPage('home')` runs in every normal
+case: a fresh network boot (`bootFromNetwork()`) already awaits `_bootPromise` as part of
+its own spinner-gated `Promise.all` before ever calling `showPage()` the first time, and
+a cache-hit boot (Round 46) restores `STATE.settings` from the cached snapshot before
+`showPage()` runs too. So re-awaiting anything at this point was pure unnecessary delay,
+not a real data dependency. Fixed: `renderHome()` is no longer awaited here at all (its
+own synchronous `paintHome()` portion still runs in the same tick either way, so Home's
+own paint ordering is unaffected — only the announcement's timing changes); the
+announcement check now fires immediately off whatever `STATE.settings` already holds,
+with the `withTimeout(_bootPromise, 6000)` wait kept only as a fallback for the one
+genuine edge case where `STATE.settings` is somehow still `null` (a truly first-ever
+boot with a still-in-flight live settings fetch — not the normal path). Round 62's
+`isAnyOverlayOpen()` guard (don't show over an already-open Deposit/Withdraw/gift-code)
+is unchanged and still applies at the moment of the (now near-instant) check.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. New Playwright pass: (1) a cache-hit boot with `/account` deliberately delayed
+2.5s — the announcement shows within 3ms of the app becoming visible, not after the
+account fetch; (2) tapping Home → Products → Home again shows it a second time within
+18ms of the second tap, confirming "even clicking back to home" holds on every repeat
+visit, not just first entry; (3) Round 62's overlay guard re-confirmed intact (still
+doesn't show over an open Deposit sheet). Re-ran Rounds 59–62's own suites — all still
+pass (Round 59's own first-boot-with-delayed-settings test still correctly shows the
+~3s wait for that one genuine no-cache-yet edge case, unchanged and expected). Cache
+bumped `v44`→`v45`. `user-src/`-only change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
