@@ -3062,6 +3062,142 @@ shows plain status-only rows for deposit/withdraw while income rows are unchange
 --check` clean on both files, `build-core.js` round-trip clean, `git diff --check` clean.
 Cache bumped `v39`→`v40`. **`server.js` changed → needs a Railway redeploy.**
 
+## Round 59 (2026-08-28) — Full-system subagent audit (4 parallel reviewers) + every real finding fixed
+
+Owner: "l said check through the system to check all bugs, use subagents to verify" (after
+initially just saying "you never ran a liveness check and running agents" with no
+test-liveness.js or established "running agents" workflow actually present in this repo or
+the sibling Space8 project to point to — asked a clarifying question, this was the answer).
+
+Ran 4 independent `general-purpose` subagents in parallel, each auditing a different layer
+with no visibility into the others' work: (1) `server.js` money-flow logic (deposits,
+withdrawals, investments, commissions, mission salary, gift codes, the abuse-guard just
+fixed in Round 58), (2) `user-src/` frontend logic (race conditions, double-submit,
+stale-state clobber, auth edge cases, navigation), (3) the admin panel + every `/admin/*`
+route (authorization, session revocation, integrity-tool correctness, settings save), (4)
+`db.js`'s Mongo-as-Firestore-compat semantics (atomicity, query correctness). Each was told
+explicitly not to report style nits or already-guarded paths — only a finding with a
+concrete, statable failure scenario. Total: ~24 minutes of combined agent runtime (run in
+parallel, so real elapsed time was well under 8 minutes), 97 tool calls, ~970K tokens.
+Below is every finding that survived scrutiny, and what was done about it.
+
+### Fixed
+
+**1. [Backend audit, HIGH] `processWithdrawalCore`'s `totalWithdrawn` increment wasn't
+locked — could double-count under a real race.** `server.js`'s own comment on
+`/admin/user/repair-ledger` already claimed "every withdrawal status transition that
+touches totalWithdrawn ... is serialized through this exact lock key (`bal:<userId>`)" —
+but the "send" transition itself never actually took that lock. Scenario: admin clicks
+Send → status flips to `processing`/`processed` → **before** the `totalWithdrawn` increment
+runs, a concurrent `repair-ledger` call reads the withdrawal as already processed and
+bakes its net into an absolute overwrite → the original increment then resumes and stacks
++net on top of that → `totalWithdrawn` inflated by exactly one withdrawal's net, silently,
+with zero audit coverage (`/admin/integrity` never checked `totalWithdrawn` at all). Fixed
+by wrapping the status-flip + increment in the same `withLock('bal:'+userId, ...)` every
+sibling call site already uses. Verified no deadlock risk (neither caller —
+`/admin/withdraw/process` nor `autoApproveWithdrawalsTick` — holds that lock beforehand).
+
+**2. [Admin audit, HIGH — a same-day side effect of Round 58's own deposit-ledger-row
+change] A failed deposit permanently inflated `totalDeposited`, poisoning
+`/admin/integrity` and "Recalculate totals"/"Repair ledger."** Round 58 made
+`/deposit/marzpay` create a `transactions` row up front so deposits show in Records
+immediately — but `markDepositFailed()` never zeroed that row's `amount` on failure, and
+both `computeRealTotals()`'s `totalDeposited` sum and `/admin/integrity`'s raw
+`walletBalance` ledger sum count every `deposit`-type row's `amount` with no status filter.
+So a routine failed deposit (wrong PIN, insufficient funds — exactly the kind of thing
+Round 58's own bug report was about) permanently overstated both, and clicking "Recalculate
+totals" would **write the inflated figure into the user's real document**. Fixed by zeroing
+the row's `amount` in `markDepositFailed()`, mirroring `finalizeWithdrawalTransactionRecord`'s
+existing withdrawal-refund pattern exactly.
+
+**2b. [Self-caught while fixing #2] Zeroing `amount` on a failed/refunded row broke its own
+Records display.** Round 58's "plain deposit/withdraw records" change made the amount
+column read the row's raw `amount` field directly — so a row zeroed for integrity-math
+reasons now shows "+UGX 0" instead of what was actually attempted (this bug already existed
+latently for refunded withdrawals since Round 53, just masked before Round 58 because the
+old full-description text redundantly spelled out the real amount too). Fixed by adding a
+separate, never-zeroed `displayAmount` field (set once at row creation, for both deposits
+and withdrawals) that Records reads for the amount column; falls back to parsing the figure
+back out of the description text for pre-existing withdrawal rows that predate this field.
+
+**3. [Frontend audit, real regression from Round 57] The cache-hit "instant boot" path now
+blocked up to 6 seconds on `boot()` — reintroducing the exact "loads too slow" complaint
+for the common case.** Round 57's fix for "announcement/ticker popping in after the
+spinner" added `await withTimeout(_bootPromise, 6000)` into `enterApp()`'s cache-hit branch
+— but that branch has no spinner to gate; Round 46 built it specifically so a returning
+member paints instantly from cache with zero network wait. Fixed by removing the wait from
+there and moving it into `showPage()`'s `'home'` branch instead (between `renderHome()` and
+`maybeShowAnnouncement()`), so only the announcement's own appearance is gated, not the
+whole page reveal. `bootFromNetwork()`'s own concurrent wait (added Round 57, genuinely
+free since it runs alongside the account/investments prefetch) is untouched.
+
+**4. [Frontend audit] A third dialog (`#confirmBg` — Invest-confirm and the generic
+yes/no confirm) had the same scroll-chaining gap Round 57 fixed for the other two.** Fixed
+identically: lock `document.body.style.overflow` in `openInvestConfirm()`/
+`openSimpleConfirm()`, unlock in the shared `closeConfirm()`.
+
+**5. [Frontend audit] Withdraw's "Add withdrawal account" link (the one place a sheet
+opens another sheet) broke the back button.** `openSheet()` always pushed a new history
+entry, even when the shared `#sheetBody` overlay was already showing a different sheet's
+content — stacking two entries for what looks like one continuously-open overlay. One
+Back/X tap then only unwound the newest entry, closing the whole overlay in a single tap
+instead of feeling consistent, and left a stale entry behind. Fixed: `openSheet()` now
+checks whether `#sheetBg` is already showing and uses `history.replaceState` instead of
+`pushState` in that case, so stack depth never exceeds 1 regardless of how many sheets got
+chained — one Back/X tap always does exactly one thing: close.
+
+**6. [Frontend audit] Withdraw/Withdrawal-Accounts/Mission-Center's deferred repaint could
+clobber a live in-progress form on a DIFFERENT sheet.** All three gated their post-fetch
+repaint on `$('sheetBody')` being truthy — but `#sheetBody` is the one static, always-present
+shared overlay element; that check never actually detects "the user has since switched to a
+different sheet" (unlike Records, which correctly checks its own `#recordsBody`). Fixed by
+adding `_openSheetTitle` (set by `openSheet()`, cleared by `closeSheet()`/`popstate`) and
+switching all three checks to compare against it — reusing the same tracking variable the
+history fix above needed anyway.
+
+**7. [Frontend audit] My Products' header totals could garble into a wrong number if
+`amount`/`paidOut` were ever strings.** `active.reduce((s,i)=>s+(i.amount||0),0)` — no
+`Number()` coercion, so a string value turns `+` into concatenation (the exact
+"1,000,000,500"-class bug Round 52 fixed server-side). Fixed with explicit `Number(...)`
+coercion, matching every other money-summing site in this file.
+
+**8. [Admin audit] Admin's "WhatsApp group"/"WhatsApp contact" settings fields saved
+successfully but did nothing** — sitting right next to the working Telegram fields with
+identical copy, never read anywhere in `user-src/`. Fixed by wiring both into
+`openHelpSheet()` the same way the Telegram buttons already work.
+
+### Investigated, correctly already-guarded or deferred as genuinely dormant (not fixed)
+
+- **db.js audit**: `db.runTransaction`/`.batch()` provide no real atomicity (already known
+  and documented) — 4 additional money-adjacent call sites identified that queue a wallet
+  write + a ledger write in one such "transaction" with no compensation if the second
+  write fails (`/team/milestone/claim`, `/mission/deposit/claim`, `/admin/deposit`,
+  `/admin/debit`). Same accepted-tradeoff class Round 19 already named for cashback/
+  commission/checkin — noted here for the record, not fixed this round (would need the
+  same wider "credit-then-verify-the-ledger-row-landed" treatment applied elsewhere, out of
+  scope for a same-day fix). `resolveFieldValues()`'s `arrayUnion`/`arrayRemove`/`increment`
+  handling has correctness traps for a future `.set()`-without-merge or `.add()` call —
+  confirmed no current call site triggers them.
+- **Backend audit**: claim-before-credit discipline, webhook trust model, and the
+  string-concat-into-money guard were all independently re-verified correct across every
+  money path traced (deposit, withdrawal, invest, checkin, gift codes, Task/Mission
+  Center, registration).
+- **Admin audit**: authorization gating, session revocation, and XSS escaping across all
+  58 `/admin/*` routes and every admin-src interpolation were independently re-verified
+  clean.
+
+**Verified**: a new backend harness (11 checks — deposit-failed zeroing + displayAmount
+preservation, no false `/admin/integrity` mismatch, the withdrawal-lock race producing the
+exact correct `totalWithdrawn` under concurrent firing, Round 58's flow re-confirmed intact)
+and a new Playwright pass (5 checks — instant cache-hit reveal restored, confirm-dialog
+scroll lock, nested-sheet back button closing in one tap, My Products totals surviving
+string amounts, Records showing the real amount on a zeroed row) all pass. Re-ran Round 57's
+and Round 58's own test suites afterward — all still pass (the 2 "failures" in Round 57's
+suite are its old assertions for the exact behavior fix #3 above deliberately reverses, not
+a regression). `node --check` clean on both files, `build-core.js` round-trip clean,
+`git diff --check` clean. Cache bumped `v40`→`v41`. **`server.js` changed → needs a Railway
+redeploy.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

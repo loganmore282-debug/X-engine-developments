@@ -721,12 +721,22 @@ async function markDepositFailed(depRef, userId, reason) {
   // Flip the ledger row created up front (see /deposit/marzpay) from
   // "Processing" to "Failed" too, same as creditDeposit() does for a
   // successful match -- otherwise a failed deposit is stuck showing
-  // "Processing" in Records forever.
+  // "Processing" in Records forever. Also zero the row's `amount` --
+  // subagent-audit-caught real bug: /admin/integrity's walletBalance check
+  // sums EVERY transaction row's raw amount regardless of status, and
+  // computeRealTotals's totalDeposited sum only filters by `type`, not
+  // status -- so a failed deposit's nonzero amount permanently inflated
+  // both, exactly the false-positive-that-writes-real-corruption class
+  // Round 53 already fixed once for declined withdrawals
+  // (finalizeWithdrawalTransactionRecord zeroes its row's amount the same
+  // way, only once the outcome is final). "Recalculate totals"/"Repair
+  // ledger" would otherwise bake this inflated totalDeposited into the
+  // user's real document.
   try {
     const txSnap = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
     await Promise.all(txSnap.docs.map(txDoc => {
       const amt = Math.abs(Number(txDoc.data().amount) || 0);
-      return txDoc.ref.update({ status: 'failed', description: `Deposit — Failed — ${fmtUGX(amt)}` });
+      return txDoc.ref.update({ status: 'failed', description: `Deposit — Failed — ${fmtUGX(amt)}`, amount: 0 });
     }));
   } catch (e) { console.warn('markDepositFailed: could not update ledger row:', e.message); }
 }
@@ -1589,8 +1599,13 @@ app.post('/deposit/marzpay', async (req, res) => {
     // withdrawal, no money has moved yet at this point) --
     // creditDeposit()'s own find-or-create step below covers that case.
     await db.collection('transactions').add({
+      // displayAmount is a separate, never-zeroed copy of the real amount --
+      // markDepositFailed() zeroes `amount` itself (see its own comment) so
+      // the walletBalance/totalDeposited integrity math stays honest, but
+      // Records' own amount column reads THIS field so a failed deposit
+      // still shows what was actually attempted instead of "+UGX 0".
       userId, type: 'deposit', description: `Deposit — Processing — ${fmtUGX(amt)}`,
-      amount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
+      amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
     }).catch(e => console.error(`Deposit ledger row create failed for dep=${depRef.id}:`, e.message));
     // Respond the instant our own write lands — do not wait on MarzPay's own
     // round-trip. The status screen's own polling picks up the resolution.
@@ -1680,7 +1695,7 @@ async function creditDeposit(depDoc) {
           const { date, time } = nowStr();
           await db.collection('transactions').add({
             userId: depUserId, type: 'deposit', description: `Deposit — Success — ${fmtUGX(depAmount)}`,
-            amount: depAmount, status: 'success', date, time, ref: fd.ref, depositId: depDoc.id,
+            amount: depAmount, displayAmount: depAmount, status: 'success', date, time, ref: fd.ref, depositId: depDoc.id,
             createdAt: FieldValue.serverTimestamp()
           });
         }
@@ -1885,8 +1900,14 @@ app.post('/withdraw/request', async (req, res) => {
         // out here (still recorded on the withdrawal doc itself, just not
         // repeated in this one-line ledger description).
         await db.collection('transactions').add({
+          // displayAmount mirrors the deposit-side fix (see /deposit/marzpay's
+          // own comment): finalizeWithdrawalTransactionRecord() zeroes
+          // `amount` once a decline's refund is confirmed, to keep the
+          // walletBalance/totalDeposited integrity math honest -- but that
+          // used to also make Records' amount column show "+UGX 0" for a
+          // refunded withdrawal instead of what was actually attempted.
           userId, type: 'withdraw', description: `Withdrawal — Processing — ${fmtUGX(amt)}`,
-          amount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
+          amount: -amt, displayAmount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
         });
       } catch (createErr) {
         // Codex-caught real bug: same shape as the investment path above --
@@ -2053,12 +2074,26 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
     }
     const sandbox = mpData.status === 'sandbox';
     const updateFields = { status: sandbox ? 'processed' : 'processing', processedBy, processedAt: FieldValue.serverTimestamp(), marzReference: sendingMarker, marzTxUuid: mpData.data?.transaction?.uuid || null };
-    await witRef.update(updateFields);
-    try {
-      await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
-    } catch (twErr) {
-      console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
-    }
+    // subagent-audit-caught real bug: every OTHER totalWithdrawn mutation
+    // (declineWithdrawalAndRefund, /admin/user/repair-ledger -- see its own
+    // comment claiming "every withdrawal status transition that touches
+    // totalWithdrawn ... is serialized through this exact lock key") takes
+    // out bal:<userId> first. This "send" transition was the one place that
+    // comment was wrong about -- it never actually locked, so a
+    // repair-ledger run racing a send here could land its absolute-overwrite
+    // BETWEEN this increment's read and write, silently losing or double-
+    // counting this withdrawal's net amount in totalWithdrawn. No lock is
+    // already held here (verified: neither /admin/withdraw/process nor
+    // autoApproveWithdrawalsTick, the only two callers, holds bal:<userId>
+    // before this point), so this can't deadlock.
+    await withLock('bal:' + wit.userId, async () => {
+      await witRef.update(updateFields);
+      try {
+        await db.collection('users').doc(wit.userId).update({ totalWithdrawn: FieldValue.increment(wit.net) });
+      } catch (twErr) {
+        console.error(`MONEY-SAFETY: totalWithdrawn increment failed AFTER withdrawal ${withdrawalId} was marked sent — user ${wit.userId} is missing +${wit.net} in their totalWithdrawn stat. Backfill by hand.`, twErr.message);
+      }
+    });
     if (sandbox) await finalizeWithdrawalTransactionRecord(withdrawalId, 'processed');
     else {
       try {

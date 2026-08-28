@@ -427,7 +427,16 @@ async function enterApp(){
   STATE.account = cached.account; STATE.investments = cached.investments;
   STATE.teamStats = cached.teamStats; STATE.bankAccounts = cached.bankAccounts;
   STATE.transactions = cached.transactions; STATE.mission = cached.mission;
-  await withTimeout(_bootPromise, 6000);
+  // subagent-audit-caught real regression: Round 57 added a wait on
+  // _bootPromise right here to stop the announcement dialog/activity
+  // ticker popping in after the spinner -- but THIS is the cache-hit
+  // "instant boot" path, which has no spinner to gate in the first place
+  // (Round 46 built it specifically so a returning visit paints with zero
+  // network wait). Making it block here reintroduced the exact "takes long
+  // to load" complaint for the common case (a returning member) instead of
+  // fixing it. The wait now happens narrowly in showPage()'s 'home' branch,
+  // just before maybeShowAnnouncement() -- gates only the announcement's
+  // own appearance, not this instant paint.
   $('loadingScreen').style.display = 'none';
   $('app').style.display = '';
   showPage(STATE.page || 'home');
@@ -573,7 +582,7 @@ window.showPage = async function(name){
   updateNavIcons();
   if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
   stopActivityTicker();
-  if (name === 'home') { await renderHome(); maybeShowAnnouncement(); }
+  if (name === 'home') { await renderHome(); await withTimeout(_bootPromise, 6000); maybeShowAnnouncement(); }
   else if (name === 'products') await renderProducts();
   else if (name === 'team') await renderTeam();
   else if (name === 'account') await renderAccount();
@@ -728,8 +737,15 @@ async function renderProducts(){
 function paintProducts(animate){
   const investments = STATE.investments || [];
   const active = investments.filter(i => i.status === 'active' || i.status === 'matured');
-  const totalInvested = active.reduce((s,i)=>s+(i.amount||0),0);
-  const totalEarned = active.reduce((s,i)=>s+(i.paidOut||0),0);
+  // Number(...) coercion matters here -- subagent-audit-caught: without it,
+  // a single string-typed amount/paidOut in the /investments response turns
+  // every "+" from here on into string concatenation instead of addition,
+  // the exact "1,000,000,500"-class corruption Round 52 already found and
+  // fixed server-side. This is the one spot on My Products that read the
+  // raw field straight into a sum without going through fmtUGX() (which
+  // already coerces) or an explicit Number() first.
+  const totalInvested = active.reduce((s,i)=>s+(Number(i.amount)||0),0);
+  const totalEarned = active.reduce((s,i)=>s+(Number(i.paidOut)||0),0);
   let html = `
 <div class="top-bar" style="display:flex;align-items:center;justify-content:space-between;padding:24px 20px 4px;">
   <div class="wordmark">${snowflakeSvg('var(--snow-ink)',15)}<div class="wm-text" style="font-size:17px;">SNOW</div></div>
@@ -998,7 +1014,7 @@ window.openMissionCenterSheet = async function(){
   else $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Loading…</div>';
   const r = await api('/mission/status');
   if (r.status === 'success') STATE.mission = r;
-  if (!hadCache && $('sheetBody')) {
+  if (!hadCache && _openSheetTitle === 'Mission Center') {
     if (r.status === 'success') renderMissionCenter();
     else $('sheetBody').innerHTML = '<div class="list-empty reveal-in">Could not load Mission Center right now.</div>';
   }
@@ -1174,22 +1190,43 @@ async function renderAccount(){
 }
 
 // ── SHEETS ──
+// Tracks which sheet's content is currently showing in the one shared
+// #sheetBody -- every deferred (post-await) repaint in a sheet's own open*
+// function should check this, not merely "does #sheetBody exist" (it
+// always does, it's a static element whose innerHTML just gets replaced).
+// See openWithdrawSheet/openWithdrawalAccountsSheet/openMissionCenterSheet.
+var _openSheetTitle = null;
 function openSheet(title, bodyHtml){
   $('sheetTitle').textContent = title;
   $('sheetBody').innerHTML = bodyHtml;
+  // Withdraw's empty-state "Add withdrawal account" link opens Withdrawal
+  // Accounts FROM WITHIN the already-open Withdraw sheet -- both render into
+  // this same shared overlay, so without this check a second history entry
+  // stacks on top of the first for what looks like one continuously-open
+  // sheet. A single Back tap (or the X button) then only unwound the newest
+  // entry, closing the whole overlay in one tap instead of returning to
+  // Withdraw, and left a stale extra entry behind that broke the NEXT Back
+  // press too. Replacing the entry in place when a sheet is already open
+  // keeps stack depth at 1 regardless of how many sheets got chained, so
+  // one Back/X tap always does exactly one consistent thing: close.
+  const alreadyOpen = $('sheetBg').classList.contains('show');
   $('sheetBg').classList.add('show');
-  history.pushState({ sheet: title }, '', '');
+  _openSheetTitle = title;
+  if (alreadyOpen) history.replaceState({ sheet: title }, '', '');
+  else history.pushState({ sheet: title }, '', '');
   document.body.style.overflow = 'hidden';
 }
 window.closeSheet = function(){
   $('sheetBg').classList.remove('show');
   document.body.style.overflow = '';
+  _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
   if (history.state && history.state.sheet) history.back();
 };
 window.addEventListener('popstate', () => {
   $('sheetBg').classList.remove('show');
   document.body.style.overflow = '';
+  _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
 });
 
@@ -1209,8 +1246,16 @@ window.openInfoSheet = function(kind){
 // immediately with just the links/text while the image streams in.
 window.openHelpSheet = async function(){
   const s = STATE.settings || {};
+  // subagent-audit-caught real bug: the admin Settings panel has had a
+  // "WhatsApp group"/"WhatsApp contact" card (whatsappGroup/whatsappContact)
+  // sitting right next to the working Telegram fields, saving successfully
+  // with the same "leave blank to hide its button" copy -- but nothing here
+  // ever read either field, so filling them in silently did nothing. Wired
+  // in the same way as the Telegram links right below.
   const links = (s.telegramGroup ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;" href="${esc(s.telegramGroup)}" target="_blank" rel="noopener">Telegram Group</a>` : '')
-    + (s.supportTelegram ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-ink);" href="${esc(s.supportTelegram)}" target="_blank" rel="noopener">Customer Service</a>` : '');
+    + (s.supportTelegram ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-ink);" href="${esc(s.supportTelegram)}" target="_blank" rel="noopener">Customer Service</a>` : '')
+    + (s.whatsappGroup ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-green);" href="${esc(s.whatsappGroup)}" target="_blank" rel="noopener">WhatsApp Group</a>` : '')
+    + (s.whatsappContact ? `<a class="primary-button" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box;background:var(--snow-green-deep);" href="${esc(s.whatsappContact)}" target="_blank" rel="noopener">WhatsApp Support</a>` : '');
   openSheet('Help Centre', `<div class="reveal-in">
     <div id="helpBannerWrap"></div>
     ${links ? `<div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">${links}</div>` : ''}
@@ -1367,19 +1412,40 @@ function depWitStatusLabel(desc){
 function recordsRowLabel(cat, t){
   return (cat === 'deposit' || cat === 'withdraw') ? depWitStatusLabel(t.description) : cleanDesc(t.description);
 }
+// A failed deposit / a declined-and-refunded withdrawal has its ledger
+// row's `amount` zeroed server-side (see markDepositFailed()/
+// finalizeWithdrawalTransactionRecord() in server.js) so the admin's
+// walletBalance/totalDeposited integrity math stays honest -- but the
+// amount column here must still show what was actually attempted, not
+// "+UGX 0". `displayAmount` is a separate, never-zeroed copy of the real
+// amount server.js writes at creation time for exactly this. Falls back to
+// parsing the figure back out of the description for older rows written
+// before that field existed (only realistically possible for withdrawals --
+// deposits only started getting a ledger row at all in Round 58).
+function recordsRowAmount(t){
+  if (t.displayAmount !== undefined && t.displayAmount !== null) return Number(t.displayAmount) || 0;
+  if ((Number(t.amount) || 0) === 0 && t.description) {
+    const m = String(t.description).match(/UGX\s*([\d,]+)/);
+    if (m) {
+      const parsed = Number(m[1].replace(/,/g, ''));
+      if (Number.isFinite(parsed)) return t.type === 'withdraw' ? -parsed : parsed;
+    }
+  }
+  return Number(t.amount) || 0;
+}
 function renderRecordsTab(cat){
   const body = $('recordsBody');
   if (!body) return;
   const rows = (STATE.transactions || []).filter(t => recordsTabMatch(cat, t));
   if (!rows.length) { body.innerHTML = '<div class="list-empty reveal-in">No records yet.</div>'; return; }
-  body.innerHTML = '<div class="reveal-in"><div class="settings-list">' + rows.map(t => `
+  body.innerHTML = '<div class="reveal-in"><div class="settings-list">' + rows.map(t => { const amt = recordsRowAmount(t); return `
     <div class="list-row">
       <div style="flex:1;min-width:0;">
         <div style="font-size:13.5px;font-weight:600;">${esc(recordsRowLabel(cat, t))}</div>
         <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">${esc(t.date||'')} ${esc(t.time||'')}</div>
       </div>
-      <div class="mono" style="font-size:13px;font-weight:700;color:${t.amount<0?'var(--snow-wine)':'var(--snow-green)'};">${t.amount<0?'-':'+'}${fmtUGX(Math.abs(t.amount))}</div>
-    </div>`).join('') + '</div><div class="list-end">No more data</div></div>';
+      <div class="mono" style="font-size:13px;font-weight:700;color:${amt<0?'var(--snow-wine)':'var(--snow-green)'};">${amt<0?'-':'+'}${fmtUGX(Math.abs(amt))}</div>
+    </div>`; }).join('') + '</div><div class="list-end">No more data</div></div>';
 }
 function cleanDesc(d){ return d || ''; }
 
@@ -1463,7 +1529,7 @@ window.openWithdrawSheet = async function(){
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!hadCache) STATE.bankAccounts = [];
-  if (!hadCache && $('sheetBody')) paintWithdrawSheet(s);
+  if (!hadCache && _openSheetTitle === 'Withdraw') paintWithdrawSheet(s);
 };
 function paintWithdrawSheet(s){
   const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)} — ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
@@ -1512,7 +1578,7 @@ window.openWithdrawalAccountsSheet = async function(){
   const r = await api('/bank/list');
   if (r.status === 'success') STATE.bankAccounts = r.accounts;
   else if (!hadCache) STATE.bankAccounts = [];
-  if (!hadCache && $('sheetBody')) renderWithdrawalAccountsSheet();
+  if (!hadCache && _openSheetTitle === 'Withdrawal Accounts') renderWithdrawalAccountsSheet();
 };
 // Groups a phone number into card-number-style chunks of 4 digits; an empty
 // number shows the masked "XXXX XXXX XX" placeholder the owner asked for.
@@ -1621,8 +1687,12 @@ window.openInvestConfirm = function(tierKey){
     <button class="primary-button" id="investConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;" onclick="confirmInvest('${esc(tierKey)}')">Confirm & Invest</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
   $('confirmBg').classList.add('show');
+  document.body.style.overflow = 'hidden'; // subagent-audit-caught: same scroll-chaining gap already fixed for #announceBg/#chestModalBg
 };
-window.closeConfirm = function(){ $('confirmBg').classList.remove('show'); };
+window.closeConfirm = function(){
+  $('confirmBg').classList.remove('show');
+  document.body.style.overflow = '';
+};
 window.confirmInvest = async function(tierKey){
   const btn = $('investConfirmBtn');
   btn.disabled = true; btn.textContent = 'Please wait…';
@@ -1649,6 +1719,7 @@ function openSimpleConfirm(title, body, onConfirm){
     if (ok) closeConfirm();
   };
   $('confirmBg').classList.add('show');
+  document.body.style.overflow = 'hidden';
 }
 
 // ── PWA: install prompt + service worker auto-update ──
