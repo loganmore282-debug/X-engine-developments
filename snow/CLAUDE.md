@@ -2855,6 +2855,40 @@ the viewport's horizontal center (195px on a 390px-wide screen), screenshot show
 sitting cleanly above the empty-state text. `node --check` clean, `node build-core.js`
 round-trip clean, `git diff --check` clean. Cache bumped `v35`→`v36`.
 
+## Round 55 (2026-08-27) — Records' background refresh no longer silently repaints (same bug class Round 41 already fixed for Mission Center)
+
+Owner: "records income 🙌 has silent loader, when you open it shows and loads in
+background and reshow again." Exactly the Round 41 Mission Center bug, recurring in a
+different sheet: `openRecordsSheet()` paints instantly from `STATE.transactions` when a
+cache exists (correct, no network wait), but then called `renderRecordsTab()` a SECOND
+time, unconditionally, once the background `/transactions` refetch landed — replaying
+the row list's `.reveal-in` entrance animation a moment after the sheet had already
+finished opening, visually indistinguishable from the whole list quietly reloading
+itself. Every other cache-first sheet in this app (`openWithdrawSheet`,
+`openWithdrawalAccountsSheet`, and Mission Center since Round 41) already guards this
+exact repaint with `if (!hadCache && $(...)) { ... }` — Records was simply missing it
+(pre-dates the category-tabs feature, or regressed when that was added; either way, the
+established fix is the same one-line guard, applied here).
+
+**Fix**: `renderRecordsTab(_recordsTab)` after the background fetch is now gated behind
+`if (!hadCache && $('recordsBody'))`, matching the other three sheets exactly.
+Tab-switching (`switchRecordsTab`) is untouched — it still reads live `STATE.transactions`
+directly, so it correctly shows the refreshed data once the user actually taps a tab, the
+same "no surprise repaint, but nothing stale either" balance the other cache-first sheets
+already strike. Checked whether `renderProducts()`/`paintProducts()` had the same gap —
+it doesn't: it already conditions the `.reveal-in` wrapper on an explicit `animate` flag
+(`animate ? '<div class="reveal-in">'+html+'</div>' : html`), so its background refresh
+silently updates the DOM without ever replaying the animation.
+
+**Verified** with Playwright, mirroring Round 41's own verification technique: delayed
+`/transactions` 500ms so the background refetch was still in flight after the cached
+paint landed, tagged `#recordsBody` with a marker attribute right after that first paint,
+waited past the delay, and confirmed the marker AND the full `innerHTML` were
+byte-identical afterward (no repaint happened) — then confirmed switching tabs still
+correctly shows the (now-refreshed) transaction data. Separately verified the no-cache
+first-open path still paints once the fetch resolves. `node --check` clean, `node
+build-core.js` round-trip clean, `git diff --check` clean. Cache bumped `v36`→`v37`.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

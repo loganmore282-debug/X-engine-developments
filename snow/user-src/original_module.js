@@ -1246,7 +1246,16 @@ function recordsTabMatch(cat, t){
 // Cache-first: STATE.transactions is already prefetched at login (see
 // enterApp()), so this normally has data to show the instant the sheet
 // opens -- no network wait. Still quietly re-fetches in the background to
-// stay current for next time.
+// stay current for next time -- but, matching every other cache-first sheet
+// in this app (openWithdrawSheet/openWithdrawalAccountsSheet, and Mission
+// Center after Round 41's fix for this exact bug), that background refetch
+// only repaints when there was NO cache to show initially. This one never
+// got the guard: it used to call renderRecordsTab() again unconditionally
+// once the refetch landed, replaying the row list's .reveal-in entrance
+// animation a moment after the sheet had already finished opening --
+// visually indistinguishable from the whole list quietly reloading itself
+// (owner: "records income has silent loader... shows and loads in
+// background and reshow again").
 window.openRecordsSheet = async function(){
   _recordsTab = 'income';
   const hadCache = Array.isArray(STATE.transactions);
@@ -1261,8 +1270,7 @@ window.openRecordsSheet = async function(){
   const r = await api('/transactions');
   if (r.status === 'success') STATE.transactions = r.transactions;
   else if (!hadCache) STATE.transactions = [];
-  if (!$('recordsBody')) return; // sheet closed while awaiting
-  renderRecordsTab(_recordsTab);
+  if (!hadCache && $('recordsBody')) renderRecordsTab(_recordsTab);
 };
 window.switchRecordsTab = function(cat){
   _recordsTab = cat;
