@@ -26,6 +26,8 @@ const routes = {
   } },
   'POST /admin/transactions/list': { status: 'success', transactions: [
     { id: 't1', type: 'deposit', amount: 30000, description: 'Wallet recharge', ref: 'B123', createdAt: new Date().toISOString(), userId: 'u1' },
+    { id: 't2', type: 'mission_salary', amount: 750, description: 'Mission Center salary', createdAt: new Date().toISOString(), userId: 'u1' },
+    { id: 't3', type: 'mission_deposit_reward', amount: 7500, description: 'Mission Center deposit reward', createdAt: new Date().toISOString(), userId: 'u1' },
   ] },
   'GET /admin/users': { status: 'success', users: [
     { id: 'u1', phone: '+256700000001', publicId: '000001', referralCode: 'abC123', walletBalance: 10000, totalInvested: 30000, totalEarned: 5000, status: 'active' },
@@ -35,7 +37,9 @@ const routes = {
   'GET /admin/products': { status: 'success', products: [
     { key: 'qing-shuang', name: 'Snow Qing Shuang', price: 30000, cycle: 150, expectedReturn: 900000, active: true },
   ] },
-  'GET /admin/promocodes/list': { status: 'success', codes: [] },
+  'GET /admin/promocodes/list': { status: 'success', codes: [
+    { id: 'c1', code: 'AB12CDEF', reward: 5000, uses: 0, maxUses: 1, active: true, createdAt: new Date().toISOString() },
+  ] },
   'GET /admin/referrals/list': { status: 'success', referrals: [
     { id: 'u1', phone: '+256700000001', referrerId: 'r1', referrerCode: 'xYz789', invested: 30000, status: 'active' },
   ] },
@@ -49,7 +53,9 @@ const routes = {
   'POST /admin/user/reset-payout-pin': { status: 'success' },
   'POST /admin/user/reconcile-checkin': { status: 'success', before: { checkinStreak: 2 }, after: { checkinStreak: 3 }, changed: true, lastCheckin: '2026-08-26' },
   'POST /admin/user/attach-referrer': { status: 'success', commissionTriggered: false },
-  'GET /admin/admins/list': { status: 'success', admins: [] },
+  'GET /admin/admins/list': { status: 'success', admins: [
+    { username: 'mary', active: false, createdAt: new Date().toISOString(), lastLoginAt: null },
+  ] },
   'GET /admin/audit-log': { status: 'success', log: [] },
   'POST /admin/analytics': { status: 'success', kpis: {
     depAmount: 900000, witAmount: 300000, investedAmount: 400000, commissionsPaid: 20000,
@@ -65,6 +71,11 @@ const routes = {
   'POST /admin/products/sync-pricing': { status: 'success', synced: 1 },
   'POST /admin/promocodes/generate': { status: 'success', code: 'ab3Kx', reward: 5000 },
   'GET /admin/banner': { status: 'success', image: '' },
+  'GET /admin/help-banner': { status: 'success', image: '' },
+  'GET /admin/about-content': { status: 'success', blocks: [] },
+  'GET /admin/push/list': { status: 'success', count: 0 },
+  'POST /admin/promocodes/deactivate': { status: 'success' },
+  'POST /admin/admins/reactivate': { status: 'success' },
 };
 
 function routeKey(method, path) { return `${method} ${path}`; }
@@ -215,6 +226,54 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   await sleep(250);
   const openUserBtn = doc.querySelector('[data-openuser]');
   if (openUserBtn) { openUserBtn.click(); await sleep(200); }
+
+  // ── Round 60 findings ──
+  let confirmCalls = [];
+  window.confirm = (msg) => { confirmCalls.push(msg); return true; };
+
+  // Push tooltip no longer claims a nonexistent one-tap Approve action
+  const pushBtn = doc.getElementById('pushBtn');
+  if (!pushBtn) errors.push('pushBtn not found');
+  else if (/one-tap/i.test(pushBtn.title)) errors.push('pushBtn tooltip still claims a one-tap Approve action: ' + pushBtn.title);
+
+  // Auto-approve wording no longer overstates per-request spacing
+  doc.querySelector('.tab[data-tab="settings"]').click();
+  await sleep(200);
+  const settingsHtml2 = doc.getElementById('content').innerHTML;
+  if (/spaced by the same interval/i.test(settingsHtml2)) errors.push('Auto-approve copy still claims requests are spaced by the interval');
+  if (!/back-to-back/i.test(settingsHtml2)) errors.push('Auto-approve copy missing the corrected back-to-back wording');
+
+  // Gift codes: Deactivate now confirms
+  doc.querySelector('.tab[data-tab="promocodes"]').click();
+  await sleep(200);
+  const offBtn = doc.querySelector('[data-off]');
+  if (!offBtn) errors.push('no gift-code Deactivate button found (fixture should have produced one)');
+  else {
+    confirmCalls = [];
+    offBtn.click();
+    await sleep(200);
+    if (confirmCalls.length !== 1) errors.push('gift-code Deactivate did not prompt confirm() exactly once: ' + confirmCalls.length);
+  }
+
+  // Admins: Reactivate now confirms
+  doc.querySelector('.tab[data-tab="admins"]').click();
+  await sleep(200);
+  const reactBtn = doc.querySelector('[data-react]');
+  if (!reactBtn) errors.push('no admin Reactivate button found (fixture should have produced one)');
+  else {
+    confirmCalls = [];
+    reactBtn.click();
+    await sleep(200);
+    if (confirmCalls.length !== 1) errors.push('admin Reactivate did not prompt confirm() exactly once: ' + confirmCalls.length);
+  }
+
+  // TX_LABELS covers Mission Center transaction types (rendered, not just present in source)
+  doc.querySelector('.tab[data-tab="transactions"]').click();
+  await sleep(250);
+  const txHtml = doc.getElementById('content').innerHTML;
+  if (!txHtml.includes('Mission Center salary')) errors.push('Transactions tab does not render the mission_salary label');
+  if (!txHtml.includes('Mission Center deposit reward')) errors.push('Transactions tab does not render the mission_deposit_reward label');
+  if (/\bmission_salary\b/.test(txHtml) || /\bmission_deposit_reward\b/.test(txHtml)) errors.push('Transactions tab fell through to the raw type string instead of a label');
 
   console.log('\n=== ERRORS (' + errors.length + ') ===');
   errors.forEach(e => console.log(' -', e));

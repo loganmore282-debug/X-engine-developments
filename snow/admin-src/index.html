@@ -193,7 +193,7 @@ window.addEventListener('appinstalled', function(){ window._adminInstallPrompt =
         <b>Snow Admin</b>
         <div class="spacer"></div>
         <button class="btn ghost sm" id="liveBtn" title="Auto-refresh the current tab as new activity arrives"><span id="liveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle"></span>Live</button>
-        <button class="btn ghost sm" id="pushBtn" title="Enable push notifications. On the owner's own device/browser, a new-withdrawal alert includes a one-tap Approve button that sends the payout straight from the notification -- no need to open this panel. Staff notifications never get that button.">Notify</button>
+        <button class="btn ghost sm" id="pushBtn" title="Enable push notifications for new deposits and withdrawal requests on this device/browser. Tapping an alert opens this panel -- it does not approve or send anything by itself.">Notify</button>
         <button class="btn ghost sm hidden" id="installBtn">Install</button>
         <button class="btn ghost sm" id="refreshBtn">Refresh</button>
         <button class="btn ghost sm" id="logoutBtn">Log out</button>
@@ -259,7 +259,8 @@ const TX_LABELS = {
   deposit: 'Deposit', withdraw: 'Cash out', commission: 'Commission', team_reward: 'Task Center reward',
   checkin: 'Daily reward', cashback: 'Plan cashback', investment: 'Plan purchase',
   promocode: 'Promo code redeemed', admin_credit: 'Credit', admin_debit: 'Adjustment',
-  welcome_bonus: 'Welcome bonus',
+  welcome_bonus: 'Welcome bonus', mission_salary: 'Mission Center salary',
+  mission_deposit_reward: 'Mission Center deposit reward',
 };
 function txLabel(type){ return TX_LABELS[type] || (type ? type.replace(/_/g,' ') : ''); }
 function dayLabel(iso){
@@ -837,7 +838,7 @@ async function openUser(uid){
     toast(d.message||d.status, d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } else { b.disabled=false; b.textContent=lbl; }
   });
-  $('banBtn')?.addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } });
+  $('banBtn')?.addEventListener('click', async()=>{ const action=u.status==='banned'?'unban':'ban'; if(action==='ban' && !confirm(`Suspend ${u.phone}? This immediately blocks their deposits, withdrawals, purchases, and cashback.`)) return; const d=await api('/admin/ban',{userId:uid,action}); toast(d.status==='success'?('User '+action+'ned'):(d.message||'Failed'), d.status==='success'?'ok':'err'); if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); } });
   $('pwBtn')?.addEventListener('click', async()=>{
     const np=$('pwNew').value.trim();
     if(np.length<6) return toast('New password must be at least 6 characters','err');
@@ -1005,7 +1006,10 @@ async function renderWithdrawals(){
   if(staleTab('withdrawals')) return;
   _wits = r.withdrawals||[];
   const counts = r.counts || {};
-  const subs = [['pending','Pending'],['processing','Processing'],['processed','Processed'],['declined','Declined'],['all','All']];
+  // subagent-audit-caught: 'sending' had no filter tab of its own, so an
+  // admin could only ever find one via "All" -- added alongside the fix
+  // that finally gave it an action button (Reject) too.
+  const subs = [['pending','Pending'],['processing','Processing'],['sending','Sending'],['processed','Processed'],['declined','Declined'],['all','All']];
   const pbd = r.processedByDay||[];
   const maxP = Math.max(1, ...pbd.map(d=>d.count));
   const rows = pbd.slice().reverse();
@@ -1030,6 +1034,12 @@ async function renderWithdrawals(){
 }
 function witStatusPill(w){
   if(w.status==='pending') return `<span class="pill-tag t-warn">Awaiting approval</span>`;
+  // subagent-audit-caught: 'sending' (MarzPay network-errored mid-request,
+  // see server.js's own comment on this status) fell through to the plain
+  // gray default label with no explanation and, until the fix below, no
+  // action button either -- an admin had no way to tell this apart from a
+  // normal in-progress state.
+  if(w.status==='sending') return `<span class="pill-tag t-bad">Stuck sending — check MarzPay</span>`;
   return statusPill(w.status);
 }
 function drawWits(){
@@ -1049,6 +1059,16 @@ function drawWits(){
     <td>${witStatusPill(w)}${w.processedBy?`<br><span class="muted" style="font-size:11px">by ${esc(w.processedBy)} · ${fdate(w.processedAt)}</span>`:w.declinedBy?`<br><span class="muted" style="font-size:11px">declined by ${esc(w.declinedBy)} · ${fdate(w.declinedAt)}</span>`:''}</td>
     <td>${w.status==='pending'?`<button class="btn ok sm" data-proc="${esc(w.id)}">Send via MarzPay</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
       :w.status==='processing'?`<button class="btn sky sm" data-vrf="${esc(w.id)}">Verify</button> ${SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:''}`
+      // subagent-audit-caught: 'sending' (MarzPay network-errored mid-send,
+      // see server.js's processWithdrawalCore -- deliberately never
+      // reverted to 'pending' so nobody retries it blindly) has had a
+      // working /admin/withdraw/reject path since Round 35, but no button
+      // to actually reach it -- an admin could only find one at all via
+      // the "All" filter, with nothing to click once they did. Same Reject
+      // action as the other two states; check MarzPay's own dashboard
+      // first to confirm whether it actually sent before rejecting/
+      // refunding one.
+      :w.status==='sending'?(SESSION_ROLE==='owner'?`<button class="btn danger sm" data-rej="${esc(w.id)}">Reject</button>`:'<span class="muted" style="font-size:11px">Owner only</span>')
       :''}</td></tr>`;
   }).join(''):'<tr><td colspan="7" class="empty">No withdrawals</td></tr>';
   // Tapping anywhere on the row opens the SAME full user-detail modal as
@@ -1070,7 +1090,10 @@ async function quietRefreshWithdrawals(){
   if(staleTab('withdrawals') || !$('witRows')) return;
   _wits = r.withdrawals||[];
   const counts = r.counts || {};
-  const subs = [['pending','Pending'],['processing','Processing'],['processed','Processed'],['declined','Declined'],['all','All']];
+  // subagent-audit-caught: 'sending' had no filter tab of its own, so an
+  // admin could only ever find one via "All" -- added alongside the fix
+  // that finally gave it an action button (Reject) too.
+  const subs = [['pending','Pending'],['processing','Processing'],['sending','Sending'],['processed','Processed'],['declined','Declined'],['all','All']];
   document.querySelectorAll('[data-wf]').forEach(b=>{
     const k=b.dataset.wf, l=(subs.find(s=>s[0]===k)||[])[1]||k;
     b.textContent = `${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}`;
@@ -1229,7 +1252,7 @@ async function renderPromoCodes(){
     }
     if(failMsg) toast(failMsg,'err');
   });
-  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ const d=await api('/admin/promocodes/deactivate',{id:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderPromoCodes(); }));
+  document.querySelectorAll('[data-off]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Deactivate this gift code? It can no longer be redeemed once deactivated.')) return; const d=await api('/admin/promocodes/deactivate',{id:b.dataset.off}); toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderPromoCodes(); }));
   wireCopyButtons();
   function wireCopyButtons(){
     document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>copyText(b.dataset.copy,b));
@@ -1277,6 +1300,7 @@ async function renderAdmins(){
     toast(d.status==='success'?'Deactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderAdmins();
   }));
   document.querySelectorAll('[data-react]').forEach(b=>b.addEventListener('click', async()=>{
+    if(!confirm(`Reactivate "${b.dataset.react}"? They will be able to sign in again immediately.`)) return;
     const d=await api('/admin/admins/reactivate',{username:b.dataset.react});
     toast(d.status==='success'?'Reactivated':(d.message||'Failed'),d.status==='success'?'ok':'err'); renderAdmins();
   }));
@@ -1455,11 +1479,11 @@ async function renderSettings(){
 
     <h2 class="sec">Auto-approve withdrawals</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested — even a single request always waits the full interval, it's never approved instantly) before the server approves and sends it. Requests that arrive close together are still sent one at a time, spaced by the same interval — no tap needed per request. It reuses the exact same send logic as the "Send via MarzPay" button on the Withdrawals tab, so it can never double-pay a request or act on one that isn't still genuinely pending.</p>
+      <p class="muted" style="margin-top:0">Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested — even a single request always waits the full interval, it's never approved instantly) before the server approves and sends it. It checks every few seconds, and every request that's old enough at that moment is approved and sent back-to-back in the same pass, not spaced apart from each other — no tap needed per request. It reuses the exact same send logic as the "Send via MarzPay" button on the Withdrawals tab, so it can never double-pay a request or act on one that isn't still genuinely pending.</p>
       <div class="switch-row"><span><b>Enable auto-approve</b> <span class="muted">(server keeps running even if you close this panel)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAutoApproveOn" ${s.autoApproveWithdrawalsEnabled?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">
-        <div><label>Wait between approvals (seconds)</label><input id="sAutoApproveInterval" type="number" min="5" max="3600" value="${v('autoApproveIntervalSec',10)}"></div>
+        <div><label>Wait after request before approving (seconds)</label><input id="sAutoApproveInterval" type="number" min="5" max="3600" value="${v('autoApproveIntervalSec',10)}"></div>
         <div><label>Max amount to auto-approve</label><input id="sAutoApproveMaxAmt" type="number" min="0" value="${v('autoApproveMaxAmount',0)}" placeholder="0 = no limit"></div>
       </div>
       <p class="muted" style="font-size:12px;margin:6px 0 0">A request above the max amount is skipped and left Pending for you to approve by hand — it does not block smaller requests behind it in the queue. Set to 0 to auto-approve every amount.</p>

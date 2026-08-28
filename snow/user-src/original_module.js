@@ -58,6 +58,15 @@ function accountWaveFull(){
 function copyBubble(){ return `<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${ICONS.copy}</div>`; }
 
 function fmtUGX(n){ return 'UGX ' + Math.round(Number(n)||0).toLocaleString('en-UG'); }
+// subagent-audit-caught: the deposit/withdraw amount fields have no
+// oninput sanitizer, and every amount the app itself shows (quick-amount
+// chips, "min UGX 30,000" hints) is comma-formatted via fmtUGX() -- so a
+// member typing "30,000" out of habit fed straight into a bare parseInt()
+// stops at the comma (parseInt("30,000",10) === 30), producing a
+// nonsensical "Minimum amount is UGX 30,000" rejection right next to an
+// input that visibly still reads "30,000". Strips thousands separators
+// before parsing.
+function parseMoneyInput(v){ return parseInt(String(v||'').replace(/,/g,''), 10); }
 // Matches server.js's nowStr().date exactly (Kampala/EAT, UTC+3) -- used
 // client-side only to show "claimed today" state without an extra round
 // trip; the server is still the real source of truth on submit.
@@ -130,7 +139,12 @@ function toast(msg, isErr){
 // Endpoints that actually move money -- a background service-worker reload
 // (see the registration script near the bottom of this file) waits for this
 // count to hit 0 before ever yanking the page out from under one of these.
-var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete', '/checkin', '/redeem']);
+// subagent-audit-caught: /mission/salary/claim and /mission/deposit/claim
+// both genuinely credit walletBalance server-side (same as every other
+// entry here) but were missing, so a background service-worker update
+// landing mid-claim could yank the page out from under one -- the exact
+// thing this whole tracking mechanism exists to prevent.
+var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete', '/checkin', '/redeem', '/mission/salary/claim', '/mission/deposit/claim']);
 window._moneyCallsInFlight = 0;
 async function api(path, opts){
   opts = opts || {};
@@ -327,10 +341,23 @@ window.doLogout = async function(){
 // and every caller awaits this same promise (capped by withTimeout, see
 // below) before the spinner ever comes down, so nothing pops in afterward.
 async function boot(){
-  const [s, p, f] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed') ]);
+  const [s, p, f, b] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner') ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   STATE.products = p.status === 'success' ? p.products : [];
   STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
+  STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
+  applyAuthTagline();
+}
+// Admin's "App tagline (shown under the logo)" Settings field has existed
+// since before this app had a frontend to read it -- #authTagline is only
+// ever visible on the pre-login auth screen, so this only needs a call from
+// boot() itself (which runs once at module load, independent of auth state).
+function applyAuthTagline(){
+  const el = $('authTagline');
+  if (!el) return;
+  const tag = (STATE.settings && STATE.settings.brandTagline) || '';
+  el.textContent = tag;
+  el.style.display = tag ? '' : 'none';
 }
 // Bounds how long the loading screen will wait on boot() -- a slow/stuck
 // settings or activity-feed call must never strand a member on the spinner
@@ -414,6 +441,16 @@ function saveCachedState(uid){
     localStorage.setItem(CACHED_STATE_KEY, JSON.stringify({
       uid, account: STATE.account, investments: STATE.investments, teamStats: STATE.teamStats,
       bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, mission: STATE.mission,
+      // subagent-audit-caught: products/settings were never part of this
+      // snapshot, so the cache-hit "instant boot" path (which restores
+      // everything else here with zero network wait) still showed My
+      // Products as empty ("0 plans") and Deposit/Withdraw's minimum-
+      // amount hints as "UGX 0" until boot()'s own live fetch happened to
+      // catch up. By the time this function is first ever called (bootFromNetwork
+      // awaits _bootPromise before its own prefetch resolves), these are
+      // already populated in STATE, so this alone closes the gap -- no new
+      // call site needed.
+      products: STATE.products, settings: STATE.settings,
     }));
   } catch (_) {}
 }
@@ -427,6 +464,15 @@ async function enterApp(){
   STATE.account = cached.account; STATE.investments = cached.investments;
   STATE.teamStats = cached.teamStats; STATE.bankAccounts = cached.bankAccounts;
   STATE.transactions = cached.transactions; STATE.mission = cached.mission;
+  // subagent-audit-caught: products/settings used to never be part of this
+  // cache-hit restore, so My Products showed "0 plans" and Deposit/
+  // Withdraw's min-amount hints showed "UGX 0" until boot()'s own live
+  // fetch happened to land. `||` prefers boot() if it already won the race
+  // by this point (STATE.products/settings default to null until it
+  // resolves) -- never overwrite genuinely fresh live data with the
+  // possibly-stale cached copy, only fill the gap while waiting for it.
+  STATE.products = STATE.products || cached.products;
+  STATE.settings = STATE.settings || cached.settings;
   // subagent-audit-caught real regression: Round 57 added a wait on
   // _bootPromise right here to stop the announcement dialog/activity
   // ticker popping in after the spinner -- but THIS is the cache-hit
@@ -674,7 +720,8 @@ function paintHome(){
   </div>
   ${brandWaveFull()}
 </div>
-<div style="display:flex;gap:12px;margin:-6px 20px 0;position:relative;z-index:1;">
+${STATE.homeBanner ? `<div style="margin:${'-6px 20px 0'};border-radius:20px;overflow:hidden;position:relative;z-index:1;"><img src="${esc(STATE.homeBanner)}" alt="" style="display:block;width:100%;height:auto;" onerror="this.parentElement.style.display='none'"></div>` : ''}
+<div style="display:flex;gap:12px;margin:${STATE.homeBanner ? '14px' : '-6px'} 20px 0;position:relative;z-index:1;">
   <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openDepositSheet()">${ICONS.deposit}Deposit</button>
   <button class="secondary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openWithdrawSheet()">${ICONS.withdraw}Withdraw</button>
 </div>
@@ -869,13 +916,20 @@ function startActivityTicker(){
 }
 
 // ── TEAM ──
+// subagent-audit-caught: same stale-deferred-repaint class Round 59 fixed
+// for Withdraw/Withdrawal Accounts/Mission Center, here on Team -- tapping
+// a not-yet-cached level then quickly tapping back to an already-cached
+// one used to let the first tap's slow fetch land later and silently
+// replace the visible (different) level's member list.
+var _activeTeamLevel = null;
 window.switchTeamLevel = async function(level){
+  _activeTeamLevel = level;
   document.querySelectorAll('.team-level-switcher .seg').forEach(s => s.classList.toggle('active', Number(s.dataset.level)===level));
   if (!STATE.teamMembers[level]) {
     const r = await api('/team/members?level=' + level);
     STATE.teamMembers[level] = r.status === 'success' ? r.members : [];
   }
-  renderTeamMembers(level);
+  if (_activeTeamLevel === level) renderTeamMembers(level);
 };
 function maskPhone(phone){
   const s = String(phone||'').replace(/\D/g,'');
@@ -1090,7 +1144,12 @@ window.claimMissionSalary = async function(){
   }
   toast(r.message || 'Claimed');
   const s2 = await api('/mission/status');
-  if (s2.status === 'success') { STATE.mission = s2; renderMissionCenter(); }
+  // subagent-audit-caught: this repaint wasn't gated by _openSheetTitle,
+  // unlike the sibling fix Round 59 applied to this same sheet's initial
+  // open -- if the member closed Mission Center and opened a different
+  // sheet (e.g. Withdraw) while this claim was still in flight, this would
+  // overwrite whatever they're now looking at with Mission Center content.
+  if (s2.status === 'success') { STATE.mission = s2; if (_openSheetTitle === 'Mission Center') renderMissionCenter(); }
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
 };
@@ -1106,7 +1165,7 @@ window.claimMissionDeposit = async function(target){
   }
   toast(r.message || 'Claimed');
   const s2 = await api('/mission/status');
-  if (s2.status === 'success') { STATE.mission = s2; renderMissionCenter(); }
+  if (s2.status === 'success') { STATE.mission = s2; if (_openSheetTitle === 'Mission Center') renderMissionCenter(); }
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
 };
@@ -1490,11 +1549,11 @@ window.pickDepositAmount = function(amt){
 function syncDepositQuickAmt(){
   const box = $('depQuickAmts');
   if (!box) return;
-  const val = parseInt($('depAmount').value, 10);
+  const val = parseMoneyInput($('depAmount').value);
   box.querySelectorAll('.quick-amt').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.amt) === val));
 }
 window.submitDeposit = async function(){
-  const amount = parseInt($('depAmount').value, 10);
+  const amount = parseMoneyInput($('depAmount').value);
   const phone = $('depPhone').value;
   const network = $('depNetwork').value;
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
@@ -1550,7 +1609,7 @@ function paintWithdrawSheet(s){
     <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button></div>`;
 }
 window.submitWithdraw = async function(){
-  const amount = parseInt($('witAmount').value, 10);
+  const amount = parseMoneyInput($('witAmount').value);
   const pin = $('witPin').value.trim();
   const acctSel = $('witAccount');
   const acct = acctSel ? STATE.bankAccounts.find(a => a.id === acctSel.value) : null;
@@ -1691,7 +1750,16 @@ window.openInvestConfirm = function(tierKey){
 };
 window.closeConfirm = function(){
   $('confirmBg').classList.remove('show');
-  document.body.style.overflow = '';
+  // subagent-audit-caught: this used to always clear body scroll -- but
+  // deleteWithdrawalAccount() opens this confirm dialog FROM WITHIN the
+  // already-open Withdrawal Accounts sheet, which is still showing (and
+  // still needs scroll locked) after the confirm dialog itself closes.
+  // Unconditionally clearing here unlocked scroll out from under the still-
+  // open sheet, reintroducing the exact scroll-chaining bug this whole
+  // lock/unlock pattern exists to prevent. Only clear it when nothing else
+  // (a sheet) is still relying on the lock; openSheet()/closeSheet() own
+  // the lock in that case.
+  if (!_openSheetTitle) document.body.style.overflow = '';
 };
 window.confirmInvest = async function(tierKey){
   const btn = $('investConfirmBtn');

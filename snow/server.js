@@ -717,7 +717,38 @@ async function banUserAutomatically(userId, reason) {
   } catch (e) { console.error('Auto-ban failed:', e.message); }
 }
 async function markDepositFailed(depRef, userId, reason) {
-  await depRef.update({ status: 'failed', failureReason: reason }).catch(() => {});
+  // subagent-audit-caught HIGH bug: this used to overwrite status:'failed'
+  // unconditionally, with no check that the deposit hadn't already been
+  // credited by a DIFFERENT in-flight check (the client poll, the webhook,
+  // and the reconciler each independently ask MarzPay for a live status,
+  // and mobile-money providers can genuinely flip an initial timeout/expiry
+  // into a later approval). If one path already credited the deposit
+  // (status:'matched') right before a second, stale FAILED verdict from
+  // another path landed here, this would silently flip it back to
+  // 'failed' -- /deposit/marzpay/status then reports "Failed" forever
+  // (its own guard short-circuits once status is 'failed', never
+  // rechecking), and an admin who trusts that and clicks force-credit
+  // would credit the wallet a SECOND time (force-credit's only guard,
+  // depositFullyCredited(), is false once status says 'failed', not
+  // 'matched'). Locked + re-checked the same way creditDeposit() claims
+  // before crediting, so whichever of "credited" vs "failed" lands first
+  // wins permanently and the other is a clean no-op.
+  let alreadyCredited = false;
+  await withLock('dep:' + depRef.id, async () => {
+    const fresh = await depRef.get();
+    if (fresh.exists && depositFullyCredited(fresh.data())) { alreadyCredited = true; return; }
+    await depRef.update({ status: 'failed', failureReason: reason }).catch(() => {});
+  });
+  if (alreadyCredited) {
+    console.warn(`markDepositFailed: dep=${depRef.id} was already credited by another path -- ignoring this stale FAILED verdict.`);
+    // Own test-caught follow-on bug: callers used to report "Failed" to the
+    // member/reconciler regardless of what actually happened here -- a
+    // stale FAILED verdict that lost this exact race would otherwise show
+    // "Deposit failed" to someone whose money genuinely landed, via the
+    // OTHER path, moments earlier. Returning false lets every call site
+    // report the real outcome instead.
+    return false;
+  }
   // Flip the ledger row created up front (see /deposit/marzpay) from
   // "Processing" to "Failed" too, same as creditDeposit() does for a
   // successful match -- otherwise a failed deposit is stuck showing
@@ -739,6 +770,7 @@ async function markDepositFailed(depRef, userId, reason) {
       return txDoc.ref.update({ status: 'failed', description: `Deposit — Failed — ${fmtUGX(amt)}`, amount: 0 });
     }));
   } catch (e) { console.warn('markDepositFailed: could not update ledger row:', e.message); }
+  return true;
 }
 
 // ── MARZPAY (mobile money collect/send) ──
@@ -853,6 +885,20 @@ async function settleInvestmentIfDue(doc) {
       const fresh = await doc.ref.get();
       if (!fresh.exists || fresh.data().status !== 'active') return;
       const f = fresh.data();
+      // subagent-audit-caught HIGH bug: banning a member used to have zero
+      // effect on their existing investments -- this reconciler runs every
+      // second platform-wide and kept crediting daily cashback into a
+      // banned account's wallet for the rest of the investment's cycle
+      // regardless, defeating the entire point of a ban (every money-
+      // moving/data-reading endpoint checks banned status; this background
+      // engine never did). Skip the WHOLE settlement (never advance
+      // payoutsMade) while banned -- since this function already "catches
+      // up" any missed days from real elapsed time vs. payoutsMade rather
+      // than a per-day cron, simply skipping here means it resumes and
+      // catches up naturally the moment the account is unbanned, no
+      // special-case resume logic needed.
+      const uSnap = await db.collection('users').doc(f.userId).get();
+      if (!uSnap.exists || uSnap.data().status === 'banned') return;
       const fMade = Number(f.payoutsMade) || 0;
       const fTotal = Number(f.payoutsTotal) || 0;
       const fElapsed = Math.floor((Date.now() - (tsMillis(f.createdAt) || Date.now())) / 86400000);
@@ -971,6 +1017,11 @@ app.get('/team/members', async (req, res) => {
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   const level = Math.min(3, Math.max(1, parseInt(req.query.level, 10) || 1));
   try {
+    // subagent-audit-caught: was missing the banned check every sibling
+    // data-reading route (`/account`, `/investments`, `/team/stats`, etc.) has.
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (uSnap.exists && uSnap.data().status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     let parentIds = [userId];
     let members = [];
     for (let l = 1; l <= level; l++) {
@@ -1001,6 +1052,10 @@ app.get('/team/stats', async (req, res) => {
     ]);
     if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
     const u = uSnap.data();
+    // subagent-audit-caught: was missing the banned check every sibling
+    // data-reading route has.
+    if (u.status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const l1ActiveCount = await activeL1Count(userId);
     const milestones = [
       ...TEAM_MILESTONES.map(m => ({ type: 'count', target: m.target, reward: m.reward,
@@ -1382,6 +1437,17 @@ app.get('/account', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
+    // subagent-audit-caught: this used to run settleAllForUser() (which
+    // credits any due cashback) BEFORE checking banned status -- the banned
+    // check only decided whether to show the result, not whether to credit
+    // it. settleInvestmentIfDue() itself now refuses to credit a banned
+    // account regardless of caller, so this reordering is defense-in-depth
+    // (and skips the wasted settlement work entirely for a banned account),
+    // not the only thing standing between a ban and a payout.
+    const preSnap = await db.collection('users').doc(uid).get();
+    if (!preSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
+    if (preSnap.data().status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     await settleAllForUser(uid);
     const snap = await db.collection('users').doc(uid).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
@@ -1515,6 +1581,16 @@ app.get('/investments', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
+    // subagent-audit-caught: this was the one route that read/settled a
+    // member's investments with NO banned check at all, unlike /account,
+    // /checkin, /invest/create, /withdraw/request, /bank/*, /redeem,
+    // /mission/*. A banned member's still-valid session could keep polling
+    // this directly to both see their full plan data and trigger the same
+    // on-demand cashback settlement /account does.
+    const uSnap = await db.collection('users').doc(uid).get();
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', code: 'NOT_FOUND', message: 'User not found' });
+    if (uSnap.data().status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     await settleAllForUser(uid);
     const [snap, products] = await Promise.all([
       db.collection('investments').where('userId', '==', uid).get(), getProducts()
@@ -1565,15 +1641,25 @@ app.post('/deposit/marzpay', async (req, res) => {
     const phone = cleanPhone(req.body.phone || uSnap.data().phone || '');
     if (!phone) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
 
+    // subagent-audit-caught: the debounce check must run BEFORE
+    // recordDepositAttempt() too, not just the amount/phone validation
+    // above -- otherwise a request that's rejected ONLY by the 7s debounce
+    // (nothing wrong with it, just too soon after the last one) still
+    // counted as an "attempt" toward the 5-in-a-minute auto-ban, leaving
+    // the exact false-ban chain this function's own comment above claims
+    // to have closed still reachable through the debounce path alone: one
+    // real deposit that's slow to confirm, followed by a few impatient
+    // resubmits that each get bounced by the debounce, could still add up
+    // to 5 recorded "attempts" and trip the ban.
+    const lastDep = _depCreateDebounce.get(userId) || 0;
+    if (Date.now() - lastDep < 7000)
+      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+
     const attemptCount = recordDepositAttempt(userId);
     if (attemptCount >= 5 && !_depAttemptsSucceeded.has(userId)) {
       await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     }
-
-    const lastDep = _depCreateDebounce.get(userId) || 0;
-    if (Date.now() - lastDep < 7000)
-      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
     _depCreateDebounce.set(userId, Date.now());
 
     const ref = await uniqueRef('S');
@@ -1626,7 +1712,24 @@ app.post('/deposit/marzpay', async (req, res) => {
       return;
     }
     const marzTxUuid = mpData.data?.transaction?.uuid || null;
-    await depRef.update({ status: 'pending', marzTxUuid });
+    // subagent-audit-caught: this used to overwrite `status` unconditionally
+    // -- if a webhook raced ahead (via the webhookUuid fallback path, see
+    // /deposit/callback) and already credited this exact deposit
+    // (status:'matched') before this write landed, it would silently revert
+    // status back to 'pending'. The next poll/reconciler check would then
+    // see an uncredited-looking deposit and call creditDeposit() again,
+    // crediting the wallet a second time. Locked + re-checked the same way
+    // creditDeposit()/markDepositFailed() claim before acting, so whichever
+    // outcome (credited vs. this "still initiating, now pending") lands
+    // first wins permanently.
+    await withLock('dep:' + depRef.id, async () => {
+      const fresh = await depRef.get();
+      if (fresh.exists && fresh.data().status === 'initiating') {
+        await depRef.update({ status: 'pending', marzTxUuid });
+      } else {
+        await depRef.update({ marzTxUuid }).catch(() => {});
+      }
+    });
   } catch (e) {
     console.error('Deposit error:', e.message);
     if (!res.headersSent) res.status(500).json({ status: 'error', message: PROVIDER_BUSY_MSG });
@@ -1665,15 +1768,29 @@ async function creditDeposit(depDoc) {
       if (!retryingStuckCredit) {
         await depDoc.ref.update({ status: 'matched', creditedAt: FieldValue.serverTimestamp() });
       }
-      try {
-        // Nested under bal:<depUserId> -- see settleInvestmentIfDue's own comment.
-        await withLock('bal:' + depUserId, () => db.collection('users').doc(depUserId).update({
-          walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount)
-        }));
-      } catch (creditErr) {
-        await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
-        console.error(`DEPOSIT CREDIT FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, creditErr.message);
-        throw creditErr;
+      // subagent-audit-caught CRITICAL bug: `retryingStuckCredit` only ever
+      // gated the status-flip above, never the wallet increment itself --
+      // but `needsManualCredit` gets set for TWO different failure reasons
+      // (the wallet increment throwing, below; OR the ledger-row step
+      // throwing further down, AFTER the wallet was already credited). A
+      // retry triggered by the SECOND reason (self-heal poll, reconciler,
+      // webhook redelivery, admin force-credit) re-ran this whole function
+      // body including the wallet increment -- crediting the same deposit
+      // TWICE. `walletCredited` makes the increment itself idempotent
+      // regardless of which reason triggered the retry, closing that
+      // permanently.
+      if (!fd.walletCredited) {
+        try {
+          // Nested under bal:<depUserId> -- see settleInvestmentIfDue's own comment.
+          await withLock('bal:' + depUserId, () => db.collection('users').doc(depUserId).update({
+            walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount)
+          }));
+          await depDoc.ref.update({ walletCredited: true }).catch(() => {});
+        } catch (creditErr) {
+          await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
+          console.error(`DEPOSIT CREDIT FAILED (needs manual credit) dep=${depDoc.id} user=${depUserId} amount=${depAmount}:`, creditErr.message);
+          throw creditErr;
+        }
       }
       // The ledger row was already created up front, at deposit-request
       // time (mirrors the withdrawal flow) -- find it by depositId and flip
@@ -1745,7 +1862,14 @@ app.post('/deposit/marzpay/status', async (req, res) => {
     const marzStatus = await marzGetCollectStatus(dep.marzTxUuid);
     if (SUCCESS_STATUSES.has(marzStatus)) { await creditDeposit(depSnap); return res.json({ status: 'success', state: 'matched' }); }
     if (FAILED_STATUSES.has(marzStatus)) {
-      await markDepositFailed(depSnap.ref, userId, DEPOSIT_FAILED_MSG);
+      // Own test-caught bug: markDepositFailed() can now correctly no-op
+      // (returns false) when this exact deposit was already credited by a
+      // DIFFERENT in-flight check that won the race -- reporting "failed"
+      // here regardless, as this used to, would show a member "Deposit
+      // failed" for money that genuinely landed moments earlier. Report
+      // what actually happened instead.
+      const reallyFailed = await markDepositFailed(depSnap.ref, userId, DEPOSIT_FAILED_MSG);
+      if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
       return res.json({ status: 'success', state: 'failed', message: DEPOSIT_FAILED_MSG });
     }
     res.json({ status: 'success', state: 'pending' });
@@ -2161,8 +2285,18 @@ app.post('/withdraw/marzpay/status', async (req, res) => {
       return res.json({ status: 'success', state: nowSnap.exists ? nowSnap.data().status : 'processed' });
     }
     if (FAILED_STATUSES.has(marzStatus)) {
-      const { refunded } = await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the mobile-money provider', ['processing']);
-      await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined', refunded);
+      // subagent-audit-caught: `declined` was discarded here -- if a
+      // concurrent status check (the webhook, the reconciler, this exact
+      // poll from another request) already won the decline race,
+      // declineWithdrawalAndRefund() no-ops and returns declined:false, but
+      // finalizeWithdrawalTransactionRecord() was still called unconditionally
+      // and would overwrite the winner's already-correct "Failed, refunded"
+      // row with a stale "Failed, refund pending" (and amount:0, since the
+      // winner already zeroed it) -- permanently mislabeling a withdrawal
+      // that was actually refunded promptly. Only /admin/withdraw/reject
+      // had this guard before; mirrored here.
+      const { declined, refunded } = await declineWithdrawalAndRefund(witSnap.ref, userId, 'Payout failed at the mobile-money provider', ['processing']);
+      if (declined) await finalizeWithdrawalTransactionRecord(witSnap.id, 'declined', refunded);
       return res.json({ status: 'success', state: 'declined' });
     }
     res.json({ status: 'success', state: 'processing' });
@@ -2234,8 +2368,11 @@ app.post('/withdraw/callback', async (req, res) => {
         if (candidate.reference && candidate.reference === wit.marzReference) { uuid = webhookUuid; tx = candidate; doc.ref.update({ marzTxUuid: uuid }).catch(() => {}); }
       }
       if (!uuid || !tx || !FAILED_STATUSES.has(tx.status)) return;
-      const { refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
-      await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+      // subagent-audit-caught: same guard as /withdraw/marzpay/status --
+      // `declined` must gate this call, or a decline-race loser permanently
+      // overwrites the winner's correct ledger row with a stale label.
+      const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
+      if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
     }
   } catch (e) { console.error('Withdraw callback error:', e.message); }
 });
@@ -2274,6 +2411,11 @@ app.get('/bank/list', async (req, res) => {
   const userId = await verifyAuth(req);
   if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
+    // subagent-audit-caught: was missing the banned check every sibling
+    // data-reading route has.
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (uSnap.exists && uSnap.data().status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const snap = await db.collection('bankAccounts').where('userId', '==', userId).get();
     res.json({ status: 'success', accounts: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load withdrawal accounts' }); }
@@ -2284,6 +2426,11 @@ app.post('/bank/delete', async (req, res) => {
   const id = String(req.body.id || '');
   if (!id) return res.status(400).json({ status: 'error', message: 'Missing account id' });
   try {
+    // subagent-audit-caught: was missing the banned check every sibling
+    // account-mutating route has.
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (uSnap.exists && uSnap.data().status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const ref = db.collection('bankAccounts').doc(id);
     const snap = await ref.get();
     if (!snap.exists || snap.data().userId !== userId) return res.status(404).json({ status: 'error', message: 'Account not found' });
@@ -2300,6 +2447,11 @@ app.post('/account/transaction-pin/change', async (req, res) => {
   if (!/^\d{5}$/.test(newPin)) return res.status(400).json({ status: 'error', message: 'New PIN must be 5 digits.' });
   if (isWeakPin(newPin)) return res.status(400).json({ status: 'error', message: 'That PIN is too easy to guess. Choose 5 digits that are not all the same.' });
   try {
+    // subagent-audit-caught: was missing the banned check every sibling
+    // account-mutating route has.
+    const uSnap = await db.collection('users').doc(userId).get();
+    if (uSnap.exists && uSnap.data().status === 'banned')
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     const check = await pinCheck(userId, req.body.oldPin);
     if (!check.ok) return res.status(400).json({ status: 'error', code: check.code, message: check.message });
     await db.collection('users').doc(userId).update({ transactionPinHash: scryptHash(newPin) });
@@ -2569,6 +2721,21 @@ const SETTINGS_CRITICAL_RANGES = {
   autoApproveIntervalSec: [1, 3600], autoApproveMaxAmount: [0, MAX_MONEY_AMOUNT],
 };
 const SETTINGS_BOOLEAN_FIELDS = ['maintenanceMode', 'requireInvestToWithdraw', 'autoApproveWithdrawalsEnabled', 'annEnabled'];
+// subagent-audit-caught XSS: these free-text fields are rendered straight
+// into `href="${esc(...)}"` (Help Centre buttons, the announcement dialog's
+// OK button) in user-src/original_module.js. esc() only HTML-escapes
+// &<>"' -- it does nothing to the URI *scheme*, so a value like
+// "javascript:fetch(...)" would render as a normal-looking button that
+// executes arbitrary JS in the app's origin (STATE, api(), fbAuth all in
+// scope) the instant any member taps it. Rejecting anything but a genuine
+// http(s) link at save time closes this for every place these fields are
+// ever rendered, in one spot, rather than patching each render site.
+const SETTINGS_URL_FIELDS = ['telegramGroup', 'telegramChannel', 'supportTelegram', 'whatsappGroup', 'whatsappContact'];
+function isSafeExternalUrl(v) {
+  if (!v) return true; // blank clears the field -- always allowed
+  try { const u = new URL(String(v)); return u.protocol === 'http:' || u.protocol === 'https:'; }
+  catch (_) { return false; }
+}
 app.post('/admin/settings/update', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
@@ -2582,6 +2749,10 @@ app.post('/admin/settings/update', async (req, res) => {
     }
     for (const key of SETTINGS_BOOLEAN_FIELDS) {
       if (key in updates) updates[key] = updates[key] === true || updates[key] === 'true';
+    }
+    for (const key of SETTINGS_URL_FIELDS) {
+      if (key in updates && !isSafeExternalUrl(updates[key]))
+        return res.status(400).json({ status: 'error', message: `${key} must be a valid http(s) link, or left blank.` });
     }
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
@@ -2952,8 +3123,16 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
       let deposited = 0, earned = 0;
       txSnap.forEach(d => {
         const t = d.data();
-        // Same earning-type list and admin_credit inclusion as recountAllTotals()
-        // — this is the single-user version of the same tool, must stay in lockstep.
+        // Same earning-type list and admin_credit inclusion as
+        // computeRealTotals()/recountAllTotals() — this is the single-user
+        // version of the same tool (a per-user filtered query rather than
+        // computeRealTotals()'s platform-wide scan, so it can't just call
+        // that function directly), and MUST stay in lockstep with it,
+        // including totalWithdrawn's formula below — the admin's own
+        // /admin/integrity audit and the platform-wide "Recalculate
+        // totals" button both now use computeRealTotals() for every one of
+        // these four fields, and this tool disagreeing with either would
+        // make them contradict each other about what "correct" means.
         if (t.type === 'deposit' || t.type === 'admin_credit') deposited += finiteMoney(t.amount);
         else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) earned += finiteMoney(t.amount);
       });
@@ -3521,7 +3700,7 @@ app.post('/admin/analytics/abuse', async (req, res) => {
 app.get('/admin/integrity', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const [usersSnap, txSnap, { totals: realTotals, invested: realInvested }] = await Promise.all([
+    const [usersSnap, txSnap, { totals: realTotals, invested: realInvested, withdrawn: realWithdrawn }] = await Promise.all([
       db.collection('users').limit(10000).get(),
       db.collection('transactions').limit(200000).get(),
       computeRealTotals(),
@@ -3560,6 +3739,12 @@ app.get('/admin/integrity', async (req, res) => {
         { field: 'totalDeposited', stored: finiteMoney(u.totalDeposited), real: row.deposited },
         { field: 'totalEarned', stored: finiteMoney(u.totalEarned), real: row.earned },
         { field: 'totalInvested', stored: finiteMoney(u.totalInvested), real: realInvested[d.id] || 0 },
+        // subagent-audit-caught: totalWithdrawn had zero coverage here before
+        // -- a drift in it (e.g. the exact processWithdrawalCore locking gap
+        // Round 59 fixed) would sit silently forever, since the ONLY tool
+        // that ever recomputed it was the single-user repair-ledger, which
+        // nobody has a reason to run unless the audit itself flags a problem.
+        { field: 'totalWithdrawn', stored: finiteMoney(u.totalWithdrawn), real: realWithdrawn[d.id] || 0 },
       ];
       for (const c of checks) {
         if (Math.abs(c.stored - c.real) > 1) mismatches.push({ userId: d.id, phone, field: c.field, stored: c.stored, real: c.real, diff: c.stored - c.real });
@@ -3577,9 +3762,21 @@ app.get('/admin/integrity', async (req, res) => {
 // (which writes the fix) and /admin/integrity (which only reports the gap)
 // so the two can never quietly disagree about what "correct" means.
 async function computeRealTotals() {
-  const [txSnap, invSnap] = await Promise.all([
+  const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').limit(200000).get(),
     db.collection('investments').limit(50000).get(),
+    // subagent-audit-caught: totalWithdrawn was the one lifetime stat this
+    // shared "what's actually correct" function never computed at all --
+    // /admin/integrity never checked it and "Recalculate totals" never
+    // repaired it, so a drift here (exactly the kind Round 59's
+    // processWithdrawalCore locking fix was closing off a NEW source of)
+    // had zero audit coverage; only the single-user /admin/user/repair-ledger
+    // tool had its own, separately-written copy of this same formula.
+    // Scoped to processing/processed exactly like that tool, for the same
+    // reason its own comment gives: live crediting increments
+    // totalWithdrawn the moment a payout is marked 'processing', not only
+    // once it reaches 'processed'.
+    db.collection('withdrawals').where('status', 'in', ['processing', 'processed']).limit(200000).get(),
   ]);
   const totals = {};
   const checkinDayKeys = {};
@@ -3601,7 +3798,13 @@ async function computeRealTotals() {
     if (!inv.userId) return;
     invested[inv.userId] = (invested[inv.userId] || 0) + finiteMoney(inv.amount);
   });
-  return { totals, invested, checkinDayKeys };
+  const withdrawn = {};
+  witSnap.forEach(d => {
+    const w = d.data();
+    if (!w.userId) return;
+    withdrawn[w.userId] = (withdrawn[w.userId] || 0) + finiteMoney(w.net);
+  });
+  return { totals, invested, checkinDayKeys, withdrawn };
 }
 // Rebuilds totalDeposited/totalEarned/totalInvested and each user's
 // check-in streak from the real ledger/investments/check-in history --
@@ -3610,21 +3813,62 @@ async function computeRealTotals() {
 // this used to only actually rebuild the first two (Codex-caught, round 19).
 async function recountAllTotals() {
   return withLock('totals-recount', async () => {
-    const { totals, invested, checkinDayKeys } = await computeRealTotals();
+    const { totals, invested, checkinDayKeys, withdrawn } = await computeRealTotals();
     let updated = 0, investedFixed = 0, streaksFixed = 0;
     const usersSnap = await db.collection('users').limit(10000).get();
     for (const doc of usersSnap.docs) {
       const row = totals[doc.id] || { deposited: 0, earned: 0 };
       const realInvested = invested[doc.id] || 0;
-      const realStreak = computeCheckinStreak(checkinDayKeys[doc.id] || new Set());
+      const realWithdrawn = withdrawn[doc.id] || 0;
+      const snapshotStreak = computeCheckinStreak(checkinDayKeys[doc.id] || new Set());
       const u = doc.data();
       const update = {};
-      let investedChanged = false, streakChanged = false;
+      let investedChanged = false;
       if (finiteMoney(u.totalDeposited) !== row.deposited) update.totalDeposited = row.deposited;
       if (finiteMoney(u.totalEarned) !== row.earned) update.totalEarned = row.earned;
       if (finiteMoney(u.totalInvested) !== realInvested) { update.totalInvested = realInvested; investedChanged = true; }
-      if ((u.checkinStreak || 0) !== realStreak.streak || (u.lastCheckin || null) !== realStreak.lastCheckin) {
-        update.checkinStreak = realStreak.streak; update.lastCheckin = realStreak.lastCheckin; streakChanged = true;
+      // subagent-audit-caught: totalWithdrawn was never repaired by this
+      // platform-wide tool at all -- only the single-user repair-ledger
+      // tool touched it, with its own separately-written copy of this same
+      // formula. Same bal:<userId> lock already covers this write below, no
+      // separate lock needed (unlike checkin, this field has no OTHER lock
+      // key of its own anywhere in the codebase).
+      if (finiteMoney(u.totalWithdrawn) !== realWithdrawn) update.totalWithdrawn = realWithdrawn;
+      // subagent-audit-caught HIGH bug: this used to write the SNAPSHOT-
+      // computed checkinStreak/lastCheckin straight into `update` below,
+      // guarded only by the bal:<userId> lock -- not checkin:<userId>, the
+      // lock /checkin's own claim-before-credit write holds. A live
+      // /checkin landing anywhere between computeRealTotals()'s upfront
+      // snapshot and THIS user's turn in a loop that can span up to 10,000
+      // users would get its lastCheckin=today overwritten back to
+      // yesterday by this stale snapshot, letting the member /checkin
+      // again the same day for a second bonus. Mirrors
+      // /admin/user/reconcile-checkin's own fix for the identical race
+      // (Round 35): re-read the ledger fresh, inside the checkin: lock,
+      // immediately before writing, instead of trusting a snapshot taken
+      // before this whole run began.
+      const streakLooksStale = (u.checkinStreak || 0) !== snapshotStreak.streak || (u.lastCheckin || null) !== snapshotStreak.lastCheckin;
+      let wroteStreak = false;
+      if (streakLooksStale) {
+        await withLock('checkin:' + doc.id, async () => {
+          const ledgerSnap = await db.collection('transactions')
+            .where('userId', '==', doc.id).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
+          const dayKeys = new Set();
+          ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
+          const fresh = computeCheckinStreak(dayKeys);
+          const freshDoc = await doc.ref.get();
+          const fd = freshDoc.exists ? freshDoc.data() : {};
+          const stillStale = (fd.checkinStreak || 0) !== fresh.streak || (fd.lastCheckin || null) !== fresh.lastCheckin;
+          if (stillStale) {
+            const streakUpdate = { ...update, checkinStreak: fresh.streak, lastCheckin: fresh.lastCheckin };
+            await withLock('bal:' + doc.id, () => doc.ref.update(streakUpdate));
+            wroteStreak = true;
+          } else if (Object.keys(update).length) {
+            await withLock('bal:' + doc.id, () => doc.ref.update(update));
+          }
+        });
+        if (Object.keys(update).length || wroteStreak) { updated++; if (investedChanged) investedFixed++; if (wroteStreak) streaksFixed++; }
+        continue;
       }
       if (Object.keys(update).length) {
         // Per-user bal:<userId>, not the outer 'totals-recount' lock this
@@ -3639,7 +3883,6 @@ async function recountAllTotals() {
         await withLock('bal:' + doc.id, () => doc.ref.update(update));
         updated++;
         if (investedChanged) investedFixed++;
-        if (streakChanged) streaksFixed++;
       }
     }
     return { ok: true, updated, investedFixed, streaksFixed };
@@ -3667,7 +3910,17 @@ app.use((err, _req, res, _next) => {
 async function reconcilePendingDeposits() {
   let settled = 0;
   try {
-    const snap = await db.collection('pendingDeposits').where('status', '==', 'pending').orderBy('createdAt', 'asc').limit(50).get();
+    // subagent-audit-caught: this used to scan only 'pending' -- a deposit
+    // that never made it past 'initiating' (its own follow-up write that
+    // records marzTxUuid, right after marzCollect() succeeded at the
+    // provider, itself hit a transient failure) was invisible to this
+    // sweep entirely. Widened to also pick up 'initiating' rows; still a
+    // no-op for one that genuinely has no marzTxUuid recorded (nothing to
+    // check MarzPay's status with) -- that narrow residual case still
+    // relies on an inbound webhook or a human admin noticing it in
+    // /admin/deposits/list, same as before, but it's no longer invisible
+    // in Records (Round 58's up-front ledger row still shows "Processing").
+    const snap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {
       const dep = doc.data();
       if (!dep.marzTxUuid) continue;
@@ -3697,8 +3950,12 @@ async function reconcilePendingWithdrawals() {
         if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
         settled++;
       } else if (FAILED_STATUSES.has(marzStatus)) {
-        const { refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
-        await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
+        // subagent-audit-caught: same `declined` guard as the other two
+        // decline-then-finalize call sites -- required here too, since this
+        // reconciler tick is exactly the kind of independent live-status
+        // check that can race the webhook or a client poll.
+        const { declined, refunded } = await declineWithdrawalAndRefund(doc.ref, wit.userId, 'Payout failed at the mobile-money provider', ['processing']);
+        if (declined) await finalizeWithdrawalTransactionRecord(doc.id, 'declined', refunded);
         settled++;
       }
     }

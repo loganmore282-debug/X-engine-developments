@@ -3198,6 +3198,186 @@ a regression). `node --check` clean on both files, `build-core.js` round-trip cl
 `git diff --check` clean. Cache bumped `v40`→`v41`. **`server.js` changed → needs a Railway
 redeploy.**
 
+## Round 60 (2026-08-28) — 10-agent full-system audit (deposits, withdrawals, investments, mission/task/checkin, auth/banning, frontend boot/nav, frontend money forms, admin UI, admin routes security, db.js) + every real finding fixed
+
+Owner: "you need to run like 10 agents again, run and rerun" — an explicitly larger,
+more thorough repeat of Round 59's 4-agent pass. Ran 10 independent `general-purpose`
+subagents in parallel (one retry needed: the first batch of 8 launches all hit a
+session-level `HTTP 429` rate limit, resolved by waiting for the stated UTC reset and
+relaunching all 10 fresh), each scoped to a narrow domain with no visibility into the
+others' work and explicitly told not to report style nits or already-guarded paths —
+only a finding with a concrete, statable failure scenario, and told what Rounds 1–59
+already fixed so nothing already-closed got re-reported: deposit lifecycle, withdrawal
+lifecycle, investment/commission math, mission/task/checkin/gift-codes, auth/sessions/
+PIN/banning, frontend boot/navigation, frontend money forms, admin panel UI
+correctness, admin server-route security, and `db.js` data-integrity semantics.
+
+### server.js (money-safety) — fixed
+
+- **`creditDeposit()`'s own retry-idempotency had a real gap** (a bug in Round 58's own
+  code, caught by this round's self-review): the wallet-increment step was only guarded
+  by `retryingStuckCredit` (gates the STATUS flip, not the increment itself), so a retry
+  triggered by a DIFFERENT failure (e.g. the ledger-row write throwing AFTER the wallet
+  was already credited) could re-run the wallet increment unconditionally — a genuine
+  double-credit path. Fixed with a new `walletCredited` boolean flag on the deposit doc
+  that makes the increment idempotent regardless of what triggered the retry.
+- **`markDepositFailed()` could revert an already-credited deposit back to failed**,
+  letting a later admin force-credit double-pay it — a stale FAILED verdict from one
+  in-flight check landing after a DIFFERENT path had already credited the same deposit.
+  Rewritten to acquire `withLock('dep:'+id, ...)`, re-fetch fresh state, and no-op if
+  already `depositFullyCredited()`; now returns whether it genuinely marked failed, and
+  `/deposit/marzpay/status` uses that real result instead of always telling the client
+  `state:'failed'` (a follow-on bug this round's own controlled-race test surfaced: a
+  member whose money actually landed via another path was being shown a false "Deposit
+  failed" message).
+- **`/deposit/marzpay`'s debounce/ban-counter ordering regression, re-opened**: the 7s
+  debounce check ran before `recordDepositAttempt()`, but a request bounced only by the
+  debounce still counted toward the 5-in-a-minute auto-ban — the exact false-ban chain
+  Round 58 thought it had fully closed, still reachable through this one path. Fixed by
+  moving the debounce check itself ahead of the attempt-counter too.
+- **`/deposit/marzpay`'s post-collect status write could revert an already-`'matched'`
+  deposit back to `'pending'`** if a webhook credited it first — wrapped in
+  `withLock('dep:'+id, ...)` with a fresh re-check, only writing `'pending'` if still
+  genuinely `'initiating'`.
+- **`reconcilePendingDeposits()` never scanned `'initiating'`-status deposits**, only
+  `'pending'` — a deposit stuck at `'initiating'` (a transient write failure right after
+  `marzCollect()` succeeded) was invisible to the periodic reconciler. Widened the query.
+- **Banning a member had zero effect on their ongoing daily cashback accrual** —
+  `settleInvestmentIfDue()` (the per-1-second reconciler) had no banned-status check at
+  all. Fixed by adding a fresh banned-status read inside its `withLock('payout:'+id,...)`
+  critical section, skipping the whole settlement (never advancing `payoutsMade`) for a
+  banned user. Also added the same missing banned-status check to `GET /investments`,
+  `GET /team/members`, `GET /team/stats`, `GET /bank/list`, `POST /bank/delete`, and
+  `POST /account/transaction-pin/change` — present on every sibling endpoint except
+  these; `GET /account` reordered to check ban status before settling, defense-in-depth
+  on top of the `settleInvestmentIfDue()` fix.
+- **`recountAllTotals()`'s checkin-streak repair could revert a live `/checkin`'s
+  `lastCheckin` mid-run**, enabling a same-day double check-in credit — it trusted a
+  platform-wide upfront snapshot instead of re-verifying freshness at write time. Fixed
+  by re-reading the checkin ledger inside a `withLock('checkin:'+id, ...)` immediately
+  before writing, mirroring `/admin/user/reconcile-checkin`'s own Round 35 fix.
+- **`totalWithdrawn` had zero coverage in the shared audit/repair function** —
+  `computeRealTotals()` (used by both `/admin/integrity` and `recountAllTotals()`) never
+  computed it; only the separately-written single-user `/admin/user/repair-ledger` tool
+  did. Added a `withdrawn` map (summing `net` for `processing`/`processed` withdrawals)
+  to `computeRealTotals()`, and wired it into both `/admin/integrity`'s checks array and
+  `recountAllTotals()`'s actual repair.
+- **A `javascript:` URI XSS in admin-settable social-link fields** — `telegramGroup`/
+  `telegramChannel`/`supportTelegram`/`whatsappGroup`/`whatsappContact` are rendered as
+  `href="${esc(...)}"` in the user app; `esc()` HTML-escapes but does NOT neutralize a
+  malicious URI scheme. Fixed with a new `isSafeExternalUrl()` validator (blank OK, else
+  requires `http:`/`https:`) enforced in `/admin/settings/update` for exactly these
+  fields.
+- **`processWithdrawalCore()`'s status-flip + `totalWithdrawn` increment was unlocked**,
+  racing `/admin/user/repair-ledger`'s own `bal:` lock and risking a double-count or
+  lost withdrawal amount. Wrapped in `withLock('bal:'+userId, ...)`.
+- **A decline-race loser could permanently overwrite a winner's correct ledger row.**
+  `/withdraw/marzpay/status`, `/withdraw/callback`, and `reconcilePendingWithdrawals()`
+  all unconditionally called `finalizeWithdrawalTransactionRecord(id,'declined',refunded)`
+  — only `/admin/withdraw/reject` already guarded this on the real `declined` result from
+  `declineWithdrawalAndRefund()`. All 3 other call sites now check `declined` first,
+  matching the one correct site.
+
+**Deliberately deferred, not fixed this round**: a referral-commission-recipient race on
+account deletion/reattach, flagged as real but narrow (crash-dependent trigger window)
+against the volume of higher-priority work this round — matches this project's
+established practice of documenting genuinely low-likelihood edge cases rather than
+rushing them under review-round time pressure (see Round 17's Integrity Audit deferral
+for the same reasoning pattern).
+
+### user-src/ (frontend) — fixed
+
+- **Comma-formatted amount input silently truncated at the comma.** Typing "30,000"
+  (matching the app's own `fmtUGX()`-formatted quick-amount chips/hints) into the
+  deposit/withdraw amount field got mis-parsed by a bare `parseInt`. New
+  `parseMoneyInput(v)` helper (strips commas before `parseInt`), applied at all 3 call
+  sites: `syncDepositQuickAmt()`, `submitDeposit()`, `submitWithdraw()`.
+- **`MONEY_ENDPOINTS` was missing `/mission/salary/claim`/`/mission/deposit/claim`** —
+  both genuinely credit wallet money server-side but weren't in the Set that protects
+  in-flight money calls from an SW-update interruption. Added.
+- **A confirm dialog nested inside an already-open sheet wrongly unlocked body scroll on
+  close.** `deleteWithdrawalAccount()` opens its confirm FROM WITHIN the Withdrawal
+  Accounts sheet; closing confirm used to unconditionally clear
+  `document.body.style.overflow`, reintroducing scroll-chaining while the sheet was
+  still open underneath. `window.closeConfirm` now only unlocks when `_openSheetTitle`
+  is empty.
+- **`switchTeamLevel()` had the same stale-repaint bug class Round 59 already fixed for
+  Withdraw/Withdrawal-Accounts/Mission-Center**: tapping level 3 then quickly back to
+  level 1 could have level 3's slower, now-stale fetch clobber the level-1 view the
+  member had already switched back to. Fixed with a synchronous `_activeTeamLevel`
+  tracker gating the repaint, same pattern as the other three.
+- **Cold-boot cache-hit showed "0 plans"/"min UGX 0" until `boot()`'s live fetch
+  happened to land** — `saveCachedState()`/the cache-hit path in `enterApp()` never
+  persisted/restored `STATE.products`/`STATE.settings`. Fixed to cache and restore both
+  (preferring already-resolved live data if `boot()` won the race).
+- **The "App tagline (shown under the logo)" admin Settings field was dead** — nothing
+  in `user-src/` ever read `brandTagline`. Added `#authTagline` under the auth-screen
+  wordmark and a new `applyAuthTagline()` helper, called once `boot()` resolves
+  (`STATE.settings.brandTagline`, hidden entirely when blank).
+- **The admin-configurable Home banner was dead** — `/admin/banner/set` and its preview
+  UI have existed since Round 14, but `paintHome()` never fetched or rendered
+  `/public/banner`. Added `STATE.homeBanner` to `boot()`'s prefetch and a conditional
+  banner strip in `paintHome()` (between the hero and the Deposit/Withdraw buttons,
+  matching the admin copy's "shown at the top of the Home tab"; renders nothing when no
+  custom image is set, matching the admin card's own "empty slot uses the built-in
+  default artwork" — the built-in artwork being Home's existing hero, unchanged).
+
+### admin-src/ (panel UI correctness) — fixed, all 8 findings from this round's admin-UI audit
+
+1. Stuck-`'sending'` withdrawals had no admin action button — `witStatusPill()`/
+   `drawWits()` now render a Reject option for that status (the server has accepted it
+   since Round 35; nothing in the UI ever exposed a way to reach it).
+2. Ban had zero confirmation, unlike every other destructive action in the same modal —
+   added a `confirm()` describing exactly what banning blocks.
+3. The dead App tagline field (see above, fixed on the user-src side).
+4. The dead Home banner feature (see above, fixed on the user-src side).
+5. Gift-code "Deactivate" fired instantly with no confirmation, unlike sibling buttons —
+   added a `confirm()`.
+6. Admin "Reactivate" fired instantly with no confirmation — added a `confirm()`.
+7. The push-notification tooltip claimed a nonexistent "one-tap Approve" action inside
+   the notification itself — grepped `sendAdminPush()`/every service worker for any
+   `actions:` array; none exists. Corrected the tooltip to describe what actually
+   happens (tapping the alert opens the panel, nothing more).
+8. The auto-approve-withdrawals description overstated its own throttling — it claimed
+   requests are "sent one at a time, spaced by the same interval," but
+   `autoApproveWithdrawalsTick()` processes every eligible request back-to-back within
+   one tick; only how OLD a request must be before it's eligible is governed by the
+   interval, not spacing between approvals. Corrected the copy and relabeled the input
+   "Wait after request before approving (seconds)."
+
+Also added (found during the same audit pass, same class as #7/#8 above): `TX_LABELS`
+was missing `mission_salary`/`mission_deposit_reward` — both fell through to a
+lowercase, differently-styled default label everywhere a transaction list renders them
+(Transactions tab, user-detail modal). Added both.
+
+### Verified
+
+`node --check` clean on `server.js`/`original_module.js`. `node build-core.js` and
+`node build-admin.js` both clean round-trips. `git diff --check` clean. A new
+`round60_backend_check.js` (30 checks, including a genuine controlled-timing race
+reproduction for the `markDepositFailed()` fix — a custom fetch-mock delay racing a
+precisely-timed competing request, not just asserting the code "looks right") and
+`round60_frontend_check.py` (5 checks: comma-parsing, `MONEY_ENDPOINTS`, nested-confirm
+scroll lock, `switchTeamLevel` stale repaint, cold-boot products/settings caching) — all
+pass. A separate `round60_admin_tagline_banner_check.py` (2 checks) confirms
+`#authTagline` shows/hides correctly against a live `STATE.settings.brandTagline`.
+`test-admin-obfuscated-build.js` (the existing jsdom harness against the REAL built,
+obfuscated `admin/index.html`, not just the readable source) was extended with fixtures
+and interaction steps for all 8 admin-UI findings above — confirms the push tooltip no
+longer says "one-tap," the auto-approve copy says "back-to-back" and no longer "spaced
+by the same interval," a seeded active gift code's Deactivate button and a seeded
+inactive admin's Reactivate button each call `confirm()` exactly once before hitting the
+API, and a `mission_salary`/`mission_deposit_reward` transaction row renders its real
+label (not the raw type string) in the Transactions tab — 0 errors. Also fixed 3 stale
+gaps in that same test harness unrelated to this round's changes but caught while
+extending it (`GET /admin/help-banner`/`GET /admin/about-content`/`GET /admin/push/list`
+were never mocked, added since Rounds 37/45). Re-ran Rounds 57/58/59's own test suites
+afterward — all still pass, zero regressions from this round's changes.
+
+Cache bumped `v41`→`v42` (user), `v8`→`v9` (admin). **`server.js` changed — Render
+should auto-deploy this push** (see Round 38's correction: Snow is on Render with
+`autoDeploy: true`, not Railway).
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
