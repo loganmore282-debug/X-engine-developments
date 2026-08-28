@@ -816,12 +816,12 @@ ${STATE.homeBanner ? `<div style="margin:${'-6px 20px 0'};border-radius:20px;ove
     <div class="product-card__body">
       <div style="font-size:14.5px;font-weight:700;color:var(--snow-ink);">${esc(p.name)}</div>
       <div class="product-card__stats" style="margin-top:10px;">
-        <div><div class="stat-label">Investment</div><div class="stat-val mono">${fmtUGX(p.price)}</div></div>
-        <div><div class="stat-label">Daily Cashback</div><div class="stat-val mono" style="color:var(--snow-green);">${fmtUGX(dailyPayout)}</div></div>
-        <div><div class="stat-label">Duration</div><div class="stat-val mono">${p.cycle||150} days</div></div>
+        <div><div class="stat-label">Price</div><div class="stat-val mono">${fmtUGX(p.price)}</div></div>
+        <div><div class="stat-label">Daily Income</div><div class="stat-val mono" style="color:var(--snow-green);">${fmtUGX(dailyPayout)}</div></div>
+        <div><div class="stat-label">Period</div><div class="stat-val mono">${p.cycle||150} days</div></div>
         <div><div class="stat-label">Total Return</div><div class="stat-val mono">${fmtUGX(p.expectedReturn||p.price*30)}</div></div>
       </div>
-      <button class="primary-button product-card__cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}')">${p.comingSoon?'Coming Soon':'Invest'}</button>
+      <button class="primary-button product-card__cta" ${p.comingSoon?'disabled':''} onclick="openInvestConfirm('${esc(p.key)}')">${p.comingSoon?'Coming Soon':'Buy'}</button>
     </div>
   </div>`;
   });
@@ -1829,11 +1829,11 @@ window.openInvestConfirm = function(tierKey){
   $('confirmSheet').innerHTML = `
     <h3>Confirm purchase</h3>
     <p style="color:rgba(255,255,255,.65);font-size:13px;margin:0 0 12px;">${esc(p.name)}</p>
-    <div class="confirm-row"><span>Investment</span><span class="mono">${fmtUGX(p.price)}</span></div>
-    <div class="confirm-row"><span>Daily cashback</span><span class="mono">${fmtUGX(dailyPayout)}</span></div>
-    <div class="confirm-row"><span>Duration</span><span class="mono">${p.cycle||150} days</span></div>
+    <div class="confirm-row"><span>Price</span><span class="mono">${fmtUGX(p.price)}</span></div>
+    <div class="confirm-row"><span>Daily income</span><span class="mono">${fmtUGX(dailyPayout)}</span></div>
+    <div class="confirm-row"><span>Period</span><span class="mono">${p.cycle||150} days</span></div>
     <div class="confirm-row"><span>Total return</span><span class="mono">${fmtUGX(p.expectedReturn||p.price*30)}</span></div>
-    <button class="primary-button" id="investConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;" onclick="confirmInvest('${esc(tierKey)}')">Confirm & Invest</button>
+    <button class="primary-button" id="investConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;" onclick="confirmInvest('${esc(tierKey)}')">Confirm & Buy</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
   $('confirmBg').classList.add('show');
   document.body.style.overflow = 'hidden'; // subagent-audit-caught: same scroll-chaining gap already fixed for #announceBg/#chestModalBg

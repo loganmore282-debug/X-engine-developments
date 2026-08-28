@@ -3572,6 +3572,24 @@ pending registration) confirms the `/account`-first path is untouched. Re-ran Ro
 59–63's own suites — all still pass, zero regressions. Cache bumped `v45`→`v46`.
 `user-src/`-only change — no Render redeploy needed.
 
+## Round 65 (2026-08-28) — product stat labels relabeled (Price / Daily Income / Period), Invest buttons now say Buy
+
+Owner: "change Investment to Price, dailycashback to daily income, duration to period,
+then from invest in buttons to buy." Applied at both places these 4 labels/button
+appear — Home's product catalogue cards (`paintHome()`) and the purchase-confirm dialog
+(`openInvestConfirm()`) — the only two spots in `user-src/` using this exact stat-label
+set. Deliberately left "Investment Plans" (the section header above the catalogue) and
+"Total Invested" (Home/My Products' own account-total stat, a different concept — money
+already committed across all plans, not a per-product price label) unchanged, since the
+owner named these 4 specific labels, not the whole app's investment-related wording.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. Playwright: a product card renders "Price"/"Daily Income"/"Period" (and none of
+the old "Investment"/"Daily Cashback"/"Duration" wording) with a "Buy" button; the
+purchase-confirm dialog renders "Price"/"Daily income"/"Period" with a "Confirm & Buy"
+button. Re-ran Rounds 59/62/64's own suites — no regressions. Cache bumped `v46`→`v47`.
+`user-src/`-only change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
