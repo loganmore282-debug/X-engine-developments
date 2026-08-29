@@ -1385,7 +1385,12 @@ async function renderAuditLog(){
 // ── TRANSACTIONS ──
 let _txns=[], _txFilter='all';
 async function renderTransactions(){
-  const r = await api('/admin/transactions/list', { limit: 400 });
+  // Codex-caught real bug: the server used to hardcode 300 regardless of
+  // this request's own {limit:400} body -- fixed server-side to honor it;
+  // bumped the request itself higher and made this caption reflect the
+  // server's own `truncated` flag instead of a stale, inaccurate hardcoded
+  // "300" that no longer matched what was actually being requested.
+  const r = await api('/admin/transactions/list', { limit: 1000 });
   if(staleTab('transactions')) return;
   _txns = r.transactions||[];
   const subs=[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['commission','Commissions'],['investment','Plans'],['checkin','Check-in'],['promocode','Codes']];
@@ -1393,7 +1398,7 @@ async function renderTransactions(){
     <h2 class="sec">Transactions</h2>
     <div class="panel-card"><input id="txSearch" placeholder="Search description, type, user id, or a reference"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_txFilter===k?' active':''}" data-tf="${k}">${l}</button>`).join('')}</div>
-    <p class="muted" style="margin:0 0 12px">Most recent 300, newest first.</p>
+    <p class="muted" style="margin:0 0 12px">${r.truncated?`Showing the most recent ${_txns.length} (more exist), newest first.`:`Newest first, ${_txns.length} total.`}</p>
     <div class="panel-card table-scroll"><table><thead><tr><th>When</th><th>Type</th><th>Description</th><th>Reference</th><th>Amount</th></tr></thead><tbody id="txRows"></tbody></table></div>`;
   document.querySelectorAll('[data-tf]').forEach(b=>b.addEventListener('click',()=>{ _txFilter=b.dataset.tf; drawTxns(); document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x.dataset.tf===_txFilter)); }));
   $('txSearch').addEventListener('input', drawTxns);
@@ -1403,7 +1408,7 @@ function drawTxns(){
   let list=_txFilter==='all'?_txns:_txns.filter(t=>t.type===_txFilter);
   const q=($('txSearch')?.value||'').toLowerCase().trim();
   if(q) list=list.filter(t=>(t.description||'').toLowerCase().includes(q)||(t.type||'').includes(q)||(t.userId||'').toLowerCase().includes(q)||(t.ref||'').toLowerCase().includes(q));
-  $('txRows').innerHTML = list.length?list.slice(0,300).map(t=>`
+  $('txRows').innerHTML = list.length?list.map(t=>`
     <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
     <td style="font-family:monospace;font-size:12px;white-space:nowrap">${esc(t.ref||'—')}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
@@ -1413,7 +1418,7 @@ function drawTxns(){
 // quietRefreshUsers(). No counts to patch here, the subtabs are plain
 // labels, so this is just fresh data + drawTxns().
 async function quietRefreshTransactions(){
-  const r = await api('/admin/transactions/list', { limit: 400 });
+  const r = await api('/admin/transactions/list', { limit: 1000 });
   if(staleTab('transactions') || !$('txRows')) return;
   _txns = r.transactions||[];
   drawTxns();

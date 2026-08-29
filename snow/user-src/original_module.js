@@ -487,7 +487,7 @@ function saveCachedState(uid){
   try {
     localStorage.setItem(CACHED_STATE_KEY, JSON.stringify({
       uid, account: STATE.account, investments: STATE.investments, teamStats: STATE.teamStats,
-      bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, mission: STATE.mission,
+      bankAccounts: STATE.bankAccounts, transactions: STATE.transactions, transactionsTruncated: STATE.transactionsTruncated, mission: STATE.mission,
       // subagent-audit-caught: products/settings were never part of this
       // snapshot, so the cache-hit "instant boot" path (which restores
       // everything else here with zero network wait) still showed My
@@ -510,7 +510,7 @@ async function enterApp(){
   if (!cached) return bootFromNetwork(uid);
   STATE.account = cached.account; STATE.investments = cached.investments;
   STATE.teamStats = cached.teamStats; STATE.bankAccounts = cached.bankAccounts;
-  STATE.transactions = cached.transactions; STATE.mission = cached.mission;
+  STATE.transactions = cached.transactions; STATE.transactionsTruncated = !!cached.transactionsTruncated; STATE.mission = cached.mission;
   // subagent-audit-caught: products/settings used to never be part of this
   // cache-hit restore, so My Products showed "0 plans" and Deposit/
   // Withdraw's min-amount hints showed "UGX 0" until boot()'s own live
@@ -623,7 +623,7 @@ async function bootFromNetwork(uid){
   if (invR.status === 'success') STATE.investments = invR.investments;
   if (teamR.status === 'success') STATE.teamStats = teamR;
   if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
-  if (txR.status === 'success') STATE.transactions = txR.transactions;
+  if (txR.status === 'success') { STATE.transactions = txR.transactions; STATE.transactionsTruncated = !!txR.truncated; }
   if (missionR.status === 'success') STATE.mission = missionR;
   saveCachedState(uid);
   $('loadingScreen').style.display = 'none';
@@ -652,7 +652,7 @@ async function refreshAppDataInBackground(uid){
     if (invR.status === 'success') STATE.investments = invR.investments;
     if (teamR.status === 'success') STATE.teamStats = teamR;
     if (bankR.status === 'success') STATE.bankAccounts = bankR.accounts;
-    if (txR.status === 'success') STATE.transactions = txR.transactions;
+    if (txR.status === 'success') { STATE.transactions = txR.transactions; STATE.transactionsTruncated = !!txR.truncated; }
     if (missionR.status === 'success') STATE.mission = missionR;
     saveCachedState(uid);
     if (STATE.page === 'home') patchHomeBalances();
@@ -1617,7 +1617,7 @@ window.openRecordsSheet = async function(){
     <div id="recordsBody" style="margin-top:16px;"></div>`);
   if (hadCache) renderRecordsTab(_recordsTab);
   const r = await api('/transactions');
-  if (r.status === 'success') STATE.transactions = r.transactions;
+  if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
   else if (!hadCache) STATE.transactions = [];
   if (!hadCache && $('recordsBody')) renderRecordsTab(_recordsTab);
 };
@@ -1669,6 +1669,13 @@ function renderRecordsTab(cat){
   if (!body) return;
   const rows = (STATE.transactions || []).filter(t => recordsTabMatch(cat, t));
   if (!rows.length) { body.innerHTML = '<div class="list-empty reveal-in">No records yet.</div>'; return; }
+  // Codex-caught real bug (2nd money-flow audit): this always claimed "No
+  // more data" even when the server's own list was truncated (a fixed
+  // fetch cap, well past on a long-lived heavy user) -- a false claim of
+  // completeness. Only say so when the fetch genuinely wasn't cut short.
+  const footer = STATE.transactionsTruncated
+    ? '<div class="list-end">Showing your most recent records</div>'
+    : '<div class="list-end">No more data</div>';
   body.innerHTML = '<div class="reveal-in"><div class="settings-list">' + rows.map(t => { const amt = recordsRowAmount(t); return `
     <div class="list-row">
       <div style="flex:1;min-width:0;">
@@ -1676,7 +1683,7 @@ function renderRecordsTab(cat){
         <div style="font-size:11px;color:var(--snow-muted);margin-top:1px;">${esc(t.date||'')} ${esc(t.time||'')}</div>
       </div>
       <div class="mono" style="font-size:13px;font-weight:700;color:${amt<0?'var(--snow-wine)':'var(--snow-green)'};">${amt<0?'-':'+'}${fmtUGX(Math.abs(amt))}</div>
-    </div>`; }).join('') + '</div><div class="list-end">No more data</div></div>';
+    </div>`; }).join('') + '</div>' + footer + '</div>';
 }
 function cleanDesc(d){ return d || ''; }
 
@@ -1823,7 +1830,7 @@ window.syncWithdrawReceiveAmt = function(){
 // STATE.account.
 async function refreshTransactionsCache(){
   const r = await api('/transactions');
-  if (r.status === 'success') STATE.transactions = r.transactions;
+  if (r.status === 'success') { STATE.transactions = r.transactions; STATE.transactionsTruncated = !!r.truncated; }
 }
 window.submitWithdraw = async function(){
   const amount = parseMoneyInput($('witAmount').value);

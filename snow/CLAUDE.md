@@ -4533,6 +4533,178 @@ changed — the Referrals tab truncation notice — matching `sw.js`'s own stand
 bump on every deploy that changes index.html). **`server.js` and `admin-src/index.html`
 changed — Render should auto-deploy this push.**
 
+## Round 81 (2026-08-29) — independent Codex money-flow audit (deposits, withdrawals, webhooks, Records, check-in, gift codes, milestones): 3 High + 5 Medium + 3 Low, all 11 confirmed real, all 11 fixed
+
+A same-session self-review of this exact surface (deposits/withdrawals/webhooks/
+Records/check-in/gift-codes/milestones) had found nothing new. Owner then asked for an
+independent Codex pass over the same ground with fresh eyes — it found 11 real issues
+the self-review missed, including a genuine double-credit gap in this session's OWN
+earlier gift-code resumability fix. Every finding was independently re-derived against
+the actual code before anything was touched, same discipline as every review round in
+this file — several required tracing the exact failure sequence by hand (which
+functions hold which lock, in what order, released when) to confirm both that the bug
+was real AND that the fix wouldn't introduce a new deadlock or a worse regression.
+
+**High — gift-code redemption could double-credit after a crash between the claim and
+the proof row.** `/redeem`'s own resumability fix (this session, `alreadyClaimed` +
+checking for a `promoRedemptions` proof row) assumed that if the code was claimed
+(`usedBy`) but no proof row existed, the wallet had never been credited — but the
+CREDIT step itself had no idempotency guard of its own. A crash between claiming the
+code and writing the proof row left a resumed retry crediting the wallet a SECOND
+time. Fixed with the same `updateIf()` atomic-token pattern deposits/withdrawals
+already use: a `redeemedGiftCodeIds` array on the user document makes the wallet
+increment idempotent regardless of what triggered the retry; the `promoRedemptions`
+and `transactions` ledger writes are now find-or-create (keyed by a new `giftCode`
+field on the transaction row) so a retry restores genuinely-missing proof rows without
+ever duplicating them.
+
+**High — a payout MarzPay actually sent could get refunded on top of itself.**
+`processWithdrawalCore()` only persisted `marzReference` (the field `/withdraw/
+callback` looks withdrawals up by) in the POST-success write — if THAT write failed
+after MarzPay had already accepted and sent the payout, the withdrawal was stuck at
+`'sending'` with no `marzReference` recorded anywhere. The callback could never find
+it; `/admin/withdraw/verify` read the missing `marzTxUuid` alone and told the owner
+"nothing was sent" (false); following that message and rejecting it would refund a
+member on top of a payout that already went out. Fixed in four parts: `marzReference`
+is now persisted BEFORE ever calling MarzPay (mirrors the deposit side's own
+already-correct pattern); `markWithdrawalProcessed()` now accepts `'sending'` as a
+valid starting state (not just `'processing'`) so the callback's self-heal can actually
+land, and correctly backfills `totalWithdrawn` on that path since the normal
+`'sending'→'processing'` step — the only place that stat is usually incremented — was
+skipped; `/withdraw/callback`'s top-level gate now lets `'sending'` through for the
+SUCCESS branch only (the FAILED branch still explicitly refuses to touch a `'sending'`
+row automatically — auto-declining an ambiguous payout stays admin-only, unchanged);
+`/admin/withdraw/verify`'s message now distinguishes "no `marzReference` at all — never
+reached MarzPay" (still says nothing was sent) from "`marzReference` exists but no
+`marzTxUuid` — a send attempt was genuinely made, this is unverifiable, NOT proof
+nothing went out."
+
+**High — an unauthenticated webhook could be trusted when the independent MarzPay
+check was inconclusive.** `/withdraw/callback`'s success branch gave an inconclusive
+live check (`liveStatus` empty — MarzPay briefly down or timed out) the same benefit of
+the doubt as an already-trusted uuid, on the reasoning "our own uuid is already known
+real, don't second-guess a network blip." But that reasoning only justifies not
+BLOCKING a genuine payout — the code actually went further and marked the withdrawal
+processed on the raw webhook body's unverified claim whenever the check couldn't
+confirm anything either way. An attacker who somehow learned a withdrawal's unguessable
+`marzReference` could time a fabricated success webhook to a MarzPay outage and have it
+accepted. Fixed to always require an explicit `SUCCESS_STATUSES.has(liveStatus)` —
+an inconclusive check now just leaves the withdrawal untouched for the next webhook
+retry, reconciler tick, or user poll to confirm for real, never blocking a genuine
+payout, only deferring recognition of it (the reconciler runs every 30s, so the
+practical delay is small).
+
+**Medium — `updateIf()` returning false conflated "already applied" with "the user
+document doesn't exist at all."** Both `creditDeposit()`'s wallet credit and
+`completeWithdrawalRefund()`'s wallet refund treated every `false` from `updateIf()` as
+"safe, idempotent no-op" — but a missing document (e.g. a user deleted in an extremely
+narrow race with `/admin/user/delete`'s own in-flight-deposit guard, which only checks
+`status in ['initiating','pending']` and doesn't cover a deposit already flipped to
+`'matched'` mid-credit) also returns `false`, with nowhere for the money to actually go.
+Both now re-read after a `false` and confirm the idempotency token is genuinely present
+before trusting it as safe; if the document or token is missing, this is now a loud,
+flagged failure (`needsManualCredit`/`refundPending` stays set) instead of a silent
+"credited" lie. An extremely narrow window in practice, but a real distinction worth
+making regardless of how rarely it's hit.
+
+**Medium — `markDepositFailed()`'s ledger update raced a concurrent success outside its
+own lock.** The `dep:<id>` lock was released right after the status flip to `'failed'`;
+the ledger-row update (flip to "Failed", zero the amount) ran AFTER that, unprotected.
+Mobile-money providers can genuinely flip an initial timeout/expiry into a later
+approval (this function's own comment already says so) — a concurrent `creditDeposit()`
+call reporting that later success could acquire the lock in the gap, flip status back
+to `'matched'`, credit the wallet, and write the ledger row to Success, only for this
+call's now-stale "Failed" update to land on top of it moments later — permanently
+mislabeling a successfully-credited deposit as failed/zeroed even though the wallet was
+correctly paid. Fixed by moving the ledger update inside the SAME `dep:<id>` lock as the
+status flip, so the two can never straddle a concurrent credit landing in between.
+
+**Medium — uncheckable rows could starve both reconcilers.** `reconcilePendingDeposits()`/
+`reconcilePendingWithdrawals()` always fetched the oldest 50 rows by `createdAt`, then
+`continue`d past any without a `marzTxUuid` — but that only skips PROCESSING them, it
+doesn't stop them from occupying a query slot. If 50+ old rows ever permanently lack a
+uuid, the query would return the SAME stuck 50 every tick forever, starving any
+genuinely newer, actually-reconcilable row beyond that window. Fixed by adding
+`.where('marzTxUuid', '>', '')` to both queries — a real, already-supported comparison
+operator that correctly excludes missing/null fields (unlike `$ne`, which MongoDB
+documents as matching missing fields too — confirmed this distinction before choosing
+the operator). Nothing is lost: a uuid-less row was never actionable by this loop
+anyway, only no longer able to block newer ones.
+
+**Medium (investigated, not restructured) — both webhooks ack success before durable
+processing completes.** Confirmed the pattern is real (`res.status(200)` fires before
+any DB work), but traced that the practical blast radius is already bounded: for
+deposits, `marzReference` has always been set at creation time (before ever calling
+MarzPay), so the record is always findable regardless; for both deposits and
+withdrawals, the periodic reconciler and the user's own status poll independently
+re-verify against MarzPay's live API on their own schedule, entirely independent of
+whether the webhook's own processing succeeded — so a lost webhook effect is a bounded
+delay (next reconciler tick or poll), not a lost outcome. The larger "durable inbox,
+ack only after storing" restructure Codex suggests is real architecture work with
+low marginal value given this existing redundancy; not undertaken this round, same
+"bigger lift, lower priority given existing mitigation" reasoning this file already
+uses for comparable structural findings (e.g. Round 17's outbox deferral).
+
+**Medium — a successful depositor could permanently bypass the deposit abuse auto-ban.**
+`_depAttemptsSucceeded` was a bare membership Set, added to once on any success and
+never re-scoped to a time window — only cleared once a user's `_depAttempts` emptied
+out entirely (every attempt aged out of the rolling 60s window). An active depositor
+who succeeds once and then keeps submitting at least one attempt every <60s (normal
+usage) never let that happen, so the flag stayed set indefinitely — meaning the
+5-rapid-attempts auto-ban was permanently bypassed for them, even for a much later,
+genuinely suspicious burst unrelated to that one old success. Replaced with
+`_depAttemptsSucceededAt` (a timestamped Map) and `depositSucceededRecently()`, which
+only exempts a burst from the ban if the success genuinely falls within the SAME
+rolling 60s window being evaluated — matching this guard's own original intent ("this
+burst included a real success") instead of "this user has EVER succeeded, don't ever
+ban them."
+
+**Low — check-in streaks stop increasing past day 501.** `computeCheckinStreak()` walks
+a capped 500-row ledger window and, if every row in it is contiguous, simply runs out
+of rows to walk — indistinguishable from a genuine gap. A member who never misses a
+day would have their streak permanently stick at 501 the moment they cross it (each
+day's 500-row window is still 500 contiguous rows, just shifted by one, so it keeps
+reporting the same capped value forever). Bumped the limit to 5,000 (13+ years of
+unbroken daily check-ins) at all three copies of this query (`/checkin`, `/admin/user/
+reconcile-checkin`, `recountAllTotals`'s own freshness re-check) — same "generous cap,
+not a rewrite" tradeoff already used elsewhere in this file.
+
+**Low — Records claimed "No more data" even when it wasn't.** `/transactions` (300-row
+cap) and `/admin/transactions/list` (300-row cap, and — a second, separate bug — it
+silently ignored the admin UI's own `{limit:400}` request body entirely) both truncated
+silently. Bumped both caps generously (2,000 per-user; up to 5,000 for the admin's
+platform-wide list, now honoring its own requested limit) and added a `truncated` flag
+to both responses; the user Records footer now only claims completeness when it's true,
+and the admin Transactions tab's caption reflects the real count instead of a hardcoded,
+now-inaccurate "300."
+
+**Low — a webhook could overwrite an already-trusted withdrawal uuid with an unverified
+one.** `/withdraw/callback`'s success branch used to persist the webhook's own claimed
+uuid unconditionally, even when the withdrawal already had its OWN trusted uuid (the one
+actually verified). Fixed to only ever adopt the webhook's uuid when there wasn't
+already a trusted one to begin with — closed as part of the same edit as the High
+webhook-trust fix above.
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`, `build-core.js`
+and `build-admin.js` both clean round-trips, `git diff --check` clean, a boot smoke test
+(real self-signed dummy Firebase PEM + unreachable Mongo) still fails only at the
+Mongo-connect step. `test-admin-obfuscated-build.js` (the real obfuscated admin build) —
+0 errors across all 12 tabs, Transactions tab rendering the new dynamic caption
+correctly. Three standalone isolated verification scripts (not committed — throwaway,
+same practice this file already uses for rounds without a live Mongo available in this
+sandbox): (1) the gift-code fix — reproduced the EXACT crash sequence (claim, credit,
+simulate a crash by deleting the proof rows, resume) and confirmed the wallet is not
+double-credited on resume while the genuinely-missing proof rows ARE restored, and that
+a truly-already-used code still correctly rejects on a third attempt — 10/10 checks;
+(2) the withdrawal `'sending'`-recovery + uuid-trust fixes — confirmed a stuck-at-
+`'sending'` withdrawal self-heals via a webhook's own uuid with `totalWithdrawn`
+correctly backfilled, confirmed an already-trusted uuid is the one actually checked (not
+a webhook-supplied one) and is never overwritten, confirmed an inconclusive live check
+never marks anything processed, confirmed a normal `'processing'`→`'processed'`
+transition doesn't double-touch `totalWithdrawn` — 9/9 checks. This round is server.js +
+user-src + admin-src. Cache bumped `v57`→`v58` (user), `v15`→`v16` (admin). **`server.js`
+changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

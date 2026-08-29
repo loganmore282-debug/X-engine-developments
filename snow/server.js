@@ -721,7 +721,22 @@ async function invalidateSessionsFor(username) {
 
 // ── DEPOSIT / WITHDRAWAL ABUSE GUARDS ──
 const _depAttempts = new Map();       // userId -> [timestamps]
-const _depAttemptsSucceeded = new Set();
+// Codex-caught real bug (2nd money-flow audit): this used to be a bare
+// membership Set, added to once on any success and never re-scoped to a
+// time window -- only cleared by sweepEphemeralState() once _depAttempts
+// for that user goes fully empty (every attempt has aged out of the
+// rolling 60s window). An active depositor who succeeds once and then
+// keeps submitting at least one deposit attempt every <60s (completely
+// normal usage for someone actively investing) never lets _depAttempts
+// empty out, so this stayed set INDEFINITELY -- meaning the 5-rapid-
+// attempts auto-ban was permanently bypassed for them, even for a much
+// later, genuinely suspicious burst of failed attempts unrelated to that
+// one old success. Storing the success TIMESTAMP instead lets the ban
+// check verify the success actually falls within the SAME rolling window
+// being evaluated -- matching this guard's own original intent ("this
+// burst included a real success, don't ban for it") instead of "this
+// user has EVER succeeded, don't ever ban them."
+const _depAttemptsSucceededAt = new Map(); // userId -> last success timestamp
 function recordDepositAttempt(userId) {
   const now = Date.now();
   const arr = (_depAttempts.get(userId) || []).filter(t => now - t < 60000);
@@ -729,7 +744,11 @@ function recordDepositAttempt(userId) {
   _depAttempts.set(userId, arr);
   return arr.length;
 }
-function markDepositAttemptSucceeded(userId) { _depAttemptsSucceeded.add(userId); }
+function markDepositAttemptSucceeded(userId) { _depAttemptsSucceededAt.set(userId, Date.now()); }
+function depositSucceededRecently(userId) {
+  const at = _depAttemptsSucceededAt.get(userId);
+  return !!at && (Date.now() - at < 60000);
+}
 async function banUserAutomatically(userId, reason) {
   try {
     await db.collection('users').doc(userId).update({ status: 'banned', banReason: reason, bannedAt: FieldValue.serverTimestamp() });
@@ -758,6 +777,41 @@ async function markDepositFailed(depRef, userId, reason) {
     const fresh = await depRef.get();
     if (fresh.exists && depositFullyCredited(fresh.data())) { alreadyCredited = true; return; }
     await depRef.update({ status: 'failed', failureReason: reason }).catch(() => {});
+    // Codex-caught real bug (2nd money-flow audit): this ledger-row update
+    // used to run AFTER the dep:<id> lock above was released -- a
+    // concurrent creditDeposit() call (a LATER poll/webhook/reconciler tick
+    // reporting the SAME deposit as genuinely succeeded, which mobile-money
+    // providers really can do after an initial timeout/expiry, per this
+    // function's own comment above) could acquire the lock in that gap,
+    // flip status back to 'matched', credit the wallet, and write the
+    // ledger row to Success -- only for THIS call's now-stale "Failed"
+    // ledger update to land on top of it moments later, permanently
+    // mislabeling a successfully-credited deposit as failed/zeroed even
+    // though the wallet was correctly paid. Moved inside the SAME dep:
+    // lock as the status flip so the two can never straddle a concurrent
+    // credit landing in between.
+    //
+    // Flip the ledger row created up front (see /deposit/marzpay) from
+    // "Processing" to "Failed" too, same as creditDeposit() does for a
+    // successful match -- otherwise a failed deposit is stuck showing
+    // "Processing" in Records forever. Also zero the row's `amount` --
+    // subagent-audit-caught real bug: /admin/integrity's walletBalance check
+    // sums EVERY transaction row's raw amount regardless of status, and
+    // computeRealTotals's totalDeposited sum only filters by `type`, not
+    // status -- so a failed deposit's nonzero amount permanently inflated
+    // both, exactly the false-positive-that-writes-real-corruption class
+    // Round 53 already fixed once for declined withdrawals
+    // (finalizeWithdrawalTransactionRecord zeroes its row's amount the same
+    // way, only once the outcome is final). "Recalculate totals"/"Repair
+    // ledger" would otherwise bake this inflated totalDeposited into the
+    // user's real document.
+    try {
+      const txSnap = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
+      await Promise.all(txSnap.docs.map(txDoc => {
+        const amt = Math.abs(Number(txDoc.data().amount) || 0);
+        return txDoc.ref.update({ status: 'failed', description: `Deposit — Failed — ${fmtUGX(amt)}`, amount: 0 });
+      }));
+    } catch (e) { console.warn('markDepositFailed: could not update ledger row:', e.message); }
   });
   if (alreadyCredited) {
     console.warn(`markDepositFailed: dep=${depRef.id} was already credited by another path -- ignoring this stale FAILED verdict.`);
@@ -769,27 +823,6 @@ async function markDepositFailed(depRef, userId, reason) {
     // report the real outcome instead.
     return false;
   }
-  // Flip the ledger row created up front (see /deposit/marzpay) from
-  // "Processing" to "Failed" too, same as creditDeposit() does for a
-  // successful match -- otherwise a failed deposit is stuck showing
-  // "Processing" in Records forever. Also zero the row's `amount` --
-  // subagent-audit-caught real bug: /admin/integrity's walletBalance check
-  // sums EVERY transaction row's raw amount regardless of status, and
-  // computeRealTotals's totalDeposited sum only filters by `type`, not
-  // status -- so a failed deposit's nonzero amount permanently inflated
-  // both, exactly the false-positive-that-writes-real-corruption class
-  // Round 53 already fixed once for declined withdrawals
-  // (finalizeWithdrawalTransactionRecord zeroes its row's amount the same
-  // way, only once the outcome is final). "Recalculate totals"/"Repair
-  // ledger" would otherwise bake this inflated totalDeposited into the
-  // user's real document.
-  try {
-    const txSnap = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
-    await Promise.all(txSnap.docs.map(txDoc => {
-      const amt = Math.abs(Number(txDoc.data().amount) || 0);
-      return txDoc.ref.update({ status: 'failed', description: `Deposit — Failed — ${fmtUGX(amt)}`, amount: 0 });
-    }));
-  } catch (e) { console.warn('markDepositFailed: could not update ledger row:', e.message); }
   return true;
 }
 
@@ -1565,8 +1598,25 @@ app.post('/checkin', async (req, res) => {
       if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
       const today = nowStr().date;
       if (u.lastCheckin === today) { result = { code: 400, body: { status: 'error', message: 'Already checked in today' } }; return; }
+      // Codex-caught real bug (2nd money-flow audit): computeCheckinStreak()
+      // walks this ledger window and, if every row in it turns out to be
+      // contiguous (no real gap), simply runs out of rows to walk -- it has
+      // no way to tell "the streak legitimately ends here" apart from "the
+      // query just stopped returning more rows." At a 500-row cap, a member
+      // who checks in every single day without ever missing one would have
+      // their streak permanently stick at 501 the moment they cross it (day
+      // 501's window is 500 contiguous rows -> reports 500 -> +1 -> 501; day
+      // 502's window is STILL 500 contiguous rows, just shifted by one ->
+      // reports 500 again -> +1 -> 501 again, forever). Bumped to a
+      // practically-unreachable ceiling (13+ years of unbroken daily
+      // check-ins) rather than building real pagination for it -- same
+      // "generous cap, not a rewrite" tradeoff already used elsewhere in
+      // this file (e.g. /admin/referrals/list). Also bumped at this
+      // function's two other copies (admin reconcile-checkin,
+      // recountAllTotals's own freshness re-check) so all three can never
+      // disagree about what "the real streak" is.
       const ledgerSnap = await db.collection('transactions')
-        .where('userId', '==', uid).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
+        .where('userId', '==', uid).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
       const dayKeys = new Set();
       ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
       const real = computeCheckinStreak(dayKeys);
@@ -1741,7 +1791,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
 
     const attemptCount = recordDepositAttempt(userId);
-    if (attemptCount >= 5 && !_depAttemptsSucceeded.has(userId)) {
+    if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
       await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
       return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
     }
@@ -1885,7 +1935,27 @@ async function creditDeposit(depDoc) {
               creditedDepositIds: FieldValue.arrayUnion(depDoc.id),
             }
           ));
-          if (!applied) console.warn(`Deposit ${depDoc.id} wallet credit already applied (idempotent retry) -- skipped re-incrementing.`);
+          if (!applied) {
+            // Codex-caught real bug (2nd money-flow audit): updateIf()
+            // returning false means EITHER "already applied" (the idempotency
+            // token is already there -- genuinely safe) OR "no document
+            // matched _id at all" (the user was deleted) -- these are NOT the
+            // same thing, but this used to treat every false as the safe
+            // case. If the user document is gone, the money has nowhere to
+            // go; blindly marking walletCredited:true here would silently
+            // and permanently lose it with no further retry ever attempted.
+            // Re-read to tell the two cases apart before trusting a false as
+            // safe -- an extremely narrow window in practice (would require
+            // /admin/user/delete's own in-flight-deposit guard to somehow
+            // miss a deposit mid-credit), but a real distinction to make
+            // regardless of how rarely it's hit.
+            const recheck = await db.collection('users').doc(depUserId).get();
+            const tokenPresent = recheck.exists && (recheck.data().creditedDepositIds || []).includes(depDoc.id);
+            if (!tokenPresent) {
+              throw new Error(`Deposit ${depDoc.id} wallet credit could not be verified -- user ${depUserId} document is missing (or the idempotency token is absent) after updateIf() reported no match.`);
+            }
+            console.warn(`Deposit ${depDoc.id} wallet credit already applied (idempotent retry) -- skipped re-incrementing.`);
+          }
           await depDoc.ref.update({ walletCredited: true }).catch(() => {});
         } catch (creditErr) {
           await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
@@ -2234,7 +2304,24 @@ async function completeWithdrawalRefund(witRef, userId) {
     const updates = { walletBalance: FieldValue.increment(fd.refundAmount || 0), refundedWithdrawalIds: FieldValue.arrayUnion(witRef.id) };
     if (fd.refundNetToUnwind) updates.totalWithdrawn = FieldValue.increment(-fd.refundNetToUnwind);
     const applied = await uRef.updateIf({ refundedWithdrawalIds: { $ne: witRef.id } }, updates);
-    if (!applied) console.warn(`Withdrawal refund ${witRef.id} already applied (idempotent retry) -- skipped re-crediting.`);
+    if (!applied) {
+      // Codex-caught real bug (2nd money-flow audit): updateIf() returning
+      // false means EITHER "already applied" (the token's already there --
+      // genuinely safe) OR "no document matched _id at all" (the user was
+      // deleted) -- treating every false as safe used to let this function
+      // clear refundPending and return true even when the refund never
+      // actually landed anywhere, which would then let the caller zero the
+      // withdrawal's own ledger row (finalizeWithdrawalTransactionRecord),
+      // permanently erasing any trace that a refund was ever owed. Re-check
+      // which case this actually is before trusting it.
+      const recheck = await uRef.get();
+      const tokenPresent = recheck.exists && (recheck.data().refundedWithdrawalIds || []).includes(witRef.id);
+      if (!tokenPresent) {
+        console.error(`MONEY-SAFETY: withdrawal refund ${witRef.id} could not be verified -- user ${userId} document is missing (or the idempotency token is absent) after updateIf() reported no match. refundPending stays true.`);
+        return false;
+      }
+      console.warn(`Withdrawal refund ${witRef.id} already applied (idempotent retry) -- skipped re-crediting.`);
+    }
     await witRef.update({ refundPending: FieldValue.delete(), refundAmount: FieldValue.delete(), refundNetToUnwind: FieldValue.delete() }).catch(() => {});
     return true;
   } catch (e) {
@@ -2283,12 +2370,35 @@ async function declineWithdrawalAndRefund(witRef, userId, reason, fromStatuses) 
 // can never race each other into disagreeing about the final outcome.
 async function markWithdrawalProcessed(witRef, userId) {
   let didTransition = false;
-  await withLock('bal:' + userId, () => db.runTransaction(async t => {
-    const fresh = await t.get(witRef);
-    if (!fresh.exists || fresh.data().status !== 'processing') return;
-    t.update(witRef, { status: 'processed', processedAt: FieldValue.serverTimestamp() });
+  await withLock('bal:' + userId, async () => {
+    const fresh = await witRef.get();
+    if (!fresh.exists) return;
+    const status = fresh.data().status;
+    // Codex-caught real bug (2nd money-flow audit): a withdrawal stuck at
+    // 'sending' (the post-send-money write that would normally flip it to
+    // 'processing' itself failed after MarzPay already accepted/sent the
+    // payout -- see processWithdrawalCore's own comment) could never reach
+    // 'processed' through this function, since it only ever accepted a
+    // 'processing' starting state. /withdraw/callback's own webhook-uuid
+    // fallback path (which independently re-verifies against MarzPay before
+    // ever calling here) is exactly the self-heal for that stuck state --
+    // widened to also accept 'sending' so that self-heal can actually land.
+    if (status !== 'processing' && status !== 'sending') return;
+    await witRef.update({ status: 'processed', processedAt: FieldValue.serverTimestamp() });
     didTransition = true;
-  }));
+    if (status === 'sending') {
+      // A withdrawal reaching 'processed' straight from 'sending' skipped
+      // the normal 'sending'->'processing' step, which is the ONLY place
+      // totalWithdrawn is ordinarily incremented (processWithdrawalCore) --
+      // without this, it would self-heal to 'processed' with totalWithdrawn
+      // never touched, permanently missing this payout's net from the stat.
+      try {
+        await db.collection('users').doc(userId).update({ totalWithdrawn: FieldValue.increment(fresh.data().net || 0) });
+      } catch (twErr) {
+        console.error(`MONEY-SAFETY: totalWithdrawn increment failed after self-healing withdrawal ${witRef.id} from 'sending' -- user ${userId} is missing their net in totalWithdrawn. Backfill by hand.`, twErr.message);
+      }
+    }
+  });
   return didTransition;
 }
 async function processWithdrawalCore(withdrawalId, processedBy) {
@@ -2303,7 +2413,20 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
     if (wit.status !== 'pending') return { code: 400, body: { status: 'error', message: `Cannot send, the status is '${wit.status}'` } };
 
     const sendingMarker = crypto.randomUUID();
-    await witRef.update({ status: 'sending', sendingReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
+    // Codex-caught real bug (2nd money-flow audit): marzReference -- the
+    // field /withdraw/callback actually looks withdrawals up by -- used to
+    // only get written in the POST-success update further down. If MarzPay
+    // genuinely accepted and sent the payout but that later write then
+    // failed (a transient DB error), the withdrawal was stuck at 'sending'
+    // with no marzReference recorded anywhere -- the callback could never
+    // find it (empty query), and /admin/withdraw/verify (see its own
+    // updated comment below) would wrongly read "no gateway reference,
+    // nothing was sent" even though the money may have already gone out.
+    // Mirrors the deposit side's own already-correct pattern (marzReference
+    // is set at deposit CREATION, before ever calling MarzPay) -- writing it
+    // here, before the call, means it's always persisted regardless of
+    // whether any later write in this function fails.
+    await witRef.update({ status: 'sending', sendingReference: sendingMarker, marzReference: sendingMarker, sendingBy: processedBy, sendingAt: FieldValue.serverTimestamp() });
 
     let mpData, ambiguous = false;
     try {
@@ -2324,7 +2447,7 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
       return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request — we cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
-      await witRef.update({ status: 'pending', sendingReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
+      await witRef.update({ status: 'pending', sendingReference: null, marzReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
       return { code: 400, body: { status: 'error', message: marzUserMsg(mpData, 'MarzPay could not send this payout right now. The withdrawal stays pending and untouched. Try again in a moment.') } };
     }
     const sandbox = mpData.status === 'sandbox';
@@ -2382,8 +2505,28 @@ app.post('/admin/withdraw/verify', async (req, res) => {
     const snap = await db.collection('withdrawals').doc(withdrawalId).get();
     if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Withdrawal not found' });
     const w = snap.data();
-    if (!w.marzTxUuid)
-      return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This payout never reached MarzPay (no gateway reference). Nothing was sent.' });
+    if (!w.marzTxUuid) {
+      // Codex-caught real bug (2nd money-flow audit): this used to claim
+      // "nothing was sent" from a bare missing marzTxUuid alone -- but
+      // marzTxUuid is MarzPay's own transaction id, only known once their
+      // response (or a later webhook) is received; marzReference is OUR OWN
+      // outgoing reference, set BEFORE ever calling MarzPay (see
+      // processWithdrawalCore's own comment). A withdrawal can genuinely
+      // have marzReference set with marzTxUuid still missing -- MarzPay was
+      // actually called, we just don't have their own id to check MarzPay's
+      // status API against (there is no lookup-by-reference call available).
+      // Claiming "nothing was sent" in that case is false and, if the owner
+      // acts on it by rejecting, refunds a member on top of a payout that
+      // may have already gone out. Only say "nothing was sent" when there's
+      // no record of an attempt at all.
+      if (!w.marzReference) {
+        return res.json({ status: 'success', ourStatus: w.status, marzStatus: 'no_reference', message: 'This payout never reached MarzPay (no gateway reference). Nothing was sent.' });
+      }
+      return res.json({
+        status: 'success', ourStatus: w.status, marzStatus: 'unverifiable',
+        message: `A send attempt WAS made (our reference: ${w.marzReference}) but we have no MarzPay transaction id to check against -- this does NOT mean nothing was sent. Check MarzPay's own dashboard for that reference before rejecting; rejecting a payout that already went out will refund the member on top of it.`,
+      });
+    }
     const marzStatus = await marzGetSendStatus(w.marzTxUuid);
     const sent = SUCCESS_STATUSES.has(marzStatus);
     const failed = FAILED_STATUSES.has(marzStatus);
@@ -2451,47 +2594,64 @@ app.post('/withdraw/callback', async (req, res) => {
     if (witSnap.empty) return;
     const doc = witSnap.docs[0];
     const wit = doc.data();
-    if (wit.status !== 'processing') return;
+    // Codex-caught real bug (2nd money-flow audit): a withdrawal stuck at
+    // 'sending' (see markWithdrawalProcessed's own comment) used to be
+    // invisible to this callback entirely -- widened to let it through for
+    // the SUCCESS branch (a genuine success is always safe to recognize),
+    // but the FAILED branch below still explicitly refuses to act on a
+    // 'sending' row (see its own guard) -- auto-declining/refunding an
+    // ambiguous "we don't know if it was sent" withdrawal from an
+    // unauthenticated webhook is exactly the risk this codebase already
+    // treats as admin-only, confirm-on-MarzPay's-dashboard-first territory.
+    if (wit.status !== 'processing' && wit.status !== 'sending') return;
     const webhookUuid = body.data?.transaction?.uuid || body.transaction?.uuid || body.data?.uuid || null;
     if (isSuccess) {
       // Real bug fixed: this endpoint has no webhook signature/secret check
       // (unlike a call WE make outward to MarzPay with our own key, an
       // inbound POST here is just whatever hit the URL) -- the live re-check
       // against MarzPay's own API is what actually makes this safe to act
-      // on, not the webhook body itself. It's a "best-effort" check in the
-      // sense that an inconclusive/failed live check never BLOCKS a
-      // genuinely-completed payout -- but if there's no uuid to check
-      // against AT ALL (neither our own record's marzTxUuid nor one on the
-      // webhook), there is nothing to verify the claim against, so this
-      // used to fall through and mark it processed on the unauthenticated
-      // webhook's say-so alone. Now it leaves the withdrawal untouched
-      // instead -- same "refuse rather than trust an unverifiable claim"
-      // posture /deposit/callback already uses. Recoverable by hand via
-      // /admin/withdraw/verify (reports "no_reference" for exactly this
-      // case) + /admin/withdraw/reject if MarzPay's dashboard confirms it
-      // wasn't actually sent.
+      // on, not the webhook body itself. If there's no uuid to check against
+      // AT ALL (neither our own record's marzTxUuid nor one on the webhook),
+      // there is nothing to verify the claim against, so this leaves the
+      // withdrawal untouched -- same "refuse rather than trust an
+      // unverifiable claim" posture /deposit/callback already uses.
+      // Recoverable by hand via /admin/withdraw/verify + /admin/withdraw/reject
+      // if MarzPay's dashboard confirms it wasn't actually sent.
       const uuidForCheck = wit.marzTxUuid || webhookUuid;
       if (!uuidForCheck) return;
       const liveStatus = await marzGetSendStatus(uuidForCheck);
-      if (wit.marzTxUuid) {
-        // Re-checking OUR OWN previously-recorded uuid (captured straight
-        // from MarzPay's original send-money response) -- an inconclusive
-        // result here (MarzPay briefly down, a network blip) is trusted not
-        // to be doubted, matching this block's original intent.
-        if (liveStatus && !SUCCESS_STATUSES.has(liveStatus)) return;
-      } else {
-        // No uuid of our own -- checking only the WEBHOOK's own claimed
-        // uuid, which an attacker who guessed/knew this withdrawal's
-        // marzReference could set to anything. An inconclusive result here
-        // (e.g. the uuid doesn't exist at MarzPay at all) is indistinguishable
-        // from a fabricated one, so this requires an explicit confirmed
-        // success rather than giving an unproven uuid the same benefit of
-        // the doubt as one we already know is real.
-        if (!SUCCESS_STATUSES.has(liveStatus)) return;
-      }
-      if (webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
+      // Codex-caught real bug (2nd money-flow audit): this used to give an
+      // INCONCLUSIVE live check (MarzPay briefly down/timed out, so
+      // liveStatus is '') the same benefit of the doubt as a genuinely
+      // already-trusted uuid, on the reasoning that "our own uuid is
+      // already known-real." But that reasoning only justifies not BLOCKING
+      // on an inconclusive check -- it does NOT justify marking the
+      // withdrawal processed on the unauthenticated webhook's bare claim
+      // when the live check confirmed nothing at all. An attacker who
+      // somehow learned this withdrawal's unguessable marzReference could
+      // send a fabricated success webhook timed to a MarzPay outage and
+      // have it accepted. Always require an EXPLICIT confirmed success --
+      // an inconclusive check now just leaves the withdrawal untouched for
+      // the next webhook retry, reconciler tick, or user poll to confirm
+      // for real, never blocking a genuine payout, just deferring
+      // recognition of it.
+      if (!SUCCESS_STATUSES.has(liveStatus)) return;
+      // Codex-caught real bug (2nd money-flow audit): this used to persist
+      // the WEBHOOK's own claimed uuid unconditionally, even when we
+      // already had our OWN trusted uuid and verified THAT one -- silently
+      // overwriting a known-good, independently-captured value with an
+      // unverified one from an unauthenticated request. Only ever adopt the
+      // webhook's uuid when we didn't already have our own (i.e. it's the
+      // exact one that was just verified above, not a bystander value).
+      if (!wit.marzTxUuid && webhookUuid) doc.ref.update({ marzTxUuid: webhookUuid }).catch(() => {});
       if (await markWithdrawalProcessed(doc.ref, wit.userId)) await finalizeWithdrawalTransactionRecord(doc.id, 'processed');
     } else if (isFailed) {
+      // A 'sending' withdrawal is genuinely ambiguous (see
+      // processWithdrawalCore's own comment) -- never auto-decline/refund
+      // one from this unauthenticated, automated path. Only
+      // /admin/withdraw/reject (a human, after checking MarzPay's own
+      // dashboard) is allowed to resolve a 'sending' row as failed.
+      if (wit.status === 'sending') return;
       let uuid = wit.marzTxUuid, tx = null;
       if (uuid) tx = await marzGetSendTx(uuid);
       else if (webhookUuid) {
@@ -2645,16 +2805,43 @@ app.post('/redeem', async (req, res) => {
           result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
         }
       }
-      // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
-      await withLock('bal:' + userId, () => db.collection('users').doc(userId).update({
-        walletBalance: FieldValue.increment(reward), totalEarned: FieldValue.increment(reward)
-      }));
-      await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
-      const { date, time } = nowStr();
-      await db.collection('transactions').add({
-        userId, type: 'promocode', description: `Gift code redeemed: ${code}`,
-        amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
-      });
+      // Codex-caught real bug (2nd money-flow audit): claiming the code in
+      // usedBy above is NOT the same as the credit having actually landed --
+      // a crash right after the (unconditional, before this fix) wallet
+      // increment but before the promoRedemptions proof row was written left
+      // a resumed retry with no way to tell "credited, proof row missing"
+      // apart from "never credited at all", so it just credited again.
+      // updateIf() closes this the same way creditDeposit()/
+      // completeWithdrawalRefund() already do: the wallet increment and a
+      // durable per-user "this exact code is credited" token land in ONE
+      // atomic write, so ANY retry -- after a crash here, or after a later
+      // ledger-write failure below -- is a safe no-op for the wallet itself,
+      // regardless of which write actually failed last time.
+      const applied = await withLock('bal:' + userId, () => db.collection('users').doc(userId).updateIf(
+        { redeemedGiftCodeIds: { $ne: codeDoc.id } },
+        {
+          walletBalance: FieldValue.increment(reward), totalEarned: FieldValue.increment(reward),
+          redeemedGiftCodeIds: FieldValue.arrayUnion(codeDoc.id),
+        }
+      ));
+      if (!applied) console.warn(`Gift code ${code} for user ${userId} already credited (idempotent retry) -- skipped re-incrementing.`);
+      // Find-or-create, same shape as creditDeposit()'s own ledger step --
+      // a retry after a ledger-write failure must never duplicate these
+      // rows (a duplicate 'promocode' row would inflate totalEarned the
+      // next time "Recalculate totals" runs, since that sum includes this
+      // type).
+      const priorRedemption = await db.collection('promoRedemptions').where('userId', '==', userId).where('code', '==', code).limit(1).get();
+      if (priorRedemption.empty) {
+        await db.collection('promoRedemptions').add({ userId, code, reward, createdAt: FieldValue.serverTimestamp() });
+      }
+      const priorTx = await db.collection('transactions').where('userId', '==', userId).where('type', '==', 'promocode').where('giftCode', '==', code).limit(1).get();
+      if (priorTx.empty) {
+        const { date, time } = nowStr();
+        await db.collection('transactions').add({
+          userId, type: 'promocode', description: `Gift code redeemed: ${code}`, giftCode: code,
+          amount: reward, status: 'success', date, time, createdAt: FieldValue.serverTimestamp()
+        });
+      }
       result = { code: 200, body: { status: 'success', reward } };
     });
     res.status(result.code).json(result.body);
@@ -2671,8 +2858,17 @@ app.get('/transactions', async (req, res) => {
   const uid = await verifyAuth(req);
   if (!uid) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(300).get();
-    res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    // Codex-caught real bug (2nd money-flow audit): a member past 300
+    // lifetime transactions used to silently get only the newest 300 with
+    // no signal anything was missing, while Records' own footer still said
+    // "No more data" -- a false claim. Bumped the cap generously (a
+    // practically-unreachable ceiling for one person's real ledger, not a
+    // pagination rewrite) and added a `truncated` flag so the client can
+    // stop claiming completeness it can't back up.
+    const TX_LIST_LIMIT = 2000;
+    const snap = await db.collection('transactions').where('userId', '==', uid).orderBy('createdAt', 'desc').limit(TX_LIST_LIMIT).get();
+    const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ status: 'success', transactions, truncated: transactions.length >= TX_LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not load your records' }); }
 });
 app.get('/deposits', async (req, res) => {
@@ -3470,8 +3666,9 @@ app.post('/admin/user/reconcile-checkin', async (req, res) => {
       const uSnap = await db.collection('users').doc(userId).get();
       if (!uSnap.exists) { result = { code: 404, body: { status: 'error', message: 'User not found' } }; return; }
       const before = { checkinStreak: uSnap.data().checkinStreak || 0 };
+      // Same limit bump as /checkin's own copy of this query -- see its comment.
       const ledgerSnap = await db.collection('transactions')
-        .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
+        .where('userId', '==', userId).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
       const dayKeys = new Set();
       ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
       const real = computeCheckinStreak(dayKeys);
@@ -3794,8 +3991,19 @@ app.get('/admin/stats', async (req, res) => {
 app.post('/admin/transactions/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(300).get();
-    res.json({ status: 'success', transactions: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    // Codex-caught real bug (2nd money-flow audit): this always hardcoded
+    // 300 regardless of what the caller asked for -- the admin UI itself
+    // requests {limit:400} and silently got capped down to 300 every time.
+    // This list is PLATFORM-WIDE (every transaction, not one user's), so
+    // 300 total rows is a genuinely small, fast-to-exhaust window on a live
+    // investment platform, unlike the per-user /transactions endpoint.
+    // Honor the caller's own limit (clamped to a sane range) and surface a
+    // `truncated` flag so the panel can say so if the real limit is hit.
+    const requested = parseInt(req.body.limit, 10);
+    const TX_ADMIN_LIST_LIMIT = Number.isFinite(requested) ? Math.min(5000, Math.max(50, requested)) : 300;
+    const snap = await db.collection('transactions').orderBy('createdAt', 'desc').limit(TX_ADMIN_LIST_LIMIT).get();
+    const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ status: 'success', transactions, truncated: transactions.length >= TX_ADMIN_LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 app.get('/admin/referrals/list', async (req, res) => {
@@ -4187,8 +4395,9 @@ async function recountAllTotals() {
       let wroteStreak = false;
       if (streakLooksStale) {
         await withLock('checkin:' + doc.id, async () => {
+          // Same limit bump as /checkin's own copy of this query -- see its comment.
           const ledgerSnap = await db.collection('transactions')
-            .where('userId', '==', doc.id).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(500).get();
+            .where('userId', '==', doc.id).where('type', '==', 'checkin').orderBy('createdAt', 'desc').limit(5000).get();
           const dayKeys = new Set();
           ledgerSnap.forEach(d => dayKeys.add(eatDayKey(d.data().createdAt)));
           const fresh = computeCheckinStreak(dayKeys);
@@ -4239,7 +4448,21 @@ async function reconcilePendingDeposits() {
     // relies on an inbound webhook or a human admin noticing it in
     // /admin/deposits/list, same as before, but it's no longer invisible
     // in Records (Round 58's up-front ledger row still shows "Processing").
-    const snap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).orderBy('createdAt', 'asc').limit(50).get();
+    // Codex-caught real bug (2nd money-flow audit): this used to fetch the
+    // oldest 50 pending/initiating rows regardless of whether they had a
+    // usable marzTxUuid, then just `continue` past the ones that didn't --
+    // but that only skips PROCESSING them, it doesn't stop them from
+    // occupying a query slot. If 50+ old rows ever permanently lack a uuid
+    // (nothing else ever sets one for them -- see the comment above), this
+    // query would return the SAME stuck 50 every single tick forever,
+    // starving any genuinely newer, actually-reconcilable row that sits
+    // beyond that fixed window. `.where('marzTxUuid','>','')` uses a real,
+    // already-supported comparison operator (unlike `$ne`, MongoDB's range
+    // operators correctly exclude documents where the field is missing OR
+    // null) to only ever select rows this loop can actually do something
+    // with -- nothing lost, since a uuid-less row was never actionable here
+    // anyway, just no longer able to block newer ones.
+    const snap = await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).where('marzTxUuid', '>', '').orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {
       const dep = doc.data();
       if (!dep.marzTxUuid) continue;
@@ -4260,7 +4483,12 @@ async function reconcilePendingDeposits() {
 async function reconcilePendingWithdrawals() {
   let settled = 0;
   try {
-    const snap = await db.collection('withdrawals').where('status', '==', 'processing').orderBy('createdAt', 'asc').limit(50).get();
+    // Codex-caught real bug (2nd money-flow audit): same starvation risk as
+    // reconcilePendingDeposits() above -- see its own comment for the full
+    // reasoning. A `processing` row with no marzTxUuid was never
+    // actionable by this loop anyway (the `continue` below), so excluding
+    // it from the query only removes wasted/blocking slots, not capability.
+    const snap = await db.collection('withdrawals').where('status', '==', 'processing').where('marzTxUuid', '>', '').orderBy('createdAt', 'asc').limit(50).get();
     for (const doc of snap.docs) {
       const wit = doc.data();
       if (!wit.marzTxUuid) continue;
@@ -4394,10 +4622,11 @@ function sweepEphemeralState() {
     dropStale(_depCreateDebounce, 5 * 60 * 1000);
     dropStale(_adminCreditDebounce, 5 * 60 * 1000);
     dropStale(_adminDebitDebounce, 5 * 60 * 1000);
+    dropStale(_depAttemptsSucceededAt, 60 * 1000);
     for (const [uid, times] of _depAttempts) {
       const live = times.filter(t => now - t < 60000);
       if (live.length) _depAttempts.set(uid, live);
-      else { _depAttempts.delete(uid); _depAttemptsSucceeded.delete(uid); }
+      else _depAttempts.delete(uid);
     }
     for (const [k, f] of _loginFails) {
       const locked = f.lockedUntil && f.lockedUntil > now;
