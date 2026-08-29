@@ -4290,6 +4290,46 @@ is available in this sandbox to stand one up. This round is server.js/db.js-only
 user-src/admin-src changes, so no cache bump needed. **`server.js` and `db.js` changed —
 Render should auto-deploy this push.**
 
+## Round 78 (2026-08-29) — 3 more real "records only reflect after reloading" gaps found and fixed (check-in, gift-code redemption, Mission Center claims)
+
+Owner: "some records are created or reflect after reloading, why????????????" — same
+symptom class as Round 72's own "a pending withdrawal order is not created" complaint,
+just triggered by different actions this time. Investigated against the actual code
+rather than guessing at another cache-timing tweak.
+
+**Root cause, same mechanism as Round 72, three more trigger points.** Records
+(`openRecordsSheet()`) is cache-first: it paints instantly from `STATE.transactions`,
+then quietly re-fetches in the background — but per Round 55's own fix, it deliberately
+does NOT repaint an already-open Records sheet once that background refetch lands (that
+fix stopped Records from visibly "reloading itself" mid-view). Round 72 closed the one
+gap this created for deposits/withdrawals by adding a `refreshTransactionsCache()` call
+right after each of those actions succeeds — but three OTHER actions that also write a
+real `transactions` ledger row server-side the moment they succeed never got the same
+treatment: `submitCheckin()` (`/checkin`, writes a `checkin` row), `submitChestCode()`
+(`/redeem`, writes a `promocode` row), and `claimMissionSalary()`/`claimMissionDeposit()`
+(`/mission/salary/claim`/`/mission/deposit/claim`, write `mission_salary`/
+`mission_deposit_reward` rows). Each of these refreshed `STATE.account`/`STATE.mission`
+after success but never told `STATE.transactions` to refresh — so the exact same
+sequence Round 72 diagnosed applies: the record genuinely exists in the database
+instantly, but Records won't show it until something else happens to refresh the cache,
+which could take a reload or two depending on timing.
+
+**Fix.** Added `await refreshTransactionsCache();` (the exact shared helper Round 72
+already built) to all 4 of these functions, right after their own success path updates
+`STATE.account`/`STATE.mission`, mirroring the deposit/withdraw call sites exactly —
+`STATE.transactions` is now correct by the very next Records open after a check-in,
+gift-code redemption, or Mission Center claim, not the second or third.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. A standalone Node harness (not committed — a throwaway verification script) loads
+the REAL `user-src/original_module.js` into a sandboxed global context (stubbing only
+DOM/network primitives, not the app's own logic) and calls all 4 real functions directly:
+confirmed each one calls `POST` its own real endpoint (`/checkin`, `/redeem`,
+`/mission/salary/claim`, `/mission/deposit/claim`) AND, after success, calls
+`api('/transactions')` — i.e. genuinely invokes `refreshTransactionsCache()` — 8/8
+checks passed. Cache bumped `v56`→`v57`. `user-src/`-only change — no Render redeploy
+needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

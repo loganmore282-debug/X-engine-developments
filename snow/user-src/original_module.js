@@ -1282,6 +1282,9 @@ window.claimMissionSalary = async function(){
   if (s2.status === 'success') { STATE.mission = s2; if (_openSheetTitle === 'Mission Center') renderMissionCenter(); }
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
+  // Same stale-Records fix as submitCheckin()/submitChestCode() -- the
+  // claim already wrote a real ledger row server-side by this point.
+  await refreshTransactionsCache();
 };
 window.claimMissionDeposit = async function(target){
   const btn = $('missionDepositBtn_' + target);
@@ -1298,6 +1301,8 @@ window.claimMissionDeposit = async function(target){
   if (s2.status === 'success') { STATE.mission = s2; if (_openSheetTitle === 'Mission Center') renderMissionCenter(); }
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
+  // Same stale-Records fix as claimMissionSalary() above.
+  await refreshTransactionsCache();
 };
 // Real bug fixed: these had no guard against firing more than once per tap
 // -- unlike every other button in this app (witSubmitBtn, bankSaveBtn,
@@ -1537,6 +1542,11 @@ window.submitCheckin = async function(){
   toast(`${fmtUGX(r.bonus)} added — day ${r.streak} streak`);
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
+  // Same stale-Records fix Round 72 applied to deposit/withdraw --
+  // /checkin already wrote a real ledger row server-side by this point;
+  // without this, Records' Income tab could sit stale for a reload or two
+  // (owner: "some records are created or reflect after reloading").
+  await refreshTransactionsCache();
   closeSheet();
   if (STATE.page === 'home') renderHome();
 };
@@ -1569,6 +1579,9 @@ window.submitChestCode = async function(){
   toast(`${fmtUGX(r.reward)} added to your wallet`);
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
+  // Same stale-Records fix as submitCheckin() above -- /redeem already
+  // wrote a real ledger row server-side by this point.
+  await refreshTransactionsCache();
   if (STATE.page === 'home') renderHome();
 };
 
