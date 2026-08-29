@@ -4021,6 +4021,83 @@ errors. Re-ran Rounds 58/59/60/62/63/65/71/72/73's own suites — all still pass
 regressions. Cache bumped `v55`→`v56` (user), `v12`→`v13` (admin). **`server.js`
 changed — Render should auto-deploy this push.**
 
+## Round 75 (2026-08-29) — maturity-check cron tightened to 500ms; full audit of crediting/counting accuracy and double-buy/double-credit protection (all already sound, one real tightening applied)
+
+Owner: "make sure there is perfect timing on maturity check, so cron is 1/2 second, and
+timer is well timed, accurate, encrypted and no double crediting or even double buying,
+and accurate counting." Audited every piece of this against the actual code rather than
+assuming; one concrete change made, everything else confirmed already correct.
+
+**Cron tightened, 1s → 500ms.** `reconcileCashback()` (the background sweep that settles
+daily cashback and flips an investment to `matured` once `payoutsMade` reaches
+`payoutsTotal`) ran on a plain `setInterval(reconcileCashback, 1000)`. Confirmed safe to
+halve before changing it: the function already guards itself with a `_sweepingCashback`
+boolean — a tick that's still mid-sweep when the next one fires just no-ops instead of
+overlapping, so there was no risk of two sweeps racing each other once the interval
+tightened. Now `setInterval(reconcileCashback, 500)` (+ matching initial `setTimeout`).
+Flagged to the owner, not silently absorbed: this doubles how often the reconciler queries
+MongoDB Atlas — still one lightweight `status=='active'` query, not a full-ledger scan,
+and not expected to be a real problem at Snow's current scale on the M0 free tier, but
+worth knowing.
+
+**Timer accuracy — already correct, no change needed.** My Products' live "Next cashback
+in HH:MM:SS" countdown (`startPlanCountdowns()`) recomputes `remaining = nextBoundary -
+Date.now()` fresh on every tick rather than decrementing a stale local counter — this is
+the self-correcting pattern that's immune to `setInterval`'s own well-known drift
+(background-tab throttling, GC pauses, etc.); every tick re-anchors to real wall-clock
+time regardless of whether the previous tick fired exactly on schedule. Already built
+this way since it was first added — confirmed correct, not a fix.
+
+**Accurate counting — verified mathematically, not just by inspection.** Ran a standalone
+script reproducing `settleInvestmentIfDue()`'s exact cumulative-target formula
+(`target = round(expectedReturn * payoutsMade / payoutsTotal)`, `amount = target -
+paidOut`) against all 10 real product tiers across their full 150-day cycles: every
+tier's cumulative paid-out total telescopes to EXACTLY its `expectedReturn` (zero
+rounding drift, matching Round 12's own original claim, re-verified here rather than
+just trusted) and every tier's `expectedReturn` is confirmed exactly `price × 30`. No
+day's payout is ever negative (the running total is monotonic), so a member's balance
+can never even transiently move backward from this engine.
+
+**No double-crediting — confirmed via 3 independent layers, no gap found.**
+`settleInvestmentIfDue()` guards the same investment doc against being settled twice at
+once with an in-process `_creditingPayouts` Set (checked before ever entering the
+critical section) PLUS a `withLock('payout:'+investmentId)` mutex inside it PLUS a fresh
+re-read of the doc immediately after acquiring that lock (so a stale read from before the
+lock was acquired can never be acted on) PLUS the RECORD-BEFORE-CREDIT ordering
+(`payoutsMade` is advanced and the doc flipped to `matured` BEFORE the wallet credit
+itself, with an exact compensating rollback if the credit fails) that's already documented
+as this codebase's standing money-safety pattern. Once `status` is `matured`, every future
+call (from either the reconciler or an on-demand settle via `/account`/`/investments`)
+sees `status !== 'active'` and returns immediately — maturity can only ever fire once per
+investment.
+
+**No double-buying — confirmed, both layers already in place.** Server-side,
+`/invest/create` debits the wallet based on a FRESH balance read taken inside
+`withLock('bal:'+userId)`, so two genuinely concurrent purchase requests for the same
+user are serialized and each one is charged correctly against the balance as it actually
+stood at that moment — there's no scenario where one purchase's debit is silently lost or
+double-applied. Client-side, `confirmInvest()` already disables its own button as the very
+first synchronous statement before the network call goes out (same established pattern
+as every other money-moving button in this app, e.g. Mission Center's claim buttons), so
+an impatient double-tap can't even generate a second request in the first place. No gap
+found on either side.
+
+**"Encrypted" — confirmed what's already true, nothing new added without a concrete
+spec.** Transaction PINs are stored only as `scrypt`-hashed values
+(`transactionPinHash`), never in plaintext, verified via constant-effort `scryptVerify()`
+— confirmed by re-reading the actual hashing call sites, not assumed. Traffic to Render
+is HTTPS by default (platform-level, not application code). No new literal encryption
+work was added this round — there wasn't a concrete gap to point at (no plaintext secret
+was found sitting anywhere it shouldn't be), and inventing an encryption feature with no
+specific target would be scope creep rather than a real fix.
+
+**Verified**: `node --check server.js` clean, a boot smoke test (dummy Firebase creds +
+unreachable Mongo) still starts cleanly with no early crash, `git diff --check` clean.
+The cumulative-payout telescoping check above was run standalone against all 10 real
+product tiers (150-day cycles), not just eyeballed. This round is server.js-only (the
+cron interval and the audit itself touch no frontend code) — **`server.js` changed,
+Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

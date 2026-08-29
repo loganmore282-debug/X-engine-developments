@@ -4116,8 +4116,18 @@ connectMongo(MONGODB_URI)
     app.listen(PORT, () => console.log(`Snow backend listening on :${PORT}`));
     setInterval(runReconciler, 30 * 1000);
     setTimeout(runReconciler, 15 * 1000);
-    setInterval(reconcileCashback, 1000);
-    setTimeout(reconcileCashback, 1000);
+    // Owner: "make sure there is perfect timing on maturity check, so cron
+    // is 1/2 second." Safe to tighten from 1s to 500ms because
+    // reconcileCashback() already guards itself against overlapping runs
+    // (_sweepingCashback) -- a tick that's still mid-sweep when the next one
+    // fires just no-ops instead of running concurrently, so halving the
+    // interval can never cause two sweeps to race each other. Note for the
+    // owner: this doubles how often the reconciler queries MongoDB Atlas
+    // (still a single lightweight query -- .where('status','==','active'),
+    // not a full-ledger scan) -- worth knowing on the M0 free tier, not
+    // expected to be a real problem at Snow's current scale.
+    setInterval(reconcileCashback, 500);
+    setTimeout(reconcileCashback, 500);
     setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
   })
