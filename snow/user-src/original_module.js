@@ -769,6 +769,13 @@ function maybeShowAnnouncement(){
   if (STATE.announceImage) { img.src = STATE.announceImage; img.style.display = ''; }
   else { img.removeAttribute('src'); img.style.display = 'none'; }
   window._announceUrl = url;
+  // Owner: "the dialog message should have Telegram button and ok... so the
+  // Telegram will be first followed by ok button" -- two separate buttons,
+  // same solid-wine style, instead of OK itself opening the link. Hidden
+  // entirely when no Telegram link is configured, same "blank field hides
+  // its button" convention Help Centre's own Telegram/Customer-Service
+  // buttons already use.
+  $('announceTelegramBtn').style.display = url ? '' : 'none';
   $('announceBg').classList.add('show');
   // Without this, scrolling the dialog's own message text chains straight
   // through into the Home page sitting behind it (owner: "when one scrolls
@@ -780,9 +787,8 @@ window.closeAnnounce = function(){
   $('announceBg').classList.remove('show');
   unlockBodyScroll();
 };
-window.confirmAnnounce = function(){
+window.openAnnounceTelegram = function(){
   if (window._announceUrl) window.open(window._announceUrl, '_blank', 'noopener');
-  closeAnnounce();
 };
 
 // ── HOME ──

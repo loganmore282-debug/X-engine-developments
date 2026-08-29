@@ -4858,6 +4858,40 @@ format, confirming `depWitStatusLabel()`'s updated parser still works correctly,
 no dash anywhere in the rendered Records body either. Cache bumped `v59`→`v60` (user),
 `v16`→`v17` (admin). **`server.js` changed, Render should auto-deploy this push.**
 
+## Round 84 (2026-08-29) — announcement dialog split into a Telegram button and an OK button, Telegram first
+
+Owner: "the dialog message should have Telegram button and ok, same color as it is
+now, so the Telegram will be first followed by ok button." Since Round 56, the
+announcement dialog's single OK button did double duty (opened the configured
+Telegram link AND closed the dialog in one tap); this splits that into two separate,
+explicit actions.
+
+**`index.html`**: a new `#announceTelegramBtn` (`.primary-button`, same solid-wine
+style as the existing OK button — the owner explicitly said "same color as it is
+now," so no new styling was introduced) added directly above the OK button, hidden by
+default (`display:none`). Both buttons share the exact same `.primary-button` class,
+so they're visually identical apart from label.
+
+**`original_module.js`**: `maybeShowAnnouncement()` now shows/hides
+`#announceTelegramBtn` based on whether `telegramGroup`/`telegramChannel` is actually
+configured (same "blank field hides its button" convention Help Centre's own
+Telegram/Customer Service buttons already use — an announcement with no Telegram link
+set just shows the OK button alone, unchanged from before this round).
+`confirmAnnounce()` (previously: open the link, then close) was replaced with
+`openAnnounceTelegram()` (opens the link only, dialog stays open) — the OK button's
+own `onclick` now calls `closeAnnounce()` directly instead. Tapping Telegram no longer
+closes the dialog on its own; the member taps OK afterward to dismiss it, matching the
+owner's explicit ordering ("Telegram will be first followed by ok button").
+
+**Verified**: `node --check` clean, `node build-core.js` round-trip clean, `git diff
+--check` clean. Playwright, against the real built app, 2 scenarios: with a Telegram
+link configured, both buttons render inside the dialog with Telegram appearing before
+OK in DOM order, both computed to the identical background color
+(`rgb(148, 24, 39)`), tapping Telegram opens exactly the configured URL while the
+dialog stays open, and a subsequent tap on OK closes it without opening anything else;
+with no Telegram link configured, only the OK button is visible. Cache bumped
+`v60`→`v61`. `user-src/`-only change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

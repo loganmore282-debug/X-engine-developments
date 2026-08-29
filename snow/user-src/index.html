@@ -380,7 +380,8 @@ a{color:inherit;}
     <button class="announce-close" onclick="closeAnnounce()" aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     <h3 id="announceTitle" style="display:none;"></h3>
     <div class="announce-scroll"><img id="announceImg" alt="" style="display:none;" onerror="this.style.display='none'"><p id="announceBody"></p></div>
-    <button class="primary-button" style="width:100%;padding:14px 0;font-size:15px;margin-top:16px;" onclick="confirmAnnounce()">OK</button>
+    <button class="primary-button" id="announceTelegramBtn" style="width:100%;padding:14px 0;font-size:15px;margin-top:16px;display:none;" onclick="openAnnounceTelegram()">Telegram</button>
+    <button class="primary-button" style="width:100%;padding:14px 0;font-size:15px;margin-top:10px;" onclick="closeAnnounce()">OK</button>
   </div>
 </div>
 
