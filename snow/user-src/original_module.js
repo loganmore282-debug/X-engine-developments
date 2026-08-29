@@ -369,11 +369,17 @@ window.doLogout = async function(){
 // and every caller awaits this same promise (capped by withTimeout, see
 // below) before the spinner ever comes down, so nothing pops in afterward.
 async function boot(){
-  const [s, p, f, b] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner') ]);
+  const [s, p, f, b, ai] = await Promise.all([ api('/public/settings'), api('/public/products'), api('/public/activity-feed'), api('/public/banner'), api('/public/announcement-image') ]);
   STATE.settings = s.status === 'success' ? s.settings : {};
   STATE.products = p.status === 'success' ? p.products : [];
   STATE.activityFeed = (f.status === 'success' && Array.isArray(f.feed)) ? f.feed : null;
   STATE.homeBanner = (b.status === 'success' && b.image) ? b.image : null;
+  // Same "prefetch alongside settings, zero added visible latency" reasoning
+  // as STATE.homeBanner just above -- fetched unconditionally every boot
+  // (cheap when unset, matches the existing banner's own tradeoff) so the
+  // announcement dialog's image is already known the instant
+  // maybeShowAnnouncement() runs, not fetched lazily after the dialog opens.
+  STATE.announceImage = (ai.status === 'success' && ai.image) ? ai.image : null;
   applyAuthTagline();
 }
 // Admin's "App tagline (shown under the logo)" Settings field has existed
@@ -751,6 +757,16 @@ function maybeShowAnnouncement(){
   $('announceTitle').style.display = s.annTitle ? '' : 'none';
   $('announceTitle').textContent = s.annTitle || '';
   $('announceBody').textContent = s.annBody;
+  // Owner: "introduce announcement dialog image, it will be up of dialog
+  // message and scrollable" -- the <img> sits as the first child inside
+  // .announce-scroll, directly above #announceBody, so it scrolls together
+  // with the message inside the same fixed-height region (Round 61) instead
+  // of being a separate non-scrolling element. STATE.announceImage was
+  // already prefetched in boot() alongside the Home banner, so this never
+  // adds a wait to the dialog's own already-fixed 0-wait appearance.
+  const img = $('announceImg');
+  if (STATE.announceImage) { img.src = STATE.announceImage; img.style.display = ''; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; }
   window._announceUrl = url;
   $('announceBg').classList.add('show');
   // Without this, scrolling the dialog's own message text chains straight

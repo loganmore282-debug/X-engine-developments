@@ -72,6 +72,7 @@ const routes = {
   'POST /admin/promocodes/generate': { status: 'success', code: 'ab3Kx', reward: 5000 },
   'GET /admin/banner': { status: 'success', image: '' },
   'GET /admin/help-banner': { status: 'success', image: '' },
+  'GET /admin/announcement-image': { status: 'success', image: '' },
   'GET /admin/about-content': { status: 'success', blocks: [] },
   'GET /admin/push/list': { status: 'success', count: 0 },
   'POST /admin/promocodes/deactivate': { status: 'success' },

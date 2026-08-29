@@ -93,7 +93,7 @@ const hugeJsonParser   = express.json({ limit: '13mb' });
 // hitting the small parser and failing with "request too large." Same bug
 // class space8's CLAUDE.md documents hitting its own home-banner-slides
 // route once, before that route was added here too.
-const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set']);
+const IMAGE_BODY_ROUTES = new Set(['/admin/products/save', '/admin/banner/set', '/admin/help-banner/set', '/admin/announcement-image/set']);
 const HUGE_JSON_ROUTES = new Set(['/admin/about-content/set']);
 app.use((req, res, next) => (HUGE_JSON_ROUTES.has(req.path) ? hugeJsonParser : IMAGE_BODY_ROUTES.has(req.path) ? bigJsonParser : smallJsonParser)(req, res, next));
 app.use(express.urlencoded({ extended: true, limit: '64kb' }));
@@ -202,9 +202,14 @@ const DEFAULT_SETTINGS = {
   // link and joins telegram group... X button top right." A real feature
   // that was flagged as a deferred gap when the admin panel was ported from
   // Space8 (Round 14) -- Space8's version needed its own admin-uploaded
-  // image + blur/tint sliders; this one deliberately doesn't (owner wants
-  // the SAME solid dark pill look the Home activity ticker already uses,
-  // not a photo), so no image-upload plumbing is needed at all here.
+  // image + blur/tint sliders; this one deliberately didn't at first (owner
+  // wanted the same solid dark pill look the Home activity ticker uses, no
+  // photo) -- an optional image was added later (owner: "introduce
+  // announcement dialog image, up of dialog message and scrollable"), kept
+  // as its own separate 'banners'/'announcement' doc (see getAnnouncementImage())
+  // rather than a settings field, same reasoning as the Home/Help Centre
+  // banners: a base64 image doesn't belong bloating the /public/settings
+  // payload every client fetches on every boot.
   annEnabled: false, annTitle: '', annBody: '',
 };
 // Daily Cashback × 150 = Total Return = Investment × 30, per tier — every
@@ -277,6 +282,21 @@ async function getHelpBanner() {
   } catch (_) { _helpBannerCache = _helpBannerCache || null; }
   _helpBannerCacheTs = Date.now();
   return _helpBannerCache;
+}
+// Optional image for the Home announcement dialog (owner: "introduce
+// announcement dialog image, it will be up of dialog message and
+// scrollable") -- same independent-slot/independent-cache pattern as the
+// Home and Help Centre banners above, its own 'banners'/'announcement' doc
+// so none of the three can ever step on each other.
+let _announceImageCache = null, _announceImageCacheTs = 0;
+async function getAnnouncementImage() {
+  if (Date.now() - _announceImageCacheTs < 60 * 1000 && _announceImageCache !== null) return _announceImageCache;
+  try {
+    const snap = await db.collection('banners').doc('announcement').get();
+    _announceImageCache = (snap.exists && snap.data().image) || null;
+  } catch (_) { _announceImageCache = _announceImageCache || null; }
+  _announceImageCacheTs = Date.now();
+  return _announceImageCache;
 }
 // Admin-authored "About" article: an ordered list of {type:'text',text} /
 // {type:'image',image} blocks -- the admin decides the order and whether/
@@ -1229,6 +1249,16 @@ app.get('/public/banner', async (_req, res) => {
 });
 app.get('/public/help-banner', async (_req, res) => {
   try { res.json({ status: 'success', image: await getHelpBanner() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Prefetched in boot()'s own Promise.all alongside /public/banner, so it's
+// ready with zero added visible latency by the time the announcement dialog
+// itself checks STATE.settings and decides to show (same reasoning as the
+// Home banner) -- not lazy-loaded like the Help Centre banner, since that
+// would reintroduce the "waits before appearing" complaint this dialog's
+// own timing was already fixed for in an earlier round.
+app.get('/public/announcement-image', async (_req, res) => {
+  try { res.json({ status: 'success', image: await getAnnouncementImage() }); }
   catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Lazy-loaded only when a member actually opens the About page -- not part
@@ -2809,6 +2839,31 @@ app.post('/admin/help-banner/clear', async (req, res) => {
     _helpBannerCacheTs = 0;
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: 'Could not clear the banner' }); }
+});
+app.get('/admin/announcement-image', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try { res.json({ status: 'success', image: await getAnnouncementImage() }); }
+  catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/announcement-image/set', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const image = String(req.body.image || '');
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) || image.length > 2_800_000)
+    return res.status(400).json({ status: 'error', message: 'Invalid image' });
+  try {
+    await db.collection('banners').doc('announcement').set({ image });
+    _announceImageCacheTs = 0;
+    logAdminAction(req, 'announcement_image_set', {});
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not save the image' }); }
+});
+app.post('/admin/announcement-image/clear', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    await db.collection('banners').doc('announcement').delete();
+    _announceImageCacheTs = 0;
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: 'Could not remove the image' }); }
 });
 app.get('/admin/about-content', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });

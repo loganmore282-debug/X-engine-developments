@@ -3955,6 +3955,72 @@ expected obsolescence, not a regression. Re-ran Rounds 58/59/60/62/63/65/71/72's
 suites plus Round 39/41's Mission Center-specific suites — all still pass. Cache bumped
 `v54`→`v55`. `user-src/`-only change — no Render redeploy needed.
 
+## Round 74 (2026-08-29) — announcement dialog gets an optional admin-uploaded image, shown above the message and scrolling together with it
+
+Owner: "now let us introduce announcement dialog image, it will be up of dialog message
+and scrollable." When this dialog was originally built (Round 56), the owner specifically
+said it should NOT have an image (wanted the same solid dark ticker-pill look, no photo)
+— this round is a deliberate reversal of that earlier decision, not a bug fix.
+
+**Backend** (`server.js`): new independent image slot, `getAnnouncementImage()` +
+`banners/announcement` doc, mirroring the existing Home/Help Centre banner pattern exactly
+(own 60s cache, own cache-invalidation timestamp — none of the three slots can step on
+each other). `GET /public/announcement-image` (public, prefetched — see below),
+`GET /admin/announcement-image` (admin read for the Settings preview),
+`POST /admin/announcement-image/set` (owner-only, same data-URI + 2.8MB validation every
+other image-upload route already uses), `POST /admin/announcement-image/clear`. Added to
+`IMAGE_BODY_ROUTES` so the upload gets the large-body JSON parser instead of silently
+hitting the 64KB small one (the exact bug class Round 14 already documents hitting once
+for the Home banner). A base64 image was deliberately kept OUT of `/public/settings`
+(where `annEnabled`/`annTitle`/`annBody` already live) rather than added as a settings
+field — that endpoint is fetched on every single boot, and bloating it with up to 2.8MB
+of image data would be real, avoidable waste for every member regardless of whether an
+announcement is even running.
+
+**Frontend prefetch, not lazy-load — deliberately different from the Help Centre banner.**
+Help Centre's own banner (Round 37) is fetched lazily, only when that page is actually
+opened, because nothing about Help Centre's timing is sensitive. The announcement dialog
+is different: its own 0-wait appearance (Rounds 62/63) was hard-won and explicitly
+mattered to the owner, so lazy-loading the image here would reintroduce exactly the
+"waits before showing" complaint those rounds fixed. Instead `STATE.announceImage` is
+prefetched inside `boot()`'s existing `Promise.all` alongside the Home banner (same
+"fetched every boot, cheap when unset" tradeoff that fetch already accepts) — by the time
+`maybeShowAnnouncement()` runs, the image (or its absence) is already known with zero
+added latency.
+
+**Markup, "up of dialog message and scrollable."** `<img id="announceImg">` was added as
+the FIRST child inside the existing `.announce-scroll` region (Round 61's fixed-height,
+internally-scrolling wrapper around `#announceBody`), directly above the message
+paragraph — so the image sits above the text and both scroll together as one unit within
+the same fixed-height dialog, exactly as asked, rather than being a separate
+always-visible element that would grow the dialog past its own capped height. Hidden by
+default (`display:none`) and only revealed when `STATE.announceImage` is actually set,
+with an `onerror` fallback that re-hides it if the image URL ever fails to load — no
+broken-image icon, no layout shift either way.
+
+**Admin UI** (`admin-src/index.html`): the existing "Home announcement dialog" Settings
+card gained an upload/remove block identical in shape to the Home/Help Centre banner
+cards (thumbnail preview, Upload image / Remove buttons, wired to the 3 new routes) —
+copy updated to describe the image's actual behavior (shows above the message, scrolls
+with it if the dialog runs long) instead of the old "no image to upload" line. Added
+`announcement_image_set` to `AUDIT_LABELS` so the activity log shows a readable label
+instead of the raw action string, matching every other image-upload route's own entry.
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`, `build-core.js`
+and `build-admin.js` both round-trip clean, `git diff --check` clean, a boot smoke test
+(dummy Firebase creds + unreachable Mongo) still starts cleanly with no early crash.
+Playwright, against the real built user app, two scenarios: with a configured image, the
+`<img>` renders visible with its `src` set, sits as the FIRST child of `.announce-scroll`
+(before the message paragraph), and the combined image+long-message content is genuinely
+scrollable within the region (`scrollHeight` > `clientHeight`) while the dialog itself
+still respects Round 61's own `≤85%` viewport-height cap; with no image configured, the
+`<img>` stays hidden and the dialog still renders and scrolls normally. `test-admin-
+obfuscated-build.js` (the existing jsdom harness against the real obfuscated admin
+build) extended with a fixture for the new `GET /admin/announcement-image` route — 0
+errors. Re-ran Rounds 58/59/60/62/63/65/71/72/73's own suites — all still pass, zero
+regressions. Cache bumped `v55`→`v56` (user), `v12`→`v13` (admin). **`server.js`
+changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
