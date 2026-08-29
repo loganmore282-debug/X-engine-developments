@@ -1496,6 +1496,26 @@ window.openHelpSheet = async function(){
     wrap.innerHTML = `<img src="${esc(r.image)}" style="width:100%;display:block;border-radius:0;" alt="">`;
   }
 };
+// Splits already-HTML-escaped text into one <span class="reveal-word"> per
+// word, each carrying its own staggered animation-delay, so a text block's
+// CSS reveal (.scroll-reveal.in-view .reveal-word, see index.html) plays
+// word-by-word instead of the whole paragraph fading in as one flat unit
+// (owner: "live animation of words appearing as one scrolls down"). Splits
+// on runs of whitespace and passes whitespace tokens through unwrapped --
+// this preserves the surrounding <p>'s white-space:pre-line line breaks
+// exactly as before, and keeps the (already-escaped) HTML entities intact
+// since none of them contain whitespace internally. The per-word delay is
+// capped at 40 words so a long paragraph's tail doesn't end up waiting
+// several seconds to appear.
+function revealWordsHtml(escapedText){
+  let wordIndex = 0;
+  return String(escapedText).split(/(\s+)/).map(tok => {
+    if (!tok || /^\s+$/.test(tok)) return tok;
+    const delay = Math.min(wordIndex, 40) * 30;
+    wordIndex++;
+    return `<span class="reveal-word" style="animation-delay:${delay}ms">${tok}</span>`;
+  }).join('');
+}
 // About page: an admin-authored ordered list of text/image blocks (see
 // /public/about-content), rendered as an article and revealed block-by-
 // block as the member scrolls (owner: "whenever one scrolls down, images
@@ -1510,8 +1530,8 @@ window.openAboutSheet = async function(){
   const blocks = (r.status === 'success' && Array.isArray(r.blocks) && r.blocks.length) ? r.blocks
     : [{ type: 'text', text: s.aboutText || 'Snow lets you invest in a range of plans with daily cashback and a 3-level referral program.' }];
   wrap.innerHTML = blocks.map(b => b.type === 'image'
-    ? `<div class="scroll-reveal about-block"><img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;" alt=""></div>`
-    : `<div class="scroll-reveal about-block"><p style="white-space:pre-line;line-height:1.7;color:var(--snow-ink);">${esc(b.text)}</p></div>`
+    ? `<div class="scroll-reveal about-image about-block"><img src="${esc(b.image)}" style="width:100%;display:block;border-radius:0;" alt=""></div>`
+    : `<div class="scroll-reveal about-block"><p style="white-space:pre-line;line-height:1.7;color:var(--snow-ink);">${revealWordsHtml(esc(b.text))}</p></div>`
   ).join('');
   if (_aboutScrollObserver) _aboutScrollObserver.disconnect();
   _aboutScrollObserver = new IntersectionObserver((entries) => {

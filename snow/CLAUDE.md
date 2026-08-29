@@ -4892,6 +4892,51 @@ dialog stays open, and a subsequent tap on OK closes it without opening anything
 with no Telegram link configured, only the OK button is visible. Cache bumped
 `v60`→`v61`. `user-src/`-only change — no Render redeploy needed.
 
+## Round 85 (2026-08-29) — announcement image height capped; About page's scroll reveal upgraded to word-by-word text + a livelier image scale-in
+
+Owner: "image height is not minimized of announcement dialog, it is taking some more
+space, also l want when one scrolls on about, it shows live animation of words
+appearing as one scrolls down, also images as well." Two separate fixes.
+
+**Announcement image, height capped.** `.announce-modal img` was `width:100%;
+height:auto` — on the dialog's fixed 340px width, a tall/portrait admin-uploaded image
+scaled its height up proportionally with no ceiling, pushing the dialog's own content
+(and Round 61's `max-height:70vh` cap) further than intended. Fixed with
+`max-height:130px;object-fit:cover` — the image now always renders at a fixed,
+minimized height regardless of its original aspect ratio, cropping (not squashing)
+whatever doesn't fit.
+
+**About page: word-by-word text reveal, livelier image reveal.** Round 37's
+`.scroll-reveal`/`.in-view` (a per-block fade+translateY, triggered by scroll via
+`IntersectionObserver`) was already real and working — but it revealed each text
+paragraph as one flat unit, not "words appearing" the way the owner now asked for
+explicitly. Added a new `revealWordsHtml()` helper (`user-src/original_module.js`):
+splits an already-`esc()`-escaped text block on runs of whitespace, wraps each real
+word in `<span class="reveal-word" style="animation-delay:...">`, and passes
+whitespace tokens through unwrapped (preserves the surrounding `<p>`'s
+`white-space:pre-line` line breaks exactly as before). New CSS
+(`.reveal-word{opacity:0;transform:translateY(10px);}` +
+`.scroll-reveal.in-view .reveal-word{animation:wordIn .5s ... both;}`) means each word
+stays invisible until its own block's `.in-view` class lands, then animates in with a
+per-word stagger (30ms per word, capped past 40 words so a long paragraph's tail
+doesn't take several seconds to finish) — genuinely "words appearing" as the block
+scrolls into view, not a single fade. Image blocks got their own `.about-image`
+variant (`scale(.94)→scale(1)` added on top of the existing fade+translateY) so they
+read as a distinctly livelier reveal too, per the owner's explicit "images as well."
+
+**Verified**: `node --check` clean, `node build-core.js` round-trip clean, `git diff
+--check` clean. Playwright, against the real built app: the announcement dialog's
+image renders at exactly 130px tall (computed `max-height` confirmed) regardless of
+its natural aspect ratio; on About, a long padding block's paragraph is confirmed
+split into 100+ individual `.reveal-word` spans with distinct, increasing
+`animation-delay` values (0s, .03s, .06s, .09s, .12s — a real per-word stagger, not
+one flat block); a deliberately off-screen image block and closing text block are
+confirmed NOT `.in-view` before scrolling and confirmed BOTH `.in-view` (with the
+image carrying its own `.about-image` class) after scrolling the sheet to the bottom
+via its real scrollable container (`#sheetBg`) — genuinely re-derived via the actual
+`IntersectionObserver`, not a fake flag. Cache bumped `v61`→`v62`. `user-src/`-only
+change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

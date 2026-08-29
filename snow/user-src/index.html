@@ -215,7 +215,7 @@ a{color:inherit;}
 .announce-modal{position:relative;text-align:left;max-height:70vh;display:flex;flex-direction:column;}
 .announce-modal h3{font-size:16.5px;font-weight:800;margin:0 0 8px;padding-right:24px;flex-shrink:0;}
 .announce-scroll{overflow-y:auto;flex:1;min-height:0;}
-.announce-modal img{display:block;width:100%;height:auto;border-radius:14px;margin-bottom:12px;}
+.announce-modal img{display:block;width:100%;max-height:130px;object-fit:cover;border-radius:14px;margin-bottom:12px;}
 .announce-modal p{white-space:pre-line;line-height:1.55;font-size:12.5px;color:rgba(255,255,255,.85);margin:0;}
 .announce-modal .primary-button{flex-shrink:0;}
 /* Deposit live-status modal (Recharge) -- reuses .chest-modal-bg/.chest-modal
@@ -256,11 +256,20 @@ a{color:inherit;}
 /* About page article blocks -- reveals each text/image block as it scrolls
    into view (owner: "whenever one scrolls down, images and words I placed
    show animation"), distinct from .reveal-in above which fires once on
-   first paint regardless of scroll position. */
+   first paint regardless of scroll position. Image blocks get a slightly
+   more pronounced scale-in (owner: "images as well"); text blocks reveal
+   word by word via .reveal-word spans (owner: "live animation of words
+   appearing as one scrolls down") instead of the whole paragraph fading in
+   as one flat block. */
 .scroll-reveal{opacity:0;transform:translateY(22px);transition:opacity .55s cubic-bezier(.22,1,.36,1),transform .55s cubic-bezier(.22,1,.36,1);}
 .scroll-reveal.in-view{opacity:1;transform:translateY(0);}
+.scroll-reveal.about-image{transform:translateY(22px) scale(.94);}
+.scroll-reveal.about-image.in-view{transform:translateY(0) scale(1);}
 .about-block{margin-bottom:18px;}
 .about-block:last-child{margin-bottom:0;}
+.reveal-word{display:inline-block;opacity:0;transform:translateY(10px);}
+.scroll-reveal.in-view .reveal-word{animation:wordIn .5s cubic-bezier(.22,1,.36,1) both;}
+@keyframes wordIn{to{opacity:1;transform:translateY(0);}}
 
 </style>
 </head>
