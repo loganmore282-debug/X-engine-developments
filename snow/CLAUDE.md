@@ -4168,6 +4168,128 @@ navigates back into that person's own detail modal — 0 errors. Cache bumped `v
 changed — Render should auto-deploy this push (server.js) and the admin build needs no
 separate deploy step beyond the push (static site).**
 
+## Round 77 (2026-08-29) — independent Codex full-codebase audit (6 findings): all 6 confirmed real, all 6 fixed
+
+Owner asked Codex (given real repo access + pointed at this file/`AGENT_LOG.md`, via a
+prompt written and published this same round rather than implemented directly, per the
+owner's own explicit "let's ask codex to audit" request) to audit the codebase
+independently. Codex returned 6 findings (2 High, 2 High, ranked as 2 High + 4 Medium)
+plus a "confirmed clean" section. Per this file's own standing discipline — never fix a
+review's findings on its say-so alone — every one was independently re-derived against
+the actual code before anything was touched; all 6 held up as real, with my own trace
+refining Codex's stated failure mechanism in one case (#1 below).
+
+**Fix #1 (High) — a failed/crashed deposit-credit write could double-credit the wallet
+on retry.** `creditDeposit()`'s CLAIM-BEFORE-CREDIT pattern flips the deposit's status
+to `matched` before crediting, specifically so a retry is safe — but the wallet
+increment and the "credit is done" marker were two SEPARATE writes (increment the
+user's `walletBalance`, then separately clear `needsManualCredit`). Codex described two
+sub-cases; tracing both by hand found only one genuinely reproduces today (the swallowed-
+catch sub-case is actually already safe, since `depositFullyCredited()`'s short-circuit
+correctly re-engages once `needsManualCredit` clears on a successful pass) — but the
+other, a genuine PROCESS CRASH between the two writes, is real and unavoidable given this
+app's own `process.on('uncaughtException', ...) => process.exit(1)` (confirmed via grep
+— this app crashes the whole process on any uncaught exception anywhere, not a
+hypothetical). Fixed with one robust mechanism that closes the gap regardless of which
+sub-case is actually exploitable: a new `updateIf(extraFilter, updates)` method added to
+`db.js`'s `DocumentReference` class — one atomic conditional Mongo `updateOne` that only
+applies if a fresh idempotency-token check on the SAME document also matches, eliminating
+the crash window a two-write sequence can never fully close on MongoDB Atlas M0 (no real
+multi-document transactions). `creditDeposit()`'s wallet-credit step now uses
+`updateIf({creditedDepositIds:{$ne:depDoc.id}}, {walletBalance:..., totalDeposited:...,
+creditedDepositIds: FieldValue.arrayUnion(depDoc.id)})` — the increment and the "done"
+marker land in ONE atomic write, so there is no window where one landed and not the
+other.
+
+**Fix #2 (High) — a withdrawal-decline refund could be applied twice.** The 30s
+`reconcileStuckWithdrawalRefunds()` reconciler re-triggers `completeWithdrawalRefund()`
+on any withdrawal still showing `refundPending:true` — but nothing stopped a repeat call
+from re-crediting the wallet if only the CLEARING write (dropping `refundPending`) had
+ever failed, a much easier trigger than Fix #1's full-process-crash requirement (a single
+failed write is enough, not a crash). Fixed with the same `updateIf` primitive:
+`completeWithdrawalRefund()` now does `uRef.updateIf({refundedWithdrawalIds:{$ne:
+witRef.id}}, {walletBalance:..., refundedWithdrawalIds: FieldValue.arrayUnion(witRef.id),
+...})` in one atomic write — a repeat call after a partial failure is now a safe no-op
+once the refund has genuinely landed.
+
+**Fix #3 (Medium) — force-crediting a previously-failed deposit corrupted its own stored
+ledger amount.** `markDepositFailed()` (Round 59) zeroes a failed deposit's `amount`/
+`displayAmount` so it doesn't inflate `totalDeposited`/integrity-audit sums while it's
+genuinely failed — but if an admin later force-credited that same deposit, the existing
+ledger-row-update branch never restored the real amount, permanently corrupting
+`totalDeposited` for any future "Recalculate totals"/`computeUserRealTotals()` run (both
+sum `t.amount`, not the display-only field). Fixed by restoring `amount: depAmount,
+displayAmount: depAmount` on that same update call — a force-credit now correctly
+reverses the zeroing.
+
+**Fix #4 (Medium) — "Recalculate totals" wrote stale money figures over a live credit
+landing mid-run.** `recountAllTotals()` already had a proven fix for this exact race
+class applied to `checkinStreak`/`lastCheckin` (Round 35: re-verify fresh, inside a lock,
+immediately before writing) — but that treatment was never extended to
+`totalDeposited`/`totalEarned`/`totalInvested`/`totalWithdrawn`, which still got written
+straight from `computeRealTotals()`'s single platform-wide snapshot taken once before a
+loop that can span up to 10,000 users. A live cashback/commission/deposit/withdrawal/
+mission/gift-code credit landing on a user between that snapshot and their own turn in
+the loop got silently baked over by the stale value. Fixed by extracting a new
+`computeUserRealTotals(userId)` helper (also used to deduplicate `/admin/user/
+repair-ledger`'s own previously-separate copy of the same formula) and using it exactly
+like the checkin fix: the outer snapshot now only decides which users MIGHT need
+touching (a cheap pre-filter, not the write source); the actual money figures are
+re-derived fresh via `computeUserRealTotals()` and the doc re-read fresh, both INSIDE
+`withLock('bal:'+userId, ...)`, immediately before writing.
+
+**Fix #5 (Medium) — gift-code redemption's claim was permanently unrecoverable.**
+`/redeem`'s claim-before-credit (`usedBy.indexOf(userId)!==-1` → reject as "already
+used") had no resumability check, unlike deposits/withdrawals — if the wallet credit or
+ledger write failed AFTER the code was claimed, the member was permanently locked out
+with the code burned and no reward, forever. Fixed: an `alreadyClaimed` hit now checks
+whether a matching `promoRedemptions` row genuinely exists (proof the credit actually
+completed) before rejecting — no such row means this is a resumed call from a prior
+failed attempt, so it skips the redundant `arrayUnion` write and proceeds straight to
+completing the credit + ledger row. A genuinely finished redemption (real row found)
+still correctly rejects. Safe under concurrency for the same reason it always was — the
+whole handler is serialized by the existing `withLock('redeem:'+code)`.
+
+**Fix #6 (Medium) — `recomputeTeamCounts()` could leave stale team counts uncorrected
+forever.** The old level-by-level walk only ever wrote a count for a parent id that
+showed up as a KEY in that level's `byParent` map — but the root's OWN L1/L2/L3 counts
+are structurally never reachable that way (a root is never its own referrer-of-referrer),
+and a level with zero matching users produces zero loop iterations, so a stale nonzero
+count on the root was never corrected back to 0 either. Concretely: deleting D (whose
+child G gets reparented to P) could leave P's own teamL2/L3 counts stuck at their old,
+now-wrong values forever, since nothing in the old walk ever targeted P's own document.
+Confirmed the only call site is `/admin/user/delete`, always with a single `rootId` —
+rewritten to compute and write exactly that root's own 3 counts explicitly (including a
+genuine 0) via 3 sequential BFS-layer queries, in one atomic update to the root's own
+document.
+
+**Confirmed already correct, no change** (Codex's own "confirmed clean" section,
+independently re-verified): endpoint auth-check coverage (all 85 non-public routes
+require `verifyAuth`/`verifyAdmin`/`verifyOwner`, re-confirmed against Round 76's own
+exhaustive sweep); the NoSQL-injection guard (`stripMongoOperators`) applied globally
+before any route handler runs; `verifyAuth()`'s real cryptographic token verification;
+`safeEqual()`'s timing-safe admin-key comparison.
+
+**Verified**: `node --check server.js`/`db.js` clean. A boot smoke test (a real
+self-signed dummy Firebase service-account PEM + an unreachable `MONGODB_URI`) confirmed
+the process starts cleanly and fails only at the Mongo-connect step
+(`Mongo connection failed: connect ECONNREFUSED`), no earlier syntax/runtime error from
+any of this round's edits. `git diff --check` clean. A standalone isolated unit test
+(not committed — a throwaway verification script, in-memory mock of exactly the
+`db.collection().where().get()`/`.doc().update()` shape `recomputeTeamCounts()` calls)
+reproduced Codex's own worked example (P→D→G, D deleted, G reparented to P) plus two
+additional scenarios (a root with zero downline at every level, and a full branching
+3-level tree) — all 9 checks passed, including the specific "explicit zero write, not a
+stale leftover" case that was the core of the old bug. The `/redeem` resumability logic
+and `recountAllTotals()`'s fresh-recheck logic were verified by direct manual trace
+against the actual code (both mirror already-proven, already-shipped patterns elsewhere
+in this exact file — `computeUserRealTotals()` already powers `/admin/user/
+repair-ledger`; the fresh-inside-the-lock pattern already shipped for checkin in Round
+35) rather than a live-Mongo runtime test, since no local `mongod`/`mongodb-memory-server`
+is available in this sandbox to stand one up. This round is server.js/db.js-only — no
+user-src/admin-src changes, so no cache bump needed. **`server.js` and `db.js` changed —
+Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

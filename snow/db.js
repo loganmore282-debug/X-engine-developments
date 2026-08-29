@@ -229,6 +229,23 @@ class DocumentReference {
   async delete() {
     await _mdb.collection(this._col).deleteOne({ _id: this.id });
   }
+  // Conditional atomic update: applies `updates` only if this document ALSO
+  // matches `extraFilter` (in addition to its own _id). Returns whether the
+  // update actually applied (false means either the doc doesn't exist, or
+  // extraFilter's condition already failed -- e.g. an idempotency token is
+  // already present). Unlike two separate writes (increment a value, then
+  // separately mark "done" on the SAME or a different document), this is
+  // ONE atomic Mongo operation -- there is no window where the increment
+  // has landed but the "done" marker hasn't (or vice versa), which is what
+  // makes it safe to retry after a crash with no risk of double-applying.
+  // See server.js's creditedDepositIds/refundedWithdrawalIds for the
+  // pattern this exists for.
+  async updateIf(extraFilter, updates) {
+    const op = buildMongoUpdate(updates);
+    if (!Object.keys(op).length) return false;
+    const result = await _mdb.collection(this._col).updateOne({ _id: this.id, ...extraFilter }, op);
+    return result.matchedCount > 0;
+  }
 }
 
 function resolveFieldValues(data) {

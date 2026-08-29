@@ -1811,10 +1811,26 @@ async function creditDeposit(depDoc) {
       // permanently.
       if (!fd.walletCredited) {
         try {
-          // Nested under bal:<depUserId> -- see settleInvestmentIfDue's own comment.
-          await withLock('bal:' + depUserId, () => db.collection('users').doc(depUserId).update({
-            walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount)
-          }));
+          // Codex-caught real bug: the wallet increment and the
+          // walletCredited:true marker used to be TWO separate writes -- if
+          // the increment landed but the process crashed (or this specific
+          // write failed) before the marker write, needsManualCredit could
+          // stay true with walletCredited still false, and a LATER retry
+          // would re-run the increment a second time for the same deposit.
+          // updateIf() makes this ONE atomic conditional update: the wallet
+          // is only ever incremented if this exact depositId is not already
+          // in creditedDepositIds, and the id is added in the SAME atomic
+          // operation -- there is no window where one half landed without
+          // the other. `applied:false` means this exact credit already
+          // happened (a safe, idempotent retry), not an error.
+          const applied = await withLock('bal:' + depUserId, () => db.collection('users').doc(depUserId).updateIf(
+            { creditedDepositIds: { $ne: depDoc.id } },
+            {
+              walletBalance: FieldValue.increment(depAmount), totalDeposited: FieldValue.increment(depAmount),
+              creditedDepositIds: FieldValue.arrayUnion(depDoc.id),
+            }
+          ));
+          if (!applied) console.warn(`Deposit ${depDoc.id} wallet credit already applied (idempotent retry) -- skipped re-incrementing.`);
           await depDoc.ref.update({ walletCredited: true }).catch(() => {});
         } catch (creditErr) {
           await depDoc.ref.update({ needsManualCredit: true }).catch(() => {});
@@ -1835,8 +1851,22 @@ async function creditDeposit(depDoc) {
       try {
         const txSnap = await db.collection('transactions').where('depositId', '==', depDoc.id).limit(5).get();
         if (!txSnap.empty) {
+          // Codex-caught real bug: if this row had already been zeroed by
+          // markDepositFailed() (a stale FAILED verdict, later overridden
+          // by a genuine success or an owner's force-credit), only status/
+          // description were restored here -- amount stayed at the 0 that
+          // failure left behind. computeRealTotals()/recountAllTotals() sum
+          // `amount`, not `displayAmount`, so this deposit would silently
+          // contribute nothing to totalDeposited even though the wallet was
+          // just credited the full amount -- and a later "Recalculate
+          // totals" run would then WRITE that too-low figure into the
+          // user's real totalDeposited, turning a display-only gap into
+          // stored corruption. Restore both fields explicitly so a success
+          // outcome always means the ledger row reflects what actually
+          // happened, regardless of what state it was in before.
           await Promise.all(txSnap.docs.map(txDoc => txDoc.ref.update({
-            status: 'success', description: `Deposit — Success — ${fmtUGX(depAmount)}`
+            status: 'success', description: `Deposit — Success — ${fmtUGX(depAmount)}`,
+            amount: depAmount, displayAmount: depAmount,
           })));
         } else {
           const { date, time } = nowStr();
@@ -2130,10 +2160,26 @@ async function completeWithdrawalRefund(witRef, userId) {
     const fresh = await witRef.get();
     if (!fresh.exists || !fresh.data().refundPending) return true;
     const fd = fresh.data();
+    // Codex-caught real bug: this used to be TWO separate writes -- credit
+    // the wallet, THEN (a separate call, its failure swallowed by .catch)
+    // clear refundPending. If clearing the marker failed for any reason
+    // (not just a crash -- any transient write error), refundPending
+    // stayed true forever, and reconcileStuckWithdrawalRefunds() (which
+    // scans for exactly refundPending:true every 30s) would call this
+    // function again, see refundPending still true, and credit the SAME
+    // refund a second time -- and again on every tick after that, with no
+    // limit. updateIf() makes the wallet credit and the "this exact
+    // withdrawal has been refunded" claim ONE atomic conditional update,
+    // the same pattern creditDeposit() now uses: the wallet is only ever
+    // credited if this withdrawalId is not already in
+    // refundedWithdrawalIds, and the id is added in that same atomic
+    // operation. `applied:false` means this exact refund already landed
+    // (a safe, idempotent retry), not an error.
     const uRef = db.collection('users').doc(userId);
-    const update = { walletBalance: FieldValue.increment(fd.refundAmount || 0) };
-    if (fd.refundNetToUnwind) update.totalWithdrawn = FieldValue.increment(-fd.refundNetToUnwind);
-    await uRef.update(update);
+    const updates = { walletBalance: FieldValue.increment(fd.refundAmount || 0), refundedWithdrawalIds: FieldValue.arrayUnion(witRef.id) };
+    if (fd.refundNetToUnwind) updates.totalWithdrawn = FieldValue.increment(-fd.refundNetToUnwind);
+    const applied = await uRef.updateIf({ refundedWithdrawalIds: { $ne: witRef.id } }, updates);
+    if (!applied) console.warn(`Withdrawal refund ${witRef.id} already applied (idempotent retry) -- skipped re-crediting.`);
     await witRef.update({ refundPending: FieldValue.delete(), refundAmount: FieldValue.delete(), refundNetToUnwind: FieldValue.delete() }).catch(() => {});
     return true;
   } catch (e) {
@@ -2512,18 +2558,37 @@ app.post('/redeem', async (req, res) => {
       if (cd.active === false) { result = { code: 400, body: { status: 'error', message: 'This code is no longer active' } }; return; }
       if (cd.expiresAt && tsMillis(cd.expiresAt) < Date.now()) { result = { code: 400, body: { status: 'error', message: 'This code has expired' } }; return; }
       const usedBy = cd.usedBy || [];
-      if (usedBy.indexOf(userId) !== -1) { result = { code: 400, body: { status: 'error', message: "You've already used this code" } }; return; }
-      if (cd.maxUses && usedBy.length >= cd.maxUses) { result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return; }
+      const alreadyClaimed = usedBy.indexOf(userId) !== -1;
+      if (alreadyClaimed) {
+        // subagent-audit-caught HIGH bug (Codex Finding #5): a bare
+        // usedBy-membership check treated "claimed" as permanently final --
+        // but CLAIM-BEFORE-CREDIT means a genuinely-FINISHED redemption
+        // always has a matching promoRedemptions row, written right after
+        // the credit lands. If this user is in usedBy with no such row,
+        // their own earlier attempt claimed the code but crashed/failed
+        // before the credit ever landed -- resume and complete it instead
+        // of permanently stranding them with the code burned and no
+        // reward. A genuinely already-completed redemption still correctly
+        // rejects below (real row found).
+        const priorSnap = await db.collection('promoRedemptions').where('userId', '==', userId).where('code', '==', code).limit(1).get();
+        if (!priorSnap.empty) { result = { code: 400, body: { status: 'error', message: "You've already used this code" } }; return; }
+      } else if (cd.maxUses && usedBy.length >= cd.maxUses) {
+        result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
+      }
       const reward = Number(cd.reward) || 0;
       // CLAIM-BEFORE-CREDIT — a retried redeem after a mid-request failure
-      // must never credit twice off the same code.
-      await codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId) });
-      const claimSnap = await codeDoc.ref.get();
-      const claimedBy = (claimSnap.exists && claimSnap.data().usedBy) || [];
-      if (claimedBy.indexOf(userId) === -1) { result = { code: 500, body: { status: 'error', message: 'Could not redeem this code' } }; return; }
-      if (cd.maxUses && claimedBy.length > cd.maxUses) {
-        await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId) }).catch(() => {});
-        result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
+      // must never credit twice off the same code. A resumed (already-
+      // claimed-by-this-user) call skips the redundant arrayUnion write --
+      // it's already there — and goes straight to completing the credit.
+      if (!alreadyClaimed) {
+        await codeDoc.ref.update({ usedBy: FieldValue.arrayUnion(userId) });
+        const claimSnap = await codeDoc.ref.get();
+        const claimedBy = (claimSnap.exists && claimSnap.data().usedBy) || [];
+        if (claimedBy.indexOf(userId) === -1) { result = { code: 500, body: { status: 'error', message: 'Could not redeem this code' } }; return; }
+        if (cd.maxUses && claimedBy.length > cd.maxUses) {
+          await codeDoc.ref.update({ usedBy: FieldValue.arrayRemove(userId) }).catch(() => {});
+          result = { code: 400, body: { status: 'error', message: 'This code has reached its usage limit' } }; return;
+        }
       }
       // Nested under bal:<userId> -- see settleInvestmentIfDue's own comment.
       await withLock('bal:' + userId, () => db.collection('users').doc(userId).update({
@@ -3160,47 +3225,9 @@ app.post('/admin/user/repair-ledger', async (req, res) => {
     // (too-high) total included, then decline's own subtraction runs on
     // top of that, leaving totalWithdrawn too LOW by that amount, permanently.
     const result = await withLock('bal:' + userId, async () => {
-      const [uSnap, txSnap, invSnap, witSnap] = await Promise.all([
-        db.collection('users').doc(userId).get(),
-        db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
-        db.collection('investments').where('userId', '==', userId).get(),
-        // Live crediting increments totalWithdrawn the moment a payout is
-        // marked 'processing' (MarzPay accepted it, see the send-money
-        // handler's own totalWithdrawn increment), not only once it
-        // reaches 'processed' -- and nothing increments it again when
-        // 'processing' later resolves to 'processed' (only the status
-        // field changes at that point). Scoping this query to 'processed'
-        // only would UNDER-count any user with a currently-processing
-        // withdrawal, permanently.
-        db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['processing', 'processed']).limit(5000).get(),
-      ]);
+      const uSnap = await db.collection('users').doc(userId).get();
       if (!uSnap.exists) return { notFound: true };
-      let deposited = 0, earned = 0;
-      txSnap.forEach(d => {
-        const t = d.data();
-        // Same earning-type list and admin_credit inclusion as
-        // computeRealTotals()/recountAllTotals() — this is the single-user
-        // version of the same tool (a per-user filtered query rather than
-        // computeRealTotals()'s platform-wide scan, so it can't just call
-        // that function directly), and MUST stay in lockstep with it,
-        // including totalWithdrawn's formula below — the admin's own
-        // /admin/integrity audit and the platform-wide "Recalculate
-        // totals" button both now use computeRealTotals() for every one of
-        // these four fields, and this tool disagreeing with either would
-        // make them contradict each other about what "correct" means.
-        if (t.type === 'deposit' || t.type === 'admin_credit') deposited += finiteMoney(t.amount);
-        else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) earned += finiteMoney(t.amount);
-      });
-      let invested = 0;
-      invSnap.forEach(d => { invested += finiteMoney(d.data().amount); });
-      // This used to sum the withdraw transaction rows' `amount` field,
-      // which stores the GROSS requested amount (negated) -- live crediting
-      // (see the several FieldValue.increment(wit.net) sites above) tracks
-      // totalWithdrawn by NET payout. Recomputed from the withdrawals
-      // collection's own `net` field instead, scoped to withdrawals the
-      // live code path has actually credited against.
-      let withdrawn = 0;
-      witSnap.forEach(d => { withdrawn += finiteMoney(d.data().net); });
+      const { deposited, earned, invested, withdrawn } = await computeUserRealTotals(userId);
       await db.collection('users').doc(userId).update({ totalDeposited: deposited, totalEarned: earned, totalWithdrawn: withdrawn, totalInvested: invested });
       return { notFound: false, deposited, earned, withdrawn, invested };
     });
@@ -3385,24 +3412,31 @@ app.post('/admin/user/reconcile-checkin', async (req, res) => {
 // Recomputes teamL1/L2/L3 counts for the WHOLE referral tree hanging off one
 // account — used after a delete reparents a downline, since a multi-level
 // chain's counts can't be fixed with simple increments/decrements.
+// subagent-audit-caught HIGH bug (Codex Finding #6): the old walk() only
+// ever wrote a count for a parentId that showed up as a KEY in byParent at
+// its own level -- rootId's own L1/L2/L3 counts are structurally never
+// reachable that way (byParent's keys at level N are rootId's OWN
+// referrer-of-referrer chain members, not rootId itself), and a level with
+// zero matching users produces zero loop iterations, so a stale nonzero
+// count on rootId was never corrected back to 0 either. Concretely: delete
+// D (whose child G gets reparented to P), and P's own teamL2/L3 counts
+// could sit stale forever since nothing in the old walk ever targeted P's
+// own doc. Only call site is /admin/user/delete, always with a single
+// rootId -- rewritten to compute and write exactly rootId's own 3 counts
+// explicitly (including a genuine 0), one atomic update to rootId's own
+// document.
 async function recomputeTeamCounts(rootId) {
-  const walk = async (ids, level) => {
-    if (!ids.length || level > 3) return;
+  let ids = [rootId];
+  const counts = [0, 0, 0]; // L1, L2, L3
+  for (let level = 0; level < 3; level++) {
+    if (!ids.length) break;
     const snap = await db.collection('users').where('referredBy', 'in', ids).get();
-    const byParent = new Map();
-    snap.forEach(d => {
-      const p = d.data().referredBy;
-      byParent.set(p, (byParent.get(p) || 0) + 1);
-    });
-    for (const [parentId, count] of byParent) {
-      const field = level === 1 ? 'teamL1Count' : level === 2 ? 'teamL2Count' : 'teamL3Count';
-      await db.collection('users').doc(parentId).update({ [field]: count }).catch(() => {});
-    }
-    const nextIds = [];
-    snap.forEach(d => nextIds.push(d.id));
-    await walk(nextIds, level + 1);
-  };
-  await walk([rootId], 1);
+    counts[level] = snap.size;
+    ids = snap.docs.map(d => d.id);
+  }
+  await db.collection('users').doc(rootId).update({
+    teamL1Count: counts[0], teamL2Count: counts[1], teamL3Count: counts[2],
+  }).catch(() => {});
 }
 app.post('/admin/user/delete', async (req, res) => {
   if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -3884,6 +3918,31 @@ app.get('/admin/integrity', async (req, res) => {
 // than the incremental counters on the user doc. Shared by recountAllTotals
 // (which writes the fix) and /admin/integrity (which only reports the gap)
 // so the two can never quietly disagree about what "correct" means.
+// Single-user version of computeRealTotals() below -- a per-user filtered
+// query rather than a platform-wide scan, so it stays fresh even when
+// called deep inside a loop over many users (see recountAllTotals()'s own
+// use of this). MUST stay in lockstep with computeRealTotals()'s formulas
+// (same earning-type list, same admin_credit inclusion, same
+// totalWithdrawn-from-net-not-gross logic) or the two tools would
+// contradict each other about what "correct" means.
+async function computeUserRealTotals(userId) {
+  const [txSnap, invSnap, witSnap] = await Promise.all([
+    db.collection('transactions').where('userId', '==', userId).limit(50000).get(),
+    db.collection('investments').where('userId', '==', userId).get(),
+    db.collection('withdrawals').where('userId', '==', userId).where('status', 'in', ['processing', 'processed']).limit(5000).get(),
+  ]);
+  let deposited = 0, earned = 0;
+  txSnap.forEach(d => {
+    const t = d.data();
+    if (t.type === 'deposit' || t.type === 'admin_credit') deposited += finiteMoney(t.amount);
+    else if (['cashback', 'commission', 'team_reward', 'promocode', 'checkin', 'mission_salary', 'mission_deposit_reward'].includes(t.type)) earned += finiteMoney(t.amount);
+  });
+  let invested = 0;
+  invSnap.forEach(d => { invested += finiteMoney(d.data().amount); });
+  let withdrawn = 0;
+  witSnap.forEach(d => { withdrawn += finiteMoney(d.data().net); });
+  return { deposited, earned, invested, withdrawn };
+}
 async function computeRealTotals() {
   const [txSnap, invSnap, witSnap] = await Promise.all([
     db.collection('transactions').limit(200000).get(),
@@ -3941,24 +4000,56 @@ async function recountAllTotals() {
     const usersSnap = await db.collection('users').limit(10000).get();
     for (const doc of usersSnap.docs) {
       const row = totals[doc.id] || { deposited: 0, earned: 0 };
-      const realInvested = invested[doc.id] || 0;
-      const realWithdrawn = withdrawn[doc.id] || 0;
+      const realInvestedSnapshot = invested[doc.id] || 0;
+      const realWithdrawnSnapshot = withdrawn[doc.id] || 0;
       const snapshotStreak = computeCheckinStreak(checkinDayKeys[doc.id] || new Set());
       const u = doc.data();
-      const update = {};
-      let investedChanged = false;
-      if (finiteMoney(u.totalDeposited) !== row.deposited) update.totalDeposited = row.deposited;
-      if (finiteMoney(u.totalEarned) !== row.earned) update.totalEarned = row.earned;
-      if (finiteMoney(u.totalInvested) !== realInvested) { update.totalInvested = realInvested; investedChanged = true; }
-      // subagent-audit-caught: totalWithdrawn was never repaired by this
-      // platform-wide tool at all -- only the single-user repair-ledger
-      // tool touched it, with its own separately-written copy of this same
-      // formula. Same bal:<userId> lock already covers this write below, no
-      // separate lock needed (unlike checkin, this field has no OTHER lock
-      // key of its own anywhere in the codebase).
-      if (finiteMoney(u.totalWithdrawn) !== realWithdrawn) update.totalWithdrawn = realWithdrawn;
+
+      // subagent-audit-caught HIGH bug (Finding #4): this used to write the
+      // platform-wide computeRealTotals() SNAPSHOT's deposited/earned/
+      // invested/withdrawn figures straight into the user doc, guarded only
+      // by the bal:<userId> lock around the write itself -- never
+      // re-verified against what actually landed between that upfront
+      // snapshot and this specific user's turn in a loop spanning up to
+      // 10,000 users. A live cashback/commission/deposit/withdrawal/
+      // mission/gift-code credit in that window got silently baked over by
+      // the stale value. Mirrors the exact fix already applied to
+      // checkinStreak/lastCheckin below (Round 35): use the snapshot only
+      // as a cheap pre-filter for whether this user might need touching,
+      // then re-derive the real figures fresh via computeUserRealTotals()
+      // and re-read the doc fresh, both INSIDE the bal:<userId> lock,
+      // immediately before writing.
+      const moneyLooksStale = finiteMoney(u.totalDeposited) !== row.deposited ||
+        finiteMoney(u.totalEarned) !== row.earned ||
+        finiteMoney(u.totalInvested) !== realInvestedSnapshot ||
+        finiteMoney(u.totalWithdrawn) !== realWithdrawnSnapshot;
+      let moneyWrote = false, investedChanged = false;
+      if (moneyLooksStale) {
+        // Per-user bal:<userId>, not the outer 'totals-recount' lock this
+        // whole function holds -- that lock only serializes recount runs
+        // against each other, not against a live credit landing on this one
+        // user, which is exactly the race this fresh re-check closes.
+        // Scoped per-user, not held for the whole loop, so one recount run
+        // doesn't serialize every user's money ops platform-wide for its
+        // full duration.
+        await withLock('bal:' + doc.id, async () => {
+          const fresh = await computeUserRealTotals(doc.id);
+          const freshDoc = await doc.ref.get();
+          const fd = freshDoc.exists ? freshDoc.data() : {};
+          const moneyUpdate = {};
+          if (finiteMoney(fd.totalDeposited) !== fresh.deposited) moneyUpdate.totalDeposited = fresh.deposited;
+          if (finiteMoney(fd.totalEarned) !== fresh.earned) moneyUpdate.totalEarned = fresh.earned;
+          if (finiteMoney(fd.totalInvested) !== fresh.invested) { moneyUpdate.totalInvested = fresh.invested; investedChanged = true; }
+          if (finiteMoney(fd.totalWithdrawn) !== fresh.withdrawn) moneyUpdate.totalWithdrawn = fresh.withdrawn;
+          if (Object.keys(moneyUpdate).length) {
+            await doc.ref.update(moneyUpdate);
+            moneyWrote = true;
+          }
+        });
+      }
+
       // subagent-audit-caught HIGH bug: this used to write the SNAPSHOT-
-      // computed checkinStreak/lastCheckin straight into `update` below,
+      // computed checkinStreak/lastCheckin straight into the user doc,
       // guarded only by the bal:<userId> lock -- not checkin:<userId>, the
       // lock /checkin's own claim-before-credit write holds. A live
       // /checkin landing anywhere between computeRealTotals()'s upfront
@@ -3983,30 +4074,13 @@ async function recountAllTotals() {
           const fd = freshDoc.exists ? freshDoc.data() : {};
           const stillStale = (fd.checkinStreak || 0) !== fresh.streak || (fd.lastCheckin || null) !== fresh.lastCheckin;
           if (stillStale) {
-            const streakUpdate = { ...update, checkinStreak: fresh.streak, lastCheckin: fresh.lastCheckin };
-            await withLock('bal:' + doc.id, () => doc.ref.update(streakUpdate));
+            await withLock('bal:' + doc.id, () => doc.ref.update({ checkinStreak: fresh.streak, lastCheckin: fresh.lastCheckin }));
             wroteStreak = true;
-          } else if (Object.keys(update).length) {
-            await withLock('bal:' + doc.id, () => doc.ref.update(update));
           }
         });
-        if (Object.keys(update).length || wroteStreak) { updated++; if (investedChanged) investedFixed++; if (wroteStreak) streaksFixed++; }
-        continue;
       }
-      if (Object.keys(update).length) {
-        // Per-user bal:<userId>, not the outer 'totals-recount' lock this
-        // whole function holds -- that lock only serializes recount runs
-        // against each other, not against a live credit landing on this one
-        // user between this loop's read (the `totals`/`invested` snapshots
-        // above) and this specific overwrite, which would otherwise erase it
-        // (see repair-ledger's own bal: locking for the single-user version
-        // of this same hazard). Scoped per-user, not held for the whole
-        // loop, so one recount run doesn't serialize every user's money ops
-        // platform-wide for its full duration.
-        await withLock('bal:' + doc.id, () => doc.ref.update(update));
-        updated++;
-        if (investedChanged) investedFixed++;
-      }
+
+      if (moneyWrote || wroteStreak) { updated++; if (investedChanged) investedFixed++; if (wroteStreak) streaksFixed++; }
     }
     return { ok: true, updated, investedFixed, streaksFixed };
   });
