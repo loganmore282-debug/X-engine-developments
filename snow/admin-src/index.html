@@ -746,6 +746,37 @@ async function quietRefreshUsers(){
   const h = $('usersCount'); if(h) h.textContent = `Users (${_users.length})`;
   drawUsers();
 }
+// Full-depth upline-to-root + downline tree for one member -- distinct
+// from the "Team L1/L2/L3" counts shown in openUser() itself, which are
+// deliberately capped at the 3 commission levels. Owner: "track all roots
+// or chains of referral codes and referrals and all that chain."
+async function openReferralChain(uid){
+  const r = await api('/admin/user/referral-chain',{ userId:uid });
+  if(r.status!=='success'){ toast(r.message||'Could not load referral chain','err'); return; }
+  const rowHtml = (m, extra) => `<div class="kv" data-uid="${esc(m.id)}" style="cursor:pointer">
+    <span class="k">${esc(m.phone||m.id)}</span>
+    <span>${esc(m.referralCode||'—')} · <span class="pill-tag ${m.status==='banned'?'t-bad':'t-ok'}">${esc(m.status)}</span>${extra||''}</span>
+  </div>`;
+  const uplineHtml = r.upline.length
+    ? r.upline.map(rowHtml).join('')
+    : '<p class="muted" style="margin:0">No referrer -- this account IS the root.</p>';
+  const levels = Object.keys(r.downlineCountByLevel).map(Number).sort((a,b)=>a-b);
+  const levelSummary = levels.length
+    ? levels.map(l=>`L${l}: ${r.downlineCountByLevel[l]}`).join('  ·  ')
+    : 'No downline';
+  const downlineRows = r.downline.slice(0,500).map(m=>rowHtml(m, ` · L${m.level}`)).join('');
+  openModal(`
+    <h3>Referral chain</h3>
+    <div class="muted" style="margin-bottom:10px">${esc(r.user.phone||r.user.id)}${r.cycleDetected?' <span class="pill-tag t-bad">Cycle detected in data -- stopped early</span>':''}</div>
+    <h4 style="margin:10px 0 6px;font-size:13px">Root</h4>
+    <div class="kv"><span class="k">${esc(r.root.phone||r.root.id)}</span><span>${esc(r.root.referralCode||'—')}${r.root.id===r.user.id?' <span class="pill-tag t-ok">This user</span>':''}</span></div>
+    <h4 style="margin:14px 0 6px;font-size:13px">Upline (direct referrer → root), ${r.upline.length} link${r.upline.length===1?'':'s'}</h4>
+    <div class="table-scroll" style="max-height:180px">${uplineHtml}</div>
+    <h4 style="margin:14px 0 6px;font-size:13px">Downline, ${r.downline.length}${r.downlineTruncated?'+':''} total -- ${esc(levelSummary)}</h4>
+    ${r.downline.length ? `<div class="table-scroll" style="max-height:260px">${downlineRows}</div>${r.downlineTruncated?'<p class="muted" style="font-size:11.5px;margin:6px 0 0">List capped at 5,000 nodes -- the level counts above still cover everyone.</p>':''}` : '<p class="muted" style="margin:0">This user has not referred anyone.</p>'}
+  `);
+  $('modalRoot').querySelectorAll('[data-uid]').forEach(el=>el.addEventListener('click',()=>{ closeModal(); openUser(el.dataset.uid); }));
+}
 async function openUser(uid){
   const r = await api('/admin/user/detail',{ userId:uid });
   if(r.status!=='success'){ toast(r.message||'Not found','err'); return; }
@@ -762,6 +793,7 @@ async function openUser(uid){
     <div class="kv"><span class="k">Referred by</span><span>${esc(u.referredBy||'Not set')}</span></div>
     <div class="kv"><span class="k">Team L1 / L2 / L3</span><span>${u.teamL1Count||0} / ${u.teamL2Count||0} / ${u.teamL3Count||0}</span></div>
     <div class="kv"><span class="k">Team's total deposits</span><b>${ugx(r.teamDeposits)}</b></div>
+    <button class="btn ghost sm" id="viewChainBtn" title="Full upline-to-root and downline tree, not just L1/L2/L3" style="margin:4px 0 6px">View referral chain</button>
     <div class="kv"><span class="k">Check-in streak</span><span id="streakVal">${u.checkinStreak||0}</span>${SESSION_ROLE==='owner'?` <button class="btn ghost sm" id="reconcileStreakBtn" title="Recompute this member's streak from their real check-in history right now" style="margin-left:8px">Reconcile</button>`:''}</div>
     ${u.status==='banned'?`<div class="pill-tag t-bad" style="margin:6px 0 10px">Banned</div>`:''}
     <label>Amount (UGX)</label><input id="adjAmt" type="number" placeholder="0">
@@ -879,6 +911,7 @@ async function openUser(uid){
     toast(d.status==='success'?(d.commissionTriggered?'Referrer attached, first-purchase commission credited':'Referrer attached'):(d.message||'Failed'), d.status==='success'?'ok':'err');
     if(d.status==='success'){ closeModal(); (RENDERERS[_tab]||renderUsers)(); }
   });
+  $('viewChainBtn')?.addEventListener('click', ()=>openReferralChain(uid));
   $('resetPinBtn')?.addEventListener('click', async()=>{
     const np=($('pinNew').value||'').trim();
     if(!/^\d{5}$/.test(np)) return toast('Enter a new 5-digit PIN','err');

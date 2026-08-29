@@ -4098,6 +4098,76 @@ product tiers (150-day cycles), not just eyeballed. This round is server.js-only
 cron interval and the audit itself touch no frontend code) — **`server.js` changed,
 Render should auto-deploy this push.**
 
+## Round 76 (2026-08-29) — exhaustive auth-check sweep across all 98 routes (none missing), full referral-chain (root + upline + downline) admin tool built for a genuine gap
+
+Owner: "cement every endpoint and functions and encryption on authentication to prevent
+hacking, payload injects, sql injections, and other vulnerabilities... secure
+authentication should be emphasized, and track all roots or chains of referral codes and
+referrals and all that chain, number, password, etc." Two parts: a broad hardening
+audit, and a specific, genuine feature gap.
+
+**Endpoint auth-check sweep — exhaustive, not spot-checked.** Wrote a small script that
+parsed every one of the 98 `app.get`/`app.post` route definitions in `server.js` and
+scanned each handler for a `verifyAuth`/`verifyAdmin`/`verifyOwner` call. Exactly 13 came
+back with none — and all 13 are the already-known, deliberately-public set: `/health`,
+the 7 `/public/*` read-only endpoints (settings/products/banners/activity-feed/about —
+no user data), `/deposit/callback` and `/withdraw/callback` (MarzPay webhooks, which by
+definition can't carry a Firebase Bearer token — their safety comes from the independent
+live re-check against MarzPay's own API, already verified in Round 75), `/admin/login`/
+`/admin/logout` (the auth entry/exit points themselves), and `GET /`. Every single one of
+the other 85 routes requires real authentication. No missing check found.
+
+**Authentication itself, re-verified rather than assumed.** `verifyAuth()` calls
+`admin.auth().verifyIdToken(token, true)` — Firebase's own cryptographic signature
+verification plus a live revocation check, not decoding the token and trusting its
+claims. `verifyAdmin()`/`verifyOwner()` compare the raw `ADMIN_KEY` with
+`crypto.timingSafeEqual` (immune to a byte-by-byte timing side-channel), and separately
+resolve staff sessions server-side. The one place a token IS decoded without verification
+(`rlKeyByUser()`, for rate-limit bucketing only) is explicitly safe by design — a forged
+uid there just gets its own rate-limit bucket, real auth still happens inside every
+handler afterward.
+
+**Injection/hardening stack, confirmed already in place (not new this round):** `helmet`
+(HSTS, frameguard deny, no-referrer, nosniff, same-site CORP), explicit
+`X-Content-Type-Options`/`X-Frame-Options`/`Strict-Transport-Security`/`Cache-Control:
+no-store` headers, a CORS allowlist (not a wildcard), a global NoSQL-injection guard
+(`stripMongoOperators`) applied as middleware to every request body BEFORE any route
+handler runs (strips any `$`-prefixed or dotted key, recursively), and 5 separate rate
+limiters (global per-IP, global per-user via the token's own uid, a tighter per-money-
+endpoint limiter, an 8/min admin-login limiter, a 200/min general admin limiter) — "SQL
+injection" doesn't literally apply (this is MongoDB, not SQL), but the NoSQL equivalent
+is covered the same way a parameterized-query defense would be.
+
+**Real gap found and built: full-depth referral chain tracing.** The only existing
+referral tooling (`/admin/referrals/list`, `wholeTeamDeposits()`, `recomputeTeamCounts()`)
+is deliberately capped at 3 levels, because that's all Snow's L1/L2/L3 commission
+structure needs — there was genuinely no way for the admin to trace a member's full
+upline back to the very first person in the chain ("the root"), or see their full
+downline tree past 3 levels deep. Built `POST /admin/user/referral-chain` (admin-only):
+walks `referredBy` repeatedly upward to the root (cycle-guarded with a visited-set, so
+corrupted historical data with an accidental loop can't hang the request — a real cycle
+can't be WRITTEN thanks to Round 17's own attach-referrer fix, but this is a read path
+against any data that might exist), and does a full-depth breadth-first walk downward
+(same `where('referredBy','in',parentIds)` pattern `wholeTeamDeposits()` already uses,
+just without its 3-level cap), capped at 5,000 total nodes returned with per-level counts
+included regardless of the cap so the true scale is never hidden even when the list is
+truncated. Wired into the admin panel: a new "View referral chain" button in the existing
+user-detail modal opens a dedicated view showing the root, the full upline path, and the
+downline (per-level counts + a scrollable list), with every row clickable straight into
+that person's own detail modal.
+
+**Verified**: `node --check server.js` clean, `build-admin.js` round-trip clean, a boot
+smoke test (dummy Firebase creds + unreachable Mongo) still starts cleanly with no early
+crash, `git diff --check` clean. `test-admin-obfuscated-build.js` (the existing jsdom
+harness against the REAL obfuscated admin build) extended with a fixture for
+`/admin/user/referral-chain` and a new interaction step: opens a user, clicks "View
+referral chain," confirms the resulting view renders the root's referral code and a
+downline entry from the fixture, then clicks a downline row and confirms it correctly
+navigates back into that person's own detail modal — 0 errors. Cache bumped `v13`→`v14`
+(admin). No user-app changes this round. **`server.js` and `admin-src/index.html`
+changed — Render should auto-deploy this push (server.js) and the admin build needs no
+separate deploy step beyond the push (static site).**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

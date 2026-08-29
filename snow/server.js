@@ -3688,6 +3688,74 @@ app.get('/admin/referrals/list', async (req, res) => {
     res.json({ status: 'success', referrals: rows });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
+// Full-depth referral chain trace -- deliberately separate from
+// wholeTeamDeposits()/recomputeTeamCounts() above, which are capped at 3
+// levels (Snow's commission structure only pays L1/L2/L3). Owner: "track
+// all roots or chains of referral codes and referrals and all that
+// chain." Walks the ENTIRE upline to the root (whoever has no referrer)
+// and the ENTIRE downline tree (everyone directly or indirectly referred
+// by this user, at any depth) -- an audit/support tool, not a money
+// calculation, so it isn't scoped to the 3 commission levels.
+app.post('/admin/user/referral-chain', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  const userId = String(req.body.userId || '');
+  if (!userId) return res.status(400).json({ status: 'error', message: 'userId required' });
+  try {
+    const startSnap = await db.collection('users').doc(userId).get();
+    if (!startSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    const brief = (id, d) => ({
+      id, phone: d.phone || '', referralCode: d.referralCode || '',
+      status: d.status || 'active', totalInvested: finiteMoney(d.totalInvested),
+    });
+
+    // Upline: walk referredBy repeatedly up to the root. Cycle-guarded --
+    // attach-referrer's own cycle-check (Round 17) already prevents a real
+    // cycle from being WRITTEN, but this is a read path against any
+    // historical data, so it must never hang if one somehow exists rather
+    // than trust that invariant blindly.
+    const upline = [];
+    let cursor = startSnap.data().referredBy || null;
+    const seenUp = new Set([userId]);
+    let cycleDetected = false;
+    while (cursor && upline.length < 200) {
+      if (seenUp.has(cursor)) { cycleDetected = true; break; }
+      seenUp.add(cursor);
+      const s = await db.collection('users').doc(cursor).get();
+      if (!s.exists) break;
+      upline.push(brief(s.id, s.data()));
+      cursor = s.data().referredBy || null;
+    }
+    const root = upline.length ? upline[upline.length - 1] : brief(startSnap.id, startSnap.data());
+
+    // Downline: full-depth BFS (same where('referredBy','in',parentIds)
+    // pattern wholeTeamDeposits()/recomputeTeamCounts() already use, just
+    // without their 3-level cap) -- capped only on total nodes returned and
+    // a defensive max-depth so a pathological chain can't run away.
+    const downline = [];
+    let parentIds = [userId];
+    let level = 0;
+    const DOWNLINE_CAP = 5000;
+    while (parentIds.length && downline.length < DOWNLINE_CAP && level < 50) {
+      level++;
+      const snap = await db.collection('users').where('referredBy', 'in', parentIds).limit(DOWNLINE_CAP).get();
+      const nextIds = [];
+      snap.forEach(d => {
+        nextIds.push(d.id);
+        if (downline.length < DOWNLINE_CAP) downline.push({ ...brief(d.id, d.data()), level, referredBy: d.data().referredBy });
+      });
+      parentIds = nextIds;
+    }
+    const downlineCountByLevel = {};
+    downline.forEach(d => { downlineCountByLevel[d.level] = (downlineCountByLevel[d.level] || 0) + 1; });
+
+    res.json({
+      status: 'success',
+      user: brief(startSnap.id, startSnap.data()),
+      root, upline, cycleDetected,
+      downline, downlineCountByLevel, downlineTruncated: downline.length >= DOWNLINE_CAP,
+    });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
 app.get('/admin/badges', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {

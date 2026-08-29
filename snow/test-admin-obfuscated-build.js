@@ -40,6 +40,20 @@ const routes = {
   'GET /admin/promocodes/list': { status: 'success', codes: [
     { id: 'c1', code: 'AB12CDEF', reward: 5000, uses: 0, maxUses: 1, active: true, createdAt: new Date().toISOString() },
   ] },
+  'POST /admin/user/referral-chain': { status: 'success',
+    user: { id: 'u1', phone: '+256700000001', referralCode: 'abC123', status: 'active', totalInvested: 30000 },
+    root: { id: 'r0', phone: '+256700000099', referralCode: 'root99', status: 'active', totalInvested: 0 },
+    upline: [
+      { id: 'r1', phone: '+256700000002', referralCode: 'xYz789', status: 'active', totalInvested: 50000 },
+      { id: 'r0', phone: '+256700000099', referralCode: 'root99', status: 'active', totalInvested: 0 },
+    ],
+    cycleDetected: false,
+    downline: [
+      { id: 'd1', phone: '+256700000003', referralCode: 'dn0001', status: 'active', totalInvested: 10000, level: 1, referredBy: 'u1' },
+    ],
+    downlineCountByLevel: { 1: 1 },
+    downlineTruncated: false,
+  },
   'GET /admin/referrals/list': { status: 'success', referrals: [
     { id: 'u1', phone: '+256700000001', referrerId: 'r1', referrerCode: 'xYz789', invested: 30000, status: 'active' },
   ] },
@@ -219,6 +233,31 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     const attachCode = doc.getElementById('attachRefCode');
     if (!attachCode) errors.push('attachRefCode input not found (expected since referredBy is null)');
     else { attachCode.value = 'xYz789'; doc.getElementById('attachRefBtn')?.click(); await sleep(250); }
+  }
+  // Re-open once more to test the new "View referral chain" tool (full
+  // upline-to-root + downline, distinct from the L1/L2/L3 team counts)
+  const userRow4 = doc.querySelector('#userRows tr[data-uid]');
+  if (userRow4) {
+    userRow4.click();
+    await sleep(250);
+    const chainBtn = doc.getElementById('viewChainBtn');
+    if (!chainBtn) errors.push('viewChainBtn not found in user detail modal');
+    else {
+      chainBtn.click();
+      await sleep(250);
+      const modalText = doc.getElementById('modalRoot')?.textContent || '';
+      if (!modalText.includes('Referral chain')) errors.push('referral chain modal did not render (no "Referral chain" heading)');
+      if (!modalText.includes('root99')) errors.push('referral chain modal missing root referral code from fixture');
+      if (!modalText.includes('dn0001')) errors.push('referral chain modal missing downline entry from fixture');
+      // Clicking a downline row should navigate back into that person's own detail modal.
+      const downlineRow = doc.querySelector('#modalRoot [data-uid="d1"]');
+      if (!downlineRow) errors.push('downline row for d1 not found/clickable in chain modal');
+      else {
+        downlineRow.click();
+        await sleep(250);
+        if (!doc.getElementById('viewChainBtn')) errors.push('clicking a downline row did not open that user\'s own detail modal');
+      }
+    }
   }
   // Integrity audit's "Open user" link on a mismatch row
   doc.querySelector('.tab[data-tab="users"]').click();
