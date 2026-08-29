@@ -1641,11 +1641,14 @@ window.openDepositSheet = function(){
       </select>
     </div>
     <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Recharge</button>
-    <div class="form-hint" style="margin:20px 0 0;line-height:1.6;">
-      1. Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount below.<br>
-      2. Confirm your mobile-money number and network.<br>
-      3. Tap Recharge, then approve the prompt on your phone.<br>
-      4. Your wallet updates automatically once payment is confirmed.
+    <div class="instr-card">
+      <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Recharge instructions</span></div>
+      <ol>
+        <li>Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount above.</li>
+        <li>Confirm your mobile-money number and network.</li>
+        <li>Tap Recharge, then approve the prompt on your phone.</li>
+        <li>Your wallet updates automatically once payment is confirmed.</li>
+      </ol>
     </div>
   </div>`);
 };
@@ -1711,11 +1714,14 @@ function paintWithdrawSheet(s){
     </div>
     <div class="form-field"><label>Transaction PIN</label><input id="witPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code"></div>
     <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button>
-    <div class="form-hint" style="margin:20px 0 0;line-height:1.6;">
-      1. Enter an amount (min ${fmtUGX(s.minWithdraw)}). A ${s.withdrawFeePct||15}% fee applies.<br>
-      2. Select a saved withdrawal account.<br>
-      3. Enter your Transaction PIN and tap Request Withdrawal.<br>
-      4. Funds are sent to your mobile-money number once processed.
+    <div class="instr-card">
+      <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Withdrawal instructions</span></div>
+      <ol>
+        <li>Enter an amount (min ${fmtUGX(s.minWithdraw)}). A ${s.withdrawFeePct||15}% fee applies.</li>
+        <li>Select a saved withdrawal account.</li>
+        <li>Enter your Transaction PIN and tap Request Withdrawal.</li>
+        <li>Funds are sent to your mobile-money number once processed.</li>
+      </ol>
     </div>
   </div>`;
 }

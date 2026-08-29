@@ -3777,6 +3777,49 @@ pass, zero regressions (Round 66's suite is stale/superseded by Round 68's own s
 and was not re-run for that reason, unchanged from prior rounds). Cache bumped `v50`→`v51`.
 `user-src/`-only change — no Render redeploy needed.
 
+## Round 70 (2026-08-29) — quick-amount chips made uniform-size, instructions given a titled card, sheets fill the screen better
+
+Owner, from two more screenshots of the just-rebalanced Deposit/Withdraw sheets: "even
+those quick amounts have different sizes and lengths, everything should have same box
+size, and put that deposit instructions, withdrawal instructions, and l am seeing the
+screen not filled very well, ie withdrawal, bottom space, even some on deposit."
+
+**Quick-amount chips, uniform box size.** `.quick-amts` was `display:flex;flex-wrap:wrap`
+— each chip sized itself to its own text ("UGX 30,000" vs "UGX 4,500,000"), producing the
+jagged, differently-sized boxes the owner pointed at. Switched to
+`display:grid;grid-template-columns:repeat(3,1fr)` — every chip is now an equal-width grid
+cell regardless of how many digits its amount has, with `white-space:nowrap` + ellipsis as
+a safety net if a future price ever runs long. Verified programmatically (not just
+visually): all 10 real product-price chips measure identically at 111×36px.
+
+**Instructions given a real heading, not just a numbered list.** "put that deposit
+instructions, withdrawal instructions" — added a titled `.instr-card` component (a
+wine-tinted `app-card` with an icon bubble + "Recharge instructions"/"Withdrawal
+instructions" heading, `<ol>` list instead of manual `<br>`-separated lines) wrapping the
+same 4 steps each sheet already had, on both `openDepositSheet()` and
+`paintWithdrawSheet()`.
+
+**Screen fill.** The new instructions card's own padding/heading/line-height (`line-height:
+2` in the list) genuinely takes up much more vertical space than the old plain
+`.form-hint` text did — this was the direct, non-hacky fix for "screen not filled well":
+real content taking real room, not an artificial flex-grow spacer. Measured before
+shipping: Withdraw's `#sheetBody` content height grew from ~460px to ~700px against an
+844px-tall device viewport (with the sheet's own ~80px sticky header on top, that's ~780px
+of 844 actually occupied — a large, real reduction in the empty gap the owner
+screenshotted, not a full edge-to-edge fill, since a bottom-anchored flex-stretch hack
+would just break the moment content length varies e.g. with/without a saved withdrawal
+account).
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. Playwright, against the real built app: all 10 quick-amount chips measure the exact
+same 111×36px box (no width/height variance), no chip's text overflows its own box; both
+sheets' instructions card renders the correct heading text ("Recharge instructions" /
+"Withdrawal instructions"); viewport screenshots of both sheets confirm the visual result
+— evenly-gridded chips, a clearly titled instructions card, and a much smaller empty gap
+at the bottom of each sheet. Re-ran Rounds 58/59/60/62/63/65/69's own suites — all still
+pass, zero regressions. Cache bumped `v51`→`v52`. `user-src/`-only change — no Render
+redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
