@@ -36,23 +36,24 @@ var ICONS = {
   eyeOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A11.4 11.4 0 0 1 12 5c7 0 11 7 11 7a17.5 17.5 0 0 1-3.1 3.9M6.7 6.7C3.6 8.5 1 12 1 12s4 7 11 7a10.6 10.6 0 0 0 4.3-.9"/><path d="M9.5 9.8A3 3 0 0 0 12 15a3 3 0 0 0 2.2-.97"/></svg>',
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
-// Owner: "l need exactly this ❄️" -- a hand-drawn stroke-based approximation
-// (even a geometrically-corrected one, see the prior version of this
-// comment) was never going to match the real emoji glyph people actually
-// recognize, since Unicode only defines the codepoint U+2744, not one
-// universal outline -- every vendor (Apple/Google/Microsoft/Twemoji) draws
-// it differently. Codex was asked (with repo + AGENT_LOG.md access) for the
-// closest legally-reusable, recognizable rendition and returned Twemoji's
-// official snowflake (twitter/twemoji assets/svg/2744.svg), normalized from
-// its native 36x36 viewBox down to this app's 24x24 icon convention. It's a
-// FILLED silhouette (3 paths, six-fold symmetry), not a stroke icon like
-// every other ICONS entry -- fill="${color}" with no stroke is correct here,
-// don't "fix" it to match the stroke convention elsewhere in this file.
-// Attribution (required, CC BY 4.0 -- Twemoji explicitly allows this to live
-// in source code rather than a visible UI credit): snowflake artwork
-// adapted from Twemoji by Twitter, Inc. and other contributors, licensed
-// under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
-function snowflakeSvg(color, size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" aria-hidden="true"><path d="M12.667 18.391V5.61L15.885 2.391C15.885 2.391 16.357 1.919 15.885 1.447C15.414.976 14.943 1.447 14.943 1.447L12.667 3.724V.667C12.667.667 12.667 0 12 0C11.333 0 11.333.667 11.333.667V3.724L9.057 1.447C9.057 1.447 8.586.976 8.115 1.447C7.643 1.919 8.115 2.391 8.115 2.391L11.333 5.61V18.391L8.115 21.609C8.115 21.609 7.643 22.081 8.115 22.552C8.586 23.023 9.057 22.552 9.057 22.552L11.333 20.276V23.333C11.333 23.333 11.333 24 12 24C12.667 24 12.667 23.333 12.667 23.333V20.276L14.943 22.552C14.943 22.552 15.414 23.023 15.885 22.552C16.357 22.081 15.885 21.609 15.885 21.609L12.667 18.391Z"/><path d="M23.081 13.911C22.909 13.267 22.265 13.439 22.265 13.439L17.868 14.617L6.799 8.227L5.621 3.83C5.621 3.83 5.449 3.186 4.805 3.359C4.16 3.531 4.333 4.175 4.333 4.175L5.167 7.285L2.519 5.755C2.519 5.755 1.941 5.422 1.608 5.999C1.275 6.577 1.852 6.91 1.852 6.91L4.499 8.439L1.39 9.271C1.39 9.271.745 9.444.919 10.088C1.091 10.733 1.735 10.56 1.735 10.56L6.133 9.382L17.201 15.773L18.379 20.17C18.379 20.17 18.552 20.814 19.196 20.641C19.84 20.468 19.667 19.825 19.667 19.825L18.834 16.715L21.482 18.244C21.482 18.244 22.06 18.577 22.393 18.001C22.727 17.423 22.149 17.089 22.149 17.089L19.501 15.561L22.61 14.728C22.61 14.727 23.254 14.555 23.081 13.911Z"/><path d="M22.61 9.271L19.501 8.438L22.149 6.909C22.149 6.909 22.727 6.575 22.393 5.998C22.059 5.42 21.482 5.754 21.482 5.754L18.835 7.282L19.667 4.173C19.667 4.173 19.84 3.529 19.196 3.357C18.552 3.184 18.379 3.828 18.379 3.828L17.201 8.225L6.132 14.617L1.736 13.439C1.736 13.439 1.092 13.266.919 13.91C.746 14.555 1.391 14.727 1.391 14.727L4.499 15.559L1.852 17.088C1.852 17.088 1.275 17.422 1.609 17.999C1.942 18.576 2.519 18.243 2.519 18.243L5.167 16.714L4.333 19.823C4.333 19.823 4.161 20.467 4.805 20.639C5.449 20.813 5.622 20.169 5.622 20.169L6.801 15.771L17.87 9.381L22.267 10.559C22.267 10.559 22.911 10.732 23.083 10.088C23.253 9.443 22.61 9.271 22.61 9.271Z"/></svg>`; }
+// Owner supplied this exact icy-blue gradient snowflake mark (superseding
+// both the hand-drawn version and the Twemoji-glyph version from earlier
+// rounds) and asked for it "everywhere." It's a stroke-based 6-arm mark
+// with a fixed linear gradient (#8DE8FF -> #4FC3F7 -> #168BD2), unlike
+// every other icon in this file which takes a single flat `color` -- the
+// `color` param is kept (unused) purely so every existing call site
+// (Home/Team/Account/My-Products headers) needs no changes. Each call gets
+// its own unique gradient id via _snowflakeIdCounter: this app renders the
+// mark twice in the same DOM on Account (header + profile card), and SVG
+// <linearGradient> ids must be unique or the second instance's gradient
+// resolution is undefined behavior.
+var _snowflakeIdCounter = 0;
+function snowflakeSvg(color, size){
+  const gid = 'ice' + (_snowflakeIdCounter++);
+  const armD = 'M256 256V48M256 108L204 78M256 108L308 78M256 166L215 142M256 166L297 142';
+  const arms = [0,60,120,180,240,300].map(deg => `<path d="${armD}" transform="rotate(${deg} 256 256)"/>`).join('');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="${gid}" x1="96" y1="72" x2="416" y2="440" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8DE8FF"/><stop offset="0.5" stop-color="#4FC3F7"/><stop offset="1" stop-color="#168BD2"/></linearGradient></defs><g fill="none" stroke="url(#${gid})" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">${arms}</g><circle cx="256" cy="256" r="18" fill="url(#${gid})"/></svg>`;
+}
 function waveLinesTR(w,h,color,count,opacity){
   color = color || 'var(--snow-wave-on-wine)'; count = count || 4; opacity = opacity == null ? .9 : opacity;
   const paths = ["M-18 -8 C40 0 69 42 96 86 C121 127 151 150 202 155","M0 -21 C55 -4 84 35 109 80 C134 123 162 143 205 147","M20 -34 C70 -8 99 29 123 73 C148 116 174 136 208 140","M40 -47 C85 -14 114 23 138 66 C161 108 186 128 211 132"];

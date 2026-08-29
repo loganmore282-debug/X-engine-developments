@@ -3683,6 +3683,57 @@ programmatically to confirm the corrected 68% safe-zone sizing. Re-ran Rounds 59
 own suites — no regressions. Cache bumped `v48`→`v49` (user), `v10`→`v11` (admin).
 `user-src/`-only + icon-asset change — no Render redeploy needed.
 
+## Round 68 (2026-08-28) — snowflake replaced again with an owner-supplied icy-blue gradient mark (supersedes Round 67's Twemoji glyph)
+
+Owner supplied a complete, ready-to-use SVG (a 6-arm stroke-based snowflake with a fixed
+`#8DE8FF → #4FC3F7 → #168BD2` linear gradient and a small center dot) and said "use this...
+resize and render correctly everywhere." Rendered it standalone first to confirm it's a
+real, clean, symmetric design before touching anything — it is.
+
+**This is a deliberate brand deviation from the "no blue" rule Design status documents
+for Snow's overall palette** (white/black/wine-red/green, explicitly ruling out blue
+"rounds 1-3"), and from "green snowflake mark" in the Brand language bullet — both left
+as-written per this file's own practice of correcting forward, not editing history, since
+they accurately describe the ORIGINAL Codex spec at the time it was written. Treating an
+explicit, complete, ready-to-paste asset handed over with "use this... everywhere" as
+authoritative rather than pausing to re-confirm a documented rule the owner may simply be
+choosing to override for the icon mark specifically (not the whole UI) — same posture this
+file already takes toward direct owner instructions elsewhere.
+
+**Applied to `snowflakeSvg()`** (`user-src/original_module.js`): the function signature
+keeps its `(color, size)` params unchanged (so none of the 5-6 existing call sites needed
+touching) even though `color` is now unused — the mark is a fixed gradient, not a
+single flat color like every other icon in this app. Real bug avoided by inspecting the
+DOM before shipping, not just eyeballing the SVG in isolation: Account renders this mark
+**twice in the same page** (header + profile card), and the owner's own SVG used a bare
+hardcoded `id="ice"` for its `<linearGradient>` — duplicate SVG ids are undefined
+behavior for which instance's gradient actually resolves. Added `_snowflakeIdCounter`
+(module-level `var`, per this file's own standing "top-level bindings must be var, not
+const/let, or they silently break only in the obfuscated build" rule) so every call gets
+a genuinely unique gradient id. The identical static markup in the auth-screen header
+(`user-src/index.html`) uses a fixed `id="iceAuth"` instead, since that copy only ever
+renders once per page.
+
+**Regenerated both icon sizes** (`user/` + `admin/`) on the same existing wine gradient
+background. Measured the glyph's own real pixel extent first (its round-stroke-cap tips
+reach ~107% of its own half-width — well past a 1:1 fit) rather than assuming a naive
+`scale(.8)` would be maskable-safe, then chose `scale(.78)` on the icon canvas and
+re-measured the actual rendered PNG to confirm the final on-icon-canvas extent lands at
+68% of the icon's half-width — comfortable margin under the 80% ceiling Round 67 already
+re-derived correctly.
+
+**Verified against the real obfuscated build, not just the source** — this class of
+change (a new top-level `var`) is exactly what has silently broken only in production
+before in this codebase (Round 12's own history). Playwright, against the actual built
+`user/index.html`: auth screen renders 6 arm paths + 1 gradient; Home's header renders 6
+arms + a gradient with an id genuinely different from the auth screen's (`ice0` vs
+`iceAuth` — proves the counter survived obfuscation and isn't silently undefined);
+Account page — the real two-simultaneous-instance case — renders exactly 2 gradients
+with distinct ids (`ice1`/`ice2`, no collision); zero page/console errors from the app
+itself. Icon files re-measured programmatically to confirm the 68% safe-zone sizing.
+Re-ran Rounds 59/62/65's own suites — no regressions. Cache bumped `v49`→`v50` (user),
+`v11`→`v12` (admin). `user-src/`-only + icon-asset change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
