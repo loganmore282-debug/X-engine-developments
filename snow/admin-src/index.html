@@ -696,7 +696,7 @@ async function renderUsers(){
       openModal(`<h3>Integrity audit</h3>
         <div class="muted" style="margin-bottom:10px">${d.checked} user(s) checked</div>
         ${!total?`<div style="background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:16px;font-weight:700;text-align:center">All clear. Every balance/total matches its real records, no duplicate credits, no negative balances, no stuck registrations.</div>`
-        :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${total} issue(s) found.${walletMismatches.length?` ${walletMismatches.length} wallet-balance mismatch(es) can't be auto-closed — Credit/Debit move both sides together, so open the user and diagnose by hand.`:''}${recountableMismatches.length?` ${recountableMismatches.length} deposited/earned/invested mismatch(es) will be fixed by "Recalculate totals" above.`:''}</div>`+
+        :`<div style="background:var(--danger-bg);color:var(--danger);border-radius:12px;padding:10px 14px;font-weight:700;margin-bottom:10px">${total} issue(s) found.${walletMismatches.length?` ${walletMismatches.length} wallet-balance mismatch(es) can't be auto-closed. Credit/Debit move both sides together, so open the user and diagnose by hand.`:''}${recountableMismatches.length?` ${recountableMismatches.length} deposited/earned/invested mismatch(es) will be fixed by "Recalculate totals" above.`:''}</div>`+
           mismatches.map(m=>`<div class="kv"><span class="k">${FIELD_LABEL[m.field]||m.field} ≠ real${m.phone?' · '+esc(m.phone):''}</span>
             <span>stored ${ugx(m.stored)} vs real ${ugx(m.real)} (diff ${ugx(m.diff)}) &nbsp; <button class="btn sm ghost" data-openuser="${esc(m.userId)}">Open user</button></span></div>`).join('')+
           alerts.map(a=>`<div class="kv"><span class="k">${ALERT_LABEL[a.kind]||a.kind}${a.phone?' · '+esc(a.phone):''}</span>
@@ -755,7 +755,7 @@ async function openReferralChain(uid){
   if(r.status!=='success'){ toast(r.message||'Could not load referral chain','err'); return; }
   const rowHtml = (m, extra) => `<div class="kv" data-uid="${esc(m.id)}" style="cursor:pointer">
     <span class="k">${esc(m.phone||m.id)}</span>
-    <span>${esc(m.referralCode||'—')} · <span class="pill-tag ${m.status==='banned'?'t-bad':'t-ok'}">${esc(m.status)}</span>${extra||''}</span>
+    <span>${esc(m.referralCode||'Not set')} · <span class="pill-tag ${m.status==='banned'?'t-bad':'t-ok'}">${esc(m.status)}</span>${extra||''}</span>
   </div>`;
   const uplineHtml = r.upline.length
     ? r.upline.map(rowHtml).join('')
@@ -769,7 +769,7 @@ async function openReferralChain(uid){
     <h3>Referral chain</h3>
     <div class="muted" style="margin-bottom:10px">${esc(r.user.phone||r.user.id)}${r.cycleDetected?' <span class="pill-tag t-bad">Cycle detected in data -- stopped early</span>':''}</div>
     <h4 style="margin:10px 0 6px;font-size:13px">Root</h4>
-    <div class="kv"><span class="k">${esc(r.root.phone||r.root.id)}</span><span>${esc(r.root.referralCode||'—')}${r.root.id===r.user.id?' <span class="pill-tag t-ok">This user</span>':''}</span></div>
+    <div class="kv"><span class="k">${esc(r.root.phone||r.root.id)}</span><span>${esc(r.root.referralCode||'Not set')}${r.root.id===r.user.id?' <span class="pill-tag t-ok">This user</span>':''}</span></div>
     <h4 style="margin:14px 0 6px;font-size:13px">Upline (direct referrer → root), ${r.upline.length} link${r.upline.length===1?'':'s'}</h4>
     <div class="table-scroll" style="max-height:180px">${uplineHtml}</div>
     <h4 style="margin:14px 0 6px;font-size:13px">Downline, ${r.downline.length}${r.downlineTruncated?'+':''} total -- ${esc(levelSummary)}</h4>
@@ -972,7 +972,7 @@ async function renderDeposits(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time — MarzPay mobile money, automatic. A stuck deposit can be force-credited once you've verified the money landed.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time, MarzPay mobile money, automatic. A stuck deposit can be force-credited once you've verified the money landed.</p>
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
@@ -1055,7 +1055,7 @@ async function renderWithdrawals(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0">Withdrawals</h2>
       <button class="btn sm ghost" id="witSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own — members withdraw to a bound mobile money number (see each row's destination).</p>
+    <p class="muted" style="margin:0 0 12px">Every cash-out request waits here as <b>Pending</b> until an admin sends it, nothing reaches MarzPay on its own. Members withdraw to a bound mobile money number (see each row's destination).</p>
     ${procChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="witSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_witFilter===k?' active':''}" data-wf="${k}">${l}${k==='all'?` (${_wits.length})`:(counts[k]?` (${counts[k]})`:' (0)')}</button>`).join('')}</div>
@@ -1072,7 +1072,7 @@ function witStatusPill(w){
   // gray default label with no explanation and, until the fix below, no
   // action button either -- an admin had no way to tell this apart from a
   // normal in-progress state.
-  if(w.status==='sending') return `<span class="pill-tag t-bad">Stuck sending — check MarzPay</span>`;
+  if(w.status==='sending') return `<span class="pill-tag t-bad">Stuck sending, check MarzPay</span>`;
   return statusPill(w.status);
 }
 function drawWits(){
@@ -1211,7 +1211,7 @@ function editProduct(p, order){
   const setPrev = (src)=>{ $('pImgPrev').innerHTML = src?`<img src="${esc(src)}" alt="">`:'<span class="muted">No image</span>'; $('pImgClear').style.display = src?'':'none'; };
   $('pFile').addEventListener('change', async e=>{
     const f=e.target.files[0]; if(!f) return;
-    try{ imgData = await fileToDataUrl(f,640,0.7); $('pImage').value=''; setPrev(imgData); toast('Image ready — tap Save product','ok'); }
+    try{ imgData = await fileToDataUrl(f,640,0.7); $('pImage').value=''; setPrev(imgData); toast('Image ready, tap Save product','ok'); }
     catch(err){ toast(err.message||'Could not read image','err'); }
   });
   $('pImgClear').addEventListener('click', ()=>{ imgData=''; $('pImage').value=''; setPrev(''); });
@@ -1301,7 +1301,7 @@ async function renderAdmins(){
   $('content').innerHTML = `
     <h2 class="sec">Admin accounts</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">You (the owner) always sign in with the master admin key — it's never given to anyone below. Create a separate username + password for each other person who needs access.</p>
+      <p class="muted" style="margin-top:0">You (the owner) always sign in with the master admin key. It's never given to anyone below. Create a separate username + password for each other person who needs access.</p>
       <div class="row">
         <div><label>Username</label><input id="aaUser" placeholder="e.g. mary" autocomplete="off"></div>
         <div><label>Password</label><input id="aaPass" type="password" placeholder="At least 8 characters" autocomplete="new-password"></div>
@@ -1312,7 +1312,7 @@ async function renderAdmins(){
     <tbody>${list.length?list.map(a=>`
       <tr><td><b>${esc(a.username)}</b></td>
       <td><span class="pill-tag ${a.active?'t-ok':'t-mut'}">${a.active?'Active':'Deactivated'}</span></td>
-      <td>${fdate(a.createdAt)||'—'}</td><td>${fdate(a.lastLoginAt)||'Never'}</td>
+      <td>${fdate(a.createdAt)||'Unknown'}</td><td>${fdate(a.lastLoginAt)||'Never'}</td>
       <td style="white-space:nowrap">
         ${a.active?`<button class="btn sm" data-deact="${esc(a.username)}">Deactivate</button>`:`<button class="btn sm" data-react="${esc(a.username)}">Reactivate</button>`}
         <button class="btn sm" data-reset="${esc(a.username)}">Reset password</button>
@@ -1341,7 +1341,7 @@ async function renderAdmins(){
     const password = prompt(`New password for "${b.dataset.reset}" (at least 8 characters):`);
     if(!password) return;
     const d=await api('/admin/admins/reset-password',{username:b.dataset.reset,password});
-    toast(d.status==='success'?'Password reset — they are signed out everywhere and must log in again':(d.message||'Failed'),d.status==='success'?'ok':'err');
+    toast(d.status==='success'?'Password reset, they are signed out everywhere and must log in again':(d.message||'Failed'),d.status==='success'?'ok':'err');
   }));
   document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async()=>{
     if(!confirm(`Permanently delete "${b.dataset.del}"? This cannot be undone.`)) return;
@@ -1410,7 +1410,7 @@ function drawTxns(){
   if(q) list=list.filter(t=>(t.description||'').toLowerCase().includes(q)||(t.type||'').includes(q)||(t.userId||'').toLowerCase().includes(q)||(t.ref||'').toLowerCase().includes(q));
   $('txRows').innerHTML = list.length?list.map(t=>`
     <tr class="${t.userId?'clickable':''}" ${t.userId?`data-uid="${esc(t.userId)}"`:''}><td>${fdate(t.createdAt)}</td><td>${esc(txLabel(t.type))}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description||'')}</td>
-    <td style="font-family:monospace;font-size:12px;white-space:nowrap">${esc(t.ref||'—')}</td>
+    <td style="font-family:monospace;font-size:12px;white-space:nowrap">${esc(t.ref||'Not set')}</td>
     <td style="color:${(t.amount||0)>=0?'var(--ok)':'var(--danger)'};font-weight:700;white-space:nowrap">${(t.amount||0)>=0?'+':'−'}${ugx(Math.abs(t.amount||0))}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No transactions</td></tr>';
   document.querySelectorAll('#txRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
@@ -1437,7 +1437,7 @@ async function renderReferrals(){
   // building a paginated UI that isn't needed at any realistic scale today.
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="refsCount">Referrals (${_refs.length}${r.truncated?'+':''})</h2></div>
-    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_refs.length+' referrals only — the platform has more than this list can currently display.</div>':''}
+    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_refs.length+' referrals only. The platform has more than this list can currently display.</div>':''}
     <div class="panel-card" style="margin-bottom:12px"><input id="refSearch" placeholder="Search a phone number"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Referred user</th><th>Referrer's code</th><th>Invested</th><th>Status</th></tr></thead>
     <tbody id="refRows"></tbody></table></div>`;
@@ -1447,7 +1447,7 @@ async function renderReferrals(){
 function drawRefs(){
   const raw = ($('refSearch')?.value||'').trim().toLowerCase();
   const list = raw ? _refs.filter(x => (x.phone||'').toLowerCase().includes(raw)) : _refs;
-  $('refRows').innerHTML = list.length?list.map(x=>`<tr class="clickable" data-uid="${esc(x.id)}"><td><b>${esc(x.phone||'')}</b></td><td>${esc(x.referrerCode||'—')}</td><td>${ugx(x.invested)}</td><td><span class="pill-tag ${x.status==='banned'?'t-bad':'t-ok'}">${x.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):`<tr><td colspan="4" class="empty">${raw?'No matching referrals':'No referrals yet'}</td></tr>`;
+  $('refRows').innerHTML = list.length?list.map(x=>`<tr class="clickable" data-uid="${esc(x.id)}"><td><b>${esc(x.phone||'')}</b></td><td>${esc(x.referrerCode||'None')}</td><td>${ugx(x.invested)}</td><td><span class="pill-tag ${x.status==='banned'?'t-bad':'t-ok'}">${x.status==='banned'?'Banned':'Active'}</span></td></tr>`).join(''):`<tr><td colspan="4" class="empty">${raw?'No matching referrals':'No referrals yet'}</td></tr>`;
   document.querySelectorAll('#refRows tr[data-uid]').forEach(tr=>tr.addEventListener('click',()=>openUser(tr.dataset.uid)));
 }
 // Live-refresh counterpart to renderReferrals() -- see quietRefreshUsers().
@@ -1509,7 +1509,7 @@ async function renderSettings(){
         <label style="width:auto;margin:0"><input type="checkbox" id="sReqInvest" ${s.requireInvestToWithdraw!==false?'checked':''} style="width:auto"></label></div>
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
-      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock — back shortly.">
+      <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Mobile-money recharges run on MarzPay automatically; cash-outs wait as Pending until an admin sends them from the Withdrawals tab.</p>
       <button class="btn block" id="saveRates">Save rates</button>
@@ -1524,14 +1524,14 @@ async function renderSettings(){
 
     <h2 class="sec">Auto-approve withdrawals</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested — even a single request always waits the full interval, it's never approved instantly) before the server approves and sends it. It checks every few seconds, and every request that's old enough at that moment is approved and sent back-to-back in the same pass, not spaced apart from each other — no tap needed per request. It reuses the exact same send logic as the "Send via MarzPay" button on the Withdrawals tab, so it can never double-pay a request or act on one that isn't still genuinely pending.</p>
+      <p class="muted" style="margin-top:0">Server-driven: while on, every incoming withdrawal request first waits the interval below (measured from the moment it was requested, even a single request always waits the full interval, it's never approved instantly) before the server approves and sends it. It checks every few seconds, and every request that's old enough at that moment is approved and sent back-to-back in the same pass, not spaced apart from each other. No tap needed per request. It reuses the exact same send logic as the "Send via MarzPay" button on the Withdrawals tab, so it can never double-pay a request or act on one that isn't still genuinely pending.</p>
       <div class="switch-row"><span><b>Enable auto-approve</b> <span class="muted">(server keeps running even if you close this panel)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sAutoApproveOn" ${s.autoApproveWithdrawalsEnabled?'checked':''} style="width:auto"></label></div>
       <div class="row" style="margin-top:6px">
         <div><label>Wait after request before approving (seconds)</label><input id="sAutoApproveInterval" type="number" min="5" max="3600" value="${v('autoApproveIntervalSec',10)}"></div>
         <div><label>Max amount to auto-approve</label><input id="sAutoApproveMaxAmt" type="number" min="0" value="${v('autoApproveMaxAmount',0)}" placeholder="0 = no limit"></div>
       </div>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">A request above the max amount is skipped and left Pending for you to approve by hand — it does not block smaller requests behind it in the queue. Set to 0 to auto-approve every amount.</p>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">A request above the max amount is skipped and left Pending for you to approve by hand. It does not block smaller requests behind it in the queue. Set to 0 to auto-approve every amount.</p>
       <button class="btn block" id="saveAutoApprove" style="margin-top:10px">Save auto-approve settings</button>
     </div>
 
@@ -1574,10 +1574,10 @@ async function renderSettings(){
 
     <h2 class="sec">Support contacts</h2>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">"Telegram group" and "Direct contact" also show as the two buttons on the app's Help Centre page — leave either blank to hide its button.</p>
+      <p class="muted" style="margin-top:0">"Telegram group" and "Direct contact" also show as the two buttons on the app's Help Centre page. Leave either blank to hide its button.</p>
       <label>Telegram group</label><input id="spTgGroup" value="${esc(v('telegramGroup',''))}" placeholder="https://t.me/yourgroup">
       <label>Telegram channel</label><input id="spTgChan" value="${esc(v('telegramChannel',''))}" placeholder="https://t.me/yourchannel">
-      <label>Direct contact (Telegram) — shown as "Customer Service"</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/youragent">
+      <label>Direct contact (Telegram), shown as "Customer Service"</label><input id="spTg" value="${esc(v('supportTelegram',''))}" placeholder="https://t.me/youragent">
       <label>WhatsApp group</label><input id="spWaGroup" value="${esc(v('whatsappGroup',''))}" placeholder="https://chat.whatsapp.com/yourgroup">
       <label>WhatsApp contact</label><input id="spWaContact" value="${esc(v('whatsappContact',''))}" placeholder="https://wa.me/256700000000">
       <label>Support hours</label><input id="spHours" value="${esc(v('supportHours',''))}" placeholder="Every day, 8am – 9pm">
@@ -1597,7 +1597,7 @@ async function renderSettings(){
       <button class="btn block" id="saveTagline" style="margin-top:6px">Save tagline</button>
     </div>
     <div class="panel-card">
-      <p class="muted" style="margin-top:0">Build the About page as an ordered list of blocks — add as many text blocks and images as you like, in any order (an image doesn't need to follow every paragraph, and you can skip images entirely). Members see each block animate in as they scroll down.</p>
+      <p class="muted" style="margin-top:0">Build the About page as an ordered list of blocks. Add as many text blocks and images as you like, in any order (an image doesn't need to follow every paragraph, and you can skip images entirely). Members see each block animate in as they scroll down.</p>
       <div id="aboutBlocksList"></div>
       <button class="btn block" id="abAddText">+ Add text block</button>
       <label class="btn block file-btn">+ Add image block<input type="file" id="abAddImageFile" accept="image/*" hidden></label>
@@ -1653,7 +1653,7 @@ async function renderSettings(){
         toast('Uploading…','ok');
         const image = await fileToDataUrl(f,1280,0.82);
         const d = await api('/admin/banner/set', { image });
-        toast(d.status==='success'?'Banner saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        toast(d.status==='success'?'Banner saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
         if (d.status==='success') renderSettings();
       } catch(err){ toast(err.message||'Could not read image','err'); }
     })());
@@ -1673,7 +1673,7 @@ async function renderSettings(){
         toast('Uploading…','ok');
         const image = await fileToDataUrl(f,1280,0.82);
         const d = await api('/admin/help-banner/set', { image });
-        toast(d.status==='success'?'Help Centre banner saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        toast(d.status==='success'?'Help Centre banner saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
         if (d.status==='success') renderSettings();
       } catch(err){ toast(err.message||'Could not read image','err'); }
     })());
@@ -1693,7 +1693,7 @@ async function renderSettings(){
         toast('Uploading…','ok');
         const image = await fileToDataUrl(f,1280,0.82);
         const d = await api('/admin/announcement-image/set', { image });
-        toast(d.status==='success'?'Announcement image saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+        toast(d.status==='success'?'Announcement image saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
         if (d.status==='success') renderSettings();
       } catch(err){ toast(err.message||'Could not read image','err'); }
     })());
@@ -1740,7 +1740,7 @@ async function renderSettings(){
   $('saveAbout').addEventListener('click', async()=>{
     await withTabBusy((async()=>{
       const d = await api('/admin/about-content/set', { blocks: _aboutBlocks });
-      toast(d.status==='success'?'About page saved — live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
+      toast(d.status==='success'?'About page saved, live for every user':(d.message||'Failed'), d.status==='success'?'ok':'err');
       if (d.status==='success') _aboutBlocksDirty = false;
     })());
   });
@@ -1750,7 +1750,7 @@ async function renderSettings(){
 // in full on every add/move/delete/edit (small list, cheap to re-render).
 function renderAboutBlocksEditor(){
   const box = $('aboutBlocksList'); if (!box) return;
-  if (!_aboutBlocks.length) { box.innerHTML = '<p class="muted" style="margin:8px 0">No blocks yet — add a text block or an image below.</p>'; return; }
+  if (!_aboutBlocks.length) { box.innerHTML = '<p class="muted" style="margin:8px 0">No blocks yet, add a text block or an image below.</p>'; return; }
   box.innerHTML = _aboutBlocks.map((b,i)=>`
     <div class="panel-card" style="margin-bottom:8px;padding:10px;">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">

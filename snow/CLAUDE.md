@@ -4767,6 +4767,97 @@ modal's icon class flips to `success`, renders a genuine `<svg>` element (confir
 visible only once resolved, and tapping it closes the modal. Cache bumped `v58`→`v59`.
 `user-src/`-only change — no Render redeploy needed.
 
+## Round 83 (2026-08-29) — deposit status modal now shows the actual phone/amount the prompt was sent to; every dash-as-punctuation character removed from user- and admin-facing text platform-wide
+
+Owner, on Round 82's deposit modal: "you need to add more link, payment prompt sent
+to: amount, like that" — read as: the pending state's generic "waiting for
+confirmation" copy needed the actual specifics (which number the prompt went to, for
+how much), not a placeholder message. Second, separate instruction: "stop using (-)
+dashes, check everywhere in the code, no using dashes" — a platform-wide sweep, not
+scoped to the modal.
+
+**Deposit modal now shows the real phone and amount.** `openDepositStatusModal()`
+takes `(amount, phone)` from `submitDeposit()`'s own already-validated form values;
+`setDepositStatusPending()` renders "Payment prompt sent to +256700000000 for
+UGX 50,000. Approve it on your phone to complete this recharge." — the actual number
+(reusing the existing `cleanPhone()` normalizer already used at login/register, so it
+reads as a real `+256...` number regardless of which local format the member typed)
+and the actual amount, not a generic placeholder.
+
+**Dash sweep — interpreted as "no dash used as sentence/list punctuation," not "no
+hyphens in real English words."** Compound words that are genuinely hyphenated
+("check-in," "one-time," "back-to-back," "mid-request") were left alone — removing
+those would just misspell normal English. What was actually removed: every em dash
+(`—`) and every ` - ` spaced-hyphen separator used as connective punctuation in text
+the app or admin panel actually displays — toasts, sheet copy, transaction ledger
+descriptions, server error/success messages, admin panel labels/placeholders/toasts,
+and "no value" table-cell fallbacks (`'—'` swapped for a real word like "Not set" /
+"None" / "Unknown" / "Never" depending on what's actually missing). Replaced with
+whatever reads most naturally without a dash: a period splitting it into two
+sentences, a plain comma, or a colon for a label. Code comments (never shown to a user
+or admin) were deliberately left untouched — rewriting hundreds of internal `//`
+notes for a UI wording preference would be pure churn with zero visible effect, and
+this file's own established practice is to only touch what's actually reachable by
+the complaint.
+
+**Ledger description format changed, and the client-side parser updated to match.**
+Every `Deposit`/`Withdrawal` transaction description server.js writes changed from
+`` `Deposit — Processing — ${fmtUGX(amt)}` `` to `` `Deposit: Processing
+(${fmtUGX(amt)})` `` (and the same shape for Success/Failed, and Withdrawal's
+`Processing`/`Success`/`Failed, refunded`/`Failed, refund pending` labels — the
+existing comma inside "Failed, refunded" was already dash-free and left as-is).
+`depWitStatusLabel()` (`user-src/original_module.js`, powers the Records tab's plain
+Deposits/Withdrawals status word) was rewritten to split on `': '` and strip the
+trailing `(UGX ...)` parenthetical instead of splitting on `' — '` — verified this
+still correctly extracts "Processing"/"Success"/"Failed, refunded" from the new
+format.
+
+**Every spot fixed, by file:**
+- `user-src/original_module.js`: check-in toast (`Check-in successful. UGX X added to
+  your wallet`, was `... — UGX X ... — day N streak` in earlier rounds), the empty
+  My Products state, the referral-code "not set" fallback, the check-in sheet's
+  claimed-today button label, Mission Center's two explainer lines, the referral
+  share-link text, the deposit status modal's pending copy (now also carrying the
+  phone/amount per the first request above), `depWitStatusLabel()`'s parser (and its
+  own comment), and the withdrawal-account dropdown's option label.
+- `server.js`: all 6 transaction-description template strings (deposit
+  processing/success/failed, withdrawal processing + the shared
+  processing/success/failed finalizer), 2 "your progress changed" retry messages, the
+  Mission salary already-claimed message, the cash-out-requested success message, the
+  MarzPay-mid-request ambiguous-failure message, a product-validation error message,
+  an admin debit-insufficient-funds thrown error, and 2 withdrawal-reject messages.
+  Internal-only `console.error`/`console.warn` log lines (never shown to a user or
+  admin) were left as-is — those aren't "the code" a person looking at the app would
+  ever see.
+- `admin-src/index.html`: referral-chain/referrals-list "no code" fallbacks, 2 tab
+  explainer paragraphs (Deposits, Withdrawals), a stuck-withdrawal status pill, an
+  image-ready toast, the owner-key explainer paragraph, an admin-accounts table's
+  "no date" fallback, a password-reset toast, a transaction-ref "not set" fallback, a
+  referrals-truncation notice, a maintenance-message placeholder, the auto-approve
+  explainer paragraph, the Help Centre links explainer + field label, the About-page
+  block-editor explainer, 4 "saved, live for every user" toasts (banner, Help Centre
+  banner, announcement image, About page), the empty-blocks-yet message, and the
+  Integrity Audit modal's wallet-mismatch explanation.
+
+**Verified**: `node --check` clean on `server.js` and `original_module.js`,
+`node build-core.js` and `node build-admin.js` both clean round-trips, `git diff
+--check` clean, a boot smoke test (real self-signed RSA dummy Firebase service-account
+PEM + unreachable `MONGODB_URI`) fails only at the Mongo-connect step,
+`test-admin-obfuscated-build.js` (the real obfuscated admin build) — 0 errors across
+all 12 tabs. A `grep` sweep across all 4 source files (server.js, original_module.js,
+both index.html files) for `—` confirmed only code comments remain, zero matches in
+any runtime string, template literal, or admin/user-facing label. Playwright, against
+the real built (obfuscated) `user/index.html`: the check-in toast reads exactly
+"Check-in successful. UGX 500 added to your wallet" with no em/en dash anywhere in it;
+submitting a deposit shows "Payment prompt sent to +256700000000 for UGX 50,000.
+Approve it on your phone to complete this recharge." (both the real phone and the real
+amount present, no dash) before flipping to "Recharge successful" once the poll
+resolves; Records' Deposits tab renders a plain "Processing" status word (and
+Withdrawals renders "Failed, refunded") from the new colon/parenthesis description
+format, confirming `depWitStatusLabel()`'s updated parser still works correctly, with
+no dash anywhere in the rendered Records body either. Cache bumped `v59`→`v60` (user),
+`v16`→`v17` (admin). **`server.js` changed, Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

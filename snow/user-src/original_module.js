@@ -921,7 +921,7 @@ function paintProducts(animate){
 <div class="section-title" style="margin:26px 20px 12px;">Active Plans</div>
 <div style="display:flex;flex-direction:column;gap:14px;margin:0 20px;">`;
   if (!investments.length) {
-    html += `<div class="list-empty"><div class="empty-icon">${ICONS.box}</div>No products yet — browse plans on Home to get started.</div>`;
+    html += `<div class="list-empty"><div class="empty-icon">${ICONS.box}</div>No products yet. Browse plans on Home to get started.</div>`;
   } else {
     investments.forEach(inv => {
       const p = (STATE.products||[]).find(x=>x.key===inv.tierKey) || {};
@@ -1122,7 +1122,7 @@ function paintTeam(){
   <div style="position:relative;">
     <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;opacity:.8;font-weight:700;">Your Referral Code</div>
     <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
-      <div class="mono" style="font-size:30px;font-weight:800;letter-spacing:1px;">${esc(t.referralCode||'—')}</div>
+      <div class="mono" style="font-size:30px;font-weight:800;letter-spacing:1px;">${esc(t.referralCode||'Not set')}</div>
       <button style="border:none;background:none;padding:0;" onclick="copyText('${esc(t.referralCode||'')}')">${copyBubble()}</button>
     </div>
     <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;opacity:.8;font-weight:700;margin-top:18px;">Your Invite Link</div>
@@ -1202,7 +1202,7 @@ function renderMissionCenter(){
   const m = STATE.mission;
   if (!m) return;
   const salaryBtn = m.salaryClaimedToday
-    ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Claimed today — resets at midnight</button>`
+    ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Claimed today, resets at midnight</button>`
     : !m.l1ActiveCount
       ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Need at least 1 active referral</button>`
       : `<button class="primary-button" id="missionSalaryBtn" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;" onclick="claimMissionSalary()">Claim ${fmtUGX(m.salaryAmount)}</button>`;
@@ -1243,7 +1243,7 @@ function renderMissionCenter(){
   $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="app-card" style="padding:18px;">
       <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--snow-muted);font-weight:700;">Daily Referral Salary</div>
-      <div style="font-size:13px;color:var(--snow-muted);margin-top:6px;">${fmtUGX(m.salaryRate)} per active referral, up to ${(m.salaryCap||0).toLocaleString('en-UG')} referrals. Claim once a day — resets at 00:00.</div>
+      <div style="font-size:13px;color:var(--snow-muted);margin-top:6px;">${fmtUGX(m.salaryRate)} per active referral, up to ${(m.salaryCap||0).toLocaleString('en-UG')} referrals. Claim once a day, resets at 00:00.</div>
       <div style="display:flex;align-items:baseline;gap:8px;margin-top:14px;">
         <div class="mono" style="font-size:26px;font-weight:800;color:var(--snow-wine);">${fmtUGX(m.salaryAmount)}</div>
         <div style="font-size:12px;color:var(--snow-muted);">${m.l1ActiveCount} active referral${m.l1ActiveCount===1?'':'s'}</div>
@@ -1252,7 +1252,7 @@ function renderMissionCenter(){
     </div>
     <div style="margin-top:22px;padding:0 2px;">
       <div style="font-size:15px;font-weight:800;color:var(--snow-ink);">Team Deposit Rewards</div>
-      <div style="font-size:12px;color:var(--snow-muted);margin-top:4px;">One-time reward per threshold — claim manually once your whole team's deposits reach it.</div>
+      <div style="font-size:12px;color:var(--snow-muted);margin-top:4px;">One-time reward per threshold, claim manually once your whole team's deposits reach it.</div>
     </div>
     ${depositCards}
     <p style="font-size:11.5px;color:var(--snow-muted);line-height:1.6;margin:16px 2px 0;">Daily salaries are credited once referrals meet the active-account criteria. Team deposit rewards are available to claim instantly once your team's deposits confirm.</p></div>`;
@@ -1329,7 +1329,7 @@ window.copyText = function(text){
 };
 window.shareReferral = function(link){
   if (!rapidTapGuardOk('share')) return;
-  const text = `Join Snow and start earning — sign up with my link: ${link}`;
+  const text = `Join Snow and start earning, sign up with my link: ${link}`;
   if (navigator.share) navigator.share({ text }).catch(()=>{});
   else writeClipboard(link);
 };
@@ -1540,7 +1540,7 @@ window.submitCheckin = async function(){
     btn.disabled = false; btn.textContent = label;
     return toast(r.message || 'Could not check in', true);
   }
-  toast(`Check-in successful — ${fmtUGX(r.bonus)} added to your wallet`);
+  toast(`Check-in successful. ${fmtUGX(r.bonus)} added to your wallet`);
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
   // Same stale-Records fix Round 72 applied to deposit/withdraw --
@@ -1631,15 +1631,18 @@ window.switchRecordsTab = function(cat){
 // Owner: "l need deposit and withdrawals to be plain no details, so
 // deposit amount and status, also withdrawals, amount and status." The
 // amount is already shown on its own in the right-hand mono column, so the
-// server's own "Deposit — Success — UGX 30,000" / "Withdrawal — Failed,
-// refunded — UGX 50,000" description is trimmed here to just its middle
-// segment (the plain status word) for the Deposits/Withdrawals tabs,
-// dropping the type prefix and the repeated amount. Income-tab rows
-// (cashback, commission, etc.) are untouched -- only deposit/withdraw were
-// asked to go plain.
+// server's own "Deposit: Success (UGX 30,000)" / "Withdrawal: Failed,
+// refunded (UGX 50,000)" description is trimmed here to just its status
+// segment (the part after "Type: ", with the trailing "(UGX ...)" amount
+// stripped) for the Deposits/Withdrawals tabs, dropping the type prefix and
+// the repeated amount. Income-tab rows (cashback, commission, etc.) are
+// untouched -- only deposit/withdraw were asked to go plain. No dashes in
+// this format at all (owner: "no using dashes") -- a colon separates the
+// type from the status, a plain comma separates "Failed" from "refunded".
 function depWitStatusLabel(desc){
-  const parts = String(desc || '').split(' — ');
-  return parts.length >= 2 ? parts[1] : (desc || '');
+  const parts = String(desc || '').split(': ');
+  const label = parts.length >= 2 ? parts[1] : (desc || '');
+  return label.replace(/\s*\([^)]*\)\s*$/, '');
 }
 function recordsRowLabel(cat, t){
   return (cat === 'deposit' || cat === 'withdraw') ? depWitStatusLabel(t.description) : cleanDesc(t.description);
@@ -1743,8 +1746,8 @@ function syncDepositQuickAmt(){
 // (a real operation is in flight); the Close button only appears once
 // resolved (or once the poll gives up), matching the app's own established
 // pattern of only offering Close on a settled dialog state.
-window.openDepositStatusModal = function(){
-  setDepositStatusPending();
+window.openDepositStatusModal = function(amount, phone){
+  setDepositStatusPending(amount, phone);
   $('depStatusBg').classList.add('show');
   lockBodyScroll();
 };
@@ -1752,11 +1755,14 @@ window.closeDepositStatusModal = function(){
   $('depStatusBg').classList.remove('show');
   unlockBodyScroll();
 };
-function setDepositStatusPending(){
+function setDepositStatusPending(amount, phone){
   $('depStatusIcon').className = 'dep-status-icon';
   $('depStatusIcon').innerHTML = '<div class="spin"></div>';
   $('depStatusTitle').textContent = 'Processing your recharge';
-  $('depStatusBody').textContent = "Waiting for confirmation from your mobile money provider — this only takes a moment.";
+  // Owner asked for the specifics shown here, not a generic message --
+  // the actual number the prompt was sent to and the actual amount.
+  const displayPhone = cleanPhone(phone) || ('+256' + String(phone || '').replace(/\D/g, ''));
+  $('depStatusBody').textContent = `Payment prompt sent to ${displayPhone} for ${fmtUGX(amount)}. Approve it on your phone to complete this recharge.`;
   $('depStatusCloseBtn').style.display = 'none';
 }
 function setDepositStatusSuccess(){
@@ -1794,7 +1800,7 @@ window.submitDeposit = async function(){
   // cache now so it's actually there the next time Records opens.
   await refreshTransactionsCache();
   closeSheet();
-  openDepositStatusModal();
+  openDepositStatusModal(amount, phone);
   pollDepositStatus(r.depositId);
 };
 async function pollDepositStatus(depositId){
@@ -1824,7 +1830,7 @@ window.openWithdrawSheet = async function(){
   if (!hadCache && _openSheetTitle === 'Withdraw') paintWithdrawSheet(s);
 };
 function paintWithdrawSheet(s){
-  const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)} — ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
+  const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)}, ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
   const balance = (STATE.account && STATE.account.walletBalance) || 0;
   $('sheetBody').innerHTML = `<div class="reveal-in">
     <div class="form-hint" style="margin:-6px 0 14px;line-height:1.6;">Available balance: <strong>${fmtUGX(balance)}</strong></div>

@@ -809,7 +809,7 @@ async function markDepositFailed(depRef, userId, reason) {
       const txSnap = await db.collection('transactions').where('depositId', '==', depRef.id).limit(5).get();
       await Promise.all(txSnap.docs.map(txDoc => {
         const amt = Math.abs(Number(txDoc.data().amount) || 0);
-        return txDoc.ref.update({ status: 'failed', description: `Deposit — Failed — ${fmtUGX(amt)}`, amount: 0 });
+        return txDoc.ref.update({ status: 'failed', description: `Deposit: Failed (${fmtUGX(amt)})`, amount: 0 });
       }));
     } catch (e) { console.warn('markDepositFailed: could not update ledger row:', e.message); }
   });
@@ -1223,7 +1223,7 @@ app.post('/team/milestone/claim', async (req, res) => {
         done = true;
       }));
     });
-    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now — please try again.' });
+    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now. Please try again.' });
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
     res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
   } catch (e) { console.error('Milestone claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
@@ -1263,7 +1263,7 @@ app.post('/mission/salary/claim', async (req, res) => {
       const u = uSnap.data();
       if (u.status === 'banned') { result = { code: 403, body: { status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' } }; return; }
       const today = nowStr().date;
-      if (u.missionSalaryLastClaim === today) { result = { code: 400, body: { status: 'error', message: "Already claimed today's salary — come back after 00:00." } }; return; }
+      if (u.missionSalaryLastClaim === today) { result = { code: 400, body: { status: 'error', message: "Already claimed today's salary. Come back after 00:00." } }; return; }
       const count = await activeL1Count(userId);
       const amount = Math.min(count, MISSION_SALARY_REFERRAL_CAP) * MISSION_SALARY_RATE;
       if (amount <= 0) { result = { code: 400, body: { status: 'error', message: 'You need at least one active referral to claim a daily salary.' } }; return; }
@@ -1307,7 +1307,7 @@ app.post('/mission/deposit/claim', async (req, res) => {
         done = true;
       }));
     });
-    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now — please try again.' });
+    if (stillShort) return res.status(400).json({ status: 'error', message: 'Your progress changed just now. Please try again.' });
     if (!done) return res.status(400).json({ status: 'error', message: 'Already claimed' });
     res.json({ status: 'success', amount: m.reward, message: `${fmtUGX(m.reward)} added to your wallet` });
   } catch (e) { console.error('Mission deposit claim error:', e.message); res.status(500).json({ status: 'error', message: 'Could not claim that reward right now' }); }
@@ -1825,7 +1825,7 @@ app.post('/deposit/marzpay', async (req, res) => {
       // the walletBalance/totalDeposited integrity math stays honest, but
       // Records' own amount column reads THIS field so a failed deposit
       // still shows what was actually attempted instead of "+UGX 0".
-      userId, type: 'deposit', description: `Deposit — Processing — ${fmtUGX(amt)}`,
+      userId, type: 'deposit', description: `Deposit: Processing (${fmtUGX(amt)})`,
       amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
     }).catch(e => console.error(`Deposit ledger row create failed for dep=${depRef.id}:`, e.message));
     // Respond the instant our own write lands — do not wait on MarzPay's own
@@ -1990,13 +1990,13 @@ async function creditDeposit(depDoc) {
           // outcome always means the ledger row reflects what actually
           // happened, regardless of what state it was in before.
           await Promise.all(txSnap.docs.map(txDoc => txDoc.ref.update({
-            status: 'success', description: `Deposit — Success — ${fmtUGX(depAmount)}`,
+            status: 'success', description: `Deposit: Success (${fmtUGX(depAmount)})`,
             amount: depAmount, displayAmount: depAmount,
           })));
         } else {
           const { date, time } = nowStr();
           await db.collection('transactions').add({
-            userId: depUserId, type: 'deposit', description: `Deposit — Success — ${fmtUGX(depAmount)}`,
+            userId: depUserId, type: 'deposit', description: `Deposit: Success (${fmtUGX(depAmount)})`,
             amount: depAmount, displayAmount: depAmount, status: 'success', date, time, ref: fd.ref, depositId: depDoc.id,
             createdAt: FieldValue.serverTimestamp()
           });
@@ -2215,7 +2215,7 @@ app.post('/withdraw/request', async (req, res) => {
           // walletBalance/totalDeposited integrity math honest -- but that
           // used to also make Records' amount column show "+UGX 0" for a
           // refunded withdrawal instead of what was actually attempted.
-          userId, type: 'withdraw', description: `Withdrawal — Processing — ${fmtUGX(amt)}`,
+          userId, type: 'withdraw', description: `Withdrawal: Processing (${fmtUGX(amt)})`,
           amount: -amt, displayAmount: -amt, status: 'pending', date, time, ref, withdrawalId: witRef.id, createdAt: FieldValue.serverTimestamp()
         });
       } catch (createErr) {
@@ -2235,7 +2235,7 @@ app.post('/withdraw/request', async (req, res) => {
       }
     });
     sendAdminPush('New withdrawal request', `${fmtUGX(amt)} requested via ${rawNetwork}`, { type: 'withdrawal', withdrawalId: witId }).catch(() => {});
-    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested — processing now' });
+    res.json({ status: 'success', withdrawalId: witId, reference: ref, net, message: 'Cash-out requested, processing now' });
   } catch (e) {
     res.status(400).json({ status: 'error', code: e.code, message: e.message });
   } finally { _witRequestInFlight.delete(userId); }
@@ -2263,8 +2263,8 @@ async function finalizeWithdrawalTransactionRecord(withdrawalId, outcome, refund
       // the old text -- simpler and no longer coupled to the exact
       // "processing" suffix the description used to always end with.
       const amt = Math.abs(Number(txDoc.data().amount) || 0);
-      const update = { status: newStatus, description: `Withdrawal — ${statusLabel} — ${fmtUGX(amt)}` };
-      if (newStatus === 'failed' && refunded) update.amount = 0; // wallet was CONFIRMED refunded in full — zero this row so the ledger sum stays correct
+      const update = { status: newStatus, description: `Withdrawal: ${statusLabel} (${fmtUGX(amt)})` };
+      if (newStatus === 'failed' && refunded) update.amount = 0; // wallet was CONFIRMED refunded in full, zero this row so the ledger sum stays correct
       return txDoc.ref.update(update);
     }));
   } catch (e) { console.warn('finalizeWithdrawalTransactionRecord (non-critical):', e.message); }
@@ -2444,7 +2444,7 @@ async function processWithdrawalCore(withdrawalId, processedBy) {
       mpData = { status: 'error', providerDown: true, message: netErr.message };
     }
     if (ambiguous) {
-      return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request — we cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
+      return { code: 500, body: { status: 'error', message: 'Lost contact with MarzPay mid-request. We cannot confirm whether this payout was actually sent. It stays on "Sending" (not pending) so nobody retries it blindly.', sendingReference: sendingMarker } };
     }
     if (mpData.status !== 'success' && mpData.status !== 'sandbox') {
       await witRef.update({ status: 'pending', sendingReference: null, marzReference: null, sendingBy: null, sendingAt: null }).catch(() => {});
@@ -3248,7 +3248,7 @@ app.post('/admin/products/save', async (req, res) => {
     const sanitized = [];
     for (let i = 0; i < list.length; i++) {
       const clean = sanitizeProductInput(list[i], i);
-      if (!clean) return res.status(400).json({ status: 'error', message: `Product #${i + 1} (${list[i]?.name || list[i]?.key || 'unnamed'}) has an invalid key, name, price, or (if given) cycle/return — nothing was saved.` });
+      if (!clean) return res.status(400).json({ status: 'error', message: `Product #${i + 1} (${list[i]?.name || list[i]?.key || 'unnamed'}) has an invalid key, name, price, or (if given) cycle/return. Nothing was saved.` });
       sanitized.push(clean);
     }
     const batch = db.batch();
@@ -3841,7 +3841,7 @@ app.post('/admin/debit', async (req, res) => {
       const uSnap = await t.get(uRef);
       if (!uSnap.exists) throw new Error('User not found');
       const bal = uSnap.data().walletBalance || 0;
-      if (amt > bal) throw new Error(`Cannot debit ${fmtUGX(amt)} — this wallet only holds ${fmtUGX(bal)}`);
+      if (amt > bal) throw new Error(`Cannot debit ${fmtUGX(amt)}, this wallet only holds ${fmtUGX(bal)}`);
       newBal = bal - amt;
       t.update(uRef, { walletBalance: FieldValue.increment(-amt) });
       t.set(db.collection('transactions').doc(), { userId, type: 'admin_debit', description: note || 'Balance adjustment', amount: -amt, status: 'success', date, time, createdAt: FieldValue.serverTimestamp() });
@@ -3956,10 +3956,10 @@ app.post('/admin/withdraw/reject', async (req, res) => {
     // (the payout already happened; rejecting would refund on top of it).
     if (w.status !== 'pending' && w.status !== 'processing' && w.status !== 'sending') return res.status(400).json({ status: 'error', message: `Cannot reject, the status is '${w.status}'` });
     const { declined, refunded } = await declineWithdrawalAndRefund(ref, w.userId, 'Rejected by admin', ['pending', 'processing', 'sending']);
-    if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied — refresh and try again.' });
+    if (!declined) return res.status(409).json({ status: 'error', message: 'Withdrawal status changed before this could be applied. Refresh and try again.' });
     await finalizeWithdrawalTransactionRecord(witId, 'declined', refunded);
     logAdminAction(req, 'withdrawal_rejected', { withdrawalId: witId, refunded });
-    res.json({ status: 'success', message: refunded ? 'Withdrawal rejected and refunded' : 'Withdrawal rejected — refund is pending and will complete shortly' });
+    res.json({ status: 'success', message: refunded ? 'Withdrawal rejected and refunded' : 'Withdrawal rejected, refund is pending and will complete shortly' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
   finally { _withdrawInFlight.delete(witId); }
 });
