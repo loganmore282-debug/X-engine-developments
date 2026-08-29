@@ -4937,6 +4937,67 @@ via its real scrollable container (`#sheetBg`) — genuinely re-derived via the 
 `IntersectionObserver`, not a fake flag. Cache bumped `v61`→`v62`. `user-src/`-only
 change — no Render redeploy needed.
 
+## Round 86 (2026-08-29) — admin-configurable number/digit font, 8 curated options
+
+Owner: "make when l can change figure/digit fonts in admin panel." Since Round 24, the
+`.mono` class every UGX figure/numeric stat in the user app uses has been hardcoded to
+Bodoni Moda (a Didone serif, chosen from owner-supplied reference images at the time).
+Made this admin-selectable from a curated dropdown rather than a free-text font-name
+field — a name here ends up interpolated into a Google Fonts URL and a CSS
+`font-family` value client-side, so an allowlist closes off the same kind of injection
+surface `SETTINGS_URL_FIELDS`'s http(s)-only check already exists to close for link
+fields, and avoids an admin fat-fingering a font name that silently renders as nothing.
+
+**8 curated options** (`NUMBER_FONT_OPTIONS`, kept in sync across all three files —
+server.js's save-time allowlist, `NUMBER_FONT_STACKS` in `original_module.js`, and the
+admin `<select>`'s own option list): Bodoni Moda (the original default), Playfair
+Display, DM Serif Display, Georgia (no webfont needed), Roboto Mono, JetBrains Mono
+(monospace, tabular digits), Orbitron (a display/digital look), and System default
+(matches the app's own body sans-serif stack, no distinct number styling at all).
+
+**Backend** (`server.js`): `numberFont: 'Bodoni Moda'` added to `DEFAULT_SETTINGS`
+(flows through `/public/settings` automatically like every other simple settings
+field, no new endpoint needed); `/admin/settings/update` rejects any value not in
+`NUMBER_FONT_OPTIONS`, same shape as the existing range/boolean/URL validation blocks
+already in that route.
+
+**Frontend** (`user-src/`): `.mono`'s CSS changed from a hardcoded `font-family` to
+`font-family:var(--number-font, 'Bodoni Moda',...)` — the fallback stack is the exact
+original hardcoded value, so a boot before `boot()` resolves (or a value outside the
+map) renders identically to before this round, never with no font-family at all. New
+`applyNumberFont()` (called from `boot()`, right alongside the existing
+`applyAuthTagline()` — same "runs once at module load, independent of auth state"
+pattern) reads `STATE.settings.numberFont`, looks it up in `NUMBER_FONT_STACKS` (a new
+top-level `var`, per this file's own standing "top-level bindings must be `var`, not
+`const`/`let`" rule), and sets `--number-font` on `document.documentElement`. All 6
+Google-Fonts-backed options are loaded together in ONE combined stylesheet `<link>` in
+`index.html` (Georgia and System default need no webfont) — switching the admin
+setting takes effect on the very next boot with zero added network request, since
+every option's font file is already loaded regardless of which one is currently
+selected.
+
+**Admin UI** (`admin-src/index.html`): a new "Appearance" subsection inside the
+existing "Rates & limits" panel-card (same established pattern "Payment provider"
+already uses — a second `<h2 class="sec">` sharing one panel-card and one Save
+button, since this is one more field in the same settings payload, not a whole new
+feature needing its own card) — a plain `<select id="sNumberFont">` with the 8 curated
+options, wired into the existing `saveRates` click handler's payload.
+
+**Verified**: `node --check` clean on `server.js`/`original_module.js`,
+`node build-core.js` and `node build-admin.js` both clean round-trips, `git diff
+--check` clean, a boot smoke test (real self-signed RSA dummy Firebase service-account
+PEM + unreachable `MONGODB_URI`) fails only at the Mongo-connect step,
+`test-admin-obfuscated-build.js` (the real obfuscated admin build) — 0 errors across
+all 12 tabs, Settings tab rendering the new Appearance section. Playwright, against the
+real built user app, 4 scenarios: no `numberFont` set falls back to Bodoni Moda's
+exact original stack; `numberFont:'Roboto Mono'` computes `--number-font` and `.mono`'s
+actual rendered `font-family` to start with Roboto Mono; `numberFont:'Georgia'`
+(the no-webfont option) computes correctly too; a defensive check with a value outside
+the curated list (simulating stale/hand-edited DB data, since the save-time allowlist
+already prevents this through the real admin UI) still falls back safely to Bodoni
+Moda rather than rendering with no font-family. Cache bumped `v62`→`v63` (user),
+`v17`→`v18` (admin). **`server.js` changed, Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

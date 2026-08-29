@@ -10,7 +10,13 @@
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&display=swap" rel="stylesheet">
+<!-- All admin-selectable number/digit fonts (see NUMBER_FONT_STACKS in
+     original_module.js) loaded in one request -- Georgia and "System
+     default" need no webfont, so they aren't listed here. Loading every
+     option up front (not just whichever is currently selected) means
+     switching the admin setting never needs a fresh network request or a
+     page reload to take visible effect. -->
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Playfair+Display:wght@600;700&family=DM+Serif+Display&family=Roboto+Mono:wght@500;700&family=JetBrains+Mono:wght@500;700&family=Orbitron:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --snow-canvas:#FCFBF9;
@@ -35,7 +41,7 @@
 html,body{margin:0;padding:0;touch-action:manipulation;}
 *{-webkit-tap-highlight-color:transparent;}
 body{background:var(--snow-canvas);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--snow-ink);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
-.mono{font-variant-numeric:lining-nums tabular-nums;font-family:'Bodoni Moda',Didot,'Playfair Display',Georgia,serif;}
+.mono{font-variant-numeric:lining-nums tabular-nums;font-family:var(--number-font,'Bodoni Moda',Didot,'Playfair Display',Georgia,serif);}
 button{cursor:pointer;font-family:inherit;}
 input{font-family:inherit;}
 a{color:inherit;}

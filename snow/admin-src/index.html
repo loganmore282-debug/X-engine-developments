@@ -263,6 +263,12 @@ const TX_LABELS = {
   mission_deposit_reward: 'Mission Center deposit reward',
 };
 function txLabel(type){ return TX_LABELS[type] || (type ? type.replace(/_/g,' ') : ''); }
+// Keep this exact list in sync with NUMBER_FONT_OPTIONS in server.js (the
+// save-time allowlist) and NUMBER_FONT_STACKS in the user app's
+// original_module.js (the client-side render lookup) -- a name here that
+// doesn't exist in both would save successfully but silently render with
+// no distinct font in the user app.
+const NUMBER_FONT_OPTIONS = ['Bodoni Moda', 'Playfair Display', 'DM Serif Display', 'Georgia', 'Roboto Mono', 'JetBrains Mono', 'Orbitron', 'System default'];
 function dayLabel(iso){
   const now=new Date(Date.now()+3*3600000);
   const today=now.toISOString().slice(0,10);
@@ -1510,6 +1516,9 @@ async function renderSettings(){
       <div class="switch-row" style="margin-top:8px"><span><b>Maintenance mode</b> <span class="muted">(blocks the app for users)</span></span>
         <label style="width:auto;margin:0"><input type="checkbox" id="sMaint" ${s.maintenanceMode?'checked':''} style="width:auto"></label></div>
       <label>Maintenance message (shown to users)</label><input id="sMaintMsg" value="${esc(v('maintenanceMsg',''))}" placeholder="We're topping up our stock, back shortly.">
+      <h2 class="sec" style="margin:14px 0 4px">Appearance</h2>
+      <label>Number/digit font (every UGX figure in the app)</label>
+      <select id="sNumberFont">${NUMBER_FONT_OPTIONS.map(f=>`<option value="${esc(f)}" ${v('numberFont','Bodoni Moda')===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Mobile-money recharges run on MarzPay automatically; cash-outs wait as Pending until an admin sends them from the Withdrawals tab.</p>
       <button class="btn block" id="saveRates">Save rates</button>
@@ -1612,7 +1621,7 @@ async function renderSettings(){
       returnMultiple:+$('sReturnMult').value, cycleDays:+$('sCycle').value,
       maxWithdrawalsPerDay:+$('sMaxWitDay').value,
       requireInvestToWithdraw:$('sReqInvest').checked, maintenanceMode:$('sMaint').checked,
-      maintenanceMsg:$('sMaintMsg').value.trim(),
+      maintenanceMsg:$('sMaintMsg').value.trim(), numberFont:$('sNumberFont').value,
     };
     const d=await api('/admin/settings/update', { settings: upd }); toast(d.status==='success'?'Rates saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
   });

@@ -48,6 +48,25 @@ var ICONS = {
 // mark twice in the same DOM on Account (header + profile card), and SVG
 // <linearGradient> ids must be unique or the second instance's gradient
 // resolution is undefined behavior.
+// Owner: "make when l can change figure/digit fonts in admin panel" -- the
+// `.mono` class (every UGX figure/numeric stat) reads its font-family from
+// the `--number-font` CSS custom property (see index.html), set from
+// STATE.settings.numberFont by applyNumberFont() below. Keep this exact key
+// set in sync with NUMBER_FONT_OPTIONS in server.js and the admin <select>
+// options -- a value outside this map falls back to Bodoni Moda's stack
+// (the original hardcoded default) rather than rendering with no
+// font-family at all. Georgia/"System default" need no Google Fonts
+// webfont; every other option is loaded up front in index.html's <link>.
+var NUMBER_FONT_STACKS = {
+  'Bodoni Moda': "'Bodoni Moda',Didot,'Playfair Display',Georgia,serif",
+  'Playfair Display': "'Playfair Display',Didot,Georgia,serif",
+  'DM Serif Display': "'DM Serif Display',Georgia,serif",
+  'Georgia': "Georgia,'Times New Roman',serif",
+  'Roboto Mono': "'Roboto Mono',ui-monospace,'SFMono-Regular',monospace",
+  'JetBrains Mono': "'JetBrains Mono',ui-monospace,'SFMono-Regular',monospace",
+  'Orbitron': "'Orbitron',ui-sans-serif,sans-serif",
+  'System default': "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+};
 var _snowflakeIdCounter = 0;
 function snowflakeSvg(color, size){
   const gid = 'ice' + (_snowflakeIdCounter++);
@@ -382,6 +401,12 @@ async function boot(){
   // maybeShowAnnouncement() runs, not fetched lazily after the dialog opens.
   STATE.announceImage = (ai.status === 'success' && ai.image) ? ai.image : null;
   applyAuthTagline();
+  applyNumberFont();
+}
+function applyNumberFont(){
+  const name = (STATE.settings && STATE.settings.numberFont) || 'Bodoni Moda';
+  const stack = NUMBER_FONT_STACKS[name] || NUMBER_FONT_STACKS['Bodoni Moda'];
+  document.documentElement.style.setProperty('--number-font', stack);
 }
 // Admin's "App tagline (shown under the logo)" Settings field has existed
 // since before this app had a frontend to read it -- #authTagline is only

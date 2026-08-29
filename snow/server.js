@@ -211,7 +211,21 @@ const DEFAULT_SETTINGS = {
   // banners: a base64 image doesn't belong bloating the /public/settings
   // payload every client fetches on every boot.
   annEnabled: false, annTitle: '', annBody: '',
+  // Owner: "make when l can change figure/digit fonts in admin panel" --
+  // the `.mono` class every UGX figure/numeric stat in the user app already
+  // uses (Round 24 picked Bodoni Moda as the original fixed default) is now
+  // admin-selectable from a curated list (see NUMBER_FONT_OPTIONS below),
+  // not a free-text field -- a font *name* here ends up interpolated into a
+  // Google Fonts URL and a CSS font-family value client-side, so an
+  // allowlist closes off any injection surface the way SETTINGS_URL_FIELDS'
+  // http(s)-only check already does for link fields.
+  numberFont: 'Bodoni Moda',
 };
+// Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
+// user-src/original_module.js (the client-side fallback-stack lookup) and
+// the <select> options in admin-src/index.html -- all three must agree on
+// the same set of names for a saved value to actually render correctly.
+const NUMBER_FONT_OPTIONS = ['Bodoni Moda', 'Playfair Display', 'DM Serif Display', 'Georgia', 'Roboto Mono', 'JetBrains Mono', 'Orbitron', 'System default'];
 // Daily Cashback × 150 = Total Return = Investment × 30, per tier — every
 // figure below is stamped explicitly rather than derived, matching the
 // owner-supplied table exactly.
@@ -3100,6 +3114,8 @@ app.post('/admin/settings/update', async (req, res) => {
       if (key in updates && !isSafeExternalUrl(updates[key]))
         return res.status(400).json({ status: 'error', message: `${key} must be a valid http(s) link, or left blank.` });
     }
+    if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
+      return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
     logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });
