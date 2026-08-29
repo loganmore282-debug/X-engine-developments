@@ -1189,32 +1189,38 @@ function renderMissionCenter(){
     : !m.l1ActiveCount
       ? `<button class="primary-button" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;opacity:.55;" disabled>Need at least 1 active referral</button>`
       : `<button class="primary-button" id="missionSalaryBtn" style="width:100%;padding:14px 0;font-size:14px;margin-top:14px;" onclick="claimMissionSalary()">Claim ${fmtUGX(m.salaryAmount)}</button>`;
-  // Owner: "l wanted these to be cards... each to be a box" -- one
-  // standalone app-card per threshold instead of rows sharing a single
-  // card, each with its own three-state button: not yet reached ("In
-  // progress", muted/disabled), reached but unclaimed ("Claim", the
-  // highlighted actionable state), already claimed ("Received", disabled).
-  const depositCards = m.depositRewards.map(d => {
-    const badge = d.claimed
-      ? `<div class="status-pill active mono">Received</div>`
-      : d.achieved
-        ? `<div class="status-pill active mono">Achieved</div>`
-        : `<div class="status-pill pending mono">${fmtUGX(m.teamDeposits)} / ${fmtUGX(d.target)}</div>`;
+  // Owner sent a reference screenshot of a rival app's referral-milestone
+  // list (a colored "Lv#" rail on the left, a Current/Target/Progress
+  // 3-column stat row, a thin progress bar, then a full-width status
+  // button) and asked for Team Deposit Rewards "organized like that" --
+  // matching that STRUCTURE with Snow's own wine/green palette rather than
+  // the reference's navy-blue theme, since "no blue" is this app's own
+  // locked brand rule (Design status section above) and the ask was about
+  // layout/arrangement, not a palette change. Same 3-state button logic as
+  // before (not yet reached / reached-unclaimed / claimed), just restyled
+  // into this card shape.
+  const depositCards = m.depositRewards.map((d, i) => {
+    const current = Math.min(m.teamDeposits, d.target);
+    const pct = d.target > 0 ? Math.min(100, Math.round(m.teamDeposits / d.target * 100)) : 0;
+    const done = d.claimed || d.achieved;
     const btn = d.claimed
-      ? `<button class="secondary-button" style="width:100%;margin-top:14px;padding:12px 0;font-size:13.5px;opacity:.6;" disabled>Received</button>`
+      ? `<button class="secondary-button" style="width:100%;margin-top:12px;padding:12px 0;font-size:13.5px;opacity:.6;" disabled>Received</button>`
       : d.achieved
-        ? `<button class="primary-button" id="missionDepositBtn_${d.target}" style="width:100%;margin-top:14px;padding:12px 0;font-size:13.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
-        : `<button class="secondary-button" style="width:100%;margin-top:14px;padding:12px 0;font-size:13.5px;opacity:.55;" disabled>In progress</button>`;
+        ? `<button class="primary-button" id="missionDepositBtn_${d.target}" style="width:100%;margin-top:12px;padding:12px 0;font-size:13.5px;" onclick="claimMissionDeposit(${d.target})">Claim</button>`
+        : `<button class="secondary-button" style="width:100%;margin-top:12px;padding:12px 0;font-size:13.5px;opacity:.55;" disabled>In progress</button>`;
     return `
-    <div class="app-card" style="padding:16px 18px;margin-top:12px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
-        <div style="min-width:0;">
-          <div style="font-size:14px;font-weight:700;color:var(--snow-ink);">${fmtUGX(d.target)} team deposits</div>
-          <div style="font-size:11.5px;color:var(--snow-muted);margin-top:2px;">Reward ${fmtUGX(d.reward)}</div>
+    <div class="milestone-card">
+      <div class="milestone-rail${done ? ' done' : ''}">Lv${i + 1}</div>
+      <div class="milestone-body">
+        <div class="milestone-title">Team deposits reach ${fmtUGX(d.target)} to get: ${fmtUGX(d.reward)}</div>
+        <div class="milestone-stats">
+          <div><div class="stat-num mono">${fmtUGX(current)}</div><div class="stat-lbl">Current</div></div>
+          <div><div class="stat-num mono">${fmtUGX(d.target)}</div><div class="stat-lbl">Target</div></div>
+          <div><div class="stat-num mono">${current.toLocaleString('en-UG')}/${d.target.toLocaleString('en-UG')}</div><div class="stat-lbl">Progress</div></div>
         </div>
-        ${badge}
+        <div class="milestone-track"><div class="milestone-fill${done ? ' done' : ''}" style="width:${pct}%;"></div></div>
+        ${btn}
       </div>
-      ${btn}
     </div>`;
   }).join('');
   $('sheetBody').innerHTML = `<div class="reveal-in">

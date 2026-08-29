@@ -3915,6 +3915,46 @@ the Withdrawals tab shows the "Processing" row on that very next open. Re-ran Ro
 58/59/60/62/63/65/69/70/71's own suites — all still pass, zero regressions. Cache bumped
 `v53`→`v54`. `user-src/`-only change — no Render redeploy needed.
 
+## Round 73 (2026-08-29) — Team Deposit Rewards redesigned again: a colored level rail + Current/Target/Progress stat row + progress bar, matching a reference screenshot's structure
+
+Owner sent a screenshot of a rival app's referral-milestone list (navy "Lv#" rail on the
+left, a 3-column Current/Target/Progress stat row with plain numbers, a thin progress
+bar, then a full-width status button) and said "I would like the milestone of deposits to
+be organized like that." Read this as a structural/layout request, not a palette change
+— the reference is a dark navy-blue theme, but Snow's own Design status section
+explicitly locks "no blue" as a brand rule (the one documented exception, Round 68's
+snowflake mark, was called out at the time as a deliberate one-off override for that
+single asset, not a standing invitation to reuse blue elsewhere) — so the new cards use
+Snow's own wine/green tokens for the rail instead of copying the reference's navy.
+
+**Rebuilt `renderMissionCenter()`'s Team Deposit Rewards cards** (`user-src/
+original_module.js`, `index.html`'s new `.milestone-*` CSS) from Round 42's "one
+app-card per threshold + a corner status pill" shape into: a `.milestone-rail` (wine
+gradient, turns green once a threshold is achieved/claimed) showing `Lv1`…`Lv6` for
+Snow's 6 real deposit-reward tiers; a title line ("Team deposits reach UGX X to get: UGX
+Y"); a 3-column stat row (Current/Target in full `fmtUGX()` form per this app's own "full
+numbers, no abbreviation" money-display rule, Progress as a plain comma-formatted
+`current/target` fraction so the currency unit isn't repeated a third time); a thin
+progress-bar track filled to `min(100, teamDeposits/target*100)%`; then the same
+existing 3-state button (In progress / Claim / Received) the app already had, just
+restyled into the card instead of a corner pill. No change to the underlying claim logic,
+data shape, or `claimMissionDeposit()` — purely a markup/CSS redesign of an
+already-working feature.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. Playwright, against the real built app with a mocked 6-tier `/mission/status`
+(one claimed, one achieved-unclaimed, four not-yet-reached): confirmed exactly 6
+`.milestone-card`s render, rail labels read `Lv1`…`Lv6` in order, exactly 2 rails carry
+the "done" (green) state, button text matches each card's real state exactly (`Received`/
+`Claim`/`In progress`×4), all 6 cards measure the identical width (no layout drift card to
+card), and no horizontal overflow at 390px. Screenshot confirms the visual result reads
+as the requested layout. Round 42's own test (`.app-card`-based selectors) is now stale/
+superseded by this round's replacement test, matching this project's established practice
+for structural redesigns (see Round 66→68's snowflake test succession) — its failure is
+expected obsolescence, not a regression. Re-ran Rounds 58/59/60/62/63/65/71/72's own
+suites plus Round 39/41's Mission Center-specific suites — all still pass. Cache bumped
+`v54`→`v55`. `user-src/`-only change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
