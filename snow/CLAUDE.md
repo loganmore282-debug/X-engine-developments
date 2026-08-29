@@ -3734,6 +3734,49 @@ itself. Icon files re-measured programmatically to confirm the 68% safe-zone siz
 Re-ran Rounds 59/62/65's own suites — no regressions. Cache bumped `v49`→`v50` (user),
 `v11`→`v12` (admin). `user-src/`-only + icon-asset change — no Render redeploy needed.
 
+## Round 69 (2026-08-29) — Deposit/Withdraw sheets rebalanced: instructions moved to the bottom, "Deposit" renamed to "Recharge" everywhere, Withdraw gets an available-balance display + a live "you'll receive" counter
+
+Owner, from two phone screenshots (Deposit and Withdraw sheets): "make sure the screen
+is well balanced 👌, see deposits the down area is for what?, instructions should be
+down not up, and change 'deposit' to 'recharge' / also l want it to show available
+account balance up, on Withdrawal screen, l want live counter of receive amount after
+charge on withdrawal screen."
+
+**Instructions moved to the bottom on both sheets.** Both `openDepositSheet()` and
+`paintWithdrawSheet()` had their numbered instructions block sitting above the form
+fields, leaving the bottom of the sheet empty (the "down area" the owner pointed at) —
+moved both blocks to directly after each sheet's submit button, filling that space with
+actually-useful content instead of leaving it blank.
+
+**"Deposit" renamed to "Recharge" everywhere user-facing** (`user-src/original_module.js`):
+the Deposit sheet's title, its submit button, its step-3 instruction text, the
+`submitDeposit()`/`pollDepositStatus()` restore-label/error/success/failure toasts, Home's
+Deposit button, the Records tab label ("Deposits"→"Recharges"), and the Rules & Terms copy
+("Minimum deposit"→"Minimum recharge"). Deliberately left every internal, non-user-visible
+identifier unchanged — function names (`openDepositSheet`/`submitDeposit`), field ids
+(`depAmount`/`depPhone`), the `/deposit/marzpay` API path, `MONEY_ENDPOINTS` entries, and
+Records' `data-cat="deposit"` filter-key attribute value all still say "deposit," since
+none of those are shown to the member and changing them would be pure churn.
+
+**Withdraw sheet: available balance + live receive counter, both new.** `paintWithdrawSheet(s)`
+now shows "Available balance: UGX X" (from `STATE.account.walletBalance`) right at the top,
+and a live "You'll receive: UGX X" figure directly under the amount field, wired via a new
+`syncWithdrawReceiveAmt()` on the amount input's `oninput` — computed with the exact same
+formula `server.js`'s own `/withdraw/request` uses (`fee = Math.round(amount *
+withdrawFeePct / 100); net = amount - fee`), so what the member sees here always matches
+what they'll actually be paid, not an approximation.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. New Playwright pass against the real built app: Deposit sheet's instructions text
+sits AFTER the submit button in DOM order (not before) and reads "Recharge" throughout;
+Withdraw sheet shows the fixture wallet balance ("UGX 245,000") above the submit button,
+its own instructions sit after the submit button too, and typing 20,000 into the amount
+field live-updates the receive counter to "UGX 17,000" (20,000 − 15% fee), matching the
+server's own formula exactly. Re-ran Rounds 59/60/62/63/64/65/68's own suites — all still
+pass, zero regressions (Round 66's suite is stale/superseded by Round 68's own snowflake
+and was not re-run for that reason, unchanged from prior rounds). Cache bumped `v50`→`v51`.
+`user-src/`-only change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

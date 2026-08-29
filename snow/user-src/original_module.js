@@ -804,7 +804,7 @@ function paintHome(){
 </div>
 ${STATE.homeBanner ? `<div style="margin:${'-6px 20px 0'};border-radius:20px;overflow:hidden;position:relative;z-index:1;"><img src="${esc(STATE.homeBanner)}" alt="" style="display:block;width:100%;height:auto;" onerror="this.parentElement.style.display='none'"></div>` : ''}
 <div style="display:flex;gap:12px;margin:${STATE.homeBanner ? '14px' : '-6px'} 20px 0;position:relative;z-index:1;">
-  <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openDepositSheet()">${ICONS.deposit}Deposit</button>
+  <button class="primary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openDepositSheet()">${ICONS.deposit}Recharge</button>
   <button class="secondary-button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 0;font-size:14.5px;" onclick="openWithdrawSheet()">${ICONS.withdraw}Withdraw</button>
 </div>
 <div id="activityTicker" style="margin:14px 20px 0;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:rgba(17,17,17,.82);box-shadow:0 6px 16px -8px rgba(0,0,0,.35);overflow:hidden;">
@@ -1399,7 +1399,7 @@ window.openInfoSheet = function(kind){
   if (kind === 'help') return openHelpSheet();
   const s = STATE.settings || {};
   const map = {
-    rules: ['Rules & Terms', s.rulesText || 'Minimum deposit ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + (s.withdrawFeePct||15) + '% fee applies. Referral commission: Level 1 ' + (s.commL1||27) + '%, Level 2 ' + (s.commL2||2) + '%, Level 3 ' + (s.commL3||1) + '%.'],
+    rules: ['Rules & Terms', s.rulesText || 'Minimum recharge ' + fmtUGX(s.minDeposit) + '. Minimum withdrawal ' + fmtUGX(s.minWithdraw) + ', a ' + (s.withdrawFeePct||15) + '% fee applies. Referral commission: Level 1 ' + (s.commL1||27) + '%, Level 2 ' + (s.commL2||2) + '%, Level 3 ' + (s.commL3||1) + '%.'],
   };
   const [title, body] = map[kind] || ['Info', ''];
   openSheet(title, `<div class="reveal-in"><p style="white-space:pre-line;line-height:1.6;color:var(--snow-ink);">${esc(body)}</p></div>`);
@@ -1545,7 +1545,7 @@ window.openRecordsSheet = async function(){
   openSheet('Records', `
     <div class="segmented-control" id="recordsTabs">
       <button class="seg active" data-cat="income" onclick="switchRecordsTab('income')">Income</button>
-      <button class="seg" data-cat="deposit" onclick="switchRecordsTab('deposit')">Deposits</button>
+      <button class="seg" data-cat="deposit" onclick="switchRecordsTab('deposit')">Recharges</button>
       <button class="seg" data-cat="withdraw" onclick="switchRecordsTab('withdraw')">Withdrawals</button>
     </div>
     <div id="recordsBody" style="margin-top:16px;"></div>`);
@@ -1630,13 +1630,7 @@ window.openDepositSheet = function(){
   const chipsHtml = quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
     quickAmts.map(p => `<button type="button" class="quick-amt" data-amt="${p}" onclick="pickDepositAmount(${p})">${fmtUGX(p)}</button>`).join('')
   }</div>` : '';
-  openSheet('Deposit', `<div class="reveal-in">
-    <div class="form-hint" style="margin:-6px 0 14px;line-height:1.6;">
-      1. Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount below.<br>
-      2. Confirm your mobile-money number and network.<br>
-      3. Tap Deposit, then approve the prompt on your phone.<br>
-      4. Your wallet updates automatically once payment is confirmed.
-    </div>
+  openSheet('Recharge', `<div class="reveal-in">
     <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
     ${chipsHtml}
     <div class="form-field"><label>Mobile-money phone number</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${esc(localPhoneDisplay((STATE.account&&STATE.account.phone)||''))}" oninput="sanitizePhoneInput(this)"></div></div>
@@ -1646,7 +1640,13 @@ window.openDepositSheet = function(){
         <option value="Airtel Money">Airtel Money</option>
       </select>
     </div>
-    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Deposit</button>
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitDeposit()">Recharge</button>
+    <div class="form-hint" style="margin:20px 0 0;line-height:1.6;">
+      1. Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount below.<br>
+      2. Confirm your mobile-money number and network.<br>
+      3. Tap Recharge, then approve the prompt on your phone.<br>
+      4. Your wallet updates automatically once payment is confirmed.
+    </div>
   </div>`);
 };
 window.pickDepositAmount = function(amt){
@@ -1666,8 +1666,8 @@ window.submitDeposit = async function(){
   if (!amount || amount <= 0) return toast('Enter a valid amount', true);
   $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Please wait…';
   const r = await post('/deposit/marzpay', { amount, phone, network });
-  $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Deposit';
-  if (r.status !== 'success') return toast(r.message || 'Could not start deposit', true);
+  $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge';
+  if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
   toast(r.message || 'Payment initiated. Check your phone.');
   pollDepositStatus(r.depositId);
   closeSheet();
@@ -1676,8 +1676,8 @@ async function pollDepositStatus(depositId){
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 3000));
     const r = await post('/deposit/marzpay/status', { depositId });
-    if (r.status === 'success' && r.state === 'matched') { toast('Deposit successful'); if (STATE.page==='home') renderHome(); return; }
-    if (r.status === 'success' && r.state === 'failed') { toast(r.message || 'Deposit failed', true); return; }
+    if (r.status === 'success' && r.state === 'matched') { toast('Recharge successful'); if (STATE.page==='home') renderHome(); return; }
+    if (r.status === 'success' && r.state === 'failed') { toast(r.message || 'Recharge failed', true); return; }
   }
 }
 
@@ -1699,22 +1699,35 @@ window.openWithdrawSheet = async function(){
 };
 function paintWithdrawSheet(s){
   const acctOptions = STATE.bankAccounts.map(a => `<option value="${a.id}">${esc(a.holder)} — ${esc(a.network)} ${esc(a.phone)}</option>`).join('');
+  const balance = (STATE.account && STATE.account.walletBalance) || 0;
   $('sheetBody').innerHTML = `<div class="reveal-in">
-    <div class="form-hint" style="margin:-6px 0 14px;line-height:1.6;">
-      1. Enter an amount (min ${fmtUGX(s.minWithdraw)}). A ${s.withdrawFeePct||15}% fee applies.<br>
-      2. Select a saved withdrawal account.<br>
-      3. Enter your Transaction PIN and tap Request Withdrawal.<br>
-      4. Funds are sent to your mobile-money number once processed.
-    </div>
-    <div class="form-field"><label>Amount (min ${fmtUGX(s.minWithdraw)}, ${s.withdrawFeePct||15}% fee applies)</label><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0"></div>
+    <div class="form-hint" style="margin:-6px 0 14px;line-height:1.6;">Available balance: <strong>${fmtUGX(balance)}</strong></div>
+    <div class="form-field"><label>Amount (min ${fmtUGX(s.minWithdraw)}, ${s.withdrawFeePct||15}% fee applies)</label><input id="witAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncWithdrawReceiveAmt()"></div>
+    <div class="form-hint" id="witReceiveHint" style="margin:-10px 0 14px;">You'll receive: <strong id="witReceiveAmt">${fmtUGX(0)}</strong></div>
     <div class="form-field"><label>Withdrawal account</label>
       ${STATE.bankAccounts.length
         ? `<select id="witAccount" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">${acctOptions}</select>`
         : `<div class="form-hint">No withdrawal account saved yet.</div><button class="secondary-button" style="width:100%;padding:12px 0;margin-top:8px;" onclick="openWithdrawalAccountsSheet()">Add withdrawal account</button>`}
     </div>
     <div class="form-field"><label>Transaction PIN</label><input id="witPin" type="text" inputmode="numeric" maxlength="5" placeholder="5 digits" autocomplete="one-time-code"></div>
-    <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button></div>`;
+    <button class="primary-button" id="witSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" ${STATE.bankAccounts.length?'':'disabled'} onclick="submitWithdraw()">Request Withdrawal</button>
+    <div class="form-hint" style="margin:20px 0 0;line-height:1.6;">
+      1. Enter an amount (min ${fmtUGX(s.minWithdraw)}). A ${s.withdrawFeePct||15}% fee applies.<br>
+      2. Select a saved withdrawal account.<br>
+      3. Enter your Transaction PIN and tap Request Withdrawal.<br>
+      4. Funds are sent to your mobile-money number once processed.
+    </div>
+  </div>`;
 }
+window.syncWithdrawReceiveAmt = function(){
+  const el = $('witReceiveAmt');
+  if (!el) return;
+  const s = STATE.settings || {};
+  const amount = parseMoneyInput($('witAmount').value);
+  const fee = Math.round(amount * (s.withdrawFeePct||15) / 100);
+  const net = Math.max(0, amount - fee);
+  el.textContent = fmtUGX(net);
+};
 window.submitWithdraw = async function(){
   const amount = parseMoneyInput($('witAmount').value);
   const pin = $('witPin').value.trim();
