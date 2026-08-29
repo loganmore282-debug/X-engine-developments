@@ -3820,6 +3820,59 @@ at the bottom of each sheet. Re-ran Rounds 58/59/60/62/63/65/69's own suites —
 pass, zero regressions. Cache bumped `v51`→`v52`. `user-src/`-only change — no Render
 redeploy needed.
 
+## Round 71 (2026-08-29) — 2 real bugs: bottom-nav peeking through during forceful sheet scroll, startup loader auto-re-showing itself on a duplicate Firebase auth event
+
+Owner: "when l scroll or force scroll the withdrawal screen it shows some bits of bottom
+navigation, spilled or?, also a start up loader can load twice, ie 1st, then again
+reloads again automatically why." Investigated both against the actual code rather than
+assuming CSS tweaks — both were real, root-caused bugs, not vague polish requests.
+
+**Bottom-nav spilling through during a forceful scroll — real, root-caused.** Every sheet/
+dialog open (`openSheet`, the announcement dialog, the gift-code modal, both confirm
+dialogs) already locked `document.body.style.overflow = 'hidden'` while open, specifically
+to stop the page behind it from scrolling. But per the CSSOM View spec, in standards mode
+`<html>` (`document.documentElement`), not `<body>`, is the actual "scrolling element" —
+locking only `body`'s overflow doesn't reliably stop a forceful drag/overscroll from still
+moving the whole layout viewport on mobile. Since the bottom-nav is a separate
+`position:fixed` element sitting behind the sheet in DOM order, a viewport shift during
+that bounce could let its bottom edge peek into view past the sheet's own bottom-nav-
+shaped gap for an instant — exactly "shows some bits of bottom navigation." Fixed with two
+layers: (1) new shared `lockBodyScroll()`/`unlockBodyScroll()` helpers that lock/restore
+`document.documentElement.style.overflow` alongside `document.body.style.overflow`,
+replacing all 9 existing direct `document.body.style.overflow` call sites (sheets, the
+announcement dialog, the gift-code modal, both confirm dialogs) with the shared pair so
+this can't regress site-by-site again; (2) `overscroll-behavior:contain` added to
+`.sheet-bg` itself as defense-in-depth, so an overscroll that reaches the sheet's own
+scroll boundary can't chain further even in the instant before/if the html/body lock
+takes effect.
+
+**Startup loader showing twice — real, root-caused.** `onAuthStateChanged`'s callback
+(`index.html`'s Firebase module script) unconditionally re-dispatched a `snow-auth`
+CustomEvent on every single firing, and the `snow-auth` listener
+(`original_module.js`) unconditionally re-showed the loading screen and re-ran
+`enterApp()` from scratch on every firing where a user was present — with no guard
+against Firebase genuinely firing `onAuthStateChanged` more than once for the SAME
+already-current user during one page load (a well-documented Firebase behavior: once
+synchronously from cached/persisted auth state, then again once it round-trips to
+actually confirm/refresh the session). Every such redundant re-fire was indistinguishable
+from a fresh sign-in to this code, so it re-showed the spinner and reloaded everything —
+exactly "loads twice... then again reloads again automatically." Fixed with a guard at
+the top of the `snow-auth` handler: `if (user && STATE.user && user.uid ===
+STATE.user.uid) return;` — a repeat firing for the identical uid is always a redundant
+re-fire (STATE.user is only ever cleared to `null` by a real `doLogout()`/sign-out), so
+it's safe to no-op; a genuine sign-in, sign-out, or account switch (uid actually
+different, or `STATE.user` is `null`) still runs the full flow unchanged.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. Playwright, against the real built app: firing the `snow-auth` event twice with the
+identical uid shows the loading screen exactly once (not twice) and leaves the app visible
+and functional; firing it again with a genuinely different uid correctly re-triggers the
+full sign-in flow; opening the Withdraw sheet confirms BOTH `document.documentElement.
+style.overflow` and `document.body.style.overflow` are `'hidden'` while it's open, and both
+are restored to `''` after closing. Re-ran Rounds 58/59/60/62/63/65/69/70's own suites —
+all still pass, zero regressions. Cache bumped `v52`→`v53`. `user-src/`-only change — no
+Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

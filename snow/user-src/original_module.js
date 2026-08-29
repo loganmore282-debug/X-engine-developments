@@ -411,6 +411,19 @@ function captureReferralFromUrl(){
 // ── AUTH STATE HANDLER ──
 window.addEventListener('snow-auth', async (ev) => {
   const user = ev.detail;
+  // Firebase's onAuthStateChanged can genuinely fire more than once for the
+  // SAME already-current user during a single page load/session -- e.g. once
+  // synchronously from cached/persisted auth state, then again once it
+  // round-trips to actually confirm/refresh the session with the backend.
+  // Without this guard, every one of those redundant re-fires re-showed the
+  // loading screen and re-ran enterApp() from scratch: the owner's "a start
+  // up loader can load twice... then again reloads again automatically."
+  // STATE.user is only ever null right after a real sign-out (doLogout()'s
+  // own signOut() re-fires this with user:null and clears STATE.user below),
+  // so a repeat firing with the identical uid here is always a redundant
+  // re-fire, never a genuine new sign-in -- safe to no-op. A real sign-in,
+  // sign-out, or account switch (different uid) still runs the full flow.
+  if (user && STATE.user && user.uid === STATE.user.uid) return;
   // Also bump here (not just doLogout()) -- this is what actually fires when
   // a DIFFERENT user logs in right after, and it's the guard that matters if
   // Firebase's own token expiry/refresh ever drops us out without doLogout()
@@ -744,11 +757,11 @@ function maybeShowAnnouncement(){
   // through into the Home page sitting behind it (owner: "when one scrolls
   // it, it scrolls even contents in home") -- same lock openSheet() already
   // applies for real sheets, just missing here since this modal isn't one.
-  document.body.style.overflow = 'hidden';
+  lockBodyScroll();
 }
 window.closeAnnounce = function(){
   $('announceBg').classList.remove('show');
-  document.body.style.overflow = '';
+  unlockBodyScroll();
 };
 window.confirmAnnounce = function(){
   if (window._announceUrl) window.open(window._announceUrl, '_blank', 'noopener');
@@ -1343,6 +1356,24 @@ async function renderAccount(){
   $('pageHost').innerHTML = '<div class="reveal-in">' + html + '</div>';
 }
 
+// Shared by every full-screen overlay (sheets, the announcement dialog, the
+// gift-code modal, confirm dialogs) that needs to stop the page behind it
+// from moving while it's open. Locking body.style.overflow alone isn't
+// enough -- <html> (document.documentElement), not <body>, is the actual
+// CSSOM "scrolling element" in standards mode, so a forceful drag/overscroll
+// could still shift the whole layout viewport with only body locked,
+// letting the fixed bottom-nav bar peek in at the edge during the bounce
+// (owner: "when l scroll or force scroll the withdrawal screen it shows
+// some bits of bottom navigation"). Locking both closes that gap.
+function lockBodyScroll(){
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+}
+function unlockBodyScroll(){
+  document.documentElement.style.overflow = '';
+  document.body.style.overflow = '';
+}
+
 // ── SHEETS ──
 // Tracks which sheet's content is currently showing in the one shared
 // #sheetBody -- every deferred (post-await) repaint in a sheet's own open*
@@ -1378,18 +1409,18 @@ function openSheet(title, bodyHtml){
   _openSheetTitle = title;
   if (alreadyOpen) history.replaceState({ sheet: title }, '', '');
   else history.pushState({ sheet: title }, '', '');
-  document.body.style.overflow = 'hidden';
+  lockBodyScroll();
 }
 window.closeSheet = function(){
   $('sheetBg').classList.remove('show');
-  document.body.style.overflow = '';
+  unlockBodyScroll();
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
   if (history.state && history.state.sheet) history.back();
 };
 window.addEventListener('popstate', () => {
   $('sheetBg').classList.remove('show');
-  document.body.style.overflow = '';
+  unlockBodyScroll();
   _openSheetTitle = null;
   if (_aboutScrollObserver) { _aboutScrollObserver.disconnect(); _aboutScrollObserver = null; }
 });
@@ -1496,12 +1527,12 @@ window.openChestModal = function(){
   $('chestCodeInput').value = '';
   $('chestError').innerHTML = '';
   $('chestModalBg').classList.add('show');
-  document.body.style.overflow = 'hidden'; // same scroll-chaining gap as the announcement dialog -- see maybeShowAnnouncement()
+  lockBodyScroll(); // same scroll-chaining gap as the announcement dialog -- see maybeShowAnnouncement()
   setTimeout(() => $('chestCodeInput').focus(), 50);
 };
 window.closeChestModal = function(){
   $('chestModalBg').classList.remove('show');
-  document.body.style.overflow = '';
+  unlockBodyScroll();
 };
 window.submitChestCode = async function(){
   const raw = $('chestCodeInput').value.trim();
@@ -1872,7 +1903,7 @@ window.openInvestConfirm = function(tierKey){
     <button class="primary-button" id="investConfirmBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:16px;" onclick="confirmInvest('${esc(tierKey)}')">Confirm & Buy</button>
     <button class="secondary-button" style="width:100%;padding:13px 0;font-size:14px;margin-top:10px;border:none;color:rgba(255,255,255,.65);" onclick="closeConfirm()">Cancel</button>`;
   $('confirmBg').classList.add('show');
-  document.body.style.overflow = 'hidden'; // subagent-audit-caught: same scroll-chaining gap already fixed for #announceBg/#chestModalBg
+  lockBodyScroll(); // subagent-audit-caught: same scroll-chaining gap already fixed for #announceBg/#chestModalBg
 };
 window.closeConfirm = function(){
   $('confirmBg').classList.remove('show');
@@ -1885,7 +1916,7 @@ window.closeConfirm = function(){
   // lock/unlock pattern exists to prevent. Only clear it when nothing else
   // (a sheet) is still relying on the lock; openSheet()/closeSheet() own
   // the lock in that case.
-  if (!_openSheetTitle) document.body.style.overflow = '';
+  if (!_openSheetTitle) unlockBodyScroll();
 };
 window.confirmInvest = async function(tierKey){
   const btn = $('investConfirmBtn');
@@ -1913,7 +1944,7 @@ function openSimpleConfirm(title, body, onConfirm){
     if (ok) closeConfirm();
   };
   $('confirmBg').classList.add('show');
-  document.body.style.overflow = 'hidden';
+  lockBodyScroll();
 }
 
 // ── PWA: install prompt + service worker auto-update ──
