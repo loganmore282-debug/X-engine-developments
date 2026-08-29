@@ -4393,6 +4393,146 @@ then correctly closes; and a third run (fully resolved) pays nobody again. 10/10
 passed. This round is server.js-only. **`server.js` changed — Render should auto-deploy
 this push.**
 
+## Round 80 (2026-08-29) — independent Codex referral-system audit (2nd round): 1 High + 3 Medium + 3 Low, all 7 confirmed real, all 7 fixed
+
+Owner published a second, scoped Codex audit brief specifically for the referral system
+(not a repeat of Round 77's general codebase pass) — pointed at this file/AGENT_LOG.md,
+with the money-safety conventions and Round 79's own fix already flagged as context.
+Codex explicitly re-verified Round 79's banned-referrer fix as correct for the scenario
+it targeted, then found 7 more real issues, several of them exposed BY that same fix.
+Every finding was independently re-derived against the actual code before anything was
+touched, same discipline as every prior review round in this file.
+
+**High — banning the BUYER (not just a referrer) could still permanently forfeit
+commission owed to otherwise-eligible uplines.** `creditReferralCommission()`'s
+buyer-banned branch (`if (!buyerSnap.exists || buyerSnap.data().status === 'banned')`)
+unconditionally closed `commissionPending` — the exact same permanent-forfeiture bug
+Round 79 fixed for a banned CHAIN MEMBER, just left open on the buyer-banned path. Traced
+the actual exposure window and found it's wider than Codex's own framing: `/invest/create`
+does check the buyer isn't banned immediately before creating the investment, so the
+fire-and-forget `creditReferralCommission()` call fired right after has only a genuinely
+tiny race window — but that first call can also fail for an unrelated reason (a transient
+error) and fall through to `reconcileCommissions()`'s 30s retry sweep, which can run ANY
+time later, by which point the buyer could easily have been banned for something
+completely unrelated to this investment. Nothing in this codebase invalidates an
+investment doc when its owner is banned — the purchase already genuinely happened, so
+there's no reason a referrer should lose money earned on a real transaction just because
+the buyer was later banned for something else. Fixed to match Round 79's own pattern:
+leave `commissionPending` untouched (don't close it) when the buyer is banned, so the
+reconciler naturally retries and pays once they're unbanned.
+
+**Medium — `recomputeTeamCounts(parentId)` only repaired the deleted user's direct
+parent, leaving higher ancestors' counts stale.** Reproduced Codex's own worked example
+by hand: chain A→P→D→G, delete D (its child G reparents to P). `/admin/user/delete` only
+ever called `recomputeTeamCounts(parentId)` for P — P's own counts get correctly rebuilt
+(that was Round 77's fix), but A's `teamL3Count` was counting D's children (G) before the
+deletion and NOTHING ever recomputes A afterward, so it stays wrong forever. Traced the
+general bound: a reparenting at P can affect any ancestor whose own L1/L2/L3 window still
+reaches P's children/grandchildren — that's P itself, P's own referrer, and that
+referrer's referrer (0/1/2 hops above P), never further given the 3-level cap. Fixed by
+walking up to 2 additional ancestors above `parentId` and recomputing each one too (each
+`recomputeTeamCounts()` call is already an independently correct, self-contained fresh
+BFS from its own root — calling it on more roots is just repeating a known-correct
+operation, not new logic).
+
+**Medium — registration and `/admin/user/attach-referrer` used different lock
+namespaces for the same referrer's own referredBy field, reopening a race Round 17
+thought it had closed.** `completeRegistrationCore()`'s commit step reads a referrer's
+`referredBy` (to credit that referrer's own L2/L3 ancestors) under a `referrer-guard:
+<referrerId>` lock — but `/admin/user/attach-referrer`'s write to that SAME field (when
+reparenting that same account to a new referrer) was only protected by `withLock2('reg:'
++userId,'reg:'+candidateReferrerId)`, a completely different lock family. Concretely:
+member U registers under referrer R at the same moment an admin attaches R to a new
+parent P — registration's read of R's `referredBy` could land in the gap before the
+admin's write actually lands, silently under-crediting P's L2 count for U's join, with no
+self-correction mechanism ever revisiting it. Fixed by nesting the SAME `referrer-guard:
+<userId>` lock inside attach-referrer's existing `withLock2` scope, around the write and
+its downstream reads — reuses the exact lock family registration already established for
+this purpose. Deliberately did NOT just swap the lock key from `referrer-guard:` to
+`reg:` (the seemingly obvious fix) — traced through the deadlock math by hand first and
+confirmed that would reintroduce a genuine AB-BA deadlock risk against a concurrent
+attach-referrer call in the opposite pairing (registration always acquires `reg:userId`
+before any referrer lock, in a FIXED order, not the sorted order `withLock2` uses among
+its own two keys — nesting a second `reg:` lock there could contend against a sorted
+caller wanting the same two keys in the opposite order). The chosen fix shares a single
+lock key between the two operations instead, which can never create a multi-resource
+cycle. Verified this specific deadlock-safety property empirically, not just reasoned
+through — see Verified below.
+
+**Medium — the fixes above created a real starvation risk in `reconcileCommissions()`'s
+own 30s sweep.** Once a banned buyer/referrer can leave `commissionPending:true`
+indefinitely (by design, now, for both the High fix above and Round 79's own fix), a
+large-enough backlog of long-banned (or permanently banned) blocked investments could
+occupy the query's fixed oldest-500 window every single tick forever, permanently
+starving any genuinely new or transiently-failed pending commission that sits beyond that
+window — it would simply never be reached. Considered a timestamp-based backoff field
+first, but rejected it: a `commissionNextRetryAt` field needs to be present on every
+document for a range-query filter to behave correctly (MongoDB range operators exclude
+documents missing the field entirely), which would have silently dropped every
+pre-existing pending investment from the reconciler the moment this shipped, unless
+carefully backfilled — too much migration risk for this fix. Built a two-tier
+reconciler instead: `creditReferralCommission()` now sets a plain `commissionBanBlocked:
+true` boolean whenever it leaves early because of an active ban (both the buyer branch
+and the chain-level branch); `reconcileCommissions()`'s existing 30s query adds
+`.where('commissionBanBlocked','!=',true)` (Mongo's `$ne` correctly matches documents
+where the field is simply absent, unlike range operators — no migration risk); a new,
+much less frequent `reconcileBlockedCommissions()` (runs every 5 minutes, matching the
+existing `sweepEphemeralState` cadence) separately re-checks exactly the rows the fast
+sweep skips, so a blocked investment still gets a real, bounded chance to resolve once
+unbanned without ever monopolizing the fast path.
+
+**Low — a banned account sitting at a level whose CURRENT commission rate is 0% kept
+`commissionPending` open forever for nothing.** The chain-walk loop checked ban status
+before checking whether that level's rate was actually nonzero — reordered so a 0% level
+is recognized as permanently resolved (nothing owed, regardless of account status)
+before the ban check ever runs, so it can't wrongly mark `anyLevelBlockedByBan`.
+
+**Low — `/admin/referrals/list` silently truncated past 2,000 rows with no signal.**
+Bumped the cap generously (2,000 → 20,000, matching the same "practically-unreachable
+ceiling, not real pagination" tradeoff already used for `/admin/products/clear`'s own
+cap) and added an explicit `truncated` flag in the response; the admin Referrals tab now
+shows a plain "showing the first N only" notice if that ceiling is ever actually hit,
+instead of silently looking complete. Caught and fixed a real bug of my own while wiring
+this up — the first draft referenced a `var(--bad)` CSS token that doesn't exist in
+`admin-src/index.html`'s actual token set (the real one is `--danger`), which would have
+rendered as browser-default black text instead of the intended color; caught by checking
+the file's own `:root` block before shipping, not by trusting the token name from memory.
+
+**Low — `/admin/user/referral-chain`'s downline BFS had no cycle guard, unlike its own
+upline walk right above it.** The upline walk already has a `seenUp` set specifically
+because a real cycle in corrupted/legacy data (Round 17's own write-time cycle guard
+can't retroactively fix data that predates it) would otherwise hang or loop forever — the
+downline walk never got the same treatment. Added a matching `seenDown` set and a
+`downlineCycleDetected` flag in the response, mirroring the upline guard's own shape
+exactly.
+
+**Verified**: `node --check server.js` clean, `node build-admin.js` round-trip clean,
+`git diff --check` clean, a boot smoke test (real self-signed dummy Firebase PEM +
+unreachable Mongo) still fails only at the Mongo-connect step. `test-admin-obfuscated-
+build.js` (the existing jsdom harness against the real obfuscated admin build) — 0
+errors across all 12 tabs, including the Referrals tab rendering correctly with the new
+`truncated`-aware markup. Four standalone isolated verification scripts (not committed —
+throwaway, mirroring this file's own established practice for rounds without a live
+Mongo/mongodb-memory-server available in this sandbox): (1) the buyer-ban fix — 8/8
+checks, including the zero-rate-plus-banned ordering fix and a full pending→blocked→
+unbanned→paid lifecycle; (2) the ancestor-propagation fix — reproduced Codex's own A→P→D→G
+worked example exactly, confirming A's previously-stuck-stale `teamL3Count` now correctly
+recomputes to 0; (3) the downline cycle guard — a genuine corrupted A→B→A cycle now
+reports `downlineCycleDetected:true` with exactly 1 entry instead of accumulating
+duplicates, with a sanity check confirming a normal non-cyclic tree still reports
+correctly; (4) the `referrer-guard` lock-sharing fix — an empirical race test (20
+repeated trials with real `setTimeout` delays, not just a single lucky pass) confirming
+registration's read and attach-referrer's write now genuinely serialize with zero
+interleaving, PLUS a sanity check proving the exact same test harness against the OLD
+(unfixed) shape genuinely CAN produce the stale read this fix closes (so the "passes"
+above aren't just a test too weak to ever detect the race) — and a separate deadlock-
+safety stress test confirming both possible lock-sort-order outcomes complete without
+hanging. This round is server.js + admin-src-only — no user-src changes, so no user-app
+cache bump needed. Admin cache bumped `v14`→`v15` (admin-src/index.html's own content
+changed — the Referrals tab truncation notice — matching `sw.js`'s own standing rule to
+bump on every deploy that changes index.html). **`server.js` and `admin-src/index.html`
+changed — Render should auto-deploy this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

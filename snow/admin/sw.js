@@ -1,5 +1,5 @@
 // Bump this on every deploy that changes index.html/manifest.json/icons.
-const CACHE = 'snow-admin-shell-v14';
+const CACHE = 'snow-admin-shell-v15';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 // Firebase Messaging background handler -- shows a notification for pushes

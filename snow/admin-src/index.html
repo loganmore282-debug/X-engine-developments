@@ -1425,8 +1425,14 @@ async function renderReferrals(){
   const r = await api('/admin/referrals/list');
   if(staleTab('referrals')) return;
   _refs = r.referrals||[];
+  // Codex-caught real bug: the backend caps this list (a very generous
+  // ceiling, not real pagination -- see its own comment) with no signal at
+  // all when that ceiling is actually hit, so the tab could silently show
+  // an incomplete list. Surface it plainly if it ever happens rather than
+  // building a paginated UI that isn't needed at any realistic scale today.
   $('content').innerHTML = `
-    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="refsCount">Referrals (${_refs.length})</h2></div>
+    <div class="row" style="align-items:center;margin-bottom:12px"><h2 class="sec" style="flex:1;margin:0" id="refsCount">Referrals (${_refs.length}${r.truncated?'+':''})</h2></div>
+    ${r.truncated?'<div class="panel-card" style="margin-bottom:12px;color:var(--danger)">Showing the first '+_refs.length+' referrals only — the platform has more than this list can currently display.</div>':''}
     <div class="panel-card" style="margin-bottom:12px"><input id="refSearch" placeholder="Search a phone number"></div>
     <div class="panel-card table-scroll"><table><thead><tr><th>Referred user</th><th>Referrer's code</th><th>Invested</th><th>Status</th></tr></thead>
     <tbody id="refRows"></tbody></table></div>`;

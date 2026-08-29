@@ -987,7 +987,23 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
 
     const sett = await getSettings();
     const buyerSnap = await db.collection('users').doc(buyerId).get();
-    if (!buyerSnap.exists || buyerSnap.data().status === 'banned') { await invRef.update({ commissionPending: false }); return paidAny; }
+    if (!buyerSnap.exists) { await invRef.update({ commissionPending: false }); return paidAny; }
+    // Codex-caught real bug: banning the BUYER used to close commissionPending
+    // permanently too, exactly the same class of bug the chain-level ban check
+    // below was fixed for (Round 79) -- a buyer ban is a temporary block on
+    // THAT account, not a fraud reversal of an already-genuine first purchase;
+    // nothing in this codebase invalidates the investment doc itself when its
+    // owner is banned. The referrer earned this commission on a real purchase
+    // that already happened -- they should not permanently lose it just
+    // because the buyer was later banned for something unrelated. Leave
+    // commissionPending true so reconcileCommissions() retries once the
+    // buyer is unbanned -- but mark commissionBanBlocked so that reconciler
+    // (see its own comment) can skip re-querying this row every single tick
+    // while nothing has changed.
+    if (buyerSnap.data().status === 'banned') {
+      await invRef.update({ commissionBanBlocked: true }).catch(() => {});
+      return paidAny;
+    }
     const l1Id = buyerSnap.data().referredBy;
     if (!l1Id) { await invRef.update({ commissionPending: false }); return paidAny; }
     const rates = [sett.commL1, sett.commL2, sett.commL3];
@@ -1009,11 +1025,18 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
       if (paidLevels.indexOf(i) !== -1) continue;
       const { id, snap } = chain[i];
       if (!snap.exists) continue;
+      // Codex-caught real bug: this used to check ban status BEFORE the
+      // commission rate, so a banned account sitting at a level whose rate
+      // is currently 0% would still mark anyLevelBlockedByBan -- keeping
+      // commissionPending open forever for an investment that has nothing
+      // left to actually pay at that level regardless of ban status. A
+      // zero-rate level is permanently resolved (nothing owed) no matter
+      // what the account's status is -- check that first.
+      const pct = Number(rates[i]) || 0;
+      if (pct <= 0) continue;
       // A referrer banned at this exact instant is a TEMPORARY block, not a
       // permanent forfeiture -- see the anyLevelBlockedByBan comment below.
       if (snap.data().status === 'banned') { anyLevelBlockedByBan = true; continue; }
-      const pct = Number(rates[i]) || 0;
-      if (pct <= 0) continue;
       const reward = Math.round(amount * pct / 100);
       if (reward <= 0) continue;
       await invRef.update({ commissionPaidLevels: FieldValue.arrayUnion(i) });
@@ -1040,7 +1063,23 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
     // the wrong instant would silently and PERMANENTLY forfeit commission
     // they were genuinely owed, even after being unbanned -- nothing would
     // ever look at this investment again once commissionPending flips false.
-    if (!anyLevelBlockedByBan) await invRef.update({ commissionPending: false });
+    if (anyLevelBlockedByBan) {
+      // Codex-caught real bug: leaving commissionPending:true for every
+      // ban-blocked investment (this one, and the buyer-banned branch
+      // above) means the 30s reconciler's oldest-500-first query could, at
+      // real scale, keep re-selecting the SAME long-stuck (still-banned)
+      // rows every single tick forever, permanently starving genuinely new
+      // pending commissions out of ever being reached once the backlog of
+      // still-banned rows exceeds the query's own limit. commissionBanBlocked
+      // lets reconcileCommissions() explicitly skip rows it already knows
+      // are blocked (see that query's own comment) without needing this
+      // investment to ever leave commissionPending, and without needing a
+      // timestamp/backoff scheme that would risk silently excluding every
+      // pre-existing pending investment that predates this field.
+      await invRef.update({ commissionBanBlocked: true }).catch(() => {});
+    } else {
+      await invRef.update({ commissionPending: false });
+    }
     return paidAny;
   });
 }
@@ -3327,47 +3366,66 @@ app.post('/admin/user/attach-referrer', async (req, res) => {
       if (!refSnap.exists) throw Object.assign(new Error('That referral code does not exist.'), { code: 400 });
       referrerId = candidateReferrerId;
       if (refSnap.data().status === 'banned') throw Object.assign(new Error('That referral code is no longer active.'), { code: 400 });
-      const existing = uSnap.data().referredBy;
-      // Codex-caught real bug (round 2): rejecting outright on any existing
-      // referredBy made a retry after a partial failure (referredBy written,
-      // then a crash/error before the L2/L3 increments or the commission
-      // credit below ran) permanently unrecoverable — every retry hit this
-      // same rejection. Re-attaching the SAME referrer is now treated as a
-      // resumed call (skips straight to the commission step, which is
-      // itself idempotent); only a DIFFERENT referrer is still rejected.
-      if (existing && existing !== referrerId) throw Object.assign(new Error('This account already has a different referrer.'), { code: 400 });
-      if (existing === referrerId) return; // already attached — resume below, don't re-increment counts
-      // Cycle guard — walk up from the referrer; if we ever hit userId, this
-      // would create a loop.
-      let cursor = referrerId, hops = 0;
-      while (cursor && hops < 1000) {
-        if (cursor === userId) throw Object.assign(new Error('That would create a referral loop.'), { code: 400 });
-        const cSnap = await db.collection('users').doc(cursor).get();
-        cursor = cSnap.exists ? cSnap.data().referredBy : null;
-        hops++;
-      }
-      await uRef.update({ referredBy: referrerId });
-      // Codex-caught real bug: this used to only ever increment the direct
-      // referrer's teamL1Count — never L2/L3 further up the chain, unlike
-      // every other place a referral relationship is created
-      // (completeRegistrationCore's own commit(), same L1->L2->L3 walk).
-      // KNOWN, ACCEPTED LIMITATION (same class documented elsewhere in this
-      // file, e.g. settleInvestmentIfDue/creditReferralCommission's own
-      // crash-window notes): a crash between the referredBy write above and
-      // these increments leaves them permanently unapplied — a resumed call
-      // sees existing===referrerId and skips straight past this block. A
-      // real fix needs a durable outbox/counts-recompute mechanism, a
-      // bigger lift than this pass; not attempted, same tradeoff this
-      // codebase already accepts for registration's own identical shape.
-      await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
-      const l1Snap = await db.collection('users').doc(referrerId).get();
-      const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
-      if (l2Id && l2Id !== referrerId) {
-        await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
-        const l2Snap = await db.collection('users').doc(l2Id).get();
-        const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
-        if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
-      }
+      // Codex-caught real bug: this whole block writes userId's own
+      // referredBy field and then reads/increments based on IT, but the only
+      // lock covering it was withLock2('reg:'+userId,'reg:'+candidateReferrerId)
+      // -- a DIFFERENT lock family than the one completeRegistrationCore()'s
+      // own commit() uses to read a referrer's referredBy (referrer-guard:
+      // +referrerId, see that function's own comment). Concretely: a member
+      // U registers under referrer R at the same moment an admin attaches R
+      // to a new parent P here -- registration's read of R.referredBy (to
+      // credit P's L2/L3) could land in the gap before THIS route's write of
+      // R.referredBy=P actually lands, since the two never shared a lock key.
+      // Result: P's L2 count silently underused U's join, permanently (no
+      // organic recount ever revisits it). Nesting the SAME referrer-guard:
+      // +userId key registration already uses -- inside the existing
+      // withLock2 scope, so this never tries to reacquire either 'reg:' key
+      // it already holds -- gives the two operations genuine mutual
+      // exclusion over userId's own referredBy field with zero deadlock risk
+      // (a single shared lock key can't create an acquisition cycle).
+      await withLock('referrer-guard:' + userId, async () => {
+        const existing = uSnap.data().referredBy;
+        // Codex-caught real bug (round 2): rejecting outright on any existing
+        // referredBy made a retry after a partial failure (referredBy written,
+        // then a crash/error before the L2/L3 increments or the commission
+        // credit below ran) permanently unrecoverable — every retry hit this
+        // same rejection. Re-attaching the SAME referrer is now treated as a
+        // resumed call (skips straight to the commission step, which is
+        // itself idempotent); only a DIFFERENT referrer is still rejected.
+        if (existing && existing !== referrerId) throw Object.assign(new Error('This account already has a different referrer.'), { code: 400 });
+        if (existing === referrerId) return; // already attached — resume below, don't re-increment counts
+        // Cycle guard — walk up from the referrer; if we ever hit userId, this
+        // would create a loop.
+        let cursor = referrerId, hops = 0;
+        while (cursor && hops < 1000) {
+          if (cursor === userId) throw Object.assign(new Error('That would create a referral loop.'), { code: 400 });
+          const cSnap = await db.collection('users').doc(cursor).get();
+          cursor = cSnap.exists ? cSnap.data().referredBy : null;
+          hops++;
+        }
+        await uRef.update({ referredBy: referrerId });
+        // Codex-caught real bug: this used to only ever increment the direct
+        // referrer's teamL1Count — never L2/L3 further up the chain, unlike
+        // every other place a referral relationship is created
+        // (completeRegistrationCore's own commit(), same L1->L2->L3 walk).
+        // KNOWN, ACCEPTED LIMITATION (same class documented elsewhere in this
+        // file, e.g. settleInvestmentIfDue/creditReferralCommission's own
+        // crash-window notes): a crash between the referredBy write above and
+        // these increments leaves them permanently unapplied — a resumed call
+        // sees existing===referrerId and skips straight past this block. A
+        // real fix needs a durable outbox/counts-recompute mechanism, a
+        // bigger lift than this pass; not attempted, same tradeoff this
+        // codebase already accepts for registration's own identical shape.
+        await db.collection('users').doc(referrerId).update({ teamL1Count: FieldValue.increment(1) });
+        const l1Snap = await db.collection('users').doc(referrerId).get();
+        const l2Id = l1Snap.exists ? l1Snap.data().referredBy : null;
+        if (l2Id && l2Id !== referrerId) {
+          await db.collection('users').doc(l2Id).update({ teamL2Count: FieldValue.increment(1) });
+          const l2Snap = await db.collection('users').doc(l2Id).get();
+          const l3Id = l2Snap.exists ? l2Snap.data().referredBy : null;
+          if (l3Id && l3Id !== referrerId && l3Id !== l2Id) await db.collection('users').doc(l3Id).update({ teamL3Count: FieldValue.increment(1) });
+        }
+      });
     });
     // Codex-caught real bug: the admin UI's own copy ("if this member
     // already made their first purchase, commission on it is paid now")
@@ -3511,7 +3569,31 @@ app.post('/admin/user/delete', async (req, res) => {
     ]);
     await db.collection('users').doc(userId).delete();
     try { await admin.auth().deleteUser(userId); } catch (_) {}
-    if (parentId) await recomputeTeamCounts(parentId).catch(e => console.warn('recomputeTeamCounts warning:', e.message));
+    // Codex-caught real bug: recomputeTeamCounts(parentId) alone only fixes
+    // parentId's OWN L1/L2/L3 -- but reparenting the deleted user's children
+    // up to parentId also changes what sits at levels 2/3 BELOW parentId's
+    // own ancestors. Concretely: chain A->P->D->G, delete D (G reparents to
+    // P) -- P's own counts get correctly rebuilt, but A's teamL3Count was
+    // counting D's children (G) and never gets touched, staying stale
+    // forever (recomputeTeamCounts is the only place this ever gets fixed,
+    // and it was never called for A). A change at parentId's own children/
+    // grandchildren can affect any ancestor whose OWN L2/L3 window reaches
+    // that far -- that's parentId itself, parentId's referrer, and that
+    // referrer's referrer (3 total: 0/1/2 hops above parentId), never
+    // further given the 3-level cap. Each recomputeTeamCounts() call is
+    // already a fully correct, self-contained fresh BFS from its own root,
+    // so recomputing multiple roots here is simply repeating a
+    // known-correct operation, not new logic.
+    if (parentId) {
+      const ancestorTargets = [parentId];
+      let cursor = parentId;
+      for (let hop = 0; hop < 2 && cursor; hop++) {
+        const cSnap = await db.collection('users').doc(cursor).get();
+        cursor = cSnap.exists ? cSnap.data().referredBy : null;
+        if (cursor) ancestorTargets.push(cursor);
+      }
+      for (const t of ancestorTargets) await recomputeTeamCounts(t).catch(e => console.warn('recomputeTeamCounts warning:', e.message));
+    }
     logAdminAction(req, 'user_deleted', { userId, reparentedTo: parentId });
     res.json({ status: 'success' });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -3719,7 +3801,18 @@ app.post('/admin/transactions/list', async (req, res) => {
 app.get('/admin/referrals/list', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
-    const snap = await db.collection('users').where('referredBy', '!=', null).limit(2000).get();
+    // Codex-caught real bug: a hard 2,000-row cap with no truncation signal
+    // -- once the platform passed 2,000 linked accounts, this tab would
+    // silently show an incomplete list with zero indication anything was
+    // missing, exactly the kind of silent-corruption-of-an-admin-view this
+    // codebase is otherwise careful to avoid (see /admin/integrity's own
+    // "surface, never silently launder" design intent). Bumped the cap
+    // generously (same "practically-unreachable ceiling, not real
+    // pagination" tradeoff already used for /admin/products/clear's own
+    // cap) and added an explicit `truncated` flag so the admin UI can at
+    // least say so if this ceiling is ever actually reached.
+    const REFERRALS_LIST_LIMIT = 20000;
+    const snap = await db.collection('users').where('referredBy', '!=', null).limit(REFERRALS_LIST_LIMIT).get();
     // Codex-caught real bug: `referredBy` on a user doc is the referrer's
     // raw Firebase uid, not their referral CODE -- the admin UI's "Referred
     // user" table rendered the uid straight into the "Referrer's code"
@@ -3735,7 +3828,7 @@ app.get('/admin/referrals/list', async (req, res) => {
         referrerCode: codeById[u.referredBy] || '', invested: finiteMoney(u.totalInvested), status: u.status || 'active',
       };
     });
-    res.json({ status: 'success', referrals: rows });
+    res.json({ status: 'success', referrals: rows, truncated: rows.length >= REFERRALS_LIST_LIMIT });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
 // Full-depth referral chain trace -- deliberately separate from
@@ -3781,15 +3874,28 @@ app.post('/admin/user/referral-chain', async (req, res) => {
     // pattern wholeTeamDeposits()/recomputeTeamCounts() already use, just
     // without their 3-level cap) -- capped only on total nodes returned and
     // a defensive max-depth so a pathological chain can't run away.
+    // Codex-caught real bug: unlike the upline walk right above (which has
+    // its own seenUp cycle-guard for exactly this reason), this had none --
+    // a real referral cycle in the data (attach-referrer's own cycle-check,
+    // Round 17, prevents one from ever being WRITTEN, but this reads
+    // whatever the data actually is, corrupted or not, same reasoning the
+    // upline walk's own comment already gives) would have this BFS
+    // alternately rediscover the same accounts at successive levels,
+    // inserting duplicates and reporting bogus per-level counts until
+    // hitting the depth/node caps -- exactly mirroring the upline guard.
     const downline = [];
     let parentIds = [userId];
     let level = 0;
     const DOWNLINE_CAP = 5000;
+    const seenDown = new Set([userId]);
+    let downlineCycleDetected = false;
     while (parentIds.length && downline.length < DOWNLINE_CAP && level < 50) {
       level++;
       const snap = await db.collection('users').where('referredBy', 'in', parentIds).limit(DOWNLINE_CAP).get();
       const nextIds = [];
       snap.forEach(d => {
+        if (seenDown.has(d.id)) { downlineCycleDetected = true; return; }
+        seenDown.add(d.id);
         nextIds.push(d.id);
         if (downline.length < DOWNLINE_CAP) downline.push({ ...brief(d.id, d.data()), level, referredBy: d.data().referredBy });
       });
@@ -3802,7 +3908,7 @@ app.post('/admin/user/referral-chain', async (req, res) => {
       status: 'success',
       user: brief(startSnap.id, startSnap.data()),
       root, upline, cycleDetected,
-      downline, downlineCountByLevel, downlineTruncated: downline.length >= DOWNLINE_CAP,
+      downline, downlineCountByLevel, downlineTruncated: downline.length >= DOWNLINE_CAP, downlineCycleDetected,
     });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
 });
@@ -4198,14 +4304,48 @@ async function reconcileStuckWithdrawalRefunds() {
   } catch (e) { console.error('Reconcile stuck withdrawal refunds error:', e.message); }
   return settled;
 }
+// Codex-caught real bug: this always requested the oldest 500
+// commissionPending==true rows, ordered ascending -- fine as long as
+// everything it finds actually resolves within a tick or two. But
+// creditReferralCommission() now deliberately leaves commissionPending
+// true for as long as a buyer/referrer stays banned (see its own
+// comments -- Round 79 and this round's own fix), which real bans can be
+// permanent. If 500+ old investments ever end up stuck that way at once,
+// this query would return the SAME stuck 500 every single tick forever,
+// permanently starving any genuinely newer pending commission (a real
+// first-ever attempt, or one that failed transiently) that sits beyond
+// that fixed window -- it would simply never be reached. Excluding rows
+// already flagged commissionBanBlocked (set by creditReferralCommission
+// itself whenever it leaves early because of an active ban) keeps this
+// fast, frequent (30s) sweep free to reach genuinely new/transiently-
+// failed rows. Blocked rows aren't abandoned -- see
+// reconcileBlockedCommissions() below, a separate, much less frequent
+// sweep that gives them a real chance to resolve once unbanned without
+// spamming this query every tick in the meantime.
 async function reconcileCommissions() {
   try {
-    const snap = await db.collection('investments').where('commissionPending', '==', true).orderBy('createdAt', 'asc').limit(500).get();
+    const snap = await db.collection('investments').where('commissionPending', '==', true).where('commissionBanBlocked', '!=', true).orderBy('createdAt', 'asc').limit(500).get();
     for (const doc of snap.docs) {
       const inv = doc.data();
       await creditReferralCommission(doc.id, inv.userId, inv.amount).catch(e => console.error('Reconcile commission error:', e.message));
     }
   } catch (e) { console.error('Reconcile commissions error:', e.message); }
+}
+// Slow-lane counterpart to reconcileCommissions() above -- specifically
+// re-checks rows THAT query deliberately skips (commissionBanBlocked:true).
+// A ban/unban cycle is a human-timescale event, not something needing
+// sub-minute responsiveness, so this runs far less often (see its own
+// setInterval below) -- cheap insurance against the starvation risk above
+// while still actually paying a referrer the moment they're unbanned,
+// rather than never looking at their investment again.
+async function reconcileBlockedCommissions() {
+  try {
+    const snap = await db.collection('investments').where('commissionPending', '==', true).where('commissionBanBlocked', '==', true).limit(2000).get();
+    for (const doc of snap.docs) {
+      const inv = doc.data();
+      await creditReferralCommission(doc.id, inv.userId, inv.amount).catch(e => console.error('Reconcile blocked commission error:', e.message));
+    }
+  } catch (e) { console.error('Reconcile blocked commissions error:', e.message); }
 }
 let _sweepingCashback = false;
 async function reconcileCashback() {
@@ -4288,5 +4428,6 @@ connectMongo(MONGODB_URI)
     setTimeout(reconcileCashback, 500);
     setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
+    setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });
