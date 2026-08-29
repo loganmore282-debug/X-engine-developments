@@ -4705,6 +4705,68 @@ transition doesn't double-touch `totalWithdrawn` — 9/9 checks. This round is s
 user-src + admin-src. Cache bumped `v57`→`v58` (user), `v15`→`v16` (admin). **`server.js`
 changed — Render should auto-deploy this push.**
 
+## Round 82 (2026-08-29) — check-in toast reworded (no streak number), Deposit given a live-poll status modal (pending/success/failed, SVG only)
+
+Owner: "even change the notify, change to checkin successful, not putting streaks, you
+need to change words not putting the same, so also, on deposit let's establish a live
+poll animation, so one initiates so brings status if successful ✅️ or failed ❌️" — with
+two reference images attached (a red circle+X, a green circle+check). Per this app's
+own standing "SVG icons only, no emoji" rule, read the ✅️/❌️ in the request as "a
+success indicator and a failure indicator" to be built as SVG (matching the two
+reference images), not literal emoji glyphs in the UI.
+
+**Check-in toast reworded.** `submitCheckin()`'s success toast changed from
+`` `${fmtUGX(r.bonus)} added — day ${r.streak} streak}` `` to `Check-in successful —
+${fmtUGX(r.bonus)} added to your wallet` — leads with "Check-in successful" and drops
+the streak-day count entirely, per the owner's explicit "not putting streaks."
+
+**Deposit gets a live-poll status modal.** Previously `submitDeposit()` just toasted
+"Payment initiated" and closed the sheet, with `pollDepositStatus()` silently
+backgrounding its 20×3s poll loop and firing a toast only once it resolved (or saying
+nothing at all if it never resolved within 60s). Built a new dedicated modal instead,
+reusing the app's own established `.chest-modal-bg`/`.chest-modal` dark/centered/thin
+pop-up convention (the same one every dialog since Round 28 shares) rather than
+inventing new modal styling: `#depStatusBg`/`.dep-status-modal` in `index.html`, opened
+via `openDepositStatusModal()` the instant `/deposit/marzpay` is accepted (right after
+`closeSheet()`), and updated in place by 4 new state-setter helpers as
+`pollDepositStatus()` progresses:
+- **Pending** (`setDepositStatusPending()`) — reuses the loading screen's own existing
+  `@keyframes sp` spinner (no new animation invented), "Processing your recharge."
+- **Success** (`setDepositStatusSuccess()`) — a new `ICONS.check` (stroke checkmark,
+  matching this file's existing icon style/conventions — the only genuinely new icon
+  needed, since `ICONS.x` already existed for failure), shown in a green-tinted circle
+  (`.dep-status-icon.success`, `var(--snow-green)`), "Recharge successful."
+- **Failed** (`setDepositStatusFailed(msg)`) — reuses `ICONS.x` (already existed) in a
+  wine-tinted circle (`.dep-status-icon.failed`, `var(--snow-wine)`), "Recharge failed"
+  + the server's own failure reason.
+- **Still processing** (`setDepositStatusUnknown()`) — new: the previous code had no
+  handling at all for the poll loop exhausting its 20 attempts without ever resolving;
+  now shows a neutral "still processing, check Records shortly" message with a Close
+  button instead of silently doing nothing.
+
+No outside-tap-to-close while pending (a real operation is in flight, matching the
+gift-code modal's own "don't let a stray tap dismiss an active action" posture) — the
+Close button only appears once a state resolves (success, failed, or the timeout case).
+Both `lockBodyScroll()`/`unlockBodyScroll()` (the shared helpers every other dialog
+already uses) are wired the same way. `refreshTransactionsCache()` calls already
+correctly wired into both the matched and failed branches (from Round 72's own fix)
+were preserved unchanged — this round only replaced the toast-only feedback with the
+modal, not the underlying poll timing/logic (still 20 attempts × 3s = 60s) or the
+Records-cache-freshness fix.
+
+**Verified**: `node --check user-src/original_module.js` clean, `node build-core.js`
+round-trip clean, `git diff --check` clean. Playwright, against the real built
+(obfuscated) `user/index.html` — not the readable source — 11 checks: the check-in
+toast reads exactly "Check-in successful — UGX 500 added to your wallet" (no "streak"
+or "day N" substring anywhere in it); submitting a deposit opens the status modal
+immediately, showing the pending spinner (not the resolved state) before the first real
+3-second poll tick elapses; after that tick resolves (mocked `state:'matched'`), the
+modal's icon class flips to `success`, renders a genuine `<svg>` element (confirmed via
+`outerHTML`, not just a screenshot), the title reads "Recharge successful", no literal
+✅/❌ emoji characters appear anywhere in the resulting DOM, the Close button becomes
+visible only once resolved, and tapping it closes the modal. Cache bumped `v58`→`v59`.
+`user-src/`-only change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

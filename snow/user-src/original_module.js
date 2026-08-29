@@ -35,6 +35,7 @@ var ICONS = {
   eye: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A11.4 11.4 0 0 1 12 5c7 0 11 7 11 7a17.5 17.5 0 0 1-3.1 3.9M6.7 6.7C3.6 8.5 1 12 1 12s4 7 11 7a10.6 10.6 0 0 0 4.3-.9"/><path d="M9.5 9.8A3 3 0 0 0 12 15a3 3 0 0 0 2.2-.97"/></svg>',
   x: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
 };
 // Owner supplied this exact icy-blue gradient snowflake mark (superseding
 // both the hand-drawn version and the Twemoji-glyph version from earlier
@@ -1539,7 +1540,7 @@ window.submitCheckin = async function(){
     btn.disabled = false; btn.textContent = label;
     return toast(r.message || 'Could not check in', true);
   }
-  toast(`${fmtUGX(r.bonus)} added — day ${r.streak} streak`);
+  toast(`Check-in successful — ${fmtUGX(r.bonus)} added to your wallet`);
   const acc = await api('/account');
   if (acc.status === 'success') STATE.account = acc.account;
   // Same stale-Records fix Round 72 applied to deposit/withdraw --
@@ -1735,6 +1736,50 @@ function syncDepositQuickAmt(){
   const val = parseMoneyInput($('depAmount').value);
   box.querySelectorAll('.quick-amt').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.amt) === val));
 }
+// Live deposit-status modal -- reuses the .chest-modal-bg/.chest-modal dark/
+// centered/thin pop-up convention. Opens the instant a recharge is accepted
+// and updates in place as pollDepositStatus() resolves, instead of just a
+// toast + silent background poll. No outside-tap-to-close while pending
+// (a real operation is in flight); the Close button only appears once
+// resolved (or once the poll gives up), matching the app's own established
+// pattern of only offering Close on a settled dialog state.
+window.openDepositStatusModal = function(){
+  setDepositStatusPending();
+  $('depStatusBg').classList.add('show');
+  lockBodyScroll();
+};
+window.closeDepositStatusModal = function(){
+  $('depStatusBg').classList.remove('show');
+  unlockBodyScroll();
+};
+function setDepositStatusPending(){
+  $('depStatusIcon').className = 'dep-status-icon';
+  $('depStatusIcon').innerHTML = '<div class="spin"></div>';
+  $('depStatusTitle').textContent = 'Processing your recharge';
+  $('depStatusBody').textContent = "Waiting for confirmation from your mobile money provider — this only takes a moment.";
+  $('depStatusCloseBtn').style.display = 'none';
+}
+function setDepositStatusSuccess(){
+  $('depStatusIcon').className = 'dep-status-icon success';
+  $('depStatusIcon').innerHTML = ICONS.check;
+  $('depStatusTitle').textContent = 'Recharge successful';
+  $('depStatusBody').textContent = 'Your wallet has been credited.';
+  $('depStatusCloseBtn').style.display = 'block';
+}
+function setDepositStatusFailed(msg){
+  $('depStatusIcon').className = 'dep-status-icon failed';
+  $('depStatusIcon').innerHTML = ICONS.x;
+  $('depStatusTitle').textContent = 'Recharge failed';
+  $('depStatusBody').textContent = msg || 'Your recharge could not be completed.';
+  $('depStatusCloseBtn').style.display = 'block';
+}
+function setDepositStatusUnknown(){
+  $('depStatusIcon').className = 'dep-status-icon';
+  $('depStatusIcon').innerHTML = '<div class="spin"></div>';
+  $('depStatusTitle').textContent = 'Still processing';
+  $('depStatusBody').textContent = 'This is taking longer than usual. Check Records shortly for the final status.';
+  $('depStatusCloseBtn').style.display = 'block';
+}
 window.submitDeposit = async function(){
   const amount = parseMoneyInput($('depAmount').value);
   const phone = $('depPhone').value;
@@ -1744,21 +1789,22 @@ window.submitDeposit = async function(){
   const r = await post('/deposit/marzpay', { amount, phone, network });
   $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge';
   if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
-  toast(r.message || 'Payment initiated. Check your phone.');
   // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
   // wrote a "Processing" ledger row server-side by this point, refresh the
   // cache now so it's actually there the next time Records opens.
   await refreshTransactionsCache();
-  pollDepositStatus(r.depositId);
   closeSheet();
+  openDepositStatusModal();
+  pollDepositStatus(r.depositId);
 };
 async function pollDepositStatus(depositId){
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 3000));
     const r = await post('/deposit/marzpay/status', { depositId });
-    if (r.status === 'success' && r.state === 'matched') { toast('Recharge successful'); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
-    if (r.status === 'success' && r.state === 'failed') { toast(r.message || 'Recharge failed', true); await refreshTransactionsCache(); return; }
+    if (r.status === 'success' && r.state === 'matched') { setDepositStatusSuccess(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
+    if (r.status === 'success' && r.state === 'failed') { setDepositStatusFailed(r.message); await refreshTransactionsCache(); return; }
   }
+  setDepositStatusUnknown();
 }
 
 // Cache-first: STATE.bankAccounts is prefetched at login. Deliberately does
