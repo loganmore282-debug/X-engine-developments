@@ -3873,6 +3873,48 @@ are restored to `''` after closing. Re-ran Rounds 58/59/60/62/63/65/69/70's own 
 all still pass, zero regressions. Cache bumped `v52`→`v53`. `user-src/`-only change — no
 Render redeploy needed.
 
+## Round 72 (2026-08-29) — real bug: a just-submitted withdrawal (or deposit) didn't show up in Records until the sheet had been reopened 2-3 times
+
+Owner: "bro, l am not happy with this, a pending withdrawal order is not created, when is
+withdrawal record created???? l want it to be created please." Investigated against the
+actual code rather than assuming it was a backend gap — `server.js`'s `/withdraw/request`
+already writes both a `withdrawals` doc AND a `transactions` ledger row (status
+`'pending'`, "Withdrawal — Processing — X") atomically inside the same lock the instant a
+request succeeds, and the same is true of `/deposit/marzpay`. The record WAS being
+created server-side the whole time — the bug was entirely client-side.
+
+**Root cause.** `openRecordsSheet()` is cache-first (Round 33): it paints instantly from
+whatever `STATE.transactions` already holds, and per Round 55's own fix it deliberately
+does NOT repaint once its background refetch lands (that fix stopped an already-open
+Records sheet from silently reloading itself mid-view). Nothing, however, ever told
+`STATE.transactions` to refresh the MOMENT a new ledger row was actually created —
+`submitWithdraw()`/`submitDeposit()`/`pollDepositStatus()` all just showed a toast and
+moved on. So the sequence that actually happened: member opens Records once (caches the
+list as it stood then), submits a withdrawal, opens Records again — paints instantly from
+the STILL-stale cache (missing the new row), and since a cache already existed, Round 55's
+own guard means it will never repaint from the fresh data already sitting in
+`STATE.transactions` after that open's own background refetch lands. It could take a
+third open before the new row was visible, and a member who tried once or twice and gave
+up would reasonably conclude the record was never created at all — exactly what was
+reported.
+
+**Fix.** New shared `refreshTransactionsCache()` helper (mirrors the `api('/account')`
+refresh `submitCheckin()` already does after a successful claim) — awaited right after a
+successful `/withdraw/request`, right after a successful `/deposit/marzpay` (which already
+wrote its own "Processing" row), and again on both outcomes of `pollDepositStatus()`
+(matched/failed) once the deposit's final status is known. `STATE.transactions` is now
+correct by the very next Records open in every case, not the second or third.
+
+**Verified**: `node --check` clean, `build-core.js` round-trip clean, `git diff --check`
+clean. Playwright, against the real built app: seeded `STATE.transactions` with an Open-
+Records-once-before-withdrawing cache (the exact scenario that triggered the bug),
+submitted a real withdrawal through the actual `submitWithdraw()` UI flow, confirmed
+`STATE.transactions` already holds the new pending row immediately after the call
+resolves (not after a later background fetch), then opened Records again and confirmed
+the Withdrawals tab shows the "Processing" row on that very next open. Re-ran Rounds
+58/59/60/62/63/65/69/70/71's own suites — all still pass, zero regressions. Cache bumped
+`v53`→`v54`. `user-src/`-only change — no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

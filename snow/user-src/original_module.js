@@ -1703,6 +1703,10 @@ window.submitDeposit = async function(){
   $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Recharge';
   if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
   toast(r.message || 'Payment initiated. Check your phone.');
+  // Same stale-Records fix as submitWithdraw() -- /deposit/marzpay already
+  // wrote a "Processing" ledger row server-side by this point, refresh the
+  // cache now so it's actually there the next time Records opens.
+  await refreshTransactionsCache();
   pollDepositStatus(r.depositId);
   closeSheet();
 };
@@ -1710,8 +1714,8 @@ async function pollDepositStatus(depositId){
   for (let i = 0; i < 20; i++) {
     await new Promise(r => setTimeout(r, 3000));
     const r = await post('/deposit/marzpay/status', { depositId });
-    if (r.status === 'success' && r.state === 'matched') { toast('Recharge successful'); if (STATE.page==='home') renderHome(); return; }
-    if (r.status === 'success' && r.state === 'failed') { toast(r.message || 'Recharge failed', true); return; }
+    if (r.status === 'success' && r.state === 'matched') { toast('Recharge successful'); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
+    if (r.status === 'success' && r.state === 'failed') { toast(r.message || 'Recharge failed', true); await refreshTransactionsCache(); return; }
   }
 }
 
@@ -1765,6 +1769,27 @@ window.syncWithdrawReceiveAmt = function(){
   const net = Math.max(0, amount - fee);
   el.textContent = fmtUGX(net);
 };
+// Records (openRecordsSheet()) is cache-first: it paints instantly from
+// whatever STATE.transactions already holds, and per Round 55's own fix,
+// deliberately does NOT repaint once its own background refetch lands (that
+// was to stop a sheet that's already open from silently reloading itself
+// mid-view). The side effect nobody had hit until now: nothing ever
+// refreshed STATE.transactions the moment a NEW ledger row was actually
+// created server-side (withdraw/deposit both write one immediately, see
+// server.js's own /withdraw/request and /deposit/marzpay) -- so opening
+// Records right after submitting a withdrawal painted the STALE cached
+// list, missing the just-created "Processing" row entirely, and even a
+// second open could still miss it depending on exactly when the FIRST
+// open's own background refetch happened to land. Owner: "a pending
+// withdrawal order is not created... l want it to be created" -- it WAS
+// being created server-side the whole time, the client just never told
+// itself to look again. Same "refresh the relevant STATE slice right after
+// a successful money action" pattern submitCheckin() already uses for
+// STATE.account.
+async function refreshTransactionsCache(){
+  const r = await api('/transactions');
+  if (r.status === 'success') STATE.transactions = r.transactions;
+}
 window.submitWithdraw = async function(){
   const amount = parseMoneyInput($('witAmount').value);
   const pin = $('witPin').value.trim();
@@ -1778,6 +1803,7 @@ window.submitWithdraw = async function(){
   $('witSubmitBtn').disabled = false; $('witSubmitBtn').textContent = 'Request Withdrawal';
   if (r.status !== 'success') return toast(r.message || 'Could not request withdrawal', true);
   toast(r.message || 'Cash-out requested');
+  await refreshTransactionsCache();
   closeSheet();
   if (STATE.page==='home') renderHome();
 };
