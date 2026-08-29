@@ -4330,6 +4330,69 @@ confirmed each one calls `POST` its own real endpoint (`/checkin`, `/redeem`,
 checks passed. Cache bumped `v56`→`v57`. `user-src/`-only change — no Render redeploy
 needed.
 
+## Round 79 (2026-08-29) — referral/referral-code audit: 1 real bug found and fixed (a banned referrer could permanently forfeit commission owed to them)
+
+Owner: "check referral and referral code functions and logics." Read through every
+referral-related code path end to end — code generation (`generateUniqueReferralCode()`),
+capture/registration (`captureReferralFromUrl()`, `completeRegistrationCore()`),
+commission crediting (`creditReferralCommission()`), team counts
+(`recomputeTeamCounts()`, already fixed Round 77), the admin attach-referrer/referral-list/
+referral-chain tools, and the Team page's own referral-code/link/share UI — rather than
+guessing at a specific symptom.
+
+**Referral code generation, capture, and team-count bookkeeping — all confirmed
+correct, no change.** `generateUniqueReferralCode()` does a real check-and-claim-as-one-
+atomic-step under a process-local lock, drawn from a `crypto.randomInt`-backed
+unambiguous alphabet, checked against the whole `users` collection. `captureReferralFromUrl()`
+correctly preserves case (server matching is exact-string, case-sensitive) and the
+Register pane's referral box stays editable, exactly as designed. `completeRegistrationCore()`'s
+referrer-linking is properly lock-protected and re-verifies the referrer isn't banned
+immediately before committing (a referrer who goes bad in the split second between
+validation and commit just silently isn't attached — no money lost, no user-visible
+error, an acceptably narrow race). `/admin/user/attach-referrer` has already been through
+3 full Codex-review rounds (15/16/17) hardening its locking/cycle-guard/resumability —
+re-verified those fixes are all still intact, nothing regressed.
+
+**Real bug found: `creditReferralCommission()` could permanently forfeit commission owed
+to a referrer who happened to be banned at the exact moment their downline's purchase
+triggered payment.** The function walks the L1→L2→L3 chain and skips paying (but keeps
+looping over) any level whose account is currently `banned` — correct so far. But at the
+end, it unconditionally set `commissionPending: false` regardless of whether any level
+had been skipped for that reason. Since `reconcileCommissions()` (the 30s-interval
+retry sweep) only ever looks at investments where `commissionPending === true`, flipping
+it to `false` permanently removed that investment from consideration — so a referrer
+banned at the wrong instant would NEVER receive their commission, even after being
+unbanned, with zero error surfaced anywhere to reveal the loss. This directly contradicts
+this exact codebase's own already-documented, already-correct pattern for the identical
+timing problem: `settleInvestmentIfDue()`'s own comment explicitly says a banned
+account's daily cashback settlement is skipped (not advanced) specifically so it "catches
+up naturally the moment the account is unbanned, no special-case resume logic needed" —
+`creditReferralCommission()` was the one place in the referral system that didn't follow
+that same rule.
+
+**Fix**: track whether any level was skipped specifically because that referrer was
+banned (`anyLevelBlockedByBan`); only clear `commissionPending` once every unpaid level
+has been genuinely resolved (paid, or permanently ineligible — a nonexistent chain slot
+or a zero commission rate) — never while a ban is the reason it's still outstanding. A
+level skipped for a genuine, permanent reason (no such account, 0% rate at that slot)
+still correctly closes forever, matching the original behavior; only the banned case now
+stays open for a retry. `paidLevels`'s existing per-level claim tracking already makes a
+retry fully safe — a level already paid is always skipped on any subsequent pass, so
+reopening `commissionPending` can never cause a double-payment to the levels that already
+received theirs.
+
+**Verified**: `node --check server.js` clean, `git diff --check` clean. A standalone
+isolated logic test (not committed — a throwaway verification script, copying the exact
+fixed function body against an in-memory mock of the `db.collection().doc().get/update()`
+shape it actually calls) reproduced the exact scenario — a chain of buyer→L1(banned)→
+L2(active)→L3(active) — and confirmed: L2/L3 get paid correctly and L1 does not on the
+first pass; `commissionPending` correctly stays `true` (not permanently closed) while L1
+remains banned; after unbanning L1 and re-running (simulating the reconciler's next
+tick), L1 is correctly paid its full 27% with L2/L3 NOT double-paid; `commissionPending`
+then correctly closes; and a third run (fully resolved) pays nobody again. 10/10 checks
+passed. This round is server.js-only. **`server.js` changed — Render should auto-deploy
+this push.**
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

@@ -1004,10 +1004,14 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
       }
     }
     const { date, time } = nowStr();
+    let anyLevelBlockedByBan = false;
     for (let i = 0; i < chain.length; i++) {
       if (paidLevels.indexOf(i) !== -1) continue;
       const { id, snap } = chain[i];
-      if (!snap.exists || snap.data().status === 'banned') continue;
+      if (!snap.exists) continue;
+      // A referrer banned at this exact instant is a TEMPORARY block, not a
+      // permanent forfeiture -- see the anyLevelBlockedByBan comment below.
+      if (snap.data().status === 'banned') { anyLevelBlockedByBan = true; continue; }
       const pct = Number(rates[i]) || 0;
       if (pct <= 0) continue;
       const reward = Math.round(amount * pct / 100);
@@ -1024,7 +1028,19 @@ async function creditReferralCommission(investmentId, buyerId, amount) {
       });
       paidAny = true;
     }
-    await invRef.update({ commissionPending: false });
+    // Only close out commissionPending once every unpaid level has been
+    // genuinely resolved (paid, or permanently ineligible -- a nonexistent
+    // chain slot or a zero commission rate). A level skipped because that
+    // referrer was BANNED at this exact instant is NOT resolved -- leave
+    // commissionPending untouched (still true) so reconcileCommissions()
+    // (runs every 30s) retries this investment and pays them the moment
+    // they're unbanned. Mirrors settleInvestmentIfDue()'s own documented
+    // "catches up naturally once unbanned" pattern for the identical class
+    // of timing (see its own comment). Without this, a referrer banned at
+    // the wrong instant would silently and PERMANENTLY forfeit commission
+    // they were genuinely owed, even after being unbanned -- nothing would
+    // ever look at this investment again once commissionPending flips false.
+    if (!anyLevelBlockedByBan) await invRef.update({ commissionPending: false });
     return paidAny;
   });
 }
