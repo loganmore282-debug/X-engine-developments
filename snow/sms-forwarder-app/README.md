@@ -87,6 +87,29 @@ than leaving it blank: messages get attributed to the wrong number.
 | `MANUAL_SMS_SECRET` | Random string (16+ chars) — must match what you enter in every forwarder app |
 | `MARZPAY_KEY` | Base64-encoded MarzPay credentials (for the automatic deposit method + withdrawals) |
 
+## Updates
+
+A sideloaded APK has no app store behind it, so nothing updates on its own. The app
+therefore checks for itself:
+
+- Every build publishes a small `version.json` next to the APK in the same release. The
+  installed app reads it and compares `versionCode`.
+- **When you open the app**, it checks quietly and only speaks up if there's a newer
+  version, offering a Download button (that opens the release in your browser; install
+  it over the top). There's also a "Check for updates" button to ask on demand.
+- **While it's running in the background**, the ongoing "Snow SMS active" notification
+  changes to "Snow SMS update available (1.3)" — these phones sit untouched forwarding
+  SMS, so the notification is the one thing an admin actually sees. Tapping it opens the
+  app. It keeps forwarding normally either way; an update is never forced.
+
+Installing over the top **keeps that phone's numbers, secret and settings** — the app is
+signed with a fixed keystore committed alongside it, so Android treats each build as a
+genuine upgrade rather than a different app.
+
+To publish an update: change the code, bump BOTH `versionCode` and `versionName` in
+`app/build.gradle`, and push. CI rebuilds, replaces the APK in the release, and updates
+`version.json`; phones notice within about six hours, or immediately if opened.
+
 ## Important phone setup
 - Keep each phone **charged** and **online** at all times
 - Go to phone Settings → Battery → exclude **Snow SMS** from battery optimisation

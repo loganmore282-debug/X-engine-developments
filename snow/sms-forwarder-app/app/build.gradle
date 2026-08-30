@@ -10,8 +10,11 @@ android {
         applicationId "com.snowplatform.smsforwarder"
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName "1.1"
+        // Bump BOTH on every change you want phones to be offered. The build
+        // publishes these as version.json next to the APK, and installed apps
+        // compare versionCode against it to decide whether to prompt.
+        versionCode 3
+        versionName "1.2"
     }
 
     // Sign with a keystore committed alongside the app, NOT the one Gradle

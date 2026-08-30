@@ -2,8 +2,12 @@ package com.snowplatform.smsforwarder;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.telephony.SubscriptionInfo;
@@ -95,6 +99,19 @@ public class MainActivity extends Activity {
         });
         root.addView(testBtn);
 
+        Button updateBtn = button("Check for updates");
+        updateBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { checkForUpdate(true); }
+        });
+        root.addView(updateBtn);
+
+        TextView ver = new TextView(this);
+        ver.setText("Installed version " + UpdateChecker.installedVersionName(this));
+        ver.setTextColor(Color.parseColor("#6E6E6E"));
+        ver.setTextSize(12);
+        ver.setPadding(0, dp(10), 0, 0);
+        root.addView(ver);
+
         status = new TextView(this);
         status.setTextColor(Color.parseColor("#9A9A9A"));
         status.setPadding(0, dp(16), 0, 0);
@@ -106,6 +123,53 @@ public class MainActivity extends Activity {
 
         requestPerms();
         refreshUi();
+        checkForUpdate(false);   // quiet on open: only speaks up if there IS one
+    }
+
+    /**
+     * A sideloaded APK never updates itself, so the app asks. Opening the
+     * download in the browser is deliberate: Android's own installer then
+     * handles it, with no extra install permission or FileProvider needed,
+     * and it's the same flow used to install the app in the first place.
+     */
+    private void checkForUpdate(final boolean announceWhenUpToDate) {
+        if (announceWhenUpToDate) status.setText("Checking for updates...");
+        UpdateChecker.checkAsync(this, new UpdateChecker.Callback() {
+            @Override public void onResult(final boolean available, final int latestCode, final String latestName) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (isFinishing()) return;
+                        if (available) {
+                            showUpdateDialog(latestName);
+                        } else if (announceWhenUpToDate) {
+                            status.setText(latestName == null
+                                    ? "Could not check for updates. Check the connection."
+                                    : "Up to date (version " + UpdateChecker.installedVersionName(MainActivity.this) + ").");
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    private void showUpdateDialog(String latestName) {
+        new AlertDialog.Builder(this)
+                .setTitle("Update available")
+                .setMessage("Version " + latestName + " is out. You have "
+                        + UpdateChecker.installedVersionName(this) + ".\n\n"
+                        + "Downloading opens your browser. Install it over the top -- your "
+                        + "numbers and secret are kept.")
+                .setPositiveButton("Download", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int which) {
+                        try {
+                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(UpdateChecker.APK_URL)));
+                        } catch (Exception e) {
+                            toast("No browser to open the download");
+                        }
+                    }
+                })
+                .setNegativeButton("Later", null)
+                .show();
     }
 
     /** One labelled number field per SIM slot, naming the carrier when the phone tells us. */

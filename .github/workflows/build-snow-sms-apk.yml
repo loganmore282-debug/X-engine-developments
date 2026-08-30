@@ -41,6 +41,20 @@ jobs:
         working-directory: snow/sms-forwarder-app
         run: cp app/build/outputs/apk/debug/app-debug.apk snow-sms-forwarder.apk
 
+      # The installed app polls this to find out a newer APK exists. Values
+      # come straight from build.gradle so they can never drift from what was
+      # actually built.
+      - name: Generate version.json
+        working-directory: snow/sms-forwarder-app
+        run: |
+          VC=$(grep -oP 'versionCode\s+\K[0-9]+' app/build.gradle | head -1)
+          VN=$(grep -oP 'versionName\s+"\K[^"]+' app/build.gradle | head -1)
+          if [ -z "$VC" ] || [ -z "$VN" ]; then
+            echo "Could not parse versionCode/versionName from app/build.gradle"; exit 1
+          fi
+          printf '{"versionCode":%s,"versionName":"%s"}\n' "$VC" "$VN" > version.json
+          cat version.json
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -76,6 +90,8 @@ jobs:
             cannot tell which SIM received a message and more than one number is
             configured, it deliberately drops that message rather than risk crediting
             the wrong member.
-          files: snow/sms-forwarder-app/snow-sms-forwarder.apk
+          files: |
+            snow/sms-forwarder-app/snow-sms-forwarder.apk
+            snow/sms-forwarder-app/version.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
