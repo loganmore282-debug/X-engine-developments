@@ -5306,3 +5306,11 @@ MongoDB URI and the Firebase service-account JSON are the two real secrets Snow 
 need once backend work starts — both live ONLY in the hosting platform's env vars,
 never in this repo. The Firebase web client config above is the one exception
 (genuinely not secret) — don't confuse the two when handling future infra messages.
+
+`MANUAL_SMS_SECRET` (added Round 88, manual deposits) is a third real secret — a
+random 16+ char string set on the `snow-server` Render service, and the SAME value
+entered into every admin phone's SMS-forwarder app setup screen. `manualSmsConfigured()`
+gates the whole `/deposit/manual/sms-forwarder` webhook on it being set; until it is,
+manual deposits' SMS-matching path stays inert (the rest of the feature — number CRUD,
+member-facing flow, paste-SMS fallback — works regardless, only automated forwarder
+matching needs this).
