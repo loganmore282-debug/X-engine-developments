@@ -5079,6 +5079,191 @@ successful `/checkin` call fires the correct success toast; a server-side reject
 message with no dash and correctly re-enables the button afterward. Cache bumped
 `v63`→`v64`. **`server.js` changed — Render should auto-deploy this push.**
 
+## Round 88 (2026-08-30) — manual deposits: admin-managed MTN/Airtel numbers, SMS-matched, as a toggleable alternative to MarzPay
+
+Owner: "let us also add manual payments, so payment numbers and names will be put in
+admin panel, so make when l can toggle payment method to manual or automatic (marzpay)."
+Followed by a detailed, owner-authored architecture description (round-robin number
+assignment, server-authoritative SMS matching, a 15-minute payment window, an explicit
+"no double crediting, no double requests... encrypted, secure safeguarded and
+idempotent" requirement) plus a second, independently-drafted plan pasted from Codex
+covering the same feature at much greater depth (device health scoring, per-device
+signed requests, a full audit-log subsystem). Synthesized both into one staged V1 scope
+— explicitly correcting Codex's plan's core assumption (real DB transactions) against
+this project's actual M0 constraint (`db.runTransaction()` is sequential writes, no
+rollback — see `db.js`'s own header) — presented back to the owner, who approved with
+"okay, build systematically." V2 (per-device signed requests/replay protection,
+health/heartbeat-aware allocation, phone-side SMS-inbox backlog resync) was explicitly
+scoped out of this round, not attempted.
+
+**Design, in one paragraph**: admin configures up to 10 numbers (5 MTN + 5 Airtel, or
+however many) with holder names in the admin panel. A member picks a network, enters
+the amount and the phone they'll pay from; the server round-robins to the next number on
+that network, skipping any number that already has an active pending order for the
+EXACT SAME amount (collision-avoidance without Nexus's own "unique amount surcharge"
+trick, which would fight the point of clean round-number destinations). The member sends
+money to the assigned number; the SIM on that admin phone receives the deposit SMS, a
+forked Android forwarder app (see below) posts it to the server; the server matches by
+(receiving number, amount) with a sender-phone cross-check as defense-in-depth, and
+credits via the SAME already-proven `creditDeposit()` used by the MarzPay path — zero
+new crediting logic, only new matching/assignment logic around an unchanged credit call.
+Zero or more than one candidate NEVER guesses: unmatched SMS are logged and ignored,
+ambiguous matches flag every candidate `status:'review'` for a human, credited nothing.
+A member can also paste their own confirmation SMS as a fallback if the forwarder is
+slow — this NEVER auto-credits, only ever queues the order for admin review, matching
+this codebase's own "never trust user input for a balance change" rule.
+
+**`server.js`** (`db.js` gained 2 new index specs for the query shapes below): a new
+"MANUAL DEPOSITS" section — `depositMethod: 'automatic'` added to `DEFAULT_SETTINGS`
+(validated as `'automatic'|'manual'` in `/admin/settings/update`), `MANUAL_DEPOSIT_
+WINDOW_MS` (15 min, per the owner's explicit ask, independently corroborated by Nexus's
+own `runStaleDepositCleanup()` cutoff), `MANUAL_SMS_SECRET`/`manualSmsConfigured()`,
+`parseMoMoSms()` (ported from Nexus's proven `/sms/incoming` parser, adapted — see the
+real bug fixed below), `assignManualNumber(network, amount)` (round-robin + collision-
+skip, `withLock`'d per network), `POST /deposit/manual/init` (creates the pending order
++ an up-front "Processing" ledger row, same pattern the MarzPay path already uses),
+`POST /deposit/manual/status` (member poll, lazily expires a stale order on check),
+`POST /deposit/manual/sms-forwarder` (the device webhook — shared-secret auth via
+`x-sms-secret`/timing-safe compare, TID-or-hash dedup via a `manualSmsLog` collection
+BEFORE any matching runs, the never-guess matching logic above), `POST /deposit/manual/
+paste-sms` (member fallback, always `status:'review'`, never calls `creditDeposit()`),
+`async function reconcileManualDeposits()` (1-min sweep releasing abandoned orders'
+numbers back to the pool, registered alongside the app's other `setInterval`s),
+`POST /admin/manual-numbers/list|save|delete` (owner-gated CRUD on the number pool),
+`POST /admin/deposit/manual/reject` (the review-queue's "no, this wasn't genuine"
+resolution — `/admin/deposit/force-credit`, already fully generic, needed zero changes
+to work as the "yes, credit it" resolution for a manual order too). `/deposit/manual/
+init` and `/deposit/manual/paste-sms` added to the money-endpoint rate-limiter exemption
+list. 3 of the 4 admin "unresolved deposits" queries (`/admin/deposits/list`, the
+dashboard pending-count, `/admin/badges`) widened from `status in ['pending',
+'initiating']` to also include `'review'`; the 4th (the MarzPay-specific reconciler's
+own query, already scoped by `marzTxUuid`) naturally excludes manual orders unchanged.
+
+**Real bug found and fixed by the money-safety harness below, not shipped**:
+`parseMoMoSms()`'s sender-phone regex (`from\s+([+]?\d[\d\s\-]{7,15})`) assumed the
+phone number always sits immediately after the word "from" — true for Airtel's own
+format (`from 741234567, JOHN`) but NOT MTN's (`from JOHN DOE, 256771234567`, name
+first). Every MTN sender extraction silently returned empty, which specifically broke
+the sender-mismatch review-flagging check (an empty extracted sender never disagrees
+with anything, so a genuine mismatch on an MTN-format SMS would have silently gone
+through as a match instead of being flagged for review). Fixed to match the first 9-13
+digit run anywhere after "from" (`from\s+.*?([+]?\d{9,13})`), covering both formats.
+Same fix applied to the `\btid\b` alternative missing from the transaction-id regex
+(Airtel's own `TID 149730678579` format wasn't recognized at all, only `txn id`/
+`transaction id`/`trans id`/`ref`).
+
+**Money-safety verification harness** (standalone, not committed — throwaway, same
+practice this file already uses when no live MongoDB is available in-session): an
+in-memory Mongo-compat mock plus exact copies of `parseMoMoSms()`/`assignManualNumber()`/
+the SMS-matching decision logic, run against 22 checks — SMS parsing (MTN/Airtel formats,
+outgoing/junk correctly rejected), round-robin cycling + wrapping, collision-skip (an
+ACTIVE same-amount clash blocks reassignment, an EXPIRED one doesn't), all-numbers-busy
+on one exact amount returns null (never forces a match), a happy-path single credit,
+duplicate-SMS (same TID) never re-credited, an unmatched SMS never credited, an
+ambiguous match (2 candidates) flags BOTH for review and credits neither, a sender
+mismatch flags for review and doesn't credit, an expired order is excluded from
+matching entirely. All 22 passed after the parser fix above (17/22 before it — the 5
+failures were the exact MTN-sender/TID-format gaps just described, caught BY this
+harness rather than shipped silently).
+
+**`admin-src/index.html`**: a new "Manual payments" Settings section (Automatic/Manual
+radio + Save, reusing the existing `/admin/settings/update` endpoint) and a "Payment
+numbers" card — each saved number is its own editable panel-card (network/order/phone/
+holder-name/active-checkbox, per-row Save/Delete against the 3 CRUD endpoints, an
+"+ Add payment number" button that appends a blank editable row) — deliberately NOT
+batched like the About-page block editor, since each number is genuinely its own
+document server-side, not one shared array. Deposits tab: `DEP_GROUPS` gained a
+`review` bucket + a "Needs Review" subtab, `statusPill()` gained a `review` case, the
+Method column now shows Automatic vs. Manual (with the network + assigned number for
+manual rows) instead of a hardcoded "Mobile Money", a review-status row's reviewReason
+is shown inline, and the action column shows Approve (reuses `/admin/deposit/force-
+credit`) + Reject (`/admin/deposit/manual/reject`) for a review-status row instead of
+just Force-credit. **Real bug caught by the obfuscated-build test harness before
+shipping**: every new `api('/admin/manual-numbers/list')` call was made with no body,
+which the shared `api()` helper's `method = method || (body ? 'POST' : 'GET')` silently
+defaults to GET — but the server route is POST-only. The exact same method-mismatch bug
+class Round 14's own CLAUDE.md entry already documents hitting once for `/admin/audit-
+log`. Fixed by passing `{}` as the body at all 3 call sites, forcing POST.
+`test-admin-obfuscated-build.js` extended with fixtures for all 6 new/changed endpoints
+and interaction steps (open Needs Review, confirm the network/number/reviewReason
+render, click Approve/Reject; toggle the deposit-method radio and Save; Save/Add/Delete
+a payment number) — 0 errors against the real obfuscated build. Admin cache bumped
+`v18`→`v19`.
+
+**`user-src/`**: `openDepositSheet()` now branches on `settings.depositMethod` —
+unchanged automatic form when `'automatic'` (the default), or a new manual flow when
+`'manual'`: `openManualDepositFormSheet()` (same amount field + quick-amount chips +
+network select as the automatic form, submit button reads "Get payment number") →
+`submitManualDeposit()` calls `/deposit/manual/init` → `openManualDepositWaitSheet()`
+shows the assigned number/holder name/amount, a live MM:SS countdown to the 15-minute
+expiry (`startManualDepositCountdown()`, same self-terminating-on-missing-DOM-node
+pattern `startPlanCountdowns()` already established), a paste-your-own-SMS fallback
+textarea wired to `/deposit/manual/paste-sms`, and `pollManualDepositStatus()` — polls
+`/deposit/manual/status` every 5s for up to the full 15-minute window (vs. automatic
+deposits' short 60s poll, since a manual match depends on a phone's SMS forwarder, not
+an instant gateway callback), self-terminating the moment `_openSheetTitle` no longer
+matches (the member navigated away). On `matched`/`failed`/the new `review` state, it
+closes the wait sheet and reuses the EXISTING `#depStatusBg` modal from the automatic
+flow's own Round 82/83 build (`setDepositStatusSuccess()`/`setDepositStatusFailed()`,
+plus a new `setDepositStatusReview()` for the ambiguous/pasted-SMS-awaiting-confirmation
+case) rather than inventing a second terminal-state UI. `/deposit/manual/init` and
+`/deposit/manual/paste-sms` added to `MONEY_ENDPOINTS` (both genuinely move toward a
+wallet credit, same SW-reload-interruption protection every other money call already
+gets). Verified with a jsdom harness against the real obfuscated `user/index.html` (not
+just the readable source) — dispatched a fake `snow-auth` event (no real network to
+Firebase's CDN in this sandbox) and drove the actual flow: opens Recharge with
+`depositMethod:'manual'` → the automatic form's fields are absent, "Get payment number"
+present; submitting shows the assigned number/holder/amount on the wait sheet; the
+countdown genuinely ticks (confirmed two different textContent values a second apart);
+paste-SMS submits; and simulating the poll resolving to `matched` correctly closes the
+wait sheet and shows "Recharge successful" on the reused status modal. User cache bumped
+`v64`→`v65`.
+
+**`snow/sms-forwarder-app/`** — a genuine fork of the sibling Nexus project's own
+`sms-forwarder-app/` (repo root), not an edit of it (that copy is Nexus's own live
+deployment and must never be touched from a Snow session). New package id
+`com.snowplatform.smsforwarder`, label "Snow SMS", wine-colored launcher icon
+(`#941827` on `#111111`, matching Snow's own palette instead of Nexus's gold-on-black),
+default webhook URL pointed at Snow's real deployed server
+(`https://mylifeismyhappiness.onrender.com/deposit/manual/sms-forwarder`). One
+substantive change beyond rebranding: a new "This phone's receiving number" field
+(`Prefs.receivingNumber()`, a new required setup field alongside the URL/secret) added
+to `MainActivity`'s setup screen and threaded through `Poster.post()`/`postSync()` into
+the JSON body as `receivingNumber` — Snow's multi-number design means the server has no
+way to know which of its own admin numbers a given SIM corresponds to without the phone
+telling it, unlike Nexus's own single-number design where the receiving number is
+implicit. `SmsReceiver` reads this from `Prefs` on every forwarded SMS; `toggleActive()`
+now also requires it non-empty before starting the foreground service, alongside the
+existing URL/secret checks. README rewritten for Snow's own setup steps (install ONE
+copy of this app PER admin payment phone, each configured with that phone's own number)
+and Render env var names (`MANUAL_SMS_SECRET`, matching `server.js`'s own constant,
+not Nexus's `SMS_SECRET`).
+
+**Verified**: `node --check server.js` clean; a boot smoke test (dummy Firebase creds +
+unreachable Mongo) fails only at the expected Mongo-connect step; `build-core.js` and
+`build-admin.js` both clean round-trips; `git diff --check` clean. No Android SDK/
+Gradle toolchain available in this sandbox to compile-verify the forwarder app APK
+itself (confirmed: `javac`/`gradle` exist but no `ANDROID_HOME`) — verified instead via
+balanced-braces/parens checks on every `.java` file, a full grep sweep confirming every
+`Poster.post()`/`prefs.save()` call site's argument order matches its own updated
+method signature, and a diff-level review against the original Nexus source to confirm
+nothing besides the intended rebrand + receiving-number field actually changed. The
+owner builds the real APK.
+
+**Still deliberately deferred (V2, not attempted this round)**: per-device cryptographic
+authentication/replay protection beyond the one shared `MANUAL_SMS_SECRET` (matches this
+codebase's own existing MarzPay-webhook trust model, which also has no per-request
+signature — safety comes from server-side validation, not request authentication,
+consistently across both payment methods); health/heartbeat-aware number allocation
+(today's round-robin + collision-skip is judged sufficient at V1's expected scale); a
+genuine server-initiated "pull missed SMS from the phone's inbox" resync (traced and
+confirmed structurally impossible over carrier-NAT'd mobile data with no public IP —
+would need a phone-initiated periodic inbox-backlog POST instead, deferred); a fuller
+enterprise audit-log subsystem beyond the existing `logAdminAction()` calls already on
+every new admin route. **`server.js` and `admin-src/index.html` changed — Render should
+auto-deploy this push** (`admin-src/index.html` is a static site, no separate deploy
+step beyond the push).
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —

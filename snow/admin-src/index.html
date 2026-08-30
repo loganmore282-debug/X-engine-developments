@@ -578,6 +578,7 @@ function statusPill(s){
   s=String(s||'success').toLowerCase();
   if(['success','processed','matched'].includes(s)) return `<span class="pill-tag t-ok">Successful</span>`;
   if(s==='awaiting_verification') return `<span class="pill-tag t-warn">Awaiting Review</span>`;
+  if(s==='review') return `<span class="pill-tag t-warn">Needs Review</span>`;
   if(['pending','processing','initiating'].includes(s)) return `<span class="pill-tag t-warn">Processing</span>`;
   if(['failed','declined','cancelled','rejected','expired'].includes(s)) return `<span class="pill-tag t-bad">Failed</span>`;
   return `<span class="pill-tag t-mut">${esc(s)}</span>`;
@@ -958,14 +959,14 @@ async function syncMarzPay(btn, afterFn){
     afterFn();
   } else toast(d.message||'Sync failed','err');
 }
-const DEP_GROUPS = { pending: ['initiating','pending'], matched: ['matched'], failed: ['failed','rejected'] };
+const DEP_GROUPS = { pending: ['initiating','pending'], review: ['review'], matched: ['matched'], failed: ['failed','rejected'] };
 let _deps=[], _depFilter='pending';
 async function renderDeposits(){
   const r = await api('/admin/deposits/list', {});
   if(staleTab('deposits')) return;
   _deps = r.deposits||[];
   const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
-  const subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
+  const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
   const dpbd = r.processedByDay||[];
   const dMaxP = Math.max(1, ...dpbd.map(d=>d.count));
   const dRows = dpbd.slice().reverse();
@@ -978,7 +979,7 @@ async function renderDeposits(){
   $('content').innerHTML = `
     <div class="row" style="align-items:center;margin-bottom:4px"><h2 class="sec" style="flex:1;margin:0">Deposits</h2>
       <button class="btn sm ghost" id="depSync">Sync MarzPay</button></div>
-    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time, MarzPay mobile money, automatic. A stuck deposit can be force-credited once you've verified the money landed.</p>
+    <p class="muted" style="margin:0 0 12px">Every deposit attempt, all time -- automatic (MarzPay) or manual (admin numbers, SMS-matched). Needs Review covers a manual order the SMS matcher couldn't safely resolve on its own (ambiguous match, sender mismatch, or a member-pasted confirmation) -- approve it once you've verified the money genuinely landed, or reject it if it didn't.</p>
     ${depProcChart}
     <div class="panel-card" style="margin-bottom:12px"><input id="depSearch" placeholder="Search phone or referral code"></div>
     <div class="subtabs">${subs.map(([k,l])=>`<button class="subtab${_depFilter===k?' active':''}" data-df="${k}">${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}</button>`).join('')}</div>
@@ -997,25 +998,39 @@ function drawDeps(){
     (qCore && phoneCore(d.accountPhone||d.phone).includes(qCore))
   );
   $('depRows').innerHTML = list.length?list.map(d=>{
-    const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed';
+    const isManual = d.method==='manual';
+    const stuck = d.status==='initiating' || d.status==='pending' || d.status==='failed' || d.status==='review';
     const code = d.referralCode;
-    // /admin/deposit/force-credit is verifyOwner-gated (crediting a deposit
-    // that was never actually verified by MarzPay's own webhook is a real
-    // money-safety decision, not a routine action) -- the button matches
-    // that, same silent pattern as every other owner-only control, rather
-    // than showing a button that just errors when tapped.
-    const actions = (SESSION_ROLE === 'owner' && stuck) ? `<button class="btn ok sm" data-force="${esc(d.id)}">Force-credit</button>` : '';
+    // /admin/deposit/force-credit and /admin/deposit/manual/reject are both
+    // verifyOwner-gated (crediting/rejecting a deposit that was never
+    // resolved automatically is a real money-safety decision, not a routine
+    // action) -- the buttons match that, same silent pattern as every other
+    // owner-only control, rather than showing a button that just errors.
+    let actions = '';
+    if (SESSION_ROLE === 'owner' && stuck) {
+      actions = `<button class="btn ok sm" data-force="${esc(d.id)}">${d.status==='review'?'Approve':'Force-credit'}</button>`;
+      if (isManual && d.status==='review') actions += ` <button class="btn danger sm" data-mreject="${esc(d.id)}">Reject</button>`;
+    }
+    const methodLabel = isManual
+      ? `Manual<br><span class="muted" style="font-size:11px">${esc(d.network||'')} · ${esc(d.assignedNumber||'')}</span>`
+      : 'Automatic';
+    const reviewNote = d.status==='review' && d.reviewReason ? `<br><span class="muted" style="font-size:11px">${esc(d.reviewReason)}</span>` : '';
     return `<tr><td>${fdate(d.createdAt)}</td>
       <td>${esc(d.accountPhone||d.phone||'Not set')}${code?`<br><span class="muted" style="font-size:11px">${esc(code)}</span>`:''}</td>
-      <td>Mobile Money</td>
+      <td>${methodLabel}</td>
       <td><b>${ugx(d.amount)}</b></td>
       <td>${esc(d.ref||'Not set')}</td>
-      <td>${statusPill(d.status)}</td>
+      <td>${statusPill(d.status)}${reviewNote}</td>
       <td>${actions}</td></tr>`;
   }).join(''):'<tr><td colspan="7" class="empty">No deposits</td></tr>';
   document.querySelectorAll('[data-force]').forEach(b=>b.addEventListener('click',async()=>{
-    if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed on the MarzPay dashboard.'))return;
+    if(!confirm('Credit this deposit? Only do this if you have verified the money actually landed.'))return;
     b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/force-credit',{depositId:b.dataset.force});
+    toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
+  }));
+  document.querySelectorAll('[data-mreject]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!confirm('Reject this deposit? The member will be told the payment failed and no wallet credit will be given.'))return;
+    b.disabled=true;b.textContent='…'; const d=await api('/admin/deposit/manual/reject',{depositId:b.dataset.mreject});
     toast(d.message||d.status,d.status==='success'?'ok':'err'); renderDeposits();
   }));
 }
@@ -1030,7 +1045,7 @@ async function quietRefreshDeposits(){
   if(staleTab('deposits') || !$('depRows')) return;
   _deps = r.deposits||[];
   const grp = k => _deps.filter(d=>(DEP_GROUPS[k]||[]).includes(d.status)).length;
-  const subs = [['pending','Pending'],['matched','Successful'],['failed','Failed'],['all','All']];
+  const subs = [['pending','Pending'],['review','Needs Review'],['matched','Successful'],['failed','Failed'],['all','All']];
   document.querySelectorAll('[data-df]').forEach(b=>{
     const k=b.dataset.df, l=(subs.find(s=>s[0]===k)||[])[1]||k;
     b.textContent = `${l}${k==='all'?` (${_deps.length})`:` (${grp(k)})`}`;
@@ -1479,9 +1494,10 @@ let _aboutBlocksDirty = false;
 window.addEventListener('beforeunload', (e) => {
   if (_aboutBlocksDirty) { e.preventDefault(); e.returnValue = ''; }
 });
+let _manualNumbers = [];
 async function renderSettings(){
-  const [r, br, hbr, air, abr, pr] = await Promise.all([
-    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list')
+  const [r, br, hbr, air, abr, pr, mnr] = await Promise.all([
+    api('/admin/settings'), api('/admin/banner'), api('/admin/help-banner'), api('/admin/announcement-image'), api('/admin/about-content'), api('/admin/push/list'), api('/admin/manual-numbers/list', {})
   ]);
   if(staleTab('settings')) return;
   const s = r.settings||{};
@@ -1489,6 +1505,7 @@ async function renderSettings(){
   const helpBannerImage = hbr.image||'';
   const announceImage = air.image||'';
   const pushTokenCount = pr.status==='success' ? pr.count : null;
+  _manualNumbers = mnr.numbers||[];
   if (!_aboutBlocksDirty) _aboutBlocks = Array.isArray(abr.blocks) ? abr.blocks : [];
   const v = (k,d)=> (s[k]!=null? s[k] : (d!=null?d:''));
   $('content').innerHTML = `
@@ -1522,6 +1539,20 @@ async function renderSettings(){
       <h2 class="sec" style="margin:14px 0 4px">Payment provider</h2>
       <p class="muted" style="margin:0 0 4px">Mobile-money recharges run on MarzPay automatically; cash-outs wait as Pending until an admin sends them from the Withdrawals tab.</p>
       <button class="btn block" id="saveRates">Save rates</button>
+    </div>
+
+    <h2 class="sec">Manual payments</h2>
+    <div class="panel-card">
+      <p class="muted" style="margin-top:0">Automatic uses MarzPay -- instant, no admin numbers needed. Manual assigns each member one of the numbers below to send money to by hand, matched to their order by your phone's SMS forwarder (or by the member pasting their own confirmation text if the forwarder is slow).</p>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><input type="radio" name="depMethod" id="depMethodAuto" value="automatic" ${v('depositMethod','automatic')==='automatic'?'checked':''} style="width:auto"> Automatic (MarzPay)</label>
+      <label style="width:auto;display:flex;align-items:center;gap:10px;margin-bottom:2px;"><input type="radio" name="depMethod" id="depMethodManual" value="manual" ${v('depositMethod','automatic')==='manual'?'checked':''} style="width:auto"> Manual (admin numbers below)</label>
+      <button class="btn block" id="saveDepMethod" style="margin-top:10px">Save deposit method</button>
+    </div>
+    <div class="panel-card">
+      <h2 class="sec" style="margin:0 0 6px">Payment numbers</h2>
+      <p class="muted" style="margin-top:0">A member is assigned one of these round-robin the moment Manual is active above -- give each one a real holder name, it's shown to the member so they know who they're sending to.</p>
+      <div id="manualNumbersList"></div>
+      <button class="btn block" id="mnAddBtn" style="margin-top:6px">+ Add payment number</button>
     </div>
 
     <h2 class="sec">Push notifications</h2>
@@ -1613,6 +1644,16 @@ async function renderSettings(){
       <button class="btn block" id="saveAbout">Save about page</button>
     </div>`;
   renderAboutBlocksEditor();
+  renderManualNumbersEditor();
+  $('saveDepMethod').addEventListener('click', async()=>{
+    const method = document.querySelector('input[name="depMethod"]:checked').value;
+    const d = await api('/admin/settings/update', { settings: { depositMethod: method } });
+    toast(d.status==='success'?'Deposit method saved':(d.message||'Failed'), d.status==='success'?'ok':'err');
+  });
+  $('mnAddBtn').addEventListener('click', ()=>{
+    _manualNumbers.push({ id:'', network:'MTN Mobile Money', number:'', holderName:'', active:true, order:(_manualNumbers.length?Math.max(...(_manualNumbers.map(n=>n.order||0)))+1:1), _new:true });
+    renderManualNumbersEditor();
+  });
   $('saveRates').addEventListener('click', async()=>{
     const upd = {
       minDeposit:+$('sMinDep').value, minWithdraw:+$('sMinWit').value, welcomeBonus:+$('sWelcome').value,
@@ -1783,6 +1824,61 @@ function renderAboutBlocksEditor(){
   }));
   box.querySelectorAll('[data-ab-text]').forEach(ta=>ta.addEventListener('input', ()=>{
     _aboutBlocks[+ta.dataset.abText].text = ta.value; _aboutBlocksDirty=true;
+  }));
+}
+
+// Each row saves/deletes itself immediately against /admin/manual-numbers/*
+// (unlike the About-blocks editor above, which batches into one big array
+// save) -- there's no shared payload here, each number is its own document
+// server-side, so per-row actions map directly onto per-row endpoints with
+// nothing to lose by not batching.
+const NETWORK_OPTIONS = ['MTN Mobile Money', 'Airtel Money'];
+function renderManualNumbersEditor(){
+  const box = $('manualNumbersList'); if (!box) return;
+  if (!_manualNumbers.length) { box.innerHTML = '<p class="muted" style="margin:8px 0">No payment numbers yet -- add one below before switching Manual on.</p>'; return; }
+  box.innerHTML = _manualNumbers.map((n,i)=>`
+    <div class="panel-card" style="margin-bottom:8px;padding:10px;">
+      <div class="row">
+        <div><label>Network</label><select data-mn-network="${i}">${NETWORK_OPTIONS.map(net=>`<option value="${esc(net)}" ${n.network===net?'selected':''}>${esc(net)}</option>`).join('')}</select></div>
+        <div><label>Order</label><input type="number" data-mn-order="${i}" value="${n.order||0}"></div>
+      </div>
+      <label>Phone number</label><input data-mn-number="${i}" value="${esc(n.number||'')}" placeholder="0770000001">
+      <label>Account holder name</label><input data-mn-holder="${i}" value="${esc(n.holderName||'')}" placeholder="Snow MTN 1">
+      <label style="width:auto;display:flex;align-items:center;gap:8px;margin:8px 0;"><input type="checkbox" data-mn-active="${i}" ${n.active!==false?'checked':''} style="width:auto"> Active (eligible for round-robin)</label>
+      <div class="row">
+        <button class="btn ok sm" data-mn-save="${i}" style="flex:1">${n._new||!n.id?'Add':'Save'}</button>
+        ${n.id?`<button class="btn danger sm" data-mn-del="${i}">Delete</button>`:''}
+      </div>
+    </div>`).join('');
+  box.querySelectorAll('[data-mn-save]').forEach(btn=>btn.addEventListener('click', async()=>{
+    const i = +btn.dataset.mnSave;
+    const n = _manualNumbers[i];
+    const payload = {
+      id: n.id||undefined,
+      network: box.querySelector(`[data-mn-network="${i}"]`).value,
+      number: box.querySelector(`[data-mn-number="${i}"]`).value.trim(),
+      holderName: box.querySelector(`[data-mn-holder="${i}"]`).value.trim(),
+      active: box.querySelector(`[data-mn-active="${i}"]`).checked,
+      order: +box.querySelector(`[data-mn-order="${i}"]`).value || 0,
+    };
+    btn.disabled = true; const prevText = btn.textContent; btn.textContent = '…';
+    const d = await api('/admin/manual-numbers/save', payload);
+    if (d.status !== 'success') { btn.disabled = false; btn.textContent = prevText; return toast(d.message||'Failed', 'err'); }
+    toast('Payment number saved', 'ok');
+    const mnr = await api('/admin/manual-numbers/list', {});
+    _manualNumbers = mnr.numbers||[];
+    renderManualNumbersEditor();
+  }));
+  box.querySelectorAll('[data-mn-del]').forEach(btn=>btn.addEventListener('click', async()=>{
+    const i = +btn.dataset.mnDel;
+    const n = _manualNumbers[i];
+    if (!confirm(`Delete ${n.holderName||n.number}? Any deposit already assigned to this number is unaffected, but it will no longer be handed out to new deposits.`)) return;
+    btn.disabled = true;
+    const d = await api('/admin/manual-numbers/delete', { id: n.id });
+    if (d.status !== 'success') { btn.disabled = false; return toast(d.message||'Failed', 'err'); }
+    _manualNumbers.splice(i, 1);
+    toast('Payment number deleted', 'ok');
+    renderManualNumbersEditor();
   }));
 }
 

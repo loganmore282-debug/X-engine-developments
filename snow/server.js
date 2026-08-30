@@ -74,7 +74,7 @@ app.use('/admin/', async (req, _res, next) => {
 });
 ['/withdraw/request', '/invest/create', '/deposit/marzpay', '/bank/save', '/bank/delete',
  '/account/create-profile', '/register', '/account/transaction-pin/change', '/redeem',
- '/team/milestone/claim', '/checkin']
+ '/team/milestone/claim', '/checkin', '/deposit/manual/init', '/deposit/manual/paste-sms']
   .forEach(p => app.use(p, apiLimiter));
 
 // ── BODY PARSING ──
@@ -220,6 +220,14 @@ const DEFAULT_SETTINGS = {
   // allowlist closes off any injection surface the way SETTINGS_URL_FIELDS'
   // http(s)-only check already does for link fields.
   numberFont: 'Bodoni Moda',
+  // Owner: "let us also add manual payments... make when l can toggle
+  // payment method to manual or automatic (marzpay), current one." Only
+  // one method is ever live at a time -- MarzPay's own code is completely
+  // untouched, just gated behind this flag alongside the new manual-deposit
+  // path (see the "MANUAL DEPOSITS" section below). 'automatic' matches
+  // today's live behavior exactly, so this ships with zero change for
+  // members until the owner explicitly flips it in Settings.
+  depositMethod: 'automatic',
 };
 // Keep this exact list of keys in sync with NUMBER_FONT_STACKS in
 // user-src/original_module.js (the client-side fallback-stack lookup) and
@@ -2139,6 +2147,368 @@ app.post('/deposit/callback', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
+// MANUAL DEPOSITS (admin-managed MTN/Airtel numbers, SMS-matched)
+// Owner: "let us also add manual payments, so payment numbers and names
+// will be put in admin panel, so make when l can toggle payment method to
+// manual or automatic (marzpay)." Only one method is ever live at a time
+// (settings.depositMethod) -- MarzPay's own code above is completely
+// untouched by any of this.
+//
+// Deliberately reuses the SAME `pendingDeposits` collection, the SAME
+// creditDeposit()/markDepositFailed() functions, and the SAME
+// "Deposit: Status (Amount)" ledger-row convention the MarzPay flow already
+// uses -- both functions only ever read dep.userId/dep.amount and are
+// already fully idempotent (claim-before-credit + updateIf() token), so a
+// manual deposit's credit path is exactly as safe as an automatic one with
+// zero new crediting logic. What differs between the two methods is only
+// HOW a pendingDeposits doc gets from 'pending' to 'matched': MarzPay polls
+// its own API; manual deposits wait for a phone's SMS forwarder (or a
+// member-pasted SMS) to trigger a match. A manual doc carries
+// `method:'manual'` plus network/assignedNumber/holderName/senderPhone/
+// expiresAt fields the MarzPay path doesn't use.
+// ═══════════════════════════════════════════
+const MANUAL_DEPOSIT_WINDOW_MS = 15 * 60 * 1000; // owner: "deposit payment timer should read 15minutes"
+// Each SMS-forwarder phone authenticates with this one shared secret (same
+// shape as the proven Nexus /sms/incoming design this is adapted from) --
+// per-device signed requests/replay protection is real, worthwhile
+// hardening but deliberately deferred to a later round, not blocking a
+// correct, safe V1.
+const MANUAL_SMS_SECRET = process.env.MANUAL_SMS_SECRET || '';
+function manualSmsConfigured() { return MANUAL_SMS_SECRET.length >= 16; }
+
+// Parse an MTN / Airtel Uganda "you have received" SMS. Ported from the
+// proven Nexus implementation (root server.js) -- same regex, same
+// field shape. Returns { amount, txId, sender, raw } or null if it isn't a
+// genuine incoming-money message.
+function parseMoMoSms(text) {
+  if (!text) return null;
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  const isReceive  = /(received|you have received|received from|deposit of)/i.test(t);
+  const isOutgoing = /(sent to|you have sent|withdrawn|paid to|airtime|bundle|data)/i.test(t);
+  if (!isReceive || isOutgoing) return null;
+  const m = t.match(/(?:ugx|ush|shs?)\s*([\d,]+(?:\.\d+)?)/i) ||
+            t.match(/([\d,]+(?:\.\d+)?)\s*(?:ugx|ush|shs?)/i);
+  if (!m) return null;
+  const amount = parseFloat(m[1].replace(/,/g, ''));
+  if (!amount || isNaN(amount)) return null;
+  let txId = '';
+  const idm = t.match(/(?:txn\s*id|transaction\s*id|trans\.?\s*id|\btid\b|ref(?:erence)?|financial transaction id)[:\s#]*([A-Za-z0-9.\-]{6,})/i);
+  if (idm) txId = idm[1].replace(/\.$/, '');
+  let sender = '';
+  // The sender's phone number can sit right after "from" (Airtel: "from
+  // 741234567, JOHN") or after a name/comma (MTN: "from JOHN DOE,
+  // 256771234567") -- match the first 9-13 digit run following "from"
+  // rather than assuming it's the very next token.
+  const sm = t.match(/from\s+.*?([+]?\d{9,13})/i);
+  if (sm) sender = sm[1].replace(/[\s\-]/g, '');
+  return { amount, txId, sender, raw: t };
+}
+
+// Picks the next number in this network's round-robin pool, skipping any
+// number that already has an active pending order for this EXACT amount
+// (owner: "if user A deposit on number 1, user B deposits on number 2...
+// every session, it's own number" -- the multi-number pool itself is the
+// collision-avoidance mechanism, not Nexus's own "add random shillings to
+// the amount" trick, which would fight the whole point of wanting several
+// clean, round-number-friendly destinations). Locked per network so two
+// concurrent inits can never both claim the same "next" slot.
+async function assignManualNumber(network, amount) {
+  return withLock('manual-number-assign:' + network, async () => {
+    const numsSnap = await db.collection('manualPaymentNumbers')
+      .where('network', '==', network).where('active', '==', true).orderBy('order', 'asc').get();
+    const pool = numsSnap.docs.map(d => ({ id: d.id, number: d.data().number, holderName: d.data().holderName }));
+    if (!pool.length) return null;
+    const rotRef = db.collection('manualNumberRotation').doc(network);
+    const rotSnap = await rotRef.get();
+    const startIdx = ((rotSnap.exists ? Number(rotSnap.data().lastIndex) : -1) + 1) % pool.length;
+    const now = Date.now();
+    for (let i = 0; i < pool.length; i++) {
+      const idx = (startIdx + i) % pool.length;
+      const candidate = pool[idx];
+      const clash = await db.collection('pendingDeposits')
+        .where('method', '==', 'manual').where('assignedNumber', '==', candidate.number)
+        .where('amount', '==', amount).where('status', '==', 'pending').limit(5).get();
+      const stillActive = clash.docs.some(d => (d.data().expiresAt || 0) > now);
+      if (!stillActive) {
+        await rotRef.set({ lastIndex: idx, network, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return candidate;
+      }
+    }
+    return null; // every number on this network currently clashes on this exact amount
+  });
+}
+
+app.post('/deposit/manual/init', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  const amt = parseInt(req.body.amount, 10);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ status: 'error', message: 'Invalid amount' });
+  if (amt > MAX_MONEY_AMOUNT) return res.status(400).json({ status: 'error', message: `Amount is too large (max ${fmtUGX(MAX_MONEY_AMOUNT)}).` });
+  const network = NETWORK_NAMES.has(req.body.network) ? req.body.network : null;
+  if (!network) return res.status(400).json({ status: 'error', message: 'Select a network' });
+  try {
+    const [uSnap, sett] = await Promise.all([db.collection('users').doc(userId).get(), getSettings()]);
+    if (!uSnap.exists) return res.status(404).json({ status: 'error', message: 'User not found' });
+    if (uSnap.data().status === 'banned') return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    if (sett.depositMethod !== 'manual') return res.status(400).json({ status: 'error', message: 'Manual deposits are not enabled right now.' });
+    if (_userBeingDeleted.has(userId)) return res.status(400).json({ status: 'error', message: 'This account is currently being processed. Try again shortly.' });
+    // Same validate-before-touching-abuse-counters ordering as
+    // /deposit/marzpay -- see its own comment for why this order matters.
+    if (amt < sett.minDeposit) return res.status(400).json({ status: 'error', message: `Minimum amount is ${fmtUGX(sett.minDeposit)}` });
+    const senderPhone = cleanPhone(req.body.senderPhone || req.body.phone || uSnap.data().phone || '');
+    if (!senderPhone) return res.status(400).json({ status: 'error', message: 'Enter a valid mobile-money phone number.' });
+
+    const lastDep = _depCreateDebounce.get(userId) || 0;
+    if (Date.now() - lastDep < 7000)
+      return res.status(429).json({ status: 'error', message: 'A deposit is already being processed. Please wait a moment.' });
+    const attemptCount = recordDepositAttempt(userId);
+    if (attemptCount >= 5 && !depositSucceededRecently(userId)) {
+      await banUserAutomatically(userId, 'Automatic: 5+ deposit attempts within a minute, none completed');
+      return res.status(403).json({ status: 'error', code: 'BANNED', message: 'Account suspended. Contact customer service.' });
+    }
+    _depCreateDebounce.set(userId, Date.now());
+
+    const assigned = await assignManualNumber(network, amt);
+    if (!assigned) return res.status(503).json({ status: 'error', message: 'All payment numbers for this network are busy right now. Try again shortly, or use a slightly different amount.' });
+
+    const ref = await uniqueRef('M');
+    const { date, time } = nowStr();
+    const expiresAt = Date.now() + MANUAL_DEPOSIT_WINDOW_MS;
+    const depRef = db.collection('pendingDeposits').doc();
+    await depRef.set({
+      userId, phone: senderPhone, senderPhone, network, amount: amt, ref, status: 'pending',
+      method: 'manual', assignedNumberId: assigned.id, assignedNumber: assigned.number, holderName: assigned.holderName,
+      expiresAt, date, time, createdAt: FieldValue.serverTimestamp()
+    });
+    // Same "recorded immediately, not eventually" reasoning as
+    // /deposit/marzpay's own ledger-row-up-front comment.
+    await db.collection('transactions').add({
+      userId, type: 'deposit', description: `Deposit: Processing (${fmtUGX(amt)})`,
+      amount: amt, displayAmount: amt, status: 'pending', date, time, ref, depositId: depRef.id, createdAt: FieldValue.serverTimestamp()
+    }).catch(e => console.error(`Manual deposit ledger row create failed for dep=${depRef.id}:`, e.message));
+
+    res.json({
+      status: 'success', depositId: depRef.id, reference: ref,
+      assignedNumber: assigned.number, holderName: assigned.holderName, network, amount: amt, expiresAt,
+      message: `Send exactly ${fmtUGX(amt)} to ${assigned.number} (${assigned.holderName}).`
+    });
+  } catch (e) {
+    console.error('Manual deposit init error:', e.message);
+    if (!res.headersSent) res.status(500).json({ status: 'error', message: 'Could not start the deposit right now' });
+  }
+});
+
+app.post('/deposit/manual/status', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
+    if (!depSnap.exists || depSnap.data().userId !== userId || depSnap.data().method !== 'manual')
+      return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    const dep = depSnap.data();
+    if (dep.status === 'matched') {
+      if (dep.needsManualCredit) await creditDeposit(depSnap).catch(() => {});
+      return res.json({ status: 'success', state: 'matched' });
+    }
+    if (dep.status === 'failed') return res.json({ status: 'success', state: 'failed', message: dep.failureReason });
+    // A human is already looking at this one (ambiguous SMS match, sender
+    // mismatch, or a member-pasted SMS) -- never auto-fail it out from
+    // under them just because its original 15-minute window has lapsed.
+    if (dep.status === 'review') return res.json({ status: 'success', state: 'review' });
+    if ((dep.expiresAt || 0) <= Date.now()) {
+      const reallyFailed = await markDepositFailed(depSnap.ref, userId, 'Payment window expired.');
+      if (!reallyFailed) return res.json({ status: 'success', state: 'matched' });
+      return res.json({ status: 'success', state: 'failed', message: 'Payment window expired.' });
+    }
+    return res.json({ status: 'success', state: 'pending', expiresAt: dep.expiresAt });
+  } catch (e) {
+    console.error('Manual deposit status error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not check payment status' });
+  }
+});
+
+// The phone SMS-forwarder POSTs every incoming SMS here (shared-secret
+// auth, same header convention as Nexus's own proven /sms/incoming).
+// Nothing here credits a wallet directly -- it only ever calls the SAME
+// creditDeposit() the MarzPay flow uses, and only after: (1) dedup by the
+// operator's own transaction id (or a hash fallback) so a retried/
+// redelivered/duplicate-device SMS can never be processed twice, and
+// (2) finding EXACTLY one live candidate order for this receiving number +
+// amount. Zero or more-than-one candidates never guess -- see the "never
+// silently credit on ambiguity" comment below.
+app.post('/deposit/manual/sms-forwarder', async (req, res) => {
+  if (!manualSmsConfigured()) return res.status(503).json({ status: 'error', message: 'disabled' });
+  const provided = String(req.headers['x-sms-secret'] || (req.body && req.body.secret) || '');
+  const expected = MANUAL_SMS_SECRET;
+  const ok = provided.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  if (!ok) return res.status(403).json({ status: 'error', message: 'Forbidden' });
+
+  const text = String((req.body && (req.body.message || req.body.text)) || '');
+  const receivingNumberRaw = String((req.body && req.body.receivingNumber) || '').trim();
+  const receivingNumber = cleanPhone(receivingNumberRaw) || receivingNumberRaw;
+  const info = parseMoMoSms(text);
+  if (!info) return res.json({ status: 'ignored', reason: 'not an incoming-money SMS' });
+  if (!receivingNumber) return res.json({ status: 'ignored', reason: 'no receivingNumber configured on this device' });
+
+  try {
+    // Idempotency: MoMo transaction id, or a hash of (raw text + receiving
+    // number) as a fallback for a message with no extractable TID.
+    const tid = info.txId || crypto.createHash('sha256').update(info.raw + '|' + receivingNumber).digest('hex').slice(0, 24);
+    const seenRef = db.collection('manualSmsLog').doc(tid);
+    if ((await seenRef.get()).exists) return res.json({ status: 'duplicate' });
+    await seenRef.set({ amount: info.amount, sender: info.sender || '', receivingNumber, raw: info.raw, createdAt: FieldValue.serverTimestamp() });
+
+    const now = Date.now();
+    const snap = await db.collection('pendingDeposits')
+      .where('method', '==', 'manual').where('status', '==', 'pending')
+      .where('assignedNumber', '==', receivingNumber).where('amount', '==', info.amount)
+      .limit(10).get();
+    const candidates = snap.docs.filter(d => (d.data().expiresAt || 0) > now);
+    if (!candidates.length) {
+      await seenRef.update({ matched: false }).catch(() => {});
+      console.warn(`Manual deposit SMS unmatched: ${fmtUGX(info.amount)} to ${receivingNumber}`);
+      return res.json({ status: 'unmatched', amount: info.amount });
+    }
+    if (candidates.length > 1) {
+      // Never guess with money -- a genuine same-number-same-amount
+      // collision (should already be rare given assignManualNumber()'s own
+      // skip logic, but never trust that alone) flags every candidate for
+      // a human, credits none automatically.
+      await Promise.all(candidates.map(d => d.ref.update({ status: 'review', reviewReason: 'Multiple pending orders matched this SMS (same number + amount)' }).catch(() => {})));
+      await seenRef.update({ matched: false, ambiguous: true }).catch(() => {});
+      console.warn(`Manual deposit SMS AMBIGUOUS: ${fmtUGX(info.amount)} to ${receivingNumber} -- ${candidates.length} candidates flagged for review`);
+      return res.json({ status: 'ambiguous', amount: info.amount });
+    }
+    const match = candidates[0];
+    const md = match.data();
+    // Defense in depth: sender-phone extraction from the SMS is
+    // best-effort (not every operator format includes it cleanly), so it's
+    // never a HARD requirement -- but if it IS present and it clearly
+    // disagrees with the number the member typed when starting this order,
+    // that's a real reason to stop and let a human look, not silently
+    // credit anyway just because the number+amount happened to line up.
+    const smsSenderClean = info.sender ? (cleanPhone(info.sender) || info.sender) : null;
+    const orderSenderClean = md.senderPhone ? (cleanPhone(md.senderPhone) || md.senderPhone) : null;
+    if (smsSenderClean && orderSenderClean && smsSenderClean !== orderSenderClean) {
+      await match.ref.update({ status: 'review', reviewReason: `Sender number mismatch: SMS said ${info.sender}, order was placed with ${md.senderPhone}` }).catch(() => {});
+      await seenRef.update({ matched: false, mismatch: true }).catch(() => {});
+      return res.json({ status: 'mismatch', amount: info.amount });
+    }
+    await match.ref.update({ matchedSmsId: tid, smsTxId: info.txId || '', smsSender: info.sender || '' }).catch(() => {});
+    await creditDeposit(match);
+    await seenRef.update({ matched: true, matchedOrderId: match.id }).catch(() => {});
+    return res.json({ status: 'credited', depositId: match.id });
+  } catch (e) {
+    console.error('Manual deposit SMS error:', e.message);
+    return res.status(500).json({ status: 'error', message: e.message });
+  }
+});
+
+// Member's own fallback when the forwarder is slow/down: paste the
+// confirmation text THEIR phone received. Scoped so it can only ever touch
+// their own already-existing pending order (never a blind platform-wide
+// match the way the device-forwarder path above has to be), and — per this
+// codebase's own "never trust user input for a balance change" rule —
+// this NEVER credits by itself. It only ever queues the order for a human
+// to confirm, exactly like an ambiguous/mismatched SMS does above.
+app.post('/deposit/manual/paste-sms', async (req, res) => {
+  const userId = await verifyAuth(req);
+  if (!userId) return res.status(401).json({ status: 'error', message: 'Please sign in again' });
+  try {
+    const depSnap = await db.collection('pendingDeposits').doc(String(req.body.depositId || '')).get();
+    if (!depSnap.exists || depSnap.data().userId !== userId || depSnap.data().method !== 'manual')
+      return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    const dep = depSnap.data();
+    if (dep.status !== 'pending' && dep.status !== 'review')
+      return res.status(400).json({ status: 'error', message: 'This deposit is no longer waiting for payment.' });
+    const text = String(req.body.text || '').slice(0, 2000);
+    const info = parseMoMoSms(text);
+    if (!info) return res.status(400).json({ status: 'error', message: "That doesn't look like a money-received message. Paste the exact text your phone received." });
+    await depSnap.ref.update({
+      status: 'review', reviewReason: 'Member pasted a confirmation SMS',
+      pastedSms: info.raw, pastedSmsAmount: info.amount, pastedSmsTxId: info.txId || '', pastedAt: FieldValue.serverTimestamp()
+    });
+    res.json({ status: 'success', message: "Thanks, we're checking this and will credit your wallet shortly if it's genuine." });
+  } catch (e) {
+    console.error('Manual deposit paste-sms error:', e.message);
+    res.status(500).json({ status: 'error', message: 'Could not submit this right now' });
+  }
+});
+
+// 1-minute sweep for manual orders nobody's actively polling -- the poll
+// endpoint above already expires one lazily the instant a member checks it,
+// this just makes sure an abandoned tab's order still gets released (and
+// its number freed back to the pool) even if nobody ever polls it again.
+async function reconcileManualDeposits() {
+  try {
+    const now = Date.now();
+    const snap = await db.collection('pendingDeposits').where('method', '==', 'manual').where('status', '==', 'pending').limit(500).get();
+    for (const doc of snap.docs) {
+      const d = doc.data();
+      if ((d.expiresAt || 0) <= now) {
+        await markDepositFailed(doc.ref, d.userId, 'Payment window expired.').catch(e => console.error('Manual deposit expiry error:', e.message));
+      }
+    }
+  } catch (e) { console.error('Reconcile manual deposits error:', e.message); }
+}
+
+// ── ADMIN: manual payment numbers (5 MTN + 5 Airtel, or however many the
+// owner wants) ──
+app.post('/admin/manual-numbers/list', async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const snap = await db.collection('manualPaymentNumbers').orderBy('network', 'asc').orderBy('order', 'asc').get();
+    res.json({ status: 'success', numbers: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/manual-numbers/save', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const { id, network, number, holderName, active, order } = req.body;
+    if (!NETWORK_NAMES.has(network)) return res.status(400).json({ status: 'error', message: 'Select a valid network' });
+    const cleanNumber = cleanPhone(number);
+    if (!cleanNumber) return res.status(400).json({ status: 'error', message: 'Enter a valid phone number' });
+    const name = String(holderName || '').trim().slice(0, 80);
+    if (!name) return res.status(400).json({ status: 'error', message: 'Enter the account holder name' });
+    const doc = { network, number: cleanNumber, holderName: name, active: active !== false, order: Number(order) || 0 };
+    if (id) await db.collection('manualPaymentNumbers').doc(String(id)).set(doc, { merge: true });
+    else await db.collection('manualPaymentNumbers').add({ ...doc, createdAt: FieldValue.serverTimestamp() });
+    logAdminAction(req, 'manual_number_saved', { id: id || null, network, number: cleanNumber });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+app.post('/admin/manual-numbers/delete', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const id = String(req.body.id || '');
+    if (!id) return res.status(400).json({ status: 'error', message: 'id required' });
+    await db.collection('manualPaymentNumbers').doc(id).delete();
+    logAdminAction(req, 'manual_number_deleted', { id });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+// Admin resolution for a MANUAL_REVIEW order that turns out NOT to be a
+// genuine payment (fabricated/irrelevant pasted text, a real mismatch,
+// etc.) -- the opposite of /admin/deposit/force-credit, which already
+// works unmodified for the "yes, credit it" resolution (it operates on any
+// pendingDeposits doc via creditDeposit(), manual or automatic alike).
+app.post('/admin/deposit/manual/reject', async (req, res) => {
+  if (!verifyOwner(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+  try {
+    const depositId = String(req.body.depositId || '');
+    if (!depositId) return res.status(400).json({ status: 'error', message: 'depositId required' });
+    const snap = await db.collection('pendingDeposits').doc(depositId).get();
+    if (!snap.exists) return res.status(404).json({ status: 'error', message: 'Deposit not found' });
+    if (depositFullyCredited(snap.data())) return res.status(400).json({ status: 'error', message: 'This deposit was already credited -- cannot reject it now.' });
+    const rejected = await markDepositFailed(snap.ref, snap.data().userId, 'Rejected by admin after review.');
+    if (!rejected) return res.status(409).json({ status: 'error', message: 'This deposit was credited by another process just now.' });
+    logAdminAction(req, 'manual_deposit_rejected', { depositId });
+    res.json({ status: 'success' });
+  } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
+});
+
+// ═══════════════════════════════════════════
 // WITHDRAWAL (MarzPay send-money, mobile money only)
 // ═══════════════════════════════════════════
 const _withdrawInFlight = new Set();
@@ -3134,6 +3504,8 @@ app.post('/admin/settings/update', async (req, res) => {
     }
     if ('numberFont' in updates && !NUMBER_FONT_OPTIONS.includes(updates.numberFont))
       return res.status(400).json({ status: 'error', message: `numberFont must be one of: ${NUMBER_FONT_OPTIONS.join(', ')}` });
+    if ('depositMethod' in updates && !['automatic', 'manual'].includes(updates.depositMethod))
+      return res.status(400).json({ status: 'error', message: `depositMethod must be 'automatic' or 'manual'` });
     await db.collection('settings').doc('main').set(updates, { merge: true });
     _settingsCacheTs = 0;
     logAdminAction(req, 'settings_updated', { fields: Object.keys(updates) });
@@ -3916,7 +4288,7 @@ app.post('/admin/deposits/list', async (req, res) => {
   try {
     const [snap, unresolvedSnap, usersSnap] = await Promise.all([
       db.collection('pendingDeposits').orderBy('createdAt', 'desc').limit(5000).get(),
-      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).limit(5000).get(),
+      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get(),
       db.collection('users').get(),
     ]);
     const phones = {}; const refCodes = {};
@@ -4016,7 +4388,7 @@ app.get('/admin/stats', async (req, res) => {
     let withdrawAmount = 0; witSnap.forEach(d => withdrawAmount += finiteMoney(d.data().net));
     let investedAmount = 0, activeInvestments = 0;
     invSnap.forEach(d => { const inv = d.data(); investedAmount += finiteMoney(inv.amount); if (inv.status === 'active') activeInvestments++; });
-    const pendingDepCount = (await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).limit(5000).get()).size;
+    const pendingDepCount = (await db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get()).size;
     const pendingWitCount = (await db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get()).size;
     res.json({ status: 'success', stats: { totalUsers, activeUsers, bannedUsers, walletTotal, depositAmount, withdrawAmount, investedAmount, activeInvestments, pendingDepCount, pendingWitCount } });
   } catch (e) { res.status(500).json({ status: 'error', message: e.message }); }
@@ -4157,7 +4529,7 @@ app.get('/admin/badges', async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
   try {
     const [pendingDep, pendingWit] = await Promise.all([
-      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating']).limit(5000).get(),
+      db.collection('pendingDeposits').where('status', 'in', ['pending', 'initiating', 'review']).limit(5000).get(),
       db.collection('withdrawals').where('status', '==', 'pending').limit(5000).get(),
     ]);
     res.json({ status: 'success', pendingDeposits: pendingDep.size, pendingWithdrawals: pendingWit.size });
@@ -4690,5 +5062,6 @@ connectMongo(MONGODB_URI)
     setInterval(autoApproveWithdrawalsTick, 10 * 1000);
     setInterval(sweepEphemeralState, 5 * 60 * 1000);
     setInterval(reconcileBlockedCommissions, 5 * 60 * 1000);
+    setInterval(reconcileManualDeposits, 60 * 1000);
   })
   .catch(e => { console.error('Mongo connection failed:', e.message); process.exit(1); });

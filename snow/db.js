@@ -84,6 +84,11 @@ async function ensureIndexes() {
     ['securityEvents',  { createdAt: -1 }],
     ['users',           { publicId: 1 }],
     ['transactions',    { type: 1 }],
+    // Manual deposits (admin-managed MTN/Airtel numbers, SMS-matched) --
+    // pendingDeposits already has method-agnostic indexes above; this one
+    // is specific to assignManualNumber()'s own collision-check query.
+    ['pendingDeposits', { method: 1, assignedNumber: 1, amount: 1, status: 1 }],
+    ['manualPaymentNumbers', { network: 1, active: 1, order: 1 }],
   ];
   // ONE AT A TIME -- M0's free tier has very little real concurrency headroom.
   let failed = 0;

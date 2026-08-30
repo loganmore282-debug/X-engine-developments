@@ -32,7 +32,19 @@ const routes = {
   'GET /admin/users': { status: 'success', users: [
     { id: 'u1', phone: '+256700000001', publicId: '000001', referralCode: 'abC123', walletBalance: 10000, totalInvested: 30000, totalEarned: 5000, status: 'active' },
   ], count: 1 },
-  'POST /admin/deposits/list': { status: 'success', deposits: [] },
+  'POST /admin/deposits/list': { status: 'success', deposits: [
+    { id: 'dep1', userId: 'u1', accountPhone: '+256700000001', method: 'automatic', amount: 30000, status: 'pending', ref: 'MZ001', createdAt: new Date().toISOString() },
+    { id: 'dep2', userId: 'u1', accountPhone: '+256700000001', method: 'manual', network: 'MTN Mobile Money', assignedNumber: '+256770000001', amount: 50000, status: 'review', reviewReason: 'Multiple pending orders matched this SMS (same number + amount)', ref: 'M001', createdAt: new Date().toISOString() },
+  ], counts: {}, processedByDay: [], processedAmount: 0 },
+  'POST /admin/deposit/force-credit': { status: 'success', message: 'Force-credited UGX 50,000 to the user' },
+  'POST /admin/deposit/manual/reject': { status: 'success' },
+  'POST /admin/manual-numbers/list': { status: 'success', numbers: [
+    { id: 'm1', network: 'MTN Mobile Money', number: '+256770000001', holderName: 'Snow MTN 1', active: true, order: 1 },
+    { id: 'm2', network: 'Airtel Money', number: '+256750000001', holderName: 'Snow Airtel 1', active: true, order: 1 },
+  ] },
+  'POST /admin/manual-numbers/save': { status: 'success' },
+  'POST /admin/manual-numbers/delete': { status: 'success' },
+  'POST /admin/settings/update': { status: 'success' },
   'POST /admin/withdrawals/list': { status: 'success', withdrawals: [], counts: {} },
   'GET /admin/products': { status: 'success', products: [
     { key: 'qing-shuang', name: 'Snow Qing Shuang', price: 30000, cycle: 150, expectedReturn: 900000, active: true },
@@ -314,6 +326,68 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (!txHtml.includes('Mission Center salary')) errors.push('Transactions tab does not render the mission_salary label');
   if (!txHtml.includes('Mission Center deposit reward')) errors.push('Transactions tab does not render the mission_deposit_reward label');
   if (/\bmission_salary\b/.test(txHtml) || /\bmission_deposit_reward\b/.test(txHtml)) errors.push('Transactions tab fell through to the raw type string instead of a label');
+
+  // ── Manual deposits: Deposits tab Method column + Needs Review queue ──
+  doc.querySelector('.tab[data-tab="deposits"]').click();
+  await sleep(250);
+  const depHtml = doc.getElementById('content').innerHTML;
+  if (!depHtml.includes('Needs Review')) errors.push('Deposits tab missing the Needs Review subtab');
+  const reviewSubtab = doc.querySelector('[data-df="review"]');
+  if (!reviewSubtab) errors.push('review subtab button not found');
+  else {
+    reviewSubtab.click();
+    await sleep(150);
+    const rows = doc.getElementById('depRows');
+    if (!rows || !rows.textContent.includes('MTN Mobile Money')) errors.push('Needs Review tab does not show the manual deposit\'s network/number');
+    if (!rows || !rows.textContent.includes('Multiple pending orders')) errors.push('Needs Review tab does not show the reviewReason');
+    const approveBtn = doc.querySelector('[data-force]');
+    const rejectBtn = doc.querySelector('[data-mreject]');
+    if (!approveBtn) errors.push('Approve button missing on a review-status manual deposit');
+    else if (approveBtn.textContent !== 'Approve') errors.push('review-status deposit button should read "Approve", got: ' + approveBtn.textContent);
+    if (!rejectBtn) errors.push('Reject button missing on a review-status manual deposit');
+    else {
+      window.confirm = () => true;
+      rejectBtn.click();
+      await sleep(200);
+    }
+  }
+
+  // ── Settings: Manual payments section (deposit-method toggle + numbers CRUD) ──
+  doc.querySelector('.tab[data-tab="settings"]').click();
+  await sleep(250);
+  const settingsHtml3 = doc.getElementById('content').innerHTML;
+  if (!settingsHtml3.includes('Manual payments')) errors.push('Settings: Manual payments section missing');
+  if (!settingsHtml3.includes('Payment numbers')) errors.push('Settings: Payment numbers card missing');
+  if (!settingsHtml3.includes('Snow MTN 1') || !settingsHtml3.includes('Snow Airtel 1')) errors.push('Settings: payment numbers from fixture not rendered');
+  const depMethodManualRadio = doc.getElementById('depMethodManual');
+  const saveDepMethodBtn = doc.getElementById('saveDepMethod');
+  if (!depMethodManualRadio || !saveDepMethodBtn) errors.push('Settings: deposit-method radio/save button missing');
+  else {
+    depMethodManualRadio.checked = true;
+    saveDepMethodBtn.click();
+    await sleep(200);
+  }
+  const mnSaveBtn = doc.querySelector('[data-mn-save="0"]');
+  if (!mnSaveBtn) errors.push('Settings: no per-number Save button found');
+  else {
+    mnSaveBtn.click();
+    await sleep(250);
+  }
+  const mnAddBtn = doc.getElementById('mnAddBtn');
+  if (!mnAddBtn) errors.push('Settings: Add payment number button missing');
+  else {
+    const before = doc.querySelectorAll('#manualNumbersList .panel-card').length;
+    mnAddBtn.click();
+    const after = doc.querySelectorAll('#manualNumbersList .panel-card').length;
+    if (after !== before + 1) errors.push('Add payment number did not append a new editable row');
+  }
+  const mnDelBtn = doc.querySelector('[data-mn-del]');
+  if (!mnDelBtn) errors.push('Settings: no per-number Delete button found for an existing (saved) number');
+  else {
+    window.confirm = () => true;
+    mnDelBtn.click();
+    await sleep(250);
+  }
 
   console.log('\n=== ERRORS (' + errors.length + ') ===');
   errors.forEach(e => console.log(' -', e));

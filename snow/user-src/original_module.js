@@ -184,7 +184,7 @@ function toast(msg, isErr){
 // entry here) but were missing, so a background service-worker update
 // landing mid-claim could yank the page out from under one -- the exact
 // thing this whole tracking mechanism exists to prevent.
-var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete', '/checkin', '/redeem', '/mission/salary/claim', '/mission/deposit/claim']);
+var MONEY_ENDPOINTS = new Set(['/deposit/marzpay', '/deposit/manual/init', '/deposit/manual/paste-sms', '/withdraw/request', '/invest/create', '/bank/save', '/bank/delete', '/checkin', '/redeem', '/mission/salary/claim', '/mission/deposit/claim']);
 window._moneyCallsInFlight = 0;
 async function api(path, opts){
   opts = opts || {};
@@ -1785,6 +1785,7 @@ function cleanDesc(d){ return d || ''; }
 // to put quick amounts on withdrawal, l said on deposit."
 window.openDepositSheet = function(){
   const s = STATE.settings || {};
+  if (s.depositMethod === 'manual') return openManualDepositFormSheet();
   const quickAmts = Array.from(new Set((STATE.products || [])
     .map(p => Number(p.price) || 0)
     .filter(p => p >= (Number(s.minDeposit) || 0))))
@@ -1814,6 +1815,131 @@ window.openDepositSheet = function(){
     </div>
   </div>`);
 };
+
+// ── Manual deposit flow (admin numbers, SMS-matched) -- shown instead of
+// the MarzPay form above when settings.depositMethod === 'manual'. Step 1
+// (this form) collects amount/network/sender phone and calls
+// /deposit/manual/init, which hands back an admin number to send money to;
+// step 2 (openManualDepositWaitSheet) shows that number + a live 15-minute
+// countdown and polls /deposit/manual/status until it resolves, with a
+// paste-your-own-SMS fallback for when the phone forwarder is slow. Reuses
+// the exact same quick-amount chips as the automatic form above.
+function openManualDepositFormSheet(){
+  const s = STATE.settings || {};
+  const quickAmts = Array.from(new Set((STATE.products || [])
+    .map(p => Number(p.price) || 0)
+    .filter(p => p >= (Number(s.minDeposit) || 0))))
+    .sort((a, b) => a - b);
+  const chipsHtml = quickAmts.length ? `<div class="quick-amts" id="depQuickAmts">${
+    quickAmts.map(p => `<button type="button" class="quick-amt" data-amt="${p}" onclick="pickDepositAmount(${p})">${fmtUGX(p)}</button>`).join('')
+  }</div>` : '';
+  openSheet('Recharge', `<div class="reveal-in">
+    <div class="form-field"><label>Amount (min ${fmtUGX(s.minDeposit)})</label><input id="depAmount" type="text" inputmode="numeric" maxlength="9" placeholder="0" oninput="syncDepositQuickAmt()"></div>
+    ${chipsHtml}
+    <div class="form-field"><label>Mobile-money phone number (the one you'll send from)</label><div class="phone-field"><span class="phone-prefix">+256</span><input id="depPhone" type="tel" inputmode="numeric" placeholder="07XX XXX XXX" value="${esc(localPhoneDisplay((STATE.account&&STATE.account.phone)||''))}" oninput="sanitizePhoneInput(this)"></div></div>
+    <div class="form-field"><label>Network</label>
+      <select id="depNetwork" style="width:100%;padding:15px 16px;border:1px solid var(--snow-border);border-radius:26px;font-size:15px;background:var(--snow-surface);">
+        <option value="MTN Mobile Money">MTN Mobile Money</option>
+        <option value="Airtel Money">Airtel Money</option>
+      </select>
+    </div>
+    <button class="primary-button" id="depSubmitBtn" style="width:100%;padding:15px 0;font-size:15px;margin-top:8px;" onclick="submitManualDeposit()">Get payment number</button>
+    <div class="instr-card">
+      <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">Recharge instructions</span></div>
+      <ol>
+        <li>Enter an amount (min ${fmtUGX(s.minDeposit)}) or tap a quick amount above.</li>
+        <li>Confirm your mobile-money number and network.</li>
+        <li>Tap Get payment number, then send the exact amount shown to the number given.</li>
+        <li>Your wallet updates automatically once your payment is matched.</li>
+      </ol>
+    </div>
+  </div>`);
+}
+window.submitManualDeposit = async function(){
+  const amount = parseMoneyInput($('depAmount').value);
+  const phone = $('depPhone').value;
+  const network = $('depNetwork').value;
+  if (!amount || amount <= 0) return toast('Enter a valid amount', true);
+  $('depSubmitBtn').disabled = true; $('depSubmitBtn').textContent = 'Please wait…';
+  const r = await post('/deposit/manual/init', { amount, senderPhone: phone, network });
+  if ($('depSubmitBtn')) { $('depSubmitBtn').disabled = false; $('depSubmitBtn').textContent = 'Get payment number'; }
+  if (r.status !== 'success') return toast(r.message || 'Could not start recharge', true);
+  await refreshTransactionsCache();
+  openManualDepositWaitSheet(r.depositId, r.assignedNumber, r.holderName, r.network, r.amount, r.expiresAt);
+};
+var _manDepCountdownTimer = null;
+function startManualDepositCountdown(expiresAt){
+  if (_manDepCountdownTimer) clearInterval(_manDepCountdownTimer);
+  const tick = () => {
+    const el = $('manDepCountdown');
+    if (!el || _openSheetTitle !== 'Complete Payment') { clearInterval(_manDepCountdownTimer); _manDepCountdownTimer = null; return; }
+    const remaining = Math.max(0, expiresAt - Date.now());
+    const m = Math.floor(remaining / 60000);
+    const sec = Math.floor((remaining % 60000) / 1000);
+    el.textContent = `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    if (remaining <= 0) { clearInterval(_manDepCountdownTimer); _manDepCountdownTimer = null; }
+  };
+  tick();
+  _manDepCountdownTimer = setInterval(tick, 1000);
+}
+function openManualDepositWaitSheet(depositId, assignedNumber, holderName, network, amount, expiresAt){
+  openSheet('Complete Payment', `<div class="reveal-in">
+    <div class="form-hint" style="text-align:center;margin-bottom:2px;">Send exactly</div>
+    <div class="mono" style="font-size:26px;font-weight:800;text-align:center;color:var(--snow-wine);">${fmtUGX(amount)}</div>
+    <div class="form-hint" style="text-align:center;margin:2px 0 14px;">to</div>
+    <div class="app-card" style="text-align:center;padding:18px;">
+      <div style="font-size:19px;font-weight:800;letter-spacing:.5px;">${esc(assignedNumber)}</div>
+      <div style="margin-top:4px;font-size:13px;color:var(--snow-muted);">${esc(holderName)} · ${esc(network)}</div>
+    </div>
+    <div class="form-hint" style="text-align:center;margin:16px 0 2px;">Time remaining</div>
+    <div class="mono" id="manDepCountdown" style="font-size:22px;font-weight:800;text-align:center;">15:00</div>
+    <div class="instr-card" style="margin-top:16px;">
+      <div class="instr-head"><div class="icon-tile" style="width:38px;height:38px;background:rgba(148,24,39,.12);color:var(--snow-wine);">${ICONS.doc}</div><span class="instr-title">How to pay</span></div>
+      <ol>
+        <li>Open your mobile money menu on the phone number you entered.</li>
+        <li>Send exactly ${fmtUGX(amount)} to ${esc(assignedNumber)}.</li>
+        <li>We match your wallet automatically once your payment confirmation SMS is detected.</li>
+        <li>If it's taking a while, paste the confirmation SMS your phone received below.</li>
+      </ol>
+    </div>
+    <div class="form-field" style="margin-top:16px;"><label>Paste your confirmation SMS (optional)</label><textarea id="manDepPastedSms" rows="3" placeholder="You have received UGX ..."></textarea></div>
+    <button class="secondary-button" id="manDepPasteBtn" style="width:100%;padding:13px 0;" onclick="submitManualPasteSms('${depositId}')">Submit confirmation text</button>
+  </div>`);
+  startManualDepositCountdown(expiresAt);
+  pollManualDepositStatus(depositId);
+}
+window.submitManualPasteSms = async function(depositId){
+  const text = ($('manDepPastedSms').value || '').trim();
+  if (!text) return toast('Paste the confirmation SMS text first', true);
+  const btn = $('manDepPasteBtn');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  const r = await post('/deposit/manual/paste-sms', { depositId, text });
+  if (btn) { btn.disabled = false; btn.textContent = 'Submit confirmation text'; }
+  toast(r.message || (r.status === 'success' ? 'Submitted' : 'Could not submit this right now'), r.status !== 'success');
+};
+function setDepositStatusReview(){
+  $('depStatusIcon').className = 'dep-status-icon';
+  $('depStatusIcon').innerHTML = '<div class="spin"></div>';
+  $('depStatusTitle').textContent = 'Payment under review';
+  $('depStatusBody').textContent = "We're checking this payment and will credit your wallet shortly if it's genuine. Check Records for updates.";
+  $('depStatusCloseBtn').style.display = 'block';
+}
+// Polls for up to the full 15-minute payment window (matching
+// MANUAL_DEPOSIT_WINDOW_MS server-side) rather than automatic deposits'
+// short 60s window -- a manual match depends on a phone's SMS forwarder,
+// not an instant gateway callback, so it can genuinely take longer.
+// Self-terminates the moment the member navigates away from this sheet.
+async function pollManualDepositStatus(depositId){
+  for (let i = 0; i < 190; i++) {
+    await new Promise(r => setTimeout(r, 5000));
+    if (_openSheetTitle !== 'Complete Payment') return;
+    const r = await post('/deposit/manual/status', { depositId });
+    if (r.status !== 'success') continue;
+    if (r.state === 'matched') { closeSheet(); setDepositStatusSuccess(); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); if (STATE.page==='home') renderHome(); return; }
+    if (r.state === 'failed') { closeSheet(); setDepositStatusFailed(r.message); $('depStatusBg').classList.add('show'); lockBodyScroll(); await refreshTransactionsCache(); return; }
+    if (r.state === 'review') { closeSheet(); setDepositStatusReview(); $('depStatusBg').classList.add('show'); lockBodyScroll(); return; }
+  }
+}
 window.pickDepositAmount = function(amt){
   $('depAmount').value = amt;
   syncDepositQuickAmt();
