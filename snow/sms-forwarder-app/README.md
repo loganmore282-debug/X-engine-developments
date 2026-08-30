@@ -6,10 +6,30 @@ admin payment phones and forwards them to the Snow server
 and credited automatically.
 
 This is a fork of the sibling Nexus project's own `sms-forwarder-app/`
-(repo root), adapted for Snow's multi-number manual-deposit design — install
-ONE copy of this app per admin payment phone, each configured with that
-phone's own receiving number. Never edit the root `sms-forwarder-app/`
-from here; it's Nexus's own live deployment.
+(repo root), adapted for Snow's multi-number manual-deposit design. Install
+one copy per admin payment phone. **A dual/triple-SIM phone can cover
+several Snow payment numbers from a single install** — one number per SIM
+slot — so you need fewer phones as the number pool grows. Never edit the
+root `sms-forwarder-app/` from here; it's Nexus's own live deployment.
+
+## Multi-SIM: how a message gets attributed, and why it can refuse
+
+Android tells the app which SIM subscription received each SMS; the app maps
+that to a SIM slot and sends the number you configured for that slot.
+
+If it *cannot* work out which SIM received a message and you have two or more
+numbers configured, **it drops the message instead of guessing.** That is
+deliberate. The server matches a payment by (receiving number, amount), and
+Snow's own number-assignment deliberately gives different payment numbers the
+same amount at the same time — so reporting the wrong number does not fail
+harmlessly, it can credit a completely different member for someone else's
+money. A dropped SMS is recoverable (the member's paste-SMS fallback and the
+admin review queue both still catch it); a wrong credit is not.
+
+In practice this only happens if the phone permission is denied. Grant
+"phone" permission when asked, or configure just the one number that SIM
+uses — a single-number install ignores slot detection entirely and always
+works.
 
 No external dependencies. Everything is stored on the device.
 
@@ -40,19 +60,23 @@ cd snow/sms-forwarder-app
 
 ## Install & configure on each admin phone
 1. Copy `app-debug.apk` to the phone → install it (allow "unknown sources" in settings)
-2. Open **Snow SMS** → grant SMS and notification permissions
+2. Open **Snow SMS** → grant SMS, phone and notification permissions
 3. Fill in:
    - **Server webhook URL**: `https://mylifeismyhappiness.onrender.com/deposit/manual/sms-forwarder`
    - **Shared secret**: the value of `MANUAL_SMS_SECRET` set on Render
-   - **This phone's receiving number**: the SAME number saved for this phone in the
-     admin panel's Settings → Manual payments → Payment numbers list (e.g. `0770000001`)
+   - **SIM slot 1 / SIM slot 2 / …**: the Snow payment number each SIM in this phone
+     actually uses, exactly as saved in the admin panel's Settings → Manual payments →
+     Payment numbers list (e.g. `0770000001`). The app labels each slot with the carrier
+     it detects, so slot 1 might read "SIM slot 1 (MTN)" and slot 2 "SIM slot 2 (Airtel)".
+     Leave a slot blank if that SIM is not a Snow payment number.
    - **Forward SMS from**: e.g. `MTN,MTNMoMo,Airtel,AirtelMoney` — or leave blank to forward all
 4. Tap **Save settings**, then **START forwarding**
 5. Tap **Send test ping** — you should see `Test result: HTTP 200` if the server is reachable
 
-**Every admin payment phone needs the receiving number field set correctly** — the
-server matches an incoming SMS to a pending order by (receiving number, amount), so a
-wrong or blank value here means genuine deposits on that number will never match.
+**Each number must match the admin panel exactly** — the server matches an incoming SMS
+to a pending order by (receiving number, amount), so a wrong or blank value means genuine
+deposits on that number will never match. Putting a number in the wrong slot is worse
+than leaving it blank: messages get attributed to the wrong number.
 
 ## Required Render environment variables (on the `snow-server` service)
 | Variable | Value |
