@@ -5264,6 +5264,109 @@ every new admin route. **`server.js` and `admin-src/index.html` changed — Rend
 auto-deploy this push** (`admin-src/index.html` is a static site, no separate deploy
 step beyond the push).
 
+## Round 89 (2026-08-30) — the manual-deposit APK actually gets built (GitHub Actions, not this sandbox), and the forwarder now covers multiple SIMs per phone
+
+**Two owner asks, one after the other.**
+
+**(1) "build the app and send link" — and the correction that made it possible.** Round
+88 concluded the APK couldn't be built here, which was true but incomplete: `dl.google.com`
+is blocked by this environment's network policy (403 at the proxy) and `maven.google.com`
+just 301s to it, so the Android SDK, the Gradle plugin and aapt2 are all unreachable
+locally. I said so and offered build instructions. The owner pushed back — *"but the
+existing one was built in github only by claude code, so try it too"* — and was right.
+`.github/workflows/build-sms-apk.yml` (Nexus's own forwarder) and `build-android-app.yml`
+(the `xengine-app` WebView wrapper) already existed in this repo, both building APKs on
+GitHub's runners, which ship the Android SDK preinstalled. The block was only ever on
+*this sandbox's* egress, never on CI. **Standing note for future sessions: never conclude
+an Android build is impossible here — push a workflow and let Actions do it.**
+
+New `.github/workflows/build-snow-sms-apk.yml`, modelled directly on the Nexus one:
+JDK 17 + `android-actions/setup-android@v3` + Gradle 8.7 (matches AGP 8.5.2's own
+requirement), `gradle assembleDebug`, renamed to `snow-sms-forwarder.apk` (a distinct
+filename so it can never be confused with Nexus's `app-debug.apk`), uploaded as a build
+artifact AND published to its own `snow-sms-app` release tag for a direct download link.
+Path-filtered to `snow/sms-forwarder-app/**` on `claude/snow-platform-build`, so it
+rebuilds automatically on every future change to the app. **The Round 88 fork compiled
+clean on the very first run** — 37 seconds, all 9 steps green — which retroactively
+validates that round's structural-only verification (balanced braces, call-site/signature
+grep, diff review against the Nexus original) as having been sufficient in the absence of
+a compiler.
+
+**`MANUAL_SMS_SECRET` generated and handed over** (48 hex chars, 192 bits, `crypto.randomBytes`).
+Verified absent from the repo and the tree clean before sending, and delivered in chat
+only — never written to a file, never committed. Hex deliberately, not base64: it gets
+typed into several phones by hand and hex has no case ambiguity or `+/=`.
+
+**(2) "we can get even more than 10 phones, so make in sms forwarder has 2 or more
+numbers."** Read as: one install should cover several Snow payment numbers, so a
+dual/triple-SIM phone replaces two or three single-number phones as the pool grows past
+10. (Also asked whether the forwarder was a WebView — it is not, and never was: zero
+`WebView`/`webkit` references anywhere in it, it's plain native Java widgets plus a
+BroadcastReceiver and a Service. That question arose while discussing a possible Snow
+*user-app* wrapper, which is still unbuilt and undecided — see Deferred below.)
+
+**The money-safety trap this feature contains, and why the app now refuses rather than
+guesses.** The obvious implementation — store several numbers, send "the first one" when
+unsure — is genuinely dangerous here, and it took tracing `assignManualNumber()` to see
+why. The server matches an incoming SMS by (receivingNumber, amount), and
+`assignManualNumber()`'s collision-skip **deliberately gives DIFFERENT payment numbers the
+SAME amount concurrently** (that is precisely what skipping a clashing number produces).
+So a mis-attributed SMS does NOT fail safe into "unmatched": if number A has a live
+30,000 order and number B also has one, reporting B's payment under A's number matches A's
+genuine order and credits the wrong member for someone else's money — a real
+wrong-person credit, not a missed one. Accordingly:
+- `Prefs.resolveReceivingNumber(slot)` returns the single configured number when exactly
+  one is set (single-SIM installs are unaffected and never consult slot detection), but
+  with 2+ configured it requires a resolved slot and otherwise returns `""`.
+- `SmsReceiver` drops the message on `""` with a loud log rather than forwarding.
+  Justification recorded in-code: a dropped SMS is recoverable (the member's own
+  paste-SMS fallback and the admin review queue both still catch it); a wrong credit is
+  not.
+
+**Implementation**: `Prefs` stores numbers as a JSON object keyed by SIM slot index, and
+transparently migrates an existing v1 single-number install into slot `0` on first read
+(no reconfiguration needed on phones already set up). `SmsReceiver` reads the
+subscription id off the SMS broadcast (`SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX`,
+falling back to the legacy `"subscription"` extra) and resolves it to a physical slot via
+`SubscriptionManager.getActiveSubscriptionInfo()`. `MainActivity` renders one number
+field per slot, labelling each with the carrier name it detects ("SIM slot 1 (MTN)"),
+rebuilding those labels once permission is granted, and refuses to START multi-number
+forwarding without `READ_PHONE_STATE` — the permission the attribution depends on —
+rather than starting in a state where it would silently drop everything. New
+`READ_PHONE_STATE` permission in the manifest, needed only for the 2+ number case.
+
+**Verification**: structural checks again locally (balanced braces/parens on all 6 Java
+files, `Poster.post()`/`postSync()` signatures grepped against every call site), then the
+real proof — the GitHub Actions run compiling it. Note the honest limitation carried over
+from Round 88: **no test exercises the multi-SIM attribution path itself**, because it
+needs a physical dual-SIM handset receiving real operator SMS; CI proves it compiles, not
+that slot resolution returns what a given phone reports. Worth a real-device check with
+two SIMs before relying on one phone for two numbers in production — until then, one
+number per phone is the already-proven configuration.
+
+**Deferred, explicitly undecided**: a Snow *user-app* Android wrapper. The owner asked
+for one that "accepts my changes or in layout that l put" and is secure, then questioned
+the WebView approach. Laid out the options and the tradeoff rather than picking: a native
+rewrite of `original_module.js` (2,322 lines, 177KB, 120 functions across every screen)
+would freeze the UI into the APK and so **directly contradicts the owner's own
+"accepts my changes" requirement**, besides duplicating every money flow forever. The two
+viable options are a WebView wrapper (like `xengine-app/`) or a Trusted Web Activity over
+the existing PWA. If a WebView wrapper is chosen, do NOT copy `xengine-app/`'s
+`MainActivity` verbatim — reviewing it found four real weaknesses to fix first:
+`setAllowFileAccess(true)` should be false; `setMixedContentMode(COMPATIBILITY_MODE)`
+should be `NEVER_ALLOW`; third-party cookies are enabled but unnecessary for Snow's
+email/password Firebase auth; and most importantly its internal-link check is
+`url.contains("://x-engine.site")`, plain substring matching that a URL like
+`https://evil.com/#://x-engine.site` satisfies — letting a hostile page load inside the
+app's WebView sharing the real origin's session and storage. Parse the URI and compare
+`getHost()` instead. **Also still unresolved: the Snow user app's real deployed URL.**
+`render.yaml` names the static site `snow-app` and `guard-src.js`/CORS both expect
+`snow-platform.com`, but the server actually ended up on `mylifeismyhappiness.onrender.com`,
+so the app's URL cannot be inferred from the repo — ask the owner before hardcoding one.
+
+**No `server.js`, `user-src/` or `admin-src/` changes this round** — Android app and CI
+workflow only, so no cache bumps and no Render redeploy needed.
+
 ## Live infra (provisioning started 2026-08-26)
 
 - **Firebase**: project `snow-beer-cbf65`. Client-side web config (safe to commit —
